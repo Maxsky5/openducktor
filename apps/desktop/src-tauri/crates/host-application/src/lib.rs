@@ -176,6 +176,14 @@ impl AppService {
         self.config_store.update_repo_config(repo_path, config)
     }
 
+    pub fn workspace_get_repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
+        self.config_store.repo_config(repo_path)
+    }
+
+    pub fn workspace_get_repo_config_optional(&self, repo_path: &str) -> Result<Option<RepoConfig>> {
+        self.config_store.repo_config_optional(repo_path)
+    }
+
     pub fn workspace_set_trusted_hooks(
         &self,
         repo_path: &str,
@@ -332,7 +340,15 @@ impl AppService {
                     TaskPhase::BlockedNeedsInput,
                     Some("Pre-start hook failed"),
                 );
-                return Err(anyhow!("Pre-start hook failed: {hook}\n{stderr}"));
+                let cleanup_error = remove_worktree(repo_path_ref, worktree_dir.as_path())
+                    .err()
+                    .map(|error| error.to_string());
+                return Err(anyhow!(
+                    "Pre-start hook failed: {hook}\n{stderr}{}",
+                    cleanup_error
+                        .map(|error| format!("\nAlso failed to remove worktree: {error}"))
+                        .unwrap_or_default()
+                ));
             }
         }
 

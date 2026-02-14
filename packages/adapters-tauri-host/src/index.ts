@@ -1,14 +1,16 @@
 import {
   type BeadsCheck,
-  type RuntimeCheck,
+  type RepoConfig,
   type RunSummary,
+  type RuntimeCheck,
   type SystemCheck,
   type TaskCard,
   type TaskPhase,
   type WorkspaceRecord,
   beadsCheckSchema,
-  runtimeCheckSchema,
+  repoConfigSchema,
   runSummarySchema,
+  runtimeCheckSchema,
   systemCheckSchema,
   taskCardSchema,
   taskPhaseSchema,
@@ -156,6 +158,11 @@ export class TauriHostClient implements PlannerTools {
       config,
     });
     return workspaceRecordSchema.parse(payload);
+  }
+
+  async workspaceGetRepoConfig(repoPath: string): Promise<RepoConfig> {
+    const payload = await this.invokeFn<unknown>("workspace_get_repo_config", { repoPath });
+    return repoConfigSchema.parse(payload);
   }
 
   async workspaceSetTrustedHooks(repoPath: string, trusted: boolean): Promise<WorkspaceRecord> {

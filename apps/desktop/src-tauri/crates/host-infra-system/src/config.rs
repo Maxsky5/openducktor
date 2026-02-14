@@ -263,6 +263,11 @@ impl AppConfigStore {
             .ok_or_else(|| anyhow!("Repository is not configured in {}", self.path.display()))
     }
 
+    pub fn repo_config_optional(&self, repo_path: &str) -> Result<Option<RepoConfig>> {
+        let config = self.load()?;
+        Ok(config.repos.get(repo_path).cloned())
+    }
+
     pub fn set_repo_trust_hooks(&self, repo_path: &str, trusted: bool) -> Result<WorkspaceRecord> {
         let mut config = self.load()?;
         let (has_config, configured_worktree_base_path) = {

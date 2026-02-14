@@ -16,8 +16,10 @@ import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 
 export function SettingsModal(): ReactElement {
-  const { activeRepo, activeWorkspace, saveRepoSettings, isBusy } = useOrchestrator();
+  const { activeRepo, activeWorkspace, loadRepoSettings, saveRepoSettings, isBusy } =
+    useOrchestrator();
   const [open, setOpen] = useState(false);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [worktreeBasePath, setWorktreeBasePath] = useState("");
   const [branchPrefix, setBranchPrefix] = useState("obp");
   const [trustedHooks, setTrustedHooks] = useState(false);
@@ -25,16 +27,43 @@ export function SettingsModal(): ReactElement {
   const [postCompleteHooks, setPostCompleteHooks] = useState("");
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !activeRepo) {
       return;
     }
 
-    setWorktreeBasePath(activeWorkspace?.configuredWorktreeBasePath ?? "");
-    setBranchPrefix("obp");
-    setTrustedHooks(false);
-    setPreStartHooks("");
-    setPostCompleteHooks("");
-  }, [activeWorkspace, open]);
+    let cancelled = false;
+    setIsLoadingConfig(true);
+    void loadRepoSettings()
+      .then((settings) => {
+        if (cancelled) {
+          return;
+        }
+        setWorktreeBasePath(settings.worktreeBasePath);
+        setBranchPrefix(settings.branchPrefix);
+        setTrustedHooks(settings.trustedHooks);
+        setPreStartHooks(settings.preStartHooks.join("\n"));
+        setPostCompleteHooks(settings.postCompleteHooks.join("\n"));
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setWorktreeBasePath(activeWorkspace?.configuredWorktreeBasePath ?? "");
+        setBranchPrefix("obp");
+        setTrustedHooks(false);
+        setPreStartHooks("");
+        setPostCompleteHooks("");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingConfig(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRepo, activeWorkspace, loadRepoSettings, open]);
 
   const submit = async (): Promise<void> => {
     await saveRepoSettings({
@@ -89,6 +118,7 @@ export function SettingsModal(): ReactElement {
               id="worktree-path"
               placeholder="/absolute/path/outside/repo"
               value={worktreeBasePath}
+              disabled={isLoadingConfig}
               onChange={(event) => setWorktreeBasePath(event.currentTarget.value)}
             />
           </div>
@@ -98,6 +128,7 @@ export function SettingsModal(): ReactElement {
             <Input
               id="branch-prefix"
               value={branchPrefix}
+              disabled={isLoadingConfig}
               onChange={(event) => setBranchPrefix(event.currentTarget.value)}
             />
           </div>
@@ -108,6 +139,7 @@ export function SettingsModal(): ReactElement {
               id="pre-hooks"
               rows={4}
               value={preStartHooks}
+              disabled={isLoadingConfig}
               onChange={(event) => setPreStartHooks(event.currentTarget.value)}
             />
           </div>
@@ -118,6 +150,7 @@ export function SettingsModal(): ReactElement {
               id="post-hooks"
               rows={4}
               value={postCompleteHooks}
+              disabled={isLoadingConfig}
               onChange={(event) => setPostCompleteHooks(event.currentTarget.value)}
             />
           </div>
@@ -126,6 +159,7 @@ export function SettingsModal(): ReactElement {
             <input
               type="checkbox"
               checked={trustedHooks}
+              disabled={isLoadingConfig}
               onChange={(event) => setTrustedHooks(event.currentTarget.checked)}
             />
             Trust hooks for this workspace
@@ -139,7 +173,7 @@ export function SettingsModal(): ReactElement {
           <Button
             type="button"
             onClick={() => void submit()}
-            disabled={isBusy || !activeRepo || !worktreeBasePath}
+            disabled={isBusy || isLoadingConfig || !activeRepo || !worktreeBasePath}
           >
             Save Settings
           </Button>

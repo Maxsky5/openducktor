@@ -21,7 +21,7 @@ export const taskCardSchema = z.object({
   title: z.string(),
   description: z.string().optional().default(""),
   status: taskStatusSchema,
-  phase: taskPhaseSchema.optional(),
+  phase: z.preprocess((value) => (value === null ? undefined : value), taskPhaseSchema.optional()),
   priority: z.number().int().min(0).max(4).default(2),
   issueType: issueTypeSchema.default("task"),
   labels: z.array(z.string()).default([]),
@@ -44,7 +44,10 @@ export const repoHooksSchema = z.object({
 export type RepoHooks = z.infer<typeof repoHooksSchema>;
 
 export const repoConfigSchema = z.object({
-  worktreeBasePath: z.string().min(1),
+  worktreeBasePath: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().min(1).optional(),
+  ),
   branchPrefix: z.string().min(1).default("obp"),
   trustedHooks: z.boolean().default(false),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
@@ -212,7 +215,7 @@ export const runEventSchema = z.discriminatedUnion("type", [
     type: z.literal("permission_required"),
     runId: z.string(),
     message: z.string(),
-    command: z.string().optional(),
+    command: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
     timestamp: z.string(),
   }),
   z.object({

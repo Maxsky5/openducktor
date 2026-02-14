@@ -1,0 +1,45 @@
+import { describe, expect, test } from "bun:test";
+import { repoConfigSchema, runEventSchema, taskCardSchema } from "./index";
+
+describe("runtime schemas", () => {
+  test("task card accepts null phase from host payloads", () => {
+    const parsed = taskCardSchema.parse({
+      id: "task-1",
+      title: "Sample",
+      description: "",
+      status: "open",
+      phase: null,
+      priority: 2,
+      issueType: "task",
+      labels: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(parsed.phase).toBeUndefined();
+  });
+
+  test("permission_required event accepts null command", () => {
+    const parsed = runEventSchema.parse({
+      type: "permission_required",
+      runId: "run-1",
+      message: "permission prompt",
+      command: null,
+      timestamp: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(parsed.type).toBe("permission_required");
+    expect(parsed.command).toBeUndefined();
+  });
+
+  test("repo config accepts null worktree base path", () => {
+    const parsed = repoConfigSchema.parse({
+      worktreeBasePath: null,
+      branchPrefix: "obp",
+      trustedHooks: false,
+      hooks: { preStart: [], postComplete: [] },
+    });
+
+    expect(parsed.worktreeBasePath).toBeUndefined();
+  });
+});

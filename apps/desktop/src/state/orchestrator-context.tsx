@@ -98,6 +98,7 @@ type OrchestratorContextValue = {
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
   validateSpec: (markdown: string) => { valid: boolean; missing: string[] };
   specTemplate: string;
+  loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
   activeWorkspace: WorkspaceRecord | null;
 };
@@ -188,8 +189,8 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
     setIsLoadingChecks(true);
     setStatusText(`Refreshing checks for ${activeRepo}...`);
     try {
-      const runtime = await refreshRuntimeCheck(false);
-      const beads = await refreshBeadsCheckForRepo(activeRepo, false);
+      const runtime = await refreshRuntimeCheck(true);
+      const beads = await refreshBeadsCheckForRepo(activeRepo, true);
       if (!runtime.gitOk || !runtime.opencodeOk || !beads.beadsOk) {
         const details = [
           ...runtime.errors,
@@ -491,6 +492,21 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
     [activeRepo],
   );
 
+  const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
+    if (!activeRepo) {
+      throw new Error("Select a workspace first.");
+    }
+
+    const config = await host.workspaceGetRepoConfig(activeRepo);
+    return {
+      worktreeBasePath: config.worktreeBasePath ?? "",
+      branchPrefix: config.branchPrefix,
+      trustedHooks: config.trustedHooks,
+      preStartHooks: config.hooks.preStart,
+      postCompleteHooks: config.hooks.postComplete,
+    };
+  }, [activeRepo]);
+
   const saveRepoSettings = useCallback(
     async (input: RepoSettingsInput) => {
       if (!activeRepo) {
@@ -576,6 +592,7 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       saveSpec,
       validateSpec: validateSpecMarkdown,
       specTemplate: defaultSpecTemplateMarkdown,
+      loadRepoSettings,
       saveRepoSettings,
       activeWorkspace,
     }),
@@ -608,6 +625,7 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       delegateCleanup,
       loadSpec,
       saveSpec,
+      loadRepoSettings,
       saveRepoSettings,
       activeWorkspace,
     ],
