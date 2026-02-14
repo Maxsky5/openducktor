@@ -1,0 +1,16 @@
+node_modules
+bun.lockb
+.DS_Store
+*.log
+dist
+build
+coverage
+.vite
+.vscode
+.idea
+.env
+.env.*
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/.cargo
+apps/desktop/src-tauri/binaries

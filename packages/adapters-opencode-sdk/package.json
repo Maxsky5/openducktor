@@ -1,0 +1,17 @@
+{
+  "name": "@openblueprint/adapters-opencode-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "test": "bun test --pass-with-no-tests",
+    "lint": "biome check src"
+  },
+  "dependencies": {
+    "@openblueprint/contracts": "workspace:*",
+    "@openblueprint/core": "workspace:*"
+  }
+}

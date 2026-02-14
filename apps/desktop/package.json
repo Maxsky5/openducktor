@@ -1,0 +1,46 @@
+{
+  "name": "@openblueprint/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "test": "bun test --pass-with-no-tests",
+    "lint": "biome check src"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^2.0.31",
+    "@openblueprint/adapters-tauri-host": "workspace:*",
+    "@openblueprint/contracts": "workspace:*",
+    "@openblueprint/core": "workspace:*",
+    "@openblueprint/ui": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "ai": "^5.0.89",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.539.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.9.1",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@tailwindcss/vite": "^4.1.12",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "@vitejs/plugin-react": "^4.4.1",
+    "tailwindcss": "^4.1.12",
+    "vite": "^6.0.7"
+  }
+}
