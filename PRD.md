@@ -84,3 +84,10 @@ For the initial release (V1), development will focus on the following milestones
    * Rust logic to dynamically spawn/kill `opencode serve` instances on available ports.
    * Frontend integration of `@opencode-ai/sdk` parsing SSE streams into the high-level activity UI.
    * Implement the HITL feedback loop (handling "Blocked" states and user replies via chat).
+
+## References
+- Opencode SDK: https://opencode.ai/docs/sdk/
+- Beads repository: https://github.com/steveyegge/beads
+- Beads documentation: https://deepwiki.com/steveyegge/beads/1-overview
+- OpenChamber: https://github.com/btriapitsyn/openchamber
+- VibeKanban: https://github.com/BloopAI/vibe-kanban
