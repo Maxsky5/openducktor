@@ -1,11 +1,13 @@
 import { AgentChatPanel } from "@/components/features/agent-chat-panel";
-import { ActivityStream } from "@/components/features/builder/activity-stream";
-import { ExecutionSummaryCards } from "@/components/features/builder/execution-summary-cards";
-import { RunControlCard } from "@/components/features/builder/run-control-card";
-import { TaskSelector } from "@/components/features/tasks/task-selector";
+import {
+  ActivityStream,
+  ExecutionSummaryCards,
+  RunControlCard,
+} from "@/components/features/builder";
+import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { type ReactElement, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 

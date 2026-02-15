@@ -1,5 +1,4 @@
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
-import type { ComposerMode, ComposerState } from "@/components/features/task-composer/types";
 import { issueTypeGuidance } from "@/components/features/task-composer/utils";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
@@ -8,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { TagSelector } from "@/components/ui/tag-selector";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import type { ComposerMode, ComposerState } from "@/types/task-composer";
 import { ListTodo } from "lucide-react";
 import type { ReactElement } from "react";
 

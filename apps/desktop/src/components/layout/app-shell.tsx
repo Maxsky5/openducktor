@@ -2,12 +2,14 @@ import { DiagnosticsPanel } from "@/components/features/diagnostics-panel";
 import { OpenRepositoryModal } from "@/components/features/open-repository-modal";
 import { RepositorySwitcher } from "@/components/features/repository-switcher";
 import { SettingsModal } from "@/components/features/settings-modal";
-import { AppBrand } from "@/components/layout/sidebar/app-brand";
-import { SidebarNavigation } from "@/components/layout/sidebar/sidebar-navigation";
-import { WorkspaceSnapshotCard } from "@/components/layout/sidebar/workspace-snapshot-card";
-import { WorkspaceSummaryCard } from "@/components/layout/sidebar/workspace-summary-card";
+import {
+  AppBrand,
+  SidebarNavigation,
+  WorkspaceSnapshotCard,
+  WorkspaceSummaryCard,
+} from "@/components/layout/sidebar";
 import { Button } from "@/components/ui/button";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";

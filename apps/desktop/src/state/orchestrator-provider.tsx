@@ -1,5 +1,6 @@
 import { subscribeRunEvents } from "@/lib/host-client";
 import { errorMessage, summarizeTaskLoadError } from "@/state/orchestrator-helpers";
+import type { OrchestratorContextValue } from "@/types/orchestrator";
 import {
   type RunEvent,
   defaultSpecTemplateMarkdown,
@@ -16,7 +17,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { OrchestratorContextValue } from "./orchestrator/types";
 import { useChecks } from "./orchestrator/use-checks";
 import { useDelegationOperations } from "./orchestrator/use-delegation-operations";
 import { useRepoSettingsOperations } from "./orchestrator/use-repo-settings-operations";
@@ -24,7 +24,7 @@ import { useSpecOperations } from "./orchestrator/use-spec-operations";
 import { useTaskOperations } from "./orchestrator/use-task-operations";
 import { useWorkspaceOperations } from "./orchestrator/use-workspace-operations";
 
-export type { RepoSettingsInput } from "./orchestrator/types";
+export type { RepoSettingsInput } from "@/types/orchestrator";
 
 const OrchestratorContext = createContext<OrchestratorContextValue | null>(null);
 

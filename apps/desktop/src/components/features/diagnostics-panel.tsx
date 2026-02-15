@@ -1,8 +1,8 @@
 import {
+  DiagnosticsSection,
   buildDiagnosticsSummary,
   healthVariant,
-} from "@/components/features/diagnostics/diagnostics-model";
-import { DiagnosticsSection } from "@/components/features/diagnostics/diagnostics-section";
+} from "@/components/features/diagnostics";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { AlertTriangle, ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 

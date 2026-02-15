@@ -3,7 +3,7 @@ import {
   emptyRepoSettings,
   parseHookLines,
   toHookText,
-} from "@/components/features/settings/settings-model";
+} from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 

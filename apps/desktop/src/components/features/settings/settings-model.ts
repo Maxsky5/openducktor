@@ -1,4 +1,4 @@
-import type { RepoSettingsInput } from "@/state/orchestrator-context";
+import type { RepoSettingsInput } from "@/types/orchestrator";
 
 export const DEFAULT_BRANCH_PREFIX = "obp";
 

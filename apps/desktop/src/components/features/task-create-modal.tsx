@@ -1,19 +1,14 @@
-import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
-import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-grid";
-import { TaskComposerStepper } from "@/components/features/task-composer/task-composer-stepper";
-import { TaskDetailsForm } from "@/components/features/task-composer/task-details-form";
-import type {
-  ComposerMode,
-  ComposerState,
-  ComposerStep,
-} from "@/components/features/task-composer/types";
 import {
+  ISSUE_TYPE_OPTIONS,
+  IssueTypeGrid,
+  TaskComposerStepper,
+  TaskDetailsForm,
   collectKnownLabels,
   normalizeLines,
   toComposerState,
   toParentComboboxOptions,
   toPriorityComboboxOptions,
-} from "@/components/features/task-composer/utils";
+} from "@/components/features/task-composer";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,7 +19,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
+import type { ComposerMode, ComposerState, ComposerStep } from "@/types/task-composer";
 import type { TaskCard, TaskCreateInput, TaskUpdatePatch } from "@openblueprint/contracts";
 import { ArrowLeft, Flag, Loader2, Sparkles, WandSparkles } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";

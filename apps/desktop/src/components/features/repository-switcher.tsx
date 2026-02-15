@@ -1,7 +1,7 @@
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import { workspaceNameFromPath } from "@/lib/workspace-label";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { useMemo } from "react";
 
 type RepositorySwitcherProps = {

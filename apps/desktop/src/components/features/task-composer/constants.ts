@@ -1,4 +1,4 @@
-import type { IssueTypeOption, PriorityOption } from "@/components/features/task-composer/types";
+import type { IssueTypeOption, PriorityOption } from "@/types/task-composer";
 import { Bug, Layers3, Lightbulb, ListTodo, Sparkles, Wrench } from "lucide-react";
 
 export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [

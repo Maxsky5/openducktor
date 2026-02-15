@@ -1,6 +1,6 @@
+import type { RepoSettingsInput } from "@/types/orchestrator";
 import { useCallback } from "react";
 import { host } from "./host";
-import type { RepoSettingsInput } from "./types";
 
 type UseRepoSettingsOperationsArgs = {
   activeRepo: string | null;

@@ -1,9 +1,8 @@
-import { KanbanColumn } from "@/components/features/kanban/kanban-column";
-import { KanbanSummaryCards } from "@/components/features/kanban/kanban-summary-cards";
+import { KanbanColumn, KanbanSummaryCards } from "@/components/features/kanban";
 import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { Button } from "@/components/ui/button";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { mapToKanbanColumns } from "@openblueprint/core";
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";

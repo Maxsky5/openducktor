@@ -4,10 +4,10 @@ import { BuilderPage } from "@/pages/builder-page";
 import { KanbanPage } from "@/pages/kanban-page";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { PlannerPage } from "@/pages/planner-page";
-import { OrchestratorProvider } from "@/state/orchestrator-context";
+import { OrchestratorProvider } from "@/state";
+import { useOrchestrator } from "@/state";
 import type { ReactElement } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
-import { useOrchestrator } from "./state/orchestrator-context";
 
 function RequireRepository(): ReactElement {
   const { activeRepo } = useOrchestrator();

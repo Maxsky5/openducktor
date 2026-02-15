@@ -1,6 +1,6 @@
 import { PRIORITY_OPTIONS } from "@/components/features/task-composer/constants";
-import type { ComposerState } from "@/components/features/task-composer/types";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import type { ComposerState } from "@/types/task-composer";
 import type { IssueType, TaskCard } from "@openblueprint/contracts";
 
 export const normalizeLines = (value: string): string | undefined => {

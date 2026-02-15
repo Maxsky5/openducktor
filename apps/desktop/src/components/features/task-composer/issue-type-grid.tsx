@@ -1,6 +1,6 @@
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
-import type { ComposerState } from "@/components/features/task-composer/types";
 import { cn } from "@/lib/utils";
+import type { ComposerState } from "@/types/task-composer";
 import { Check } from "lucide-react";
 import type { ReactElement } from "react";
 

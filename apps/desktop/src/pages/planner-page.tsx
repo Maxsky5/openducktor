@@ -1,12 +1,11 @@
 import { AgentChatPanel } from "@/components/features/agent-chat-panel";
-import { SpecMarkdownPreview } from "@/components/features/planner/spec-markdown-preview";
-import { SpecTemplateGuardrails } from "@/components/features/planner/spec-template-guardrails";
-import { TaskSelector } from "@/components/features/tasks/task-selector";
+import { SpecMarkdownPreview, SpecTemplateGuardrails } from "@/components/features/planner";
+import { TaskSelector } from "@/components/features/tasks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 

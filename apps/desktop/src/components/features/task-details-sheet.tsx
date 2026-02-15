@@ -1,6 +1,8 @@
-import { TaskDetailsMetadata } from "@/components/features/task-details/task-details-metadata";
-import { TaskDetailsSection } from "@/components/features/task-details/task-details-section";
-import { TaskDetailsSubtasks } from "@/components/features/task-details/task-details-subtasks";
+import {
+  TaskDetailsMetadata,
+  TaskDetailsSection,
+  TaskDetailsSubtasks,
+} from "@/components/features/task-details";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

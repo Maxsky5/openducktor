@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { workspaceLabelFromPath } from "@/lib/workspace-label";
-import { useOrchestrator } from "@/state/orchestrator-context";
+import { useOrchestrator } from "@/state";
 import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
