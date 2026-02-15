@@ -1,3 +1,8 @@
+import {
+  buildDiagnosticsSummary,
+  healthVariant,
+} from "@/components/features/diagnostics/diagnostics-model";
+import { DiagnosticsSection } from "@/components/features/diagnostics/diagnostics-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,16 +16,6 @@ import { cn } from "@/lib/utils";
 import { useOrchestrator } from "@/state/orchestrator-context";
 import { AlertTriangle, ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
-
-const healthVariant = (healthy: boolean | null): "success" | "warning" | "danger" | "secondary" => {
-  if (healthy === null) {
-    return "secondary";
-  }
-  if (healthy) {
-    return "success";
-  }
-  return "danger";
-};
 
 export function DiagnosticsPanel(): ReactElement {
   const {
@@ -67,38 +62,15 @@ export function DiagnosticsPanel(): ReactElement {
     return reasons;
   }, [activeRepo, worktreeConfigured]);
 
-  const summaryState: {
-    label: string;
-    toneClass: string;
-    iconClass: string;
-  } = useMemo(() => {
-    if (!activeRepo) {
-      return {
-        label: "No repository selected",
-        toneClass: "text-slate-500",
-        iconClass: "text-slate-500",
-      };
-    }
-    if (criticalReasons.length > 0) {
-      return {
-        label: "Critical issue",
-        toneClass: "text-rose-700",
-        iconClass: "text-rose-600",
-      };
-    }
-    if (setupReasons.length > 0) {
-      return {
-        label: "Setup needed",
-        toneClass: "text-amber-700",
-        iconClass: "text-amber-600",
-      };
-    }
-    return {
-      label: "Healthy",
-      toneClass: "text-emerald-700",
-      iconClass: "text-emerald-600",
-    };
-  }, [activeRepo, criticalReasons.length, setupReasons.length]);
+  const summaryState = useMemo(
+    () =>
+      buildDiagnosticsSummary({
+        hasActiveRepo: Boolean(activeRepo),
+        hasCriticalIssues: criticalReasons.length > 0,
+        hasSetupIssues: setupReasons.length > 0,
+      }),
+    [activeRepo, criticalReasons.length, setupReasons.length],
+  );
 
   useEffect(() => {
     if (!activeRepo) {
@@ -174,15 +146,13 @@ export function DiagnosticsPanel(): ReactElement {
           </SheetHeader>
 
           <div className="space-y-3">
-            <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Repository
-                </p>
-                <Badge variant={worktreeConfigured ? "success" : "warning"}>
-                  {worktreeConfigured ? "Configured" : "Needs setup"}
-                </Badge>
-              </div>
+            <DiagnosticsSection
+              title="Repository"
+              badge={{
+                label: worktreeConfigured ? "Configured" : "Needs setup",
+                variant: worktreeConfigured ? "success" : "warning",
+              }}
+            >
               {activeWorkspace ? (
                 <>
                   <p className="text-sm font-semibold text-slate-900">{repoName}</p>
@@ -191,17 +161,16 @@ export function DiagnosticsPanel(): ReactElement {
               ) : (
                 <p className="text-xs text-slate-500">Select a repository to load diagnostics.</p>
               )}
-            </section>
+            </DiagnosticsSection>
 
-            <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Runtime Tools
-                </p>
-                <Badge variant={healthVariant(runtimeHealthy)}>
-                  {runtimeHealthy === null ? "Checking" : runtimeHealthy ? "Available" : "Issue"}
-                </Badge>
-              </div>
+            <DiagnosticsSection
+              title="Runtime Tools"
+              badge={{
+                label:
+                  runtimeHealthy === null ? "Checking" : runtimeHealthy ? "Available" : "Issue",
+                variant: healthVariant(runtimeHealthy),
+              }}
+            >
               {runtimeCheck ? (
                 <div className="space-y-1 text-xs text-slate-700">
                   <p>git: {runtimeCheck.gitVersion ?? "missing"}</p>
@@ -216,17 +185,15 @@ export function DiagnosticsPanel(): ReactElement {
               ) : (
                 <p className="text-xs text-slate-500">Runtime checks are loading...</p>
               )}
-            </section>
+            </DiagnosticsSection>
 
-            <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Beads Store
-                </p>
-                <Badge variant={healthVariant(beadsHealthy)}>
-                  {beadsHealthy === null ? "Checking" : beadsHealthy ? "Ready" : "Unavailable"}
-                </Badge>
-              </div>
+            <DiagnosticsSection
+              title="Beads Store"
+              badge={{
+                label: beadsHealthy === null ? "Checking" : beadsHealthy ? "Ready" : "Unavailable",
+                variant: healthVariant(beadsHealthy),
+              }}
+            >
               {activeRepo ? (
                 <div className="space-y-1 text-xs text-slate-700">
                   {beadsCheck?.beadsPath ? (
@@ -242,7 +209,7 @@ export function DiagnosticsPanel(): ReactElement {
               ) : (
                 <p className="text-xs text-slate-500">Select a repository first.</p>
               )}
-            </section>
+            </DiagnosticsSection>
           </div>
         </SheetContent>
       </Sheet>

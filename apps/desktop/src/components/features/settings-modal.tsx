@@ -1,3 +1,9 @@
+import {
+  DEFAULT_BRANCH_PREFIX,
+  emptyRepoSettings,
+  parseHookLines,
+  toHookText,
+} from "@/components/features/settings/settings-model";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,7 +36,7 @@ export function SettingsModal({
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [worktreeBasePath, setWorktreeBasePath] = useState("");
-  const [branchPrefix, setBranchPrefix] = useState("obp");
+  const [branchPrefix, setBranchPrefix] = useState(DEFAULT_BRANCH_PREFIX);
   const [trustedHooks, setTrustedHooks] = useState(false);
   const [preStartHooks, setPreStartHooks] = useState("");
   const [postCompleteHooks, setPostCompleteHooks] = useState("");
@@ -50,18 +56,21 @@ export function SettingsModal({
         setWorktreeBasePath(settings.worktreeBasePath);
         setBranchPrefix(settings.branchPrefix);
         setTrustedHooks(settings.trustedHooks);
-        setPreStartHooks(settings.preStartHooks.join("\n"));
-        setPostCompleteHooks(settings.postCompleteHooks.join("\n"));
+        setPreStartHooks(toHookText(settings.preStartHooks));
+        setPostCompleteHooks(toHookText(settings.postCompleteHooks));
       })
       .catch(() => {
         if (cancelled) {
           return;
         }
-        setWorktreeBasePath(activeWorkspace?.configuredWorktreeBasePath ?? "");
-        setBranchPrefix("obp");
-        setTrustedHooks(false);
-        setPreStartHooks("");
-        setPostCompleteHooks("");
+        const defaults = emptyRepoSettings();
+        setWorktreeBasePath(
+          activeWorkspace?.configuredWorktreeBasePath ?? defaults.worktreeBasePath,
+        );
+        setBranchPrefix(defaults.branchPrefix);
+        setTrustedHooks(defaults.trustedHooks);
+        setPreStartHooks(toHookText(defaults.preStartHooks));
+        setPostCompleteHooks(toHookText(defaults.postCompleteHooks));
       })
       .finally(() => {
         if (!cancelled) {
@@ -81,14 +90,8 @@ export function SettingsModal({
         worktreeBasePath,
         branchPrefix,
         trustedHooks,
-        preStartHooks: preStartHooks
-          .split("\n")
-          .map((entry) => entry.trim())
-          .filter(Boolean),
-        postCompleteHooks: postCompleteHooks
-          .split("\n")
-          .map((entry) => entry.trim())
-          .filter(Boolean),
+        preStartHooks: parseHookLines(preStartHooks),
+        postCompleteHooks: parseHookLines(postCompleteHooks),
       });
 
       setOpen(false);

@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
+import { workspaceLabelFromPath } from "@/lib/workspace-label";
 import { useOrchestrator } from "@/state/orchestrator-context";
 import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
@@ -16,14 +17,6 @@ type OpenRepositoryModalProps = {
   open: boolean;
   canClose: boolean;
   onOpenChange: (open: boolean) => void;
-};
-
-const workspaceLabel = (path: string): string => {
-  const segments = path.split("/").filter(Boolean);
-  const repoName = segments.at(-1) ?? path;
-  const parent =
-    segments.length > 1 ? segments.slice(Math.max(0, segments.length - 3), -1).join("/") : "";
-  return parent ? `${repoName} (${parent})` : repoName;
 };
 
 export function OpenRepositoryModal({
@@ -141,7 +134,7 @@ export function OpenRepositoryModal({
                     onClick={() => void selectRecentWorkspace(workspace.path)}
                   >
                     <span className="truncate text-sm font-semibold text-slate-900">
-                      {workspaceLabel(workspace.path)}
+                      {workspaceLabelFromPath(workspace.path, { includeParent: true })}
                     </span>
                     {workspace.path === activeRepo ? (
                       <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">

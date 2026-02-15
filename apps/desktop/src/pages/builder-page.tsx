@@ -1,10 +1,11 @@
 import { AgentChatPanel } from "@/components/features/agent-chat-panel";
-import { Badge } from "@/components/ui/badge";
+import { ActivityStream } from "@/components/features/builder/activity-stream";
+import { ExecutionSummaryCards } from "@/components/features/builder/execution-summary-cards";
+import { RunControlCard } from "@/components/features/builder/run-control-card";
+import { TaskSelector } from "@/components/features/tasks/task-selector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useOrchestrator } from "@/state/orchestrator-context";
-import { Activity, CircleSlash2, GitBranch, ShieldAlert } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -44,35 +45,11 @@ export function BuilderPage(): ReactElement {
       />
 
       <div className="grid gap-4">
-        <section className="grid gap-3 md:grid-cols-3">
-          <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
-                <Activity className="size-4 text-emerald-600" />
-                Active Runs
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-semibold">{activeRuns}</CardContent>
-          </Card>
-          <Card className="border-rose-200 bg-gradient-to-br from-rose-50 to-white">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
-                <ShieldAlert className="size-4 text-rose-600" />
-                Blocked
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-semibold">{blockedRuns}</CardContent>
-          </Card>
-          <Card className="border-slate-200 bg-gradient-to-br from-slate-50 to-white">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
-                <CircleSlash2 className="size-4 text-slate-600" />
-                Event Entries
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-semibold">{events.length}</CardContent>
-          </Card>
-        </section>
+        <ExecutionSummaryCards
+          activeRuns={activeRuns}
+          blockedRuns={blockedRuns}
+          eventCount={events.length}
+        />
 
         <Card>
           <CardHeader>
@@ -83,22 +60,16 @@ export function BuilderPage(): ReactElement {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <select
-                className="h-9 min-w-[260px] rounded-md border border-slate-300 bg-white px-3 text-sm"
-                value={taskId}
-                onChange={(event) => {
-                  const next = event.currentTarget.value;
-                  setSelectedTaskId(next || null);
-                  setSearchParams(next ? { task: next } : {});
-                }}
-              >
-                <option value="">Select task</option>
-                {tasks.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.id} - {task.title}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-[260px]">
+                <TaskSelector
+                  tasks={tasks}
+                  value={taskId}
+                  onValueChange={(nextTaskId) => {
+                    setSelectedTaskId(nextTaskId || null);
+                    setSearchParams(nextTaskId ? { task: nextTaskId } : {});
+                  }}
+                />
+              </div>
               <Button
                 type="button"
                 disabled={!taskId}
@@ -115,92 +86,30 @@ export function BuilderPage(): ReactElement {
                 </div>
               ) : null}
               {taskRuns.map((run) => (
-                <article
+                <RunControlCard
                   key={run.runId}
-                  className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <code className="rounded bg-slate-900 px-2 py-1 text-xs text-white">
-                      {run.runId}
-                    </code>
-                    <Badge variant={run.state === "blocked" ? "danger" : "warning"}>
-                      {run.state}
-                    </Badge>
-                    <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                      <GitBranch className="size-3" />
-                      {run.branch}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void delegateRespond(run.runId, "approve")}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => void delegateRespond(run.runId, "deny")}
-                    >
-                      Deny
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void delegateStop(run.runId)}
-                    >
-                      Stop
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void delegateCleanup(run.runId, "success")}
-                    >
-                      Cleanup Success
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void delegateCleanup(run.runId, "failure")}
-                    >
-                      Cleanup Failure
-                    </Button>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Reply to agent"
-                      value={runMessageById[run.runId] ?? ""}
-                      onChange={(event) =>
-                        setRunMessageById((current) => ({
-                          ...current,
-                          [run.runId]: event.currentTarget.value,
-                        }))
-                      }
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        const message = (runMessageById[run.runId] ?? "").trim();
-                        if (!message) {
-                          return;
-                        }
-                        void delegateRespond(run.runId, "message", message);
-                        setRunMessageById((current) => ({ ...current, [run.runId]: "" }));
-                      }}
-                    >
-                      Send
-                    </Button>
-                  </div>
-                </article>
+                  run={run}
+                  message={runMessageById[run.runId] ?? ""}
+                  onMessageChange={(runId, value) =>
+                    setRunMessageById((current) => ({
+                      ...current,
+                      [runId]: value,
+                    }))
+                  }
+                  onApprove={(runId) => void delegateRespond(runId, "approve")}
+                  onDeny={(runId) => void delegateRespond(runId, "deny")}
+                  onStop={(runId) => void delegateStop(runId)}
+                  onCleanupSuccess={(runId) => void delegateCleanup(runId, "success")}
+                  onCleanupFailure={(runId) => void delegateCleanup(runId, "failure")}
+                  onSendMessage={(runId, message) => {
+                    const trimmed = message.trim();
+                    if (!trimmed) {
+                      return;
+                    }
+                    void delegateRespond(runId, "message", trimmed);
+                    setRunMessageById((current) => ({ ...current, [runId]: "" }));
+                  }}
+                />
               ))}
             </div>
           </CardContent>
@@ -211,22 +120,8 @@ export function BuilderPage(): ReactElement {
             <CardTitle className="text-lg">Activity Stream</CardTitle>
             <CardDescription>Structured event feed from orchestrated agent runs.</CardDescription>
           </CardHeader>
-          <CardContent className="max-h-[360px] space-y-2 overflow-y-auto">
-            {events.length === 0 ? <p className="text-sm text-slate-500">No events yet.</p> : null}
-            {events.map((event, index) => (
-              <article
-                key={`${event.type}-${event.timestamp}-${index}`}
-                className="rounded-md border border-slate-200 p-3 text-sm"
-              >
-                <header className="mb-1 flex items-center justify-between gap-2">
-                  <Badge variant="secondary">{event.type}</Badge>
-                  <time className="text-xs text-slate-400">
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </time>
-                </header>
-                <p className="text-slate-700">{event.message}</p>
-              </article>
-            ))}
+          <CardContent>
+            <ActivityStream events={events} />
           </CardContent>
         </Card>
       </div>

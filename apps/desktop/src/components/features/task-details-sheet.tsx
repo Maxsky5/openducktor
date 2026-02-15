@@ -1,3 +1,6 @@
+import { TaskDetailsMetadata } from "@/components/features/task-details/task-details-metadata";
+import { TaskDetailsSection } from "@/components/features/task-details/task-details-section";
+import { TaskDetailsSubtasks } from "@/components/features/task-details/task-details-subtasks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,14 +11,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { priorityLabel, statusBadgeVariant, statusLabel } from "@/lib/task-display";
 import type { TaskCard } from "@openblueprint/contracts";
 import {
   CalendarClock,
   CheckSquare,
   CircleHelp,
   Flag,
-  GitBranch,
-  Layers3,
   PencilLine,
   Play,
   ScrollText,
@@ -33,72 +35,6 @@ type TaskDetailsSheetProps = {
   onBuild?: (taskId: string) => void;
   onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;
-};
-
-const priorityLabel = (priority: number): string => {
-  if (priority <= 0) {
-    return "P0";
-  }
-  if (priority === 1) {
-    return "P1";
-  }
-  if (priority === 2) {
-    return "P2";
-  }
-  if (priority === 3) {
-    return "P3";
-  }
-  return "P4";
-};
-
-const statusVariant = (
-  status: TaskCard["status"],
-): "secondary" | "warning" | "danger" | "success" => {
-  if (status === "blocked") {
-    return "danger";
-  }
-  if (status === "in_progress") {
-    return "warning";
-  }
-  if (status === "closed") {
-    return "success";
-  }
-  return "secondary";
-};
-
-const humanDate = (value: string): string => {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.valueOf())) {
-    return value;
-  }
-  return parsed.toLocaleString();
-};
-
-const Section = ({
-  icon,
-  title,
-  value,
-  empty,
-}: {
-  icon: ReactElement;
-  title: string;
-  value?: string;
-  empty: string;
-}): ReactElement => {
-  const content = value?.trim();
-  return (
-    <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-      <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-        {icon}
-        {title}
-      </h4>
-      {content ? (
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{content}</p>
-      ) : (
-        <p className="text-sm text-slate-500">{empty}</p>
-      )}
-    </section>
-  );
 };
 
 export function TaskDetailsSheet({
@@ -129,7 +65,7 @@ export function TaskDetailsSheet({
               </SheetTitle>
               <SheetDescription className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs">{task.id}</span>
-                <Badge variant={statusVariant(task.status)}>{task.status.replace("_", " ")}</Badge>
+                <Badge variant={statusBadgeVariant(task.status)}>{statusLabel(task.status)}</Badge>
                 <Badge variant="outline">{task.issueType}</Badge>
                 <Badge variant="secondary">{priorityLabel(task.priority)}</Badge>
                 {task.phase ? <Badge variant="outline">phase: {task.phase}</Badge> : null}
@@ -137,75 +73,26 @@ export function TaskDetailsSheet({
             </SheetHeader>
 
             <div className="space-y-3">
-              <Section
+              <TaskDetailsSection
                 icon={<CircleHelp className="size-3.5" />}
                 title="Description"
                 value={task.description}
                 empty="No description yet."
               />
-              <Section
+              <TaskDetailsSection
                 icon={<Wrench className="size-3.5" />}
                 title="Design"
                 value={task.design}
                 empty="No design notes yet."
               />
-              <Section
+              <TaskDetailsSection
                 icon={<CheckSquare className="size-3.5" />}
                 title="Acceptance Criteria"
                 value={task.acceptanceCriteria}
                 empty="No acceptance criteria yet."
               />
-
-              <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  <Layers3 className="size-3.5" />
-                  Metadata
-                </h4>
-                <div className="grid gap-2 text-sm text-slate-700">
-                  <p>
-                    <span className="font-medium text-slate-900">Assignee:</span>{" "}
-                    {task.assignee ?? "Unassigned"}
-                  </p>
-                  <p>
-                    <span className="font-medium text-slate-900">Parent:</span>{" "}
-                    {task.parentId ?? "No parent"}
-                  </p>
-                  <p>
-                    <span className="font-medium text-slate-900">Labels:</span>{" "}
-                    {task.labels.length > 0 ? task.labels.join(", ") : "None"}
-                  </p>
-                  <p>
-                    <span className="font-medium text-slate-900">Created:</span>{" "}
-                    {humanDate(task.createdAt)}
-                  </p>
-                  <p>
-                    <span className="font-medium text-slate-900">Updated:</span>{" "}
-                    {humanDate(task.updatedAt)}
-                  </p>
-                </div>
-              </section>
-
-              <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-                <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  <GitBranch className="size-3.5" />
-                  Subtasks
-                </h4>
-                {subtasks.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {subtasks.map((subtask) => (
-                      <li
-                        key={subtask.id}
-                        className="rounded-md border border-slate-200 bg-white p-2"
-                      >
-                        <p className="text-sm font-semibold text-slate-900">{subtask.title}</p>
-                        <p className="text-xs text-slate-500">{subtask.id}</p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-slate-500">No subtasks yet.</p>
-                )}
-              </section>
+              <TaskDetailsMetadata task={task} />
+              <TaskDetailsSubtasks subtasks={subtasks} />
             </div>
 
             <SheetFooter className="mt-4 flex-wrap justify-between gap-2 border-t border-slate-200 pt-4">

@@ -1,70 +1,53 @@
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
+import { workspaceNameFromPath } from "@/lib/workspace-label";
 import { useOrchestrator } from "@/state/orchestrator-context";
-import { type ReactElement, useEffect, useState } from "react";
-
-const workspaceLabel = (path: string): string => {
-  const segments = path.split("/").filter(Boolean);
-  return segments.at(-1) ?? path;
-};
+import { useMemo } from "react";
 
 type RepositorySwitcherProps = {
   className?: string;
-  selectClassName?: string;
+  triggerClassName?: string;
 };
 
-export function RepositorySwitcher({
-  className,
-  selectClassName,
-}: RepositorySwitcherProps = {}): ReactElement | null {
+export function RepositorySwitcher({ className, triggerClassName }: RepositorySwitcherProps = {}) {
   const { workspaces, activeRepo, selectWorkspace, isSwitchingWorkspace } = useOrchestrator();
-  const [selectedRepo, setSelectedRepo] = useState(activeRepo ?? "");
 
-  useEffect(() => {
-    if (activeRepo) {
-      setSelectedRepo(activeRepo);
-      return;
-    }
+  const options = useMemo<ComboboxOption[]>(
+    () =>
+      workspaces.map((workspace) => ({
+        value: workspace.path,
+        label: workspaceNameFromPath(workspace.path),
+        searchKeywords: workspace.path.split("/").filter(Boolean),
+      })),
+    [workspaces],
+  );
 
-    const firstWorkspace = workspaces[0];
-    if (firstWorkspace && !selectedRepo) {
-      setSelectedRepo(firstWorkspace.path);
-    }
-  }, [activeRepo, selectedRepo, workspaces]);
-
-  if (workspaces.length === 0) {
+  if (options.length === 0) {
     return null;
   }
 
+  const selectedValue = activeRepo ?? options[0]?.value ?? "";
+
   return (
-    <div
-      className={cn(
-        "flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-2 py-1.5",
-        className,
-      )}
-    >
-      <select
-        className={cn(
-          "h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400",
-          selectClassName,
-        )}
-        value={selectedRepo}
+    <div className={cn("w-full", className)}>
+      <Combobox
+        value={selectedValue}
+        options={options}
         disabled={isSwitchingWorkspace}
-        onChange={(event) => {
-          const value = event.currentTarget.value;
-          setSelectedRepo(value);
-          if (value && value !== activeRepo) {
-            void selectWorkspace(value).catch(() => {
-              // Status/error is handled in orchestrator context.
-            });
+        searchPlaceholder="Search repository..."
+        onValueChange={(value) => {
+          if (!value || value === activeRepo) {
+            return;
           }
+          void selectWorkspace(value).catch(() => {
+            // Status/error is handled in orchestrator context.
+          });
         }}
-      >
-        {workspaces.map((workspace) => (
-          <option key={workspace.path} value={workspace.path}>
-            {workspaceLabel(workspace.path)}
-          </option>
-        ))}
-      </select>
+        triggerClassName={cn(
+          "h-9 w-full rounded-md border-slate-300 bg-white px-3 text-sm text-slate-700",
+          triggerClassName,
+        )}
+      />
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { AgentChatPanel } from "@/components/features/agent-chat-panel";
+import { SpecMarkdownPreview } from "@/components/features/planner/spec-markdown-preview";
+import { SpecTemplateGuardrails } from "@/components/features/planner/spec-template-guardrails";
+import { TaskSelector } from "@/components/features/tasks/task-selector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrchestrator } from "@/state/orchestrator-context";
-import { specTemplateSections } from "@openblueprint/contracts";
-import { CheckCircle2, CircleDotDashed } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -41,14 +42,6 @@ export function PlannerPage(): ReactElement {
     () => new Set(validation.missing.map((heading) => heading.toLowerCase())),
     [validation.missing],
   );
-  const previewEntries = useMemo(() => {
-    const occurrences = new Map<string, number>();
-    return markdown.split("\n").map((line) => {
-      const count = (occurrences.get(line) ?? 0) + 1;
-      occurrences.set(line, count);
-      return { line, key: `${line}::${count}` };
-    });
-  }, [markdown]);
 
   return (
     <div className="grid h-full gap-4 xl:grid-cols-[minmax(320px,1fr)_minmax(540px,1.6fr)]">
@@ -60,35 +53,7 @@ export function PlannerPage(): ReactElement {
       />
 
       <div className="grid h-full gap-4 xl:grid-cols-[minmax(280px,0.8fr)_minmax(520px,1.4fr)]">
-        <Card className="h-full border-slate-200">
-          <CardHeader>
-            <CardTitle className="text-lg">Template Guardrails</CardTitle>
-            <CardDescription>
-              Each section includes explicit purpose text and is required before save.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {specTemplateSections.map((section) => {
-              const missing = missingHeadings.has(section.heading.toLowerCase());
-              return (
-                <div
-                  key={section.heading}
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    {missing ? (
-                      <CircleDotDashed className="size-4 text-amber-600" />
-                    ) : (
-                      <CheckCircle2 className="size-4 text-emerald-600" />
-                    )}
-                    {section.heading}
-                  </div>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-600">{section.purpose}</p>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+        <SpecTemplateGuardrails missingHeadings={missingHeadings} />
 
         <Card className="h-full">
           <CardHeader>
@@ -106,21 +71,15 @@ export function PlannerPage(): ReactElement {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <select
-                className="h-9 min-w-[260px] rounded-md border border-slate-300 bg-white px-3 text-sm"
-                value={taskId}
-                onChange={(event) => {
-                  const next = event.currentTarget.value;
-                  setSearchParams(next ? { task: next } : {});
-                }}
-              >
-                <option value="">Select task</option>
-                {tasks.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.id} - {task.title}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-[260px]">
+                <TaskSelector
+                  tasks={tasks}
+                  value={taskId}
+                  onValueChange={(nextTaskId) => {
+                    setSearchParams(nextTaskId ? { task: nextTaskId } : {});
+                  }}
+                />
+              </div>
               <Button
                 type="button"
                 disabled={!activeRepo || !taskId || !validation.valid}
@@ -153,58 +112,7 @@ export function PlannerPage(): ReactElement {
                 onChange={(event) => setMarkdown(event.currentTarget.value)}
               />
             </div>
-
-            <div className="min-h-[420px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4">
-              {previewEntries.map(({ line, key }) => {
-                const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
-                if (headingMatch) {
-                  const [, hashes = "", rawTitle = ""] = headingMatch;
-                  const level = hashes.length;
-                  const title = rawTitle.trim();
-                  return (
-                    <p
-                      key={key}
-                      className={
-                        level <= 2
-                          ? "mt-4 border-b border-slate-200 pb-1 text-base font-semibold text-slate-900 first:mt-0"
-                          : "mt-3 text-sm font-semibold text-slate-800"
-                      }
-                    >
-                      {title}
-                    </p>
-                  );
-                }
-
-                if (line.startsWith(">")) {
-                  return (
-                    <p
-                      key={key}
-                      className="mt-2 rounded border-l-2 border-sky-300 bg-sky-50 px-3 py-2 text-xs text-slate-600"
-                    >
-                      {line.replace(/^>\s?/, "")}
-                    </p>
-                  );
-                }
-
-                if (/^[-*]\s+/.test(line)) {
-                  return (
-                    <p key={key} className="ml-5 list-item list-disc text-sm text-slate-700">
-                      {line.replace(/^[-*]\s+/, "")}
-                    </p>
-                  );
-                }
-
-                if (!line.trim()) {
-                  return <div key={key} className="h-2" />;
-                }
-
-                return (
-                  <p key={key} className="mt-2 text-sm leading-relaxed text-slate-700">
-                    {line}
-                  </p>
-                );
-              })}
-            </div>
+            <SpecMarkdownPreview markdown={markdown} />
           </CardContent>
         </Card>
       </div>
