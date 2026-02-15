@@ -26,6 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 
 const host = createHostClient();
 
@@ -394,6 +395,16 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
         });
         setStatusText("Task created");
         await refreshTaskData(activeRepo);
+        toast.success("Task created", {
+          description: input.title.trim(),
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        setStatusText(`Failed to create task: ${reason}`);
+        toast.error("Failed to create task", {
+          description: reason,
+        });
+        throw error;
       } finally {
         setIsBusy(false);
       }
@@ -412,6 +423,16 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
         await host.taskUpdate(activeRepo, taskId, patch);
         setStatusText(`Task ${taskId} updated`);
         await refreshTaskData(activeRepo);
+        toast.success("Task updated", {
+          description: patch.title?.trim() || taskId,
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        setStatusText(`Failed to update task ${taskId}: ${reason}`);
+        toast.error("Failed to update task", {
+          description: reason,
+        });
+        throw error;
       } finally {
         setIsBusy(false);
       }

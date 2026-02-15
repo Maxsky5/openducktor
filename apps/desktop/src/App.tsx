@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/layout/app-shell";
+import { Toaster } from "@/components/ui/sonner";
 import { BuilderPage } from "@/pages/builder-page";
 import { KanbanPage } from "@/pages/kanban-page";
 import { NotFoundPage } from "@/pages/not-found-page";
@@ -19,17 +20,20 @@ function RequireRepository(): ReactElement {
 export function App(): ReactElement {
   return (
     <OrchestratorProvider>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route path="/" element={<Navigate to="/kanban" replace />} />
-          <Route path="/kanban" element={<KanbanPage />} />
-          <Route element={<RequireRepository />}>
-            <Route path="/planner" element={<PlannerPage />} />
-            <Route path="/builder" element={<BuilderPage />} />
+      <>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<Navigate to="/kanban" replace />} />
+            <Route path="/kanban" element={<KanbanPage />} />
+            <Route element={<RequireRepository />}>
+              <Route path="/planner" element={<PlannerPage />} />
+              <Route path="/builder" element={<BuilderPage />} />
+            </Route>
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
+        </Routes>
+        <Toaster />
+      </>
     </OrchestratorProvider>
   );
 }
