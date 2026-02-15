@@ -11,15 +11,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useOrchestrator } from "@/state/orchestrator-context";
 import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 
-export function SettingsModal(): ReactElement {
-  const { activeRepo, activeWorkspace, loadRepoSettings, saveRepoSettings, isBusy } =
-    useOrchestrator();
+type SettingsModalProps = {
+  triggerClassName?: string;
+  triggerSize?: "default" | "sm" | "lg" | "icon";
+};
+
+export function SettingsModal({
+  triggerClassName,
+  triggerSize = "sm",
+}: SettingsModalProps): ReactElement {
+  const { activeRepo, activeWorkspace, loadRepoSettings, saveRepoSettings } = useOrchestrator();
   const [open, setOpen] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [worktreeBasePath, setWorktreeBasePath] = useState("");
   const [branchPrefix, setBranchPrefix] = useState("obp");
   const [trustedHooks, setTrustedHooks] = useState(false);
@@ -66,27 +75,32 @@ export function SettingsModal(): ReactElement {
   }, [activeRepo, activeWorkspace, loadRepoSettings, open]);
 
   const submit = async (): Promise<void> => {
-    await saveRepoSettings({
-      worktreeBasePath,
-      branchPrefix,
-      trustedHooks,
-      preStartHooks: preStartHooks
-        .split("\n")
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-      postCompleteHooks: postCompleteHooks
-        .split("\n")
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    });
+    setIsSaving(true);
+    try {
+      await saveRepoSettings({
+        worktreeBasePath,
+        branchPrefix,
+        trustedHooks,
+        preStartHooks: preStartHooks
+          .split("\n")
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+        postCompleteHooks: postCompleteHooks
+          .split("\n")
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+      });
 
-    setOpen(false);
+      setOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
+        <Button type="button" variant="outline" size={triggerSize} className={cn(triggerClassName)}>
           <Settings2 className="size-4" />
           Settings
         </Button>
@@ -118,7 +132,7 @@ export function SettingsModal(): ReactElement {
               id="worktree-path"
               placeholder="/absolute/path/outside/repo"
               value={worktreeBasePath}
-              disabled={isLoadingConfig}
+              disabled={isLoadingConfig || isSaving}
               onChange={(event) => setWorktreeBasePath(event.currentTarget.value)}
             />
           </div>
@@ -128,7 +142,7 @@ export function SettingsModal(): ReactElement {
             <Input
               id="branch-prefix"
               value={branchPrefix}
-              disabled={isLoadingConfig}
+              disabled={isLoadingConfig || isSaving}
               onChange={(event) => setBranchPrefix(event.currentTarget.value)}
             />
           </div>
@@ -139,7 +153,7 @@ export function SettingsModal(): ReactElement {
               id="pre-hooks"
               rows={4}
               value={preStartHooks}
-              disabled={isLoadingConfig}
+              disabled={isLoadingConfig || isSaving}
               onChange={(event) => setPreStartHooks(event.currentTarget.value)}
             />
           </div>
@@ -150,7 +164,7 @@ export function SettingsModal(): ReactElement {
               id="post-hooks"
               rows={4}
               value={postCompleteHooks}
-              disabled={isLoadingConfig}
+              disabled={isLoadingConfig || isSaving}
               onChange={(event) => setPostCompleteHooks(event.currentTarget.value)}
             />
           </div>
@@ -159,7 +173,7 @@ export function SettingsModal(): ReactElement {
             <input
               type="checkbox"
               checked={trustedHooks}
-              disabled={isLoadingConfig}
+              disabled={isLoadingConfig || isSaving}
               onChange={(event) => setTrustedHooks(event.currentTarget.checked)}
             />
             Trust hooks for this workspace
@@ -173,9 +187,9 @@ export function SettingsModal(): ReactElement {
           <Button
             type="button"
             onClick={() => void submit()}
-            disabled={isBusy || isLoadingConfig || !activeRepo || !worktreeBasePath}
+            disabled={isSaving || isLoadingConfig || !activeRepo || !worktreeBasePath}
           >
-            Save Settings
+            {isSaving ? "Saving..." : "Save Settings"}
           </Button>
         </DialogFooter>
       </DialogContent>

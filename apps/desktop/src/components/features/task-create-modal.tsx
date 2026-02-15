@@ -178,12 +178,13 @@ export function TaskCreateModal({
   tasks,
   task = null,
 }: TaskCreateModalProps): ReactElement {
-  const { activeRepo, createTask, updateTask, isBusy } = useOrchestrator();
+  const { activeRepo, createTask, updateTask } = useOrchestrator();
   const mode = task ? "edit" : "create";
 
   const [step, setStep] = useState<ComposerStep>("type");
   const [state, setState] = useState<ComposerState>(() => toFormState(task));
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -192,6 +193,7 @@ export function TaskCreateModal({
     setState(toFormState(task));
     setStep(task ? "details" : "type");
     setError(null);
+    setIsSubmitting(false);
   }, [open, task]);
 
   const selectedType = issueTypeOptions.find((option) => option.value === state.issueType);
@@ -262,6 +264,7 @@ export function TaskCreateModal({
     }
 
     setError(null);
+    setIsSubmitting(true);
     try {
       if (mode === "create") {
         const input: TaskCreateInput = {
@@ -291,6 +294,8 @@ export function TaskCreateModal({
       close();
     } catch (reason) {
       setError((reason as Error).message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -418,7 +423,7 @@ export function TaskCreateModal({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (isBusy && !nextOpen) {
+        if (isSubmitting && !nextOpen) {
           return;
         }
         onOpenChange(nextOpen);
@@ -437,8 +442,13 @@ export function TaskCreateModal({
           </DialogDescription>
         </DialogHeader>
 
-        <fieldset disabled={isBusy} className="flex min-h-0 flex-1 flex-col border-0 p-0">
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <fieldset disabled={isSubmitting} className="flex min-h-0 flex-1 flex-col border-0 p-0">
+          <div
+            className={cn(
+              "min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4 transition-opacity",
+              isSubmitting ? "cursor-wait opacity-55" : "opacity-100",
+            )}
+          >
             {mode === "create" ? (
               <>
                 <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
@@ -580,7 +590,7 @@ export function TaskCreateModal({
                 variant="outline"
                 className="cursor-pointer"
                 onClick={() => setStep("type")}
-                disabled={isBusy}
+                disabled={isSubmitting}
               >
                 <ArrowLeft className="size-4" />
                 Back
@@ -596,7 +606,7 @@ export function TaskCreateModal({
                 variant="secondary"
                 className="cursor-pointer"
                 onClick={close}
-                disabled={isBusy}
+                disabled={isSubmitting}
               >
                 Cancel
               </Button>
@@ -605,7 +615,7 @@ export function TaskCreateModal({
                   type="button"
                   className="cursor-pointer"
                   onClick={() => setStep("details")}
-                  disabled={isBusy}
+                  disabled={isSubmitting}
                 >
                   Continue
                 </Button>
@@ -614,16 +624,16 @@ export function TaskCreateModal({
                   type="button"
                   className="cursor-pointer"
                   onClick={() => void submit()}
-                  disabled={isBusy || !state.title.trim()}
+                  disabled={isSubmitting || !state.title.trim()}
                 >
-                  {isBusy ? (
+                  {isSubmitting ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : mode === "create" ? (
                     <Flag className="size-4" />
                   ) : (
                     <WandSparkles className="size-4" />
                   )}
-                  {isBusy
+                  {isSubmitting
                     ? mode === "create"
                       ? "Creating..."
                       : "Saving..."

@@ -36,7 +36,7 @@ export function OpenRepositoryModal({
   const [isPickingRepo, setIsPickingRepo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isBusy = isPickingRepo || isSwitchingWorkspace;
+  const isModalBusy = isPickingRepo || isSwitchingWorkspace;
   const sortedRecent = useMemo(
     () => [...workspaces].sort((a, b) => Number(b.isActive) - Number(a.isActive)),
     [workspaces],
@@ -113,7 +113,7 @@ export function OpenRepositoryModal({
             size="lg"
             className="w-full"
             onClick={() => void openSelectedRepo()}
-            disabled={isBusy}
+            disabled={isModalBusy}
           >
             <FolderOpen className="size-4" />
             {isPickingRepo ? "Opening directory picker..." : "Choose Repository Folder"}
@@ -137,7 +137,7 @@ export function OpenRepositoryModal({
                     type="button"
                     variant="outline"
                     className="h-auto justify-between gap-3 overflow-hidden px-3 py-2 text-left"
-                    disabled={isBusy}
+                    disabled={isModalBusy}
                     onClick={() => void selectRecentWorkspace(workspace.path)}
                   >
                     <span className="truncate text-sm font-semibold text-slate-900">

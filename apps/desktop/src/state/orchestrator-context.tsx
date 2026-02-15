@@ -69,12 +69,10 @@ type OrchestratorContextValue = {
   runtimeCheck: RuntimeCheck | null;
   beadsCheck: BeadsCheck | null;
   systemCheck: SystemCheck | null;
-  isBusy: boolean;
   isSwitchingWorkspace: boolean;
   switchingRepoPath: string | null;
   isLoadingTasks: boolean;
   isLoadingChecks: boolean;
-  isRepositoryLoading: boolean;
   workspaces: WorkspaceRecord[];
   activeRepo: string | null;
   tasks: TaskCard[];
@@ -126,7 +124,6 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
   const [statusText, setStatusText] = useState("Ready");
   const [runtimeCheck, setRuntimeCheck] = useState<RuntimeCheck | null>(null);
   const [activeBeadsCheck, setActiveBeadsCheck] = useState<BeadsCheck | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false);
   const [switchingRepoPath, setSwitchingRepoPath] = useState<string | null>(null);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
@@ -232,9 +229,8 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
   }, [activeRepo, refreshBeadsCheckForRepo, refreshTaskData]);
 
   useEffect(() => {
-    setIsBusy(true);
-    Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)])
-      .then(([workspaceResult, runtimeResult]) => {
+    Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
+      ([workspaceResult, runtimeResult]) => {
         if (workspaceResult.status === "rejected") {
           setStatusText(`Workspace load failed: ${errorMessage(workspaceResult.reason)}`);
           return;
@@ -242,8 +238,8 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
         if (runtimeResult.status === "rejected") {
           setStatusText(`Runtime checks unavailable: ${errorMessage(runtimeResult.reason)}`);
         }
-      })
-      .finally(() => setIsBusy(false));
+      },
+    );
 
     subscribeRunEvents((payload) => {
       const parsed = runEventSchema.safeParse(payload);
@@ -326,14 +322,9 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
         return;
       }
 
-      setIsBusy(true);
-      try {
-        const workspace = await host.workspaceAdd(repoPath.trim());
-        setStatusText(`Workspace added: ${workspace.path}`);
-        await refreshWorkspaces();
-      } finally {
-        setIsBusy(false);
-      }
+      const workspace = await host.workspaceAdd(repoPath.trim());
+      setStatusText(`Workspace added: ${workspace.path}`);
+      await refreshWorkspaces();
     },
     [refreshWorkspaces],
   );
@@ -387,7 +378,6 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
         return;
       }
 
-      setIsBusy(true);
       try {
         await host.taskCreate(activeRepo, {
           ...input,
@@ -405,8 +395,6 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
           description: reason,
         });
         throw error;
-      } finally {
-        setIsBusy(false);
       }
     },
     [activeRepo, refreshTaskData],
@@ -418,7 +406,6 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
         throw new Error("Select a workspace first.");
       }
 
-      setIsBusy(true);
       try {
         await host.taskUpdate(activeRepo, taskId, patch);
         setStatusText(`Task ${taskId} updated`);
@@ -433,8 +420,6 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
           description: reason,
         });
         throw error;
-      } finally {
-        setIsBusy(false);
       }
     },
     [activeRepo, refreshTaskData],
@@ -447,15 +432,10 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       }
 
       taskPhaseSchema.parse(phase);
-      setIsBusy(true);
-      try {
-        await host.taskSetPhase(activeRepo, taskId, phase, "Kanban move");
-        await host.taskUpdate(activeRepo, taskId, { status: phaseToStatus(phase) });
-        setStatusText(`Task ${taskId} moved to ${phase}`);
-        await refreshTaskData(activeRepo);
-      } finally {
-        setIsBusy(false);
-      }
+      await host.taskSetPhase(activeRepo, taskId, phase, "Kanban move");
+      await host.taskUpdate(activeRepo, taskId, { status: phaseToStatus(phase) });
+      setStatusText(`Task ${taskId} moved to ${phase}`);
+      await refreshTaskData(activeRepo);
     },
     [activeRepo, refreshTaskData],
   );
@@ -466,14 +446,9 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
         throw new Error("Select a workspace first.");
       }
 
-      setIsBusy(true);
-      try {
-        const run = await host.delegateStart(activeRepo, taskId);
-        setStatusText(`Delegation started: ${run.runId}`);
-        await refreshTaskData(activeRepo);
-      } finally {
-        setIsBusy(false);
-      }
+      const run = await host.delegateStart(activeRepo, taskId);
+      setStatusText(`Delegation started: ${run.runId}`);
+      await refreshTaskData(activeRepo);
     },
     [activeRepo, refreshTaskData],
   );
@@ -609,12 +584,10 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       runtimeCheck,
       beadsCheck: activeBeadsCheck,
       systemCheck,
-      isBusy,
       isSwitchingWorkspace,
       switchingRepoPath,
       isLoadingTasks,
       isLoadingChecks,
-      isRepositoryLoading: isSwitchingWorkspace || isLoadingTasks || isLoadingChecks,
       workspaces,
       activeRepo,
       tasks,
@@ -647,7 +620,6 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       runtimeCheck,
       activeBeadsCheck,
       systemCheck,
-      isBusy,
       isSwitchingWorkspace,
       switchingRepoPath,
       isLoadingTasks,

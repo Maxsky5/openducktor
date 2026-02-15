@@ -1,15 +1,21 @@
+import { cn } from "@/lib/utils";
 import { useOrchestrator } from "@/state/orchestrator-context";
 import { type ReactElement, useEffect, useState } from "react";
 
 const workspaceLabel = (path: string): string => {
   const segments = path.split("/").filter(Boolean);
-  const repoName = segments.at(-1) ?? path;
-  const parent =
-    segments.length > 1 ? segments.slice(Math.max(0, segments.length - 3), -1).join("/") : "";
-  return parent ? `${repoName}  (${parent})` : repoName;
+  return segments.at(-1) ?? path;
 };
 
-export function RepositorySwitcher(): ReactElement | null {
+type RepositorySwitcherProps = {
+  className?: string;
+  selectClassName?: string;
+};
+
+export function RepositorySwitcher({
+  className,
+  selectClassName,
+}: RepositorySwitcherProps = {}): ReactElement | null {
   const { workspaces, activeRepo, selectWorkspace, isSwitchingWorkspace } = useOrchestrator();
   const [selectedRepo, setSelectedRepo] = useState(activeRepo ?? "");
 
@@ -30,9 +36,17 @@ export function RepositorySwitcher(): ReactElement | null {
   }
 
   return (
-    <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-2 py-1.5 md:min-w-[380px] md:w-auto">
+    <div
+      className={cn(
+        "flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-2 py-1.5",
+        className,
+      )}
+    >
       <select
-        className="h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400"
+        className={cn(
+          "h-9 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400",
+          selectClassName,
+        )}
         value={selectedRepo}
         disabled={isSwitchingWorkspace}
         onChange={(event) => {

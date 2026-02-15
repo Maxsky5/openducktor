@@ -1,6 +1,5 @@
 import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
-import { WorkspaceToolbar } from "@/components/features/workspace-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,8 +76,6 @@ export function KanbanPage(): ReactElement {
 
   return (
     <div className="grid h-full gap-4">
-      <WorkspaceToolbar />
-
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Card className="animate-rise-in border-sky-200 bg-gradient-to-br from-sky-50 to-white">
           <CardHeader className="pb-2">
@@ -129,6 +126,8 @@ export function KanbanPage(): ReactElement {
         <div className="flex items-center gap-2">
           <Button
             type="button"
+            size="default"
+            className="h-10"
             onClick={() => {
               setComposerTaskId(null);
               setTaskComposerOpen(true);
@@ -139,15 +138,16 @@ export function KanbanPage(): ReactElement {
           </Button>
           <Button
             type="button"
+            size="default"
             variant="outline"
-            size="sm"
+            className="h-10"
             disabled={isLoadingTasks || isSwitchingWorkspace}
             onClick={() => void refreshTasks()}
           >
             {isLoadingTasks ? (
-              <Loader2 className="size-3 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <RefreshCcw className="size-3" />
+              <RefreshCcw className="size-3.5" />
             )}
             {isLoadingTasks ? "Refreshing..." : "Refresh Tasks"}
           </Button>
