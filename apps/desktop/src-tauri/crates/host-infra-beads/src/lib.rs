@@ -235,7 +235,7 @@ impl TaskStore for BeadsTaskStore {
         ];
         let value = self.run_bd_json(repo_path, &args)?;
 
-        let tasks = value
+        let mut tasks: Vec<TaskCard> = value
             .as_array()
             .ok_or_else(|| anyhow!("bd list did not return an array"))?
             .iter()
@@ -243,19 +243,83 @@ impl TaskStore for BeadsTaskStore {
             .filter(|task| task.issue_type != "event" && task.issue_type != "gate")
             .collect();
 
+        let mut subtasks_by_parent: HashMap<String, Vec<String>> = HashMap::new();
+        for task in &tasks {
+            if let Some(parent_id) = &task.parent_id {
+                subtasks_by_parent
+                    .entry(parent_id.clone())
+                    .or_default()
+                    .push(task.id.clone());
+            }
+        }
+
+        for task in &mut tasks {
+            let mut subtasks = subtasks_by_parent.remove(&task.id).unwrap_or_default();
+            subtasks.sort();
+            task.subtask_ids = subtasks;
+        }
+
         Ok(tasks)
     }
 
     fn create_task(&self, repo_path: &Path, input: CreateTaskInput) -> Result<TaskCard> {
-        let args = vec![
-            "create".to_string(),
-            input.title,
-            "--type".to_string(),
-            "task".to_string(),
-        ];
+        let mut args = vec!["create".to_string(), input.title];
+        args.push("--type".to_string());
+        args.push(input.issue_type);
+        args.push("--priority".to_string());
+        args.push(input.priority.to_string());
+
+        if let Some(description) = normalize_text_option(input.description) {
+            args.push("--description".to_string());
+            args.push(description);
+        }
+
+        if let Some(design) = normalize_text_option(input.design) {
+            args.push("--design".to_string());
+            args.push(design);
+        }
+
+        if let Some(acceptance_criteria) = normalize_text_option(input.acceptance_criteria) {
+            args.push("--acceptance".to_string());
+            args.push(acceptance_criteria);
+        }
+
+        if let Some(labels) = input.labels {
+            let normalized_labels = normalize_labels(labels);
+            if !normalized_labels.is_empty() {
+                args.push("--labels".to_string());
+                args.push(normalized_labels.join(","));
+            }
+        }
+
+        if let Some(parent_id) = normalize_text_option(input.parent_id) {
+            args.push("--parent".to_string());
+            args.push(parent_id);
+        }
 
         let value = self.run_bd_json(repo_path, &args)?;
         let created = parse_task_card(&value)?;
+
+        if let Some(status) = input.status {
+            if status != TaskStatus::Open {
+                let _ = self.update_task(
+                    repo_path,
+                    &created.id,
+                    UpdateTaskPatch {
+                        title: None,
+                        description: None,
+                        design: None,
+                        acceptance_criteria: None,
+                        status: Some(status),
+                        priority: None,
+                        issue_type: None,
+                        labels: None,
+                        assignee: None,
+                        parent_id: None,
+                    },
+                );
+            }
+        }
 
         // Default new tasks to backlog phase.
         let _ = self.set_phase(
@@ -275,6 +339,11 @@ impl TaskStore for BeadsTaskStore {
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
         let mut args = vec!["update".to_string(), task_id.to_string()];
+        let current_labels = if patch.labels.is_some() {
+            Some(self.show_task(repo_path, task_id)?.labels)
+        } else {
+            None
+        };
 
         if let Some(title) = patch.title {
             args.push("--title".to_string());
@@ -286,9 +355,62 @@ impl TaskStore for BeadsTaskStore {
             args.push(description);
         }
 
+        if let Some(design) = patch.design {
+            args.push("--design".to_string());
+            args.push(design);
+        }
+
+        if let Some(acceptance_criteria) = patch.acceptance_criteria {
+            args.push("--acceptance".to_string());
+            args.push(acceptance_criteria);
+        }
+
         if let Some(status) = patch.status {
             args.push("--status".to_string());
             args.push(status.as_cli_value().to_string());
+        }
+
+        if let Some(priority) = patch.priority {
+            args.push("--priority".to_string());
+            args.push(priority.to_string());
+        }
+
+        if let Some(issue_type) = patch.issue_type {
+            args.push("--type".to_string());
+            args.push(issue_type);
+        }
+
+        if let Some(assignee) = patch.assignee {
+            args.push("--assignee".to_string());
+            args.push(assignee);
+        }
+
+        if let Some(parent_id) = patch.parent_id {
+            args.push("--parent".to_string());
+            args.push(parent_id.trim().to_string());
+        }
+
+        if let Some(labels) = patch.labels {
+            let desired: HashSet<String> = normalize_labels(labels).into_iter().collect();
+            let existing: HashSet<String> = current_labels.unwrap_or_default().into_iter().collect();
+
+            let mut labels_to_remove: Vec<String> = existing.difference(&desired).cloned().collect();
+            labels_to_remove.sort();
+            for label in labels_to_remove {
+                args.push("--remove-label".to_string());
+                args.push(label);
+            }
+
+            let mut labels_to_add: Vec<String> = desired.difference(&existing).cloned().collect();
+            labels_to_add.sort();
+            for label in labels_to_add {
+                args.push("--add-label".to_string());
+                args.push(label);
+            }
+        }
+
+        if args.len() == 2 {
+            return self.show_task(repo_path, task_id);
         }
 
         self.run_bd_json(repo_path, &args)?;
@@ -334,7 +456,14 @@ impl TaskStore for BeadsTaskStore {
         let patch = UpdateTaskPatch {
             title: None,
             description: Some(markdown.to_string()),
+            design: None,
+            acceptance_criteria: None,
             status: None,
+            priority: None,
+            issue_type: None,
+            labels: None,
+            assignee: None,
+            parent_id: None,
         };
         let updated = self.update_task(repo_path, task_id, patch)?;
         Ok(SpecDocument {
@@ -350,6 +479,10 @@ struct RawIssue {
     title: String,
     #[serde(default)]
     description: String,
+    #[serde(default)]
+    design: String,
+    #[serde(default)]
+    acceptance_criteria: String,
     status: String,
     #[serde(default)]
     priority: i32,
@@ -357,8 +490,24 @@ struct RawIssue {
     issue_type: String,
     #[serde(default)]
     labels: Vec<String>,
+    #[serde(default)]
+    owner: Option<String>,
+    #[serde(default)]
+    parent: Option<String>,
+    #[serde(default)]
+    dependencies: Vec<RawDependency>,
     updated_at: String,
     created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawDependency {
+    #[serde(rename = "type", alias = "dependency_type", default)]
+    dependency_type: String,
+    #[serde(default)]
+    depends_on_id: Option<String>,
+    #[serde(default)]
+    id: Option<String>,
 }
 
 fn parse_task_card(value: &Value) -> Result<TaskCard> {
@@ -373,17 +522,59 @@ fn parse_task_card(value: &Value) -> Result<TaskCard> {
     };
 
     let phase = TaskPhase::from_label(&issue.labels);
+    let parent_id = issue.parent.or_else(|| {
+        issue.dependencies.iter().find_map(|dependency| {
+            if dependency.dependency_type != "parent-child" {
+                return None;
+            }
+            dependency
+                .depends_on_id
+                .clone()
+                .or_else(|| dependency.id.clone())
+        })
+    });
 
     Ok(TaskCard {
         id: issue.id,
         title: issue.title,
         description: issue.description,
+        design: issue.design,
+        acceptance_criteria: issue.acceptance_criteria,
         status,
         phase,
         priority: issue.priority,
-        issue_type: issue.issue_type,
+        issue_type: if issue.issue_type.is_empty() {
+            "task".to_string()
+        } else {
+            issue.issue_type
+        },
         labels: issue.labels,
+        assignee: issue.owner,
+        parent_id,
+        subtask_ids: Vec::new(),
         updated_at: issue.updated_at,
         created_at: issue.created_at,
+    })
+}
+
+fn normalize_labels(labels: Vec<String>) -> Vec<String> {
+    let mut normalized: Vec<String> = labels
+        .into_iter()
+        .map(|label| label.trim().to_string())
+        .filter(|label| !label.is_empty())
+        .collect();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn normalize_text_option(value: Option<String>) -> Option<String> {
+    value.and_then(|entry| {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
     })
 }

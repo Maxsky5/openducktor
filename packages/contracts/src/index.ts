@@ -13,22 +13,73 @@ export const taskPhaseSchema = z.enum([
 ]);
 export type TaskPhase = z.infer<typeof taskPhaseSchema>;
 
-export const issueTypeSchema = z.enum(["task", "feature", "bug", "chore", "epic"]);
+export const issueTypeSchema = z.enum([
+  "task",
+  "feature",
+  "bug",
+  "chore",
+  "epic",
+  "decision",
+  "merge-request",
+  "molecule",
+  "gate",
+  "agent",
+  "role",
+  "rig",
+  "convoy",
+  "event",
+  "slot",
+]);
 export type IssueType = z.infer<typeof issueTypeSchema>;
+
+export const taskPrioritySchema = z.number().int().min(0).max(4);
+export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
 export const taskCardSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().default(""),
+  design: z.string().optional().default(""),
+  acceptanceCriteria: z.string().optional().default(""),
   status: taskStatusSchema,
   phase: z.preprocess((value) => (value === null ? undefined : value), taskPhaseSchema.optional()),
-  priority: z.number().int().min(0).max(4).default(2),
+  priority: taskPrioritySchema.default(2),
   issueType: issueTypeSchema.default("task"),
   labels: z.array(z.string()).default([]),
+  assignee: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  subtaskIds: z.array(z.string()).default([]),
   updatedAt: z.string(),
   createdAt: z.string(),
 });
 export type TaskCard = z.infer<typeof taskCardSchema>;
+
+export const taskCreateInputSchema = z.object({
+  title: z.string().min(1),
+  issueType: issueTypeSchema.default("task"),
+  priority: taskPrioritySchema.default(2),
+  description: z.string().optional(),
+  design: z.string().optional(),
+  acceptanceCriteria: z.string().optional(),
+  status: taskStatusSchema.optional(),
+  labels: z.array(z.string()).optional(),
+  parentId: z.string().optional(),
+});
+export type TaskCreateInput = z.infer<typeof taskCreateInputSchema>;
+
+export const taskUpdatePatchSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  design: z.string().optional(),
+  acceptanceCriteria: z.string().optional(),
+  status: taskStatusSchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  issueType: issueTypeSchema.optional(),
+  labels: z.array(z.string()).optional(),
+  assignee: z.string().optional(),
+  parentId: z.string().optional(),
+});
+export type TaskUpdatePatch = z.infer<typeof taskUpdatePatchSchema>;
 
 export const softGuardrailsSchema = z.object({
   cpuHighWatermarkPercent: z.number().int().min(1).max(100).default(85),

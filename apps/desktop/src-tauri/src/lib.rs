@@ -14,6 +14,14 @@ struct AppState {
 #[serde(rename_all = "camelCase")]
 struct TaskCreatePayload {
     title: String,
+    issue_type: String,
+    priority: i32,
+    description: Option<String>,
+    design: Option<String>,
+    acceptance_criteria: Option<String>,
+    labels: Option<Vec<String>>,
+    status: Option<host_domain::TaskStatus>,
+    parent_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -21,7 +29,14 @@ struct TaskCreatePayload {
 struct TaskUpdatePayload {
     title: Option<String>,
     description: Option<String>,
+    design: Option<String>,
+    acceptance_criteria: Option<String>,
     status: Option<host_domain::TaskStatus>,
+    priority: Option<i32>,
+    issue_type: Option<String>,
+    labels: Option<Vec<String>>,
+    assignee: Option<String>,
+    parent_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,7 +170,17 @@ async fn task_create(
     repo_path: String,
     input: TaskCreatePayload,
 ) -> Result<TaskCard, String> {
-    let create = CreateTaskInput { title: input.title };
+    let create = CreateTaskInput {
+        title: input.title,
+        issue_type: input.issue_type,
+        priority: input.priority,
+        description: input.description,
+        design: input.design,
+        acceptance_criteria: input.acceptance_criteria,
+        labels: input.labels,
+        status: input.status,
+        parent_id: input.parent_id,
+    };
     as_error(state.service.task_create(&repo_path, create))
 }
 
@@ -172,7 +197,14 @@ async fn task_update(
         UpdateTaskPatch {
             title: patch.title,
             description: patch.description,
+            design: patch.design,
+            acceptance_criteria: patch.acceptance_criteria,
             status: patch.status,
+            priority: patch.priority,
+            issue_type: patch.issue_type,
+            labels: patch.labels,
+            assignee: patch.assignee,
+            parent_id: patch.parent_id,
         },
     ))
 }

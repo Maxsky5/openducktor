@@ -331,7 +331,14 @@ impl AppService {
                     UpdateTaskPatch {
                         title: None,
                         description: None,
+                        design: None,
+                        acceptance_criteria: None,
                         status: Some(TaskStatus::Blocked),
+                        priority: None,
+                        issue_type: None,
+                        labels: None,
+                        assignee: None,
+                        parent_id: None,
                     },
                 );
                 let _ = self.task_store.set_phase(
@@ -370,7 +377,14 @@ impl AppService {
             UpdateTaskPatch {
                 title: None,
                 description: None,
+                design: None,
+                acceptance_criteria: None,
                 status: Some(TaskStatus::InProgress),
+                priority: None,
+                issue_type: None,
+                labels: None,
+                assignee: None,
+                parent_id: None,
             },
         )?;
         self.task_store.set_phase(
@@ -474,7 +488,14 @@ impl AppService {
                     UpdateTaskPatch {
                         title: None,
                         description: None,
+                        design: None,
+                        acceptance_criteria: None,
                         status: Some(TaskStatus::Blocked),
+                        priority: None,
+                        issue_type: None,
+                        labels: None,
+                        assignee: None,
+                        parent_id: None,
                     },
                 );
                 let _ = self.task_store.set_phase(
@@ -551,7 +572,14 @@ impl AppService {
                     UpdateTaskPatch {
                         title: None,
                         description: None,
+                        design: None,
+                        acceptance_criteria: None,
                         status: Some(TaskStatus::Blocked),
+                        priority: None,
+                        issue_type: None,
+                        labels: None,
+                        assignee: None,
+                        parent_id: None,
                     },
                 )?;
                 self.task_store.set_phase(
@@ -600,7 +628,14 @@ impl AppService {
                     UpdateTaskPatch {
                         title: None,
                         description: None,
+                        design: None,
+                        acceptance_criteria: None,
                         status: Some(TaskStatus::Blocked),
+                        priority: None,
+                        issue_type: None,
+                        labels: None,
+                        assignee: None,
+                        parent_id: None,
                     },
                 )?;
                 self.task_store.set_phase(
@@ -638,7 +673,14 @@ impl AppService {
             UpdateTaskPatch {
                 title: None,
                 description: None,
+                design: None,
+                acceptance_criteria: None,
                 status: Some(TaskStatus::Closed),
+                priority: None,
+                issue_type: None,
+                labels: None,
+                assignee: None,
+                parent_id: None,
             },
         )?;
         self.task_store.set_phase(

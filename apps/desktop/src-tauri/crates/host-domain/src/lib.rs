@@ -70,11 +70,16 @@ pub struct TaskCard {
     pub id: String,
     pub title: String,
     pub description: String,
+    pub design: String,
+    pub acceptance_criteria: String,
     pub status: TaskStatus,
     pub phase: Option<TaskPhase>,
     pub priority: i32,
     pub issue_type: String,
     pub labels: Vec<String>,
+    pub assignee: Option<String>,
+    pub parent_id: Option<String>,
+    pub subtask_ids: Vec<String>,
     pub updated_at: String,
     pub created_at: String,
 }
@@ -83,6 +88,14 @@ pub struct TaskCard {
 #[serde(rename_all = "camelCase")]
 pub struct CreateTaskInput {
     pub title: String,
+    pub issue_type: String,
+    pub priority: i32,
+    pub description: Option<String>,
+    pub design: Option<String>,
+    pub acceptance_criteria: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub status: Option<TaskStatus>,
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,7 +103,14 @@ pub struct CreateTaskInput {
 pub struct UpdateTaskPatch {
     pub title: Option<String>,
     pub description: Option<String>,
+    pub design: Option<String>,
+    pub acceptance_criteria: Option<String>,
     pub status: Option<TaskStatus>,
+    pub priority: Option<i32>,
+    pub issue_type: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub assignee: Option<String>,
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

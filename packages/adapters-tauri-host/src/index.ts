@@ -5,7 +5,9 @@ import {
   type RuntimeCheck,
   type SystemCheck,
   type TaskCard,
+  type TaskCreateInput,
   type TaskPhase,
+  type TaskUpdatePatch,
   type WorkspaceRecord,
   beadsCheckSchema,
   repoConfigSchema,
@@ -13,7 +15,9 @@ import {
   runtimeCheckSchema,
   systemCheckSchema,
   taskCardSchema,
+  taskCreateInputSchema,
   taskPhaseSchema,
+  taskUpdatePatchSchema,
   workspaceRecordSchema,
 } from "@openblueprint/contracts";
 import type { PlannerTools, SetSpecMarkdownOutput } from "@openblueprint/core";
@@ -65,27 +69,21 @@ export class TauriHostClient implements PlannerTools {
     return parseArray(taskCardSchema, payload);
   }
 
-  async taskCreate(repoPath: string, title: string): Promise<TaskCard> {
+  async taskCreate(repoPath: string, input: TaskCreateInput): Promise<TaskCard> {
+    const createInput = taskCreateInputSchema.parse(input);
     const payload = await this.invokeFn<unknown>("task_create", {
       repoPath,
-      input: { title },
+      input: createInput,
     });
     return taskCardSchema.parse(payload);
   }
 
-  async taskUpdate(
-    repoPath: string,
-    taskId: string,
-    patch: {
-      title?: string;
-      description?: string;
-      status?: "open" | "in_progress" | "blocked" | "closed";
-    },
-  ): Promise<TaskCard> {
+  async taskUpdate(repoPath: string, taskId: string, patch: TaskUpdatePatch): Promise<TaskCard> {
+    const updatePatch = taskUpdatePatchSchema.parse(patch);
     const payload = await this.invokeFn<unknown>("task_update", {
       repoPath,
       taskId,
-      patch,
+      patch: updatePatch,
     });
     return taskCardSchema.parse(payload);
   }

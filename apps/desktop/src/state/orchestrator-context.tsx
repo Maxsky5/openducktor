@@ -6,7 +6,9 @@ import {
   type RuntimeCheck,
   type SystemCheck,
   type TaskCard,
+  type TaskCreateInput,
   type TaskPhase,
+  type TaskUpdatePatch,
   type WorkspaceRecord,
   defaultSpecTemplateMarkdown,
   runEventSchema,
@@ -83,7 +85,8 @@ type OrchestratorContextValue = {
   selectWorkspace: (repoPath: string) => Promise<void>;
   refreshChecks: () => Promise<void>;
   refreshTasks: () => Promise<void>;
-  createTask: (title: string) => Promise<void>;
+  createTask: (input: TaskCreateInput) => Promise<void>;
+  updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   setTaskPhase: (taskId: string, phase: TaskPhase) => Promise<void>;
   setSelectedTaskId: (taskId: string | null) => void;
   delegateTask: (taskId: string) => Promise<void>;
@@ -150,7 +153,7 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       host.tasksList(repoPath),
       host.runsList(repoPath),
     ]);
-    setTasks(taskList.filter((task) => task.issueType !== "epic"));
+    setTasks(taskList);
     setRuns(runList);
   }, []);
 
@@ -375,18 +378,39 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
   );
 
   const createTask = useCallback(
-    async (title: string): Promise<void> => {
+    async (input: TaskCreateInput): Promise<void> => {
       if (!activeRepo) {
         throw new Error("Select a workspace first.");
       }
-      if (!title.trim()) {
+      if (!input.title.trim()) {
         return;
       }
 
       setIsBusy(true);
       try {
-        await host.taskCreate(activeRepo, title.trim());
+        await host.taskCreate(activeRepo, {
+          ...input,
+          title: input.title.trim(),
+        });
         setStatusText("Task created");
+        await refreshTaskData(activeRepo);
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
+  const updateTask = useCallback(
+    async (taskId: string, patch: TaskUpdatePatch): Promise<void> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+
+      setIsBusy(true);
+      try {
+        await host.taskUpdate(activeRepo, taskId, patch);
+        setStatusText(`Task ${taskId} updated`);
         await refreshTaskData(activeRepo);
       } finally {
         setIsBusy(false);
@@ -582,6 +606,7 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       refreshChecks,
       refreshTasks,
       createTask,
+      updateTask,
       setTaskPhase,
       setSelectedTaskId,
       delegateTask,
@@ -618,6 +643,7 @@ export function OrchestratorProvider({ children }: PropsWithChildren): ReactElem
       refreshChecks,
       refreshTasks,
       createTask,
+      updateTask,
       setTaskPhase,
       delegateTask,
       delegateRespond,

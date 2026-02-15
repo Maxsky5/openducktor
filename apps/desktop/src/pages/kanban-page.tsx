@@ -1,23 +1,26 @@
+import { TaskCreateModal } from "@/components/features/task-create-modal";
+import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { WorkspaceToolbar } from "@/components/features/workspace-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { PHASE_OPTIONS, phaseLabel } from "@/lib/task-phase";
 import { useOrchestrator } from "@/state/orchestrator-context";
 import type { TaskPhase } from "@openblueprint/contracts";
 import { mapToKanbanColumns } from "@openblueprint/core";
 import {
   Clock3,
+  Eye,
   Loader2,
   Play,
+  Plus,
   RefreshCcw,
   ScrollText,
   ShieldAlert,
   WandSparkles,
 } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const phaseBadgeVariant = (phase?: TaskPhase): "secondary" | "warning" | "danger" | "success" => {
   if (!phase) {
@@ -40,7 +43,6 @@ export function KanbanPage(): ReactElement {
   const {
     tasks,
     runs,
-    createTask,
     setTaskPhase,
     delegateTask,
     setSelectedTaskId,
@@ -48,7 +50,10 @@ export function KanbanPage(): ReactElement {
     isLoadingTasks,
     isSwitchingWorkspace,
   } = useOrchestrator();
-  const [title, setTitle] = useState("");
+  const navigate = useNavigate();
+  const [isTaskComposerOpen, setTaskComposerOpen] = useState(false);
+  const [composerTaskId, setComposerTaskId] = useState<string | null>(null);
+  const [detailsTaskId, setDetailsTaskId] = useState<string | null>(null);
 
   const columns = useMemo(() => mapToKanbanColumns(tasks), [tasks]);
   const runByTask = useMemo(() => new Map(runs.map((run) => [run.taskId, run])), [runs]);
@@ -61,6 +66,14 @@ export function KanbanPage(): ReactElement {
     [tasks],
   );
   const doneCount = useMemo(() => tasks.filter((task) => task.phase === "done").length, [tasks]);
+  const detailsTask = useMemo(
+    () => tasks.find((task) => task.id === detailsTaskId) ?? null,
+    [detailsTaskId, tasks],
+  );
+  const composerTask = useMemo(
+    () => tasks.find((task) => task.id === composerTaskId) ?? null,
+    [composerTaskId, tasks],
+  );
 
   return (
     <div className="grid h-full gap-4">
@@ -111,51 +124,34 @@ export function KanbanPage(): ReactElement {
         </Card>
       </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Create Work Item</CardTitle>
-          <CardDescription>
-            Add a task, route it to Planner for specification, then delegate to Builder.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="flex flex-wrap gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void createTask(title);
-              setTitle("");
-            }}
-          >
-            <Input
-              className="min-w-[280px] flex-1"
-              placeholder="Describe the feature, bug, or refactor"
-              value={title}
-              onChange={(event) => setTitle(event.currentTarget.value)}
-            />
-            <Button type="submit" disabled={!title.trim()}>
-              Create Task
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold tracking-tight text-slate-800">Kanban Board</h2>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={isLoadingTasks || isSwitchingWorkspace}
-          onClick={() => void refreshTasks()}
-        >
-          {isLoadingTasks ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <RefreshCcw className="size-3" />
-          )}
-          {isLoadingTasks ? "Refreshing..." : "Refresh Tasks"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            onClick={() => {
+              setComposerTaskId(null);
+              setTaskComposerOpen(true);
+            }}
+          >
+            <Plus className="size-3.5" />
+            Create Task
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isLoadingTasks || isSwitchingWorkspace}
+            onClick={() => void refreshTasks()}
+          >
+            {isLoadingTasks ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <RefreshCcw className="size-3" />
+            )}
+            {isLoadingTasks ? "Refreshing..." : "Refresh Tasks"}
+          </Button>
+        </div>
       </div>
 
       <section className="grid auto-cols-[minmax(240px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-6">
@@ -181,13 +177,22 @@ export function KanbanPage(): ReactElement {
                     key={task.id}
                     className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                   >
-                    <p className="text-sm font-semibold leading-tight text-slate-900">
-                      {task.title}
-                    </p>
+                    <button
+                      type="button"
+                      className="w-full space-y-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+                      onClick={() => setDetailsTaskId(task.id)}
+                    >
+                      <p className="text-sm font-semibold leading-tight text-slate-900">
+                        {task.title}
+                      </p>
+                      <p className="text-[11px] text-slate-500">{task.id}</p>
+                    </button>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant={phaseBadgeVariant(task.phase)}>
                         {phaseLabel(task.phase)}
                       </Badge>
+                      <Badge variant="outline">{task.issueType}</Badge>
+                      <Badge variant="secondary">P{task.priority}</Badge>
                       {run ? <Badge variant="warning">Run {run.state}</Badge> : null}
                     </div>
 
@@ -205,7 +210,18 @@ export function KanbanPage(): ReactElement {
                       ))}
                     </select>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDetailsTaskId(task.id);
+                        }}
+                      >
+                        <Eye className="size-3" /> View
+                      </Button>
                       <Button type="button" size="sm" variant="outline" asChild>
                         <Link
                           to={`/planner?task=${encodeURIComponent(task.id)}`}
@@ -239,6 +255,44 @@ export function KanbanPage(): ReactElement {
           </Card>
         ))}
       </section>
+
+      <TaskCreateModal
+        open={isTaskComposerOpen}
+        task={composerTask}
+        onOpenChange={(nextOpen) => {
+          setTaskComposerOpen(nextOpen);
+          if (!nextOpen) {
+            setComposerTaskId(null);
+          }
+        }}
+        tasks={tasks}
+      />
+      <TaskDetailsSheet
+        task={detailsTask}
+        allTasks={tasks}
+        open={detailsTask !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailsTaskId(null);
+          }
+        }}
+        onPlan={(taskId) => {
+          setSelectedTaskId(taskId);
+          navigate(`/planner?task=${encodeURIComponent(taskId)}`);
+        }}
+        onBuild={(taskId) => {
+          setSelectedTaskId(taskId);
+          navigate(`/builder?task=${encodeURIComponent(taskId)}`);
+        }}
+        onDelegate={(taskId) => {
+          void delegateTask(taskId);
+        }}
+        onEdit={(taskId) => {
+          setDetailsTaskId(null);
+          setComposerTaskId(taskId);
+          setTaskComposerOpen(true);
+        }}
+      />
     </div>
   );
 }

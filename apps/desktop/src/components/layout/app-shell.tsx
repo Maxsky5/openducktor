@@ -42,7 +42,7 @@ export function AppShell(): ReactElement {
     <>
       <div className="min-h-screen">
         <div className="mx-auto grid min-h-screen max-w-[1600px] grid-cols-1 gap-4 p-4 md:grid-cols-[240px_1fr]">
-          <aside className="rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm backdrop-blur">
+          <aside className="sticky top-4 max-h-[calc(100vh-2rem)] self-start overflow-y-auto rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm backdrop-blur">
             <div className="mb-8 flex items-center gap-3">
               <div className="rounded-xl bg-gradient-to-br from-slate-900 to-slate-700 p-2 text-white shadow-md">
                 <Bot className="size-5" />
