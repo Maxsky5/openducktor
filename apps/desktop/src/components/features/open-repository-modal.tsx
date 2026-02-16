@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { workspaceLabelFromPath } from "@/lib/workspace-label";
-import { useOrchestrator } from "@/state";
+import { useWorkspaceState } from "@/state";
 import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 
@@ -25,7 +25,7 @@ export function OpenRepositoryModal({
   onOpenChange,
 }: OpenRepositoryModalProps): ReactElement {
   const { activeRepo, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
-    useOrchestrator();
+    useWorkspaceState();
   const [isPickingRepo, setIsPickingRepo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

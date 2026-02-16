@@ -7,26 +7,18 @@ import {
 import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useOrchestrator } from "@/state";
+import { useDelegationState, useTasksState } from "@/state";
 import { type ReactElement, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 export function BuilderPage(): ReactElement {
-  const {
-    tasks,
-    runs,
-    events,
-    selectedTask,
-    setSelectedTaskId,
-    delegateTask,
-    delegateRespond,
-    delegateStop,
-    delegateCleanup,
-  } = useOrchestrator();
+  const { tasks, runs } = useTasksState();
+  const { events, delegateTask, delegateRespond, delegateStop, delegateCleanup } =
+    useDelegationState();
   const [searchParams, setSearchParams] = useSearchParams();
   const [runMessageById, setRunMessageById] = useState<Record<string, string>>({});
 
-  const taskId = searchParams.get("task") ?? selectedTask?.id ?? "";
+  const taskId = searchParams.get("task") ?? "";
   const taskRuns = useMemo(
     () => runs.filter((run) => !taskId || run.taskId === taskId),
     [runs, taskId],
@@ -67,7 +59,6 @@ export function BuilderPage(): ReactElement {
                   tasks={tasks}
                   value={taskId}
                   onValueChange={(nextTaskId) => {
-                    setSelectedTaskId(nextTaskId || null);
                     setSearchParams(nextTaskId ? { task: nextTaskId } : {});
                   }}
                 />

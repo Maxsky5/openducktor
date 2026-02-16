@@ -2,23 +2,16 @@ import { KanbanColumn, KanbanSummaryCards } from "@/components/features/kanban";
 import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { Button } from "@/components/ui/button";
-import { useOrchestrator } from "@/state";
+import { useDelegationState, useTasksState, useWorkspaceState } from "@/state";
 import { mapToKanbanColumns } from "@openblueprint/core";
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export function KanbanPage(): ReactElement {
-  const {
-    tasks,
-    runs,
-    setTaskPhase,
-    delegateTask,
-    setSelectedTaskId,
-    refreshTasks,
-    isLoadingTasks,
-    isSwitchingWorkspace,
-  } = useOrchestrator();
+  const { delegateTask } = useDelegationState();
+  const { isSwitchingWorkspace } = useWorkspaceState();
+  const { tasks, runs, setTaskPhase, refreshTasks, isLoadingTasks } = useTasksState();
   const navigate = useNavigate();
   const [isTaskComposerOpen, setTaskComposerOpen] = useState(false);
   const [composerTaskId, setComposerTaskId] = useState<string | null>(null);
@@ -99,11 +92,9 @@ export function KanbanPage(): ReactElement {
             onSetPhase={(taskId, phase) => void setTaskPhase(taskId, phase)}
             onDelegate={(taskId) => void delegateTask(taskId)}
             onPlan={(taskId) => {
-              setSelectedTaskId(taskId);
               navigate(`/planner?task=${encodeURIComponent(taskId)}`);
             }}
             onBuild={(taskId) => {
-              setSelectedTaskId(taskId);
               navigate(`/builder?task=${encodeURIComponent(taskId)}`);
             }}
           />
@@ -131,11 +122,9 @@ export function KanbanPage(): ReactElement {
           }
         }}
         onPlan={(taskId) => {
-          setSelectedTaskId(taskId);
           navigate(`/planner?task=${encodeURIComponent(taskId)}`);
         }}
         onBuild={(taskId) => {
-          setSelectedTaskId(taskId);
           navigate(`/builder?task=${encodeURIComponent(taskId)}`);
         }}
         onDelegate={(taskId) => {

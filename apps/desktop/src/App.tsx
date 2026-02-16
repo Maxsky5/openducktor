@@ -4,13 +4,13 @@ import { BuilderPage } from "@/pages/builder-page";
 import { KanbanPage } from "@/pages/kanban-page";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { PlannerPage } from "@/pages/planner-page";
-import { OrchestratorProvider } from "@/state";
-import { useOrchestrator } from "@/state";
+import { AppStateProvider } from "@/state";
+import { useWorkspaceState } from "@/state";
 import type { ReactElement } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 function RequireRepository(): ReactElement {
-  const { activeRepo } = useOrchestrator();
+  const { activeRepo } = useWorkspaceState();
   if (!activeRepo) {
     return <Navigate to="/kanban" replace />;
   }
@@ -19,7 +19,7 @@ function RequireRepository(): ReactElement {
 
 export function App(): ReactElement {
   return (
-    <OrchestratorProvider>
+    <AppStateProvider>
       <>
         <Routes>
           <Route element={<AppShell />}>
@@ -34,6 +34,6 @@ export function App(): ReactElement {
         </Routes>
         <Toaster />
       </>
-    </OrchestratorProvider>
+    </AppStateProvider>
   );
 }

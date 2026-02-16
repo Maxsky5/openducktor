@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useOrchestrator } from "@/state";
+import { useWorkspaceState } from "@/state";
 import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 
@@ -31,7 +31,7 @@ export function SettingsModal({
   triggerClassName,
   triggerSize = "sm",
 }: SettingsModalProps): ReactElement {
-  const { activeRepo, activeWorkspace, loadRepoSettings, saveRepoSettings } = useOrchestrator();
+  const { activeRepo, activeWorkspace, loadRepoSettings, saveRepoSettings } = useWorkspaceState();
   const [open, setOpen] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSaving, setIsSaving] = useState(false);

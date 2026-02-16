@@ -1,7 +1,7 @@
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import { workspaceNameFromPath } from "@/lib/workspace-label";
-import { useOrchestrator } from "@/state";
+import { useWorkspaceState } from "@/state";
 import { useMemo } from "react";
 
 type RepositorySwitcherProps = {
@@ -10,7 +10,7 @@ type RepositorySwitcherProps = {
 };
 
 export function RepositorySwitcher({ className, triggerClassName }: RepositorySwitcherProps = {}) {
-  const { workspaces, activeRepo, selectWorkspace, isSwitchingWorkspace } = useOrchestrator();
+  const { workspaces, activeRepo, selectWorkspace, isSwitchingWorkspace } = useWorkspaceState();
 
   const options = useMemo<ComboboxOption[]>(
     () =>
@@ -40,7 +40,7 @@ export function RepositorySwitcher({ className, triggerClassName }: RepositorySw
             return;
           }
           void selectWorkspace(value).catch(() => {
-            // Status/error is handled in orchestrator context.
+            // Error toast is emitted by workspace operations.
           });
         }}
         triggerClassName={cn(

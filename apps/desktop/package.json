@@ -19,7 +19,6 @@
     "@openblueprint/adapters-tauri-host": "workspace:*",
     "@openblueprint/contracts": "workspace:*",
     "@openblueprint/core": "workspace:*",
-    "@openblueprint/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.3",

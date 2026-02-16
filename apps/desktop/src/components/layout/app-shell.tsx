@@ -9,13 +9,14 @@ import {
   WorkspaceSummaryCard,
 } from "@/components/layout/sidebar";
 import { Button } from "@/components/ui/button";
-import { useOrchestrator } from "@/state";
+import { useTasksState, useWorkspaceState } from "@/state";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 export function AppShell(): ReactElement {
-  const { activeRepo, tasks, runs, workspaces } = useOrchestrator();
+  const { activeRepo, workspaces } = useWorkspaceState();
+  const { tasks, runs } = useTasksState();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const isRepositoryModalBlocking = !activeRepo && workspaces.length === 0;
 

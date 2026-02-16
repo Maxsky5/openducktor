@@ -1,26 +1,33 @@
-const isTauriRuntime = (): boolean => {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-};
+import { assertTauriRuntime } from "@/lib/runtime";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
-export const pickRepositoryDirectory = async (): Promise<string | null> => {
-  if (!isTauriRuntime()) {
-    throw new Error("Directory picker is only available in the desktop app.");
-  }
+const DIRECTORY_PICKER_TITLE = "Select Repository";
 
-  const dialog = await import("@tauri-apps/plugin-dialog");
-  const selected = await dialog.open({
-    directory: true,
-    multiple: false,
-    title: "Select Repository",
-  });
+type DirectorySelection = string | string[] | null;
 
-  if (!selected) {
+const normalizeDirectorySelection = (selection: DirectorySelection): string | null => {
+  if (!selection) {
     return null;
   }
 
-  if (Array.isArray(selected)) {
-    return selected[0] ?? null;
+  if (Array.isArray(selection)) {
+    return selection[0] ?? null;
   }
 
-  return selected;
+  return selection;
+};
+
+const openTauriDirectoryPicker = async (): Promise<DirectorySelection> => {
+  return openDialog({
+    directory: true,
+    multiple: false,
+    title: DIRECTORY_PICKER_TITLE,
+  });
+};
+
+export const pickRepositoryDirectory = async (): Promise<string | null> => {
+  assertTauriRuntime("Directory picker");
+
+  const selected = await openTauriDirectoryPicker();
+  return normalizeDirectorySelection(selected);
 };

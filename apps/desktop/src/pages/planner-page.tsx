@@ -5,38 +5,31 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { useOrchestrator } from "@/state";
+import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
+import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openblueprint/contracts";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 export function PlannerPage(): ReactElement {
-  const {
-    tasks,
-    selectedTask,
-    setSelectedTaskId,
-    loadSpec,
-    saveSpec,
-    validateSpec,
-    specTemplate,
-    activeRepo,
-  } = useOrchestrator();
+  const { activeRepo } = useWorkspaceState();
+  const { tasks } = useTasksState();
+  const { loadSpec, saveSpec } = useSpecState();
   const [searchParams, setSearchParams] = useSearchParams();
-  const taskId = searchParams.get("task") ?? selectedTask?.id ?? "";
-  const [markdown, setMarkdown] = useState(specTemplate);
+  const taskId = searchParams.get("task") ?? "";
+  const [markdown, setMarkdown] = useState(defaultSpecTemplateMarkdown);
 
   useEffect(() => {
     if (!taskId) {
-      setMarkdown(specTemplate);
+      setMarkdown(defaultSpecTemplateMarkdown);
       return;
     }
 
-    setSelectedTaskId(taskId);
     loadSpec(taskId)
       .then((doc) => setMarkdown(doc))
-      .catch(() => setMarkdown(specTemplate));
-  }, [taskId, loadSpec, setSelectedTaskId, specTemplate]);
+      .catch(() => setMarkdown(defaultSpecTemplateMarkdown));
+  }, [taskId, loadSpec]);
 
-  const validation = useMemo(() => validateSpec(markdown), [markdown, validateSpec]);
+  const validation = useMemo(() => validateSpecMarkdown(markdown), [markdown]);
   const missingHeadings = useMemo(
     () => new Set(validation.missing.map((heading) => heading.toLowerCase())),
     [validation.missing],

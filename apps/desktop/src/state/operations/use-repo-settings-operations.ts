@@ -1,4 +1,4 @@
-import type { RepoSettingsInput } from "@/types/orchestrator";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { useCallback } from "react";
 import { host } from "./host";
 

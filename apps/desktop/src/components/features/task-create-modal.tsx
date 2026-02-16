@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useOrchestrator } from "@/state";
+import { useTasksState, useWorkspaceState } from "@/state";
 import type { ComposerMode, ComposerState, ComposerStep } from "@/types/task-composer";
 import type { TaskCard, TaskCreateInput, TaskUpdatePatch } from "@openblueprint/contracts";
 import { ArrowLeft, Flag, Loader2, Sparkles, WandSparkles } from "lucide-react";
@@ -38,7 +38,8 @@ export function TaskCreateModal({
   tasks,
   task = null,
 }: TaskCreateModalProps): ReactElement {
-  const { activeRepo, createTask, updateTask } = useOrchestrator();
+  const { activeRepo } = useWorkspaceState();
+  const { createTask, updateTask } = useTasksState();
   const mode: ComposerMode = task ? "edit" : "create";
 
   const [step, setStep] = useState<ComposerStep>("type");

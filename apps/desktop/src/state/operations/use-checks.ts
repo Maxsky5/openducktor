@@ -1,29 +1,27 @@
-import { errorMessage } from "@/state/orchestrator-helpers";
-import type { BeadsCheck, RuntimeCheck, SystemCheck } from "@openblueprint/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { errorMessage } from "@/lib/errors";
+import type { BeadsCheck, RuntimeCheck } from "@openblueprint/contracts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { host } from "./host";
 
 type UseChecksArgs = {
   activeRepo: string | null;
-  setStatusText: (value: string) => void;
 };
 
 type UseChecksResult = {
   runtimeCheck: RuntimeCheck | null;
   activeBeadsCheck: BeadsCheck | null;
-  systemCheck: SystemCheck | null;
   isLoadingChecks: boolean;
   setIsLoadingChecks: (value: boolean) => void;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
   refreshChecks: () => Promise<void>;
-  getCachedBeadsCheck: (repoPath: string) => BeadsCheck | null;
   hasRuntimeCheck: () => boolean;
   hasCachedBeadsCheck: (repoPath: string) => boolean;
   clearActiveBeadsCheck: () => void;
 };
 
-export function useChecks({ activeRepo, setStatusText }: UseChecksArgs): UseChecksResult {
+export function useChecks({ activeRepo }: UseChecksArgs): UseChecksResult {
   const [runtimeCheck, setRuntimeCheck] = useState<RuntimeCheck | null>(null);
   const [activeBeadsCheck, setActiveBeadsCheck] = useState<BeadsCheck | null>(null);
   const [isLoadingChecks, setIsLoadingChecks] = useState(false);
@@ -66,7 +64,6 @@ export function useChecks({ activeRepo, setStatusText }: UseChecksArgs): UseChec
     }
 
     setIsLoadingChecks(true);
-    setStatusText(`Refreshing checks for ${activeRepo}...`);
     try {
       const runtime = await refreshRuntimeCheck(true);
       const beads = await refreshBeadsCheckForRepo(activeRepo, true);
@@ -75,20 +72,14 @@ export function useChecks({ activeRepo, setStatusText }: UseChecksArgs): UseChec
           ...runtime.errors,
           ...(beads.beadsError ? [`beads: ${beads.beadsError}`] : []),
         ].join(" | ");
-        setStatusText(`System check issues: ${details}`);
-      } else {
-        setStatusText("System checks passed");
+        toast.error("Diagnostics check failed", { description: details });
       }
     } catch (error) {
-      setStatusText(`System checks unavailable: ${errorMessage(error)}`);
+      toast.error("Diagnostics check unavailable", { description: errorMessage(error) });
     } finally {
       setIsLoadingChecks(false);
     }
-  }, [activeRepo, refreshBeadsCheckForRepo, refreshRuntimeCheck, setStatusText]);
-
-  const getCachedBeadsCheck = useCallback((repoPath: string): BeadsCheck | null => {
-    return beadsCheckCacheRef.current.get(repoPath) ?? null;
-  }, []);
+  }, [activeRepo, refreshBeadsCheckForRepo, refreshRuntimeCheck]);
 
   const hasCachedBeadsCheck = useCallback((repoPath: string): boolean => {
     return beadsCheckCacheRef.current.has(repoPath);
@@ -111,38 +102,14 @@ export function useChecks({ activeRepo, setStatusText }: UseChecksArgs): UseChec
     setActiveBeadsCheck(beadsCheckCacheRef.current.get(activeRepo) ?? null);
   }, [activeRepo]);
 
-  const systemCheck = useMemo<SystemCheck | null>(() => {
-    if (!runtimeCheck || !activeBeadsCheck) {
-      return null;
-    }
-
-    const errors = [...runtimeCheck.errors];
-    if (activeBeadsCheck.beadsError) {
-      errors.push(`beads: ${activeBeadsCheck.beadsError}`);
-    }
-
-    return {
-      gitOk: runtimeCheck.gitOk,
-      gitVersion: runtimeCheck.gitVersion,
-      opencodeOk: runtimeCheck.opencodeOk,
-      opencodeVersion: runtimeCheck.opencodeVersion,
-      beadsOk: activeBeadsCheck.beadsOk,
-      beadsPath: activeBeadsCheck.beadsPath,
-      beadsError: activeBeadsCheck.beadsError,
-      errors,
-    };
-  }, [activeBeadsCheck, runtimeCheck]);
-
   return {
     runtimeCheck,
     activeBeadsCheck,
-    systemCheck,
     isLoadingChecks,
     setIsLoadingChecks,
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
     refreshChecks,
-    getCachedBeadsCheck,
     hasRuntimeCheck,
     hasCachedBeadsCheck,
     clearActiveBeadsCheck,

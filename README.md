@@ -9,7 +9,6 @@ OpenBlueprint is a macOS-first Tauri v2 desktop app with a Bun monorepo, React f
 - `packages/core`: Hexagonal domain services and ports.
 - `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
 - `packages/adapters-tauri-host`: Frontend IPC client adapter.
-- `packages/ui`: Reusable UI components.
 
 ## Hexagonal Boundaries
 

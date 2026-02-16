@@ -1,4 +1,6 @@
-import { errorMessage, phaseToStatus, summarizeTaskLoadError } from "@/state/orchestrator-helpers";
+import { errorMessage } from "@/lib/errors";
+import { phaseToStatus } from "@/state/tasks/phase-mapping";
+import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import {
   type BeadsCheck,
   type RunSummary,
@@ -14,7 +16,6 @@ import { host } from "./host";
 
 type UseTaskOperationsArgs = {
   activeRepo: string | null;
-  setStatusText: (value: string) => void;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
 };
 
@@ -23,8 +24,6 @@ type UseTaskOperationsResult = {
   runs: RunSummary[];
   isLoadingTasks: boolean;
   setIsLoadingTasks: (value: boolean) => void;
-  setTasks: (tasks: TaskCard[]) => void;
-  setRuns: (runs: RunSummary[]) => void;
   clearTaskData: () => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
@@ -35,7 +34,6 @@ type UseTaskOperationsResult = {
 
 export function useTaskOperations({
   activeRepo,
-  setStatusText,
   refreshBeadsCheckForRepo,
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
   const [tasks, setTasks] = useState<TaskCard[]>([]);
@@ -57,23 +55,23 @@ export function useTaskOperations({
     }
 
     setIsLoadingTasks(true);
-    setStatusText(`Refreshing tasks for ${activeRepo}...`);
     try {
       const beads = await refreshBeadsCheckForRepo(activeRepo, false);
       if (!beads.beadsOk) {
         const details = beads.beadsError ?? "Beads store is not initialized for this repository.";
-        setStatusText(`Task store unavailable. ${details}`);
+        toast.error("Task store unavailable", { description: details });
         return;
       }
 
       await refreshTaskData(activeRepo);
-      setStatusText("Tasks refreshed");
     } catch (error) {
-      setStatusText(summarizeTaskLoadError(error));
+      toast.error("Failed to refresh tasks", {
+        description: summarizeTaskLoadError(error),
+      });
     } finally {
       setIsLoadingTasks(false);
     }
-  }, [activeRepo, refreshBeadsCheckForRepo, refreshTaskData, setStatusText]);
+  }, [activeRepo, refreshBeadsCheckForRepo, refreshTaskData]);
 
   const createTask = useCallback(
     async (input: TaskCreateInput): Promise<void> => {
@@ -89,21 +87,19 @@ export function useTaskOperations({
           ...input,
           title: input.title.trim(),
         });
-        setStatusText("Task created");
         await refreshTaskData(activeRepo);
         toast.success("Task created", {
           description: input.title.trim(),
         });
       } catch (error) {
         const reason = errorMessage(error);
-        setStatusText(`Failed to create task: ${reason}`);
         toast.error("Failed to create task", {
           description: reason,
         });
         throw error;
       }
     },
-    [activeRepo, refreshTaskData, setStatusText],
+    [activeRepo, refreshTaskData],
   );
 
   const updateTask = useCallback(
@@ -114,21 +110,19 @@ export function useTaskOperations({
 
       try {
         await host.taskUpdate(activeRepo, taskId, patch);
-        setStatusText(`Task ${taskId} updated`);
         await refreshTaskData(activeRepo);
         toast.success("Task updated", {
           description: patch.title?.trim() || taskId,
         });
       } catch (error) {
         const reason = errorMessage(error);
-        setStatusText(`Failed to update task ${taskId}: ${reason}`);
         toast.error("Failed to update task", {
           description: reason,
         });
         throw error;
       }
     },
-    [activeRepo, refreshTaskData, setStatusText],
+    [activeRepo, refreshTaskData],
   );
 
   const setTaskPhase = useCallback(
@@ -140,10 +134,9 @@ export function useTaskOperations({
       taskPhaseSchema.parse(phase);
       await host.taskSetPhase(activeRepo, taskId, phase, "Kanban move");
       await host.taskUpdate(activeRepo, taskId, { status: phaseToStatus(phase) });
-      setStatusText(`Task ${taskId} moved to ${phase}`);
       await refreshTaskData(activeRepo);
     },
-    [activeRepo, refreshTaskData, setStatusText],
+    [activeRepo, refreshTaskData],
   );
 
   const clearTaskData = useCallback(() => {
@@ -157,8 +150,6 @@ export function useTaskOperations({
     runs,
     isLoadingTasks,
     setIsLoadingTasks,
-    setTasks,
-    setRuns,
     clearTaskData,
     refreshTaskData,
     refreshTasks,

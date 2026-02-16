@@ -1,8 +1,5 @@
+import { isTauriRuntime } from "@/lib/runtime";
 import { TauriHostClient } from "@openblueprint/adapters-tauri-host";
-
-const isTauriRuntime = (): boolean => {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-};
 
 const notAvailable = async <T>(): Promise<T> => {
   throw new Error("Tauri runtime not available. Run inside the desktop shell.");

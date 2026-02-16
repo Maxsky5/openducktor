@@ -3,7 +3,6 @@ import { host } from "./host";
 
 type UseDelegationOperationsArgs = {
   activeRepo: string | null;
-  setStatusText: (value: string) => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
 };
 
@@ -20,7 +19,6 @@ type UseDelegationOperationsResult = {
 
 export function useDelegationOperations({
   activeRepo,
-  setStatusText,
   refreshTaskData,
 }: UseDelegationOperationsArgs): UseDelegationOperationsResult {
   const delegateTask = useCallback(
@@ -30,10 +28,9 @@ export function useDelegationOperations({
       }
 
       const run = await host.delegateStart(activeRepo, taskId);
-      setStatusText(`Delegation started: ${run.runId}`);
       await refreshTaskData(activeRepo);
     },
-    [activeRepo, refreshTaskData, setStatusText],
+    [activeRepo, refreshTaskData],
   );
 
   const delegateRespond = useCallback(

@@ -4,7 +4,6 @@ import { host } from "./host";
 
 type UseSpecOperationsArgs = {
   activeRepo: string | null;
-  setStatusText: (value: string) => void;
 };
 
 type UseSpecOperationsResult = {
@@ -12,10 +11,7 @@ type UseSpecOperationsResult = {
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
-export function useSpecOperations({
-  activeRepo,
-  setStatusText,
-}: UseSpecOperationsArgs): UseSpecOperationsResult {
+export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpecOperationsResult {
   const loadSpec = useCallback(
     async (taskId: string): Promise<string> => {
       if (!activeRepo) {
@@ -39,10 +35,9 @@ export function useSpecOperations({
       }
 
       const saved = await host.setSpecMarkdown({ repoPath: activeRepo, taskId, markdown });
-      setStatusText(`Specification updated for ${taskId}`);
       return saved;
     },
-    [activeRepo, setStatusText],
+    [activeRepo],
   );
 
   return {

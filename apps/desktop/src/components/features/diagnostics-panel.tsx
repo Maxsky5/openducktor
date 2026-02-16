@@ -13,20 +13,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { useOrchestrator } from "@/state";
+import { useChecksState, useWorkspaceState } from "@/state";
 import { AlertTriangle, ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 
 export function DiagnosticsPanel(): ReactElement {
-  const {
-    activeRepo,
-    activeWorkspace,
-    runtimeCheck,
-    beadsCheck,
-    refreshChecks,
-    isLoadingChecks,
-    isSwitchingWorkspace,
-  } = useOrchestrator();
+  const { activeRepo, activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
+  const { runtimeCheck, beadsCheck, refreshChecks, isLoadingChecks } = useChecksState();
   const [isOpen, setOpen] = useState(false);
   const autoOpenedByRepoRef = useRef<Set<string>>(new Set());
 
