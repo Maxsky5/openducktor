@@ -41,8 +41,9 @@ Human actions:
 |---|---|---|---|
 | `task_create` | n/a | always | `open` |
 | `set_spec` | `open`, `spec_ready` | non-empty markdown | `spec_ready` |
-| `set_plan` | `spec_ready`, `open` | non-empty markdown | `ready_for_dev` |
-| `set_plan` (epic) | `spec_ready`, `open` | plan includes subtask proposals | `ready_for_dev` |
+| `set_plan` (feature/epic) | `spec_ready` | non-empty markdown | `ready_for_dev` |
+| `set_plan` (task/bug) | `open`, `spec_ready` | non-empty markdown | `ready_for_dev` |
+| `set_plan` (epic) | `spec_ready` | plan includes subtask proposals | `ready_for_dev` |
 | `build_start` | `ready_for_dev` | feature/epic standard flow | `in_progress` |
 | `build_start` | `open`, `spec_ready`, `ready_for_dev` | task/bug optional flow | `in_progress` |
 | `build_blocked` | `in_progress` | reason required | `blocked` |

@@ -16,6 +16,19 @@ export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export const issueTypeSchema = z.enum(["task", "feature", "bug", "epic"]);
 export type IssueType = z.infer<typeof issueTypeSchema>;
 
+export const taskActionSchema = z.enum([
+  "view_details",
+  "set_spec",
+  "set_plan",
+  "build_start",
+  "open_builder",
+  "defer_issue",
+  "resume_deferred",
+  "human_request_changes",
+  "human_approve",
+]);
+export type TaskAction = z.infer<typeof taskActionSchema>;
+
 const issueTypeFallbackSchema = z.preprocess(
   (value) =>
     value === "task" || value === "feature" || value === "bug" || value === "epic" ? value : "task",
@@ -29,13 +42,13 @@ export const taskCardSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().default(""),
-  design: z.string().optional().default(""),
   acceptanceCriteria: z.string().optional().default(""),
   notes: z.string().optional().default(""),
   status: taskStatusSchema,
   priority: taskPrioritySchema.default(2),
   issueType: issueTypeFallbackSchema.default("task"),
   aiReviewEnabled: z.boolean().optional().default(true),
+  availableActions: z.array(taskActionSchema).default([]),
   labels: z.array(z.string()).default([]),
   assignee: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
@@ -51,7 +64,6 @@ export const taskCreateInputSchema = z.object({
   aiReviewEnabled: z.boolean().optional().default(true),
   priority: taskPrioritySchema.default(2),
   description: z.string().optional(),
-  design: z.string().optional(),
   acceptanceCriteria: z.string().optional(),
   labels: z.array(z.string()).optional(),
   parentId: z.string().optional(),
@@ -61,7 +73,6 @@ export type TaskCreateInput = z.infer<typeof taskCreateInputSchema>;
 export const taskUpdatePatchSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
-  design: z.string().optional(),
   acceptanceCriteria: z.string().optional(),
   notes: z.string().optional(),
   priority: taskPrioritySchema.optional(),

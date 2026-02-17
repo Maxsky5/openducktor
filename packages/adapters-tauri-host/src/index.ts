@@ -124,15 +124,18 @@ export class TauriHostClient implements PlannerTools {
   async specGet(
     repoPath: string,
     taskId: string,
-  ): Promise<{ markdown: string; updatedAt: string }> {
-    const payload = await this.invokeFn<{ markdown: string; updatedAt: string }>("spec_get", {
-      repoPath,
-      taskId,
-    });
+  ): Promise<{ markdown: string; updatedAt: string | null }> {
+    const payload = await this.invokeFn<{ markdown: string; updatedAt?: string | null }>(
+      "spec_get",
+      {
+        repoPath,
+        taskId,
+      },
+    );
 
     return {
       markdown: payload.markdown,
-      updatedAt: payload.updatedAt,
+      updatedAt: payload.updatedAt ?? null,
     };
   }
 
@@ -184,28 +187,34 @@ export class TauriHostClient implements PlannerTools {
   async planGet(
     repoPath: string,
     taskId: string,
-  ): Promise<{ markdown: string; updatedAt: string }> {
-    const payload = await this.invokeFn<{ markdown: string; updatedAt: string }>("plan_get", {
-      repoPath,
-      taskId,
-    });
+  ): Promise<{ markdown: string; updatedAt: string | null }> {
+    const payload = await this.invokeFn<{ markdown: string; updatedAt?: string | null }>(
+      "plan_get",
+      {
+        repoPath,
+        taskId,
+      },
+    );
     return {
       markdown: payload.markdown,
-      updatedAt: payload.updatedAt,
+      updatedAt: payload.updatedAt ?? null,
     };
   }
 
   async qaGetReport(
     repoPath: string,
     taskId: string,
-  ): Promise<{ markdown: string; updatedAt: string }> {
-    const payload = await this.invokeFn<{ markdown: string; updatedAt: string }>("qa_get_report", {
-      repoPath,
-      taskId,
-    });
+  ): Promise<{ markdown: string; updatedAt: string | null }> {
+    const payload = await this.invokeFn<{ markdown: string; updatedAt?: string | null }>(
+      "qa_get_report",
+      {
+        repoPath,
+        taskId,
+      },
+    );
     return {
       markdown: payload.markdown,
-      updatedAt: payload.updatedAt,
+      updatedAt: payload.updatedAt ?? null,
     };
   }
 

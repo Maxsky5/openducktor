@@ -8,19 +8,61 @@ type UseSpecOperationsArgs = {
 
 type UseSpecOperationsResult = {
   loadSpec: (taskId: string) => Promise<string>;
+  loadSpecDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
+  loadPlanDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
+  loadQaReportDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
 export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpecOperationsResult {
-  const loadSpec = useCallback(
-    async (taskId: string): Promise<string> => {
+  const loadSpecDocument = useCallback(
+    async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
       if (!activeRepo) {
         throw new Error("Select a workspace first.");
       }
       const spec = await host.specGet(activeRepo, taskId);
-      return spec.markdown || defaultSpecTemplateMarkdown;
+      return {
+        markdown: spec.markdown,
+        updatedAt: spec.updatedAt,
+      };
     },
     [activeRepo],
+  );
+
+  const loadPlanDocument = useCallback(
+    async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+      const plan = await host.planGet(activeRepo, taskId);
+      return {
+        markdown: plan.markdown,
+        updatedAt: plan.updatedAt,
+      };
+    },
+    [activeRepo],
+  );
+
+  const loadQaReportDocument = useCallback(
+    async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+      const report = await host.qaGetReport(activeRepo, taskId);
+      return {
+        markdown: report.markdown,
+        updatedAt: report.updatedAt,
+      };
+    },
+    [activeRepo],
+  );
+
+  const loadSpec = useCallback(
+    async (taskId: string): Promise<string> => {
+      const spec = await loadSpecDocument(taskId);
+      return spec.markdown || defaultSpecTemplateMarkdown;
+    },
+    [loadSpecDocument],
   );
 
   const saveSpec = useCallback(
@@ -42,6 +84,9 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
 
   return {
     loadSpec,
+    loadSpecDocument,
+    loadPlanDocument,
+    loadQaReportDocument,
     saveSpec,
   };
 }

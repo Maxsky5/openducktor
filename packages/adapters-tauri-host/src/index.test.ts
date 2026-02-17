@@ -10,7 +10,6 @@ const makeTaskCardPayload = () => ({
   id: "task-1",
   title: "Task",
   description: "",
-  design: "",
   acceptanceCriteria: "",
   notes: "",
   status: "open",

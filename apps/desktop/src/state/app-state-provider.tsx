@@ -70,6 +70,8 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     transitionTask,
     deferTask,
     resumeDeferredTask,
+    humanApproveTask,
+    humanRequestChangesTask,
   } = useTaskOperations({
     activeRepo,
     refreshBeadsCheckForRepo,
@@ -80,9 +82,10 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     refreshTaskData,
   });
 
-  const { loadSpec, saveSpec } = useSpecOperations({
-    activeRepo,
-  });
+  const { loadSpec, loadSpecDocument, loadPlanDocument, loadQaReportDocument, saveSpec } =
+    useSpecOperations({
+      activeRepo,
+    });
 
   const { workspaces, isSwitchingWorkspace, refreshWorkspaces, addWorkspace, selectWorkspace } =
     useWorkspaceOperations({
@@ -161,10 +164,14 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       transitionTask,
       deferTask,
       resumeDeferredTask,
+      humanApproveTask,
+      humanRequestChangesTask,
     }),
     [
       createTask,
       deferTask,
+      humanApproveTask,
+      humanRequestChangesTask,
       isLoadingTasks,
       refreshTasks,
       resumeDeferredTask,
@@ -189,9 +196,12 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const specStateValue = useMemo<SpecStateContextValue>(
     () => ({
       loadSpec,
+      loadSpecDocument,
+      loadPlanDocument,
+      loadQaReportDocument,
       saveSpec,
     }),
-    [loadSpec, saveSpec],
+    [loadPlanDocument, loadQaReportDocument, loadSpec, loadSpecDocument, saveSpec],
   );
 
   return (

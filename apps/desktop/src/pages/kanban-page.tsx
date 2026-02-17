@@ -11,7 +11,16 @@ import { useNavigate } from "react-router-dom";
 export function KanbanPage(): ReactElement {
   const { delegateTask } = useDelegationState();
   const { isSwitchingWorkspace } = useWorkspaceState();
-  const { tasks, runs, refreshTasks, isLoadingTasks, deferTask } = useTasksState();
+  const {
+    tasks,
+    runs,
+    refreshTasks,
+    isLoadingTasks,
+    deferTask,
+    resumeDeferredTask,
+    humanApproveTask,
+    humanRequestChangesTask,
+  } = useTasksState();
   const navigate = useNavigate();
   const [isTaskComposerOpen, setTaskComposerOpen] = useState(false);
   const [composerTaskId, setComposerTaskId] = useState<string | null>(null);
@@ -41,7 +50,7 @@ export function KanbanPage(): ReactElement {
   );
 
   return (
-    <div className="grid h-full gap-4">
+    <div className="grid h-full min-w-0 gap-4 overflow-x-hidden">
       <KanbanSummaryCards
         taskCount={tasks.length}
         runningCount={runningCount}
@@ -82,22 +91,28 @@ export function KanbanPage(): ReactElement {
         </div>
       </div>
 
-      <section className="grid auto-cols-[minmax(240px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-8">
-        {columns.map((column) => (
-          <KanbanColumn
-            key={column.id}
-            column={column}
-            runStateByTaskId={runStateByTaskId}
-            onOpenDetails={(taskId) => setDetailsTaskId(taskId)}
-            onDelegate={(taskId) => void delegateTask(taskId)}
-            onPlan={(taskId) => {
-              navigate(`/planner?task=${encodeURIComponent(taskId)}`);
-            }}
-            onBuild={(taskId) => {
-              navigate(`/builder?task=${encodeURIComponent(taskId)}`);
-            }}
-          />
-        ))}
+      <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white/85 to-slate-50/70 p-3 shadow-sm">
+        <div className="max-w-full overflow-x-auto pb-2">
+          <div className="flex min-w-max items-stretch gap-4 pr-2">
+            {columns.map((column) => (
+              <KanbanColumn
+                key={column.id}
+                column={column}
+                runStateByTaskId={runStateByTaskId}
+                onOpenDetails={(taskId) => setDetailsTaskId(taskId)}
+                onDelegate={(taskId) => void delegateTask(taskId)}
+                onPlan={(taskId) => {
+                  navigate(`/planner?task=${encodeURIComponent(taskId)}`);
+                }}
+                onBuild={(taskId) => {
+                  navigate(`/builder?task=${encodeURIComponent(taskId)}`);
+                }}
+                onHumanApprove={(taskId) => void humanApproveTask(taskId)}
+                onHumanRequestChanges={(taskId) => void humanRequestChangesTask(taskId)}
+              />
+            ))}
+          </div>
+        </div>
       </section>
 
       <TaskCreateModal
@@ -135,6 +150,9 @@ export function KanbanPage(): ReactElement {
           setTaskComposerOpen(true);
         }}
         onDefer={(taskId) => void deferTask(taskId)}
+        onResumeDeferred={(taskId) => void resumeDeferredTask(taskId)}
+        onHumanApprove={(taskId) => void humanApproveTask(taskId)}
+        onHumanRequestChanges={(taskId) => void humanRequestChangesTask(taskId)}
       />
     </div>
   );

@@ -19,7 +19,6 @@ struct TaskCreatePayload {
     issue_type: String,
     priority: i32,
     description: Option<String>,
-    design: Option<String>,
     acceptance_criteria: Option<String>,
     labels: Option<Vec<String>>,
     ai_review_enabled: Option<bool>,
@@ -31,7 +30,6 @@ struct TaskCreatePayload {
 struct TaskUpdatePayload {
     title: Option<String>,
     description: Option<String>,
-    design: Option<String>,
     acceptance_criteria: Option<String>,
     priority: Option<i32>,
     issue_type: Option<String>,
@@ -198,7 +196,6 @@ async fn task_create(
         issue_type: input.issue_type,
         priority: input.priority,
         description: input.description,
-        design: input.design,
         acceptance_criteria: input.acceptance_criteria,
         labels: input.labels,
         ai_review_enabled: input.ai_review_enabled,
@@ -220,7 +217,6 @@ async fn task_update(
         UpdateTaskPatch {
             title: patch.title,
             description: patch.description,
-            design: patch.design,
             acceptance_criteria: patch.acceptance_criteria,
             notes: None,
             status: None,

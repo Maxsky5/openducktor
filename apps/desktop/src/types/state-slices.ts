@@ -46,6 +46,8 @@ export type TasksStateContextValue = {
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;
+  humanApproveTask: (taskId: string) => Promise<void>;
+  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 
 export type DelegationStateContextValue = {
@@ -62,5 +64,8 @@ export type DelegationStateContextValue = {
 
 export type SpecStateContextValue = {
   loadSpec: (taskId: string) => Promise<string>;
+  loadSpecDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
+  loadPlanDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
+  loadQaReportDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };

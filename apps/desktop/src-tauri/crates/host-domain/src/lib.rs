@@ -47,19 +47,33 @@ impl TaskStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskAction {
+    ViewDetails,
+    SetSpec,
+    SetPlan,
+    BuildStart,
+    OpenBuilder,
+    DeferIssue,
+    ResumeDeferred,
+    HumanRequestChanges,
+    HumanApprove,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskCard {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub design: String,
     pub acceptance_criteria: String,
     pub notes: String,
     pub status: TaskStatus,
     pub priority: i32,
     pub issue_type: String,
     pub ai_review_enabled: bool,
+    pub available_actions: Vec<TaskAction>,
     pub labels: Vec<String>,
     pub assignee: Option<String>,
     pub parent_id: Option<String>,
@@ -75,7 +89,6 @@ pub struct CreateTaskInput {
     pub issue_type: String,
     pub priority: i32,
     pub description: Option<String>,
-    pub design: Option<String>,
     pub acceptance_criteria: Option<String>,
     pub labels: Option<Vec<String>>,
     pub ai_review_enabled: Option<bool>,
@@ -96,7 +109,6 @@ pub struct PlanSubtaskInput {
 pub struct UpdateTaskPatch {
     pub title: Option<String>,
     pub description: Option<String>,
-    pub design: Option<String>,
     pub acceptance_criteria: Option<String>,
     pub notes: Option<String>,
     pub status: Option<TaskStatus>,
@@ -112,7 +124,7 @@ pub struct UpdateTaskPatch {
 #[serde(rename_all = "camelCase")]
 pub struct SpecDocument {
     pub markdown: String,
-    pub updated_at: String,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -142,20 +154,14 @@ pub trait TaskStore: Send + Sync {
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard>;
     fn get_spec(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument>;
-    fn set_spec(
-        &self,
-        repo_path: &Path,
-        task_id: &str,
-        markdown: &str,
-    ) -> Result<SpecDocument>;
+    fn set_spec(&self, repo_path: &Path, task_id: &str, markdown: &str) -> Result<SpecDocument>;
     fn get_plan(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument>;
-    fn set_plan(
+    fn set_plan(&self, repo_path: &Path, task_id: &str, markdown: &str) -> Result<SpecDocument>;
+    fn get_latest_qa_report(
         &self,
         repo_path: &Path,
         task_id: &str,
-        markdown: &str,
-    ) -> Result<SpecDocument>;
-    fn get_latest_qa_report(&self, repo_path: &Path, task_id: &str) -> Result<Option<QaReportDocument>>;
+    ) -> Result<Option<QaReportDocument>>;
     fn append_qa_report(
         &self,
         repo_path: &Path,

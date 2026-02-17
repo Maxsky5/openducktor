@@ -150,12 +150,9 @@ mod tests {
 
     #[test]
     fn run_command_allow_failure_returns_status_and_streams() {
-        let (ok, stdout, stderr) = run_command_allow_failure(
-            "sh",
-            &["-lc", "echo hello; echo warn >&2; exit 3"],
-            None,
-        )
-        .expect("command should execute");
+        let (ok, stdout, stderr) =
+            run_command_allow_failure("sh", &["-lc", "echo hello; echo warn >&2; exit 3"], None)
+                .expect("command should execute");
 
         assert!(!ok);
         assert_eq!(stdout, "hello");

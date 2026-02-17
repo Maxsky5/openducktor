@@ -17,6 +17,7 @@ describe("runtime schemas", () => {
 
     expect(parsed.status).toBe("spec_ready");
     expect(parsed.aiReviewEnabled).toBe(true);
+    expect(parsed.availableActions).toEqual([]);
     expect(parsed.notes).toBe("");
   });
 

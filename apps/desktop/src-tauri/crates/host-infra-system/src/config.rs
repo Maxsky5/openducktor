@@ -427,7 +427,10 @@ mod tests {
         assert_eq!(recent.first().map(String::as_str), Some("/tmp/repo-3"));
         assert_eq!(recent.len(), 20);
         assert_eq!(
-            recent.iter().filter(|entry| entry.as_str() == "/tmp/repo-3").count(),
+            recent
+                .iter()
+                .filter(|entry| entry.as_str() == "/tmp/repo-3")
+                .count(),
             1
         );
     }

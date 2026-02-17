@@ -30,6 +30,8 @@ type UseTaskOperationsResult = {
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;
+  humanApproveTask: (taskId: string) => Promise<void>;
+  humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
 
 export function useTaskOperations({
@@ -191,6 +193,52 @@ export function useTaskOperations({
     [activeRepo, refreshTaskData],
   );
 
+  const humanApproveTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+
+      try {
+        await host.humanApprove(activeRepo, taskId);
+        await refreshTaskData(activeRepo);
+        toast.success("Task approved", {
+          description: taskId,
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        toast.error("Failed to approve task", {
+          description: reason,
+        });
+        throw error;
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
+  const humanRequestChangesTask = useCallback(
+    async (taskId: string, note?: string): Promise<void> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+
+      try {
+        await host.humanRequestChanges(activeRepo, taskId, note);
+        await refreshTaskData(activeRepo);
+        toast.success("Changes requested", {
+          description: taskId,
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        toast.error("Failed to request changes", {
+          description: reason,
+        });
+        throw error;
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
   const clearTaskData = useCallback(() => {
     setTasks([]);
     setRuns([]);
@@ -210,5 +258,7 @@ export function useTaskOperations({
     transitionTask,
     deferTask,
     resumeDeferredTask,
+    humanApproveTask,
+    humanRequestChangesTask,
   };
 }

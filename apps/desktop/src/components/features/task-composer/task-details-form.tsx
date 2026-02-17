@@ -147,17 +147,6 @@ export function TaskDetailsForm({
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="task-design">Design</Label>
-        <Textarea
-          id="task-design"
-          rows={3}
-          value={state.design}
-          placeholder="Architecture notes, key constraints, and integration points."
-          onChange={(event) => onStateChange({ design: event.currentTarget.value })}
-        />
-      </div>
-
-      <div className="grid gap-2">
         <Label htmlFor="task-acceptance">Acceptance Criteria</Label>
         <Textarea
           id="task-acceptance"

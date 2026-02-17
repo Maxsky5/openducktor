@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, BeadsCheck, CreateTaskInput, PlanSubtaskInput, QaVerdict, RunEvent, RunState,
-    RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskCard, TaskStatus, TaskStore,
-    UpdateTaskPatch, WorkspaceRecord,
+    RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard, TaskStatus,
+    TaskStore, UpdateTaskPatch, WorkspaceRecord,
 };
 use host_infra_system::{
     build_branch_name, command_exists, pick_free_port, remove_worktree, resolve_central_beads_dir,
@@ -75,6 +75,20 @@ impl AppService {
         cache.insert(repo_key);
 
         Ok(())
+    }
+
+    fn enrich_task(&self, task: TaskCard, all_tasks: &[TaskCard]) -> TaskCard {
+        let mut enriched = task;
+        enriched.available_actions = derive_available_actions(&enriched, all_tasks);
+        enriched
+    }
+
+    fn enrich_tasks(&self, tasks: Vec<TaskCard>) -> Vec<TaskCard> {
+        let snapshot = tasks.clone();
+        tasks
+            .into_iter()
+            .map(|task| self.enrich_task(task, &snapshot))
+            .collect()
     }
 
     pub fn runtime_check(&self) -> Result<RuntimeCheck> {
@@ -180,7 +194,10 @@ impl AppService {
         self.config_store.repo_config(repo_path)
     }
 
-    pub fn workspace_get_repo_config_optional(&self, repo_path: &str) -> Result<Option<RepoConfig>> {
+    pub fn workspace_get_repo_config_optional(
+        &self,
+        repo_path: &str,
+    ) -> Result<Option<RepoConfig>> {
         self.config_store.repo_config_optional(repo_path)
     }
 
@@ -194,7 +211,8 @@ impl AppService {
 
     pub fn tasks_list(&self, repo_path: &str) -> Result<Vec<TaskCard>> {
         self.ensure_repo_initialized(repo_path)?;
-        self.task_store.list_tasks(Path::new(repo_path))
+        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        Ok(self.enrich_tasks(tasks))
     }
 
     pub fn task_create(&self, repo_path: &str, mut input: CreateTaskInput) -> Result<TaskCard> {
@@ -204,10 +222,12 @@ impl AppService {
             input.ai_review_enabled = Some(default_qa_required_for_issue_type(&input.issue_type));
         }
 
-        let existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;
         validate_parent_relationships_for_create(&existing, &input)?;
 
-        self.task_store.create_task(Path::new(repo_path), input)
+        let created = self.task_store.create_task(Path::new(repo_path), input)?;
+        existing.push(created.clone());
+        Ok(self.enrich_task(created, &existing))
     }
 
     pub fn task_update(
@@ -226,15 +246,20 @@ impl AppService {
             patch.issue_type = Some(normalize_issue_type(issue_type).to_string());
         }
 
-        let existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;
         let current = existing
             .iter()
             .find(|task| task.id == task_id)
             .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
         validate_parent_relationships_for_update(&existing, current, &patch)?;
 
-        self.task_store
-            .update_task(Path::new(repo_path), task_id, patch)
+        let updated = self
+            .task_store
+            .update_task(Path::new(repo_path), task_id, patch)?;
+        if let Some(index) = existing.iter().position(|task| task.id == task_id) {
+            existing[index] = updated.clone();
+        }
+        Ok(self.enrich_task(updated, &existing))
     }
 
     pub fn task_transition(
@@ -245,7 +270,7 @@ impl AppService {
         _reason: Option<&str>,
     ) -> Result<TaskCard> {
         self.ensure_repo_initialized(repo_path)?;
-        let existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;
         let task = existing
             .iter()
             .find(|entry| entry.id == task_id)
@@ -255,16 +280,15 @@ impl AppService {
         validate_transition(&task, &existing, &task.status, &target_status)?;
 
         if task.status == target_status {
-            return Ok(task);
+            return Ok(self.enrich_task(task, &existing));
         }
 
-        self.task_store.update_task(
+        let updated = self.task_store.update_task(
             Path::new(repo_path),
             task_id,
             UpdateTaskPatch {
                 title: None,
                 description: None,
-                design: None,
                 acceptance_criteria: None,
                 notes: None,
                 status: Some(target_status),
@@ -275,7 +299,13 @@ impl AppService {
                 assignee: None,
                 parent_id: None,
             },
-        )
+        )?;
+
+        if let Some(index) = existing.iter().position(|entry| entry.id == task_id) {
+            existing[index] = updated.clone();
+        }
+
+        Ok(self.enrich_task(updated, &existing))
     }
 
     pub fn build_blocked(
@@ -288,12 +318,7 @@ impl AppService {
             .map(str::trim)
             .filter(|entry| !entry.is_empty())
             .ok_or_else(|| anyhow!("build_blocked requires a non-empty reason"))?;
-        self.task_transition(
-            repo_path,
-            task_id,
-            TaskStatus::Blocked,
-            Some(reason),
-        )
+        self.task_transition(repo_path, task_id, TaskStatus::Blocked, Some(reason))
     }
 
     pub fn build_resumed(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
@@ -336,19 +361,24 @@ impl AppService {
             .map(str::trim)
             .filter(|entry| !entry.is_empty())
             .unwrap_or("Human requested changes");
-        self.task_transition(
-            repo_path,
-            task_id,
-            TaskStatus::InProgress,
-            Some(reason),
-        )
+        self.task_transition(repo_path, task_id, TaskStatus::InProgress, Some(reason))
     }
 
     pub fn human_approve(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
-        self.task_transition(repo_path, task_id, TaskStatus::Closed, Some("Human approved"))
+        self.task_transition(
+            repo_path,
+            task_id,
+            TaskStatus::Closed,
+            Some("Human approved"),
+        )
     }
 
-    pub fn task_defer(&self, repo_path: &str, task_id: &str, _reason: Option<&str>) -> Result<TaskCard> {
+    pub fn task_defer(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        _reason: Option<&str>,
+    ) -> Result<TaskCard> {
         self.ensure_repo_initialized(repo_path)?;
         let existing = self.task_store.list_tasks(Path::new(repo_path))?;
         let task = existing
@@ -364,7 +394,12 @@ impl AppService {
             return Err(anyhow!("Only non-closed open-state tasks can be deferred."));
         }
 
-        self.task_transition(repo_path, task_id, TaskStatus::Deferred, Some("Deferred by user"))
+        self.task_transition(
+            repo_path,
+            task_id,
+            TaskStatus::Deferred,
+            Some("Deferred by user"),
+        )
     }
 
     pub fn task_resume_deferred(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
@@ -377,7 +412,12 @@ impl AppService {
         if task.status != TaskStatus::Deferred {
             return Err(anyhow!("Task is not deferred: {task_id}"));
         }
-        self.task_transition(repo_path, task_id, TaskStatus::Open, Some("Deferred task resumed"))
+        self.task_transition(
+            repo_path,
+            task_id,
+            TaskStatus::Open,
+            Some("Deferred task resumed"),
+        )
     }
 
     pub fn spec_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
@@ -385,12 +425,7 @@ impl AppService {
         self.task_store.get_spec(Path::new(repo_path), task_id)
     }
 
-    pub fn set_spec(
-        &self,
-        repo_path: &str,
-        task_id: &str,
-        markdown: &str,
-    ) -> Result<SpecDocument> {
+    pub fn set_spec(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<SpecDocument> {
         self.ensure_repo_initialized(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "spec")?;
         let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
@@ -412,7 +447,12 @@ impl AppService {
             .with_context(|| format!("Failed to persist spec markdown for {task_id}"))?;
 
         if task.status == TaskStatus::Open {
-            self.task_transition(repo_path, task_id, TaskStatus::SpecReady, Some("Spec ready"))?;
+            self.task_transition(
+                repo_path,
+                task_id,
+                TaskStatus::SpecReady,
+                Some("Spec ready"),
+            )?;
         }
 
         Ok(spec)
@@ -438,9 +478,10 @@ impl AppService {
             .find(|entry| entry.id == task_id)
             .cloned()
             .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
-        if !can_set_plan_from_status(&task.status) {
+        if !can_set_plan(&task) {
             return Err(anyhow!(
-                "set_plan is only allowed from open/spec_ready (current: {})",
+                "set_plan is not allowed for issue type {} from status {}",
+                normalize_issue_type(&task.issue_type),
                 task.status.as_cli_value()
             ));
         }
@@ -472,7 +513,9 @@ impl AppService {
                 }
                 create_input.parent_id = Some(task_id.to_string());
                 validate_parent_relationships_for_create(&current_tasks, &create_input)?;
-                let created = self.task_store.create_task(Path::new(repo_path), create_input)?;
+                let created = self
+                    .task_store
+                    .create_task(Path::new(repo_path), create_input)?;
                 current_tasks.push(created);
                 existing_titles.insert(title_key);
             }
@@ -495,21 +538,16 @@ impl AppService {
             .get_latest_qa_report(Path::new(repo_path), task_id)?
             .map(|entry| SpecDocument {
                 markdown: entry.markdown,
-                updated_at: entry.updated_at,
+                updated_at: Some(entry.updated_at),
             })
             .unwrap_or_else(|| SpecDocument {
                 markdown: String::new(),
-                updated_at: now_rfc3339(),
+                updated_at: None,
             });
         Ok(report)
     }
 
-    pub fn qa_approved(
-        &self,
-        repo_path: &str,
-        task_id: &str,
-        markdown: &str,
-    ) -> Result<TaskCard> {
+    pub fn qa_approved(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<TaskCard> {
         self.ensure_repo_initialized(repo_path)?;
         let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
         let task = tasks
@@ -523,7 +561,12 @@ impl AppService {
             .append_qa_report(Path::new(repo_path), task_id, markdown, QaVerdict::Approved)
             .with_context(|| format!("Failed to persist QA report for {task_id}"))?;
 
-        self.task_transition(repo_path, task_id, TaskStatus::HumanReview, Some("QA approved"))
+        self.task_transition(
+            repo_path,
+            task_id,
+            TaskStatus::HumanReview,
+            Some("QA approved"),
+        )
     }
 
     pub fn qa_rejected(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<TaskCard> {
@@ -537,12 +580,7 @@ impl AppService {
         validate_transition(&task, &tasks, &task.status, &TaskStatus::InProgress)?;
 
         self.task_store
-            .append_qa_report(
-                Path::new(repo_path),
-                task_id,
-                markdown,
-                QaVerdict::Rejected,
-            )
+            .append_qa_report(Path::new(repo_path), task_id, markdown, QaVerdict::Rejected)
             .with_context(|| format!("Failed to persist QA report for {task_id}"))?;
 
         self.task_transition(
@@ -956,7 +994,10 @@ fn normalize_issue_type(issue_type: &str) -> &'static str {
 }
 
 fn default_qa_required_for_issue_type(issue_type: &str) -> bool {
-    matches!(normalize_issue_type(issue_type), "epic" | "feature" | "task" | "bug")
+    matches!(
+        normalize_issue_type(issue_type),
+        "epic" | "feature" | "task" | "bug"
+    )
 }
 
 fn is_open_state(status: &TaskStatus) -> bool {
@@ -1060,9 +1101,16 @@ fn find_task<'a>(tasks: &'a [TaskCard], task_id: &str) -> Result<&'a TaskCard> {
         .ok_or_else(|| anyhow!("Task not found: {task_id}"))
 }
 
-fn validate_parent_relationships_for_create(tasks: &[TaskCard], input: &CreateTaskInput) -> Result<()> {
+fn validate_parent_relationships_for_create(
+    tasks: &[TaskCard],
+    input: &CreateTaskInput,
+) -> Result<()> {
     let issue_type = normalize_issue_type(&input.issue_type);
-    let parent_id = input.parent_id.as_deref().map(str::trim).filter(|value| !value.is_empty());
+    let parent_id = input
+        .parent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     if issue_type == "epic" && parent_id.is_some() {
         return Err(anyhow!("Epics cannot be created as subtasks."));
@@ -1144,8 +1192,54 @@ fn can_set_spec_from_status(status: &TaskStatus) -> bool {
     matches!(status, TaskStatus::Open | TaskStatus::SpecReady)
 }
 
-fn can_set_plan_from_status(status: &TaskStatus) -> bool {
-    matches!(status, TaskStatus::Open | TaskStatus::SpecReady)
+fn can_set_plan(task: &TaskCard) -> bool {
+    let issue_type = normalize_issue_type(&task.issue_type);
+    match issue_type {
+        "epic" | "feature" => matches!(task.status, TaskStatus::SpecReady),
+        "task" | "bug" => matches!(task.status, TaskStatus::Open | TaskStatus::SpecReady),
+        _ => false,
+    }
+}
+
+fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) -> Vec<TaskAction> {
+    let mut actions = vec![TaskAction::ViewDetails];
+
+    if can_set_spec_from_status(&task.status) {
+        actions.push(TaskAction::SetSpec);
+    }
+
+    if can_set_plan(task) {
+        actions.push(TaskAction::SetPlan);
+    }
+
+    if allows_transition(task, &task.status, &TaskStatus::InProgress) {
+        actions.push(TaskAction::BuildStart);
+    }
+
+    if matches!(
+        task.status,
+        TaskStatus::InProgress | TaskStatus::Blocked | TaskStatus::HumanReview
+    ) {
+        actions.push(TaskAction::OpenBuilder);
+    }
+
+    if task.parent_id.is_none() {
+        if task.status == TaskStatus::Deferred {
+            actions.push(TaskAction::ResumeDeferred);
+        } else if is_open_state(&task.status) {
+            actions.push(TaskAction::DeferIssue);
+        }
+    }
+
+    if task.status == TaskStatus::HumanReview {
+        actions.push(TaskAction::HumanRequestChanges);
+    }
+
+    if validate_transition(task, all_tasks, &task.status, &TaskStatus::Closed).is_ok() {
+        actions.push(TaskAction::HumanApprove);
+    }
+
+    actions
 }
 
 fn validate_plan_subtask_rules(
@@ -1156,7 +1250,9 @@ fn validate_plan_subtask_rules(
     let issue_type = normalize_issue_type(&task.issue_type);
     if issue_type != "epic" {
         if !plan_subtasks.is_empty() {
-            return Err(anyhow!("Only epics can receive subtask proposals during planning."));
+            return Err(anyhow!(
+                "Only epics can receive subtask proposals during planning."
+            ));
         }
         return Ok(());
     }
@@ -1185,7 +1281,8 @@ fn normalize_subtask_plan_inputs(inputs: Vec<PlanSubtaskInput>) -> Result<Vec<Cr
             return Err(anyhow!("Subtask proposals require a non-empty title."));
         }
 
-        let issue_type = normalize_issue_type(entry.issue_type.as_deref().unwrap_or("task")).to_string();
+        let issue_type =
+            normalize_issue_type(entry.issue_type.as_deref().unwrap_or("task")).to_string();
         if issue_type == "epic" {
             return Err(anyhow!(
                 "Epic subtasks are not allowed. Subtask hierarchy depth is limited to one level."
@@ -1207,7 +1304,6 @@ fn normalize_subtask_plan_inputs(inputs: Vec<PlanSubtaskInput>) -> Result<Vec<Cr
             issue_type: issue_type.clone(),
             priority,
             description,
-            design: None,
             acceptance_criteria: None,
             labels: None,
             ai_review_enabled: Some(default_qa_required_for_issue_type(&issue_type)),
@@ -1269,25 +1365,27 @@ fn spawn_output_forwarder(
 #[cfg(test)]
 mod tests {
     use super::{
-        allows_transition, can_set_plan_from_status, can_set_spec_from_status,
-        normalize_required_markdown, normalize_subtask_plan_inputs, validate_plan_subtask_rules,
-        validate_parent_relationships_for_create,
-        validate_parent_relationships_for_update, validate_transition,
+        allows_transition, can_set_plan, can_set_spec_from_status, derive_available_actions,
+        normalize_required_markdown, normalize_subtask_plan_inputs,
+        validate_parent_relationships_for_create, validate_parent_relationships_for_update,
+        validate_plan_subtask_rules, validate_transition,
     };
-    use host_domain::{CreateTaskInput, PlanSubtaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
+    use host_domain::{
+        CreateTaskInput, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
+    };
 
     fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskCard {
         TaskCard {
             id: id.to_string(),
             title: format!("Task {id}"),
             description: String::new(),
-            design: String::new(),
             acceptance_criteria: String::new(),
             notes: String::new(),
             status,
             priority: 2,
             issue_type: issue_type.to_string(),
             ai_review_enabled: true,
+            available_actions: Vec::new(),
             labels: Vec::new(),
             assignee: None,
             parent_id: None,
@@ -1300,7 +1398,11 @@ mod tests {
     #[test]
     fn bug_can_skip_spec_and_go_in_progress_from_open() {
         let bug = make_task("bug-1", "bug", TaskStatus::Open);
-        assert!(allows_transition(&bug, &TaskStatus::Open, &TaskStatus::InProgress));
+        assert!(allows_transition(
+            &bug,
+            &TaskStatus::Open,
+            &TaskStatus::InProgress
+        ));
     }
 
     #[test]
@@ -1335,8 +1437,12 @@ mod tests {
         deferred_child.parent_id = Some(epic.id.clone());
 
         let tasks = vec![epic.clone(), deferred_child];
-        let result = validate_transition(&epic, &tasks, &TaskStatus::HumanReview, &TaskStatus::Closed);
-        assert!(result.is_ok(), "deferred subtasks should not block epic completion");
+        let result =
+            validate_transition(&epic, &tasks, &TaskStatus::HumanReview, &TaskStatus::Closed);
+        assert!(
+            result.is_ok(),
+            "deferred subtasks should not block epic completion"
+        );
     }
 
     #[test]
@@ -1346,8 +1452,12 @@ mod tests {
         active_child.parent_id = Some(epic.id.clone());
 
         let tasks = vec![epic.clone(), active_child];
-        let result = validate_transition(&epic, &tasks, &TaskStatus::HumanReview, &TaskStatus::Closed);
-        assert!(result.is_err(), "open direct subtasks must block epic completion");
+        let result =
+            validate_transition(&epic, &tasks, &TaskStatus::HumanReview, &TaskStatus::Closed);
+        assert!(
+            result.is_err(),
+            "open direct subtasks must block epic completion"
+        );
     }
 
     #[test]
@@ -1357,27 +1467,31 @@ mod tests {
         let mut level_two_parent = make_task("epic-child", "epic", TaskStatus::Open);
         level_two_parent.parent_id = Some(epic.id.clone());
 
-        let tasks = vec![epic.clone(), non_epic_parent.clone(), level_two_parent.clone()];
+        let tasks = vec![
+            epic.clone(),
+            non_epic_parent.clone(),
+            level_two_parent.clone(),
+        ];
 
         let invalid_non_epic_parent = CreateTaskInput {
             title: "child".to_string(),
             issue_type: "task".to_string(),
             priority: 2,
             description: None,
-            design: None,
             acceptance_criteria: None,
             labels: None,
             ai_review_enabled: Some(true),
             parent_id: Some(non_epic_parent.id.clone()),
         };
-        assert!(validate_parent_relationships_for_create(&tasks, &invalid_non_epic_parent).is_err());
+        assert!(
+            validate_parent_relationships_for_create(&tasks, &invalid_non_epic_parent).is_err()
+        );
 
         let invalid_depth_two = CreateTaskInput {
             title: "child".to_string(),
             issue_type: "task".to_string(),
             priority: 2,
             description: None,
-            design: None,
             acceptance_criteria: None,
             labels: None,
             ai_review_enabled: Some(true),
@@ -1389,7 +1503,6 @@ mod tests {
         let patch = UpdateTaskPatch {
             title: None,
             description: None,
-            design: None,
             acceptance_criteria: None,
             notes: None,
             status: Some(TaskStatus::Deferred),
@@ -1447,9 +1560,19 @@ mod tests {
         assert!(can_set_spec_from_status(&TaskStatus::SpecReady));
         assert!(!can_set_spec_from_status(&TaskStatus::InProgress));
 
-        assert!(can_set_plan_from_status(&TaskStatus::Open));
-        assert!(can_set_plan_from_status(&TaskStatus::SpecReady));
-        assert!(!can_set_plan_from_status(&TaskStatus::AiReview));
+        let epic_open = make_task("epic-open", "epic", TaskStatus::Open);
+        let epic_spec_ready = make_task("epic-spec", "epic", TaskStatus::SpecReady);
+        let feature_open = make_task("feature-open", "feature", TaskStatus::Open);
+        let task_open = make_task("task-open", "task", TaskStatus::Open);
+        let bug_open = make_task("bug-open", "bug", TaskStatus::Open);
+        let feature_in_progress = make_task("feature-progress", "feature", TaskStatus::InProgress);
+
+        assert!(!can_set_plan(&epic_open));
+        assert!(can_set_plan(&epic_spec_ready));
+        assert!(!can_set_plan(&feature_open));
+        assert!(can_set_plan(&task_open));
+        assert!(can_set_plan(&bug_open));
+        assert!(!can_set_plan(&feature_in_progress));
     }
 
     #[test]
@@ -1464,7 +1587,6 @@ mod tests {
             issue_type: "task".to_string(),
             priority: 2,
             description: None,
-            design: None,
             acceptance_criteria: None,
             labels: None,
             ai_review_enabled: Some(true),
@@ -1481,7 +1603,6 @@ mod tests {
             issue_type: "bug".to_string(),
             priority: 2,
             description: None,
-            design: None,
             acceptance_criteria: None,
             labels: None,
             ai_review_enabled: Some(true),
@@ -1490,5 +1611,49 @@ mod tests {
 
         let result = validate_plan_subtask_rules(&task, std::slice::from_ref(&task), &proposals);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn feature_in_open_exposes_spec_only() {
+        let feature = make_task("feature-1", "feature", TaskStatus::Open);
+        let actions = derive_available_actions(&feature, std::slice::from_ref(&feature));
+
+        assert!(actions.contains(&TaskAction::SetSpec));
+        assert!(!actions.contains(&TaskAction::SetPlan));
+        assert!(!actions.contains(&TaskAction::BuildStart));
+    }
+
+    #[test]
+    fn epic_in_open_exposes_spec_only() {
+        let epic = make_task("epic-1", "epic", TaskStatus::Open);
+        let actions = derive_available_actions(&epic, std::slice::from_ref(&epic));
+
+        assert!(actions.contains(&TaskAction::SetSpec));
+        assert!(!actions.contains(&TaskAction::SetPlan));
+        assert!(!actions.contains(&TaskAction::BuildStart));
+    }
+
+    #[test]
+    fn bug_in_open_can_start_build_directly() {
+        let bug = make_task("bug-1", "bug", TaskStatus::Open);
+        let actions = derive_available_actions(&bug, std::slice::from_ref(&bug));
+        assert!(actions.contains(&TaskAction::BuildStart));
+    }
+
+    #[test]
+    fn in_progress_tasks_expose_builder_action_and_no_plan_actions() {
+        let task = make_task("task-1", "task", TaskStatus::InProgress);
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+        assert!(actions.contains(&TaskAction::OpenBuilder));
+        assert!(!actions.contains(&TaskAction::SetSpec));
+        assert!(!actions.contains(&TaskAction::SetPlan));
+    }
+
+    #[test]
+    fn deferred_parent_task_exposes_resume_and_hides_defer() {
+        let deferred = make_task("task-1", "task", TaskStatus::Deferred);
+        let actions = derive_available_actions(&deferred, std::slice::from_ref(&deferred));
+        assert!(actions.contains(&TaskAction::ResumeDeferred));
+        assert!(!actions.contains(&TaskAction::DeferIssue));
     }
 }

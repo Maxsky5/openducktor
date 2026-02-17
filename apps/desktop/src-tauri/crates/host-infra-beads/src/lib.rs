@@ -132,7 +132,11 @@ impl BeadsTaskStore {
         Ok(())
     }
 
-    fn verify_repo_initialized(&self, repo_path: &Path, beads_dir: &Path) -> Result<(bool, String)> {
+    fn verify_repo_initialized(
+        &self,
+        repo_path: &Path,
+        beads_dir: &Path,
+    ) -> Result<(bool, String)> {
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
         let (ok, stdout, stderr) = run_command_allow_failure_with_env(
             "bd",
@@ -152,11 +156,7 @@ impl BeadsTaskStore {
 
         let payload: Value = serde_json::from_str(&stdout)
             .with_context(|| format!("Failed to parse `bd where --json` output: {stdout}"))?;
-        if payload
-            .get("path")
-            .and_then(Value::as_str)
-            .is_some()
-        {
+        if payload.get("path").and_then(Value::as_str).is_some() {
             return Ok((true, String::new()));
         }
 
@@ -168,7 +168,12 @@ impl BeadsTaskStore {
             repo_path,
             &["config", "set", "status.custom", CUSTOM_STATUS_VALUES],
         )
-        .with_context(|| format!("Failed to configure custom statuses in {}", repo_path.display()))?;
+        .with_context(|| {
+            format!(
+                "Failed to configure custom statuses in {}",
+                repo_path.display()
+            )
+        })?;
         Ok(())
     }
 
@@ -204,13 +209,13 @@ impl BeadsTaskStore {
             id: issue.id,
             title: issue.title,
             description: issue.description,
-            design: issue.design,
             acceptance_criteria: issue.acceptance_criteria,
             notes: issue.notes,
             status,
             priority: issue.priority,
             issue_type: normalized_issue_type,
             ai_review_enabled,
+            available_actions: Vec::new(),
             labels: normalize_labels(issue.labels),
             assignee: issue.owner,
             parent_id,
@@ -220,13 +225,25 @@ impl BeadsTaskStore {
         })
     }
 
-    fn write_metadata(&self, repo_path: &Path, task_id: &str, metadata: &Map<String, Value>) -> Result<()> {
+    fn write_metadata(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        metadata: &Map<String, Value>,
+    ) -> Result<()> {
         let payload = serde_json::to_string(&Value::Object(metadata.clone()))?;
-        self.run_bd_json(repo_path, &["update", task_id, "--metadata", payload.as_str()])?;
+        self.run_bd_json(
+            repo_path,
+            &["update", task_id, "--metadata", payload.as_str()],
+        )?;
         Ok(())
     }
 
-    fn load_namespace(&self, repo_path: &Path, task_id: &str) -> Result<(RawIssue, Map<String, Value>, Map<String, Value>)> {
+    fn load_namespace(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+    ) -> Result<(RawIssue, Map<String, Value>, Map<String, Value>)> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let mut root = parse_metadata_root(issue.metadata.clone());
 
@@ -306,7 +323,8 @@ impl TaskStore for BeadsTaskStore {
                 ));
             }
 
-            let (is_ready_after, reason_after) = self.verify_repo_initialized(repo_path, &beads_dir)?;
+            let (is_ready_after, reason_after) =
+                self.verify_repo_initialized(repo_path, &beads_dir)?;
             if !is_ready_after {
                 return Err(anyhow!(
                     "Beads init completed but store is not ready at {}: {}",
@@ -374,11 +392,6 @@ impl TaskStore for BeadsTaskStore {
             args.push(description);
         }
 
-        if let Some(design) = normalize_text_option(input.design) {
-            args.push("--design".to_string());
-            args.push(design);
-        }
-
         if let Some(acceptance_criteria) = normalize_text_option(input.acceptance_criteria) {
             args.push("--acceptance".to_string());
             args.push(acceptance_criteria);
@@ -397,7 +410,8 @@ impl TaskStore for BeadsTaskStore {
 
         let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         let value = self.run_bd_json(repo_path, &arg_refs)?;
-        let raw: RawIssue = serde_json::from_value(value).context("Failed to decode created issue")?;
+        let raw: RawIssue =
+            serde_json::from_value(value).context("Failed to decode created issue")?;
         let created_id = raw.id.clone();
 
         let mut metadata_root = parse_metadata_root(raw.metadata);
@@ -410,12 +424,7 @@ impl TaskStore for BeadsTaskStore {
             Value::Bool(input.ai_review_enabled.unwrap_or(true)),
         );
 
-        self.persist_namespace(
-            repo_path,
-            &created_id,
-            &mut metadata_root,
-            namespace_map,
-        )?;
+        self.persist_namespace(repo_path, &created_id, &mut metadata_root, namespace_map)?;
 
         self.show_task(repo_path, &created_id)
     }
@@ -436,11 +445,6 @@ impl TaskStore for BeadsTaskStore {
         if let Some(description) = patch.description {
             args.push("--description".to_string());
             args.push(description);
-        }
-
-        if let Some(design) = patch.design {
-            args.push("--design".to_string());
-            args.push(design);
         }
 
         if let Some(acceptance_criteria) = patch.acceptance_criteria {
@@ -507,10 +511,10 @@ impl TaskStore for BeadsTaskStore {
         let latest = entries.as_ref().and_then(|list| list.last());
 
         Ok(SpecDocument {
-            markdown: latest.map(|entry| entry.markdown.clone()).unwrap_or_default(),
-            updated_at: latest
-                .map(|entry| entry.updated_at.clone())
-                .unwrap_or(issue.updated_at),
+            markdown: latest
+                .map(|entry| entry.markdown.clone())
+                .unwrap_or_default(),
+            updated_at: latest.map(|entry| entry.updated_at.clone()),
         })
     }
 
@@ -547,7 +551,7 @@ impl TaskStore for BeadsTaskStore {
 
         Ok(SpecDocument {
             markdown: entry.markdown,
-            updated_at: timestamp,
+            updated_at: Some(timestamp),
         })
     }
 
@@ -561,10 +565,10 @@ impl TaskStore for BeadsTaskStore {
         let latest = entries.as_ref().and_then(|list| list.last());
 
         Ok(SpecDocument {
-            markdown: latest.map(|entry| entry.markdown.clone()).unwrap_or_default(),
-            updated_at: latest
-                .map(|entry| entry.updated_at.clone())
-                .unwrap_or(issue.updated_at),
+            markdown: latest
+                .map(|entry| entry.markdown.clone())
+                .unwrap_or_default(),
+            updated_at: latest.map(|entry| entry.updated_at.clone()),
         })
     }
 
@@ -601,11 +605,15 @@ impl TaskStore for BeadsTaskStore {
 
         Ok(SpecDocument {
             markdown: entry.markdown,
-            updated_at: timestamp,
+            updated_at: Some(timestamp),
         })
     }
 
-    fn get_latest_qa_report(&self, repo_path: &Path, task_id: &str) -> Result<Option<QaReportDocument>> {
+    fn get_latest_qa_report(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+    ) -> Result<Option<QaReportDocument>> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace = metadata_namespace(&metadata_root, &self.metadata_namespace);
@@ -687,8 +695,6 @@ struct RawIssue {
     #[serde(default)]
     description: String,
     #[serde(default)]
-    design: String,
-    #[serde(default)]
     acceptance_criteria: String,
     #[serde(default)]
     notes: String,
@@ -749,7 +755,10 @@ fn parse_metadata_root(metadata: Option<Value>) -> Map<String, Value> {
     }
 }
 
-fn metadata_namespace<'a>(metadata: &'a Map<String, Value>, namespace: &str) -> Option<&'a Map<String, Value>> {
+fn metadata_namespace<'a>(
+    metadata: &'a Map<String, Value>,
+    namespace: &str,
+) -> Option<&'a Map<String, Value>> {
     metadata.get(namespace).and_then(Value::as_object)
 }
 
@@ -807,15 +816,18 @@ fn normalize_issue_type(issue_type: &str) -> &'static str {
 }
 
 fn default_ai_review_enabled(issue_type: &str) -> bool {
-    matches!(normalize_issue_type(issue_type), "epic" | "feature" | "task" | "bug")
+    matches!(
+        normalize_issue_type(issue_type),
+        "epic" | "feature" | "task" | "bug"
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace, normalize_issue_type,
-        normalize_labels, normalize_text_option, parse_markdown_entries, parse_metadata_root,
-        parse_qa_entries,
+        default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace,
+        normalize_issue_type, normalize_labels, normalize_text_option, parse_markdown_entries,
+        parse_metadata_root, parse_qa_entries,
     };
     use serde_json::json;
 
@@ -845,7 +857,10 @@ mod tests {
         ]);
         assert_eq!(labels, vec!["api".to_string(), "backend".to_string()]);
 
-        assert_eq!(normalize_text_option(Some("  value  ".to_string())), Some("value".to_string()));
+        assert_eq!(
+            normalize_text_option(Some("  value  ".to_string())),
+            Some("value".to_string())
+        );
         assert_eq!(normalize_text_option(Some("   ".to_string())), None);
     }
 

@@ -11,7 +11,6 @@ export type ComposerState = {
   title: string;
   priority: number;
   description: string;
-  design: string;
   acceptanceCriteria: string;
   labels: string[];
   parentId: string;

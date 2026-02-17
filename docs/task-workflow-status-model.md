@@ -35,6 +35,11 @@ Notes:
 - `closed` -> `Done`
 - `deferred` -> hidden from main Kanban (for now)
 
+## Task Capability Contract (Backend-Driven)
+- Backend computes allowed task actions and returns them on each `TaskCard` as `availableActions`.
+- Frontend must render action buttons from `availableActions` and must not infer workflow actions from local status heuristics.
+- This keeps workflow authority in the backend transition matrix while allowing UI-specific presentation (button order, emphasis, labels).
+
 ## Issue Types in Scope
 Allowed issue types in OpenDucktor UI:
 - `epic`
@@ -49,6 +54,7 @@ Removed from OpenDucktor UI scope:
 ## Type-Specific Flow Rules
 - `feature` and `epic` follow the standard path:
   `open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed`
+- `feature` and `epic` cannot start planning directly from `open`; `set_plan` is allowed only from `spec_ready`.
 - `task` and `bug` may skip spec/planning:
   `open -> in_progress`
 

@@ -60,7 +60,8 @@ mod tests {
         let slug = slugify_title("  Build API: v2 + queue processors now!  ");
         assert_eq!(slug, "build-api-v2-queue-processors-now");
 
-        let long = slugify_title("a very long title that should be truncated to forty chars exactly");
+        let long =
+            slugify_title("a very long title that should be truncated to forty chars exactly");
         assert!(long.len() <= 40);
     }
 

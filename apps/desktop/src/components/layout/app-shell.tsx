@@ -41,7 +41,7 @@ export function AppShell(): ReactElement {
   return (
     <>
       <div className="min-h-screen">
-        <div className="grid min-h-screen w-full grid-cols-1 gap-4 p-4 md:grid-cols-[248px_1fr]">
+        <div className="grid min-h-screen w-full grid-cols-1 gap-4 p-4 md:grid-cols-[248px_minmax(0,1fr)]">
           <aside className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col self-start rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-sm backdrop-blur">
             <div className="flex-1 space-y-3 overflow-y-auto pr-1">
               <AppBrand />
@@ -74,8 +74,8 @@ export function AppShell(): ReactElement {
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col">
-            <main className="min-h-0 flex-1">
+          <section className="flex min-h-0 min-w-0 flex-col">
+            <main className="min-h-0 min-w-0 flex-1">
               <Outlet />
             </main>
           </section>
