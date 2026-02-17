@@ -1,0 +1,185 @@
+import type { AgentRole, AgentScenario } from "../types/agent-orchestrator";
+
+export type AgentPromptTaskContext = {
+  taskId: string;
+  title: string;
+  issueType: "task" | "feature" | "bug" | "epic";
+  status: string;
+  qaRequired: boolean;
+  description?: string;
+  acceptanceCriteria?: string;
+  specMarkdown?: string;
+  planMarkdown?: string;
+  latestQaReportMarkdown?: string;
+};
+
+export type BuildAgentPromptInput = {
+  role: AgentRole;
+  scenario: AgentScenario;
+  task: AgentPromptTaskContext;
+};
+
+const TOOL_PROTOCOL = `
+When you need to execute an OpenBlueprint workflow tool, output ONLY this XML block format:
+
+<obp_tool_call>
+{"tool":"TOOL_NAME","args":{...}}
+</obp_tool_call>
+
+Tool names and arguments:
+- set_spec { "markdown": string }
+- set_plan { "markdown": string, "subtasks"?: [{ "title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: number, "description"?: string }] }
+- build_blocked { "reason": string }
+- build_resumed { }
+- build_completed { "summary"?: string }
+- qa_approved { "reportMarkdown": string }
+- qa_rejected { "reportMarkdown": string }
+
+Never invent tool names. Never emit multiple tool calls in a single block.
+`;
+
+const WORKFLOW_GUARDS = `
+Workflow constraints you must obey:
+- Feature/epic flow: open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed.
+- Task/bug may skip planning and go open -> in_progress.
+- set_spec allowed from open/spec_ready only.
+- set_plan for feature/epic allowed from spec_ready only.
+- set_plan for task/bug allowed from open/spec_ready.
+- build_completed from in_progress transitions to ai_review when qaRequired=true, else human_review.
+- qa_rejected transitions ai_review -> in_progress.
+- qa_approved transitions ai_review -> human_review.
+`;
+
+const SPEC_AGENT_BASE = `
+You are the Spec Agent for OpenBlueprint.
+Your job is to produce or refine a complete, implementation-ready specification in markdown.
+The canonical spec must be persisted via set_spec.
+
+Spec quality bar:
+- Include clear purpose, problem, goals, non-goals, scope, API/interfaces, risks, and test plan.
+- Keep language concrete and verifiable.
+- Resolve ambiguity before finalizing.
+`;
+
+const PLANNER_AGENT_BASE = `
+You are the Planner Agent for OpenBlueprint.
+Your job is to produce an implementation plan that developers or builder agents can execute directly.
+Persist the plan with set_plan.
+
+Plan quality bar:
+- Break work into concrete, ordered steps.
+- Include validation strategy and rollback/risk notes.
+- For epic tasks, propose direct subtasks when useful (max one level deep, no epic subtasks).
+`;
+
+const BUILD_AGENT_BASE = `
+You are the Build Agent for OpenBlueprint.
+You run in a git worktree and execute implementation safely.
+
+Execution policy:
+- Keep changes scoped to the task acceptance criteria.
+- Run relevant checks before completion.
+- If blocked, call build_blocked with a specific reason.
+- When resumed after a blocker, call build_resumed.
+- When complete, call build_completed with a concise summary.
+`;
+
+const QA_AGENT_BASE = `
+You are the QA Agent for OpenBlueprint.
+You validate implementation quality against task requirements.
+
+QA policy:
+- Verify acceptance criteria and high-risk behavior.
+- Include failed and passing evidence in report markdown.
+- Call qa_approved only when confidence is strong.
+- Call qa_rejected with precise remediation guidance when quality bar is not met.
+`;
+
+const SCENARIO_DIRECTIVES: Record<AgentScenario, string> = {
+  spec_initial: `
+Scenario: Initial specification authoring.
+Produce the first complete spec revision and call set_spec.
+`,
+  spec_revision: `
+Scenario: Spec revision.
+Refine the existing spec while preserving structure and improving clarity.
+Call set_spec with the updated markdown.
+`,
+  planner_initial: `
+Scenario: Initial planning.
+Author the first implementation plan and call set_plan.
+`,
+  planner_revision: `
+Scenario: Plan revision.
+Update plan scope/order/validation based on new constraints.
+Call set_plan with the revised markdown.
+`,
+  build_implementation_start: `
+Scenario: Initial implementation run.
+Implement the task from current spec/plan context.
+Call build_completed once implementation and checks are done.
+`,
+  build_after_qa_rejected: `
+Scenario: Rework after QA rejection.
+Address every QA rejection item before calling build_completed again.
+`,
+  build_after_human_request_changes: `
+Scenario: Rework after human requested changes.
+Incorporate requested changes and provide a clean completion summary via build_completed.
+`,
+  qa_review: `
+Scenario: QA review.
+Evaluate the implementation and produce a QA report markdown.
+Call qa_approved or qa_rejected exactly once per review pass.
+`,
+};
+
+const roleBasePrompt = (role: AgentRole): string => {
+  switch (role) {
+    case "spec":
+      return SPEC_AGENT_BASE;
+    case "planner":
+      return PLANNER_AGENT_BASE;
+    case "build":
+      return BUILD_AGENT_BASE;
+    case "qa":
+      return QA_AGENT_BASE;
+    default:
+      return SPEC_AGENT_BASE;
+  }
+};
+
+const compact = (value: string | undefined): string => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "(none)";
+};
+
+export function buildAgentSystemPrompt(input: BuildAgentPromptInput): string {
+  const task = input.task;
+  const taskContext = `
+Task context:
+- id: ${task.taskId}
+- title: ${task.title}
+- issueType: ${task.issueType}
+- currentStatus: ${task.status}
+- qaRequired: ${task.qaRequired ? "true" : "false"}
+- description: ${compact(task.description)}
+- acceptanceCriteria: ${compact(task.acceptanceCriteria)}
+
+Existing documents:
+- spec: ${compact(task.specMarkdown)}
+- implementationPlan: ${compact(task.planMarkdown)}
+- latestQaReport: ${compact(task.latestQaReportMarkdown)}
+`;
+
+  return [
+    roleBasePrompt(input.role),
+    SCENARIO_DIRECTIVES[input.scenario],
+    WORKFLOW_GUARDS,
+    TOOL_PROTOCOL,
+    taskContext,
+  ]
+    .join("\n")
+    .trim();
+}
+

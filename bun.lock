@@ -57,6 +57,7 @@
       "dependencies": {
         "@openblueprint/contracts": "workspace:*",
         "@openblueprint/core": "workspace:*",
+        "@opencode-ai/sdk": "^1.2.6",
       },
     },
     "packages/adapters-tauri-host": {
@@ -229,6 +230,8 @@
     "@openblueprint/core": ["@openblueprint/core@workspace:packages/core"],
 
     "@openblueprint/desktop": ["@openblueprint/desktop@workspace:apps/desktop"],
+
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.2.6", "", {}, "sha512-dWMF8Aku4h7fh8sw5tQ2FtbqRLbIFT8FcsukpxTird49ax7oUXP+gzqxM/VdxHjfksQvzLBjLZyMdDStc5g7xA=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
 

@@ -1,26 +1,48 @@
-import type { RunEvent } from "@openblueprint/contracts";
+import type {
+  AgentEvent,
+  AgentRole,
+  AgentScenario,
+  AgentSessionContext,
+} from "../types/agent-orchestrator";
 
-export type SessionMode = "planner" | "builder";
-
-export type StartSessionInput = {
-  sessionId: string;
-  repoPath: string;
-  taskId: string;
-  mode: SessionMode;
-  baseUrl?: string;
+export type StartAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
+  sessionId?: string;
 };
 
-export type SendMessageInput = {
+export type SendAgentUserMessageInput = {
   sessionId: string;
   content: string;
 };
 
+export type ReplyPermissionInput = {
+  sessionId: string;
+  requestId: string;
+  reply: "once" | "always" | "reject";
+  message?: string;
+};
+
+export type ReplyQuestionInput = {
+  sessionId: string;
+  requestId: string;
+  answers: string[][];
+};
+
 export type EventUnsubscribe = () => void;
 
+export type AgentSessionSummary = {
+  sessionId: string;
+  externalSessionId: string;
+  role: AgentRole;
+  scenario: AgentScenario;
+  startedAt: string;
+  status: "starting" | "running" | "idle" | "error" | "stopped";
+};
+
 export interface AgentEnginePort {
-  startPlanSession(input: Omit<StartSessionInput, "mode">): Promise<void>;
-  startBuildSession(input: Omit<StartSessionInput, "mode">): Promise<void>;
-  sendUserMessage(input: SendMessageInput): Promise<void>;
-  subscribeEvents(sessionId: string, listener: (event: RunEvent) => void): EventUnsubscribe;
+  startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
+  sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
+  replyPermission(input: ReplyPermissionInput): Promise<void>;
+  replyQuestion(input: ReplyQuestionInput): Promise<void>;
+  subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe;
   stopSession(sessionId: string): Promise<void>;
 }

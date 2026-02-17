@@ -11,6 +11,7 @@
     "lint": "biome check src"
   },
   "dependencies": {
+    "@opencode-ai/sdk": "^1.2.6",
     "@openblueprint/contracts": "workspace:*",
     "@openblueprint/core": "workspace:*"
   }
