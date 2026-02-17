@@ -1,0 +1,22 @@
+{
+  "name": "openblueprint",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "bun@1.3.5",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "bun run --filter @openblueprint/desktop dev",
+    "tauri": "cd apps/desktop && bun run tauri",
+    "tauri:dev": "cd apps/desktop && bun run tauri:dev",
+    "tauri:build": "cd apps/desktop && bun run tauri:build",
+    "build": "bun run --workspaces build",
+    "typecheck": "bun run --workspaces typecheck",
+    "test": "bun run --workspaces test",
+    "lint": "bun run --workspaces lint"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.7.3"
+  }
+}

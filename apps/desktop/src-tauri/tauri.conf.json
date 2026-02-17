@@ -1,0 +1,40 @@
+{
+  "$schema": "./gen/schemas/desktop-schema.json",
+  "productName": "OpenBlueprint",
+  "version": "0.1.0",
+  "identifier": "dev.openblueprint.desktop",
+  "build": {
+    "beforeDevCommand": "cd .. && bun run dev",
+    "beforeBuildCommand": "cd .. && bun run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "OpenBlueprint",
+        "width": 1500,
+        "height": 980,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "icon": ["icons/icon.png"]
+  },
+  "plugins": {
+    "shell": {
+      "open": false
+    }
+  }
+}

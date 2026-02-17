@@ -1,0 +1,78 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --radius: 0.75rem;
+  --ring: #0369a1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.15), transparent 24%),
+    radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.13), transparent 22%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+code,
+pre {
+  font-family: "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+::selection {
+  background: rgba(14, 165, 233, 0.25);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: rgba(15, 23, 42, 0.25);
+  background-clip: padding-box;
+}
+
+@keyframes rise-in {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 0.3s ease-out;
+}
+
+.markdown-body pre code {
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+.markdown-body pre code::before,
+.markdown-body pre code::after {
+  content: none;
+}
