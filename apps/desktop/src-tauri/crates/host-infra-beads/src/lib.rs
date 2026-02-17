@@ -812,7 +812,11 @@ fn default_ai_review_enabled(issue_type: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{metadata_bool_qa_required, metadata_namespace, parse_metadata_root};
+    use super::{
+        default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace, normalize_issue_type,
+        normalize_labels, normalize_text_option, parse_markdown_entries, parse_metadata_root,
+        parse_qa_entries,
+    };
     use serde_json::json;
 
     #[test]
@@ -829,5 +833,63 @@ mod tests {
         let namespace = metadata_namespace(&root, "openducktor").expect("namespace missing");
         assert_eq!(metadata_bool_qa_required(namespace), Some(true));
         assert!(root.contains_key("other"));
+    }
+
+    #[test]
+    fn normalize_helpers_keep_payloads_stable() {
+        let labels = normalize_labels(vec![
+            "backend".to_string(),
+            " backend ".to_string(),
+            "".to_string(),
+            "api".to_string(),
+        ]);
+        assert_eq!(labels, vec!["api".to_string(), "backend".to_string()]);
+
+        assert_eq!(normalize_text_option(Some("  value  ".to_string())), Some("value".to_string()));
+        assert_eq!(normalize_text_option(Some("   ".to_string())), None);
+    }
+
+    #[test]
+    fn issue_type_and_ai_review_defaults_are_normalized() {
+        assert_eq!(normalize_issue_type("feature"), "feature");
+        assert_eq!(normalize_issue_type("unknown-type"), "task");
+        assert!(default_ai_review_enabled("epic"));
+        assert!(default_ai_review_enabled("unknown-type"));
+    }
+
+    #[test]
+    fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
+        let markdown_entries = parse_markdown_entries(&json!([
+            {
+                "markdown": "# Spec",
+                "updatedAt": "2026-02-17T12:34:56Z",
+                "updatedBy": "planner-agent",
+                "sourceTool": "set_spec",
+                "revision": 1
+            },
+            {
+                "markdown": 42
+            }
+        ]))
+        .expect("markdown entries");
+        assert_eq!(markdown_entries.len(), 1);
+        assert_eq!(markdown_entries[0].revision, 1);
+
+        let qa_entries = parse_qa_entries(&json!([
+            {
+                "markdown": "# QA",
+                "verdict": "approved",
+                "updatedAt": "2026-02-17T13:10:00Z",
+                "updatedBy": "qa-agent",
+                "sourceTool": "qa_approved",
+                "revision": 2
+            },
+            {
+                "verdict": "rejected"
+            }
+        ]))
+        .expect("qa entries");
+        assert_eq!(qa_entries.len(), 1);
+        assert_eq!(qa_entries[0].revision, 2);
     }
 }

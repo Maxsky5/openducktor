@@ -50,3 +50,30 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{build_branch_name, slugify_title};
+
+    #[test]
+    fn slugify_title_normalizes_and_limits_length() {
+        let slug = slugify_title("  Build API: v2 + queue processors now!  ");
+        assert_eq!(slug, "build-api-v2-queue-processors-now");
+
+        let long = slugify_title("a very long title that should be truncated to forty chars exactly");
+        assert!(long.len() <= 40);
+    }
+
+    #[test]
+    fn build_branch_name_applies_defaults() {
+        let branch = build_branch_name("", "task-123", "Implement feature");
+        assert!(branch.starts_with("obp/"));
+        assert!(branch.contains("task-123-implement-feature"));
+    }
+
+    #[test]
+    fn build_branch_name_falls_back_when_slug_is_empty() {
+        let branch = build_branch_name("custom", "task-9", "!!!");
+        assert_eq!(branch, "custom/task-9");
+    }
+}

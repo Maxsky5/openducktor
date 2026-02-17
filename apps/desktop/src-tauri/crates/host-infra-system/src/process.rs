@@ -113,3 +113,73 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
 fn shell_escape(value: &str) -> String {
     value.replace('"', "\\\"")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        command_exists, run_command, run_command_allow_failure, run_command_allow_failure_with_env,
+        run_command_with_env, version_command,
+    };
+
+    #[test]
+    fn run_command_returns_stdout() {
+        let output = run_command("sh", &["-lc", "printf 'ok'"], None).expect("command should pass");
+        assert_eq!(output, "ok");
+    }
+
+    #[test]
+    fn run_command_with_env_injects_environment() {
+        let output = run_command_with_env(
+            "sh",
+            &["-lc", "printf '%s' \"$OBP_TEST_ENV\""],
+            None,
+            &[("OBP_TEST_ENV", "42")],
+        )
+        .expect("command should pass");
+        assert_eq!(output, "42");
+    }
+
+    #[test]
+    fn run_command_reports_failure_with_context() {
+        let error =
+            run_command("sh", &["-lc", "echo boom >&2; exit 7"], None).expect_err("must fail");
+        let message = error.to_string();
+        assert!(message.contains("Command failed"));
+        assert!(message.contains("boom"));
+    }
+
+    #[test]
+    fn run_command_allow_failure_returns_status_and_streams() {
+        let (ok, stdout, stderr) = run_command_allow_failure(
+            "sh",
+            &["-lc", "echo hello; echo warn >&2; exit 3"],
+            None,
+        )
+        .expect("command should execute");
+
+        assert!(!ok);
+        assert_eq!(stdout, "hello");
+        assert_eq!(stderr, "warn");
+    }
+
+    #[test]
+    fn run_command_allow_failure_with_env_supports_variables() {
+        let (ok, stdout, _stderr) = run_command_allow_failure_with_env(
+            "sh",
+            &["-lc", "printf '%s' \"$OBP_ENV\""],
+            None,
+            &[("OBP_ENV", "set")],
+        )
+        .expect("command should execute");
+        assert!(ok);
+        assert_eq!(stdout, "set");
+    }
+
+    #[test]
+    fn command_exists_and_version_command_behave_consistently() {
+        assert!(command_exists("sh"));
+        let version = version_command("sh", &["-lc", "echo v-test"]);
+        assert_eq!(version.as_deref(), Some("v-test"));
+        assert!(!command_exists("definitely_not_a_real_binary_name"));
+    }
+}

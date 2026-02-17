@@ -287,3 +287,35 @@ pub enum RunEvent {
 pub fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TaskStatus;
+
+    #[test]
+    fn task_status_cli_roundtrip() {
+        let statuses = [
+            TaskStatus::Open,
+            TaskStatus::SpecReady,
+            TaskStatus::ReadyForDev,
+            TaskStatus::InProgress,
+            TaskStatus::Blocked,
+            TaskStatus::AiReview,
+            TaskStatus::HumanReview,
+            TaskStatus::Deferred,
+            TaskStatus::Closed,
+        ];
+
+        for status in statuses {
+            let raw = status.as_cli_value();
+            let parsed = TaskStatus::from_cli_value(raw).expect("status should parse");
+            assert_eq!(parsed, status);
+        }
+    }
+
+    #[test]
+    fn task_status_rejects_unknown_value() {
+        assert!(TaskStatus::from_cli_value("backlog").is_none());
+        assert!(TaskStatus::from_cli_value("").is_none());
+    }
+}

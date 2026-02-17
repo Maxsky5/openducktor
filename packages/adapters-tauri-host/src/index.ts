@@ -20,11 +20,7 @@ import {
   taskUpdatePatchSchema,
   workspaceRecordSchema,
 } from "@openblueprint/contracts";
-import type {
-  PlannerTools,
-  SetPlanOutput,
-  SetSpecOutput,
-} from "@openblueprint/core";
+import type { PlannerTools, SetPlanOutput, SetSpecOutput } from "@openblueprint/core";
 
 type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -213,11 +209,7 @@ export class TauriHostClient implements PlannerTools {
     };
   }
 
-  async qaApproved(
-    repoPath: string,
-    taskId: string,
-    markdown: string,
-  ): Promise<TaskCard> {
+  async qaApproved(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
     const payload = await this.invokeFn<unknown>("qa_approved", {
       repoPath,
       taskId,

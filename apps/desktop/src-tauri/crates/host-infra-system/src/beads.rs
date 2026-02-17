@@ -84,7 +84,7 @@ fn sanitize_slug(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_repo_id, compute_repo_slug};
+    use super::{compute_repo_id, compute_repo_slug, resolve_central_beads_dir};
     use std::path::Path;
 
     #[test]
@@ -112,5 +112,14 @@ mod tests {
         let first = compute_repo_id(Path::new("/tmp/a/project")).expect("first id");
         let second = compute_repo_id(Path::new("/tmp/b/project")).expect("second id");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn central_beads_dir_uses_expected_layout_suffix() {
+        let resolved = resolve_central_beads_dir(Path::new("/tmp/openblueprint-test/repo"))
+            .expect("beads dir");
+        let as_string = resolved.to_string_lossy();
+        assert!(as_string.contains(".openblueprint/beads/"));
+        assert!(as_string.ends_with("/.beads"));
     }
 }

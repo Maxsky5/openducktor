@@ -98,10 +98,64 @@ Goals for agent contributions:
 ## Beads and Task Model Rules
 
 - Beads is the sole source of truth for tasks in V1.
-- Spec markdown canonical source is issue `description`.
-- Spec revisions must update `description`; do not create spec-revision comments.
-- Kanban phase mapping uses Beads state dimension (`phase`) with project-defined values.
-- Task forms should support structured Beads fields (title, description, design, acceptance criteria, priority, issue type, labels, parent/subtasks as applicable).
+- Lifecycle state is Beads `status` (not labels/phases).
+- Canonical statuses:
+  - built-in: `open`, `in_progress`, `blocked`, `deferred`, `closed`
+  - custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
+- UI label mapping:
+  - `open` => Backlog
+  - `closed` => Done
+  - `deferred` => hidden from Kanban (for now)
+- Agent-authored docs are metadata-only under configurable namespace (`taskMetadataNamespace`, default `openducktor`):
+  - `documents.spec` (latest-only list in V1)
+  - `documents.implementationPlan` (latest-only list in V1)
+  - `documents.qaReports` (append-only history)
+- Tool naming:
+  - planner: `set_spec`, `set_plan`
+  - builder: `build_*`
+  - QA: `qa_approved`, `qa_rejected`
+- Detailed workflow docs:
+  - `docs/task-workflow-status-model.md`
+  - `docs/task-workflow-transition-matrix.md`
+
+## Testing Policy
+
+### Scope
+
+- Non-frontend code must be deeply tested:
+  - Rust backend crates
+  - `packages/core`
+  - adapter packages (`packages/adapters-*`)
+- Frontend/UI component tests are intentionally deferred for now.
+
+### Required checks before finishing non-UI changes
+
+- Rust:
+  - `cd apps/desktop/src-tauri && cargo check`
+  - `cd apps/desktop/src-tauri && cargo test`
+- Bun workspaces:
+  - `bun run typecheck`
+  - `bun run test`
+
+### Package-level targets for focused iteration
+
+- `bun run --filter @openblueprint/core test`
+- `bun run --filter @openblueprint/adapters-tauri-host test`
+- `bun run --filter @openblueprint/adapters-opencode-sdk test`
+- `cd apps/desktop/src-tauri && cargo test -p host-domain`
+- `cd apps/desktop/src-tauri && cargo test -p host-infra-system`
+- `cd apps/desktop/src-tauri && cargo test -p host-infra-beads`
+- `cd apps/desktop/src-tauri && cargo test -p host-application`
+
+### Test quality standards
+
+- Test behavior, not implementation details.
+- Prefer deterministic unit tests over fragile integration tests.
+- Cover error paths and guardrails, not only happy paths.
+- For adapters, test command routing, payload shapes, and schema parsing failures.
+- For workflow logic, test transition rules and invariants (epic/subtask guardrails, deferred handling, QA transitions).
+- When fixing a bug, add a regression test in the package where the bug originated.
+- Keep tests readable with helper builders/factories to avoid duplication.
 
 ## Commands
 

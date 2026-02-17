@@ -314,3 +314,121 @@ fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {
     recent.insert(0, repo_path.to_string());
     recent.truncate(20);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{touch_recent, AppConfigStore, GlobalConfig, RepoConfig};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("openblueprint-{name}-{nonce}"))
+    }
+
+    fn test_store(name: &str) -> (AppConfigStore, PathBuf) {
+        let root = unique_temp_path(name);
+        let path = root.join("config.json");
+        (AppConfigStore { path }, root)
+    }
+
+    #[test]
+    fn load_missing_returns_default_config() {
+        let (store, root) = test_store("load-default");
+        let config = store.load().expect("load default");
+        assert_eq!(config.version, 1);
+        assert_eq!(config.task_metadata_namespace, "openducktor");
+        assert!(config.repos.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn task_metadata_namespace_defaults_when_blank() {
+        let (store, root) = test_store("namespace-default");
+        let config = GlobalConfig {
+            task_metadata_namespace: "   ".to_string(),
+            ..GlobalConfig::default()
+        };
+        store.save(&config).expect("save config");
+
+        let namespace = store.task_metadata_namespace().expect("namespace");
+        assert_eq!(namespace, "openducktor");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_add_select_and_update_persist_state() {
+        let (store, root) = test_store("workspace-flow");
+        let repo_a = root.join("repo-a");
+        let repo_b = root.join("repo-b");
+        fs::create_dir_all(repo_a.join(".git")).expect("repo a");
+        fs::create_dir_all(repo_b.join(".git")).expect("repo b");
+
+        let repo_a_str = repo_a.to_string_lossy().to_string();
+        let repo_b_str = repo_b.to_string_lossy().to_string();
+
+        let added = store.add_workspace(&repo_a_str).expect("add workspace");
+        assert!(added.is_active);
+        assert_eq!(added.path, repo_a_str);
+
+        store.add_workspace(&repo_b_str).expect("add second");
+        let selected = store.select_workspace(&repo_a_str).expect("select");
+        assert!(selected.is_active);
+
+        let updated = store
+            .update_repo_config(
+                &repo_a_str,
+                RepoConfig {
+                    worktree_base_path: Some("/tmp/worktrees".to_string()),
+                    branch_prefix: "duck".to_string(),
+                    trusted_hooks: true,
+                    hooks: Default::default(),
+                },
+            )
+            .expect("update config");
+        assert!(updated.has_config);
+        assert_eq!(
+            updated.configured_worktree_base_path.as_deref(),
+            Some("/tmp/worktrees")
+        );
+
+        let workspaces = store.list_workspaces().expect("list workspaces");
+        assert_eq!(workspaces.len(), 2);
+        assert_eq!(workspaces[0].path, repo_a_str);
+        assert!(workspaces[0].is_active);
+
+        let loaded = store.load().expect("load final");
+        assert_eq!(
+            loaded.recent_repos.first().map(String::as_str),
+            Some(repo_a_str.as_str())
+        );
+        assert_eq!(
+            loaded
+                .repos
+                .get(&repo_a_str)
+                .and_then(|entry| entry.worktree_base_path.as_deref()),
+            Some("/tmp/worktrees")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn touch_recent_keeps_latest_first_and_caps_size() {
+        let mut recent = (0..25)
+            .map(|index| format!("/tmp/repo-{index}"))
+            .collect::<Vec<_>>();
+        touch_recent(&mut recent, "/tmp/repo-3");
+
+        assert_eq!(recent.first().map(String::as_str), Some("/tmp/repo-3"));
+        assert_eq!(recent.len(), 20);
+        assert_eq!(
+            recent.iter().filter(|entry| entry.as_str() == "/tmp/repo-3").count(),
+            1
+        );
+    }
+}

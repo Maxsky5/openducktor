@@ -1,12 +1,12 @@
 import { errorMessage } from "@/lib/errors";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import {
-  type BeadsCheck,
-  type RunSummary,
-  type TaskCard,
-  type TaskCreateInput,
-  type TaskStatus,
-  type TaskUpdatePatch,
+import type {
+  BeadsCheck,
+  RunSummary,
+  TaskCard,
+  TaskCreateInput,
+  TaskStatus,
+  TaskUpdatePatch,
 } from "@openblueprint/contracts";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
