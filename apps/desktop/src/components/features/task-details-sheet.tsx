@@ -4,7 +4,6 @@ import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workf
 import {
   TaskDetailsDocumentSection,
   TaskDetailsMetadata,
-  TaskDetailsSection,
   TaskDetailsSubtasks,
 } from "@/components/features/task-details";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +20,7 @@ import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
 import { useSpecState } from "@/state";
 import type { TaskCard } from "@openblueprint/contracts";
 import { CheckSquare, CircleHelp, FileCode, PencilLine, ShieldCheck, Sparkles } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 
 type TaskDetailsSheetProps = {
   task: TaskCard | null;
@@ -43,10 +42,10 @@ type TaskDocumentState = {
   updatedAt: string | null;
   isLoading: boolean;
   error: string | null;
+  loaded: boolean;
 };
 
-type SheetSectionKey = "spec" | "plan" | "qa" | "metadata";
-type SheetSectionsState = Record<SheetSectionKey, boolean>;
+type DocumentSectionKey = "spec" | "plan" | "qa";
 
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_spec",
@@ -64,13 +63,7 @@ const initialDocumentState = (): TaskDocumentState => ({
   updatedAt: null,
   isLoading: false,
   error: null,
-});
-
-const initialSectionsState = (): SheetSectionsState => ({
-  spec: false,
-  plan: false,
-  qa: false,
-  metadata: false,
+  loaded: false,
 });
 
 const toErrorMessage = (error: unknown): string =>
@@ -94,8 +87,7 @@ export function TaskDetailsSheet({
   const [specDoc, setSpecDoc] = useState<TaskDocumentState>(initialDocumentState);
   const [planDoc, setPlanDoc] = useState<TaskDocumentState>(initialDocumentState);
   const [qaDoc, setQaDoc] = useState<TaskDocumentState>(initialDocumentState);
-  const [expandedSections, setExpandedSections] =
-    useState<SheetSectionsState>(initialSectionsState);
+  const documentLoadSequence = useRef(0);
   const taskId = task?.id ?? null;
 
   const subtasks = task
@@ -142,92 +134,122 @@ export function TaskDetailsSheet({
   };
 
   useEffect(() => {
+    documentLoadSequence.current += 1;
+
     if (!open || !taskId) {
       setSpecDoc(initialDocumentState());
       setPlanDoc(initialDocumentState());
       setQaDoc(initialDocumentState());
-      setExpandedSections(initialSectionsState());
       return;
     }
 
-    setExpandedSections(initialSectionsState());
+    setSpecDoc(initialDocumentState());
+    setPlanDoc(initialDocumentState());
+    setQaDoc(initialDocumentState());
+  }, [open, taskId]);
 
-    let alive = true;
-    setSpecDoc((previous) => ({ ...previous, isLoading: true, error: null }));
-    setPlanDoc((previous) => ({ ...previous, isLoading: true, error: null }));
-    setQaDoc((previous) => ({ ...previous, isLoading: true, error: null }));
+  const ensureDocumentLoaded = (section: DocumentSectionKey): void => {
+    if (!taskId || !open) {
+      return;
+    }
 
-    const loadDocuments = async (): Promise<void> => {
-      const [specResult, planResult, qaResult] = await Promise.allSettled([
-        loadSpecDocument(taskId),
-        loadPlanDocument(taskId),
-        loadQaReportDocument(taskId),
-      ]);
+    const sequence = documentLoadSequence.current;
 
-      if (!alive) {
+    if (section === "spec") {
+      if (specDoc.loaded || specDoc.isLoading) {
         return;
       }
+      setSpecDoc((previous) => ({ ...previous, isLoading: true, error: null }));
+      void loadSpecDocument(taskId)
+        .then((result) => {
+          if (sequence !== documentLoadSequence.current) {
+            return;
+          }
+          setSpecDoc({
+            markdown: result.markdown,
+            updatedAt: result.updatedAt,
+            isLoading: false,
+            error: null,
+            loaded: true,
+          });
+        })
+        .catch((error: unknown) => {
+          if (sequence !== documentLoadSequence.current) {
+            return;
+          }
+          setSpecDoc({
+            markdown: "",
+            updatedAt: null,
+            isLoading: false,
+            error: toErrorMessage(error),
+            loaded: true,
+          });
+        });
+      return;
+    }
 
-      if (specResult.status === "fulfilled") {
-        setSpecDoc({
-          markdown: specResult.value.markdown,
-          updatedAt: specResult.value.updatedAt,
-          isLoading: false,
-          error: null,
-        });
-      } else {
-        setSpecDoc({
-          markdown: "",
-          updatedAt: null,
-          isLoading: false,
-          error: toErrorMessage(specResult.reason),
-        });
+    if (section === "plan") {
+      if (planDoc.loaded || planDoc.isLoading) {
+        return;
       }
-
-      if (planResult.status === "fulfilled") {
-        setPlanDoc({
-          markdown: planResult.value.markdown,
-          updatedAt: planResult.value.updatedAt,
-          isLoading: false,
-          error: null,
+      setPlanDoc((previous) => ({ ...previous, isLoading: true, error: null }));
+      void loadPlanDocument(taskId)
+        .then((result) => {
+          if (sequence !== documentLoadSequence.current) {
+            return;
+          }
+          setPlanDoc({
+            markdown: result.markdown,
+            updatedAt: result.updatedAt,
+            isLoading: false,
+            error: null,
+            loaded: true,
+          });
+        })
+        .catch((error: unknown) => {
+          if (sequence !== documentLoadSequence.current) {
+            return;
+          }
+          setPlanDoc({
+            markdown: "",
+            updatedAt: null,
+            isLoading: false,
+            error: toErrorMessage(error),
+            loaded: true,
+          });
         });
-      } else {
-        setPlanDoc({
-          markdown: "",
-          updatedAt: null,
-          isLoading: false,
-          error: toErrorMessage(planResult.reason),
-        });
-      }
+      return;
+    }
 
-      if (qaResult.status === "fulfilled") {
+    if (qaDoc.loaded || qaDoc.isLoading) {
+      return;
+    }
+    setQaDoc((previous) => ({ ...previous, isLoading: true, error: null }));
+    void loadQaReportDocument(taskId)
+      .then((result) => {
+        if (sequence !== documentLoadSequence.current) {
+          return;
+        }
         setQaDoc({
-          markdown: qaResult.value.markdown,
-          updatedAt: qaResult.value.updatedAt,
+          markdown: result.markdown,
+          updatedAt: result.updatedAt,
           isLoading: false,
           error: null,
+          loaded: true,
         });
-      } else {
+      })
+      .catch((error: unknown) => {
+        if (sequence !== documentLoadSequence.current) {
+          return;
+        }
         setQaDoc({
           markdown: "",
           updatedAt: null,
           isLoading: false,
-          error: toErrorMessage(qaResult.reason),
+          error: toErrorMessage(error),
+          loaded: true,
         });
-      }
-    };
-
-    void loadDocuments();
-    return () => {
-      alive = false;
-    };
-  }, [loadPlanDocument, loadQaReportDocument, loadSpecDocument, open, taskId]);
-
-  const toggleSection = (section: SheetSectionKey): void => {
-    setExpandedSections((current) => ({
-      ...current,
-      [section]: !current[section],
-    }));
+      });
   };
 
   const aiReviewBadge = useMemo(
@@ -302,16 +324,25 @@ export function TaskDetailsSheet({
 
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="space-y-3 px-5 py-4">
-                <TaskDetailsSection
+                <TaskDetailsDocumentSection
+                  key={`${task.id}:description`}
                   icon={<CircleHelp className="size-3.5" />}
                   title="Description"
-                  value={task.description}
+                  markdown={task.description}
+                  updatedAt={null}
+                  isLoading={false}
+                  error={null}
                   empty="No description yet."
+                  defaultExpanded
                 />
-                <TaskDetailsSection
+                <TaskDetailsDocumentSection
+                  key={`${task.id}:acceptance-criteria`}
                   icon={<CheckSquare className="size-3.5" />}
                   title="Acceptance Criteria"
-                  value={task.acceptanceCriteria}
+                  markdown={task.acceptanceCriteria}
+                  updatedAt={null}
+                  isLoading={false}
+                  error={null}
                   empty="No acceptance criteria yet."
                 />
 
@@ -319,49 +350,60 @@ export function TaskDetailsSheet({
                   key={`${task.id}:spec`}
                   icon={<FileCode className="size-3.5" />}
                   title="Specification"
-                  description="Canonical spec document used by Planner and Build agents."
                   markdown={specDoc.markdown}
                   updatedAt={specDoc.updatedAt}
                   isLoading={specDoc.isLoading}
                   error={specDoc.error}
                   empty="No specification yet."
-                  isExpanded={expandedSections.spec}
-                  onToggle={() => toggleSection("spec")}
+                  onExpandedChange={(expanded) => {
+                    if (!expanded) {
+                      return;
+                    }
+                    requestAnimationFrame(() => {
+                      ensureDocumentLoaded("spec");
+                    });
+                  }}
                 />
 
                 <TaskDetailsDocumentSection
                   key={`${task.id}:plan`}
                   icon={<FileCode className="size-3.5" />}
                   title="Implementation Plan"
-                  description="Execution plan produced from the approved specification."
                   markdown={planDoc.markdown}
                   updatedAt={planDoc.updatedAt}
                   isLoading={planDoc.isLoading}
                   error={planDoc.error}
                   empty="No implementation plan yet."
-                  isExpanded={expandedSections.plan}
-                  onToggle={() => toggleSection("plan")}
+                  onExpandedChange={(expanded) => {
+                    if (!expanded) {
+                      return;
+                    }
+                    requestAnimationFrame(() => {
+                      ensureDocumentLoaded("plan");
+                    });
+                  }}
                 />
 
                 <TaskDetailsDocumentSection
                   key={`${task.id}:qa`}
                   icon={<ShieldCheck className="size-3.5" />}
                   title="QA Reports"
-                  description="Latest QA review report (history-ready format)."
                   markdown={qaDoc.markdown}
                   updatedAt={qaDoc.updatedAt}
                   isLoading={qaDoc.isLoading}
                   error={qaDoc.error}
                   empty="No QA report yet."
-                  isExpanded={expandedSections.qa}
-                  onToggle={() => toggleSection("qa")}
+                  onExpandedChange={(expanded) => {
+                    if (!expanded) {
+                      return;
+                    }
+                    requestAnimationFrame(() => {
+                      ensureDocumentLoaded("qa");
+                    });
+                  }}
                 />
 
-                <TaskDetailsMetadata
-                  task={task}
-                  isExpanded={expandedSections.metadata}
-                  onToggle={() => toggleSection("metadata")}
-                />
+                <TaskDetailsMetadata key={`${task.id}:metadata`} task={task} />
                 {shouldRenderSubtasks ? <TaskDetailsSubtasks subtasks={subtasks} /> : null}
               </div>
             </div>

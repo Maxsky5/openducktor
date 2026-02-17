@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 :root {
   --radius: 0.75rem;
@@ -61,4 +62,17 @@ pre {
 
 .animate-rise-in {
   animation: rise-in 0.3s ease-out;
+}
+
+.markdown-body pre code {
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+.markdown-body pre code::before,
+.markdown-body pre code::after {
+  content: none;
 }

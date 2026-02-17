@@ -115,10 +115,8 @@ export function KanbanTaskCard({
   onHumanApprove,
   onHumanRequestChanges,
 }: KanbanTaskCardProps): ReactElement {
-  const hasDescription = task.description.trim().length > 0;
-
   return (
-    <article className="group min-w-0 cursor-pointer space-y-2.5 rounded-xl border border-slate-200/90 bg-white/95 p-3.5 shadow-sm transition duration-150 hover:border-sky-200 hover:shadow-md">
+    <article className="group flex min-w-0 cursor-pointer flex-col space-y-2.5 overflow-hidden rounded-xl border border-slate-200/90 bg-white/95 p-3.5 shadow-sm transition duration-150 hover:border-sky-200 hover:shadow-md">
       <button
         type="button"
         className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
@@ -137,12 +135,6 @@ export function KanbanTaskCard({
       </button>
 
       <TaskMeta task={task} runState={runState} />
-
-      {hasDescription ? (
-        <p className="break-words text-xs leading-relaxed text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-          {task.description}
-        </p>
-      ) : null}
 
       <TaskActions
         task={task}
