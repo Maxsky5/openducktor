@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 export function KanbanPage(): ReactElement {
   const { delegateTask } = useDelegationState();
   const { isSwitchingWorkspace } = useWorkspaceState();
-  const { tasks, runs, setTaskPhase, refreshTasks, isLoadingTasks } = useTasksState();
+  const { tasks, runs, refreshTasks, isLoadingTasks, deferTask } = useTasksState();
   const navigate = useNavigate();
   const [isTaskComposerOpen, setTaskComposerOpen] = useState(false);
   const [composerTaskId, setComposerTaskId] = useState<string | null>(null);
@@ -27,10 +27,10 @@ export function KanbanPage(): ReactElement {
     [runs],
   );
   const blockedCount = useMemo(
-    () => tasks.filter((task) => task.phase === "blocked_needs_input").length,
+    () => tasks.filter((task) => task.status === "blocked").length,
     [tasks],
   );
-  const doneCount = useMemo(() => tasks.filter((task) => task.phase === "done").length, [tasks]);
+  const doneCount = useMemo(() => tasks.filter((task) => task.status === "closed").length, [tasks]);
   const detailsTask = useMemo(
     () => tasks.find((task) => task.id === detailsTaskId) ?? null,
     [detailsTaskId, tasks],
@@ -82,14 +82,13 @@ export function KanbanPage(): ReactElement {
         </div>
       </div>
 
-      <section className="grid auto-cols-[minmax(240px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-6">
+      <section className="grid auto-cols-[minmax(240px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 xl:grid-flow-row xl:grid-cols-8">
         {columns.map((column) => (
           <KanbanColumn
             key={column.id}
             column={column}
             runStateByTaskId={runStateByTaskId}
             onOpenDetails={(taskId) => setDetailsTaskId(taskId)}
-            onSetPhase={(taskId, phase) => void setTaskPhase(taskId, phase)}
             onDelegate={(taskId) => void delegateTask(taskId)}
             onPlan={(taskId) => {
               navigate(`/planner?task=${encodeURIComponent(taskId)}`);
@@ -135,6 +134,7 @@ export function KanbanPage(): ReactElement {
           setComposerTaskId(taskId);
           setTaskComposerOpen(true);
         }}
+        onDefer={(taskId) => void deferTask(taskId)}
       />
     </div>
   );

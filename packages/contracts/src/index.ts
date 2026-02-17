@@ -1,36 +1,26 @@
 import { z } from "zod";
 
-export const taskStatusSchema = z.enum(["open", "in_progress", "blocked", "closed"]);
-export type TaskStatus = z.infer<typeof taskStatusSchema>;
-
-export const taskPhaseSchema = z.enum([
-  "backlog",
-  "specifying",
+export const taskStatusSchema = z.enum([
+  "open",
+  "spec_ready",
   "ready_for_dev",
   "in_progress",
-  "blocked_needs_input",
-  "done",
+  "blocked",
+  "ai_review",
+  "human_review",
+  "deferred",
+  "closed",
 ]);
-export type TaskPhase = z.infer<typeof taskPhaseSchema>;
+export type TaskStatus = z.infer<typeof taskStatusSchema>;
 
-export const issueTypeSchema = z.enum([
-  "task",
-  "feature",
-  "bug",
-  "chore",
-  "epic",
-  "decision",
-  "merge-request",
-  "molecule",
-  "gate",
-  "agent",
-  "role",
-  "rig",
-  "convoy",
-  "event",
-  "slot",
-]);
+export const issueTypeSchema = z.enum(["task", "feature", "bug", "epic"]);
 export type IssueType = z.infer<typeof issueTypeSchema>;
+
+const issueTypeFallbackSchema = z.preprocess(
+  (value) =>
+    value === "task" || value === "feature" || value === "bug" || value === "epic" ? value : "task",
+  issueTypeSchema,
+);
 
 export const taskPrioritySchema = z.number().int().min(0).max(4);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
@@ -41,10 +31,11 @@ export const taskCardSchema = z.object({
   description: z.string().optional().default(""),
   design: z.string().optional().default(""),
   acceptanceCriteria: z.string().optional().default(""),
+  notes: z.string().optional().default(""),
   status: taskStatusSchema,
-  phase: z.preprocess((value) => (value === null ? undefined : value), taskPhaseSchema.optional()),
   priority: taskPrioritySchema.default(2),
-  issueType: issueTypeSchema.default("task"),
+  issueType: issueTypeFallbackSchema.default("task"),
+  aiReviewEnabled: z.boolean().optional().default(true),
   labels: z.array(z.string()).default([]),
   assignee: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
@@ -57,11 +48,11 @@ export type TaskCard = z.infer<typeof taskCardSchema>;
 export const taskCreateInputSchema = z.object({
   title: z.string().min(1),
   issueType: issueTypeSchema.default("task"),
+  aiReviewEnabled: z.boolean().optional().default(true),
   priority: taskPrioritySchema.default(2),
   description: z.string().optional(),
   design: z.string().optional(),
   acceptanceCriteria: z.string().optional(),
-  status: taskStatusSchema.optional(),
   labels: z.array(z.string()).optional(),
   parentId: z.string().optional(),
 });
@@ -72,9 +63,10 @@ export const taskUpdatePatchSchema = z.object({
   description: z.string().optional(),
   design: z.string().optional(),
   acceptanceCriteria: z.string().optional(),
-  status: taskStatusSchema.optional(),
+  notes: z.string().optional(),
   priority: taskPrioritySchema.optional(),
   issueType: issueTypeSchema.optional(),
+  aiReviewEnabled: z.boolean().optional(),
   labels: z.array(z.string()).optional(),
   assignee: z.string().optional(),
   parentId: z.string().optional(),
@@ -108,6 +100,7 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 export const globalConfigSchema = z.object({
   version: z.literal(1),
   activeRepo: z.string().optional(),
+  taskMetadataNamespace: z.string().min(1).default("openducktor"),
   repos: z.record(repoConfigSchema).default({}),
   recentRepos: z.array(z.string()).default([]),
   scheduler: z

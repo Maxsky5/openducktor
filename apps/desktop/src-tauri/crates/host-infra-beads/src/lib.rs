@@ -1,66 +1,100 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    CreateTaskInput, SpecDocument, TaskCard, TaskPhase, TaskStatus, TaskStore, UpdateTaskPatch,
+    now_rfc3339, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument, TaskCard, TaskStatus,
+    TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     compute_repo_slug, resolve_central_beads_dir, run_command_allow_failure_with_env,
     run_command_with_env,
 };
-use serde::Deserialize;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+const DEFAULT_METADATA_NAMESPACE: &str = "openducktor";
+const CUSTOM_STATUS_VALUES: &str = "spec_ready,ready_for_dev,ai_review,human_review";
+
 #[derive(Debug, Default)]
 pub struct BeadsTaskStore {
+    metadata_namespace: String,
     init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     initialized_repos: Mutex<HashSet<String>>,
 }
 
 impl BeadsTaskStore {
     pub fn new() -> Self {
+        Self::with_metadata_namespace(DEFAULT_METADATA_NAMESPACE)
+    }
+
+    pub fn with_metadata_namespace(namespace: &str) -> Self {
+        let trimmed = namespace.trim();
+        let metadata_namespace = if trimmed.is_empty() {
+            DEFAULT_METADATA_NAMESPACE.to_string()
+        } else {
+            trimmed.to_string()
+        };
+
         Self {
+            metadata_namespace,
             init_locks: Mutex::new(HashMap::new()),
             initialized_repos: Mutex::new(HashSet::new()),
         }
     }
 
-    fn run_bd_json(&self, repo_path: &Path, args: &[String]) -> Result<Value> {
+    fn run_bd(&self, repo_path: &Path, args: &[&str]) -> Result<String> {
         let beads_dir = resolve_central_beads_dir(repo_path)?;
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
-        let mut final_args: Vec<&str> = Vec::with_capacity(args.len() + 2);
-        // Avoid daemon startup latency on every CLI invocation.
+        let mut final_args = Vec::with_capacity(args.len() + 1);
         final_args.push("--no-daemon");
-        final_args.extend(args.iter().map(|entry| entry.as_str()));
+        final_args.extend(args);
+
+        run_command_with_env(
+            "bd",
+            &final_args,
+            Some(repo_path),
+            &[("BEADS_DIR", beads_dir_env.as_str())],
+        )
+    }
+
+    fn run_bd_json(&self, repo_path: &Path, args: &[&str]) -> Result<Value> {
+        let beads_dir = resolve_central_beads_dir(repo_path)?;
+        let beads_dir_env = beads_dir.to_string_lossy().to_string();
+        let mut final_args = Vec::with_capacity(args.len() + 2);
+        final_args.push("--no-daemon");
+        final_args.extend(args);
         final_args.push("--json");
+
         let output = run_command_with_env(
             "bd",
             &final_args,
             Some(repo_path),
             &[("BEADS_DIR", beads_dir_env.as_str())],
         )?;
-        let json: Value = serde_json::from_str(&output).with_context(|| {
+
+        serde_json::from_str(&output).with_context(|| {
             format!(
                 "Failed to parse bd JSON output for command `bd {}`. Output: {}",
                 final_args.join(" "),
                 output
             )
-        })?;
-        Ok(json)
+        })
     }
 
-    fn show_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard> {
-        let args = vec!["show".to_string(), task_id.to_string()];
-        let value = self.run_bd_json(repo_path, &args)?;
-
-        let issue = value
+    fn show_raw_issue(&self, repo_path: &Path, task_id: &str) -> Result<RawIssue> {
+        let value = self.run_bd_json(repo_path, &["show", task_id])?;
+        let issue_value = value
             .as_array()
             .and_then(|entries| entries.first())
             .ok_or_else(|| anyhow!("bd show returned empty payload for task {task_id}"))?;
+        serde_json::from_value(issue_value.clone()).context("Failed to decode bd show payload")
+    }
 
-        parse_task_card(issue)
+    fn show_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard> {
+        let raw = self.show_raw_issue(repo_path, task_id)?;
+        self.parse_task_card(raw)
     }
 
     fn repo_key(repo_path: &Path) -> String {
@@ -98,11 +132,7 @@ impl BeadsTaskStore {
         Ok(())
     }
 
-    fn verify_repo_initialized(
-        &self,
-        repo_path: &Path,
-        beads_dir: &Path,
-    ) -> Result<(bool, String)> {
+    fn verify_repo_initialized(&self, repo_path: &Path, beads_dir: &Path) -> Result<(bool, String)> {
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
         let (ok, stdout, stderr) = run_command_allow_failure_with_env(
             "bd",
@@ -124,13 +154,109 @@ impl BeadsTaskStore {
             .with_context(|| format!("Failed to parse `bd where --json` output: {stdout}"))?;
         if payload
             .get("path")
-            .and_then(|value| value.as_str())
+            .and_then(Value::as_str)
             .is_some()
         {
             return Ok((true, String::new()));
         }
 
         Ok((false, "bd where returned malformed payload".to_string()))
+    }
+
+    fn ensure_custom_statuses(&self, repo_path: &Path) -> Result<()> {
+        self.run_bd(
+            repo_path,
+            &["config", "set", "status.custom", CUSTOM_STATUS_VALUES],
+        )
+        .with_context(|| format!("Failed to configure custom statuses in {}", repo_path.display()))?;
+        Ok(())
+    }
+
+    fn parse_task_card(&self, issue: RawIssue) -> Result<TaskCard> {
+        let status = TaskStatus::from_cli_value(&issue.status)
+            .ok_or_else(|| anyhow!("Unknown task status from bd: {}", issue.status))?;
+
+        let metadata_root = parse_metadata_root(issue.metadata);
+        let namespace = metadata_namespace(&metadata_root, &self.metadata_namespace);
+        let ai_review_enabled = namespace
+            .and_then(metadata_bool_qa_required)
+            .unwrap_or_else(|| default_ai_review_enabled(&issue.issue_type));
+
+        let normalized_issue_type = if issue.issue_type == "event" || issue.issue_type == "gate" {
+            issue.issue_type.clone()
+        } else {
+            normalize_issue_type(&issue.issue_type).to_string()
+        };
+
+        let parent_id = issue.parent.or_else(|| {
+            issue.dependencies.iter().find_map(|dependency| {
+                if dependency.dependency_type != "parent-child" {
+                    return None;
+                }
+                dependency
+                    .depends_on_id
+                    .clone()
+                    .or_else(|| dependency.id.clone())
+            })
+        });
+
+        Ok(TaskCard {
+            id: issue.id,
+            title: issue.title,
+            description: issue.description,
+            design: issue.design,
+            acceptance_criteria: issue.acceptance_criteria,
+            notes: issue.notes,
+            status,
+            priority: issue.priority,
+            issue_type: normalized_issue_type,
+            ai_review_enabled,
+            labels: normalize_labels(issue.labels),
+            assignee: issue.owner,
+            parent_id,
+            subtask_ids: Vec::new(),
+            updated_at: issue.updated_at,
+            created_at: issue.created_at,
+        })
+    }
+
+    fn write_metadata(&self, repo_path: &Path, task_id: &str, metadata: &Map<String, Value>) -> Result<()> {
+        let payload = serde_json::to_string(&Value::Object(metadata.clone()))?;
+        self.run_bd_json(repo_path, &["update", task_id, "--metadata", payload.as_str()])?;
+        Ok(())
+    }
+
+    fn load_namespace(&self, repo_path: &Path, task_id: &str) -> Result<(RawIssue, Map<String, Value>, Map<String, Value>)> {
+        let issue = self.show_raw_issue(repo_path, task_id)?;
+        let mut root = parse_metadata_root(issue.metadata.clone());
+
+        let namespace = root
+            .entry(self.metadata_namespace.clone())
+            .or_insert_with(|| Value::Object(Map::new()));
+        if !namespace.is_object() {
+            *namespace = Value::Object(Map::new());
+        }
+
+        let namespace_map = namespace
+            .as_object()
+            .cloned()
+            .ok_or_else(|| anyhow!("Invalid metadata namespace payload"))?;
+
+        Ok((issue, root, namespace_map))
+    }
+
+    fn persist_namespace(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        root: &mut Map<String, Value>,
+        namespace_map: Map<String, Value>,
+    ) -> Result<()> {
+        root.insert(
+            self.metadata_namespace.clone(),
+            Value::Object(namespace_map),
+        );
+        self.write_metadata(repo_path, task_id, root)
     }
 }
 
@@ -148,100 +274,71 @@ impl TaskStore for BeadsTaskStore {
             return Ok(());
         }
 
-        eprintln!(
-            "[openblueprint][beads] ensure repo={} dir={}",
-            repo_path.display(),
-            beads_dir.display()
-        );
         let (is_ready, reason) = self.verify_repo_initialized(repo_path, &beads_dir)?;
-        if is_ready {
-            self.mark_repo_initialized(&repo_key)?;
-            return Ok(());
+        if !is_ready {
+            let slug = compute_repo_slug(repo_path);
+            let beads_dir_env = beads_dir.to_string_lossy().to_string();
+            let (ok, _stdout, stderr) = run_command_allow_failure_with_env(
+                "bd",
+                &[
+                    "--no-daemon",
+                    "init",
+                    "--quiet",
+                    "--skip-hooks",
+                    "--skip-merge-driver",
+                    "--prefix",
+                    slug.as_str(),
+                ],
+                Some(repo_path),
+                &[("BEADS_DIR", beads_dir_env.as_str())],
+            )?;
+
+            if !ok {
+                let details = if stderr.trim().is_empty() {
+                    reason
+                } else {
+                    stderr.trim().to_string()
+                };
+                return Err(anyhow!(
+                    "Failed to initialize Beads at {}: {}",
+                    beads_dir.display(),
+                    details
+                ));
+            }
+
+            let (is_ready_after, reason_after) = self.verify_repo_initialized(repo_path, &beads_dir)?;
+            if !is_ready_after {
+                return Err(anyhow!(
+                    "Beads init completed but store is not ready at {}: {}",
+                    beads_dir.display(),
+                    reason_after
+                ));
+            }
         }
 
-        let slug = compute_repo_slug(repo_path);
-        eprintln!(
-            "[openblueprint][beads] init-attempt repo={} dir={} prefix={}",
-            repo_path.display(),
-            beads_dir.display(),
-            slug
-        );
-        let beads_dir_env = beads_dir.to_string_lossy().to_string();
-        let (ok, _stdout, stderr) = run_command_allow_failure_with_env(
-            "bd",
-            &[
-                "--no-daemon",
-                "init",
-                "--quiet",
-                "--skip-hooks",
-                "--skip-merge-driver",
-                "--prefix",
-                slug.as_str(),
-            ],
-            Some(repo_path),
-            &[("BEADS_DIR", beads_dir_env.as_str())],
-        )?;
-
-        if !ok {
-            let details = if stderr.trim().is_empty() {
-                reason
-            } else {
-                stderr.trim().to_string()
-            };
-            eprintln!(
-                "[openblueprint][beads] init-failed repo={} dir={} error={}",
-                repo_path.display(),
-                beads_dir.display(),
-                details
-            );
-            return Err(anyhow!(
-                "Failed to initialize Beads at {}: {}",
-                beads_dir.display(),
-                details
-            ));
-        }
-
-        let (is_ready_after, reason_after) = self.verify_repo_initialized(repo_path, &beads_dir)?;
-        if !is_ready_after {
-            eprintln!(
-                "[openblueprint][beads] init-invalid repo={} dir={} error={}",
-                repo_path.display(),
-                beads_dir.display(),
-                reason_after
-            );
-            return Err(anyhow!(
-                "Beads init completed but store is not ready at {}: {}",
-                beads_dir.display(),
-                reason_after
-            ));
-        }
-
-        eprintln!(
-            "[openblueprint][beads] init-success repo={} dir={}",
-            repo_path.display(),
-            beads_dir.display()
-        );
+        self.ensure_custom_statuses(repo_path)?;
         self.mark_repo_initialized(&repo_key)?;
-
         Ok(())
     }
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
-        let args = vec![
-            "list".to_string(),
-            "--all".to_string(),
-            "-n".to_string(),
-            "500".to_string(),
-        ];
-        let value = self.run_bd_json(repo_path, &args)?;
+        let value = self.run_bd_json(repo_path, &["list", "--all", "-n", "500"])?;
 
-        let mut tasks: Vec<TaskCard> = value
+        let mut tasks = value
             .as_array()
             .ok_or_else(|| anyhow!("bd list did not return an array"))?
             .iter()
-            .filter_map(|entry| parse_task_card(entry).ok())
+            .map(|entry| {
+                let issue: RawIssue = serde_json::from_value(entry.clone())
+                    .context("Failed to decode task from bd list")?;
+                self.parse_task_card(issue)
+            })
+            .collect::<Result<Vec<TaskCard>>>()?;
+
+        tasks = tasks
+            .into_iter()
             .filter(|task| task.issue_type != "event" && task.issue_type != "gate")
-            .collect();
+            .collect::<Vec<_>>();
 
         let mut subtasks_by_parent: HashMap<String, Vec<String>> = HashMap::new();
         for task in &tasks {
@@ -263,11 +360,14 @@ impl TaskStore for BeadsTaskStore {
     }
 
     fn create_task(&self, repo_path: &Path, input: CreateTaskInput) -> Result<TaskCard> {
-        let mut args = vec!["create".to_string(), input.title];
-        args.push("--type".to_string());
-        args.push(input.issue_type);
-        args.push("--priority".to_string());
-        args.push(input.priority.to_string());
+        let mut args = vec![
+            "create".to_string(),
+            input.title,
+            "--type".to_string(),
+            input.issue_type,
+            "--priority".to_string(),
+            input.priority.to_string(),
+        ];
 
         if let Some(description) = normalize_text_option(input.description) {
             args.push("--description".to_string());
@@ -284,12 +384,10 @@ impl TaskStore for BeadsTaskStore {
             args.push(acceptance_criteria);
         }
 
-        if let Some(labels) = input.labels {
-            let normalized_labels = normalize_labels(labels);
-            if !normalized_labels.is_empty() {
-                args.push("--labels".to_string());
-                args.push(normalized_labels.join(","));
-            }
+        let labels = normalize_labels(input.labels.unwrap_or_default());
+        if !labels.is_empty() {
+            args.push("--labels".to_string());
+            args.push(labels.join(","));
         }
 
         if let Some(parent_id) = normalize_text_option(input.parent_id) {
@@ -297,39 +395,29 @@ impl TaskStore for BeadsTaskStore {
             args.push(parent_id);
         }
 
-        let value = self.run_bd_json(repo_path, &args)?;
-        let created = parse_task_card(&value)?;
+        let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        let value = self.run_bd_json(repo_path, &arg_refs)?;
+        let raw: RawIssue = serde_json::from_value(value).context("Failed to decode created issue")?;
+        let created_id = raw.id.clone();
 
-        if let Some(status) = input.status {
-            if status != TaskStatus::Open {
-                let _ = self.update_task(
-                    repo_path,
-                    &created.id,
-                    UpdateTaskPatch {
-                        title: None,
-                        description: None,
-                        design: None,
-                        acceptance_criteria: None,
-                        status: Some(status),
-                        priority: None,
-                        issue_type: None,
-                        labels: None,
-                        assignee: None,
-                        parent_id: None,
-                    },
-                );
-            }
-        }
+        let mut metadata_root = parse_metadata_root(raw.metadata);
+        let mut namespace_map = metadata_namespace(&metadata_root, &self.metadata_namespace)
+            .cloned()
+            .unwrap_or_default();
 
-        // Default new tasks to backlog phase.
-        let _ = self.set_phase(
-            repo_path,
-            &created.id,
-            TaskPhase::Backlog,
-            Some("Task created in OpenBlueprint"),
+        namespace_map.insert(
+            "qaRequired".to_string(),
+            Value::Bool(input.ai_review_enabled.unwrap_or(true)),
         );
 
-        self.show_task(repo_path, &created.id)
+        self.persist_namespace(
+            repo_path,
+            &created_id,
+            &mut metadata_root,
+            namespace_map,
+        )?;
+
+        self.show_task(repo_path, &created_id)
     }
 
     fn update_task(
@@ -339,11 +427,6 @@ impl TaskStore for BeadsTaskStore {
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
         let mut args = vec!["update".to_string(), task_id.to_string()];
-        let current_labels = if patch.labels.is_some() {
-            Some(self.show_task(repo_path, task_id)?.labels)
-        } else {
-            None
-        };
 
         if let Some(title) = patch.title {
             args.push("--title".to_string());
@@ -363,6 +446,11 @@ impl TaskStore for BeadsTaskStore {
         if let Some(acceptance_criteria) = patch.acceptance_criteria {
             args.push("--acceptance".to_string());
             args.push(acceptance_criteria);
+        }
+
+        if let Some(notes) = patch.notes {
+            args.push("--notes".to_string());
+            args.push(notes);
         }
 
         if let Some(status) = patch.status {
@@ -391,84 +479,203 @@ impl TaskStore for BeadsTaskStore {
         }
 
         if let Some(labels) = patch.labels {
-            let desired: HashSet<String> = normalize_labels(labels).into_iter().collect();
-            let existing: HashSet<String> = current_labels.unwrap_or_default().into_iter().collect();
-
-            let mut labels_to_remove: Vec<String> = existing.difference(&desired).cloned().collect();
-            labels_to_remove.sort();
-            for label in labels_to_remove {
-                args.push("--remove-label".to_string());
-                args.push(label);
-            }
-
-            let mut labels_to_add: Vec<String> = desired.difference(&existing).cloned().collect();
-            labels_to_add.sort();
-            for label in labels_to_add {
-                args.push("--add-label".to_string());
-                args.push(label);
-            }
+            args.push("--set-labels".to_string());
+            args.push(normalize_labels(labels).join(","));
         }
 
-        if args.len() == 2 {
-            return self.show_task(repo_path, task_id);
+        if args.len() > 2 {
+            let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+            self.run_bd_json(repo_path, &arg_refs)?;
         }
 
-        self.run_bd_json(repo_path, &args)?;
+        if let Some(ai_review_enabled) = patch.ai_review_enabled {
+            let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+            namespace_map.insert("qaRequired".to_string(), Value::Bool(ai_review_enabled));
+            self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+        }
+
         self.show_task(repo_path, task_id)
     }
 
-    fn set_phase(
-        &self,
-        repo_path: &Path,
-        task_id: &str,
-        phase: TaskPhase,
-        reason: Option<&str>,
-    ) -> Result<TaskCard> {
-        let mut args = vec![
-            "set-state".to_string(),
-            task_id.to_string(),
-            format!("phase={}", phase.as_cli_value()),
-        ];
+    fn get_spec(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
+        let issue = self.show_raw_issue(repo_path, task_id)?;
+        let metadata_root = parse_metadata_root(issue.metadata.clone());
+        let entries = metadata_namespace(&metadata_root, &self.metadata_namespace)
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("spec"))
+            .and_then(parse_markdown_entries);
+        let latest = entries.as_ref().and_then(|list| list.last());
 
-        if let Some(reason) = reason {
-            args.push("--reason".to_string());
-            args.push(reason.to_string());
-        }
-
-        self.run_bd_json(repo_path, &args)?;
-        self.show_task(repo_path, task_id)
-    }
-
-    fn get_spec_markdown(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
-        let task = self.show_task(repo_path, task_id)?;
         Ok(SpecDocument {
-            markdown: task.description,
-            updated_at: task.updated_at,
+            markdown: latest.map(|entry| entry.markdown.clone()).unwrap_or_default(),
+            updated_at: latest
+                .map(|entry| entry.updated_at.clone())
+                .unwrap_or(issue.updated_at),
         })
     }
 
-    fn set_spec_markdown(
+    fn set_spec(&self, repo_path: &Path, task_id: &str, markdown: &str) -> Result<SpecDocument> {
+        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let mut documents_map = namespace_map
+            .get("documents")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+
+        let next_revision = documents_map
+            .get("spec")
+            .and_then(parse_markdown_entries)
+            .and_then(|entries| entries.last().map(|entry| entry.revision + 1))
+            .unwrap_or(1);
+
+        let timestamp = now_rfc3339();
+        let entry = MarkdownEntry {
+            markdown: markdown.trim().to_string(),
+            updated_at: timestamp.clone(),
+            updated_by: "planner-agent".to_string(),
+            source_tool: "set_spec".to_string(),
+            revision: next_revision,
+        };
+
+        documents_map.insert(
+            "spec".to_string(),
+            Value::Array(vec![serde_json::to_value(&entry)?]),
+        );
+        namespace_map.insert("documents".to_string(), Value::Object(documents_map));
+
+        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+
+        Ok(SpecDocument {
+            markdown: entry.markdown,
+            updated_at: timestamp,
+        })
+    }
+
+    fn get_plan(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
+        let issue = self.show_raw_issue(repo_path, task_id)?;
+        let metadata_root = parse_metadata_root(issue.metadata.clone());
+        let entries = metadata_namespace(&metadata_root, &self.metadata_namespace)
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("implementationPlan"))
+            .and_then(parse_markdown_entries);
+        let latest = entries.as_ref().and_then(|list| list.last());
+
+        Ok(SpecDocument {
+            markdown: latest.map(|entry| entry.markdown.clone()).unwrap_or_default(),
+            updated_at: latest
+                .map(|entry| entry.updated_at.clone())
+                .unwrap_or(issue.updated_at),
+        })
+    }
+
+    fn set_plan(&self, repo_path: &Path, task_id: &str, markdown: &str) -> Result<SpecDocument> {
+        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let mut documents_map = namespace_map
+            .get("documents")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+
+        let next_revision = documents_map
+            .get("implementationPlan")
+            .and_then(parse_markdown_entries)
+            .and_then(|entries| entries.last().map(|entry| entry.revision + 1))
+            .unwrap_or(1);
+
+        let timestamp = now_rfc3339();
+        let entry = MarkdownEntry {
+            markdown: markdown.trim().to_string(),
+            updated_at: timestamp.clone(),
+            updated_by: "planner-agent".to_string(),
+            source_tool: "set_plan".to_string(),
+            revision: next_revision,
+        };
+
+        documents_map.insert(
+            "implementationPlan".to_string(),
+            Value::Array(vec![serde_json::to_value(&entry)?]),
+        );
+        namespace_map.insert("documents".to_string(), Value::Object(documents_map));
+
+        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+
+        Ok(SpecDocument {
+            markdown: entry.markdown,
+            updated_at: timestamp,
+        })
+    }
+
+    fn get_latest_qa_report(&self, repo_path: &Path, task_id: &str) -> Result<Option<QaReportDocument>> {
+        let issue = self.show_raw_issue(repo_path, task_id)?;
+        let metadata_root = parse_metadata_root(issue.metadata);
+        let namespace = metadata_namespace(&metadata_root, &self.metadata_namespace);
+        let Some(entries) = namespace
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("qaReports"))
+            .and_then(parse_qa_entries)
+        else {
+            return Ok(None);
+        };
+
+        Ok(entries.last().map(|entry| QaReportDocument {
+            markdown: entry.markdown.clone(),
+            verdict: entry.verdict.clone(),
+            updated_at: entry.updated_at.clone(),
+            revision: entry.revision,
+        }))
+    }
+
+    fn append_qa_report(
         &self,
         repo_path: &Path,
         task_id: &str,
         markdown: &str,
-    ) -> Result<SpecDocument> {
-        let patch = UpdateTaskPatch {
-            title: None,
-            description: Some(markdown.to_string()),
-            design: None,
-            acceptance_criteria: None,
-            status: None,
-            priority: None,
-            issue_type: None,
-            labels: None,
-            assignee: None,
-            parent_id: None,
+        verdict: QaVerdict,
+    ) -> Result<QaReportDocument> {
+        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let mut documents_map = namespace_map
+            .get("documents")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+
+        let mut entries = documents_map
+            .get("qaReports")
+            .and_then(parse_qa_entries)
+            .unwrap_or_default();
+        let next_revision = entries.last().map(|entry| entry.revision + 1).unwrap_or(1);
+
+        let timestamp = now_rfc3339();
+        let entry = QaEntry {
+            markdown: markdown.trim().to_string(),
+            verdict: verdict.clone(),
+            updated_at: timestamp.clone(),
+            updated_by: "qa-agent".to_string(),
+            source_tool: match verdict {
+                QaVerdict::Approved => "qa_approved".to_string(),
+                QaVerdict::Rejected => "qa_rejected".to_string(),
+            },
+            revision: next_revision,
         };
-        let updated = self.update_task(repo_path, task_id, patch)?;
-        Ok(SpecDocument {
-            markdown: updated.description,
-            updated_at: updated.updated_at,
+
+        entries.push(entry.clone());
+        documents_map.insert(
+            "qaReports".to_string(),
+            Value::Array(
+                entries
+                    .iter()
+                    .map(serde_json::to_value)
+                    .collect::<std::result::Result<Vec<_>, _>>()?,
+            ),
+        );
+        namespace_map.insert("documents".to_string(), Value::Object(documents_map));
+
+        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+        Ok(QaReportDocument {
+            markdown: entry.markdown,
+            verdict: entry.verdict,
+            updated_at: timestamp,
+            revision: entry.revision,
         })
     }
 }
@@ -483,6 +690,8 @@ struct RawIssue {
     design: String,
     #[serde(default)]
     acceptance_criteria: String,
+    #[serde(default)]
+    notes: String,
     status: String,
     #[serde(default)]
     priority: i32,
@@ -496,6 +705,8 @@ struct RawIssue {
     parent: Option<String>,
     #[serde(default)]
     dependencies: Vec<RawDependency>,
+    #[serde(default)]
+    metadata: Option<Value>,
     updated_at: String,
     created_at: String,
 }
@@ -510,51 +721,58 @@ struct RawDependency {
     id: Option<String>,
 }
 
-fn parse_task_card(value: &Value) -> Result<TaskCard> {
-    let issue: RawIssue = serde_json::from_value(value.clone())?;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarkdownEntry {
+    markdown: String,
+    updated_at: String,
+    updated_by: String,
+    source_tool: String,
+    revision: u32,
+}
 
-    let status = match issue.status.as_str() {
-        "open" => TaskStatus::Open,
-        "in_progress" => TaskStatus::InProgress,
-        "blocked" => TaskStatus::Blocked,
-        "closed" => TaskStatus::Closed,
-        other => return Err(anyhow!("Unknown task status from bd: {other}")),
-    };
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QaEntry {
+    markdown: String,
+    verdict: QaVerdict,
+    updated_at: String,
+    updated_by: String,
+    source_tool: String,
+    revision: u32,
+}
 
-    let phase = TaskPhase::from_label(&issue.labels);
-    let parent_id = issue.parent.or_else(|| {
-        issue.dependencies.iter().find_map(|dependency| {
-            if dependency.dependency_type != "parent-child" {
-                return None;
-            }
-            dependency
-                .depends_on_id
-                .clone()
-                .or_else(|| dependency.id.clone())
-        })
-    });
+fn parse_metadata_root(metadata: Option<Value>) -> Map<String, Value> {
+    match metadata {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    }
+}
 
-    Ok(TaskCard {
-        id: issue.id,
-        title: issue.title,
-        description: issue.description,
-        design: issue.design,
-        acceptance_criteria: issue.acceptance_criteria,
-        status,
-        phase,
-        priority: issue.priority,
-        issue_type: if issue.issue_type.is_empty() {
-            "task".to_string()
-        } else {
-            issue.issue_type
-        },
-        labels: issue.labels,
-        assignee: issue.owner,
-        parent_id,
-        subtask_ids: Vec::new(),
-        updated_at: issue.updated_at,
-        created_at: issue.created_at,
-    })
+fn metadata_namespace<'a>(metadata: &'a Map<String, Value>, namespace: &str) -> Option<&'a Map<String, Value>> {
+    metadata.get(namespace).and_then(Value::as_object)
+}
+
+fn metadata_bool_qa_required(namespace: &Map<String, Value>) -> Option<bool> {
+    namespace.get("qaRequired").and_then(Value::as_bool)
+}
+
+fn parse_markdown_entries(value: &Value) -> Option<Vec<MarkdownEntry>> {
+    let entries = value
+        .as_array()?
+        .iter()
+        .filter_map(|entry| serde_json::from_value::<MarkdownEntry>(entry.clone()).ok())
+        .collect::<Vec<_>>();
+    Some(entries)
+}
+
+fn parse_qa_entries(value: &Value) -> Option<Vec<QaEntry>> {
+    let entries = value
+        .as_array()?
+        .iter()
+        .filter_map(|entry| serde_json::from_value::<QaEntry>(entry.clone()).ok())
+        .collect::<Vec<_>>();
+    Some(entries)
 }
 
 fn normalize_labels(labels: Vec<String>) -> Vec<String> {
@@ -577,4 +795,39 @@ fn normalize_text_option(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
+}
+
+fn normalize_issue_type(issue_type: &str) -> &'static str {
+    match issue_type {
+        "epic" => "epic",
+        "feature" => "feature",
+        "bug" => "bug",
+        _ => "task",
+    }
+}
+
+fn default_ai_review_enabled(issue_type: &str) -> bool {
+    matches!(normalize_issue_type(issue_type), "epic" | "feature" | "task" | "bug")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{metadata_bool_qa_required, metadata_namespace, parse_metadata_root};
+    use serde_json::json;
+
+    #[test]
+    fn metadata_namespace_roundtrip() {
+        let root = parse_metadata_root(Some(json!({
+            "openducktor": {
+                "qaRequired": true
+            },
+            "other": {
+                "keep": true
+            }
+        })));
+
+        let namespace = metadata_namespace(&root, "openducktor").expect("namespace missing");
+        assert_eq!(metadata_bool_qa_required(namespace), Some(true));
+        assert!(root.contains_key("other"));
+    }
 }

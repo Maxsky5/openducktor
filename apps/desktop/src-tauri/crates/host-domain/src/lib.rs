@@ -6,8 +6,13 @@ use std::path::Path;
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Open,
+    SpecReady,
+    ReadyForDev,
     InProgress,
     Blocked,
+    AiReview,
+    HumanReview,
+    Deferred,
     Closed,
 }
 
@@ -15,52 +20,30 @@ impl TaskStatus {
     pub fn as_cli_value(&self) -> &'static str {
         match self {
             TaskStatus::Open => "open",
+            TaskStatus::SpecReady => "spec_ready",
+            TaskStatus::ReadyForDev => "ready_for_dev",
             TaskStatus::InProgress => "in_progress",
             TaskStatus::Blocked => "blocked",
+            TaskStatus::AiReview => "ai_review",
+            TaskStatus::HumanReview => "human_review",
+            TaskStatus::Deferred => "deferred",
             TaskStatus::Closed => "closed",
         }
     }
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskPhase {
-    Backlog,
-    Specifying,
-    ReadyForDev,
-    InProgress,
-    BlockedNeedsInput,
-    Done,
-}
-
-impl TaskPhase {
-    pub fn as_cli_value(&self) -> &'static str {
-        match self {
-            TaskPhase::Backlog => "backlog",
-            TaskPhase::Specifying => "specifying",
-            TaskPhase::ReadyForDev => "ready_for_dev",
-            TaskPhase::InProgress => "in_progress",
-            TaskPhase::BlockedNeedsInput => "blocked_needs_input",
-            TaskPhase::Done => "done",
+    pub fn from_cli_value(value: &str) -> Option<Self> {
+        match value {
+            "open" => Some(TaskStatus::Open),
+            "spec_ready" => Some(TaskStatus::SpecReady),
+            "ready_for_dev" => Some(TaskStatus::ReadyForDev),
+            "in_progress" => Some(TaskStatus::InProgress),
+            "blocked" => Some(TaskStatus::Blocked),
+            "ai_review" => Some(TaskStatus::AiReview),
+            "human_review" => Some(TaskStatus::HumanReview),
+            "deferred" => Some(TaskStatus::Deferred),
+            "closed" => Some(TaskStatus::Closed),
+            _ => None,
         }
-    }
-
-    pub fn from_label(labels: &[String]) -> Option<Self> {
-        for label in labels {
-            if !label.starts_with("phase:") {
-                continue;
-            }
-            return match label.trim_start_matches("phase:") {
-                "backlog" => Some(TaskPhase::Backlog),
-                "specifying" => Some(TaskPhase::Specifying),
-                "ready_for_dev" => Some(TaskPhase::ReadyForDev),
-                "in_progress" => Some(TaskPhase::InProgress),
-                "blocked_needs_input" => Some(TaskPhase::BlockedNeedsInput),
-                "done" => Some(TaskPhase::Done),
-                _ => None,
-            };
-        }
-        None
     }
 }
 
@@ -72,10 +55,11 @@ pub struct TaskCard {
     pub description: String,
     pub design: String,
     pub acceptance_criteria: String,
+    pub notes: String,
     pub status: TaskStatus,
-    pub phase: Option<TaskPhase>,
     pub priority: i32,
     pub issue_type: String,
+    pub ai_review_enabled: bool,
     pub labels: Vec<String>,
     pub assignee: Option<String>,
     pub parent_id: Option<String>,
@@ -94,8 +78,17 @@ pub struct CreateTaskInput {
     pub design: Option<String>,
     pub acceptance_criteria: Option<String>,
     pub labels: Option<Vec<String>>,
-    pub status: Option<TaskStatus>,
+    pub ai_review_enabled: Option<bool>,
     pub parent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanSubtaskInput {
+    pub title: String,
+    pub issue_type: Option<String>,
+    pub priority: Option<i32>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,9 +98,11 @@ pub struct UpdateTaskPatch {
     pub description: Option<String>,
     pub design: Option<String>,
     pub acceptance_criteria: Option<String>,
+    pub notes: Option<String>,
     pub status: Option<TaskStatus>,
     pub priority: Option<i32>,
     pub issue_type: Option<String>,
+    pub ai_review_enabled: Option<bool>,
     pub labels: Option<Vec<String>>,
     pub assignee: Option<String>,
     pub parent_id: Option<String>,
@@ -120,6 +115,22 @@ pub struct SpecDocument {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QaVerdict {
+    Approved,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QaReportDocument {
+    pub markdown: String,
+    pub verdict: QaVerdict,
+    pub updated_at: String,
+    pub revision: u32,
+}
+
 pub trait TaskStore: Send + Sync {
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()>;
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>>;
@@ -130,20 +141,28 @@ pub trait TaskStore: Send + Sync {
         task_id: &str,
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard>;
-    fn set_phase(
-        &self,
-        repo_path: &Path,
-        task_id: &str,
-        phase: TaskPhase,
-        reason: Option<&str>,
-    ) -> Result<TaskCard>;
-    fn get_spec_markdown(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument>;
-    fn set_spec_markdown(
+    fn get_spec(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument>;
+    fn set_spec(
         &self,
         repo_path: &Path,
         task_id: &str,
         markdown: &str,
     ) -> Result<SpecDocument>;
+    fn get_plan(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument>;
+    fn set_plan(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        markdown: &str,
+    ) -> Result<SpecDocument>;
+    fn get_latest_qa_report(&self, repo_path: &Path, task_id: &str) -> Result<Option<QaReportDocument>>;
+    fn append_qa_report(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        markdown: &str,
+        verdict: QaVerdict,
+    ) -> Result<QaReportDocument>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

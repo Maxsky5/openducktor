@@ -34,7 +34,7 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
         throw new Error(`Missing required sections: ${validation.missing.join(", ")}`);
       }
 
-      const saved = await host.setSpecMarkdown({ repoPath: activeRepo, taskId, markdown });
+      const saved = await host.setSpec({ repoPath: activeRepo, taskId, markdown });
       return saved;
     },
     [activeRepo],

@@ -1,4 +1,7 @@
-import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
+import {
+  ISSUE_TYPE_DEFAULTS,
+  ISSUE_TYPE_OPTIONS,
+} from "@/components/features/task-composer/constants";
 import { cn } from "@/lib/utils";
 import type { ComposerState } from "@/types/task-composer";
 import { Check } from "lucide-react";
@@ -28,6 +31,7 @@ export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): Rea
             onClick={() =>
               onStateChange({
                 issueType: option.value,
+                aiReviewEnabled: ISSUE_TYPE_DEFAULTS[option.value].aiReviewEnabled,
                 parentId: option.supportsParent ? state.parentId : "",
               })
             }

@@ -1,6 +1,6 @@
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { TaskCard, TaskPhase } from "@openblueprint/contracts";
+import type { TaskCard } from "@openblueprint/contracts";
 import type { ReactElement } from "react";
 
 type KanbanColumnData = {
@@ -13,7 +13,6 @@ type KanbanColumnProps = {
   column: KanbanColumnData;
   runStateByTaskId: Map<string, string>;
   onOpenDetails: (taskId: string) => void;
-  onSetPhase: (taskId: string, phase: TaskPhase) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string) => void;
   onBuild: (taskId: string) => void;
@@ -23,7 +22,6 @@ export function KanbanColumn({
   column,
   runStateByTaskId,
   onOpenDetails,
-  onSetPhase,
   onDelegate,
   onPlan,
   onBuild,
@@ -49,7 +47,6 @@ export function KanbanColumn({
             task={task}
             runState={runStateByTaskId.get(task.id)}
             onOpenDetails={onOpenDetails}
-            onSetPhase={onSetPhase}
             onDelegate={onDelegate}
             onPlan={onPlan}
             onBuild={onBuild}

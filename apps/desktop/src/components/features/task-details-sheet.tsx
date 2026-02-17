@@ -37,6 +37,7 @@ type TaskDetailsSheetProps = {
   onBuild?: (taskId: string) => void;
   onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;
+  onDefer?: (taskId: string) => void;
 };
 
 export function TaskDetailsSheet({
@@ -48,6 +49,7 @@ export function TaskDetailsSheet({
   onBuild,
   onDelegate,
   onEdit,
+  onDefer,
 }: TaskDetailsSheetProps): ReactElement {
   const subtasks = task
     ? task.subtaskIds
@@ -70,7 +72,6 @@ export function TaskDetailsSheet({
                 <Badge variant={statusBadgeVariant(task.status)}>{statusLabel(task.status)}</Badge>
                 <Badge variant="outline">{task.issueType}</Badge>
                 <Badge variant="secondary">{priorityLabel(task.priority)}</Badge>
-                {task.phase ? <Badge variant="outline">phase: {task.phase}</Badge> : null}
               </SheetDescription>
             </SheetHeader>
 
@@ -123,6 +124,14 @@ export function TaskDetailsSheet({
                   <Play className="size-4" />
                   Delegate
                   <Flag className="size-4" />
+                </Button>
+              ) : null}
+              {onDefer &&
+              task.parentId === undefined &&
+              task.status !== "closed" &&
+              task.status !== "deferred" ? (
+                <Button type="button" variant="outline" onClick={() => onDefer(task.id)}>
+                  Defer
                 </Button>
               ) : null}
             </SheetFooter>

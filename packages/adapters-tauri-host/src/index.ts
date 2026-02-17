@@ -6,7 +6,7 @@ import {
   type SystemCheck,
   type TaskCard,
   type TaskCreateInput,
-  type TaskPhase,
+  type TaskStatus,
   type TaskUpdatePatch,
   type WorkspaceRecord,
   beadsCheckSchema,
@@ -16,11 +16,15 @@ import {
   systemCheckSchema,
   taskCardSchema,
   taskCreateInputSchema,
-  taskPhaseSchema,
+  taskStatusSchema,
   taskUpdatePatchSchema,
   workspaceRecordSchema,
 } from "@openblueprint/contracts";
-import type { PlannerTools, SetSpecMarkdownOutput } from "@openblueprint/core";
+import type {
+  PlannerTools,
+  SetPlanOutput,
+  SetSpecOutput,
+} from "@openblueprint/core";
 
 type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -88,18 +92,35 @@ export class TauriHostClient implements PlannerTools {
     return taskCardSchema.parse(payload);
   }
 
-  async taskSetPhase(
+  async taskTransition(
     repoPath: string,
     taskId: string,
-    phase: TaskPhase,
+    status: TaskStatus,
     reason?: string,
   ): Promise<TaskCard> {
-    taskPhaseSchema.parse(phase);
-    const payload = await this.invokeFn<unknown>("task_set_phase", {
+    taskStatusSchema.parse(status);
+    const payload = await this.invokeFn<unknown>("task_transition", {
       repoPath,
       taskId,
-      phase,
+      status,
       reason,
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async taskDefer(repoPath: string, taskId: string, reason?: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("task_defer", {
+      repoPath,
+      taskId,
+      reason,
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async taskResumeDeferred(repoPath: string, taskId: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("task_resume_deferred", {
+      repoPath,
+      taskId,
     });
     return taskCardSchema.parse(payload);
   }
@@ -119,22 +140,99 @@ export class TauriHostClient implements PlannerTools {
     };
   }
 
-  async setSpecMarkdown(input: {
+  async setSpec(input: {
     taskId: string;
     markdown: string;
     repoPath?: string;
-  }): Promise<SetSpecMarkdownOutput> {
+  }): Promise<SetSpecOutput> {
     if (!input.repoPath) {
-      throw new Error("repoPath is required to set spec markdown");
+      throw new Error("repoPath is required to set spec");
     }
 
-    const payload = await this.invokeFn<{ updatedAt: string }>("spec_set_markdown", {
+    const payload = await this.invokeFn<{ updatedAt: string }>("set_spec", {
       repoPath: input.repoPath,
       taskId: input.taskId,
       markdown: input.markdown,
     });
 
     return { updatedAt: payload.updatedAt };
+  }
+
+  async setPlan(input: {
+    taskId: string;
+    markdown: string;
+    subtasks?: Array<{
+      title: string;
+      issueType?: "task" | "feature" | "bug";
+      priority?: number;
+      description?: string;
+    }>;
+    repoPath?: string;
+  }): Promise<SetPlanOutput> {
+    if (!input.repoPath) {
+      throw new Error("repoPath is required to set plan");
+    }
+
+    const payload = await this.invokeFn<{ updatedAt: string }>("set_plan", {
+      repoPath: input.repoPath,
+      taskId: input.taskId,
+      input: {
+        markdown: input.markdown,
+        subtasks: input.subtasks,
+      },
+    });
+
+    return { updatedAt: payload.updatedAt };
+  }
+
+  async planGet(
+    repoPath: string,
+    taskId: string,
+  ): Promise<{ markdown: string; updatedAt: string }> {
+    const payload = await this.invokeFn<{ markdown: string; updatedAt: string }>("plan_get", {
+      repoPath,
+      taskId,
+    });
+    return {
+      markdown: payload.markdown,
+      updatedAt: payload.updatedAt,
+    };
+  }
+
+  async qaGetReport(
+    repoPath: string,
+    taskId: string,
+  ): Promise<{ markdown: string; updatedAt: string }> {
+    const payload = await this.invokeFn<{ markdown: string; updatedAt: string }>("qa_get_report", {
+      repoPath,
+      taskId,
+    });
+    return {
+      markdown: payload.markdown,
+      updatedAt: payload.updatedAt,
+    };
+  }
+
+  async qaApproved(
+    repoPath: string,
+    taskId: string,
+    markdown: string,
+  ): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("qa_approved", {
+      repoPath,
+      taskId,
+      input: { markdown },
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async qaRejected(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("qa_rejected", {
+      repoPath,
+      taskId,
+      input: { markdown },
+    });
+    return taskCardSchema.parse(payload);
   }
 
   async runsList(repoPath?: string): Promise<RunSummary[]> {
@@ -171,24 +269,67 @@ export class TauriHostClient implements PlannerTools {
     return workspaceRecordSchema.parse(payload);
   }
 
-  async delegateStart(repoPath: string, taskId: string): Promise<RunSummary> {
-    const payload = await this.invokeFn<unknown>("delegate_start", { repoPath, taskId });
+  async buildStart(repoPath: string, taskId: string): Promise<RunSummary> {
+    const payload = await this.invokeFn<unknown>("build_start", { repoPath, taskId });
     return runSummarySchema.parse(payload);
   }
 
-  async delegateRespond(
+  async buildBlocked(repoPath: string, taskId: string, reason: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("build_blocked", {
+      repoPath,
+      taskId,
+      reason,
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async buildResumed(repoPath: string, taskId: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("build_resumed", {
+      repoPath,
+      taskId,
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async buildCompleted(repoPath: string, taskId: string, summary?: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("build_completed", {
+      repoPath,
+      taskId,
+      input: { summary },
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async humanRequestChanges(repoPath: string, taskId: string, note?: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("human_request_changes", {
+      repoPath,
+      taskId,
+      note,
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async humanApprove(repoPath: string, taskId: string): Promise<TaskCard> {
+    const payload = await this.invokeFn<unknown>("human_approve", {
+      repoPath,
+      taskId,
+    });
+    return taskCardSchema.parse(payload);
+  }
+
+  async buildRespond(
     runId: string,
     action: "approve" | "deny" | "message",
     payload?: string,
   ): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("delegate_respond", { runId, action, payload });
+    return this.invokeFn<{ ok: boolean }>("build_respond", { runId, action, payload });
   }
 
-  async delegateStop(runId: string): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("delegate_stop", { runId });
+  async buildStop(runId: string): Promise<{ ok: boolean }> {
+    return this.invokeFn<{ ok: boolean }>("build_stop", { runId });
   }
 
-  async delegateCleanup(runId: string, mode: "success" | "failure"): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("delegate_cleanup", { runId, mode });
+  async buildCleanup(runId: string, mode: "success" | "failure"): Promise<{ ok: boolean }> {
+    return this.invokeFn<{ ok: boolean }>("build_cleanup", { runId, mode });
   }
 }

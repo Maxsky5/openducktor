@@ -27,7 +27,7 @@ export function useDelegationOperations({
         throw new Error("Select a workspace first.");
       }
 
-      const run = await host.delegateStart(activeRepo, taskId);
+      await host.buildStart(activeRepo, taskId);
       await refreshTaskData(activeRepo);
     },
     [activeRepo, refreshTaskData],
@@ -35,7 +35,7 @@ export function useDelegationOperations({
 
   const delegateRespond = useCallback(
     async (runId: string, action: "approve" | "deny" | "message", payload?: string) => {
-      await host.delegateRespond(runId, action, payload);
+      await host.buildRespond(runId, action, payload);
       if (activeRepo) {
         await refreshTaskData(activeRepo);
       }
@@ -45,7 +45,7 @@ export function useDelegationOperations({
 
   const delegateStop = useCallback(
     async (runId: string) => {
-      await host.delegateStop(runId);
+      await host.buildStop(runId);
       if (activeRepo) {
         await refreshTaskData(activeRepo);
       }
@@ -55,7 +55,7 @@ export function useDelegationOperations({
 
   const delegateCleanup = useCallback(
     async (runId: string, mode: "success" | "failure") => {
-      await host.delegateCleanup(runId, mode);
+      await host.buildCleanup(runId, mode);
       if (activeRepo) {
         await refreshTaskData(activeRepo);
       }

@@ -26,6 +26,6 @@ export class PlannerSpecService {
       throw new Error(`Spec is missing required sections: ${validation.missing.join(", ")}`);
     }
 
-    return this.tools.setSpecMarkdown({ taskId, markdown });
+    return this.tools.setSpec({ taskId, markdown });
   }
 }

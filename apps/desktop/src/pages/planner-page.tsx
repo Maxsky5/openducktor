@@ -53,7 +53,7 @@ export function PlannerPage(): ReactElement {
               <div>
                 <CardTitle className="text-lg">Specification Workspace</CardTitle>
                 <CardDescription>
-                  Canonical spec is persisted in the Beads task description.
+                  Canonical spec is persisted in OpenDucktor metadata on the Beads issue.
                 </CardDescription>
               </div>
               {validation.valid ? (

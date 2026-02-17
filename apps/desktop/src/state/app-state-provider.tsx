@@ -67,7 +67,9 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     refreshTasks,
     createTask,
     updateTask,
-    setTaskPhase,
+    transitionTask,
+    deferTask,
+    resumeDeferredTask,
   } = useTaskOperations({
     activeRepo,
     refreshBeadsCheckForRepo,
@@ -156,9 +158,21 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       refreshTasks,
       createTask,
       updateTask,
-      setTaskPhase,
+      transitionTask,
+      deferTask,
+      resumeDeferredTask,
     }),
-    [createTask, isLoadingTasks, refreshTasks, runs, setTaskPhase, tasks, updateTask],
+    [
+      createTask,
+      deferTask,
+      isLoadingTasks,
+      refreshTasks,
+      resumeDeferredTask,
+      runs,
+      tasks,
+      transitionTask,
+      updateTask,
+    ],
   );
 
   const delegationStateValue = useMemo<DelegationStateContextValue>(

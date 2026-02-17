@@ -112,6 +112,30 @@ export function TaskDetailsForm({
       </div>
 
       <div className="grid gap-2">
+        <Label htmlFor="task-ai-review">AI Review</Label>
+        <label
+          htmlFor="task-ai-review"
+          className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700"
+        >
+          <input
+            id="task-ai-review"
+            type="checkbox"
+            className="mt-0.5 size-4 rounded border-slate-300 accent-sky-600"
+            checked={state.aiReviewEnabled}
+            onChange={(event) => onStateChange({ aiReviewEnabled: event.currentTarget.checked })}
+          />
+          <span className="space-y-0.5">
+            <span className="block font-semibold text-slate-900">
+              Run QA agent before human review
+            </span>
+            <span className="block text-xs text-slate-500">
+              Enabled by default. If disabled, completed tasks go directly to Human Review.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div className="grid gap-2">
         <Label htmlFor="task-description">Description</Label>
         <Textarea
           id="task-description"

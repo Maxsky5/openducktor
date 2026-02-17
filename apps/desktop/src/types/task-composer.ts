@@ -7,6 +7,7 @@ export type ComposerStep = "type" | "details";
 
 export type ComposerState = {
   issueType: IssueType;
+  aiReviewEnabled: boolean;
   title: string;
   priority: number;
   description: string;

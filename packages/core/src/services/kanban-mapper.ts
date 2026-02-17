@@ -1,12 +1,14 @@
-import type { TaskCard, TaskPhase } from "@openblueprint/contracts";
+import type { TaskCard, TaskStatus } from "@openblueprint/contracts";
 
 export type KanbanColumnId =
-  | "backlog"
-  | "specifying"
+  | "open"
+  | "spec_ready"
   | "ready_for_dev"
   | "in_progress"
-  | "blocked_needs_input"
-  | "done";
+  | "blocked"
+  | "ai_review"
+  | "human_review"
+  | "closed";
 
 export type KanbanColumn = {
   id: KanbanColumnId;
@@ -15,30 +17,18 @@ export type KanbanColumn = {
 };
 
 const columns: Array<{ id: KanbanColumnId; title: string }> = [
-  { id: "backlog", title: "Backlog" },
-  { id: "specifying", title: "Specifying" },
+  { id: "open", title: "Backlog" },
+  { id: "spec_ready", title: "Spec Ready" },
   { id: "ready_for_dev", title: "Ready for Dev" },
   { id: "in_progress", title: "In Progress" },
-  { id: "blocked_needs_input", title: "Blocked / Needs Input" },
-  { id: "done", title: "Done" },
+  { id: "blocked", title: "Blocked / Needs Input" },
+  { id: "ai_review", title: "AI Review" },
+  { id: "human_review", title: "Human Review" },
+  { id: "closed", title: "Done" },
 ];
 
-const coercePhase = (task: TaskCard): TaskPhase => {
-  if (task.phase) {
-    return task.phase;
-  }
-
-  switch (task.status) {
-    case "blocked":
-      return "blocked_needs_input";
-    case "in_progress":
-      return "in_progress";
-    case "closed":
-      return "done";
-    default:
-      return "backlog";
-  }
-};
+const toColumn = (status: TaskStatus): KanbanColumnId | null =>
+  status === "deferred" ? null : status;
 
 export const mapToKanbanColumns = (tasks: TaskCard[]): KanbanColumn[] => {
   const grouped = new Map<KanbanColumnId, TaskCard[]>();
@@ -47,8 +37,11 @@ export const mapToKanbanColumns = (tasks: TaskCard[]): KanbanColumn[] => {
   }
 
   for (const task of tasks) {
-    const phase = coercePhase(task);
-    const bucket = grouped.get(phase);
+    const column = toColumn(task.status);
+    if (!column) {
+      continue;
+    }
+    const bucket = grouped.get(column);
     if (bucket) {
       bucket.push(task);
     }

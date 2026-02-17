@@ -1,5 +1,5 @@
 import type { IssueTypeOption, PriorityOption } from "@/types/task-composer";
-import { Bug, Layers3, Lightbulb, ListTodo, Sparkles, Wrench } from "lucide-react";
+import { Bug, Layers3, ListTodo, Sparkles } from "lucide-react";
 
 export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
   {
@@ -30,30 +30,12 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     supportsParent: true,
   },
   {
-    value: "chore",
-    label: "Chore",
-    description: "Maintenance, upgrades, tooling, or non-user-visible work.",
-    icon: Wrench,
-    accentClass: "border-amber-300 bg-amber-50/90",
-    iconClass: "bg-amber-100 text-amber-700",
-    supportsParent: true,
-  },
-  {
     value: "epic",
     label: "Epic",
     description: "Large initiative that contains multiple subtasks.",
     icon: Layers3,
     accentClass: "border-violet-300 bg-violet-50/90",
     iconClass: "bg-violet-100 text-violet-700",
-    supportsParent: false,
-  },
-  {
-    value: "decision",
-    label: "Decision",
-    description: "Architecture/product decision record with explicit rationale.",
-    icon: Lightbulb,
-    accentClass: "border-emerald-300 bg-emerald-50/90",
-    iconClass: "bg-emerald-100 text-emerald-700",
     supportsParent: false,
   },
 ];
@@ -65,3 +47,10 @@ export const PRIORITY_OPTIONS: PriorityOption[] = [
   { value: 3, label: "P3", hint: "Low" },
   { value: 4, label: "P4", hint: "Very low" },
 ];
+
+export const ISSUE_TYPE_DEFAULTS = {
+  bug: { aiReviewEnabled: true },
+  epic: { aiReviewEnabled: true },
+  feature: { aiReviewEnabled: true },
+  task: { aiReviewEnabled: true },
+} as const;

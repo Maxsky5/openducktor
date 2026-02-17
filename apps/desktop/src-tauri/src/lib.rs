@@ -1,5 +1,7 @@
 use host_application::{AppService, RunEmitter};
-use host_domain::{CreateTaskInput, RunEvent, RunSummary, TaskCard, TaskPhase, UpdateTaskPatch};
+use host_domain::{
+    CreateTaskInput, PlanSubtaskInput, RunEvent, RunSummary, TaskCard, TaskStatus, UpdateTaskPatch,
+};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
 use serde::Deserialize;
@@ -20,7 +22,7 @@ struct TaskCreatePayload {
     design: Option<String>,
     acceptance_criteria: Option<String>,
     labels: Option<Vec<String>>,
-    status: Option<host_domain::TaskStatus>,
+    ai_review_enabled: Option<bool>,
     parent_id: Option<String>,
 }
 
@@ -31,12 +33,31 @@ struct TaskUpdatePayload {
     description: Option<String>,
     design: Option<String>,
     acceptance_criteria: Option<String>,
-    status: Option<host_domain::TaskStatus>,
     priority: Option<i32>,
     issue_type: Option<String>,
+    ai_review_enabled: Option<bool>,
     labels: Option<Vec<String>>,
     assignee: Option<String>,
     parent_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarkdownPayload {
+    markdown: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlanPayload {
+    markdown: String,
+    subtasks: Option<Vec<PlanSubtaskInput>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuildCompletePayload {
+    summary: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,9 +132,11 @@ async fn workspace_update_repo_config(
     let existing = as_error(state.service.workspace_get_repo_config_optional(&repo_path))?;
 
     let repo_config = RepoConfig {
-        worktree_base_path: config
-            .worktree_base_path
-            .or_else(|| existing.as_ref().and_then(|entry| entry.worktree_base_path.clone())),
+        worktree_base_path: config.worktree_base_path.or_else(|| {
+            existing
+                .as_ref()
+                .and_then(|entry| entry.worktree_base_path.clone())
+        }),
         branch_prefix: config
             .branch_prefix
             .or_else(|| existing.as_ref().map(|entry| entry.branch_prefix.clone()))
@@ -178,7 +201,7 @@ async fn task_create(
         design: input.design,
         acceptance_criteria: input.acceptance_criteria,
         labels: input.labels,
-        status: input.status,
+        ai_review_enabled: input.ai_review_enabled,
         parent_id: input.parent_id,
     };
     as_error(state.service.task_create(&repo_path, create))
@@ -199,9 +222,11 @@ async fn task_update(
             description: patch.description,
             design: patch.design,
             acceptance_criteria: patch.acceptance_criteria,
-            status: patch.status,
+            notes: None,
+            status: None,
             priority: patch.priority,
             issue_type: patch.issue_type,
+            ai_review_enabled: patch.ai_review_enabled,
             labels: patch.labels,
             assignee: patch.assignee,
             parent_id: patch.parent_id,
@@ -210,18 +235,41 @@ async fn task_update(
 }
 
 #[tauri::command]
-async fn task_set_phase(
+async fn task_transition(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
-    phase: TaskPhase,
+    status: TaskStatus,
     reason: Option<String>,
 ) -> Result<TaskCard, String> {
     as_error(
         state
             .service
-            .task_set_phase(&repo_path, &task_id, phase, reason.as_deref()),
+            .task_transition(&repo_path, &task_id, status, reason.as_deref()),
     )
+}
+
+#[tauri::command]
+async fn task_defer(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    reason: Option<String>,
+) -> Result<TaskCard, String> {
+    as_error(
+        state
+            .service
+            .task_defer(&repo_path, &task_id, reason.as_deref()),
+    )
+}
+
+#[tauri::command]
+async fn task_resume_deferred(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<TaskCard, String> {
+    as_error(state.service.task_resume_deferred(&repo_path, &task_id))
 }
 
 #[tauri::command]
@@ -234,21 +282,77 @@ async fn spec_get(
 }
 
 #[tauri::command]
-async fn spec_set_markdown(
+async fn set_spec(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
     markdown: String,
 ) -> Result<host_domain::SpecDocument, String> {
+    as_error(state.service.set_spec(&repo_path, &task_id, &markdown))
+}
+
+#[tauri::command]
+async fn plan_get(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<host_domain::SpecDocument, String> {
+    as_error(state.service.plan_get(&repo_path, &task_id))
+}
+
+#[tauri::command]
+async fn set_plan(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    input: PlanPayload,
+) -> Result<host_domain::SpecDocument, String> {
     as_error(
         state
             .service
-            .spec_set_markdown(&repo_path, &task_id, &markdown),
+            .set_plan(&repo_path, &task_id, &input.markdown, input.subtasks),
     )
 }
 
 #[tauri::command]
-async fn delegate_start(
+async fn qa_get_report(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<host_domain::SpecDocument, String> {
+    as_error(state.service.qa_get_report(&repo_path, &task_id))
+}
+
+#[tauri::command]
+async fn qa_approved(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    input: MarkdownPayload,
+) -> Result<TaskCard, String> {
+    as_error(
+        state
+            .service
+            .qa_approved(&repo_path, &task_id, &input.markdown),
+    )
+}
+
+#[tauri::command]
+async fn qa_rejected(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    input: MarkdownPayload,
+) -> Result<TaskCard, String> {
+    as_error(
+        state
+            .service
+            .qa_rejected(&repo_path, &task_id, &input.markdown),
+    )
+}
+
+#[tauri::command]
+async fn build_start(
     state: State<'_, AppState>,
     app: AppHandle,
     repo_path: String,
@@ -257,12 +361,12 @@ async fn delegate_start(
     as_error(
         state
             .service
-            .delegate_start(&repo_path, &task_id, run_emitter(app)),
+            .build_start(&repo_path, &task_id, run_emitter(app)),
     )
 }
 
 #[tauri::command]
-async fn delegate_respond(
+async fn build_respond(
     state: State<'_, AppState>,
     app: AppHandle,
     run_id: String,
@@ -272,13 +376,13 @@ async fn delegate_respond(
     as_error(
         state
             .service
-            .delegate_respond(&run_id, &action, payload.as_deref(), run_emitter(app))
+            .build_respond(&run_id, &action, payload.as_deref(), run_emitter(app))
             .map(|ok| serde_json::json!({ "ok": ok })),
     )
 }
 
 #[tauri::command]
-async fn delegate_stop(
+async fn build_stop(
     state: State<'_, AppState>,
     app: AppHandle,
     run_id: String,
@@ -286,13 +390,13 @@ async fn delegate_stop(
     as_error(
         state
             .service
-            .delegate_stop(&run_id, run_emitter(app))
+            .build_stop(&run_id, run_emitter(app))
             .map(|ok| serde_json::json!({ "ok": ok })),
     )
 }
 
 #[tauri::command]
-async fn delegate_cleanup(
+async fn build_cleanup(
     state: State<'_, AppState>,
     app: AppHandle,
     run_id: String,
@@ -301,9 +405,69 @@ async fn delegate_cleanup(
     as_error(
         state
             .service
-            .delegate_cleanup(&run_id, &mode, run_emitter(app))
+            .build_cleanup(&run_id, &mode, run_emitter(app))
             .map(|ok| serde_json::json!({ "ok": ok })),
     )
+}
+
+#[tauri::command]
+async fn build_blocked(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    reason: Option<String>,
+) -> Result<TaskCard, String> {
+    as_error(
+        state
+            .service
+            .build_blocked(&repo_path, &task_id, reason.as_deref()),
+    )
+}
+
+#[tauri::command]
+async fn build_resumed(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<TaskCard, String> {
+    as_error(state.service.build_resumed(&repo_path, &task_id))
+}
+
+#[tauri::command]
+async fn build_completed(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    input: Option<BuildCompletePayload>,
+) -> Result<TaskCard, String> {
+    as_error(state.service.build_completed(
+        &repo_path,
+        &task_id,
+        input.as_ref().and_then(|entry| entry.summary.as_deref()),
+    ))
+}
+
+#[tauri::command]
+async fn human_request_changes(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    note: Option<String>,
+) -> Result<TaskCard, String> {
+    as_error(
+        state
+            .service
+            .human_request_changes(&repo_path, &task_id, note.as_deref()),
+    )
+}
+
+#[tauri::command]
+async fn human_approve(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<TaskCard, String> {
+    as_error(state.service.human_approve(&repo_path, &task_id))
 }
 
 #[tauri::command]
@@ -315,8 +479,11 @@ async fn runs_list(
 }
 
 pub fn run() {
-    let task_store = Arc::new(BeadsTaskStore::new());
     let config_store = AppConfigStore::new().expect("failed to initialize config store");
+    let metadata_namespace = config_store
+        .task_metadata_namespace()
+        .expect("failed to read task metadata namespace from config");
+    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(&metadata_namespace));
     let service = Arc::new(AppService::new(task_store, config_store));
 
     tauri::Builder::default()
@@ -336,13 +503,25 @@ pub fn run() {
             tasks_list,
             task_create,
             task_update,
-            task_set_phase,
+            task_transition,
+            task_defer,
+            task_resume_deferred,
             spec_get,
-            spec_set_markdown,
-            delegate_start,
-            delegate_respond,
-            delegate_stop,
-            delegate_cleanup,
+            set_spec,
+            plan_get,
+            set_plan,
+            qa_get_report,
+            qa_approved,
+            qa_rejected,
+            build_start,
+            build_respond,
+            build_stop,
+            build_cleanup,
+            build_blocked,
+            build_resumed,
+            build_completed,
+            human_request_changes,
+            human_approve,
             runs_list
         ])
         .run(tauri::generate_context!())

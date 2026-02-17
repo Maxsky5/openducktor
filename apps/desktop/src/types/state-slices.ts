@@ -5,7 +5,7 @@ import type {
   RuntimeCheck,
   TaskCard,
   TaskCreateInput,
-  TaskPhase,
+  TaskStatus,
   TaskUpdatePatch,
   WorkspaceRecord,
 } from "@openblueprint/contracts";
@@ -43,7 +43,9 @@ export type TasksStateContextValue = {
   refreshTasks: () => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
-  setTaskPhase: (taskId: string, phase: TaskPhase) => Promise<void>;
+  transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
+  deferTask: (taskId: string) => Promise<void>;
+  resumeDeferredTask: (taskId: string) => Promise<void>;
 };
 
 export type DelegationStateContextValue = {

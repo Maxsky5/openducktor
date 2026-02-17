@@ -1,8 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { phaseBadgeVariant, priorityLabel } from "@/lib/task-display";
-import { PHASE_OPTIONS, phaseLabel } from "@/lib/task-phase";
-import type { TaskCard, TaskPhase } from "@openblueprint/contracts";
+import { priorityLabel, statusBadgeVariant, statusLabel } from "@/lib/task-display";
+import type { TaskCard } from "@openblueprint/contracts";
 import { Eye, Play, ScrollText, WandSparkles } from "lucide-react";
 import type { ReactElement } from "react";
 
@@ -10,7 +9,6 @@ type KanbanTaskCardProps = {
   task: TaskCard;
   runState?: string | undefined;
   onOpenDetails: (taskId: string) => void;
-  onSetPhase: (taskId: string, phase: TaskPhase) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string) => void;
   onBuild: (taskId: string) => void;
@@ -20,7 +18,6 @@ export function KanbanTaskCard({
   task,
   runState,
   onOpenDetails,
-  onSetPhase,
   onDelegate,
   onPlan,
   onBuild,
@@ -37,23 +34,11 @@ export function KanbanTaskCard({
       </button>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant={phaseBadgeVariant(task.phase)}>{phaseLabel(task.phase)}</Badge>
+        <Badge variant={statusBadgeVariant(task.status)}>{statusLabel(task.status)}</Badge>
         <Badge variant="outline">{task.issueType}</Badge>
         <Badge variant="secondary">{priorityLabel(task.priority)}</Badge>
         {runState ? <Badge variant="warning">Run {runState}</Badge> : null}
       </div>
-
-      <select
-        className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs"
-        value={task.phase ?? "backlog"}
-        onChange={(event) => onSetPhase(task.id, event.currentTarget.value as TaskPhase)}
-      >
-        {PHASE_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
 
       <div className="grid grid-cols-3 gap-2">
         <Button type="button" size="sm" variant="outline" onClick={() => onOpenDetails(task.id)}>

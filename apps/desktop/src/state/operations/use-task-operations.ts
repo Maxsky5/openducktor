@@ -1,14 +1,12 @@
 import { errorMessage } from "@/lib/errors";
-import { phaseToStatus } from "@/state/tasks/phase-mapping";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import {
   type BeadsCheck,
   type RunSummary,
   type TaskCard,
   type TaskCreateInput,
-  type TaskPhase,
+  type TaskStatus,
   type TaskUpdatePatch,
-  taskPhaseSchema,
 } from "@openblueprint/contracts";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -29,7 +27,9 @@ type UseTaskOperationsResult = {
   refreshTasks: () => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
-  setTaskPhase: (taskId: string, phase: TaskPhase) => Promise<void>;
+  transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
+  deferTask: (taskId: string) => Promise<void>;
+  resumeDeferredTask: (taskId: string) => Promise<void>;
 };
 
 export function useTaskOperations({
@@ -45,7 +45,7 @@ export function useTaskOperations({
       host.tasksList(repoPath),
       host.runsList(repoPath),
     ]);
-    setTasks(taskList);
+    setTasks(taskList.filter((task) => task.status !== "deferred"));
     setRuns(runList);
   }, []);
 
@@ -125,16 +125,68 @@ export function useTaskOperations({
     [activeRepo, refreshTaskData],
   );
 
-  const setTaskPhase = useCallback(
-    async (taskId: string, phase: TaskPhase): Promise<void> => {
+  const transitionTask = useCallback(
+    async (taskId: string, status: TaskStatus, reason?: string): Promise<void> => {
       if (!activeRepo) {
         throw new Error("Select a workspace first.");
       }
 
-      taskPhaseSchema.parse(phase);
-      await host.taskSetPhase(activeRepo, taskId, phase, "Kanban move");
-      await host.taskUpdate(activeRepo, taskId, { status: phaseToStatus(phase) });
-      await refreshTaskData(activeRepo);
+      try {
+        await host.taskTransition(activeRepo, taskId, status, reason);
+        await refreshTaskData(activeRepo);
+      } catch (error) {
+        const reason = errorMessage(error);
+        toast.error("Failed to transition task", {
+          description: reason,
+        });
+        throw error;
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
+  const deferTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+
+      try {
+        await host.taskDefer(activeRepo, taskId, "Deferred by user");
+        await refreshTaskData(activeRepo);
+        toast.success("Task deferred", {
+          description: taskId,
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        toast.error("Failed to defer task", {
+          description: reason,
+        });
+        throw error;
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
+  const resumeDeferredTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+
+      try {
+        await host.taskResumeDeferred(activeRepo, taskId);
+        await refreshTaskData(activeRepo);
+        toast.success("Task resumed", {
+          description: taskId,
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        toast.error("Failed to resume task", {
+          description: reason,
+        });
+        throw error;
+      }
     },
     [activeRepo, refreshTaskData],
   );
@@ -155,6 +207,8 @@ export function useTaskOperations({
     refreshTasks,
     createTask,
     updateTask,
-    setTaskPhase,
+    transitionTask,
+    deferTask,
+    resumeDeferredTask,
   };
 }

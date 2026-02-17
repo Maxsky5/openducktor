@@ -39,6 +39,10 @@ fn default_branch_prefix() -> String {
     "obp".to_string()
 }
 
+fn default_task_metadata_namespace() -> String {
+    "openducktor".to_string()
+}
+
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
@@ -93,6 +97,8 @@ pub struct SchedulerConfig {
 pub struct GlobalConfig {
     pub version: u8,
     pub active_repo: Option<String>,
+    #[serde(default = "default_task_metadata_namespace")]
+    pub task_metadata_namespace: String,
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
     #[serde(default)]
@@ -106,6 +112,7 @@ impl Default for GlobalConfig {
         Self {
             version: 1,
             active_repo: None,
+            task_metadata_namespace: default_task_metadata_namespace(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),
             scheduler: SchedulerConfig::default(),
@@ -146,6 +153,16 @@ impl AppConfigStore {
         let parsed: GlobalConfig = serde_json::from_str(&data)
             .with_context(|| format!("Failed parsing config file {}", self.path.display()))?;
         Ok(parsed)
+    }
+
+    pub fn task_metadata_namespace(&self) -> Result<String> {
+        let config = self.load()?;
+        let trimmed = config.task_metadata_namespace.trim();
+        if trimmed.is_empty() {
+            Ok(default_task_metadata_namespace())
+        } else {
+            Ok(trimmed.to_string())
+        }
     }
 
     pub fn save(&self, config: &GlobalConfig) -> Result<()> {

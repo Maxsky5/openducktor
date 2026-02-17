@@ -1,4 +1,7 @@
-import { PRIORITY_OPTIONS } from "@/components/features/task-composer/constants";
+import {
+  ISSUE_TYPE_DEFAULTS,
+  PRIORITY_OPTIONS,
+} from "@/components/features/task-composer/constants";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { ComposerState } from "@/types/task-composer";
 import type { IssueType, TaskCard } from "@openblueprint/contracts";
@@ -12,6 +15,7 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
   if (!task) {
     return {
       issueType: "task",
+      aiReviewEnabled: ISSUE_TYPE_DEFAULTS.task.aiReviewEnabled,
       title: "",
       priority: 2,
       description: "",
@@ -24,6 +28,7 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
 
   return {
     issueType: task.issueType,
+    aiReviewEnabled: task.aiReviewEnabled,
     title: task.title,
     priority: task.priority,
     description: task.description,
@@ -40,9 +45,6 @@ export const issueTypeGuidance = (issueType: IssueType): string => {
   }
   if (issueType === "epic") {
     return "Use this for umbrella initiatives and then create scoped child tasks under it.";
-  }
-  if (issueType === "decision") {
-    return "Document tradeoffs in Design and explicit outcomes in Acceptance Criteria.";
   }
   return "Define enough detail for Planner/Builder automation to execute with minimal ambiguity.";
 };

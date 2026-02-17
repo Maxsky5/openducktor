@@ -73,7 +73,7 @@ export function TaskCreateModal({
     () =>
       tasks
         .filter((entry) => entry.id !== task?.id)
-        .filter((entry) => entry.issueType === "epic" || entry.issueType === "feature")
+        .filter((entry) => entry.issueType === "epic")
         .sort((left, right) => left.id.localeCompare(right.id)),
     [task?.id, tasks],
   );
@@ -109,6 +109,7 @@ export function TaskCreateModal({
         const input: TaskCreateInput = {
           title: state.title.trim(),
           issueType: state.issueType,
+          aiReviewEnabled: state.aiReviewEnabled,
           priority: state.priority,
           description: normalizeLines(state.description),
           design: normalizeLines(state.design),
@@ -120,6 +121,7 @@ export function TaskCreateModal({
       } else if (task) {
         const patch: TaskUpdatePatch = {
           title: state.title.trim(),
+          aiReviewEnabled: state.aiReviewEnabled,
           priority: state.priority,
           description: state.description.trim(),
           design: state.design.trim(),
