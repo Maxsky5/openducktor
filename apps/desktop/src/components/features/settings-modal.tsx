@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state";
+import type { RepoAgentDefaultInput } from "@/types/state-slices";
 import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 
@@ -40,6 +41,39 @@ export function SettingsModal({
   const [trustedHooks, setTrustedHooks] = useState(false);
   const [preStartHooks, setPreStartHooks] = useState("");
   const [postCompleteHooks, setPostCompleteHooks] = useState("");
+  const [agentDefaults, setAgentDefaults] = useState(emptyRepoSettings().agentDefaults);
+
+  const ensureAgentDefault = (value: RepoAgentDefaultInput | null): RepoAgentDefaultInput =>
+    value ?? {
+      providerId: "",
+      modelId: "",
+      variant: "",
+      opencodeAgent: "",
+    };
+
+  const updateAgentDefault = (
+    role: "spec" | "planner" | "build" | "qa",
+    field: keyof RepoAgentDefaultInput,
+    value: string,
+  ): void => {
+    setAgentDefaults((current) => {
+      const next = ensureAgentDefault(current[role]);
+      return {
+        ...current,
+        [role]: {
+          ...next,
+          [field]: value,
+        },
+      };
+    });
+  };
+
+  const clearAgentDefault = (role: "spec" | "planner" | "build" | "qa"): void => {
+    setAgentDefaults((current) => ({
+      ...current,
+      [role]: null,
+    }));
+  };
 
   useEffect(() => {
     if (!open || !activeRepo) {
@@ -58,6 +92,7 @@ export function SettingsModal({
         setTrustedHooks(settings.trustedHooks);
         setPreStartHooks(toHookText(settings.preStartHooks));
         setPostCompleteHooks(toHookText(settings.postCompleteHooks));
+        setAgentDefaults(settings.agentDefaults);
       })
       .catch(() => {
         if (cancelled) {
@@ -71,6 +106,7 @@ export function SettingsModal({
         setTrustedHooks(defaults.trustedHooks);
         setPreStartHooks(toHookText(defaults.preStartHooks));
         setPostCompleteHooks(toHookText(defaults.postCompleteHooks));
+        setAgentDefaults(defaults.agentDefaults);
       })
       .finally(() => {
         if (!cancelled) {
@@ -92,6 +128,7 @@ export function SettingsModal({
         trustedHooks,
         preStartHooks: parseHookLines(preStartHooks),
         postCompleteHooks: parseHookLines(postCompleteHooks),
+        agentDefaults,
       });
 
       setOpen(false);
@@ -172,6 +209,103 @@ export function SettingsModal({
             />
           </div>
 
+          <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Agent Defaults (Per Role)</h3>
+              <p className="text-xs text-slate-600">
+                Optional defaults applied when sessions start in this repository.
+              </p>
+            </div>
+
+            {(
+              [
+                ["spec", "Spec"],
+                ["planner", "Planner"],
+                ["build", "Build"],
+                ["qa", "QA"],
+              ] as const
+            ).map(([role, label]) => {
+              const value = ensureAgentDefault(agentDefaults[role]);
+              return (
+                <div key={role} className="grid gap-2 rounded border border-slate-200 bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {label}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isLoadingConfig || isSaving}
+                      onClick={() => clearAgentDefault(role)}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <div className="grid gap-1">
+                      <Label htmlFor={`${role}-provider`} className="text-xs">
+                        Provider ID
+                      </Label>
+                      <Input
+                        id={`${role}-provider`}
+                        value={value.providerId}
+                        placeholder="openai"
+                        disabled={isLoadingConfig || isSaving}
+                        onChange={(event) =>
+                          updateAgentDefault(role, "providerId", event.currentTarget.value)
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor={`${role}-model`} className="text-xs">
+                        Model ID
+                      </Label>
+                      <Input
+                        id={`${role}-model`}
+                        value={value.modelId}
+                        placeholder="gpt-5"
+                        disabled={isLoadingConfig || isSaving}
+                        onChange={(event) =>
+                          updateAgentDefault(role, "modelId", event.currentTarget.value)
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor={`${role}-variant`} className="text-xs">
+                        Variant
+                      </Label>
+                      <Input
+                        id={`${role}-variant`}
+                        value={value.variant}
+                        placeholder="high"
+                        disabled={isLoadingConfig || isSaving}
+                        onChange={(event) =>
+                          updateAgentDefault(role, "variant", event.currentTarget.value)
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor={`${role}-agent`} className="text-xs">
+                        OpenCode Agent
+                      </Label>
+                      <Input
+                        id={`${role}-agent`}
+                        value={value.opencodeAgent}
+                        placeholder="build"
+                        disabled={isLoadingConfig || isSaving}
+                        onChange={(event) =>
+                          updateAgentDefault(role, "opencodeAgent", event.currentTarget.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -190,7 +324,7 @@ export function SettingsModal({
           <Button
             type="button"
             onClick={() => void submit()}
-            disabled={isSaving || isLoadingConfig || !activeRepo || !worktreeBasePath}
+            disabled={isSaving || isLoadingConfig || !activeRepo}
           >
             {isSaving ? "Saving..." : "Save Settings"}
           </Button>

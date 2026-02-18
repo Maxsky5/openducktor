@@ -16,4 +16,10 @@ export const emptyRepoSettings = (): RepoSettingsInput => ({
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
+  agentDefaults: {
+    spec: null,
+    planner: null,
+    build: null,
+    qa: null,
+  },
 });

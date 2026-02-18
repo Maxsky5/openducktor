@@ -16,6 +16,54 @@ export function useRepoSettingsOperations({
   activeRepo,
   refreshWorkspaces,
 }: UseRepoSettingsOperationsArgs): UseRepoSettingsOperationsResult {
+  const toInputDefault = useCallback(
+    (
+      entry:
+        | {
+            providerId: string;
+            modelId: string;
+            variant?: string | undefined;
+            opencodeAgent?: string | undefined;
+          }
+        | null
+        | undefined,
+    ) => {
+      if (!entry) {
+        return null;
+      }
+      return {
+        providerId: entry.providerId,
+        modelId: entry.modelId,
+        variant: entry.variant ?? "",
+        opencodeAgent: entry.opencodeAgent ?? "",
+      };
+    },
+    [],
+  );
+
+  const toConfigDefault = useCallback(
+    (
+      entry: {
+        providerId: string;
+        modelId: string;
+        variant: string;
+        opencodeAgent: string;
+      } | null,
+    ) => {
+      if (!entry || !entry.providerId.trim() || !entry.modelId.trim()) {
+        return undefined;
+      }
+
+      return {
+        providerId: entry.providerId.trim(),
+        modelId: entry.modelId.trim(),
+        ...(entry.variant.trim() ? { variant: entry.variant.trim() } : {}),
+        ...(entry.opencodeAgent.trim() ? { opencodeAgent: entry.opencodeAgent.trim() } : {}),
+      };
+    },
+    [],
+  );
+
   const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
     if (!activeRepo) {
       throw new Error("Select a workspace first.");
@@ -28,14 +76,25 @@ export function useRepoSettingsOperations({
       trustedHooks: config.trustedHooks,
       preStartHooks: config.hooks.preStart,
       postCompleteHooks: config.hooks.postComplete,
+      agentDefaults: {
+        spec: toInputDefault(config.agentDefaults.spec),
+        planner: toInputDefault(config.agentDefaults.planner),
+        build: toInputDefault(config.agentDefaults.build),
+        qa: toInputDefault(config.agentDefaults.qa),
+      },
     };
-  }, [activeRepo]);
+  }, [activeRepo, toInputDefault]);
 
   const saveRepoSettings = useCallback(
     async (input: RepoSettingsInput) => {
       if (!activeRepo) {
         throw new Error("Select a workspace first.");
       }
+
+      const specDefault = toConfigDefault(input.agentDefaults.spec);
+      const plannerDefault = toConfigDefault(input.agentDefaults.planner);
+      const buildDefault = toConfigDefault(input.agentDefaults.build);
+      const qaDefault = toConfigDefault(input.agentDefaults.qa);
 
       await host.workspaceUpdateRepoConfig(activeRepo, {
         worktreeBasePath: input.worktreeBasePath,
@@ -45,11 +104,17 @@ export function useRepoSettingsOperations({
           preStart: input.preStartHooks,
           postComplete: input.postCompleteHooks,
         },
+        agentDefaults: {
+          ...(specDefault ? { spec: specDefault } : {}),
+          ...(plannerDefault ? { planner: plannerDefault } : {}),
+          ...(buildDefault ? { build: buildDefault } : {}),
+          ...(qaDefault ? { qa: qaDefault } : {}),
+        },
       });
 
       await refreshWorkspaces();
     },
-    [activeRepo, refreshWorkspaces],
+    [activeRepo, refreshWorkspaces, toConfigDefault],
   );
 
   return {

@@ -136,6 +136,39 @@ const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelection | nul
   };
 };
 
+const normalizeSelectionForCatalog = (
+  catalog: AgentModelCatalog,
+  selection: AgentModelSelection | null,
+): AgentModelSelection | null => {
+  if (!selection) {
+    return null;
+  }
+
+  const model = catalog.models.find(
+    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
+  );
+  if (!model) {
+    return null;
+  }
+
+  const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
+  const hasAgent = Boolean(
+    selection.opencodeAgent &&
+      catalog.agents.some((agent) => agent.name === selection.opencodeAgent),
+  );
+
+  return {
+    providerId: model.providerId,
+    modelId: model.modelId,
+    ...(hasVariant
+      ? { variant: selection.variant }
+      : model.variants[0]
+        ? { variant: model.variants[0] }
+        : {}),
+    ...(hasAgent ? { opencodeAgent: selection.opencodeAgent } : {}),
+  };
+};
+
 const upsertMessage = (
   messages: AgentChatMessage[],
   message: AgentChatMessage,
@@ -237,6 +270,23 @@ export function useAgentOrchestratorOperations({
   const attachSessionListener = useCallback(
     (repoPath: string, sessionId: string): void => {
       const unsubscribe = adapter.subscribeEvents(sessionId, (event) => {
+        if (event.type === "session_started") {
+          updateSession(sessionId, (current) => ({
+            ...current,
+            status: "running",
+            messages: [
+              ...current.messages,
+              {
+                id: crypto.randomUUID(),
+                role: "system",
+                content: event.message,
+                timestamp: event.timestamp,
+              },
+            ],
+          }));
+          return;
+        }
+
         if (event.type === "assistant_delta") {
           updateSession(sessionId, (current) => ({
             ...current,
@@ -494,6 +544,24 @@ export function useAgentOrchestratorOperations({
     };
   }, []);
 
+  const loadRepoDefaultModel = useCallback(
+    async (repoPath: string, role: AgentRole): Promise<AgentModelSelection | null> => {
+      const config = await host.workspaceGetRepoConfig(repoPath);
+      const roleDefault = config.agentDefaults[role];
+      if (!roleDefault) {
+        return null;
+      }
+
+      return {
+        providerId: roleDefault.providerId,
+        modelId: roleDefault.modelId,
+        ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
+        ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
+      };
+    },
+    [],
+  );
+
   const ensureRuntime = useCallback(
     async (repoPath: string, taskId: string, role: AgentRole): Promise<RuntimeInfo> => {
       if (role === "build") {
@@ -512,11 +580,7 @@ export function useAgentOrchestratorOperations({
         };
       }
 
-      const runtime = await host.opencodeRuntimeStart(
-        repoPath,
-        taskId,
-        role as "spec" | "planner" | "qa",
-      );
+      const runtime = await host.opencodeRepoRuntimeEnsure(repoPath);
       return {
         runtimeId: runtime.runtimeId,
         runId: null,
@@ -612,6 +676,7 @@ export function useAgentOrchestratorOperations({
       const docs = await loadTaskDocuments(activeRepo, taskId);
       const resolvedScenario = scenario ?? inferScenario(role, task, docs);
       const runtime = await ensureRuntime(activeRepo, taskId, role);
+      const defaultModelSelection = await loadRepoDefaultModel(activeRepo, role).catch(() => null);
       const systemPrompt = buildAgentSystemPrompt({
         role,
         scenario: resolvedScenario,
@@ -664,7 +729,7 @@ export function useAgentOrchestratorOperations({
           pendingPermissions: [],
           pendingQuestions: [],
           modelCatalog: null,
-          selectedModel: null,
+          selectedModel: defaultModelSelection,
           isLoadingModelCatalog: true,
         },
       }));
@@ -680,7 +745,9 @@ export function useAgentOrchestratorOperations({
           updateSession(summary.sessionId, (current) => ({
             ...current,
             modelCatalog: catalog,
-            selectedModel: current.selectedModel ?? pickDefaultModel(catalog),
+            selectedModel:
+              normalizeSelectionForCatalog(catalog, current.selectedModel) ??
+              pickDefaultModel(catalog),
             isLoadingModelCatalog: false,
           }));
         })
@@ -712,6 +779,7 @@ export function useAgentOrchestratorOperations({
       adapter,
       attachSessionListener,
       ensureRuntime,
+      loadRepoDefaultModel,
       loadTaskDocuments,
       refreshTaskData,
       sendAgentMessage,
@@ -731,9 +799,6 @@ export function useAgentOrchestratorOperations({
       unsubscribersRef.current.delete(sessionId);
 
       await adapter.stopSession(sessionId);
-      if (session.runtimeId) {
-        await host.opencodeRuntimeStop(session.runtimeId).catch(() => ({ ok: false }));
-      }
 
       updateSession(sessionId, (current) => ({
         ...current,

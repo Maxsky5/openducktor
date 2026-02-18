@@ -191,43 +191,45 @@ export function AgentsPage(): ReactElement {
     }
   }, [activeSession, input, sendAgentMessage]);
 
-  const providerOptions = useMemo<ComboboxOption[]>(() => {
+  const agentOptions = useMemo<ComboboxOption[]>(() => {
     if (!activeSession?.modelCatalog) {
       return [];
     }
-    const providers = new Map<string, string>();
-    for (const entry of activeSession.modelCatalog.models) {
-      providers.set(entry.providerId, entry.providerName);
-    }
-    return [...providers.entries()].map(([value, label]) => ({
-      value,
-      label,
-    }));
+    return activeSession.modelCatalog.agents
+      .filter((entry) => !entry.hidden)
+      .map((entry) => ({
+        value: entry.name,
+        label: entry.name,
+        ...(entry.description ? { description: entry.description } : {}),
+      }));
   }, [activeSession?.modelCatalog]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
-    if (!activeSession?.modelCatalog || !activeSession.selectedModel) {
+    if (!activeSession?.modelCatalog) {
       return [];
     }
-    return activeSession.modelCatalog.models
-      .filter((entry) => entry.providerId === activeSession.selectedModel?.providerId)
-      .map((entry) => ({
-        value: `${entry.providerId}::${entry.modelId}`,
-        label: entry.modelName,
-        description: entry.modelId,
-        searchKeywords: entry.variants.map((variant) => `variant:${variant}`),
-      }));
+    return activeSession.modelCatalog.models.map((entry) => ({
+      value: entry.id,
+      label: entry.modelName,
+      description: `${entry.providerName} (${entry.providerId}/${entry.modelId})`,
+      searchKeywords: entry.variants.map((variant) => `variant:${variant}`),
+    }));
+  }, [activeSession?.modelCatalog]);
+
+  const selectedModelEntry = useMemo(() => {
+    if (!activeSession?.modelCatalog || !activeSession.selectedModel) {
+      return null;
+    }
+    return (
+      activeSession.modelCatalog.models.find(
+        (entry) =>
+          entry.providerId === activeSession.selectedModel?.providerId &&
+          entry.modelId === activeSession.selectedModel?.modelId,
+      ) ?? null
+    );
   }, [activeSession?.modelCatalog, activeSession?.selectedModel]);
 
   const variantOptions = useMemo(() => {
-    if (!activeSession?.modelCatalog || !activeSession.selectedModel) {
-      return [];
-    }
-    const selectedModelEntry = activeSession.modelCatalog.models.find(
-      (entry) =>
-        entry.providerId === activeSession.selectedModel?.providerId &&
-        entry.modelId === activeSession.selectedModel?.modelId,
-    );
     if (!selectedModelEntry) {
       return [];
     }
@@ -235,7 +237,7 @@ export function AgentsPage(): ReactElement {
       value: variant,
       label: variant,
     }));
-  }, [activeSession?.modelCatalog, activeSession?.selectedModel]);
+  }, [selectedModelEntry]);
 
   return (
     <div className="grid h-full min-w-0 gap-4">
@@ -335,29 +337,22 @@ export function AgentsPage(): ReactElement {
             <div className="grid gap-2 md:grid-cols-3">
               <div>
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Provider
+                  Agent
                 </p>
                 <Combobox
-                  value={activeSession.selectedModel?.providerId ?? ""}
-                  options={providerOptions}
+                  value={activeSession.selectedModel?.opencodeAgent ?? ""}
+                  options={agentOptions}
                   placeholder={
-                    activeSession.isLoadingModelCatalog ? "Loading providers..." : "Select provider"
+                    activeSession.isLoadingModelCatalog ? "Loading agents..." : "Select agent"
                   }
                   disabled={!activeSession || activeSession.isLoadingModelCatalog}
-                  onValueChange={(providerId) => {
-                    if (!activeSession.modelCatalog) {
-                      return;
-                    }
-                    const firstModel = activeSession.modelCatalog.models.find(
-                      (entry) => entry.providerId === providerId,
-                    );
-                    if (!firstModel) {
+                  onValueChange={(opencodeAgent) => {
+                    if (!activeSession.selectedModel) {
                       return;
                     }
                     updateAgentSessionModel(activeSession.sessionId, {
-                      providerId,
-                      modelId: firstModel.modelId,
-                      ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
+                      ...activeSession.selectedModel,
+                      opencodeAgent,
                     });
                   }}
                 />
@@ -369,29 +364,31 @@ export function AgentsPage(): ReactElement {
                 <Combobox
                   value={
                     activeSession.selectedModel
-                      ? `${activeSession.selectedModel.providerId}::${activeSession.selectedModel.modelId}`
+                      ? `${activeSession.selectedModel.providerId}/${activeSession.selectedModel.modelId}`
                       : ""
                   }
                   options={modelOptions}
                   placeholder={
                     activeSession.isLoadingModelCatalog ? "Loading models..." : "Select model"
                   }
-                  disabled={!activeSession.selectedModel || activeSession.isLoadingModelCatalog}
+                  disabled={activeSession.isLoadingModelCatalog}
                   onValueChange={(nextValue) => {
-                    const [providerId, modelId] = nextValue.split("::");
-                    if (!providerId || !modelId || !activeSession.modelCatalog) {
+                    if (!activeSession.modelCatalog) {
                       return;
                     }
                     const model = activeSession.modelCatalog.models.find(
-                      (entry) => entry.providerId === providerId && entry.modelId === modelId,
+                      (entry) => entry.id === nextValue,
                     );
                     if (!model) {
                       return;
                     }
                     updateAgentSessionModel(activeSession.sessionId, {
-                      providerId,
-                      modelId,
+                      providerId: model.providerId,
+                      modelId: model.modelId,
                       ...(model.variants[0] ? { variant: model.variants[0] } : {}),
+                      ...(activeSession.selectedModel?.opencodeAgent
+                        ? { opencodeAgent: activeSession.selectedModel.opencodeAgent }
+                        : {}),
                     });
                   }}
                 />
@@ -456,7 +453,11 @@ export function AgentsPage(): ReactElement {
                   <header className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     {message.role === "thinking" ? "thinking" : message.role}
                   </header>
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {message.role === "user" ? (
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  ) : (
+                    <MarkdownRenderer markdown={message.content} variant="compact" />
+                  )}
                 </article>
               ))}
 
@@ -465,7 +466,7 @@ export function AgentsPage(): ReactElement {
                   <header className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     assistant (streaming)
                   </header>
-                  <p className="whitespace-pre-wrap">{activeSession.draftAssistantText}</p>
+                  <MarkdownRenderer markdown={activeSession.draftAssistantText} variant="compact" />
                 </article>
               ) : null}
 

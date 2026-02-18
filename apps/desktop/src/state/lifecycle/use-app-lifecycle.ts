@@ -10,6 +10,7 @@ type UseAppLifecycleArgs = {
   setEvents: Dispatch<SetStateAction<RunEvent[]>>;
   refreshWorkspaces: () => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
+  ensureRepoRuntime: (repoPath: string) => Promise<unknown>;
   refreshBeadsCheckForRepo: (
     repoPath: string,
     force?: boolean,
@@ -31,6 +32,7 @@ export function useAppLifecycle({
   setEvents,
   refreshWorkspaces,
   refreshRuntimeCheck,
+  ensureRepoRuntime,
   refreshBeadsCheckForRepo,
   refreshTaskData,
   clearTaskData,
@@ -107,8 +109,9 @@ export function useAppLifecycle({
         await refreshTaskData(activeRepo);
       })(),
       refreshRuntimeCheck(false),
+      ensureRepoRuntime(activeRepo),
     ])
-      .then(([tasksResult, runtimeResult]) => {
+      .then(([tasksResult, runtimeResult, ensureRuntimeResult]) => {
         if (repoLoadVersionRef.current !== loadVersion) {
           return;
         }
@@ -122,6 +125,12 @@ export function useAppLifecycle({
         if (runtimeResult.status === "rejected") {
           toast.error("Runtime checks unavailable", {
             description: errorMessage(runtimeResult.reason),
+          });
+        }
+
+        if (ensureRuntimeResult.status === "rejected") {
+          toast.error("OpenCode server unavailable", {
+            description: errorMessage(ensureRuntimeResult.reason),
           });
         }
       })
@@ -139,6 +148,7 @@ export function useAppLifecycle({
     clearTaskData,
     hasCachedBeadsCheck,
     hasRuntimeCheck,
+    ensureRepoRuntime,
     refreshBeadsCheckForRepo,
     refreshRuntimeCheck,
     refreshTaskData,

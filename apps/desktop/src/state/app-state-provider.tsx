@@ -13,11 +13,13 @@ import {
   type PropsWithChildren,
   type ReactElement,
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
 } from "react";
 import { useAppLifecycle } from "./lifecycle/use-app-lifecycle";
+import { host } from "./operations/host";
 import { useAgentOrchestratorOperations } from "./operations/use-agent-orchestrator-operations";
 import { useChecks } from "./operations/use-checks";
 import { useDelegationOperations } from "./operations/use-delegation-operations";
@@ -44,6 +46,9 @@ const useRequiredContext = <T,>(context: Context<T | null>, name: string): T => 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
+  const ensureRepoRuntime = useCallback(async (repoPath: string): Promise<void> => {
+    await host.opencodeRepoRuntimeEnsure(repoPath);
+  }, []);
 
   const {
     runtimeCheck,
@@ -123,6 +128,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     setEvents,
     refreshWorkspaces,
     refreshRuntimeCheck,
+    ensureRepoRuntime,
     refreshBeadsCheckForRepo,
     refreshTaskData,
     clearTaskData,

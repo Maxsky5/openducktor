@@ -12,12 +12,25 @@ import type {
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openblueprint/core";
 import type { AgentSessionState } from "./agent-orchestrator";
 
+export type RepoAgentDefaultInput = {
+  providerId: string;
+  modelId: string;
+  variant: string;
+  opencodeAgent: string;
+};
+
 export type RepoSettingsInput = {
   worktreeBasePath: string;
   branchPrefix: string;
   trustedHooks: boolean;
   preStartHooks: string[];
   postCompleteHooks: string[];
+  agentDefaults: {
+    spec: RepoAgentDefaultInput | null;
+    planner: RepoAgentDefaultInput | null;
+    build: RepoAgentDefaultInput | null;
+    qa: RepoAgentDefaultInput | null;
+  };
 };
 
 export type WorkspaceStateContextValue = {
