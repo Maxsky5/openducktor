@@ -5,6 +5,8 @@ import {
   toHookText,
 } from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
+import type { ComboboxOption } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogContent,
@@ -17,11 +19,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state";
+import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
+import type { AgentModelCatalog, AgentRole } from "@openblueprint/core";
 import { Settings2 } from "lucide-react";
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 
 type SettingsModalProps = {
   triggerClassName?: string;
@@ -35,7 +40,10 @@ export function SettingsModal({
   const { activeRepo, activeWorkspace, loadRepoSettings, saveRepoSettings } = useWorkspaceState();
   const [open, setOpen] = useState(false);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [catalog, setCatalog] = useState<AgentModelCatalog | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [worktreeBasePath, setWorktreeBasePath] = useState("");
   const [branchPrefix, setBranchPrefix] = useState(DEFAULT_BRANCH_PREFIX);
   const [trustedHooks, setTrustedHooks] = useState(false);
@@ -75,42 +83,65 @@ export function SettingsModal({
     }));
   };
 
+  const selectedModelKeyForRole = (role: AgentRole): string => {
+    const value = agentDefaults[role];
+    if (!value?.providerId || !value.modelId) {
+      return "";
+    }
+    return `${value.providerId}/${value.modelId}`;
+  };
+
+  const findCatalogModel = (modelKey: string) => {
+    return catalog?.models.find((entry) => entry.id === modelKey) ?? null;
+  };
+
   useEffect(() => {
     if (!open || !activeRepo) {
       return;
     }
 
     let cancelled = false;
+    setCatalogError(null);
+    setCatalog(null);
     setIsLoadingConfig(true);
-    void loadRepoSettings()
-      .then((settings) => {
+    setIsLoadingCatalog(true);
+    void Promise.allSettled([loadRepoSettings(), loadRepoOpencodeCatalog(activeRepo)])
+      .then(([settingsResult, catalogResult]) => {
         if (cancelled) {
           return;
         }
-        setWorktreeBasePath(settings.worktreeBasePath);
-        setBranchPrefix(settings.branchPrefix);
-        setTrustedHooks(settings.trustedHooks);
-        setPreStartHooks(toHookText(settings.preStartHooks));
-        setPostCompleteHooks(toHookText(settings.postCompleteHooks));
-        setAgentDefaults(settings.agentDefaults);
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
+
+        if (settingsResult.status === "fulfilled") {
+          const settings = settingsResult.value;
+          setWorktreeBasePath(settings.worktreeBasePath);
+          setBranchPrefix(settings.branchPrefix);
+          setTrustedHooks(settings.trustedHooks);
+          setPreStartHooks(toHookText(settings.preStartHooks));
+          setPostCompleteHooks(toHookText(settings.postCompleteHooks));
+          setAgentDefaults(settings.agentDefaults);
+        } else {
+          const defaults = emptyRepoSettings();
+          setWorktreeBasePath(
+            activeWorkspace?.configuredWorktreeBasePath ?? defaults.worktreeBasePath,
+          );
+          setBranchPrefix(defaults.branchPrefix);
+          setTrustedHooks(defaults.trustedHooks);
+          setPreStartHooks(toHookText(defaults.preStartHooks));
+          setPostCompleteHooks(toHookText(defaults.postCompleteHooks));
+          setAgentDefaults(defaults.agentDefaults);
         }
-        const defaults = emptyRepoSettings();
-        setWorktreeBasePath(
-          activeWorkspace?.configuredWorktreeBasePath ?? defaults.worktreeBasePath,
-        );
-        setBranchPrefix(defaults.branchPrefix);
-        setTrustedHooks(defaults.trustedHooks);
-        setPreStartHooks(toHookText(defaults.preStartHooks));
-        setPostCompleteHooks(toHookText(defaults.postCompleteHooks));
-        setAgentDefaults(defaults.agentDefaults);
+
+        if (catalogResult.status === "fulfilled") {
+          setCatalog(catalogResult.value);
+        } else {
+          setCatalog(null);
+          setCatalogError(errorMessage(catalogResult.reason));
+        }
       })
       .finally(() => {
         if (!cancelled) {
           setIsLoadingConfig(false);
+          setIsLoadingCatalog(false);
         }
       });
 
@@ -118,6 +149,42 @@ export function SettingsModal({
       cancelled = true;
     };
   }, [activeRepo, activeWorkspace, loadRepoSettings, open]);
+
+  const modelOptions = useMemo<ComboboxOption[]>(() => {
+    if (!catalog) {
+      return [];
+    }
+    return catalog.models.map((entry) => ({
+      value: entry.id,
+      label: entry.modelName,
+      description: entry.modelId,
+      searchKeywords: [entry.modelId, ...entry.variants.map((variant) => `variant:${variant}`)],
+    }));
+  }, [catalog]);
+
+  const agentOptions = useMemo<ComboboxOption[]>(() => {
+    if (!catalog) {
+      return [];
+    }
+    return catalog.agents
+      .filter((entry) => !entry.hidden)
+      .map((entry) => ({
+        value: entry.name,
+        label: entry.name,
+        ...(entry.description ? { description: entry.description } : {}),
+      }));
+  }, [catalog]);
+
+  const variantOptionsForRole = (role: AgentRole): ComboboxOption[] => {
+    const model = findCatalogModel(selectedModelKeyForRole(role));
+    if (!model) {
+      return [];
+    }
+    return model.variants.map((variant) => ({
+      value: variant,
+      label: variant,
+    }));
+  };
 
   const submit = async (): Promise<void> => {
     setIsSaving(true);
@@ -145,15 +212,15 @@ export function SettingsModal({
           Settings
         </Button>
       </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden p-0">
+        <DialogHeader className="border-b border-slate-200 px-6 pb-4 pt-6">
           <DialogTitle>Workspace Settings</DialogTitle>
           <DialogDescription>
             Settings are stored in <code>~/.openblueprint/config.json</code>.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 pt-2">
+        <div className="grid flex-1 gap-4 overflow-y-auto px-6 py-4">
           {!activeRepo ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               Select or add a workspace first, then save settings for that repository.
@@ -216,6 +283,16 @@ export function SettingsModal({
                 Optional defaults applied when sessions start in this repository.
               </p>
             </div>
+            {isLoadingCatalog ? (
+              <p className="text-xs text-slate-600">
+                Loading available agents/models from OpenCode...
+              </p>
+            ) : null}
+            {catalogError ? (
+              <p className="text-xs text-amber-700">
+                Failed to load OpenCode values: {catalogError}
+              </p>
+            ) : null}
 
             {(
               [
@@ -226,6 +303,8 @@ export function SettingsModal({
               ] as const
             ).map(([role, label]) => {
               const value = ensureAgentDefault(agentDefaults[role]);
+              const roleVariantOptions = variantOptionsForRole(role);
+              const modelKey = selectedModelKeyForRole(role);
               return (
                 <div key={role} className="grid gap-2 rounded border border-slate-200 bg-white p-3">
                   <div className="flex items-center justify-between">
@@ -245,59 +324,64 @@ export function SettingsModal({
 
                   <div className="grid gap-2 md:grid-cols-2">
                     <div className="grid gap-1">
-                      <Label htmlFor={`${role}-provider`} className="text-xs">
-                        Provider ID
-                      </Label>
-                      <Input
-                        id={`${role}-provider`}
-                        value={value.providerId}
-                        placeholder="openai"
-                        disabled={isLoadingConfig || isSaving}
-                        onChange={(event) =>
-                          updateAgentDefault(role, "providerId", event.currentTarget.value)
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-1">
-                      <Label htmlFor={`${role}-model`} className="text-xs">
-                        Model ID
-                      </Label>
-                      <Input
-                        id={`${role}-model`}
-                        value={value.modelId}
-                        placeholder="gpt-5"
-                        disabled={isLoadingConfig || isSaving}
-                        onChange={(event) =>
-                          updateAgentDefault(role, "modelId", event.currentTarget.value)
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-1">
-                      <Label htmlFor={`${role}-variant`} className="text-xs">
-                        Variant
-                      </Label>
-                      <Input
-                        id={`${role}-variant`}
-                        value={value.variant}
-                        placeholder="high"
-                        disabled={isLoadingConfig || isSaving}
-                        onChange={(event) =>
-                          updateAgentDefault(role, "variant", event.currentTarget.value)
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-1">
-                      <Label htmlFor={`${role}-agent`} className="text-xs">
-                        OpenCode Agent
-                      </Label>
-                      <Input
-                        id={`${role}-agent`}
+                      <Label className="text-xs">OpenCode Agent</Label>
+                      <Combobox
                         value={value.opencodeAgent}
-                        placeholder="build"
-                        disabled={isLoadingConfig || isSaving}
-                        onChange={(event) =>
-                          updateAgentDefault(role, "opencodeAgent", event.currentTarget.value)
+                        options={agentOptions}
+                        placeholder={
+                          !modelKey
+                            ? "Select model first"
+                            : isLoadingCatalog
+                              ? "Loading agents..."
+                              : "Select agent"
                         }
+                        disabled={
+                          isLoadingCatalog || isSaving || agentOptions.length === 0 || !modelKey
+                        }
+                        onValueChange={(opencodeAgent) =>
+                          updateAgentDefault(role, "opencodeAgent", opencodeAgent)
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label className="text-xs">Model</Label>
+                      <Combobox
+                        value={modelKey}
+                        options={modelOptions}
+                        placeholder={isLoadingCatalog ? "Loading models..." : "Select model"}
+                        disabled={isLoadingCatalog || isSaving || modelOptions.length === 0}
+                        onValueChange={(selectedModelKey) => {
+                          const model = findCatalogModel(selectedModelKey);
+                          if (!model) {
+                            return;
+                          }
+                          setAgentDefaults((current) => ({
+                            ...current,
+                            [role]: {
+                              ...ensureAgentDefault(current[role]),
+                              providerId: model.providerId,
+                              modelId: model.modelId,
+                              variant: model.variants[0] ?? "",
+                            },
+                          }));
+                        }}
+                      />
+                    </div>
+                    <div className="grid gap-1 md:col-span-2">
+                      <Label className="text-xs">Variant</Label>
+                      <Combobox
+                        value={value.variant}
+                        options={roleVariantOptions}
+                        placeholder={
+                          roleVariantOptions.length > 0 ? "Select variant" : "No variants for model"
+                        }
+                        disabled={
+                          isLoadingCatalog ||
+                          isSaving ||
+                          !modelKey ||
+                          roleVariantOptions.length === 0
+                        }
+                        onValueChange={(variant) => updateAgentDefault(role, "variant", variant)}
                       />
                     </div>
                   </div>
@@ -317,7 +401,7 @@ export function SettingsModal({
           </label>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="border-t border-slate-200 px-6 pb-6 pt-4">
           <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
             Cancel
           </Button>

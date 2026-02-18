@@ -711,7 +711,7 @@ export function useAgentOrchestratorOperations({
           taskId,
           role,
           scenario: resolvedScenario,
-          status: "idle",
+          status: "starting",
           startedAt: summary.startedAt,
           runtimeId: runtime.runtimeId,
           runId: runtime.runId,
