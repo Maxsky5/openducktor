@@ -400,6 +400,10 @@ export function AgentsPage(): ReactElement {
   }, [activeRepo, activeSession, autostart, role, scenario, startSession, taskId]);
 
   const onSend = useCallback(async (): Promise<void> => {
+    if (isSending || isStarting) {
+      return;
+    }
+
     const message = input.trim();
     if (!message || !taskId) {
       return;
@@ -429,7 +433,16 @@ export function AgentsPage(): ReactElement {
     } finally {
       setIsSending(false);
     }
-  }, [activeSession, input, isComposingNewSession, sendAgentMessage, startSession, taskId]);
+  }, [
+    activeSession,
+    input,
+    isComposingNewSession,
+    isSending,
+    isStarting,
+    sendAgentMessage,
+    startSession,
+    taskId,
+  ]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
     return toPrimaryAgentOptions(activeSession?.modelCatalog ?? null);
@@ -744,7 +757,6 @@ export function AgentsPage(): ReactElement {
               <Textarea
                 placeholder="# for agents · @ for files · / for commands"
                 value={input}
-                disabled={!taskId || isSending || isStarting}
                 className="min-h-24 resize-none"
                 onChange={(event) => setInput(event.currentTarget.value)}
                 onKeyDown={(event) => {

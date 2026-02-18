@@ -397,7 +397,12 @@ const readStringProp = (payload: Record<string, unknown>, keys: string[]): strin
 };
 
 const normalizePartDeltaField = (field: string): string => {
-  if (field === "reasoning_content" || field === "reasoning_details") {
+  if (
+    field === "reasoning_content" ||
+    field === "reasoning_details" ||
+    field === "reasoningContent" ||
+    field === "reasoningDetails"
+  ) {
     return "text";
   }
   return field;
@@ -803,6 +808,19 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     });
     const responseData = unwrapData(response, "prompt session");
 
+    for (const responsePart of responseData.parts) {
+      const mappedPart = mapPartToAgentStreamPart(responsePart);
+      if (!mappedPart) {
+        continue;
+      }
+      this.emit(session.summary.sessionId, {
+        type: "assistant_part",
+        sessionId: session.summary.sessionId,
+        timestamp: this.now(),
+        part: mappedPart,
+      });
+    }
+
     const assistantMessage = readTextFromParts(responseData.parts);
     const parsed = sanitizeAssistantMessage(assistantMessage);
     if (parsed.visible) {
@@ -924,7 +942,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
 
       if (event.type === "message.part.delta") {
         const deltaEvent = event.properties as Record<string, unknown>;
-        const partId = readStringProp(deltaEvent, ["partID", "partId"]) ?? "";
+        const partId = readStringProp(deltaEvent, ["partID", "partId", "part_id"]) ?? "";
         const field = readStringProp(deltaEvent, ["field"]) ?? "";
         const delta = typeof deltaEvent.delta === "string" ? deltaEvent.delta : "";
         const knownPart = partId ? partsById.get(partId) : undefined;
@@ -987,6 +1005,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         const removedPartId = readStringProp(event.properties as Record<string, unknown>, [
           "partID",
           "partId",
+          "part_id",
         ]);
         if (removedPartId) {
           partsById.delete(removedPartId);
@@ -1065,7 +1084,12 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
 
   private isRelevantEvent(externalSessionId: string, event: Event): boolean {
     const properties = event.properties as Record<string, unknown>;
-    const directSessionId = readStringProp(properties, ["sessionID", "sessionId", "session"]);
+    const directSessionId = readStringProp(properties, [
+      "sessionID",
+      "sessionId",
+      "session_id",
+      "session",
+    ]);
     if (directSessionId) {
       return directSessionId === externalSessionId;
     }
@@ -1073,7 +1097,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     if ("part" in properties) {
       const part = properties.part as Record<string, unknown> | undefined;
       if (part && typeof part === "object") {
-        const partSessionId = readStringProp(part, ["sessionID", "sessionId"]);
+        const partSessionId = readStringProp(part, ["sessionID", "sessionId", "session_id"]);
         if (partSessionId) {
           return partSessionId === externalSessionId;
         }
@@ -1083,7 +1107,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     if ("info" in properties) {
       const info = properties.info as Record<string, unknown> | undefined;
       if (info && typeof info === "object") {
-        const infoSessionId = readStringProp(info, ["sessionID", "sessionId"]);
+        const infoSessionId = readStringProp(info, ["sessionID", "sessionId", "session_id"]);
         if (infoSessionId) {
           return infoSessionId === externalSessionId;
         }

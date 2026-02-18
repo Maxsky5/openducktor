@@ -325,6 +325,61 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("sendUserMessage emits mapped assistant parts from prompt response", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({
+      promptQueue: [
+        {
+          info: { id: "assistant-1" },
+          parts: [
+            {
+              id: "reason-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "reasoning",
+              text: "Reasoning trace",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+            {
+              id: "text-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "text",
+              text: "Assistant output",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter);
+
+    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event as { type: string; part?: { kind: string; text?: string } });
+    });
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Produce response with reasoning",
+    });
+
+    expect(
+      events.some(
+        (event) =>
+          event.type === "assistant_part" &&
+          event.part?.kind === "reasoning" &&
+          event.part.text === "Reasoning trace",
+      ),
+    ).toBe(true);
+    expect(events.some((event) => event.type === "assistant_message")).toBe(true);
+  });
+
   test("rejects workflow tool calls that are not allowed for the session role", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({
@@ -518,6 +573,55 @@ describe("OpencodeSdkAdapter", () => {
     expect(reasoningUpdates).toHaveLength(2);
     expect(reasoningUpdates[1]?.part?.text).toBe("Inspecting constraints");
     expect(events.some((event) => event.type === "assistant_delta")).toBe(false);
+  });
+
+  test("event stream accepts snake_case session and part identifiers", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({
+      streamEvents: [
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-reasoning",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "reasoning",
+              text: "",
+              time: { start: Date.now() },
+            },
+          },
+        } as Event,
+        {
+          type: "message.part.delta",
+          properties: {
+            session_id: "session-opencode-1",
+            message_id: "assistant-1",
+            part_id: "part-reasoning",
+            field: "reasoning_details",
+            delta: "Snake case reasoning",
+          },
+        } as Event,
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event as { type: string; part?: { kind: string; text?: string } });
+    });
+
+    await startDefaultSession(adapter);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const reasoningUpdates = events.filter(
+      (event) => event.type === "assistant_part" && event.part?.kind === "reasoning",
+    );
+    expect(reasoningUpdates).toHaveLength(2);
+    expect(reasoningUpdates[1]?.part?.text).toBe("Snake case reasoning");
   });
 
   test("startSession defaults to external session id when none provided", async () => {

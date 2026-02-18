@@ -627,6 +627,7 @@ export function useAgentOrchestratorOperations({
 
         if (event.type === "assistant_part") {
           const part = event.part;
+          const streamMessageKey = `${part.messageId}:${part.partId}`;
           if (part.kind === "text") {
             if (!part.synthetic) {
               draftSourceBySessionRef.current[sessionId] = "part";
@@ -651,7 +652,7 @@ export function useAgentOrchestratorOperations({
                 ...current,
                 status: "running",
                 messages: upsertMessage(current.messages, {
-                  id: `thinking:${part.partId}`,
+                  id: `thinking:${streamMessageKey}`,
                   role: "thinking",
                   content: part.text,
                   timestamp: event.timestamp,
@@ -674,7 +675,7 @@ export function useAgentOrchestratorOperations({
                 ...current,
                 status: "running",
                 messages: upsertMessage(current.messages, {
-                  id: `tool:${part.partId}`,
+                  id: `tool:${streamMessageKey}`,
                   role: "tool",
                   content: formatToolContent(part),
                   timestamp: event.timestamp,
@@ -703,7 +704,7 @@ export function useAgentOrchestratorOperations({
                 ...current,
                 status: "running",
                 messages: upsertMessage(current.messages, {
-                  id: `step:${part.partId}`,
+                  id: `step:${streamMessageKey}`,
                   role: "system",
                   content:
                     part.phase === "start"
@@ -731,7 +732,7 @@ export function useAgentOrchestratorOperations({
                 ...current,
                 status: "running",
                 messages: upsertMessage(current.messages, {
-                  id: `subtask:${part.partId}`,
+                  id: `subtask:${streamMessageKey}`,
                   role: "system",
                   content: `Subtask (${part.agent}): ${part.description}`,
                   timestamp: event.timestamp,
@@ -773,14 +774,14 @@ export function useAgentOrchestratorOperations({
           updateSession(sessionId, (current) => ({
             ...current,
             messages: upsertMessage(current.messages, {
-              id: `workflow-tool-call:${event.timestamp}:${event.call.tool}`,
+              id: crypto.randomUUID(),
               role: "tool",
               content: `Workflow tool call: ${event.call.tool}`,
               timestamp: event.timestamp,
               meta: {
                 kind: "tool",
-                partId: `workflow-tool-call:${event.call.tool}`,
-                callId: `workflow-tool-call:${event.call.tool}`,
+                partId: crypto.randomUUID(),
+                callId: crypto.randomUUID(),
                 tool: event.call.tool,
                 status: "pending",
                 input: event.call.args as Record<string, unknown>,
@@ -794,14 +795,14 @@ export function useAgentOrchestratorOperations({
           updateSession(sessionId, (current) => ({
             ...current,
             messages: upsertMessage(current.messages, {
-              id: `workflow-tool-result:${event.timestamp}:${event.tool}`,
+              id: crypto.randomUUID(),
               role: "tool",
               content: `${event.tool}: ${event.success ? "success" : "error"} - ${event.message}`,
               timestamp: event.timestamp,
               meta: {
                 kind: "tool",
-                partId: `workflow-tool-result:${event.tool}`,
-                callId: `workflow-tool-result:${event.tool}`,
+                partId: crypto.randomUUID(),
+                callId: crypto.randomUUID(),
                 tool: event.tool,
                 status: event.success ? "completed" : "error",
                 ...(event.success ? { output: event.message } : { error: event.message }),
