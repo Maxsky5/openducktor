@@ -19,6 +19,25 @@ export type AgentToolName =
   | "qa_approved"
   | "qa_rejected";
 
+export type AgentModelSelection = {
+  providerId: string;
+  modelId: string;
+  variant?: string;
+};
+
+export type AgentModelDescriptor = {
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  modelName: string;
+  variants: string[];
+};
+
+export type AgentModelCatalog = {
+  models: AgentModelDescriptor[];
+  defaultModelsByProvider: Record<string, string>;
+};
+
 export type AgentToolCall =
   | {
       tool: "set_spec";
@@ -76,6 +95,75 @@ export type AgentSessionContext = {
   scenario: AgentScenario;
   systemPrompt: string;
   baseUrl: string;
+  model?: AgentModelSelection;
+};
+
+export type AgentStreamPart =
+  | {
+      kind: "text";
+      messageId: string;
+      partId: string;
+      text: string;
+      synthetic?: boolean;
+      completed: boolean;
+    }
+  | {
+      kind: "reasoning";
+      messageId: string;
+      partId: string;
+      text: string;
+      completed: boolean;
+    }
+  | {
+      kind: "tool";
+      messageId: string;
+      partId: string;
+      callId: string;
+      tool: string;
+      status: "pending" | "running" | "completed" | "error";
+      title?: string;
+      input?: Record<string, unknown>;
+      output?: string;
+      error?: string;
+    }
+  | {
+      kind: "step";
+      messageId: string;
+      partId: string;
+      phase: "start" | "finish";
+      reason?: string;
+      cost?: number;
+    }
+  | {
+      kind: "subtask";
+      messageId: string;
+      partId: string;
+      agent: string;
+      prompt: string;
+      description: string;
+    };
+
+export type AgentSessionStatus =
+  | {
+      type: "busy";
+    }
+  | {
+      type: "idle";
+    }
+  | {
+      type: "retry";
+      attempt: number;
+      message: string;
+      nextEpochMs: number;
+    };
+
+export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
+
+export const AGENT_ROLE_TOOL_POLICY: AgentRoleToolPolicy = {
+  spec: ["set_spec"],
+  planner: ["set_plan"],
+  build: ["build_blocked", "build_resumed", "build_completed"],
+  qa: ["qa_approved", "qa_rejected"],
 };
 
 export type AgentEvent =
@@ -96,6 +184,12 @@ export type AgentEvent =
       sessionId: string;
       timestamp: string;
       message: string;
+    }
+  | {
+      type: "assistant_part";
+      sessionId: string;
+      timestamp: string;
+      part: AgentStreamPart;
     }
   | {
       type: "tool_call";
@@ -134,6 +228,12 @@ export type AgentEvent =
       }>;
     }
   | {
+      type: "session_status";
+      sessionId: string;
+      timestamp: string;
+      status: AgentSessionStatus;
+    }
+  | {
       type: "session_error";
       sessionId: string;
       timestamp: string;
@@ -150,4 +250,3 @@ export type AgentEvent =
       timestamp: string;
       message: string;
     };
-

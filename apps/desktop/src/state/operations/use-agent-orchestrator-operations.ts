@@ -1,8 +1,14 @@
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { OpencodeSdkAdapter } from "@openblueprint/adapters-opencode-sdk";
 import type { RunSummary, TaskCard } from "@openblueprint/contracts";
-import { type AgentRole, type AgentScenario, buildAgentSystemPrompt } from "@openblueprint/core";
+import {
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  type AgentRole,
+  type AgentScenario,
+  buildAgentSystemPrompt,
+} from "@openblueprint/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";
@@ -20,9 +26,11 @@ type UseAgentOrchestratorOperationsResult = {
     taskId: string;
     role: AgentRole;
     scenario?: AgentScenario;
+    sendKickoff?: boolean;
   }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
+  updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   replyAgentPermission: (
     sessionId: string,
     requestId: string,
@@ -37,78 +45,6 @@ type RuntimeInfo = {
   runId: string | null;
   baseUrl: string;
   workingDirectory: string;
-};
-
-const SESSION_AUTO_PROMPT: Record<AgentRole, Record<AgentScenario, string>> = {
-  spec: {
-    spec_initial: "Create the first complete specification revision and emit set_spec when ready.",
-    spec_revision:
-      "Revise the specification based on available context and emit set_spec with the updated markdown.",
-    planner_initial:
-      "Create the first complete specification revision and emit set_spec when ready.",
-    planner_revision:
-      "Revise the specification based on available context and emit set_spec with the updated markdown.",
-    build_implementation_start:
-      "Create the first complete specification revision and emit set_spec when ready.",
-    build_after_qa_rejected:
-      "Create the first complete specification revision and emit set_spec when ready.",
-    build_after_human_request_changes:
-      "Create the first complete specification revision and emit set_spec when ready.",
-    qa_review: "Create the first complete specification revision and emit set_spec when ready.",
-  },
-  planner: {
-    planner_initial:
-      "Create the first implementation plan now and emit set_plan with concrete execution steps.",
-    planner_revision:
-      "Revise the implementation plan now and emit set_plan with updated scope and sequencing.",
-    spec_initial:
-      "Create the first implementation plan now and emit set_plan with concrete execution steps.",
-    spec_revision:
-      "Create the first implementation plan now and emit set_plan with concrete execution steps.",
-    build_implementation_start:
-      "Create the first implementation plan now and emit set_plan with concrete execution steps.",
-    build_after_qa_rejected:
-      "Create the first implementation plan now and emit set_plan with concrete execution steps.",
-    build_after_human_request_changes:
-      "Create the first implementation plan now and emit set_plan with concrete execution steps.",
-    qa_review:
-      "Create the first implementation plan now and emit set_plan with concrete execution steps.",
-  },
-  build: {
-    build_implementation_start:
-      "Start implementing now. Use build_blocked/build_completed as the task progresses.",
-    build_after_qa_rejected:
-      "Address the QA rejection findings now, then emit build_completed with a rework summary.",
-    build_after_human_request_changes:
-      "Apply requested human review changes now, then emit build_completed with an updated summary.",
-    spec_initial:
-      "Start implementing now. Use build_blocked/build_completed as the task progresses.",
-    spec_revision:
-      "Start implementing now. Use build_blocked/build_completed as the task progresses.",
-    planner_initial:
-      "Start implementing now. Use build_blocked/build_completed as the task progresses.",
-    planner_revision:
-      "Start implementing now. Use build_blocked/build_completed as the task progresses.",
-    qa_review: "Start implementing now. Use build_blocked/build_completed as the task progresses.",
-  },
-  qa: {
-    qa_review:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-    spec_initial:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-    spec_revision:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-    planner_initial:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-    planner_revision:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-    build_implementation_start:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-    build_after_qa_rejected:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-    build_after_human_request_changes:
-      "Run QA review now. Emit qa_approved or qa_rejected with a complete markdown report.",
-  },
 };
 
 const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
@@ -147,6 +83,94 @@ const inferScenario = (
   }
 
   return "build_implementation_start";
+};
+
+const kickoffPrompt = (role: AgentRole, scenario: AgentScenario): string => {
+  if (role === "spec") {
+    return scenario === "spec_revision"
+      ? "Revise the current specification and call set_spec with the updated markdown."
+      : "Write the initial specification and call set_spec with complete markdown.";
+  }
+  if (role === "planner") {
+    return scenario === "planner_revision"
+      ? "Revise the current implementation plan and call set_plan with the updated markdown."
+      : "Create the initial implementation plan and call set_plan with concrete execution steps.";
+  }
+  if (role === "qa") {
+    return "Perform QA review now and call qa_approved or qa_rejected exactly once with a complete report.";
+  }
+  if (scenario === "build_after_qa_rejected") {
+    return "Address all QA rejection findings and call build_completed with a concise rework summary.";
+  }
+  if (scenario === "build_after_human_request_changes") {
+    return "Apply all human-requested changes and call build_completed with a concise summary.";
+  }
+  return "Start implementation now and use build_blocked/build_resumed/build_completed as progress changes.";
+};
+
+const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelection | null => {
+  if (catalog.models.length === 0) {
+    return null;
+  }
+
+  for (const model of catalog.models) {
+    const providerDefault = catalog.defaultModelsByProvider[model.providerId];
+    if (providerDefault && providerDefault === model.modelId) {
+      return {
+        providerId: model.providerId,
+        modelId: model.modelId,
+        ...(model.variants[0] ? { variant: model.variants[0] } : {}),
+      };
+    }
+  }
+
+  const first = catalog.models[0];
+  if (!first) {
+    return null;
+  }
+
+  return {
+    providerId: first.providerId,
+    modelId: first.modelId,
+    ...(first.variants[0] ? { variant: first.variants[0] } : {}),
+  };
+};
+
+const upsertMessage = (
+  messages: AgentChatMessage[],
+  message: AgentChatMessage,
+): AgentChatMessage[] => {
+  const index = messages.findIndex((entry) => entry.id === message.id);
+  if (index < 0) {
+    return [...messages, message];
+  }
+
+  const next = [...messages];
+  next[index] = {
+    ...next[index],
+    ...message,
+  };
+  return next;
+};
+
+const formatToolContent = (part: {
+  tool: string;
+  status: "pending" | "running" | "completed" | "error";
+  title?: string;
+  output?: string;
+  error?: string;
+}): string => {
+  const title = part.title ? ` (${part.title})` : "";
+  if (part.status === "completed") {
+    return `Tool ${part.tool}${title} completed${part.output ? `\n\n${part.output}` : ""}`;
+  }
+  if (part.status === "error") {
+    return `Tool ${part.tool}${title} failed${part.error ? `\n\n${part.error}` : ""}`;
+  }
+  if (part.status === "running") {
+    return `Tool ${part.tool}${title} running...`;
+  }
+  return `Tool ${part.tool}${title} queued...`;
 };
 
 export function useAgentOrchestratorOperations({
@@ -216,8 +240,82 @@ export function useAgentOrchestratorOperations({
         if (event.type === "assistant_delta") {
           updateSession(sessionId, (current) => ({
             ...current,
+            status: "running",
             draftAssistantText: `${current.draftAssistantText}${event.delta}`,
           }));
+          return;
+        }
+
+        if (event.type === "assistant_part") {
+          const part = event.part;
+          if (part.kind === "text") {
+            if (!part.synthetic) {
+              updateSession(sessionId, (current) => ({
+                ...current,
+                status: "running",
+                draftAssistantText: part.text,
+              }));
+            }
+            return;
+          }
+
+          if (part.kind === "reasoning") {
+            updateSession(sessionId, (current) => ({
+              ...current,
+              status: "running",
+              messages: upsertMessage(current.messages, {
+                id: `thinking:${part.partId}`,
+                role: "thinking",
+                content: part.text,
+                timestamp: event.timestamp,
+              }),
+            }));
+            return;
+          }
+
+          if (part.kind === "tool") {
+            updateSession(sessionId, (current) => ({
+              ...current,
+              status: "running",
+              messages: upsertMessage(current.messages, {
+                id: `tool:${part.partId}`,
+                role: "tool",
+                content: formatToolContent(part),
+                timestamp: event.timestamp,
+              }),
+            }));
+            return;
+          }
+
+          if (part.kind === "step") {
+            updateSession(sessionId, (current) => ({
+              ...current,
+              status: "running",
+              messages: upsertMessage(current.messages, {
+                id: `step:${part.partId}`,
+                role: "system",
+                content:
+                  part.phase === "start"
+                    ? "Agent step started"
+                    : `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
+                timestamp: event.timestamp,
+              }),
+            }));
+            return;
+          }
+
+          if (part.kind === "subtask") {
+            updateSession(sessionId, (current) => ({
+              ...current,
+              status: "running",
+              messages: upsertMessage(current.messages, {
+                id: `subtask:${part.partId}`,
+                role: "system",
+                content: `Subtask (${part.agent}): ${part.description}`,
+                timestamp: event.timestamp,
+              }),
+            }));
+          }
           return;
         }
 
@@ -246,7 +344,7 @@ export function useAgentOrchestratorOperations({
               {
                 id: crypto.randomUUID(),
                 role: "system",
-                content: `Tool call: ${event.call.tool}`,
+                content: `Workflow tool call: ${event.call.tool}`,
                 timestamp: event.timestamp,
               },
             ],
@@ -270,6 +368,36 @@ export function useAgentOrchestratorOperations({
           if (event.success) {
             void refreshTaskData(repoPath).catch(() => undefined);
           }
+          return;
+        }
+
+        if (event.type === "session_status") {
+          const status = event.status;
+          if (status.type === "busy") {
+            updateSession(sessionId, (current) => ({
+              ...current,
+              status: "running",
+            }));
+            return;
+          }
+          if (status.type === "retry") {
+            updateSession(sessionId, (current) => ({
+              ...current,
+              status: "running",
+              messages: upsertMessage(current.messages, {
+                id: `retry:${status.attempt}`,
+                role: "system",
+                content: `Retry ${status.attempt}: ${status.message}`,
+                timestamp: event.timestamp,
+              }),
+            }));
+            return;
+          }
+          updateSession(sessionId, (current) => ({
+            ...current,
+            status: "idle",
+            draftAssistantText: "",
+          }));
           return;
         }
 
@@ -406,6 +534,9 @@ export function useAgentOrchestratorOperations({
         return;
       }
 
+      const session = sessionsRef.current[sessionId];
+      const selectedModel = session?.selectedModel ?? undefined;
+
       updateSession(sessionId, (current) => ({
         ...current,
         status: "running",
@@ -421,7 +552,11 @@ export function useAgentOrchestratorOperations({
       }));
 
       try {
-        await adapter.sendUserMessage({ sessionId, content: trimmed });
+        await adapter.sendUserMessage({
+          sessionId,
+          content: trimmed,
+          ...(selectedModel ? { model: selectedModel } : {}),
+        });
       } catch (error) {
         updateSession(sessionId, (current) => ({
           ...current,
@@ -447,10 +582,12 @@ export function useAgentOrchestratorOperations({
       taskId,
       role,
       scenario,
+      sendKickoff = false,
     }: {
       taskId: string;
       role: AgentRole;
       scenario?: AgentScenario;
+      sendKickoff?: boolean;
     }): Promise<string> => {
       if (!activeRepo) {
         throw new Error("Select a workspace first.");
@@ -509,7 +646,7 @@ export function useAgentOrchestratorOperations({
           taskId,
           role,
           scenario: resolvedScenario,
-          status: summary.status,
+          status: "idle",
           startedAt: summary.startedAt,
           runtimeId: runtime.runtimeId,
           runId: runtime.runId,
@@ -526,14 +663,47 @@ export function useAgentOrchestratorOperations({
           draftAssistantText: "",
           pendingPermissions: [],
           pendingQuestions: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: true,
         },
       }));
 
       attachSessionListener(activeRepo, summary.sessionId);
 
-      const kickoff = SESSION_AUTO_PROMPT[role][resolvedScenario];
-      await sendAgentMessage(summary.sessionId, kickoff);
-      await refreshTaskData(activeRepo);
+      void adapter
+        .listAvailableModels({
+          baseUrl: runtime.baseUrl,
+          workingDirectory: runtime.workingDirectory,
+        })
+        .then((catalog) => {
+          updateSession(summary.sessionId, (current) => ({
+            ...current,
+            modelCatalog: catalog,
+            selectedModel: current.selectedModel ?? pickDefaultModel(catalog),
+            isLoadingModelCatalog: false,
+          }));
+        })
+        .catch((error) => {
+          updateSession(summary.sessionId, (current) => ({
+            ...current,
+            isLoadingModelCatalog: false,
+            messages: [
+              ...current.messages,
+              {
+                id: crypto.randomUUID(),
+                role: "system",
+                content: `Model catalog unavailable: ${errorMessage(error)}`,
+                timestamp: now(),
+              },
+            ],
+          }));
+        });
+
+      if (sendKickoff) {
+        await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario));
+        await refreshTaskData(activeRepo);
+      }
 
       return summary.sessionId;
     },
@@ -545,6 +715,7 @@ export function useAgentOrchestratorOperations({
       loadTaskDocuments,
       refreshTaskData,
       sendAgentMessage,
+      updateSession,
     ],
   );
 
@@ -571,6 +742,16 @@ export function useAgentOrchestratorOperations({
       }));
     },
     [adapter, updateSession],
+  );
+
+  const updateAgentSessionModel = useCallback(
+    (sessionId: string, selection: AgentModelSelection | null): void => {
+      updateSession(sessionId, (current) => ({
+        ...current,
+        selectedModel: selection,
+      }));
+    },
+    [updateSession],
   );
 
   const replyAgentPermission = useCallback(
@@ -640,6 +821,7 @@ export function useAgentOrchestratorOperations({
     },
     sendAgentMessage,
     stopAgentSession,
+    updateAgentSessionModel,
     replyAgentPermission,
     answerAgentQuestion,
   };

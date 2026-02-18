@@ -9,7 +9,7 @@ import type {
   TaskUpdatePatch,
   WorkspaceRecord,
 } from "@openblueprint/contracts";
-import type { AgentRole, AgentScenario } from "@openblueprint/core";
+import type { AgentModelSelection, AgentRole, AgentScenario } from "@openblueprint/core";
 import type { AgentSessionState } from "./agent-orchestrator";
 
 export type RepoSettingsInput = {
@@ -78,9 +78,11 @@ export type AgentStateContextValue = {
     taskId: string;
     role: AgentRole;
     scenario?: AgentScenario;
+    sendKickoff?: boolean;
   }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
+  updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   replyAgentPermission: (
     sessionId: string,
     requestId: string,

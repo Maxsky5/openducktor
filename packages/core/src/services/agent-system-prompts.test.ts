@@ -15,7 +15,7 @@ const taskContext = {
 };
 
 describe("buildAgentSystemPrompt", () => {
-  test("includes tool protocol and workflow guards", () => {
+  test("includes role-scoped tool protocol and workflow guards", () => {
     const prompt = buildAgentSystemPrompt({
       role: "planner",
       scenario: "planner_initial",
@@ -23,10 +23,11 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("<obp_tool_call>");
-    expect(prompt).toContain("set_spec");
+    expect(prompt).toContain("Allowed tools for this role");
     expect(prompt).toContain("set_plan");
-    expect(prompt).toContain("build_completed");
-    expect(prompt).toContain("qa_rejected");
+    expect(prompt).not.toContain("- set_spec {");
+    expect(prompt).not.toContain("- build_completed {");
+    expect(prompt).not.toContain("- qa_rejected {");
     expect(prompt).toContain("Feature/epic flow");
   });
 
@@ -40,6 +41,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Rework after QA rejection");
     expect(prompt).toContain("Address every QA rejection item");
     expect(prompt).toContain("build_completed");
+    expect(prompt).not.toContain("- set_plan {");
   });
 
   test("qa scenario includes approval/rejection tool requirements", () => {
@@ -50,7 +52,9 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("Call qa_approved or qa_rejected exactly once");
+    expect(prompt).toContain("qa_approved");
+    expect(prompt).toContain("qa_rejected");
+    expect(prompt).not.toContain("- build_completed {");
     expect(prompt).toContain("latestQaReport");
   });
 });
-

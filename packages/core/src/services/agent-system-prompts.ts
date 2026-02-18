@@ -1,4 +1,9 @@
-import type { AgentRole, AgentScenario } from "../types/agent-orchestrator";
+import {
+  AGENT_ROLE_TOOL_POLICY,
+  type AgentRole,
+  type AgentScenario,
+  type AgentToolName,
+} from "../types/agent-orchestrator";
 
 export type AgentPromptTaskContext = {
   taskId: string;
@@ -19,24 +24,15 @@ export type BuildAgentPromptInput = {
   task: AgentPromptTaskContext;
 };
 
-const TOOL_PROTOCOL = `
-When you need to execute an OpenBlueprint workflow tool, output ONLY this XML block format:
-
-<obp_tool_call>
-{"tool":"TOOL_NAME","args":{...}}
-</obp_tool_call>
-
-Tool names and arguments:
-- set_spec { "markdown": string }
-- set_plan { "markdown": string, "subtasks"?: [{ "title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: number, "description"?: string }] }
-- build_blocked { "reason": string }
-- build_resumed { }
-- build_completed { "summary"?: string }
-- qa_approved { "reportMarkdown": string }
-- qa_rejected { "reportMarkdown": string }
-
-Never invent tool names. Never emit multiple tool calls in a single block.
-`;
+const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
+  set_spec: `set_spec { "markdown": string }`,
+  set_plan: `set_plan { "markdown": string, "subtasks"?: [{ "title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: number, "description"?: string }] }`,
+  build_blocked: `build_blocked { "reason": string }`,
+  build_resumed: `build_resumed { }`,
+  build_completed: `build_completed { "summary"?: string }`,
+  qa_approved: `qa_approved { "reportMarkdown": string }`,
+  qa_rejected: `qa_rejected { "reportMarkdown": string }`,
+};
 
 const WORKFLOW_GUARDS = `
 Workflow constraints you must obey:
@@ -149,6 +145,25 @@ const roleBasePrompt = (role: AgentRole): string => {
   }
 };
 
+const buildToolProtocol = (role: AgentRole): string => {
+  const allowedTools = AGENT_ROLE_TOOL_POLICY[role];
+  const toolList = allowedTools.map((tool) => `- ${TOOL_ARG_SPEC[tool]}`).join("\n");
+
+  return `
+When you need to execute an OpenBlueprint workflow tool, output ONLY this XML block format:
+
+<obp_tool_call>
+{"tool":"TOOL_NAME","args":{...}}
+</obp_tool_call>
+
+Allowed tools for this role:
+${toolList}
+
+Never invent tool names. Never emit multiple tool calls in a single block.
+Do not call tools that are not explicitly listed above.
+`;
+};
+
 const compact = (value: string | undefined): string => {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
@@ -176,10 +191,9 @@ Existing documents:
     roleBasePrompt(input.role),
     SCENARIO_DIRECTIVES[input.scenario],
     WORKFLOW_GUARDS,
-    TOOL_PROTOCOL,
+    buildToolProtocol(input.role),
     taskContext,
   ]
     .join("\n")
     .trim();
 }
-

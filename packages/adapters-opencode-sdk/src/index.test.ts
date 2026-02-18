@@ -263,6 +263,40 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptCalls.length).toBeGreaterThanOrEqual(2);
   });
 
+  test("rejects workflow tool calls that are not allowed for the session role", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({
+      promptQueue: [
+        {
+          info: { id: "assistant-1" },
+          parts: [
+            {
+              id: "part-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "text",
+              text: `<obp_tool_call>\n{"tool":"qa_approved","args":{"reportMarkdown":"# QA"}}\n</obp_tool_call>`,
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter);
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        content: "Try unauthorized qa tool",
+      }),
+    ).rejects.toThrow("not allowed for role spec");
+    expect(executor.calls).toHaveLength(0);
+  });
+
   test("replyPermission and replyQuestion route to opencode APIs", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({});
@@ -288,7 +322,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.question.replyCalls).toHaveLength(1);
   });
 
-  test("event stream maps permission and delta events for matching session", async () => {
+  test("event stream maps delta/part/status/permission events for matching session", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({
       streamEvents: [
@@ -300,6 +334,26 @@ describe("OpencodeSdkAdapter", () => {
             partID: "part-1",
             field: "text",
             delta: "Hello",
+          },
+        } as Event,
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-reasoning",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "reasoning",
+              text: "Inspecting codebase",
+              time: { start: Date.now() },
+            },
+          },
+        } as Event,
+        {
+          type: "session.status",
+          properties: {
+            sessionID: "session-opencode-1",
+            status: { type: "busy" },
           },
         } as Event,
         {
@@ -329,6 +383,8 @@ describe("OpencodeSdkAdapter", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(events).toContain("assistant_delta");
+    expect(events).toContain("assistant_part");
+    expect(events).toContain("session_status");
     expect(events).toContain("permission_required");
   });
 

@@ -1,8 +1,13 @@
-import type { AgentRole, AgentScenario } from "@openblueprint/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentScenario,
+} from "@openblueprint/core";
 
 export type AgentChatMessage = {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "thinking" | "tool";
   content: string;
   timestamp: string;
 };
@@ -40,4 +45,7 @@ export type AgentSessionState = {
   draftAssistantText: string;
   pendingPermissions: AgentPermissionRequest[];
   pendingQuestions: AgentQuestionRequest[];
+  modelCatalog: AgentModelCatalog | null;
+  selectedModel: AgentModelSelection | null;
+  isLoadingModelCatalog: boolean;
 };

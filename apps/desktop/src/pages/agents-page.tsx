@@ -3,12 +3,22 @@ import { TaskSelector } from "@/components/features/tasks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import type { ComboboxOption } from "@/components/ui/combobox";
+import { Combobox } from "@/components/ui/combobox";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
 import type { AgentRole, AgentScenario } from "@openblueprint/core";
-import { Bot, CheckCircle2, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  CheckCircle2,
+  LoaderCircle,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -77,6 +87,7 @@ export function AgentsPage(): ReactElement {
     startAgentSession,
     sendAgentMessage,
     stopAgentSession,
+    updateAgentSessionModel,
     replyAgentPermission,
     answerAgentQuestion,
   } = useAgentState();
@@ -138,18 +149,21 @@ export function AgentsPage(): ReactElement {
     [searchParams, setSearchParams],
   );
 
-  const startSession = useCallback(async (): Promise<void> => {
-    if (!taskId) {
-      return;
-    }
-    setIsStarting(true);
-    try {
-      await startAgentSession({ taskId, role, scenario });
-      await updateQuery({ autostart: undefined });
-    } finally {
-      setIsStarting(false);
-    }
-  }, [role, scenario, startAgentSession, taskId, updateQuery]);
+  const startSession = useCallback(
+    async (sendKickoff = false): Promise<void> => {
+      if (!taskId) {
+        return;
+      }
+      setIsStarting(true);
+      try {
+        await startAgentSession({ taskId, role, scenario, sendKickoff });
+        await updateQuery({ autostart: undefined });
+      } finally {
+        setIsStarting(false);
+      }
+    },
+    [role, scenario, startAgentSession, taskId, updateQuery],
+  );
 
   useEffect(() => {
     if (!autostart || !activeRepo || !taskId || activeSession) {
@@ -160,7 +174,7 @@ export function AgentsPage(): ReactElement {
       return;
     }
     autoStartExecutedRef.current.add(key);
-    void startSession();
+    void startSession(true);
   }, [activeRepo, activeSession, autostart, role, scenario, startSession, taskId]);
 
   const onSend = useCallback(async (): Promise<void> => {
@@ -168,14 +182,60 @@ export function AgentsPage(): ReactElement {
     if (!activeSession || !message) {
       return;
     }
+    setInput("");
     setIsSending(true);
     try {
       await sendAgentMessage(activeSession.sessionId, message);
-      setInput("");
     } finally {
       setIsSending(false);
     }
   }, [activeSession, input, sendAgentMessage]);
+
+  const providerOptions = useMemo<ComboboxOption[]>(() => {
+    if (!activeSession?.modelCatalog) {
+      return [];
+    }
+    const providers = new Map<string, string>();
+    for (const entry of activeSession.modelCatalog.models) {
+      providers.set(entry.providerId, entry.providerName);
+    }
+    return [...providers.entries()].map(([value, label]) => ({
+      value,
+      label,
+    }));
+  }, [activeSession?.modelCatalog]);
+
+  const modelOptions = useMemo<ComboboxOption[]>(() => {
+    if (!activeSession?.modelCatalog || !activeSession.selectedModel) {
+      return [];
+    }
+    return activeSession.modelCatalog.models
+      .filter((entry) => entry.providerId === activeSession.selectedModel?.providerId)
+      .map((entry) => ({
+        value: `${entry.providerId}::${entry.modelId}`,
+        label: entry.modelName,
+        description: entry.modelId,
+        searchKeywords: entry.variants.map((variant) => `variant:${variant}`),
+      }));
+  }, [activeSession?.modelCatalog, activeSession?.selectedModel]);
+
+  const variantOptions = useMemo(() => {
+    if (!activeSession?.modelCatalog || !activeSession.selectedModel) {
+      return [];
+    }
+    const selectedModelEntry = activeSession.modelCatalog.models.find(
+      (entry) =>
+        entry.providerId === activeSession.selectedModel?.providerId &&
+        entry.modelId === activeSession.selectedModel?.modelId,
+    );
+    if (!selectedModelEntry) {
+      return [];
+    }
+    return selectedModelEntry.variants.map((variant) => ({
+      value: variant,
+      label: variant,
+    }));
+  }, [activeSession?.modelCatalog, activeSession?.selectedModel]);
 
   return (
     <div className="grid h-full min-w-0 gap-4">
@@ -246,7 +306,7 @@ export function AgentsPage(): ReactElement {
             <Button
               type="button"
               disabled={!activeRepo || !taskId || isStarting}
-              onClick={() => void startSession()}
+              onClick={() => void startSession(false)}
             >
               {isStarting ? "Starting..." : "Start Session"}
             </Button>
@@ -270,6 +330,94 @@ export function AgentsPage(): ReactElement {
               </Badge>
             ) : null}
           </div>
+
+          {activeSession ? (
+            <div className="grid gap-2 md:grid-cols-3">
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Provider
+                </p>
+                <Combobox
+                  value={activeSession.selectedModel?.providerId ?? ""}
+                  options={providerOptions}
+                  placeholder={
+                    activeSession.isLoadingModelCatalog ? "Loading providers..." : "Select provider"
+                  }
+                  disabled={!activeSession || activeSession.isLoadingModelCatalog}
+                  onValueChange={(providerId) => {
+                    if (!activeSession.modelCatalog) {
+                      return;
+                    }
+                    const firstModel = activeSession.modelCatalog.models.find(
+                      (entry) => entry.providerId === providerId,
+                    );
+                    if (!firstModel) {
+                      return;
+                    }
+                    updateAgentSessionModel(activeSession.sessionId, {
+                      providerId,
+                      modelId: firstModel.modelId,
+                      ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Model
+                </p>
+                <Combobox
+                  value={
+                    activeSession.selectedModel
+                      ? `${activeSession.selectedModel.providerId}::${activeSession.selectedModel.modelId}`
+                      : ""
+                  }
+                  options={modelOptions}
+                  placeholder={
+                    activeSession.isLoadingModelCatalog ? "Loading models..." : "Select model"
+                  }
+                  disabled={!activeSession.selectedModel || activeSession.isLoadingModelCatalog}
+                  onValueChange={(nextValue) => {
+                    const [providerId, modelId] = nextValue.split("::");
+                    if (!providerId || !modelId || !activeSession.modelCatalog) {
+                      return;
+                    }
+                    const model = activeSession.modelCatalog.models.find(
+                      (entry) => entry.providerId === providerId && entry.modelId === modelId,
+                    );
+                    if (!model) {
+                      return;
+                    }
+                    updateAgentSessionModel(activeSession.sessionId, {
+                      providerId,
+                      modelId,
+                      ...(model.variants[0] ? { variant: model.variants[0] } : {}),
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Variant
+                </p>
+                <Combobox
+                  value={activeSession.selectedModel?.variant ?? ""}
+                  options={variantOptions}
+                  placeholder={variantOptions.length > 0 ? "Select variant" : "No variants"}
+                  disabled={variantOptions.length === 0}
+                  onValueChange={(variant) => {
+                    if (!activeSession.selectedModel) {
+                      return;
+                    }
+                    updateAgentSessionModel(activeSession.sessionId, {
+                      ...activeSession.selectedModel,
+                      variant,
+                    });
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -298,11 +446,15 @@ export function AgentsPage(): ReactElement {
                       ? "border-sky-200 bg-sky-50 text-slate-800"
                       : message.role === "assistant"
                         ? "border-slate-200 bg-white text-slate-800"
-                        : "border-amber-200 bg-amber-50 text-amber-900",
+                        : message.role === "thinking"
+                          ? "border-violet-200 bg-violet-50 text-violet-900"
+                          : message.role === "tool"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                            : "border-amber-200 bg-amber-50 text-amber-900",
                   )}
                 >
                   <header className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    {message.role}
+                    {message.role === "thinking" ? "thinking" : message.role}
                   </header>
                   <p className="whitespace-pre-wrap">{message.content}</p>
                 </article>
@@ -316,24 +468,44 @@ export function AgentsPage(): ReactElement {
                   <p className="whitespace-pre-wrap">{activeSession.draftAssistantText}</p>
                 </article>
               ) : null}
+
+              {activeSession?.status === "running" && !activeSession?.draftAssistantText ? (
+                <div className="flex items-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
+                  <LoaderCircle className="size-3.5 animate-spin text-slate-500" />
+                  <Brain className="size-3.5 text-violet-600" />
+                  Agent is thinking...
+                </div>
+              ) : null}
             </div>
 
             <form
-              className="flex gap-2"
+              className="space-y-2"
               onSubmit={(event) => {
                 event.preventDefault();
                 void onSend();
               }}
             >
-              <Input
-                placeholder="Send instruction to agent"
+              <Textarea
+                placeholder="Send instruction to agent (Enter to send, Shift+Enter for newline)"
                 value={input}
                 disabled={!activeSession || isSending}
+                className="min-h-20 resize-none"
                 onChange={(event) => setInput(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void onSend();
+                  }
+                }}
               />
-              <Button type="submit" disabled={!activeSession || isSending}>
-                {isSending ? "Sending..." : "Send"}
-              </Button>
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  disabled={!activeSession || isSending || input.trim().length === 0}
+                >
+                  {isSending ? "Sending..." : "Send"}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>

@@ -95,6 +95,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     startAgentSession,
     sendAgentMessage,
     stopAgentSession,
+    updateAgentSessionModel,
     replyAgentPermission,
     answerAgentQuestion,
   } = useAgentOrchestratorOperations({
@@ -227,6 +228,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       startAgentSession,
       sendAgentMessage,
       stopAgentSession,
+      updateAgentSessionModel,
       replyAgentPermission,
       answerAgentQuestion,
     }),
@@ -237,6 +239,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       sessions,
       startAgentSession,
       stopAgentSession,
+      updateAgentSessionModel,
     ],
   );
 

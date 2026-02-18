@@ -4,17 +4,22 @@ import {
   type OpencodeClient,
   type Part,
 } from "@opencode-ai/sdk/v2";
-import type {
-  AgentEnginePort,
-  AgentEvent,
-  AgentSessionSummary,
-  AgentToolCall,
-  AgentToolName,
-  EventUnsubscribe,
-  ReplyPermissionInput,
-  ReplyQuestionInput,
-  SendAgentUserMessageInput,
-  StartAgentSessionInput,
+import {
+  AGENT_ROLE_TOOL_POLICY,
+  type AgentEnginePort,
+  type AgentEvent,
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  type AgentRole,
+  type AgentSessionSummary,
+  type AgentStreamPart,
+  type AgentToolCall,
+  type AgentToolName,
+  type EventUnsubscribe,
+  type ReplyPermissionInput,
+  type ReplyQuestionInput,
+  type SendAgentUserMessageInput,
+  type StartAgentSessionInput,
 } from "@openblueprint/core";
 
 type SessionToolExecutor = {
@@ -37,16 +42,20 @@ type SessionToolExecutor = {
   qaRejected: (repoPath: string, taskId: string, reportMarkdown: string) => Promise<unknown>;
 };
 
+type NormalizedStartInput = Omit<StartAgentSessionInput, "sessionId"> & {
+  sessionId: string;
+};
+
 type SessionRecord = {
   summary: AgentSessionSummary;
-  input: Required<StartAgentSessionInput>;
+  input: NormalizedStartInput;
   client: OpencodeClient;
   externalSessionId: string;
   streamAbortController: AbortController;
   streamDone: Promise<void>;
 };
 
-type ClientFactory = (input: Required<StartAgentSessionInput>) => OpencodeClient;
+type ClientFactory = (input: NormalizedStartInput) => OpencodeClient;
 
 export type OpencodeSdkAdapterOptions = {
   now?: () => string;
@@ -64,7 +73,7 @@ const buildDefaultFactory = (): ClientFactory => {
     });
 };
 
-const normalizeStartInput = (input: StartAgentSessionInput): Required<StartAgentSessionInput> => {
+const normalizeStartInput = (input: StartAgentSessionInput): NormalizedStartInput => {
   return {
     ...input,
     sessionId: input.sessionId ?? `obp-session-${crypto.randomUUID()}`,
@@ -72,6 +81,13 @@ const normalizeStartInput = (input: StartAgentSessionInput): Required<StartAgent
 };
 
 const TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*([\s\S]*?)\s*<\/obp_tool_call>/g;
+
+const ROLE_TOOLS: Record<AgentRole, ReadonlySet<AgentToolName>> = {
+  spec: new Set(AGENT_ROLE_TOOL_POLICY.spec),
+  planner: new Set(AGENT_ROLE_TOOL_POLICY.planner),
+  build: new Set(AGENT_ROLE_TOOL_POLICY.build),
+  qa: new Set(AGENT_ROLE_TOOL_POLICY.qa),
+};
 
 const readTextFromParts = (parts: Part[]): string => {
   return parts
@@ -219,6 +235,12 @@ const extractToolCalls = (message: string): AgentToolCall[] => {
   return calls;
 };
 
+const sanitizeAssistantMessage = (rawMessage: string): { visible: string; toolCalls: AgentToolCall[] } => {
+  const toolCalls = extractToolCalls(rawMessage);
+  const visible = rawMessage.replace(TOOL_BLOCK_PATTERN, "").trim();
+  return { visible, toolCalls };
+};
+
 const normalizeToolResult = (tool: AgentToolName, result: unknown): string => {
   if (!result || typeof result !== "object") {
     return `${tool} completed`;
@@ -246,6 +268,181 @@ const unwrapData = <T>(
       ? (payload.error as { message: string }).message
       : `OpenCode request failed: ${action}`;
   throw new Error(errorMessage);
+};
+
+const normalizeModelInput = (
+  model: AgentModelSelection | undefined,
+): {
+  model?: { providerID: string; modelID: string };
+  variant?: string;
+} => {
+  if (!model) {
+    return {};
+  }
+
+  return {
+    model: {
+      providerID: model.providerId,
+      modelID: model.modelId,
+    },
+    ...(model.variant ? { variant: model.variant } : {}),
+  };
+};
+
+const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
+  switch (part.type) {
+    case "text":
+      return {
+        kind: "text",
+        messageId: part.messageID,
+        partId: part.id,
+        text: part.text,
+        ...(part.synthetic !== undefined ? { synthetic: part.synthetic } : {}),
+        completed: Boolean(part.time?.end),
+      };
+    case "reasoning":
+      return {
+        kind: "reasoning",
+        messageId: part.messageID,
+        partId: part.id,
+        text: part.text,
+        completed: Boolean(part.time?.end),
+      };
+    case "tool": {
+      if (part.state.status === "pending") {
+        return {
+          kind: "tool",
+          messageId: part.messageID,
+          partId: part.id,
+          callId: part.callID,
+          tool: part.tool,
+          status: "pending",
+          input: part.state.input,
+        };
+      }
+      if (part.state.status === "running") {
+        return {
+          kind: "tool",
+          messageId: part.messageID,
+          partId: part.id,
+          callId: part.callID,
+          tool: part.tool,
+          status: "running",
+          input: part.state.input,
+          ...(part.state.title ? { title: part.state.title } : {}),
+        };
+      }
+      if (part.state.status === "completed") {
+        return {
+          kind: "tool",
+          messageId: part.messageID,
+          partId: part.id,
+          callId: part.callID,
+          tool: part.tool,
+          status: "completed",
+          input: part.state.input,
+          output: part.state.output,
+          title: part.state.title,
+        };
+      }
+      return {
+        kind: "tool",
+        messageId: part.messageID,
+        partId: part.id,
+        callId: part.callID,
+        tool: part.tool,
+        status: "error",
+        input: part.state.input,
+        error: part.state.error,
+      };
+    }
+    case "step-start":
+      return {
+        kind: "step",
+        messageId: part.messageID,
+        partId: part.id,
+        phase: "start",
+      };
+    case "step-finish":
+      return {
+        kind: "step",
+        messageId: part.messageID,
+        partId: part.id,
+        phase: "finish",
+        reason: part.reason,
+        cost: part.cost,
+      };
+    case "subtask":
+      return {
+        kind: "subtask",
+        messageId: part.messageID,
+        partId: part.id,
+        agent: part.agent,
+        prompt: part.prompt,
+        description: part.description,
+      };
+    default:
+      return null;
+  }
+};
+
+const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
+  if (!payload || typeof payload !== "object") {
+    return { models: [], defaultModelsByProvider: {} };
+  }
+
+  const all = Array.isArray((payload as { all?: unknown }).all)
+    ? ((payload as { all: Array<unknown> }).all as Array<unknown>)
+    : [];
+  const defaults =
+    typeof (payload as { default?: unknown }).default === "object" &&
+    (payload as { default?: unknown }).default !== null
+      ? ((payload as { default: Record<string, string> }).default ?? {})
+      : {};
+
+  const models = all.flatMap((provider) => {
+    if (!provider || typeof provider !== "object") {
+      return [];
+    }
+    const providerId = (provider as { id?: unknown }).id;
+    const providerName = (provider as { name?: unknown }).name;
+    const rawModels = (provider as { models?: unknown }).models;
+    if (
+      typeof providerId !== "string" ||
+      typeof providerName !== "string" ||
+      !rawModels ||
+      typeof rawModels !== "object"
+    ) {
+      return [];
+    }
+
+    return Object.entries(rawModels as Record<string, unknown>)
+      .map(([modelId, rawModel]) => {
+        if (!rawModel || typeof rawModel !== "object") {
+          return null;
+        }
+        const modelName = (rawModel as { name?: unknown }).name;
+        const variantsRaw = (rawModel as { variants?: unknown }).variants;
+        const variants =
+          variantsRaw && typeof variantsRaw === "object"
+            ? Object.keys(variantsRaw as Record<string, unknown>)
+            : [];
+
+        return {
+          providerId,
+          providerName,
+          modelId,
+          modelName: typeof modelName === "string" ? modelName : modelId,
+          variants,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  });
+
+  return {
+    models,
+    defaultModelsByProvider: defaults,
+  };
 };
 
 export class OpencodeSdkAdapter implements AgentEnginePort {
@@ -323,9 +520,24 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     return summary;
   }
 
+  async listAvailableModels(input: {
+    baseUrl: string;
+    workingDirectory: string;
+  }): Promise<AgentModelCatalog> {
+    const client = createOpencodeClient({
+      baseUrl: input.baseUrl,
+      directory: input.workingDirectory,
+    });
+    const response = await client.provider.list({
+      directory: input.workingDirectory,
+    });
+    const data = unwrapData(response, "list providers");
+    return mapProviderListToCatalog(data);
+  }
+
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = this.requireSession(input.sessionId);
-    await this.executePromptLoop(session, input.content, 0);
+    await this.executePromptLoop(session, input.content, 0, input.model ?? session.input.model);
   }
 
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
@@ -396,26 +608,31 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     session: SessionRecord,
     userMessage: string,
     depth: number,
+    model: AgentModelSelection | undefined,
   ): Promise<void> {
+    const modelInput = normalizeModelInput(model);
     const response = await session.client.session.prompt({
       sessionID: session.externalSessionId,
       directory: session.input.workingDirectory,
       system: session.input.systemPrompt,
+      ...(modelInput.model ? { model: modelInput.model } : {}),
+      ...(modelInput.variant ? { variant: modelInput.variant } : {}),
       parts: [{ type: "text", text: userMessage }],
     });
     const responseData = unwrapData(response, "prompt session");
 
     const assistantMessage = readTextFromParts(responseData.parts);
-    if (assistantMessage) {
+    const parsed = sanitizeAssistantMessage(assistantMessage);
+    if (parsed.visible) {
       this.emit(session.summary.sessionId, {
         type: "assistant_message",
         sessionId: session.summary.sessionId,
         timestamp: this.now(),
-        message: assistantMessage,
+        message: parsed.visible,
       });
     }
 
-    const toolCalls = extractToolCalls(assistantMessage);
+    const toolCalls = parsed.toolCalls;
     if (toolCalls.length === 0 || depth >= this.maxAutoToolLoops) {
       return;
     }
@@ -428,6 +645,19 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         timestamp: this.now(),
         call: toolCall,
       });
+
+      if (!this.isToolAllowedForRole(session.input.role, toolCall.tool)) {
+        const message = `Tool ${toolCall.tool} is not allowed for role ${session.input.role}`;
+        this.emit(session.summary.sessionId, {
+          type: "tool_result",
+          sessionId: session.summary.sessionId,
+          timestamp: this.now(),
+          tool: toolCall.tool,
+          success: false,
+          message,
+        });
+        throw new Error(message);
+      }
 
       try {
         const result = await this.executeToolCall(session, toolCall);
@@ -459,6 +689,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       session,
       `OpenBlueprint tool results:\n${toolResultMessages.join("\n")}\nContinue the task.`,
       depth + 1,
+      model,
     );
   }
 
@@ -489,11 +720,15 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     }
   }
 
+  private isToolAllowedForRole(role: AgentRole, tool: AgentToolName): boolean {
+    return ROLE_TOOLS[role].has(tool);
+  }
+
   private async subscribeOpencodeEvents(
     context: {
       sessionId: string;
       externalSessionId: string;
-      input: Required<StartAgentSessionInput>;
+      input: NormalizedStartInput;
     },
     client: OpencodeClient,
     controller: AbortController,
@@ -515,6 +750,38 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
           timestamp: this.now(),
           delta: event.properties.delta,
         });
+      } else if (event.type === "message.part.updated") {
+        const mapped = mapPartToAgentStreamPart(event.properties.part);
+        if (mapped) {
+          this.emit(context.sessionId, {
+            type: "assistant_part",
+            sessionId: context.sessionId,
+            timestamp: this.now(),
+            part: mapped,
+          });
+        }
+      } else if (event.type === "session.status") {
+        const status = event.properties.status;
+        if (status.type === "busy" || status.type === "idle") {
+          this.emit(context.sessionId, {
+            type: "session_status",
+            sessionId: context.sessionId,
+            timestamp: this.now(),
+            status: { type: status.type },
+          });
+        } else {
+          this.emit(context.sessionId, {
+            type: "session_status",
+            sessionId: context.sessionId,
+            timestamp: this.now(),
+            status: {
+              type: "retry",
+              attempt: status.attempt,
+              message: status.message,
+              nextEpochMs: status.next,
+            },
+          });
+        }
       } else if (event.type === "permission.asked") {
         this.emit(context.sessionId, {
           type: "permission_required",
@@ -565,18 +832,25 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   }
 
   private isRelevantEvent(externalSessionId: string, event: Event): boolean {
-    if ("sessionID" in event.properties && event.properties.sessionID) {
+    if (
+      "sessionID" in event.properties &&
+      typeof event.properties.sessionID === "string" &&
+      event.properties.sessionID
+    ) {
       return event.properties.sessionID === externalSessionId;
+    }
+    if ("part" in event.properties) {
+      const part = event.properties.part as { sessionID?: unknown } | undefined;
+      if (part && typeof part.sessionID === "string") {
+        return part.sessionID === externalSessionId;
+      }
     }
     if ("session" in event.properties && typeof event.properties.session === "string") {
       return event.properties.session === externalSessionId;
     }
     if ("info" in event.properties) {
       const info = event.properties.info as { sessionID?: unknown; id?: unknown };
-      return (
-        typeof info.sessionID === "string" &&
-        info.sessionID === externalSessionId
-      );
+      return typeof info.sessionID === "string" && info.sessionID === externalSessionId;
     }
     return false;
   }

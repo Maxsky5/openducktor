@@ -1,5 +1,7 @@
 import type {
   AgentEvent,
+  AgentModelCatalog,
+  AgentModelSelection,
   AgentRole,
   AgentScenario,
   AgentSessionContext,
@@ -12,6 +14,7 @@ export type StartAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
 export type SendAgentUserMessageInput = {
   sessionId: string;
   content: string;
+  model?: AgentModelSelection;
 };
 
 export type ReplyPermissionInput = {
@@ -40,6 +43,10 @@ export type AgentSessionSummary = {
 
 export interface AgentEnginePort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
+  listAvailableModels(input: {
+    baseUrl: string;
+    workingDirectory: string;
+  }): Promise<AgentModelCatalog>;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
