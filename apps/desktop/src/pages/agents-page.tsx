@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   CircleDotDashed,
   LoaderCircle,
-  Play,
   SendHorizontal,
   ShieldCheck,
   Sparkles,
@@ -152,6 +151,7 @@ export function AgentsPage(): ReactElement {
   const [input, setInput] = useState("");
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isComposingNewSession, setIsComposingNewSession] = useState(false);
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -201,13 +201,22 @@ export function AgentsPage(): ReactElement {
       : firstScenario(role));
 
   const activeSession = useMemo(() => {
+    if (isComposingNewSession) {
+      return null;
+    }
     if (selectedSessionById) {
       return selectedSessionById;
     }
     return sessions
       .filter((entry) => entry.taskId === taskId && entry.role === role)
       .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1))[0];
-  }, [role, selectedSessionById, sessions, taskId]);
+  }, [isComposingNewSession, role, selectedSessionById, sessions, taskId]);
+
+  const contextSessions = useMemo(() => {
+    return sessions
+      .filter((entry) => entry.taskId === taskId && entry.role === role)
+      .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1));
+  }, [role, sessions, taskId]);
 
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(taskId || null, true);
 
@@ -263,6 +272,7 @@ export function AgentsPage(): ReactElement {
     if (!sessionParam || selectedSessionById) {
       return;
     }
+    setIsComposingNewSession(false);
     void updateQuery({ session: undefined });
   }, [selectedSessionById, sessionParam, updateQuery]);
 
@@ -280,15 +290,13 @@ export function AgentsPage(): ReactElement {
   }, [repoSettings?.agentDefaults, role]);
 
   const sessionOptions = useMemo<ComboboxOption[]>(() => {
-    return [...sessions]
-      .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1))
-      .map((entry) => ({
-        value: entry.sessionId,
-        label: `${entry.role.toUpperCase()} · ${entry.taskId} · ${formatSessionTime(entry.startedAt)}`,
-        description: `${SCENARIO_LABELS[entry.scenario]} · ${entry.status}`,
-        searchKeywords: [entry.taskId, entry.role, entry.scenario, entry.status, entry.sessionId],
-      }));
-  }, [sessions]);
+    return contextSessions.map((entry) => ({
+      value: entry.sessionId,
+      label: `${SCENARIO_LABELS[entry.scenario]} · ${formatSessionTime(entry.startedAt)}`,
+      description: `${SCENARIO_LABELS[entry.scenario]} · ${entry.status}`,
+      searchKeywords: [entry.taskId, entry.role, entry.scenario, entry.status, entry.sessionId],
+    }));
+  }, [contextSessions]);
 
   useEffect(() => {
     if (!activeSession || !roleDefaultSelection) {
@@ -346,6 +354,7 @@ export function AgentsPage(): ReactElement {
           session: sessionId,
           autostart: undefined,
         });
+        setIsComposingNewSession(false);
         return sessionId;
       } finally {
         setIsStarting(false);
@@ -380,8 +389,9 @@ export function AgentsPage(): ReactElement {
       return;
     }
 
+    const shouldStartNew = isComposingNewSession || !activeSession;
     let targetSessionId = activeSession?.sessionId;
-    if (!targetSessionId) {
+    if (shouldStartNew) {
       targetSessionId = await startSession(false);
     }
 
@@ -394,7 +404,7 @@ export function AgentsPage(): ReactElement {
     try {
       await sendAgentMessage(targetSessionId, message);
     } catch {
-      if (activeSession && targetSessionId === activeSession.sessionId) {
+      if (!shouldStartNew && activeSession && targetSessionId === activeSession.sessionId) {
         const fallbackSessionId = await startSession(false);
         if (fallbackSessionId) {
           await sendAgentMessage(fallbackSessionId, message);
@@ -403,7 +413,7 @@ export function AgentsPage(): ReactElement {
     } finally {
       setIsSending(false);
     }
-  }, [activeSession, input, sendAgentMessage, startSession, taskId]);
+  }, [activeSession, input, isComposingNewSession, sendAgentMessage, startSession, taskId]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
     return toPrimaryAgentOptions(activeSession?.modelCatalog ?? null);
@@ -529,9 +539,13 @@ export function AgentsPage(): ReactElement {
 
           <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_240px_auto_1fr]">
             <Combobox
-              value={selectedSessionById?.sessionId ?? ""}
+              value={isComposingNewSession ? "" : (selectedSessionById?.sessionId ?? "")}
               options={sessionOptions}
-              placeholder={sessionOptions.length > 0 ? "Pin session (optional)" : "No sessions yet"}
+              placeholder={
+                sessionOptions.length > 0
+                  ? "Select session (latest used by default)"
+                  : "No session yet for this task/role"
+              }
               searchPlaceholder="Search sessions..."
               emptyText="No matching session."
               onValueChange={(sessionId) => {
@@ -539,6 +553,7 @@ export function AgentsPage(): ReactElement {
                 if (!selected) {
                   return;
                 }
+                setIsComposingNewSession(false);
                 updateQuery({
                   session: selected.sessionId,
                   task: selected.taskId,
@@ -552,29 +567,23 @@ export function AgentsPage(): ReactElement {
               value={scenario}
               options={scenarioOptions}
               placeholder="Select scenario"
-              onValueChange={(value) =>
-                updateQuery({ scenario: value, session: undefined, autostart: undefined })
-              }
+              disabled={Boolean(selectedSessionById) && !isComposingNewSession}
+              onValueChange={(value) => updateQuery({ scenario: value, autostart: undefined })}
             />
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                disabled={!activeRepo || !taskId || isStarting}
-                onClick={() => void startSession(false)}
+                variant={isComposingNewSession ? "default" : "outline"}
+                disabled={!activeRepo || !taskId}
+                onClick={() => {
+                  setIsComposingNewSession(true);
+                  setInput("");
+                  void updateQuery({ session: undefined, autostart: undefined });
+                }}
               >
-                {isStarting ? (
-                  <>
-                    <LoaderCircle className="size-3.5 animate-spin" />
-                    Starting
-                  </>
-                ) : (
-                  <>
-                    <Play className="size-3.5" />
-                    Start
-                  </>
-                )}
+                New Session
               </Button>
-              {activeSession ? (
+              {activeSession && !isComposingNewSession ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -591,8 +600,11 @@ export function AgentsPage(): ReactElement {
                   {selectedTask.title}
                 </Badge>
               ) : (
-                <span>Select a task to start.</span>
+                <span>Select a task to chat.</span>
               )}
+              <span>
+                Sessions: <strong>{contextSessions.length}</strong>
+              </span>
               <span>
                 Messages: <strong>{activeSession?.messages.length ?? 0}</strong>
               </span>
@@ -608,9 +620,12 @@ export function AgentsPage(): ReactElement {
                   size="sm"
                   variant="outline"
                   className="h-6 px-2 text-[11px]"
-                  onClick={() => updateQuery({ session: undefined, autostart: undefined })}
+                  onClick={() => {
+                    setIsComposingNewSession(false);
+                    void updateQuery({ session: undefined, autostart: undefined });
+                  }}
                 >
-                  Unpin Session
+                  Follow Latest
                 </Button>
               ) : null}
             </div>
@@ -625,7 +640,9 @@ export function AgentsPage(): ReactElement {
             >
               {!activeSession ? (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                  Start a session to begin.
+                  {taskId
+                    ? "Send a message to start a new session automatically."
+                    : "Select a task to begin."}
                 </div>
               ) : null}
 
@@ -665,7 +682,7 @@ export function AgentsPage(): ReactElement {
               <Textarea
                 placeholder="# for agents · @ for files · / for commands"
                 value={input}
-                disabled={!activeSession || isSending}
+                disabled={!taskId || isSending || isStarting}
                 className="min-h-24 resize-none"
                 onChange={(event) => setInput(event.currentTarget.value)}
                 onKeyDown={(event) => {
@@ -687,7 +704,7 @@ export function AgentsPage(): ReactElement {
                     placeholder={
                       activeSession?.isLoadingModelCatalog ? "Loading agents..." : "Agent"
                     }
-                    disabled={!activeSession || activeSession.isLoadingModelCatalog}
+                    disabled={!activeSession || activeSession.isLoadingModelCatalog || isStarting}
                     onValueChange={(opencodeAgent) => {
                       if (!activeSession) {
                         return;
@@ -730,7 +747,7 @@ export function AgentsPage(): ReactElement {
                     placeholder={
                       activeSession?.isLoadingModelCatalog ? "Loading models..." : "Model"
                     }
-                    disabled={!activeSession || activeSession.isLoadingModelCatalog}
+                    disabled={!activeSession || activeSession.isLoadingModelCatalog || isStarting}
                     onValueChange={(nextValue) => {
                       if (!activeSession?.modelCatalog) {
                         return;
@@ -760,7 +777,7 @@ export function AgentsPage(): ReactElement {
                     value={activeSession?.selectedModel?.variant ?? ""}
                     options={variantOptions}
                     placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
-                    disabled={!activeSession || variantOptions.length === 0}
+                    disabled={!activeSession || variantOptions.length === 0 || isStarting}
                     onValueChange={(variant) => {
                       if (!activeSession?.selectedModel) {
                         return;
@@ -777,16 +794,7 @@ export function AgentsPage(): ReactElement {
                   <Button
                     type="submit"
                     className="w-full lg:w-auto"
-                    disabled={
-                      isSending ||
-                      isStarting ||
-                      !taskId ||
-                      input.trim().length === 0 ||
-                      (activeSession &&
-                        activeSession.status !== "stopped" &&
-                        activeSession.status !== "error" &&
-                        !activeSession.selectedModel?.opencodeAgent)
-                    }
+                    disabled={isSending || isStarting || !taskId || input.trim().length === 0}
                   >
                     {isSending ? (
                       <>
@@ -804,13 +812,17 @@ export function AgentsPage(): ReactElement {
               </div>
 
               <p className="text-xs text-slate-500">
-                {activeSession?.status === "running"
-                  ? "Streaming OpenCode events..."
-                  : activeSession?.status === "starting"
-                    ? "Starting session..."
-                    : activeSession
-                      ? "Ready"
-                      : "Start a session to begin chatting."}
+                {isStarting
+                  ? "Preparing session..."
+                  : activeSession?.status === "running"
+                    ? "Streaming OpenCode events..."
+                    : activeSession?.status === "starting"
+                      ? "Starting session..."
+                      : activeSession
+                        ? "Ready"
+                        : taskId
+                          ? "Ready to start automatically on your first message."
+                          : "Select a task to start chatting."}
               </p>
             </form>
           </div>

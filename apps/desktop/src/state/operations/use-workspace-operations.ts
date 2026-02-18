@@ -63,6 +63,11 @@ export function useWorkspaceOperations({
 
       try {
         await host.workspaceSelect(repoPath);
+        await host.opencodeRepoRuntimeEnsure(repoPath).catch((error) => {
+          toast.error("OpenCode server unavailable", {
+            description: errorMessage(error),
+          });
+        });
         if (workspaceSwitchVersionRef.current !== switchVersion) {
           return;
         }
