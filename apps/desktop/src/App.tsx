@@ -1,10 +1,8 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { AgentsPage } from "@/pages/agents-page";
-import { BuilderPage } from "@/pages/builder-page";
 import { KanbanPage } from "@/pages/kanban-page";
 import { NotFoundPage } from "@/pages/not-found-page";
-import { PlannerPage } from "@/pages/planner-page";
 import { AppStateProvider } from "@/state";
 import { useWorkspaceState } from "@/state";
 import type { ReactElement } from "react";
@@ -28,8 +26,8 @@ export function App(): ReactElement {
             <Route path="/kanban" element={<KanbanPage />} />
             <Route element={<RequireRepository />}>
               <Route path="/agents" element={<AgentsPage />} />
-              <Route path="/planner" element={<PlannerPage />} />
-              <Route path="/builder" element={<BuilderPage />} />
+              <Route path="/planner" element={<Navigate to="/agents?agent=planner" replace />} />
+              <Route path="/builder" element={<Navigate to="/agents?agent=build" replace />} />
             </Route>
             <Route path="*" element={<NotFoundPage />} />
           </Route>
