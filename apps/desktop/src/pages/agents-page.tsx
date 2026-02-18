@@ -15,7 +15,9 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
-import type { AgentRole, AgentScenario } from "@openblueprint/core";
+import type { RepoSettingsInput } from "@/types/state-slices";
+import type { TaskCard } from "@openblueprint/contracts";
+import type { AgentModelSelection, AgentRole, AgentScenario } from "@openblueprint/core";
 import {
   Bot,
   Brain,
@@ -65,6 +67,39 @@ const SCENARIO_LABELS: Record<AgentScenario, string> = {
   qa_review: "QA Review",
 };
 
+const isTaskEligibleForRole = (task: TaskCard, role: AgentRole): boolean => {
+  if (role === "spec") {
+    return task.availableActions.includes("set_spec");
+  }
+  if (role === "planner") {
+    return task.availableActions.includes("set_plan");
+  }
+  if (role === "build") {
+    return (
+      task.availableActions.includes("build_start") ||
+      task.availableActions.includes("open_builder") ||
+      task.status === "in_progress" ||
+      task.status === "blocked" ||
+      task.status === "ai_review" ||
+      task.status === "human_review"
+    );
+  }
+  return task.status === "ai_review";
+};
+
+const formatSessionTime = (iso: string): string => {
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) {
+    return "Unknown";
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+};
+
 const isRole = (value: string | null): value is AgentRole =>
   value === "spec" || value === "planner" || value === "build" || value === "qa";
 
@@ -101,7 +136,7 @@ const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | 
 };
 
 export function AgentsPage(): ReactElement {
-  const { activeRepo } = useWorkspaceState();
+  const { activeRepo, loadRepoSettings } = useWorkspaceState();
   const { tasks } = useTasksState();
   const {
     sessions,
@@ -116,34 +151,62 @@ export function AgentsPage(): ReactElement {
   const [input, setInput] = useState("");
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const taskId = searchParams.get("task") ?? "";
+  const taskIdParam = searchParams.get("task") ?? "";
+  const sessionParam = searchParams.get("session");
   const roleParam = searchParams.get("agent");
-  const role: AgentRole = isRole(roleParam) ? roleParam : "spec";
+  const roleFromQuery: AgentRole = isRole(roleParam) ? roleParam : "spec";
   const scenarioParam = searchParams.get("scenario");
   const scenarioFromQuery: AgentScenario | undefined = isScenario(scenarioParam)
     ? scenarioParam
     : undefined;
   const autostart = searchParams.get("autostart") === "1";
 
+  const selectedSessionById = useMemo(
+    () => sessions.find((entry) => entry.sessionId === sessionParam) ?? null,
+    [sessionParam, sessions],
+  );
+
+  const role: AgentRole = selectedSessionById?.role ?? roleFromQuery;
+  const taskId = selectedSessionById?.taskId ?? taskIdParam;
+
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === taskId) ?? null,
     [taskId, tasks],
   );
 
+  const eligibleTasks = useMemo(() => {
+    return tasks.filter((task) => isTaskEligibleForRole(task, role));
+  }, [role, tasks]);
+
+  const tasksForSelector = useMemo(() => {
+    if (!selectedTask) {
+      return eligibleTasks;
+    }
+    if (eligibleTasks.some((task) => task.id === selectedTask.id)) {
+      return eligibleTasks;
+    }
+    return [selectedTask, ...eligibleTasks];
+  }, [eligibleTasks, selectedTask]);
+
   const scenarios = SCENARIOS_BY_ROLE[role];
   const scenario =
-    scenarioFromQuery && scenarios.includes(scenarioFromQuery)
+    selectedSessionById?.scenario ??
+    (scenarioFromQuery && scenarios.includes(scenarioFromQuery)
       ? scenarioFromQuery
-      : firstScenario(role);
+      : firstScenario(role));
 
   const activeSession = useMemo(() => {
+    if (selectedSessionById) {
+      return selectedSessionById;
+    }
     return sessions
       .filter((entry) => entry.taskId === taskId && entry.role === role)
       .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1))[0];
-  }, [role, sessions, taskId]);
+  }, [role, selectedSessionById, sessions, taskId]);
 
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(taskId || null, true);
 
@@ -171,6 +234,98 @@ export function AgentsPage(): ReactElement {
     [searchParams, setSearchParams],
   );
 
+  useEffect(() => {
+    if (!activeRepo) {
+      setRepoSettings(null);
+      return;
+    }
+    let cancelled = false;
+    void loadRepoSettings()
+      .then((settings) => {
+        if (!cancelled) {
+          setRepoSettings(settings);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRepoSettings(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRepo, loadRepoSettings]);
+
+  useEffect(() => {
+    if (!sessionParam || selectedSessionById) {
+      return;
+    }
+    void updateQuery({ session: undefined });
+  }, [selectedSessionById, sessionParam, updateQuery]);
+
+  const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
+    const roleDefault = repoSettings?.agentDefaults[role];
+    if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
+      return null;
+    }
+    return {
+      providerId: roleDefault.providerId,
+      modelId: roleDefault.modelId,
+      ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
+      ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
+    };
+  }, [repoSettings?.agentDefaults, role]);
+
+  const sessionOptions = useMemo<ComboboxOption[]>(() => {
+    return [...sessions]
+      .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1))
+      .map((entry) => ({
+        value: entry.sessionId,
+        label: `${entry.role.toUpperCase()} · ${entry.taskId} · ${formatSessionTime(entry.startedAt)}`,
+        description: `${SCENARIO_LABELS[entry.scenario]} · ${entry.status}`,
+        searchKeywords: [entry.taskId, entry.role, entry.scenario, entry.status, entry.sessionId],
+      }));
+  }, [sessions]);
+
+  useEffect(() => {
+    if (!activeSession || !roleDefaultSelection) {
+      return;
+    }
+    if (activeSession.role !== role) {
+      return;
+    }
+
+    const selectedModel = activeSession.selectedModel;
+    if (!selectedModel) {
+      updateAgentSessionModel(activeSession.sessionId, roleDefaultSelection);
+      return;
+    }
+
+    let changed = false;
+    const nextSelection: AgentModelSelection = { ...selectedModel };
+
+    if (!nextSelection.providerId || !nextSelection.modelId) {
+      changed = true;
+      nextSelection.providerId = roleDefaultSelection.providerId;
+      nextSelection.modelId = roleDefaultSelection.modelId;
+    }
+
+    if (roleDefaultSelection.variant && !nextSelection.variant) {
+      changed = true;
+      nextSelection.variant = roleDefaultSelection.variant;
+    }
+
+    if (roleDefaultSelection.opencodeAgent && !nextSelection.opencodeAgent) {
+      changed = true;
+      nextSelection.opencodeAgent = roleDefaultSelection.opencodeAgent;
+    }
+
+    if (changed) {
+      updateAgentSessionModel(activeSession.sessionId, nextSelection);
+    }
+  }, [activeSession, role, roleDefaultSelection, updateAgentSessionModel]);
+
   const startSession = useCallback(
     async (sendKickoff = false): Promise<void> => {
       if (!taskId) {
@@ -178,13 +333,30 @@ export function AgentsPage(): ReactElement {
       }
       setIsStarting(true);
       try {
-        await startAgentSession({ taskId, role, scenario, sendKickoff });
-        await updateQuery({ autostart: undefined });
+        const sessionId = await startAgentSession({ taskId, role, scenario, sendKickoff });
+        if (roleDefaultSelection) {
+          updateAgentSessionModel(sessionId, roleDefaultSelection);
+        }
+        await updateQuery({
+          task: taskId,
+          agent: role,
+          scenario,
+          session: sessionId,
+          autostart: undefined,
+        });
       } finally {
         setIsStarting(false);
       }
     },
-    [role, scenario, startAgentSession, taskId, updateQuery],
+    [
+      role,
+      roleDefaultSelection,
+      scenario,
+      startAgentSession,
+      taskId,
+      updateAgentSessionModel,
+      updateQuery,
+    ],
   );
 
   useEffect(() => {
@@ -296,11 +468,12 @@ export function AgentsPage(): ReactElement {
           <div className="grid gap-2 lg:grid-cols-[minmax(280px,1fr)_auto]">
             <div className="min-w-0">
               <TaskSelector
-                tasks={tasks}
+                tasks={tasksForSelector}
                 value={taskId}
                 onValueChange={(nextTaskId) => {
                   updateQuery({
                     task: nextTaskId || undefined,
+                    session: undefined,
                     autostart: undefined,
                   });
                 }}
@@ -321,6 +494,7 @@ export function AgentsPage(): ReactElement {
                       updateQuery({
                         agent: entry.role,
                         scenario: firstScenario(entry.role),
+                        session: undefined,
                         autostart: undefined,
                       })
                     }
@@ -333,12 +507,34 @@ export function AgentsPage(): ReactElement {
             </div>
           </div>
 
-          <div className="grid gap-2 lg:grid-cols-[240px_auto_1fr]">
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_240px_auto_1fr]">
+            <Combobox
+              value={selectedSessionById?.sessionId ?? ""}
+              options={sessionOptions}
+              placeholder={sessionOptions.length > 0 ? "Pin session (optional)" : "No sessions yet"}
+              searchPlaceholder="Search sessions..."
+              emptyText="No matching session."
+              onValueChange={(sessionId) => {
+                const selected = sessions.find((entry) => entry.sessionId === sessionId);
+                if (!selected) {
+                  return;
+                }
+                updateQuery({
+                  session: selected.sessionId,
+                  task: selected.taskId,
+                  agent: selected.role,
+                  scenario: selected.scenario,
+                  autostart: undefined,
+                });
+              }}
+            />
             <Combobox
               value={scenario}
               options={scenarioOptions}
               placeholder="Select scenario"
-              onValueChange={(value) => updateQuery({ scenario: value, autostart: undefined })}
+              onValueChange={(value) =>
+                updateQuery({ scenario: value, session: undefined, autostart: undefined })
+              }
             />
             <div className="flex flex-wrap gap-2">
               <Button
@@ -386,6 +582,17 @@ export function AgentsPage(): ReactElement {
               <span>
                 Questions: <strong>{activeSession?.pendingQuestions.length ?? 0}</strong>
               </span>
+              {selectedSessionById ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[11px]"
+                  onClick={() => updateQuery({ session: undefined, autostart: undefined })}
+                >
+                  Unpin Session
+                </Button>
+              ) : null}
             </div>
           </div>
         </CardHeader>

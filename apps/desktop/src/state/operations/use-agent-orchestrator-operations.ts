@@ -725,17 +725,6 @@ export function useAgentOrchestratorOperations({
         throw new Error("Select a workspace first.");
       }
 
-      const existing = Object.values(sessionsRef.current).find(
-        (session) =>
-          session.taskId === taskId &&
-          session.role === role &&
-          session.status !== "stopped" &&
-          session.status !== "error",
-      );
-      if (existing) {
-        return existing.sessionId;
-      }
-
       const task = taskRef.current.find((entry) => entry.id === taskId);
       if (!task) {
         throw new Error(`Task not found: ${taskId}`);
