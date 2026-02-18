@@ -384,13 +384,11 @@ export function useAgentOrchestratorOperations({
         };
       }
 
-      const runtimeList = await host.opencodeRuntimeList(repoPath);
-      const existing = runtimeList.find(
-        (runtime) => runtime.taskId === taskId && runtime.role === role,
+      const runtime = await host.opencodeRuntimeStart(
+        repoPath,
+        taskId,
+        role as "spec" | "planner" | "qa",
       );
-      const runtime =
-        existing ??
-        (await host.opencodeRuntimeStart(repoPath, taskId, role as "spec" | "planner" | "qa"));
       return {
         runtimeId: runtime.runtimeId,
         runId: null,

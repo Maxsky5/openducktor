@@ -294,7 +294,15 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       },
       client,
       controller,
-    );
+    ).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "Event stream failed";
+      this.emit(sessionId, {
+        type: "session_error",
+        sessionId,
+        timestamp: this.now(),
+        message,
+      });
+    });
 
     this.sessions.set(sessionId, {
       summary,
