@@ -438,11 +438,26 @@ export function AgentsPage(): ReactElement {
                       }
                       disabled={activeSession.isLoadingModelCatalog}
                       onValueChange={(opencodeAgent) => {
-                        if (!activeSession.selectedModel) {
+                        const selectedModel =
+                          activeSession.selectedModel ??
+                          (() => {
+                            const firstModel = activeSession.modelCatalog?.models[0];
+                            if (!firstModel) {
+                              return null;
+                            }
+                            return {
+                              providerId: firstModel.providerId,
+                              modelId: firstModel.modelId,
+                              ...(firstModel.variants[0]
+                                ? { variant: firstModel.variants[0] }
+                                : {}),
+                            };
+                          })();
+                        if (!selectedModel) {
                           return;
                         }
                         updateAgentSessionModel(activeSession.sessionId, {
-                          ...activeSession.selectedModel,
+                          ...selectedModel,
                           opencodeAgent,
                         });
                       }}
