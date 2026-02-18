@@ -247,6 +247,17 @@ export const runSummarySchema = z.object({
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
+export const agentRuntimeSummarySchema = z.object({
+  runtimeId: z.string(),
+  repoPath: z.string(),
+  taskId: z.string(),
+  role: z.string(),
+  workingDirectory: z.string(),
+  port: z.number().int().positive(),
+  startedAt: z.string(),
+});
+export type AgentRuntimeSummary = z.infer<typeof agentRuntimeSummarySchema>;
+
 export const runEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("run_started"),

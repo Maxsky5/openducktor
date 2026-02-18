@@ -1,12 +1,11 @@
 import { cn } from "@/lib/utils";
-import { Columns3, Hammer, ScrollText } from "lucide-react";
+import { Bot, Columns3 } from "lucide-react";
 import type { ReactElement } from "react";
 import { NavLink } from "react-router-dom";
 
 const NAV_ITEMS = [
   { to: "/kanban", icon: Columns3, label: "Kanban", requiresRepo: false },
-  { to: "/planner", icon: ScrollText, label: "Planner", requiresRepo: true },
-  { to: "/builder", icon: Hammer, label: "Builder", requiresRepo: true },
+  { to: "/agents", icon: Bot, label: "Agents", requiresRepo: true },
 ] as const;
 
 type SidebarNavigationProps = {

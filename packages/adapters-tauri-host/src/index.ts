@@ -1,4 +1,5 @@
 import {
+  type AgentRuntimeSummary,
   type BeadsCheck,
   type RepoConfig,
   type RunSummary,
@@ -9,6 +10,7 @@ import {
   type TaskStatus,
   type TaskUpdatePatch,
   type WorkspaceRecord,
+  agentRuntimeSummarySchema,
   beadsCheckSchema,
   repoConfigSchema,
   runSummarySchema,
@@ -239,6 +241,30 @@ export class TauriHostClient implements PlannerTools {
   async runsList(repoPath?: string): Promise<RunSummary[]> {
     const payload = await this.invokeFn<unknown>("runs_list", { repoPath });
     return parseArray(runSummarySchema, payload);
+  }
+
+  async opencodeRuntimeList(repoPath?: string): Promise<AgentRuntimeSummary[]> {
+    const payload = await this.invokeFn<unknown>("opencode_runtime_list", { repoPath });
+    return parseArray(agentRuntimeSummarySchema, payload);
+  }
+
+  async opencodeRuntimeStart(
+    repoPath: string,
+    taskId: string,
+    role: "spec" | "planner" | "qa",
+  ): Promise<AgentRuntimeSummary> {
+    const payload = await this.invokeFn<unknown>("opencode_runtime_start", {
+      repoPath,
+      taskId,
+      role,
+    });
+    return agentRuntimeSummarySchema.parse(payload);
+  }
+
+  async opencodeRuntimeStop(runtimeId: string): Promise<{ ok: boolean }> {
+    return this.invokeFn<{ ok: boolean }>("opencode_runtime_stop", {
+      runtimeId,
+    });
   }
 
   async workspaceUpdateRepoConfig(

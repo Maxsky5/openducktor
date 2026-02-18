@@ -238,6 +238,18 @@ pub struct RunSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRuntimeSummary {
+    pub runtime_id: String,
+    pub repo_path: String,
+    pub task_id: String,
+    pub role: String,
+    pub working_directory: String,
+    pub port: u16,
+    pub started_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum RunEvent {

@@ -9,6 +9,8 @@ import type {
   TaskUpdatePatch,
   WorkspaceRecord,
 } from "@openblueprint/contracts";
+import type { AgentRole, AgentScenario } from "@openblueprint/core";
+import type { AgentSessionState } from "./agent-orchestrator";
 
 export type RepoSettingsInput = {
   worktreeBasePath: string;
@@ -68,4 +70,22 @@ export type SpecStateContextValue = {
   loadPlanDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   loadQaReportDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+};
+
+export type AgentStateContextValue = {
+  sessions: AgentSessionState[];
+  startAgentSession: (input: {
+    taskId: string;
+    role: AgentRole;
+    scenario?: AgentScenario;
+  }) => Promise<string>;
+  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+  stopAgentSession: (sessionId: string) => Promise<void>;
+  replyAgentPermission: (
+    sessionId: string,
+    requestId: string,
+    reply: "once" | "always" | "reject",
+    message?: string,
+  ) => Promise<void>;
+  answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
 };

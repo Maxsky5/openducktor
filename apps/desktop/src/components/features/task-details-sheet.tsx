@@ -28,7 +28,7 @@ type TaskDetailsSheetProps = {
   allTasks: TaskCard[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPlan?: (taskId: string) => void;
+  onPlan?: (taskId: string, action: "set_spec" | "set_plan") => void;
   onBuild?: (taskId: string) => void;
   onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;
@@ -97,8 +97,10 @@ export function TaskDetailsSheet({
 
       switch (action) {
         case "set_spec":
+          onPlan?.(taskId, action);
+          return;
         case "set_plan":
-          onPlan?.(taskId);
+          onPlan?.(taskId, action);
           return;
         case "open_builder":
           onBuild?.(taskId);

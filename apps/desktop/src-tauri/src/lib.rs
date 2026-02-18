@@ -1,6 +1,7 @@
 use host_application::{AppService, RunEmitter};
 use host_domain::{
-    CreateTaskInput, PlanSubtaskInput, RunEvent, RunSummary, TaskCard, TaskStatus, UpdateTaskPatch,
+    AgentRuntimeSummary, CreateTaskInput, PlanSubtaskInput, RunEvent, RunSummary, TaskCard,
+    TaskStatus, UpdateTaskPatch,
 };
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
@@ -474,6 +475,37 @@ async fn runs_list(
     as_error(state.service.runs_list(repo_path.as_deref()))
 }
 
+#[tauri::command]
+async fn opencode_runtime_list(
+    state: State<'_, AppState>,
+    repo_path: Option<String>,
+) -> Result<Vec<AgentRuntimeSummary>, String> {
+    as_error(state.service.opencode_runtime_list(repo_path.as_deref()))
+}
+
+#[tauri::command]
+async fn opencode_runtime_start(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    role: String,
+) -> Result<AgentRuntimeSummary, String> {
+    as_error(state.service.opencode_runtime_start(&repo_path, &task_id, &role))
+}
+
+#[tauri::command]
+async fn opencode_runtime_stop(
+    state: State<'_, AppState>,
+    runtime_id: String,
+) -> Result<serde_json::Value, String> {
+    as_error(
+        state
+            .service
+            .opencode_runtime_stop(&runtime_id)
+            .map(|ok| serde_json::json!({ "ok": ok })),
+    )
+}
+
 pub fn run() {
     let config_store = AppConfigStore::new().expect("failed to initialize config store");
     let metadata_namespace = config_store
@@ -518,7 +550,10 @@ pub fn run() {
             build_completed,
             human_request_changes,
             human_approve,
-            runs_list
+            runs_list,
+            opencode_runtime_list,
+            opencode_runtime_start,
+            opencode_runtime_stop
         ])
         .run(tauri::generate_context!())
         .expect("error while running openblueprint");

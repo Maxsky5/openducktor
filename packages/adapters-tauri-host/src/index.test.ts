@@ -104,4 +104,50 @@ describe("TauriHostClient", () => {
     const { client } = createClient(() => [{ id: "task-1", title: "broken" }]);
     await expect(client.tasksList("/repo")).rejects.toThrow();
   });
+
+  test("opencode runtime commands use expected IPC routes", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "opencode_runtime_start") {
+        return {
+          runtimeId: "runtime-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          role: "planner",
+          workingDirectory: "/repo",
+          port: 4173,
+          startedAt: "2026-02-17T12:00:00Z",
+        };
+      }
+      if (command === "opencode_runtime_list") {
+        return [
+          {
+            runtimeId: "runtime-1",
+            repoPath: "/repo",
+            taskId: "task-1",
+            role: "planner",
+            workingDirectory: "/repo",
+            port: 4173,
+            startedAt: "2026-02-17T12:00:00Z",
+          },
+        ];
+      }
+      if (command === "opencode_runtime_stop") {
+        return { ok: true };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const runtime = await client.opencodeRuntimeStart("/repo", "task-1", "planner");
+    const runtimes = await client.opencodeRuntimeList("/repo");
+    const stopped = await client.opencodeRuntimeStop("runtime-1");
+
+    expect(runtime.runtimeId).toBe("runtime-1");
+    expect(runtimes).toHaveLength(1);
+    expect(stopped.ok).toBe(true);
+    expect(calls.map((entry) => entry.command)).toEqual([
+      "opencode_runtime_start",
+      "opencode_runtime_list",
+      "opencode_runtime_stop",
+    ]);
+  });
 });

@@ -1,5 +1,6 @@
 export {
   AppStateProvider,
+  useAgentState,
   useChecksState,
   useDelegationState,
   useSpecState,

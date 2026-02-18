@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema, runEventSchema, taskCardSchema } from "./index";
+import { agentRuntimeSummarySchema, repoConfigSchema, runEventSchema, taskCardSchema } from "./index";
 
 describe("runtime schemas", () => {
   test("task card parses workflow status from host payloads", () => {
@@ -59,5 +59,20 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.worktreeBasePath).toBeUndefined();
+  });
+
+  test("agent runtime summary parses host payload", () => {
+    const parsed = agentRuntimeSummarySchema.parse({
+      runtimeId: "runtime-1",
+      repoPath: "/repo",
+      taskId: "task-1",
+      role: "planner",
+      workingDirectory: "/repo",
+      port: 4100,
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(parsed.runtimeId).toBe("runtime-1");
+    expect(parsed.port).toBe(4100);
   });
 });

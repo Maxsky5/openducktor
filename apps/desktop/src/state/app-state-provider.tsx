@@ -1,4 +1,5 @@
 import type {
+  AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   RepoSettingsInput,
@@ -17,6 +18,7 @@ import {
   useState,
 } from "react";
 import { useAppLifecycle } from "./lifecycle/use-app-lifecycle";
+import { useAgentOrchestratorOperations } from "./operations/use-agent-orchestrator-operations";
 import { useChecks } from "./operations/use-checks";
 import { useDelegationOperations } from "./operations/use-delegation-operations";
 import { useRepoSettingsOperations } from "./operations/use-repo-settings-operations";
@@ -29,6 +31,7 @@ const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);
 const TasksStateContext = createContext<TasksStateContextValue | null>(null);
 const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
 const SpecStateContext = createContext<SpecStateContextValue | null>(null);
+const AgentStateContext = createContext<AgentStateContextValue | null>(null);
 
 const useRequiredContext = <T,>(context: Context<T | null>, name: string): T => {
   const value = useContext(context);
@@ -86,6 +89,20 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     useSpecOperations({
       activeRepo,
     });
+
+  const {
+    sessions,
+    startAgentSession,
+    sendAgentMessage,
+    stopAgentSession,
+    replyAgentPermission,
+    answerAgentQuestion,
+  } = useAgentOrchestratorOperations({
+    activeRepo,
+    tasks,
+    runs,
+    refreshTaskData,
+  });
 
   const { workspaces, isSwitchingWorkspace, refreshWorkspaces, addWorkspace, selectWorkspace } =
     useWorkspaceOperations({
@@ -204,12 +221,35 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     [loadPlanDocument, loadQaReportDocument, loadSpec, loadSpecDocument, saveSpec],
   );
 
+  const agentStateValue = useMemo<AgentStateContextValue>(
+    () => ({
+      sessions,
+      startAgentSession,
+      sendAgentMessage,
+      stopAgentSession,
+      replyAgentPermission,
+      answerAgentQuestion,
+    }),
+    [
+      answerAgentQuestion,
+      replyAgentPermission,
+      sendAgentMessage,
+      sessions,
+      startAgentSession,
+      stopAgentSession,
+    ],
+  );
+
   return (
     <WorkspaceStateContext.Provider value={workspaceStateValue}>
       <ChecksStateContext.Provider value={checksStateValue}>
         <TasksStateContext.Provider value={tasksStateValue}>
           <DelegationStateContext.Provider value={delegationStateValue}>
-            <SpecStateContext.Provider value={specStateValue}>{children}</SpecStateContext.Provider>
+            <SpecStateContext.Provider value={specStateValue}>
+              <AgentStateContext.Provider value={agentStateValue}>
+                {children}
+              </AgentStateContext.Provider>
+            </SpecStateContext.Provider>
           </DelegationStateContext.Provider>
         </TasksStateContext.Provider>
       </ChecksStateContext.Provider>
@@ -231,5 +271,8 @@ export const useDelegationState = (): DelegationStateContextValue =>
 
 export const useSpecState = (): SpecStateContextValue =>
   useRequiredContext(SpecStateContext, "useSpecState");
+
+export const useAgentState = (): AgentStateContextValue =>
+  useRequiredContext(AgentStateContext, "useAgentState");
 
 export type { RepoSettingsInput };

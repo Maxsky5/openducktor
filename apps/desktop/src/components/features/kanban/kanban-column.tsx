@@ -12,7 +12,7 @@ type KanbanColumnProps = {
   runStateByTaskId: Map<string, RunSummary["state"]>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onPlan: (taskId: string) => void;
+  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onBuild: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;

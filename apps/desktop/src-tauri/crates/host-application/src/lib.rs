@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    now_rfc3339, BeadsCheck, CreateTaskInput, PlanSubtaskInput, QaVerdict, RunEvent, RunState,
-    RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard, TaskStatus,
-    TaskStore, UpdateTaskPatch, WorkspaceRecord,
+    now_rfc3339, AgentRuntimeSummary, BeadsCheck, CreateTaskInput, PlanSubtaskInput, QaVerdict,
+    RunEvent, RunState, RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard,
+    TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
 };
 use host_infra_system::{
     build_branch_name, command_exists, pick_free_port, remove_worktree, resolve_central_beads_dir,
@@ -11,9 +11,11 @@ use host_infra_system::{
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
+use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
@@ -23,6 +25,7 @@ pub struct AppService {
     task_store: Arc<dyn TaskStore>,
     config_store: AppConfigStore,
     runs: Arc<Mutex<HashMap<String, RunProcess>>>,
+    agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     initialized_repos: Arc<Mutex<HashSet<String>>>,
 }
 
@@ -35,12 +38,18 @@ struct RunProcess {
     repo_config: RepoConfig,
 }
 
+struct AgentRuntimeProcess {
+    summary: AgentRuntimeSummary,
+    child: Child,
+}
+
 impl AppService {
     pub fn new(task_store: Arc<dyn TaskStore>, config_store: AppConfigStore) -> Self {
         Self {
             task_store,
             config_store,
             runs: Arc::new(Mutex::new(HashMap::new())),
+            agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
         }
     }
@@ -613,6 +622,125 @@ impl AppService {
         Ok(list)
     }
 
+    pub fn opencode_runtime_list(
+        &self,
+        repo_path: Option<&str>,
+    ) -> Result<Vec<AgentRuntimeSummary>> {
+        let runtimes = self
+            .agent_runtimes
+            .lock()
+            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+
+        let mut list = runtimes
+            .values()
+            .filter(|runtime| {
+                if let Some(path) = repo_path {
+                    runtime.summary.repo_path == path
+                } else {
+                    true
+                }
+            })
+            .map(|runtime| runtime.summary.clone())
+            .collect::<Vec<_>>();
+
+        list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        Ok(list)
+    }
+
+    pub fn opencode_runtime_start(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        role: &str,
+    ) -> Result<AgentRuntimeSummary> {
+        self.ensure_repo_initialized(repo_path)?;
+        if !matches!(role, "spec" | "planner" | "qa") {
+            return Err(anyhow!(
+                "Unsupported agent runtime role: {role}. Supported: spec, planner, qa"
+            ));
+        }
+
+        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let _task = tasks
+            .iter()
+            .find(|entry| entry.id == task_id)
+            .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
+
+        {
+            let mut runtimes = self
+                .agent_runtimes
+                .lock()
+                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+
+            let stale_runtime_ids = runtimes
+                .iter_mut()
+                .filter_map(|(runtime_id, runtime)| {
+                    runtime
+                        .child
+                        .try_wait()
+                        .ok()
+                        .flatten()
+                        .map(|_| runtime_id.clone())
+                })
+                .collect::<Vec<_>>();
+            for runtime_id in stale_runtime_ids {
+                runtimes.remove(&runtime_id);
+            }
+
+            if let Some(existing) = runtimes.values().find(|runtime| {
+                runtime.summary.repo_path == repo_path
+                    && runtime.summary.task_id == task_id
+                    && runtime.summary.role == role
+            }) {
+                return Ok(existing.summary.clone());
+            }
+        }
+
+        let port = pick_free_port()?;
+        let mut child = spawn_opencode_server(Path::new(repo_path), port)?;
+        if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
+            let _ = child.kill();
+            return Err(error)
+                .with_context(|| format!("OpenCode runtime failed to start for task {task_id}"));
+        }
+
+        let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
+        let summary = AgentRuntimeSummary {
+            runtime_id: runtime_id.clone(),
+            repo_path: repo_path.to_string(),
+            task_id: task_id.to_string(),
+            role: role.to_string(),
+            working_directory: repo_path.to_string(),
+            port,
+            started_at: now_rfc3339(),
+        };
+
+        self.agent_runtimes
+            .lock()
+            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?
+            .insert(
+                runtime_id,
+                AgentRuntimeProcess {
+                    summary: summary.clone(),
+                    child,
+                },
+            );
+
+        Ok(summary)
+    }
+
+    pub fn opencode_runtime_stop(&self, runtime_id: &str) -> Result<bool> {
+        let mut runtimes = self
+            .agent_runtimes
+            .lock()
+            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+        let mut runtime = runtimes
+            .remove(runtime_id)
+            .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
+        let _ = runtime.child.kill();
+        Ok(true)
+    }
+
     pub fn build_start(
         &self,
         repo_path: &str,
@@ -701,15 +829,13 @@ impl AppService {
 
         let port = pick_free_port()?;
 
-        let mut child = Command::new("opencode")
-            .arg("serve")
-            .arg("--port")
-            .arg(port.to_string())
-            .current_dir(worktree_dir.as_path())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("Failed to spawn opencode serve")?;
+        let mut child = spawn_opencode_server(worktree_dir.as_path(), port)?;
+        if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
+            let _ = child.kill();
+            return Err(error).with_context(|| {
+                format!("OpenCode build runtime failed to start for task {task_id}")
+            });
+        }
 
         self.task_transition(
             repo_path,
@@ -1362,17 +1488,53 @@ fn spawn_output_forwarder(
     });
 }
 
+fn spawn_opencode_server(working_directory: &Path, port: u16) -> Result<Child> {
+    Command::new("opencode")
+        .arg("serve")
+        .arg("--hostname")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg(port.to_string())
+        .env("OPENCODE_CONFIG_CONTENT", r#"{"logLevel":"info"}"#)
+        .current_dir(working_directory)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("Failed to spawn opencode serve")
+}
+
+fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
+    let deadline = Instant::now() + timeout;
+    let address: SocketAddr = format!("127.0.0.1:{port}")
+        .parse()
+        .context("Invalid localhost address")?;
+
+    while Instant::now() < deadline {
+        if TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+
+    Err(anyhow!(
+        "Timed out waiting for OpenCode runtime on 127.0.0.1:{}",
+        port
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         allows_transition, can_set_plan, can_set_spec_from_status, derive_available_actions,
         normalize_required_markdown, normalize_subtask_plan_inputs,
         validate_parent_relationships_for_create, validate_parent_relationships_for_update,
-        validate_plan_subtask_rules, validate_transition,
+        validate_plan_subtask_rules, validate_transition, wait_for_local_server,
     };
     use host_domain::{
         CreateTaskInput, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
     };
+    use std::net::TcpListener;
+    use std::time::Duration;
 
     fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskCard {
         TaskCard {
@@ -1655,5 +1817,22 @@ mod tests {
         let actions = derive_available_actions(&deferred, std::slice::from_ref(&deferred));
         assert!(actions.contains(&TaskAction::ResumeDeferred));
         assert!(!actions.contains(&TaskAction::DeferIssue));
+    }
+
+    #[test]
+    fn wait_for_local_server_returns_ok_when_port_is_open() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+        let port = listener.local_addr().expect("addr").port();
+        let result = wait_for_local_server(port, Duration::from_millis(500));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn wait_for_local_server_times_out_when_port_is_closed() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+        let port = listener.local_addr().expect("addr").port();
+        drop(listener);
+        let result = wait_for_local_server(port, Duration::from_millis(250));
+        assert!(result.is_err());
     }
 }

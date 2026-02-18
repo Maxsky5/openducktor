@@ -2,14 +2,13 @@ import { KanbanColumn, KanbanSummaryCards } from "@/components/features/kanban";
 import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { Button } from "@/components/ui/button";
-import { useDelegationState, useTasksState, useWorkspaceState } from "@/state";
+import { useTasksState, useWorkspaceState } from "@/state";
 import { mapToKanbanColumns } from "@openblueprint/core";
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export function KanbanPage(): ReactElement {
-  const { delegateTask } = useDelegationState();
   const { isSwitchingWorkspace } = useWorkspaceState();
   const {
     tasks,
@@ -47,6 +46,30 @@ export function KanbanPage(): ReactElement {
   const composerTask = useMemo(
     () => tasks.find((task) => task.id === composerTaskId) ?? null,
     [composerTaskId, tasks],
+  );
+
+  const openAgents = useCallback(
+    (
+      taskId: string,
+      agent: "spec" | "planner" | "build" | "qa",
+      options?: {
+        scenario?: string;
+        autostart?: boolean;
+      },
+    ) => {
+      const params = new URLSearchParams({
+        task: taskId,
+        agent,
+      });
+      if (options?.scenario) {
+        params.set("scenario", options.scenario);
+      }
+      if (options?.autostart) {
+        params.set("autostart", "1");
+      }
+      navigate(`/agents?${params.toString()}`);
+    },
+    [navigate],
   );
 
   return (
@@ -100,15 +123,29 @@ export function KanbanPage(): ReactElement {
                 column={column}
                 runStateByTaskId={runStateByTaskId}
                 onOpenDetails={(taskId) => setDetailsTaskId(taskId)}
-                onDelegate={(taskId) => void delegateTask(taskId)}
-                onPlan={(taskId) => {
-                  navigate(`/planner?task=${encodeURIComponent(taskId)}`);
+                onDelegate={(taskId) =>
+                  openAgents(taskId, "build", {
+                    scenario: "build_implementation_start",
+                    autostart: true,
+                  })
+                }
+                onPlan={(taskId, action) => {
+                  openAgents(taskId, action === "set_spec" ? "spec" : "planner", {
+                    autostart: true,
+                  });
                 }}
                 onBuild={(taskId) => {
-                  navigate(`/builder?task=${encodeURIComponent(taskId)}`);
+                  openAgents(taskId, "build");
                 }}
                 onHumanApprove={(taskId) => void humanApproveTask(taskId)}
-                onHumanRequestChanges={(taskId) => void humanRequestChangesTask(taskId)}
+                onHumanRequestChanges={(taskId) => {
+                  void humanRequestChangesTask(taskId).then(() =>
+                    openAgents(taskId, "build", {
+                      scenario: "build_after_human_request_changes",
+                      autostart: true,
+                    }),
+                  );
+                }}
               />
             ))}
           </div>
@@ -135,14 +172,19 @@ export function KanbanPage(): ReactElement {
             setDetailsTaskId(null);
           }
         }}
-        onPlan={(taskId) => {
-          navigate(`/planner?task=${encodeURIComponent(taskId)}`);
+        onPlan={(taskId, action) => {
+          openAgents(taskId, action === "set_spec" ? "spec" : "planner", {
+            autostart: true,
+          });
         }}
         onBuild={(taskId) => {
-          navigate(`/builder?task=${encodeURIComponent(taskId)}`);
+          openAgents(taskId, "build");
         }}
         onDelegate={(taskId) => {
-          void delegateTask(taskId);
+          openAgents(taskId, "build", {
+            scenario: "build_implementation_start",
+            autostart: true,
+          });
         }}
         onEdit={(taskId) => {
           setDetailsTaskId(null);
@@ -152,7 +194,14 @@ export function KanbanPage(): ReactElement {
         onDefer={(taskId) => void deferTask(taskId)}
         onResumeDeferred={(taskId) => void resumeDeferredTask(taskId)}
         onHumanApprove={(taskId) => void humanApproveTask(taskId)}
-        onHumanRequestChanges={(taskId) => void humanRequestChangesTask(taskId)}
+        onHumanRequestChanges={(taskId) => {
+          void humanRequestChangesTask(taskId).then(() =>
+            openAgents(taskId, "build", {
+              scenario: "build_after_human_request_changes",
+              autostart: true,
+            }),
+          );
+        }}
       />
     </div>
   );

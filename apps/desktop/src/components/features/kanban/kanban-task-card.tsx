@@ -15,7 +15,7 @@ type KanbanTaskCardProps = {
   runState?: RunSummary["state"] | undefined;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onPlan: (taskId: string) => void;
+  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onBuild: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
@@ -54,7 +54,7 @@ function TaskActions({
   onHumanRequestChanges,
 }: {
   task: TaskCard;
-  onPlan: (taskId: string) => void;
+  onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onBuild: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
@@ -64,7 +64,7 @@ function TaskActions({
     switch (action) {
       case "set_spec":
       case "set_plan":
-        onPlan(task.id);
+        onPlan(task.id, action);
         return;
       case "open_builder":
         onBuild(task.id);
