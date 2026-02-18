@@ -329,10 +329,7 @@ export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelecti
 
 export const agentSessionRecordSchema = z.object({
   sessionId: z.string(),
-  externalSessionId: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    z.string().optional(),
-  ),
+  externalSessionId: z.string(),
   taskId: z.string(),
   role: agentSessionRoleSchema,
   scenario: agentSessionScenarioSchema,

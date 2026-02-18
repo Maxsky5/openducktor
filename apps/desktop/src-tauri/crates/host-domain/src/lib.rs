@@ -156,8 +156,7 @@ pub struct AgentSessionModelSelection {
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionDocument {
     pub session_id: String,
-    #[serde(default)]
-    pub external_session_id: Option<String>,
+    pub external_session_id: String,
     pub task_id: String,
     pub role: String,
     pub scenario: String,

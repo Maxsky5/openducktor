@@ -999,9 +999,6 @@ mod tests {
         .expect("agent sessions");
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].session_id, "obp-session-1");
-        assert_eq!(
-            sessions[0].external_session_id.as_deref(),
-            Some("session-opencode-1")
-        );
+        assert_eq!(sessions[0].external_session_id, "session-opencode-1");
     }
 }

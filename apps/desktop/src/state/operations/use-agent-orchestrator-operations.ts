@@ -302,7 +302,7 @@ const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionSt
     session.status === "starting" || session.status === "running" ? "stopped" : session.status;
   return {
     sessionId: session.sessionId,
-    externalSessionId: session.externalSessionId ?? session.sessionId,
+    externalSessionId: session.externalSessionId,
     taskId: session.taskId,
     role: session.role,
     scenario: session.scenario,
@@ -551,7 +551,6 @@ export function useAgentOrchestratorOperations({
 
       await Promise.all(
         recordsToHydrate.map(async (record) => {
-          const externalSessionId = record.externalSessionId ?? record.sessionId;
           const baseUrl =
             (record.role === "spec" || record.role === "planner") && workspaceRuntime
               ? toBaseUrl(workspaceRuntime.port)
@@ -565,7 +564,7 @@ export function useAgentOrchestratorOperations({
             const history = await adapter.loadSessionHistory({
               baseUrl,
               workingDirectory,
-              externalSessionId,
+              externalSessionId: record.externalSessionId,
               limit: 250,
             });
             updateSession(
@@ -1056,10 +1055,6 @@ export function useAgentOrchestratorOperations({
       const task = taskRef.current.find((entry) => entry.id === session.taskId);
       if (!task) {
         throw new Error(`Task not found: ${session.taskId}`);
-      }
-
-      if (!session.externalSessionId) {
-        throw new Error("Session cannot be resumed because OpenCode session id is missing.");
       }
 
       const docs = await loadTaskDocuments(activeRepo, session.taskId);
