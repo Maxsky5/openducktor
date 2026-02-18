@@ -131,6 +131,17 @@ describe("TauriHostClient", () => {
           },
         ];
       }
+      if (command === "opencode_repo_runtime_ensure") {
+        return {
+          runtimeId: "runtime-main",
+          repoPath: "/repo",
+          taskId: "__workspace__",
+          role: "workspace",
+          workingDirectory: "/repo",
+          port: 4180,
+          startedAt: "2026-02-17T12:00:00Z",
+        };
+      }
       if (command === "opencode_runtime_stop") {
         return { ok: true };
       }
@@ -139,14 +150,17 @@ describe("TauriHostClient", () => {
 
     const runtime = await client.opencodeRuntimeStart("/repo", "task-1", "planner");
     const runtimes = await client.opencodeRuntimeList("/repo");
+    const ensured = await client.opencodeRepoRuntimeEnsure("/repo");
     const stopped = await client.opencodeRuntimeStop("runtime-1");
 
     expect(runtime.runtimeId).toBe("runtime-1");
     expect(runtimes).toHaveLength(1);
+    expect(ensured.runtimeId).toBe("runtime-main");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "opencode_runtime_start",
       "opencode_runtime_list",
+      "opencode_repo_runtime_ensure",
       "opencode_runtime_stop",
     ]);
   });

@@ -28,7 +28,7 @@ const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   set_spec: `set_spec { "markdown": string }`,
   set_plan: `set_plan { "markdown": string, "subtasks"?: [{ "title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: number, "description"?: string }] }`,
   build_blocked: `build_blocked { "reason": string }`,
-  build_resumed: `build_resumed { }`,
+  build_resumed: "build_resumed { }",
   build_completed: `build_completed { "summary"?: string }`,
   qa_approved: `qa_approved { "reportMarkdown": string }`,
   qa_rejected: `qa_rejected { "reportMarkdown": string }`,

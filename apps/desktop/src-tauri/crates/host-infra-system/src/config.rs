@@ -23,6 +23,30 @@ impl Default for HookSet {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentModelDefault {
+    pub provider_id: String,
+    pub model_id: String,
+    #[serde(default)]
+    pub variant: Option<String>,
+    #[serde(default)]
+    pub opencode_agent: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDefaults {
+    #[serde(default)]
+    pub spec: Option<AgentModelDefault>,
+    #[serde(default)]
+    pub planner: Option<AgentModelDefault>,
+    #[serde(default)]
+    pub build: Option<AgentModelDefault>,
+    #[serde(default)]
+    pub qa: Option<AgentModelDefault>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoConfig {
@@ -33,6 +57,8 @@ pub struct RepoConfig {
     pub trusted_hooks: bool,
     #[serde(default)]
     pub hooks: HookSet,
+    #[serde(default)]
+    pub agent_defaults: AgentDefaults,
 }
 
 fn default_branch_prefix() -> String {
@@ -50,6 +76,7 @@ impl Default for RepoConfig {
             branch_prefix: default_branch_prefix(),
             trusted_hooks: false,
             hooks: HookSet::default(),
+            agent_defaults: AgentDefaults::default(),
         }
     }
 }
@@ -387,6 +414,7 @@ mod tests {
                     branch_prefix: "duck".to_string(),
                     trusted_hooks: true,
                     hooks: Default::default(),
+                    agent_defaults: Default::default(),
                 },
             )
             .expect("update config");

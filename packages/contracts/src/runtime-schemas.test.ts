@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { agentRuntimeSummarySchema, repoConfigSchema, runEventSchema, taskCardSchema } from "./index";
+import {
+  agentRuntimeSummarySchema,
+  repoConfigSchema,
+  runEventSchema,
+  taskCardSchema,
+} from "./index";
 
 describe("runtime schemas", () => {
   test("task card parses workflow status from host payloads", () => {
@@ -59,6 +64,34 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.worktreeBasePath).toBeUndefined();
+    expect(parsed.agentDefaults).toEqual({
+      spec: undefined,
+      planner: undefined,
+      build: undefined,
+      qa: undefined,
+    });
+  });
+
+  test("repo config parses agent defaults", () => {
+    const parsed = repoConfigSchema.parse({
+      worktreeBasePath: "/tmp/wt",
+      branchPrefix: "obp",
+      trustedHooks: true,
+      hooks: { preStart: [], postComplete: [] },
+      agentDefaults: {
+        spec: {
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          opencodeAgent: "build",
+        },
+      },
+    });
+
+    expect(parsed.agentDefaults.spec?.providerId).toBe("openai");
+    expect(parsed.agentDefaults.spec?.modelId).toBe("gpt-5");
+    expect(parsed.agentDefaults.spec?.variant).toBe("high");
+    expect(parsed.agentDefaults.spec?.opencodeAgent).toBe("build");
   });
 
   test("agent runtime summary parses host payload", () => {

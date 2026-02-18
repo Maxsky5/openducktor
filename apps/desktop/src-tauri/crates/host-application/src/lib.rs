@@ -44,6 +44,9 @@ struct AgentRuntimeProcess {
 }
 
 impl AppService {
+    const WORKSPACE_RUNTIME_ROLE: &'static str = "workspace";
+    const WORKSPACE_RUNTIME_TASK_ID: &'static str = "__workspace__";
+
     pub fn new(task_store: Arc<dyn TaskStore>, config_store: AppConfigStore) -> Self {
         Self {
             task_store,
@@ -626,10 +629,11 @@ impl AppService {
         &self,
         repo_path: Option<&str>,
     ) -> Result<Vec<AgentRuntimeSummary>> {
-        let runtimes = self
+        let mut runtimes = self
             .agent_runtimes
             .lock()
             .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+        Self::prune_stale_runtimes(&mut runtimes);
 
         let mut list = runtimes
             .values()
@@ -645,6 +649,70 @@ impl AppService {
 
         list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
         Ok(list)
+    }
+
+    pub fn opencode_repo_runtime_ensure(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
+        self.ensure_repo_initialized(repo_path)?;
+
+        {
+            let mut runtimes = self
+                .agent_runtimes
+                .lock()
+                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+            Self::prune_stale_runtimes(&mut runtimes);
+
+            if let Some(existing) = runtimes.values().find(|runtime| {
+                runtime.summary.repo_path == repo_path
+                    && runtime.summary.role == Self::WORKSPACE_RUNTIME_ROLE
+            }) {
+                return Ok(existing.summary.clone());
+            }
+        }
+
+        let port = pick_free_port()?;
+        let mut child = spawn_opencode_server(Path::new(repo_path), port)?;
+        if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
+            let _ = child.kill();
+            return Err(error)
+                .with_context(|| format!("OpenCode workspace runtime failed to start for {repo_path}"));
+        }
+
+        let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
+        let summary = AgentRuntimeSummary {
+            runtime_id: runtime_id.clone(),
+            repo_path: repo_path.to_string(),
+            task_id: Self::WORKSPACE_RUNTIME_TASK_ID.to_string(),
+            role: Self::WORKSPACE_RUNTIME_ROLE.to_string(),
+            working_directory: repo_path.to_string(),
+            port,
+            started_at: now_rfc3339(),
+        };
+
+        {
+            let mut runtimes = self
+                .agent_runtimes
+                .lock()
+                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+            Self::prune_stale_runtimes(&mut runtimes);
+
+            if let Some(existing) = runtimes.values().find(|runtime| {
+                runtime.summary.repo_path == repo_path
+                    && runtime.summary.role == Self::WORKSPACE_RUNTIME_ROLE
+            }) {
+                let _ = child.kill();
+                return Ok(existing.summary.clone());
+            }
+
+            runtimes.insert(
+                runtime_id,
+                AgentRuntimeProcess {
+                    summary: summary.clone(),
+                    child,
+                },
+            );
+        }
+
+        Ok(summary)
     }
 
     pub fn opencode_runtime_start(
@@ -671,21 +739,7 @@ impl AppService {
                 .agent_runtimes
                 .lock()
                 .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-
-            let stale_runtime_ids = runtimes
-                .iter_mut()
-                .filter_map(|(runtime_id, runtime)| {
-                    runtime
-                        .child
-                        .try_wait()
-                        .ok()
-                        .flatten()
-                        .map(|_| runtime_id.clone())
-                })
-                .collect::<Vec<_>>();
-            for runtime_id in stale_runtime_ids {
-                runtimes.remove(&runtime_id);
-            }
+            Self::prune_stale_runtimes(&mut runtimes);
 
             if let Some(existing) = runtimes.values().find(|runtime| {
                 runtime.summary.repo_path == repo_path
@@ -739,6 +793,23 @@ impl AppService {
             .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
         let _ = runtime.child.kill();
         Ok(true)
+    }
+
+    fn prune_stale_runtimes(runtimes: &mut HashMap<String, AgentRuntimeProcess>) {
+        let stale_runtime_ids = runtimes
+            .iter_mut()
+            .filter_map(|(runtime_id, runtime)| {
+                runtime
+                    .child
+                    .try_wait()
+                    .ok()
+                    .flatten()
+                    .map(|_| runtime_id.clone())
+            })
+            .collect::<Vec<_>>();
+        for runtime_id in stale_runtime_ids {
+            runtimes.remove(&runtime_id);
+        }
     }
 
     pub fn build_start(

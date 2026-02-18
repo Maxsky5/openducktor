@@ -263,6 +263,36 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptCalls.length).toBeGreaterThanOrEqual(2);
   });
 
+  test("sendUserMessage forwards selected model, variant, and agent", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter);
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Use the selected model",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        opencodeAgent: "spec",
+      },
+    });
+
+    expect(mock.session.promptCalls[0]).toMatchObject({
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5",
+      },
+      variant: "high",
+      agent: "spec",
+    });
+  });
+
   test("rejects workflow tool calls that are not allowed for the session role", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({
@@ -399,8 +429,6 @@ describe("OpencodeSdkAdapter", () => {
       }),
     ).rejects.toThrow("Unknown session");
 
-    await expect(
-      adapter.stopSession("missing"),
-    ).rejects.toThrow("Unknown session");
+    await expect(adapter.stopSession("missing")).rejects.toThrow("Unknown session");
   });
 });

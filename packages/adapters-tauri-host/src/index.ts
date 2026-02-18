@@ -267,6 +267,13 @@ export class TauriHostClient implements PlannerTools {
     });
   }
 
+  async opencodeRepoRuntimeEnsure(repoPath: string): Promise<AgentRuntimeSummary> {
+    const payload = await this.invokeFn<unknown>("opencode_repo_runtime_ensure", {
+      repoPath,
+    });
+    return agentRuntimeSummarySchema.parse(payload);
+  }
+
   async workspaceUpdateRepoConfig(
     repoPath: string,
     config: {
@@ -274,6 +281,12 @@ export class TauriHostClient implements PlannerTools {
       branchPrefix?: string;
       trustedHooks?: boolean;
       hooks?: { preStart?: string[]; postComplete?: string[] };
+      agentDefaults?: {
+        spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        build?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        qa?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+      };
     },
   ): Promise<WorkspaceRecord> {
     const payload = await this.invokeFn<unknown>("workspace_update_repo_config", {

@@ -23,9 +23,11 @@ export type AgentModelSelection = {
   providerId: string;
   modelId: string;
   variant?: string;
+  opencodeAgent?: string;
 };
 
 export type AgentModelDescriptor = {
+  id: string;
   providerId: string;
   providerName: string;
   modelId: string;
@@ -33,9 +35,18 @@ export type AgentModelDescriptor = {
   variants: string[];
 };
 
+export type AgentDescriptor = {
+  name: string;
+  description?: string;
+  mode: "subagent" | "primary" | "all";
+  hidden?: boolean;
+  native?: boolean;
+};
+
 export type AgentModelCatalog = {
   models: AgentModelDescriptor[];
   defaultModelsByProvider: Record<string, string>;
+  agents: AgentDescriptor[];
 };
 
 export type AgentToolCall =

@@ -66,6 +66,7 @@ struct RepoConfigPayload {
     branch_prefix: Option<String>,
     trusted_hooks: Option<bool>,
     hooks: Option<host_infra_system::HookSet>,
+    agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
 fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
@@ -147,6 +148,10 @@ async fn workspace_update_repo_config(
         hooks: config
             .hooks
             .or_else(|| existing.as_ref().map(|entry| entry.hooks.clone()))
+            .unwrap_or_default(),
+        agent_defaults: config
+            .agent_defaults
+            .or_else(|| existing.as_ref().map(|entry| entry.agent_defaults.clone()))
             .unwrap_or_default(),
     };
 
@@ -506,6 +511,14 @@ async fn opencode_runtime_stop(
     )
 }
 
+#[tauri::command]
+async fn opencode_repo_runtime_ensure(
+    state: State<'_, AppState>,
+    repo_path: String,
+) -> Result<AgentRuntimeSummary, String> {
+    as_error(state.service.opencode_repo_runtime_ensure(&repo_path))
+}
+
 pub fn run() {
     let config_store = AppConfigStore::new().expect("failed to initialize config store");
     let metadata_namespace = config_store
@@ -553,7 +566,8 @@ pub fn run() {
             runs_list,
             opencode_runtime_list,
             opencode_runtime_start,
-            opencode_runtime_stop
+            opencode_runtime_stop,
+            opencode_repo_runtime_ensure
         ])
         .run(tauri::generate_context!())
         .expect("error while running openblueprint");

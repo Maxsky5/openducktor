@@ -1,10 +1,4 @@
 import {
-  createOpencodeClient,
-  type Event,
-  type OpencodeClient,
-  type Part,
-} from "@opencode-ai/sdk/v2";
-import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentEnginePort,
   type AgentEvent,
@@ -21,6 +15,12 @@ import {
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
 } from "@openblueprint/core";
+import {
+  type Event,
+  type OpencodeClient,
+  type Part,
+  createOpencodeClient,
+} from "@opencode-ai/sdk/v2";
 
 type SessionToolExecutor = {
   setSpec: (repoPath: string, taskId: string, markdown: string) => Promise<{ updatedAt?: string }>;
@@ -235,7 +235,9 @@ const extractToolCalls = (message: string): AgentToolCall[] => {
   return calls;
 };
 
-const sanitizeAssistantMessage = (rawMessage: string): { visible: string; toolCalls: AgentToolCall[] } => {
+const sanitizeAssistantMessage = (
+  rawMessage: string,
+): { visible: string; toolCalls: AgentToolCall[] } => {
   const toolCalls = extractToolCalls(rawMessage);
   const visible = rawMessage.replace(TOOL_BLOCK_PATTERN, "").trim();
   return { visible, toolCalls };
@@ -275,6 +277,7 @@ const normalizeModelInput = (
 ): {
   model?: { providerID: string; modelID: string };
   variant?: string;
+  agent?: string;
 } => {
   if (!model) {
     return {};
@@ -286,6 +289,7 @@ const normalizeModelInput = (
       modelID: model.modelId,
     },
     ...(model.variant ? { variant: model.variant } : {}),
+    ...(model.opencodeAgent ? { agent: model.opencodeAgent } : {}),
   };
 };
 
@@ -388,11 +392,11 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
 
 const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
   if (!payload || typeof payload !== "object") {
-    return { models: [], defaultModelsByProvider: {} };
+    return { models: [], defaultModelsByProvider: {}, agents: [] };
   }
 
-  const all = Array.isArray((payload as { all?: unknown }).all)
-    ? ((payload as { all: Array<unknown> }).all as Array<unknown>)
+  const providers = Array.isArray((payload as { providers?: unknown }).providers)
+    ? ((payload as { providers: Array<unknown> }).providers as Array<unknown>)
     : [];
   const defaults =
     typeof (payload as { default?: unknown }).default === "object" &&
@@ -400,7 +404,7 @@ const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
       ? ((payload as { default: Record<string, string> }).default ?? {})
       : {};
 
-  const models = all.flatMap((provider) => {
+  const models = providers.flatMap((provider) => {
     if (!provider || typeof provider !== "object") {
       return [];
     }
@@ -429,6 +433,7 @@ const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
             : [];
 
         return {
+          id: `${providerId}/${modelId}`,
           providerId,
           providerName,
           modelId,
@@ -442,6 +447,7 @@ const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
   return {
     models,
     defaultModelsByProvider: defaults,
+    agents: [],
   };
 };
 
@@ -528,11 +534,45 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       baseUrl: input.baseUrl,
       directory: input.workingDirectory,
     });
-    const response = await client.provider.list({
+    const response = await client.config.providers({
       directory: input.workingDirectory,
     });
-    const data = unwrapData(response, "list providers");
-    return mapProviderListToCatalog(data);
+    const providerData = unwrapData(response, "list configured providers");
+    const agentsData = await (async () => {
+      const app = (client as { app?: { agents?: unknown } }).app;
+      if (!app || typeof app.agents !== "function") {
+        return [];
+      }
+      try {
+        const payload = await app.agents({
+          directory: input.workingDirectory,
+        } as {
+          directory: string;
+        });
+        return unwrapData(
+          payload as { data?: unknown; error?: { message?: string } | unknown },
+          "list agents",
+        );
+      } catch {
+        return [];
+      }
+    })();
+    const baseCatalog = mapProviderListToCatalog(providerData);
+    const agents = Array.isArray(agentsData)
+      ? agentsData
+          .map((entry) => ({
+            name: entry.name,
+            ...(entry.description ? { description: entry.description } : {}),
+            mode: entry.mode,
+            ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
+            ...(entry.native !== undefined ? { native: entry.native } : {}),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      : [];
+    return {
+      ...baseCatalog,
+      agents,
+    };
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
@@ -559,10 +599,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     });
   }
 
-  subscribeEvents(
-    sessionId: string,
-    listener: (event: AgentEvent) => void,
-  ): EventUnsubscribe {
+  subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe {
     const listeners = this.listeners.get(sessionId) ?? new Set();
     listeners.add(listener);
     this.listeners.set(sessionId, listeners);
@@ -617,6 +654,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       system: session.input.systemPrompt,
       ...(modelInput.model ? { model: modelInput.model } : {}),
       ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+      ...(modelInput.agent ? { agent: modelInput.agent } : {}),
       parts: [{ type: "text", text: userMessage }],
     });
     const responseData = unwrapData(response, "prompt session");
@@ -699,12 +737,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       case "set_spec":
         return this.tools.setSpec(repoPath, taskId, toolCall.args.markdown);
       case "set_plan":
-        return this.tools.setPlan(
-          repoPath,
-          taskId,
-          toolCall.args.markdown,
-          toolCall.args.subtasks,
-        );
+        return this.tools.setPlan(repoPath, taskId, toolCall.args.markdown, toolCall.args.subtasks);
       case "build_blocked":
         return this.tools.buildBlocked(repoPath, taskId, toolCall.args.reason);
       case "build_resumed":
