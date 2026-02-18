@@ -318,6 +318,11 @@ export function useAgentOrchestratorOperations({
                 role: "thinking",
                 content: part.text,
                 timestamp: event.timestamp,
+                meta: {
+                  kind: "reasoning",
+                  partId: part.partId,
+                  completed: part.completed,
+                },
               }),
             }));
             return;
@@ -332,6 +337,17 @@ export function useAgentOrchestratorOperations({
                 role: "tool",
                 content: formatToolContent(part),
                 timestamp: event.timestamp,
+                meta: {
+                  kind: "tool",
+                  partId: part.partId,
+                  callId: part.callId,
+                  tool: part.tool,
+                  status: part.status,
+                  ...(part.title ? { title: part.title } : {}),
+                  ...(part.input ? { input: part.input } : {}),
+                  ...(part.output ? { output: part.output } : {}),
+                  ...(part.error ? { error: part.error } : {}),
+                },
               }),
             }));
             return;
@@ -349,6 +365,13 @@ export function useAgentOrchestratorOperations({
                     ? "Agent step started"
                     : `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
                 timestamp: event.timestamp,
+                meta: {
+                  kind: "step",
+                  partId: part.partId,
+                  phase: part.phase,
+                  ...(part.reason ? { reason: part.reason } : {}),
+                  ...(typeof part.cost === "number" ? { cost: part.cost } : {}),
+                },
               }),
             }));
             return;
@@ -363,6 +386,13 @@ export function useAgentOrchestratorOperations({
                 role: "system",
                 content: `Subtask (${part.agent}): ${part.description}`,
                 timestamp: event.timestamp,
+                meta: {
+                  kind: "subtask",
+                  partId: part.partId,
+                  agent: part.agent,
+                  prompt: part.prompt,
+                  description: part.description,
+                },
               }),
             }));
           }

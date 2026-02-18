@@ -5,11 +5,44 @@ import type {
   AgentScenario,
 } from "@openblueprint/core";
 
+export type AgentChatMessageMeta =
+  | {
+      kind: "reasoning";
+      partId: string;
+      completed: boolean;
+    }
+  | {
+      kind: "tool";
+      partId: string;
+      callId: string;
+      tool: string;
+      status: "pending" | "running" | "completed" | "error";
+      title?: string;
+      input?: Record<string, unknown>;
+      output?: string;
+      error?: string;
+    }
+  | {
+      kind: "step";
+      partId: string;
+      phase: "start" | "finish";
+      reason?: string;
+      cost?: number;
+    }
+  | {
+      kind: "subtask";
+      partId: string;
+      agent: string;
+      prompt: string;
+      description: string;
+    };
+
 export type AgentChatMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "thinking" | "tool";
   content: string;
   timestamp: string;
+  meta?: AgentChatMessageMeta;
 };
 
 export type AgentPermissionRequest = {

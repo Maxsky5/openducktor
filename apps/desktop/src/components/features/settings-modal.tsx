@@ -1,4 +1,9 @@
 import {
+  toModelGroupsByProvider,
+  toModelOptions,
+  toPrimaryAgentOptions,
+} from "@/components/features/agents/catalog-select-options";
+import {
   DEFAULT_BRANCH_PREFIX,
   emptyRepoSettings,
   parseHookLines,
@@ -161,29 +166,14 @@ export function SettingsModal({
   }, [activeRepo, activeWorkspace, loadRepoSettings, open]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
-    if (!catalog) {
-      return [];
-    }
-    return catalog.models.map((entry) => ({
-      value: entry.id,
-      label: entry.modelName,
-      description: entry.modelId,
-      searchKeywords: [entry.modelId, ...entry.variants.map((variant) => `variant:${variant}`)],
-    }));
+    return toModelOptions(catalog);
   }, [catalog]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
-    if (!catalog) {
-      return [];
-    }
-    return catalog.agents
-      .filter((entry) => !entry.hidden)
-      .map((entry) => ({
-        value: entry.name,
-        label: entry.name,
-        ...(entry.description ? { description: entry.description } : {}),
-      }));
+    return toPrimaryAgentOptions(catalog);
   }, [catalog]);
+
+  const modelGroups = useMemo(() => toModelGroupsByProvider(catalog), [catalog]);
 
   const variantOptionsForRole = (role: AgentRole): ComboboxOption[] => {
     const model = findCatalogModel(selectedModelKeyForRole(role));
@@ -348,8 +338,8 @@ export function SettingsModal({
                     </Button>
                   </div>
 
-                  <div className="grid gap-2 md:grid-cols-3">
-                    <div className="grid gap-1">
+                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="grid min-w-0 gap-1">
                       <Label className="text-xs">Agent</Label>
                       <Combobox
                         value={value.opencodeAgent}
@@ -361,11 +351,12 @@ export function SettingsModal({
                         }
                       />
                     </div>
-                    <div className="grid gap-1">
+                    <div className="grid min-w-0 gap-1">
                       <Label className="text-xs">Model</Label>
                       <Combobox
                         value={modelKey}
                         options={modelOptions}
+                        groups={modelGroups}
                         placeholder={isLoadingCatalog ? "Loading models..." : "Select model"}
                         disabled={isLoadingCatalog || isSaving || modelOptions.length === 0}
                         onValueChange={(selectedModelKey) => {
@@ -385,7 +376,7 @@ export function SettingsModal({
                         }}
                       />
                     </div>
-                    <div className="grid gap-1">
+                    <div className="grid min-w-0 gap-1">
                       <Label className="text-xs">Variant</Label>
                       <Combobox
                         value={value.variant}

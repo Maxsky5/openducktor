@@ -1,3 +1,9 @@
+import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
+import {
+  toModelGroupsByProvider,
+  toModelOptions,
+  toPrimaryAgentOptions,
+} from "@/components/features/agents/catalog-select-options";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { TaskSelector } from "@/components/features/tasks";
 import { Badge } from "@/components/ui/badge";
@@ -193,29 +199,17 @@ export function AgentsPage(): ReactElement {
   }, [activeSession, input, sendAgentMessage]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
-    if (!activeSession?.modelCatalog) {
-      return [];
-    }
-    return activeSession.modelCatalog.agents
-      .filter((entry) => !entry.hidden)
-      .map((entry) => ({
-        value: entry.name,
-        label: entry.name,
-        ...(entry.description ? { description: entry.description } : {}),
-      }));
+    return toPrimaryAgentOptions(activeSession?.modelCatalog ?? null);
   }, [activeSession?.modelCatalog]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
-    if (!activeSession?.modelCatalog) {
-      return [];
-    }
-    return activeSession.modelCatalog.models.map((entry) => ({
-      value: entry.id,
-      label: entry.modelName,
-      description: entry.modelId,
-      searchKeywords: entry.variants.map((variant) => `variant:${variant}`),
-    }));
+    return toModelOptions(activeSession?.modelCatalog ?? null);
   }, [activeSession?.modelCatalog]);
+
+  const modelGroups = useMemo(
+    () => toModelGroupsByProvider(activeSession?.modelCatalog ?? null),
+    [activeSession?.modelCatalog],
+  );
 
   const selectedModelEntry = useMemo(() => {
     if (!activeSession?.modelCatalog || !activeSession.selectedModel) {
@@ -372,39 +366,37 @@ export function AgentsPage(): ReactElement {
                 </div>
               ) : null}
 
+              {activeSession ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+                  <Badge variant={statusBadgeVariant(activeSession.status)}>
+                    {activeSession.status}
+                  </Badge>
+                  <span>
+                    Messages: <strong>{activeSession.messages.length}</strong>
+                  </span>
+                  <span>
+                    Pending permissions: <strong>{activeSession.pendingPermissions.length}</strong>
+                  </span>
+                  <span>
+                    Pending questions: <strong>{activeSession.pendingQuestions.length}</strong>
+                  </span>
+                </div>
+              ) : null}
+
               {activeSession?.messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={cn(
-                    "rounded-md border px-3 py-2 text-sm",
-                    message.role === "user"
-                      ? "border-sky-200 bg-sky-50 text-slate-800"
-                      : message.role === "assistant"
-                        ? "border-slate-200 bg-white text-slate-800"
-                        : message.role === "thinking"
-                          ? "border-violet-200 bg-violet-50 text-violet-900"
-                          : message.role === "tool"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                            : "border-amber-200 bg-amber-50 text-amber-900",
-                  )}
-                >
-                  <header className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    {message.role === "thinking" ? "thinking" : message.role}
-                  </header>
-                  {message.role === "user" ? (
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                  ) : (
-                    <MarkdownRenderer markdown={message.content} variant="compact" />
-                  )}
-                </article>
+                <AgentChatMessageCard key={message.id} message={message} />
               ))}
 
               {activeSession?.draftAssistantText ? (
                 <article className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                  <header className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     assistant (streaming)
+                    <LoaderCircle className="size-3 animate-spin" />
                   </header>
-                  <MarkdownRenderer markdown={activeSession.draftAssistantText} variant="compact" />
+                  <MarkdownRenderer
+                    markdown={`${activeSession.draftAssistantText}▍`}
+                    variant="compact"
+                  />
                 </article>
               ) : null}
 
@@ -424,139 +416,158 @@ export function AgentsPage(): ReactElement {
                 void onSend();
               }}
             >
-              {activeSession ? (
-                <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 md:grid-cols-3">
-                  <div>
-                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      Agent
-                    </p>
-                    <Combobox
-                      value={activeSession.selectedModel?.opencodeAgent ?? ""}
-                      options={agentOptions}
-                      placeholder={
-                        activeSession.isLoadingModelCatalog ? "Loading agents..." : "Select agent"
-                      }
-                      disabled={activeSession.isLoadingModelCatalog}
-                      onValueChange={(opencodeAgent) => {
-                        const selectedModel =
-                          activeSession.selectedModel ??
-                          (() => {
-                            const firstModel = activeSession.modelCatalog?.models[0];
-                            if (!firstModel) {
-                              return null;
+              <div className="rounded-lg border border-slate-200 bg-white">
+                <Textarea
+                  placeholder="# for agents · @ for files · / for commands"
+                  value={input}
+                  disabled={!activeSession || isSending}
+                  className="min-h-24 resize-none border-0 focus-visible:ring-0"
+                  onChange={(event) => setInput(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void onSend();
+                    }
+                  }}
+                />
+                {activeSession ? (
+                  <div className="space-y-2 border-t border-slate-200 px-2 py-2">
+                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                      <div className="min-w-0">
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          Agent
+                        </p>
+                        <Combobox
+                          value={activeSession.selectedModel?.opencodeAgent ?? ""}
+                          options={agentOptions}
+                          placeholder={
+                            activeSession.isLoadingModelCatalog
+                              ? "Loading agents..."
+                              : "Select agent"
+                          }
+                          disabled={activeSession.isLoadingModelCatalog}
+                          onValueChange={(opencodeAgent) => {
+                            const selectedModel =
+                              activeSession.selectedModel ??
+                              (() => {
+                                const firstModel = activeSession.modelCatalog?.models[0];
+                                if (!firstModel) {
+                                  return null;
+                                }
+                                return {
+                                  providerId: firstModel.providerId,
+                                  modelId: firstModel.modelId,
+                                  ...(firstModel.variants[0]
+                                    ? { variant: firstModel.variants[0] }
+                                    : {}),
+                                };
+                              })();
+                            if (!selectedModel) {
+                              return;
                             }
-                            return {
-                              providerId: firstModel.providerId,
-                              modelId: firstModel.modelId,
-                              ...(firstModel.variants[0]
-                                ? { variant: firstModel.variants[0] }
+                            updateAgentSessionModel(activeSession.sessionId, {
+                              ...selectedModel,
+                              opencodeAgent,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          Model
+                        </p>
+                        <Combobox
+                          value={
+                            activeSession.selectedModel
+                              ? `${activeSession.selectedModel.providerId}/${activeSession.selectedModel.modelId}`
+                              : ""
+                          }
+                          options={modelOptions}
+                          groups={modelGroups}
+                          placeholder={
+                            activeSession.isLoadingModelCatalog
+                              ? "Loading models..."
+                              : "Select model"
+                          }
+                          disabled={activeSession.isLoadingModelCatalog}
+                          onValueChange={(nextValue) => {
+                            if (!activeSession.modelCatalog) {
+                              return;
+                            }
+                            const model = activeSession.modelCatalog.models.find(
+                              (entry) => entry.id === nextValue,
+                            );
+                            if (!model) {
+                              return;
+                            }
+                            updateAgentSessionModel(activeSession.sessionId, {
+                              providerId: model.providerId,
+                              modelId: model.modelId,
+                              ...(model.variants[0] ? { variant: model.variants[0] } : {}),
+                              ...(activeSession.selectedModel?.opencodeAgent
+                                ? { opencodeAgent: activeSession.selectedModel.opencodeAgent }
                                 : {}),
-                            };
-                          })();
-                        if (!selectedModel) {
-                          return;
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          Variant
+                        </p>
+                        <Combobox
+                          value={activeSession.selectedModel?.variant ?? ""}
+                          options={variantOptions}
+                          placeholder={variantOptions.length > 0 ? "Select variant" : "No variants"}
+                          disabled={variantOptions.length === 0}
+                          onValueChange={(variant) => {
+                            if (!activeSession.selectedModel) {
+                              return;
+                            }
+                            updateAgentSessionModel(activeSession.sessionId, {
+                              ...activeSession.selectedModel,
+                              variant,
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-slate-500">
+                        {activeSession.status === "running"
+                          ? "Streaming OpenCode events..."
+                          : activeSession.status === "starting"
+                            ? "Starting session..."
+                            : "Ready"}
+                      </p>
+                      <Button
+                        type="submit"
+                        disabled={
+                          !activeSession ||
+                          isSending ||
+                          input.trim().length === 0 ||
+                          !activeSession.selectedModel?.opencodeAgent
                         }
-                        updateAgentSessionModel(activeSession.sessionId, {
-                          ...selectedModel,
-                          opencodeAgent,
-                        });
-                      }}
-                    />
+                      >
+                        {isSending ? (
+                          <>
+                            <LoaderCircle className="size-3.5 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          "Send"
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      Model
-                    </p>
-                    <Combobox
-                      value={
-                        activeSession.selectedModel
-                          ? `${activeSession.selectedModel.providerId}/${activeSession.selectedModel.modelId}`
-                          : ""
-                      }
-                      options={modelOptions}
-                      placeholder={
-                        activeSession.isLoadingModelCatalog ? "Loading models..." : "Select model"
-                      }
-                      disabled={activeSession.isLoadingModelCatalog}
-                      onValueChange={(nextValue) => {
-                        if (!activeSession.modelCatalog) {
-                          return;
-                        }
-                        const model = activeSession.modelCatalog.models.find(
-                          (entry) => entry.id === nextValue,
-                        );
-                        if (!model) {
-                          return;
-                        }
-                        updateAgentSessionModel(activeSession.sessionId, {
-                          providerId: model.providerId,
-                          modelId: model.modelId,
-                          ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-                          ...(activeSession.selectedModel?.opencodeAgent
-                            ? { opencodeAgent: activeSession.selectedModel.opencodeAgent }
-                            : {}),
-                        });
-                      }}
-                    />
+                ) : (
+                  <div className="flex items-center justify-between border-t border-slate-200 px-2 py-2">
+                    <p className="text-xs text-slate-500">Start a session to begin chatting.</p>
+                    <Button type="submit" disabled>
+                      Send
+                    </Button>
                   </div>
-                  <div>
-                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      Variant
-                    </p>
-                    <Combobox
-                      value={activeSession.selectedModel?.variant ?? ""}
-                      options={variantOptions}
-                      placeholder={variantOptions.length > 0 ? "Select variant" : "No variants"}
-                      disabled={variantOptions.length === 0}
-                      onValueChange={(variant) => {
-                        if (!activeSession.selectedModel) {
-                          return;
-                        }
-                        updateAgentSessionModel(activeSession.sessionId, {
-                          ...activeSession.selectedModel,
-                          variant,
-                        });
-                      }}
-                    />
-                  </div>
-                </div>
-              ) : null}
-              <Textarea
-                placeholder="Send instruction to agent (Enter to send, Shift+Enter for newline)"
-                value={input}
-                disabled={!activeSession || isSending}
-                className="min-h-20 resize-none"
-                onChange={(event) => setInput(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void onSend();
-                  }
-                }}
-              />
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-slate-500">
-                  {!activeSession
-                    ? "Start a session to begin chatting."
-                    : activeSession.status === "running"
-                      ? "Agent response is streaming..."
-                      : activeSession.status === "starting"
-                        ? "Starting session..."
-                        : "Ready"}
-                </p>
-                <Button
-                  type="submit"
-                  disabled={!activeSession || isSending || input.trim().length === 0}
-                >
-                  {isSending ? (
-                    <>
-                      <LoaderCircle className="size-3.5 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    "Send"
-                  )}
-                </Button>
+                )}
               </div>
             </form>
           </CardContent>
