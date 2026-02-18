@@ -85,6 +85,13 @@ const ROLE_TOOLS: Record<AgentRole, ReadonlySet<AgentToolName>> = {
   qa: new Set(AGENT_ROLE_TOOL_POLICY.qa),
 };
 
+const ROLE_TERMINAL_TOOLS: Record<AgentRole, ReadonlySet<AgentToolName>> = {
+  spec: new Set(["set_spec"]),
+  planner: new Set(["set_plan"]),
+  build: new Set(["build_completed"]),
+  qa: new Set(["qa_approved", "qa_rejected"]),
+};
+
 const readTextFromParts = (parts: Part[]): string => {
   return parts
     .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text")
@@ -670,6 +677,11 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = this.requireSession(input.sessionId);
     await this.executePromptLoop(session, input.content, 0, input.model ?? session.input.model);
+    this.emit(session.summary.sessionId, {
+      type: "session_idle",
+      sessionId: session.summary.sessionId,
+      timestamp: this.now(),
+    });
   }
 
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
@@ -823,6 +835,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
 
     const assistantMessage = readTextFromParts(responseData.parts);
     const parsed = sanitizeAssistantMessage(assistantMessage);
+    let emittedVisibleAssistantMessage = false;
     if (parsed.visible) {
       this.emit(session.summary.sessionId, {
         type: "assistant_message",
@@ -830,6 +843,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         timestamp: this.now(),
         message: parsed.visible,
       });
+      emittedVisibleAssistantMessage = true;
     }
 
     const toolCalls = parsed.toolCalls;
@@ -838,6 +852,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     }
 
     const toolResultMessages: string[] = [];
+    let terminalToolCompleted: AgentToolName | null = null;
     for (const toolCall of toolCalls) {
       this.emit(session.summary.sessionId, {
         type: "tool_call",
@@ -871,6 +886,10 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
           message: resultMessage,
         });
         toolResultMessages.push(`${toolCall.tool}: success (${resultMessage})`);
+        if (this.isTerminalToolForRole(session.input.role, toolCall.tool)) {
+          terminalToolCompleted = toolCall.tool;
+          break;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Tool execution failed";
         this.emit(session.summary.sessionId, {
@@ -883,6 +902,22 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         });
         throw error;
       }
+    }
+
+    if (terminalToolCompleted) {
+      if (!emittedVisibleAssistantMessage) {
+        this.emit(session.summary.sessionId, {
+          type: "assistant_message",
+          sessionId: session.summary.sessionId,
+          timestamp: this.now(),
+          message: `${terminalToolCompleted} completed.`,
+        });
+      }
+      return;
+    }
+
+    if (toolResultMessages.length === 0) {
+      return;
     }
 
     await this.executePromptLoop(
@@ -917,6 +952,10 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
 
   private isToolAllowedForRole(role: AgentRole, tool: AgentToolName): boolean {
     return ROLE_TOOLS[role].has(tool);
+  }
+
+  private isTerminalToolForRole(role: AgentRole, tool: AgentToolName): boolean {
+    return ROLE_TERMINAL_TOOLS[role].has(tool);
   }
 
   private async subscribeOpencodeEvents(

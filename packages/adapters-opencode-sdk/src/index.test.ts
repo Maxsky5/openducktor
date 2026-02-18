@@ -292,7 +292,8 @@ describe("OpencodeSdkAdapter", () => {
     });
     expect(events.some((event) => event.type === "tool_call")).toBe(true);
     expect(events.some((event) => event.type === "tool_result")).toBe(true);
-    expect(mock.session.promptCalls.length).toBeGreaterThanOrEqual(2);
+    expect(events.some((event) => event.type === "session_idle")).toBe(true);
+    expect(mock.session.promptCalls.length).toBe(1);
   });
 
   test("sendUserMessage forwards selected model, variant, and agent", async () => {

@@ -99,6 +99,22 @@ const formatSessionTime = (iso: string): string => {
   }).format(value);
 };
 
+const formatDocumentUpdatedAt = (iso: string | null): string | null => {
+  if (!iso) {
+    return null;
+  }
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) {
+    return null;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+};
+
 const isRole = (value: string | null): value is AgentRole =>
   value === "spec" || value === "planner" || value === "build" || value === "qa";
 
@@ -184,6 +200,7 @@ export function AgentsPage(): ReactElement {
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
+  const [questionDrafts, setQuestionDrafts] = useState<Record<string, string[][]>>({});
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const processedDocumentToolEventsRef = useRef(new Set<string>());
@@ -545,6 +562,38 @@ export function AgentsPage(): ReactElement {
       behavior: "smooth",
     });
   }, [scrollTrigger]);
+
+  useEffect(() => {
+    const pending = activeSession?.pendingQuestions ?? [];
+    setQuestionDrafts((previous) => {
+      const next: Record<string, string[][]> = {};
+      let changed = false;
+
+      for (const request of pending) {
+        const existing = previous[request.requestId] ?? [];
+        const requestDraft = request.questions.map((question, index) => {
+          const current = existing[index] ?? [];
+          if (question.multiple) {
+            return current;
+          }
+          return current.slice(0, 1);
+        });
+        next[request.requestId] = requestDraft;
+        if (
+          !previous[request.requestId] ||
+          previous[request.requestId]?.length !== requestDraft.length
+        ) {
+          changed = true;
+        }
+      }
+
+      const previousKeys = Object.keys(previous);
+      if (!changed && previousKeys.length === Object.keys(next).length) {
+        return previous;
+      }
+      return next;
+    });
+  }, [activeSession?.pendingQuestions]);
 
   useEffect(() => {
     if (!taskId || !selectedTask) {
@@ -975,10 +1024,10 @@ export function AgentsPage(): ReactElement {
               <p className="text-xs text-slate-500">
                 {activeSession?.status === "running"
                   ? "Streaming OpenCode events..."
-                  : isStarting || activeSession?.status === "starting"
-                    ? "Starting OpenCode session..."
-                    : isSending
-                      ? "Sending message..."
+                  : isSending
+                    ? "Sending message..."
+                    : isStarting
+                      ? "Preparing session..."
                       : activeSession
                         ? "Ready"
                         : taskId
@@ -1075,42 +1124,103 @@ export function AgentsPage(): ReactElement {
               {activeSession?.pendingQuestions.length ? null : (
                 <p className="text-sm text-slate-500">No pending questions.</p>
               )}
-              {activeSession?.pendingQuestions.map((request) => {
-                const firstQuestion = request.questions[0];
-                if (!firstQuestion) {
-                  return null;
-                }
-                return (
-                  <div
-                    key={request.requestId}
-                    className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <p className="text-sm font-medium text-slate-800">{firstQuestion.question}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {firstQuestion.options.map((option) => (
-                        <Button
-                          key={option.label}
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            activeSession
-                              ? void answerAgentQuestion(
-                                  activeSession.sessionId,
-                                  request.requestId,
-                                  [[option.label]],
-                                )
-                              : undefined
-                          }
-                        >
-                          <CheckCircle2 className="size-3.5" />
-                          {option.label}
-                        </Button>
-                      ))}
+              {activeSession?.pendingQuestions.map((request) => (
+                <div
+                  key={request.requestId}
+                  className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                >
+                  {request.questions.map((question, index) => (
+                    <div
+                      key={`${request.requestId}:${question.header}:${index}`}
+                      className="space-y-2"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {question.header}
+                      </p>
+                      <p className="text-sm font-medium text-slate-800">{question.question}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {question.options.map((option) => (
+                          <Button
+                            key={`${request.requestId}:${question.header}:${option.label}`}
+                            type="button"
+                            size="sm"
+                            variant={
+                              questionDrafts[request.requestId]?.[index]?.includes(option.label)
+                                ? "default"
+                                : "outline"
+                            }
+                            onClick={() => {
+                              setQuestionDrafts((previous) => {
+                                const next = { ...previous };
+                                const existing = next[request.requestId];
+                                const current = existing
+                                  ? existing.map((entry) => [...entry])
+                                  : request.questions.map(() => []);
+                                const selected = [...(current[index] ?? [])];
+                                const isSelected = selected.includes(option.label);
+                                let nextSelected = selected;
+
+                                if (question.multiple) {
+                                  nextSelected = isSelected
+                                    ? selected.filter((entry) => entry !== option.label)
+                                    : [...selected, option.label];
+                                } else {
+                                  nextSelected = isSelected ? [] : [option.label];
+                                }
+
+                                current[index] = nextSelected;
+                                next[request.requestId] = current;
+                                return next;
+                              });
+                            }}
+                          >
+                            <CheckCircle2 className="size-3.5" />
+                            {option.label}
+                          </Button>
+                        ))}
+                      </div>
                     </div>
+                  ))}
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        !activeSession ||
+                        request.questions.some((question, index) => {
+                          const selected = questionDrafts[request.requestId]?.[index] ?? [];
+                          if (question.custom && question.options.length === 0) {
+                            return false;
+                          }
+                          return selected.length === 0;
+                        })
+                      }
+                      onClick={() => {
+                        if (!activeSession) {
+                          return;
+                        }
+                        const answers = request.questions.map((question, index) => {
+                          const selected = questionDrafts[request.requestId]?.[index] ?? [];
+                          if (selected.length > 0) {
+                            return selected;
+                          }
+                          if (question.options[0]?.label) {
+                            return [question.options[0].label];
+                          }
+                          return [];
+                        });
+                        void answerAgentQuestion(
+                          activeSession.sessionId,
+                          request.requestId,
+                          answers,
+                        );
+                      }}
+                    >
+                      Submit Answers
+                    </Button>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </section>
           </CardContent>
         </Card>
@@ -1120,43 +1230,54 @@ export function AgentsPage(): ReactElement {
             <CardTitle className="text-lg">Documents</CardTitle>
             <CardDescription>Live task artifacts for the selected task.</CardDescription>
           </CardHeader>
-          <CardContent className="max-h-[40vh] space-y-4 overflow-y-auto">
-            <section className="space-y-1">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Spec</h3>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <CardContent className="max-h-[40vh] space-y-3 overflow-y-auto">
+            <details className="rounded-lg border border-slate-200 bg-white" open>
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <span>Spec</span>
+                <span className="text-[11px] normal-case text-slate-500">
+                  {formatDocumentUpdatedAt(specDoc.updatedAt) ?? "Not set"}
+                </span>
+              </summary>
+              <div className="border-t border-slate-200 p-3">
                 {specDoc.markdown.trim().length > 0 ? (
                   <MarkdownRenderer markdown={specDoc.markdown} variant="compact" />
                 ) : (
                   <p className="text-sm text-slate-500">No spec document yet.</p>
                 )}
               </div>
-            </section>
+            </details>
 
-            <section className="space-y-1">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Implementation Plan
-              </h3>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <details className="rounded-lg border border-slate-200 bg-white" open>
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <span>Implementation Plan</span>
+                <span className="text-[11px] normal-case text-slate-500">
+                  {formatDocumentUpdatedAt(planDoc.updatedAt) ?? "Not set"}
+                </span>
+              </summary>
+              <div className="border-t border-slate-200 p-3">
                 {planDoc.markdown.trim().length > 0 ? (
                   <MarkdownRenderer markdown={planDoc.markdown} variant="compact" />
                 ) : (
                   <p className="text-sm text-slate-500">No implementation plan yet.</p>
                 )}
               </div>
-            </section>
+            </details>
 
-            <section className="space-y-1">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                QA Report
-              </h3>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <details className="rounded-lg border border-slate-200 bg-white" open>
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                <span>QA Report</span>
+                <span className="text-[11px] normal-case text-slate-500">
+                  {formatDocumentUpdatedAt(qaDoc.updatedAt) ?? "Not set"}
+                </span>
+              </summary>
+              <div className="border-t border-slate-200 p-3">
                 {qaDoc.markdown.trim().length > 0 ? (
                   <MarkdownRenderer markdown={qaDoc.markdown} variant="compact" />
                 ) : (
                   <p className="text-sm text-slate-500">No QA report yet.</p>
                 )}
               </div>
-            </section>
+            </details>
           </CardContent>
         </Card>
       </div>

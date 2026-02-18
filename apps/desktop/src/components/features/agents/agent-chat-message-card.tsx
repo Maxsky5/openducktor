@@ -52,23 +52,28 @@ const roleLabel = (role: AgentChatMessage["role"]): string => {
   return "System";
 };
 
+const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
+
 export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): ReactElement {
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
+  const isToolMessage = meta?.kind === "tool";
+  const isSubtaskMessage = meta?.kind === "subtask";
+  const isSystemPromptMessage =
+    message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
+  const systemPromptBody = isSystemPromptMessage
+    ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
+    : "";
 
   return (
     <article
       className={cn(
         "rounded-md border px-3 py-2 text-sm",
-        message.role === "user"
-          ? "border-sky-200 bg-sky-50 text-slate-800"
-          : message.role === "assistant"
-            ? "border-slate-200 bg-white text-slate-800"
-            : message.role === "thinking"
-              ? "border-violet-200 bg-violet-50 text-violet-900"
-              : message.role === "tool"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                : "border-amber-200 bg-amber-50 text-amber-900",
+        isToolMessage
+          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          : isSubtaskMessage
+            ? "border-amber-200 bg-amber-50 text-amber-900"
+            : "border-slate-200 bg-white text-slate-800",
       )}
     >
       <header className="mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -88,17 +93,9 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
       </header>
 
       {meta?.kind === "reasoning" ? (
-        <details
-          open={!meta.completed}
-          className="rounded border border-violet-200 bg-violet-100/40"
-        >
-          <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-violet-900">
-            Reasoning trace
-          </summary>
-          <div className="px-2 pb-2">
-            <MarkdownRenderer markdown={message.content} variant="compact" />
-          </div>
-        </details>
+        <p className="whitespace-pre-wrap leading-6 text-slate-700">
+          {message.content || "Thinking..."}
+        </p>
       ) : meta?.kind === "tool" ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -142,16 +139,12 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
           ) : null}
         </div>
       ) : meta?.kind === "step" ? (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Badge variant={meta.phase === "start" ? "warning" : "success"}>
-              {meta.phase === "start" ? "step started" : "step finished"}
-            </Badge>
-            {typeof meta.cost === "number" ? (
-              <p className="text-xs text-amber-800">cost: {meta.cost.toFixed(2)}</p>
-            ) : null}
-          </div>
-          {meta.reason ? <p className="text-xs text-amber-900">{meta.reason}</p> : null}
+        <div className="space-y-1 text-xs text-slate-600">
+          <p className="font-medium text-slate-700">
+            {meta.phase === "start" ? "Step started" : "Step finished"}
+            {typeof meta.cost === "number" ? ` · cost ${meta.cost.toFixed(2)}` : ""}
+          </p>
+          {meta.reason ? <p>{meta.reason}</p> : null}
         </div>
       ) : meta?.kind === "subtask" ? (
         <div className="space-y-1 rounded border border-amber-200 bg-amber-100/40 p-2">
@@ -168,8 +161,19 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
             </details>
           ) : null}
         </div>
+      ) : isSystemPromptMessage ? (
+        <details className="rounded border border-slate-200 bg-slate-50/70">
+          <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-slate-700">
+            Show system prompt
+          </summary>
+          <div className="border-t border-slate-200 px-2 py-2">
+            <MarkdownRenderer markdown={systemPromptBody} variant="compact" />
+          </div>
+        </details>
       ) : message.role === "user" ? (
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+      ) : message.role === "thinking" || message.role === "system" ? (
+        <p className="whitespace-pre-wrap leading-6 text-slate-700">{message.content}</p>
       ) : (
         <MarkdownRenderer markdown={message.content} variant="compact" />
       )}

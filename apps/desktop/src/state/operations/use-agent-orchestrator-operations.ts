@@ -367,13 +367,13 @@ const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChat
       }
 
       if (part.kind === "step") {
+        if (part.phase === "start") {
+          continue;
+        }
         next.push({
           id: `history:step:${message.messageId}:${part.partId}`,
           role: "system",
-          content:
-            part.phase === "start"
-              ? "Agent step started"
-              : `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
+          content: `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
           timestamp: message.timestamp,
           meta: {
             kind: "step",
@@ -785,6 +785,9 @@ export function useAgentOrchestratorOperations({
           }
 
           if (part.kind === "step") {
+            if (part.phase === "start") {
+              return;
+            }
             updateSession(
               sessionId,
               (current) => ({
@@ -1325,7 +1328,7 @@ export function useAgentOrchestratorOperations({
         taskId,
         role,
         scenario: resolvedScenario,
-        status: "starting",
+        status: "idle",
         startedAt: summary.startedAt,
         runtimeId: runtime.runtimeId,
         runId: runtime.runId,

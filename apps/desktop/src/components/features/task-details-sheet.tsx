@@ -403,11 +403,11 @@ export function TaskDetailsSheet({
             {deleteError ? <p className="text-rose-700">{deleteError}</p> : null}
           </div>
 
-          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end">
+          <DialogFooter className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
             <Button
               type="button"
               variant="outline"
-              className="w-full sm:w-auto"
+              className="min-w-28"
               disabled={isDeleting}
               onClick={() => setDeleteDialogOpen(false)}
             >
@@ -416,7 +416,7 @@ export function TaskDetailsSheet({
             <Button
               type="button"
               variant="destructive"
-              className="w-full sm:w-auto sm:min-w-36"
+              className="min-w-28"
               disabled={isDeleting}
               onClick={confirmDelete}
             >
