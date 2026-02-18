@@ -43,6 +43,7 @@ export function useTaskDocuments(
   planDoc: TaskDocumentState;
   qaDoc: TaskDocumentState;
   ensureDocumentLoaded: (section: DocumentSectionKey) => void;
+  reloadDocument: (section: DocumentSectionKey) => void;
 } {
   const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = useSpecState();
   const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
@@ -61,8 +62,8 @@ export function useTaskDocuments(
     setDocuments(createInitialDocumentsState());
   }, [open, taskId]);
 
-  const ensureDocumentLoaded = useCallback(
-    (section: DocumentSectionKey): void => {
+  const loadDocument = useCallback(
+    (section: DocumentSectionKey, force: boolean): void => {
       if (!taskId || !open) {
         return;
       }
@@ -70,14 +71,18 @@ export function useTaskDocuments(
       let shouldLoad = false;
       setDocuments((previous) => {
         const current = previous[section];
-        if (current.loaded || current.isLoading) {
+        if (current.isLoading || (!force && current.loaded)) {
           return previous;
         }
 
         shouldLoad = true;
         return {
           ...previous,
-          [section]: { ...current, isLoading: true, error: null },
+          [section]: {
+            ...current,
+            isLoading: true,
+            error: null,
+          },
         };
       });
 
@@ -118,8 +123,7 @@ export function useTaskDocuments(
           setDocuments((previous) => ({
             ...previous,
             [section]: {
-              markdown: "",
-              updatedAt: null,
+              ...previous[section],
               isLoading: false,
               error: toErrorMessage(error),
               loaded: true,
@@ -130,10 +134,25 @@ export function useTaskDocuments(
     [loadPlanDocument, loadQaReportDocument, loadSpecDocument, open, taskId],
   );
 
+  const ensureDocumentLoaded = useCallback(
+    (section: DocumentSectionKey): void => {
+      loadDocument(section, false);
+    },
+    [loadDocument],
+  );
+
+  const reloadDocument = useCallback(
+    (section: DocumentSectionKey): void => {
+      loadDocument(section, true);
+    },
+    [loadDocument],
+  );
+
   return {
     specDoc: documents.spec,
     planDoc: documents.plan,
     qaDoc: documents.qa,
     ensureDocumentLoaded,
+    reloadDocument,
   };
 }

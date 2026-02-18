@@ -156,6 +156,7 @@ export function AgentsPage(): ReactElement {
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const processedDocumentToolEventsRef = useRef(new Set<string>());
 
   const taskIdParam = searchParams.get("task") ?? "";
   const sessionParam = searchParams.get("session");
@@ -220,7 +221,10 @@ export function AgentsPage(): ReactElement {
       .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1));
   }, [role, sessions, taskId]);
 
-  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(taskId || null, true);
+  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded, reloadDocument } = useTaskDocuments(
+    taskId || null,
+    true,
+  );
 
   useEffect(() => {
     if (!taskId) {
@@ -488,9 +492,44 @@ export function AgentsPage(): ReactElement {
     });
   }, [scrollTrigger]);
 
+  useEffect(() => {
+    if (!activeSession || !taskId) {
+      return;
+    }
+
+    for (const message of activeSession.messages) {
+      const eventKey = `${activeSession.sessionId}:${message.id}`;
+      if (processedDocumentToolEventsRef.current.has(eventKey)) {
+        continue;
+      }
+
+      const meta = message.meta;
+      if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+        continue;
+      }
+
+      if (meta.tool === "set_spec") {
+        processedDocumentToolEventsRef.current.add(eventKey);
+        reloadDocument("spec");
+        continue;
+      }
+
+      if (meta.tool === "set_plan") {
+        processedDocumentToolEventsRef.current.add(eventKey);
+        reloadDocument("plan");
+        continue;
+      }
+
+      if (meta.tool === "qa_approved" || meta.tool === "qa_rejected") {
+        processedDocumentToolEventsRef.current.add(eventKey);
+        reloadDocument("qa");
+      }
+    }
+  }, [activeSession, reloadDocument, taskId]);
+
   return (
-    <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <Card className="flex min-h-0 flex-col overflow-hidden border-slate-200 shadow-sm">
+    <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="flex h-full min-h-0 flex-col overflow-hidden border-slate-200 shadow-sm">
         <CardHeader className="space-y-3 border-b border-slate-200 bg-white pb-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -839,7 +878,7 @@ export function AgentsPage(): ReactElement {
         </CardContent>
       </Card>
 
-      <div className="grid min-h-0 gap-4">
+      <div className="grid h-full min-h-0 content-start gap-4 overflow-y-auto pr-1">
         <Card className="overflow-hidden border-slate-200 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Workflow Inbox</CardTitle>
