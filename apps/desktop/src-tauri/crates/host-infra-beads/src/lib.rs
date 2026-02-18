@@ -973,6 +973,7 @@ mod tests {
         let sessions = parse_agent_sessions(&json!([
             {
                 "sessionId": "obp-session-1",
+                "externalSessionId": "session-opencode-1",
                 "taskId": "task-1",
                 "role": "spec",
                 "scenario": "spec_initial",
@@ -989,15 +990,7 @@ mod tests {
                     "modelId": "gpt-5",
                     "variant": "high",
                     "opencodeAgent": "architect"
-                },
-                "messages": [
-                    {
-                        "id": "m1",
-                        "role": "assistant",
-                        "content": "Spec persisted.",
-                        "timestamp": "2026-02-18T17:20:10Z"
-                    }
-                ]
+                }
             },
             {
                 "sessionId": 123
@@ -1006,5 +999,9 @@ mod tests {
         .expect("agent sessions");
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].session_id, "obp-session-1");
+        assert_eq!(
+            sessions[0].external_session_id.as_deref(),
+            Some("session-opencode-1")
+        );
     }
 }

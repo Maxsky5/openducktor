@@ -5,13 +5,16 @@ import {
   type AgentModelCatalog,
   type AgentModelSelection,
   type AgentRole,
+  type AgentSessionHistoryMessage,
   type AgentSessionSummary,
   type AgentStreamPart,
   type AgentToolCall,
   type AgentToolName,
   type EventUnsubscribe,
+  type LoadAgentSessionHistoryInput,
   type ReplyPermissionInput,
   type ReplyQuestionInput,
+  type ResumeAgentSessionInput,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
 } from "@openblueprint/core";
@@ -42,20 +45,20 @@ type SessionToolExecutor = {
   qaRejected: (repoPath: string, taskId: string, reportMarkdown: string) => Promise<unknown>;
 };
 
-type NormalizedStartInput = Omit<StartAgentSessionInput, "sessionId"> & {
+type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
   sessionId: string;
 };
 
 type SessionRecord = {
   summary: AgentSessionSummary;
-  input: NormalizedStartInput;
+  input: SessionInput;
   client: OpencodeClient;
   externalSessionId: string;
   streamAbortController: AbortController;
   streamDone: Promise<void>;
 };
 
-type ClientFactory = (input: NormalizedStartInput) => OpencodeClient;
+type ClientFactory = (input: { baseUrl: string; workingDirectory: string }) => OpencodeClient;
 
 export type OpencodeSdkAdapterOptions = {
   now?: () => string;
@@ -71,13 +74,6 @@ const buildDefaultFactory = (): ClientFactory => {
       baseUrl: input.baseUrl,
       directory: input.workingDirectory,
     });
-};
-
-const normalizeStartInput = (input: StartAgentSessionInput): NormalizedStartInput => {
-  return {
-    ...input,
-    sessionId: input.sessionId ?? `obp-session-${crypto.randomUUID()}`,
-  };
 };
 
 const TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*([\s\S]*?)\s*<\/obp_tool_call>/g;
@@ -390,6 +386,30 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
   }
 };
 
+const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return fallback();
+  }
+  const iso = new Date(value).toISOString();
+  return Number.isNaN(new Date(iso).getTime()) ? fallback() : iso;
+};
+
+const toSessionInput = (
+  input: Omit<StartAgentSessionInput, "sessionId"> & { sessionId: string },
+): SessionInput => {
+  return {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    taskId: input.taskId,
+    role: input.role,
+    scenario: input.scenario,
+    systemPrompt: input.systemPrompt,
+    baseUrl: input.baseUrl,
+    ...(input.model ? { model: input.model } : {}),
+    sessionId: input.sessionId,
+  };
+};
+
 const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
   if (!payload || typeof payload !== "object") {
     return { models: [], defaultModelsByProvider: {}, agents: [] };
@@ -468,62 +488,98 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
-    const normalized = normalizeStartInput(input);
-    const client = this.createClient(normalized);
+    const client = this.createClient({
+      baseUrl: input.baseUrl,
+      workingDirectory: input.workingDirectory,
+    });
     const created = await client.session.create({
-      directory: normalized.workingDirectory,
-      title: `${normalized.role.toUpperCase()} ${normalized.taskId}`,
+      directory: input.workingDirectory,
+      title: `${input.role.toUpperCase()} ${input.taskId}`,
     });
     const createdData = unwrapData(created, "create session");
-
     const externalSessionId = createdData.id;
-    const sessionId = normalized.sessionId;
-    const controller = new AbortController();
+    const sessionId = input.sessionId?.trim() ? input.sessionId : externalSessionId;
+    const sessionInput = toSessionInput({
+      ...input,
+      sessionId,
+    });
 
-    const summary: AgentSessionSummary = {
+    return this.registerSession({
       sessionId,
       externalSessionId,
-      role: normalized.role,
-      scenario: normalized.scenario,
+      input: sessionInput,
+      client,
       startedAt: this.now(),
-      status: "running",
-    };
+      startedMessage: `Started ${input.role} session (${input.scenario})`,
+    });
+  }
 
-    const streamDone = this.subscribeOpencodeEvents(
-      {
-        sessionId,
-        externalSessionId,
-        input: normalized,
-      },
+  async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
+    const existing = this.sessions.get(input.sessionId);
+    if (existing) {
+      return existing.summary;
+    }
+
+    const client = this.createClient({
+      baseUrl: input.baseUrl,
+      workingDirectory: input.workingDirectory,
+    });
+    const detail = await client.session.get({
+      directory: input.workingDirectory,
+      sessionID: input.externalSessionId,
+    });
+    const detailData = unwrapData(detail, "get session");
+    const startedAt = toIsoFromEpoch(
+      (detailData as { time?: { created?: unknown } }).time?.created,
+      this.now,
+    );
+    const sessionInput = toSessionInput({
+      ...input,
+      sessionId: input.sessionId,
+    });
+
+    return this.registerSession({
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      input: sessionInput,
       client,
-      controller,
-    ).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "Event stream failed";
-      this.emit(sessionId, {
-        type: "session_error",
-        sessionId,
-        timestamp: this.now(),
-        message,
-      });
+      startedAt,
+      startedMessage: `Resumed ${input.role} session (${input.scenario})`,
     });
+  }
 
-    this.sessions.set(sessionId, {
-      summary,
-      input: normalized,
-      client,
-      externalSessionId,
-      streamAbortController: controller,
-      streamDone,
+  hasSession(sessionId: string): boolean {
+    return this.sessions.has(sessionId);
+  }
+
+  async loadSessionHistory(
+    input: LoadAgentSessionHistoryInput,
+  ): Promise<AgentSessionHistoryMessage[]> {
+    const client = this.createClient({
+      baseUrl: input.baseUrl,
+      workingDirectory: input.workingDirectory,
     });
-
-    this.emit(sessionId, {
-      type: "session_started",
-      sessionId,
-      timestamp: this.now(),
-      message: `Started ${normalized.role} session (${normalized.scenario})`,
+    const response = await client.session.messages({
+      sessionID: input.externalSessionId,
+      directory: input.workingDirectory,
+      ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
     });
-
-    return summary;
+    const data = unwrapData(response, "load session messages");
+    return data.map((entry) => {
+      const rawText = readTextFromParts(entry.parts);
+      const text =
+        entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText).visible : rawText;
+      const parts = entry.parts
+        .map(mapPartToAgentStreamPart)
+        .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
+      return {
+        messageId: entry.info.id,
+        role: entry.info.role,
+        timestamp: toIsoFromEpoch(entry.info.time.created, this.now),
+        text,
+        parts,
+      };
+    });
   }
 
   async listAvailableModels(input: {
@@ -641,6 +697,61 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     this.listeners.delete(sessionId);
   }
 
+  private registerSession(input: {
+    sessionId: string;
+    externalSessionId: string;
+    input: SessionInput;
+    client: OpencodeClient;
+    startedAt: string;
+    startedMessage: string;
+  }): AgentSessionSummary {
+    const controller = new AbortController();
+    const summary: AgentSessionSummary = {
+      sessionId: input.sessionId,
+      externalSessionId: input.externalSessionId,
+      role: input.input.role,
+      scenario: input.input.scenario,
+      startedAt: input.startedAt,
+      status: "running",
+    };
+
+    const streamDone = this.subscribeOpencodeEvents(
+      {
+        sessionId: input.sessionId,
+        externalSessionId: input.externalSessionId,
+        input: input.input,
+      },
+      input.client,
+      controller,
+    ).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "Event stream failed";
+      this.emit(input.sessionId, {
+        type: "session_error",
+        sessionId: input.sessionId,
+        timestamp: this.now(),
+        message,
+      });
+    });
+
+    this.sessions.set(input.sessionId, {
+      summary,
+      input: input.input,
+      client: input.client,
+      externalSessionId: input.externalSessionId,
+      streamAbortController: controller,
+      streamDone,
+    });
+
+    this.emit(input.sessionId, {
+      type: "session_started",
+      sessionId: input.sessionId,
+      timestamp: this.now(),
+      message: input.startedMessage,
+    });
+
+    return summary;
+  }
+
   private async executePromptLoop(
     session: SessionRecord,
     userMessage: string,
@@ -651,7 +762,9 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     const response = await session.client.session.prompt({
       sessionID: session.externalSessionId,
       directory: session.input.workingDirectory,
-      system: session.input.systemPrompt,
+      ...(session.input.systemPrompt.trim().length > 0
+        ? { system: session.input.systemPrompt }
+        : {}),
       ...(modelInput.model ? { model: modelInput.model } : {}),
       ...(modelInput.variant ? { variant: modelInput.variant } : {}),
       ...(modelInput.agent ? { agent: modelInput.agent } : {}),
@@ -761,7 +874,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     context: {
       sessionId: string;
       externalSessionId: string;
-      input: NormalizedStartInput;
+      input: SessionInput;
     },
     client: OpencodeClient,
     controller: AbortController,

@@ -113,6 +113,7 @@ describe("runtime schemas", () => {
   test("agent session record parses persisted history payload", () => {
     const parsed = agentSessionRecordSchema.parse({
       sessionId: "obp-session-1",
+      externalSessionId: "session-opencode-1",
       taskId: "task-1",
       role: "spec",
       scenario: "spec_revision",
@@ -130,19 +131,11 @@ describe("runtime schemas", () => {
         variant: "high",
         opencodeAgent: "architect",
       },
-      messages: [
-        {
-          id: "m1",
-          role: "assistant",
-          content: "Drafted and saved spec.",
-          timestamp: "2026-02-18T17:12:00.000Z",
-        },
-      ],
     });
 
     expect(parsed.role).toBe("spec");
     expect(parsed.scenario).toBe("spec_revision");
-    expect(parsed.messages).toHaveLength(1);
+    expect(parsed.externalSessionId).toBe("session-opencode-1");
     expect(parsed.selectedModel?.modelId).toBe("gpt-5");
   });
 });

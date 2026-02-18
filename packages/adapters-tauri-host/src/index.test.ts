@@ -171,6 +171,7 @@ describe("TauriHostClient", () => {
         return [
           {
             sessionId: "obp-session-1",
+            externalSessionId: "session-opencode-1",
             taskId: "task-1",
             role: "spec",
             scenario: "spec_initial",
@@ -183,14 +184,6 @@ describe("TauriHostClient", () => {
             baseUrl: "http://127.0.0.1:4173",
             workingDirectory: "/repo",
             selectedModel: null,
-            messages: [
-              {
-                id: "m1",
-                role: "assistant",
-                content: "Spec saved.",
-                timestamp: "2026-02-18T17:20:10Z",
-              },
-            ],
           },
         ];
       }

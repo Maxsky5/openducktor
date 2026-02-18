@@ -5,16 +5,37 @@ import type {
   AgentRole,
   AgentScenario,
   AgentSessionContext,
+  AgentStreamPart,
 } from "../types/agent-orchestrator";
 
 export type StartAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
   sessionId?: string;
 };
 
+export type ResumeAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
+  sessionId: string;
+  externalSessionId: string;
+};
+
 export type SendAgentUserMessageInput = {
   sessionId: string;
   content: string;
   model?: AgentModelSelection;
+};
+
+export type LoadAgentSessionHistoryInput = {
+  baseUrl: string;
+  workingDirectory: string;
+  externalSessionId: string;
+  limit?: number;
+};
+
+export type AgentSessionHistoryMessage = {
+  messageId: string;
+  role: "user" | "assistant";
+  timestamp: string;
+  text: string;
+  parts: AgentStreamPart[];
 };
 
 export type ReplyPermissionInput = {
@@ -43,10 +64,13 @@ export type AgentSessionSummary = {
 
 export interface AgentEnginePort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
+  resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   listAvailableModels(input: {
     baseUrl: string;
     workingDirectory: string;
   }): Promise<AgentModelCatalog>;
+  hasSession(sessionId: string): boolean;
+  loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;

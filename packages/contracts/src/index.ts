@@ -316,14 +316,6 @@ export const agentSessionScenarioSchema = z.enum([
 ]);
 export type AgentSessionScenario = z.infer<typeof agentSessionScenarioSchema>;
 
-export const agentSessionMessageSchema = z.object({
-  id: z.string(),
-  role: z.enum(["user", "assistant", "system", "thinking", "tool"]),
-  content: z.string(),
-  timestamp: z.string(),
-});
-export type AgentSessionMessage = z.infer<typeof agentSessionMessageSchema>;
-
 export const agentSessionModelSelectionSchema = z.object({
   providerId: z.string(),
   modelId: z.string(),
@@ -337,6 +329,10 @@ export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelecti
 
 export const agentSessionRecordSchema = z.object({
   sessionId: z.string(),
+  externalSessionId: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().optional(),
+  ),
   taskId: z.string(),
   role: agentSessionRoleSchema,
   scenario: agentSessionScenarioSchema,
@@ -352,7 +348,6 @@ export const agentSessionRecordSchema = z.object({
     (value) => (value === null ? undefined : value),
     agentSessionModelSelectionSchema.optional(),
   ),
-  messages: z.array(agentSessionMessageSchema).default([]),
 });
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
 

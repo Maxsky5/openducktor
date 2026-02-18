@@ -381,11 +381,7 @@ export function AgentsPage(): ReactElement {
     }
 
     let targetSessionId = activeSession?.sessionId;
-    if (
-      !targetSessionId ||
-      activeSession?.status === "stopped" ||
-      activeSession?.status === "error"
-    ) {
+    if (!targetSessionId) {
       targetSessionId = await startSession(false);
     }
 
@@ -397,6 +393,13 @@ export function AgentsPage(): ReactElement {
     setIsSending(true);
     try {
       await sendAgentMessage(targetSessionId, message);
+    } catch {
+      if (activeSession && targetSessionId === activeSession.sessionId) {
+        const fallbackSessionId = await startSession(false);
+        if (fallbackSessionId) {
+          await sendAgentMessage(fallbackSessionId, message);
+        }
+      }
     } finally {
       setIsSending(false);
     }

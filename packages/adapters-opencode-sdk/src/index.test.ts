@@ -6,7 +6,13 @@ type MockSession = {
   createCalls: unknown[];
   promptCalls: unknown[];
   abortCalls: unknown[];
+  getCalls: unknown[];
+  messagesCalls: unknown[];
   promptQueue: Array<{ info: { id: string }; parts: Part[] }>;
+  messagesResponse: Array<{
+    info: { id: string; role: "user" | "assistant"; time: { created: number } };
+    parts: Part[];
+  }>;
 };
 
 type MockPermission = {
@@ -25,10 +31,15 @@ const makeMockClient = ({
   sessionId = "session-opencode-1",
   streamEvents = [],
   promptQueue = [],
+  messagesResponse = [],
 }: {
   sessionId?: string;
   streamEvents?: Event[];
   promptQueue?: Array<{ info: { id: string }; parts: Part[] }>;
+  messagesResponse?: Array<{
+    info: { id: string; role: "user" | "assistant"; time: { created: number } };
+    parts: Part[];
+  }>;
 }): {
   client: OpencodeClient;
   session: MockSession;
@@ -40,7 +51,10 @@ const makeMockClient = ({
     createCalls: [],
     promptCalls: [],
     abortCalls: [],
+    getCalls: [],
+    messagesCalls: [],
     promptQueue: [...promptQueue],
+    messagesResponse: [...messagesResponse],
   };
   const permission: MockPermission = {
     replyCalls: [],
@@ -83,6 +97,24 @@ const makeMockClient = ({
       abort: async (input: unknown) => {
         session.abortCalls.push(input);
         return { data: true, error: undefined };
+      },
+      get: async (input: unknown) => {
+        session.getCalls.push(input);
+        return {
+          data: {
+            id: sessionId,
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          error: undefined,
+        };
+      },
+      messages: async (input: unknown) => {
+        session.messagesCalls.push(input);
+        return {
+          data: session.messagesResponse,
+          error: undefined,
+        };
       },
     },
     permission: {
@@ -416,6 +448,103 @@ describe("OpencodeSdkAdapter", () => {
     expect(events).toContain("assistant_part");
     expect(events).toContain("session_status");
     expect(events).toContain("permission_required");
+  });
+
+  test("startSession defaults to external session id when none provided", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({ sessionId: "session-opencode-42" });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const summary = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "spec",
+      scenario: "spec_initial",
+      systemPrompt: "system",
+      baseUrl: "http://127.0.0.1:12000",
+    });
+
+    expect(summary.sessionId).toBe("session-opencode-42");
+    expect(summary.externalSessionId).toBe("session-opencode-42");
+    expect(adapter.hasSession("session-opencode-42")).toBe(true);
+  });
+
+  test("resumeSession re-attaches existing OpenCode session", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({ sessionId: "session-opencode-9" });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const summary = await adapter.resumeSession({
+      sessionId: "obp-session-9",
+      externalSessionId: "session-opencode-9",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "planner",
+      scenario: "planner_revision",
+      systemPrompt: "system",
+      baseUrl: "http://127.0.0.1:12000",
+    });
+
+    expect(summary.sessionId).toBe("obp-session-9");
+    expect(summary.externalSessionId).toBe("session-opencode-9");
+    expect(mock.session.getCalls).toHaveLength(1);
+    expect(adapter.hasSession("obp-session-9")).toBe(true);
+  });
+
+  test("loadSessionHistory maps assistant parts and strips tool XML blocks", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:10:00Z") },
+          },
+          parts: [
+            {
+              id: "reason-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "reasoning",
+              text: "Inspecting code",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+            {
+              id: "text-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "text",
+              text: `Draft complete\n<obp_tool_call>{"tool":"set_spec","args":{"markdown":"# Spec"}}</obp_tool_call>`,
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      baseUrl: "http://127.0.0.1:12000",
+      workingDirectory: "/repo",
+      externalSessionId: "session-opencode-1",
+    });
+
+    expect(history).toHaveLength(1);
+    expect(history[0]?.text).toBe("Draft complete");
+    expect(history[0]?.parts).toHaveLength(1);
+    expect(history[0]?.parts[0]?.kind).toBe("reasoning");
+    expect(mock.session.messagesCalls).toHaveLength(1);
   });
 
   test("unknown session operations throw", async () => {

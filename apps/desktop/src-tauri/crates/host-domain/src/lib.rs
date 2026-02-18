@@ -154,17 +154,10 @@ pub struct AgentSessionModelSelection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentSessionMessageDocument {
-    pub id: String,
-    pub role: String,
-    pub content: String,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AgentSessionDocument {
     pub session_id: String,
+    #[serde(default)]
+    pub external_session_id: Option<String>,
     pub task_id: String,
     pub role: String,
     pub scenario: String,
@@ -177,7 +170,6 @@ pub struct AgentSessionDocument {
     pub base_url: String,
     pub working_directory: String,
     pub selected_model: Option<AgentSessionModelSelection>,
-    pub messages: Vec<AgentSessionMessageDocument>,
 }
 
 pub trait TaskStore: Send + Sync {

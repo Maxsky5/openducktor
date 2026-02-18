@@ -65,6 +65,7 @@ export type AgentQuestionRequest = {
 
 export type AgentSessionState = {
   sessionId: string;
+  externalSessionId: string;
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;

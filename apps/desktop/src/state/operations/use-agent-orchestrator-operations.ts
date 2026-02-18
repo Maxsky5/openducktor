@@ -7,6 +7,7 @@ import {
   type AgentModelSelection,
   type AgentRole,
   type AgentScenario,
+  type AgentSessionHistoryMessage,
   buildAgentSystemPrompt,
 } from "@openblueprint/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -262,8 +263,6 @@ const formatToolContent = (part: {
   return `Tool ${part.tool}${title} queued...`;
 };
 
-const MAX_PERSISTED_MESSAGES = 200;
-
 const normalizePersistedSelection = (
   selection: AgentSessionRecord["selectedModel"] | undefined,
 ): AgentModelSelection | null => {
@@ -283,6 +282,7 @@ const toPersistedSessionRecord = (
   updatedAt: string,
 ): AgentSessionRecord => ({
   sessionId: session.sessionId,
+  externalSessionId: session.externalSessionId,
   taskId: session.taskId,
   role: session.role,
   scenario: session.scenario,
@@ -295,12 +295,6 @@ const toPersistedSessionRecord = (
   baseUrl: session.baseUrl,
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel ?? undefined,
-  messages: session.messages.slice(-MAX_PERSISTED_MESSAGES).map((entry) => ({
-    id: entry.id,
-    role: entry.role,
-    content: entry.content,
-    timestamp: entry.timestamp,
-  })),
 });
 
 const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionState => {
@@ -308,6 +302,7 @@ const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionSt
     session.status === "starting" || session.status === "running" ? "stopped" : session.status;
   return {
     sessionId: session.sessionId,
+    externalSessionId: session.externalSessionId ?? session.sessionId,
     taskId: session.taskId,
     role: session.role,
     scenario: session.scenario,
@@ -317,12 +312,7 @@ const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionSt
     runId: session.runId ?? null,
     baseUrl: session.baseUrl,
     workingDirectory: session.workingDirectory,
-    messages: session.messages.map((entry) => ({
-      id: entry.id,
-      role: entry.role,
-      content: entry.content,
-      timestamp: entry.timestamp,
-    })),
+    messages: [],
     draftAssistantText: "",
     pendingPermissions: [],
     pendingQuestions: [],
@@ -330,6 +320,98 @@ const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionSt
     selectedModel: normalizePersistedSelection(session.selectedModel),
     isLoadingModelCatalog: false,
   };
+};
+
+const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChatMessage[] => {
+  const next: AgentChatMessage[] = [];
+
+  for (const message of history) {
+    for (const part of message.parts) {
+      if (part.kind === "reasoning") {
+        next.push({
+          id: `history:thinking:${message.messageId}:${part.partId}`,
+          role: "thinking",
+          content: part.text,
+          timestamp: message.timestamp,
+          meta: {
+            kind: "reasoning",
+            partId: part.partId,
+            completed: part.completed,
+          },
+        });
+        continue;
+      }
+
+      if (part.kind === "tool") {
+        next.push({
+          id: `history:tool:${message.messageId}:${part.partId}`,
+          role: "tool",
+          content: formatToolContent(part),
+          timestamp: message.timestamp,
+          meta: {
+            kind: "tool",
+            partId: part.partId,
+            callId: part.callId,
+            tool: part.tool,
+            status: part.status,
+            ...(part.title ? { title: part.title } : {}),
+            ...(part.input ? { input: part.input } : {}),
+            ...(part.output ? { output: part.output } : {}),
+            ...(part.error ? { error: part.error } : {}),
+          },
+        });
+        continue;
+      }
+
+      if (part.kind === "step") {
+        next.push({
+          id: `history:step:${message.messageId}:${part.partId}`,
+          role: "system",
+          content:
+            part.phase === "start"
+              ? "Agent step started"
+              : `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
+          timestamp: message.timestamp,
+          meta: {
+            kind: "step",
+            partId: part.partId,
+            phase: part.phase,
+            ...(part.reason ? { reason: part.reason } : {}),
+            ...(typeof part.cost === "number" ? { cost: part.cost } : {}),
+          },
+        });
+        continue;
+      }
+
+      if (part.kind === "subtask") {
+        next.push({
+          id: `history:subtask:${message.messageId}:${part.partId}`,
+          role: "system",
+          content: `Subtask (${part.agent}): ${part.description}`,
+          timestamp: message.timestamp,
+          meta: {
+            kind: "subtask",
+            partId: part.partId,
+            agent: part.agent,
+            prompt: part.prompt,
+            description: part.description,
+          },
+        });
+      }
+    }
+
+    const content = message.text.trim();
+    if (content.length > 0) {
+      next.push({
+        id: `history:text:${message.messageId}`,
+        role: message.role,
+        content,
+        timestamp: message.timestamp,
+      });
+    }
+  }
+
+  return next;
 };
 
 export function useAgentOrchestratorOperations({
@@ -443,6 +525,8 @@ export function useAgentOrchestratorOperations({
       }
 
       const persisted = await host.agentSessionsList(activeRepo, taskId);
+      const existingIds = new Set(Object.keys(sessionsRef.current));
+      const recordsToHydrate = persisted.filter((record) => !existingIds.has(record.sessionId));
       setSessionsById((current) => {
         const next = { ...current };
         for (const record of persisted) {
@@ -453,8 +537,54 @@ export function useAgentOrchestratorOperations({
         }
         return next;
       });
+
+      if (recordsToHydrate.length === 0) {
+        return;
+      }
+
+      const requiresWorkspaceRuntime = recordsToHydrate.some(
+        (record) => record.role === "spec" || record.role === "planner",
+      );
+      const workspaceRuntime = requiresWorkspaceRuntime
+        ? await host.opencodeRepoRuntimeEnsure(activeRepo).catch(() => null)
+        : null;
+
+      await Promise.all(
+        recordsToHydrate.map(async (record) => {
+          const externalSessionId = record.externalSessionId ?? record.sessionId;
+          const baseUrl =
+            (record.role === "spec" || record.role === "planner") && workspaceRuntime
+              ? toBaseUrl(workspaceRuntime.port)
+              : record.baseUrl;
+          const workingDirectory =
+            (record.role === "spec" || record.role === "planner") && workspaceRuntime
+              ? workspaceRuntime.workingDirectory
+              : record.workingDirectory;
+
+          try {
+            const history = await adapter.loadSessionHistory({
+              baseUrl,
+              workingDirectory,
+              externalSessionId,
+              limit: 250,
+            });
+            updateSession(
+              record.sessionId,
+              (current) => ({
+                ...current,
+                baseUrl,
+                workingDirectory,
+                messages: historyToChatMessages(history),
+              }),
+              { persist: false },
+            );
+          } catch {
+            // Ignore missing/unavailable external history; metadata pointer remains persisted.
+          }
+        }),
+      );
     },
-    [activeRepo],
+    [activeRepo, adapter, updateSession],
   );
 
   const attachSessionListener = useCallback(
@@ -909,6 +1039,84 @@ export function useAgentOrchestratorOperations({
     [refreshTaskData],
   );
 
+  const ensureSessionReady = useCallback(
+    async (sessionId: string): Promise<void> => {
+      if (adapter.hasSession(sessionId)) {
+        return;
+      }
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+
+      const session = sessionsRef.current[sessionId];
+      if (!session) {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
+
+      const task = taskRef.current.find((entry) => entry.id === session.taskId);
+      if (!task) {
+        throw new Error(`Task not found: ${session.taskId}`);
+      }
+
+      if (!session.externalSessionId) {
+        throw new Error("Session cannot be resumed because OpenCode session id is missing.");
+      }
+
+      const docs = await loadTaskDocuments(activeRepo, session.taskId);
+      const runtime =
+        session.role === "spec" || session.role === "planner"
+          ? await ensureRuntime(activeRepo, session.taskId, session.role)
+          : {
+              runtimeId: session.runtimeId,
+              runId: session.runId,
+              baseUrl: session.baseUrl,
+              workingDirectory: session.workingDirectory,
+            };
+      const systemPrompt = buildAgentSystemPrompt({
+        role: session.role,
+        scenario: session.scenario,
+        task: {
+          taskId: task.id,
+          title: task.title,
+          issueType: task.issueType,
+          status: task.status,
+          qaRequired: task.aiReviewEnabled,
+          description: task.description,
+          acceptanceCriteria: task.acceptanceCriteria,
+          specMarkdown: docs.specMarkdown,
+          planMarkdown: docs.planMarkdown,
+          latestQaReportMarkdown: docs.qaMarkdown,
+        },
+      });
+
+      await adapter.resumeSession({
+        sessionId: session.sessionId,
+        externalSessionId: session.externalSessionId,
+        repoPath: activeRepo,
+        workingDirectory: runtime.workingDirectory,
+        taskId: session.taskId,
+        role: session.role,
+        scenario: session.scenario,
+        systemPrompt,
+        baseUrl: runtime.baseUrl,
+      });
+
+      if (!unsubscribersRef.current.has(sessionId)) {
+        attachSessionListener(activeRepo, sessionId);
+      }
+
+      updateSession(sessionId, (current) => ({
+        ...current,
+        status: "idle",
+        runtimeId: runtime.runtimeId,
+        runId: runtime.runId,
+        baseUrl: runtime.baseUrl,
+        workingDirectory: runtime.workingDirectory,
+      }));
+    },
+    [activeRepo, adapter, attachSessionListener, ensureRuntime, loadTaskDocuments, updateSession],
+  );
+
   const sendAgentMessage = useCallback(
     async (sessionId: string, content: string): Promise<void> => {
       const trimmed = content.trim();
@@ -916,8 +1124,9 @@ export function useAgentOrchestratorOperations({
         return;
       }
 
-      const session = sessionsRef.current[sessionId];
-      const selectedModel = session?.selectedModel ?? undefined;
+      await ensureSessionReady(sessionId);
+
+      const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
 
       updateSession(sessionId, (current) => ({
         ...current,
@@ -956,7 +1165,7 @@ export function useAgentOrchestratorOperations({
         throw error;
       }
     },
-    [adapter, updateSession],
+    [adapter, ensureSessionReady, updateSession],
   );
 
   const startAgentSession = useCallback(
@@ -1013,6 +1222,7 @@ export function useAgentOrchestratorOperations({
 
       const initialSession: AgentSessionState = {
         sessionId: summary.sessionId,
+        externalSessionId: summary.externalSessionId,
         taskId,
         role,
         scenario: resolvedScenario,
@@ -1109,7 +1319,9 @@ export function useAgentOrchestratorOperations({
       unsubscribe?.();
       unsubscribersRef.current.delete(sessionId);
 
-      await adapter.stopSession(sessionId);
+      if (adapter.hasSession(sessionId)) {
+        await adapter.stopSession(sessionId);
+      }
 
       updateSession(sessionId, (current) => ({
         ...current,
