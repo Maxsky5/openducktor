@@ -42,8 +42,8 @@ export function useTaskDocuments(
   specDoc: TaskDocumentState;
   planDoc: TaskDocumentState;
   qaDoc: TaskDocumentState;
-  ensureDocumentLoaded: (section: DocumentSectionKey) => void;
-  reloadDocument: (section: DocumentSectionKey) => void;
+  ensureDocumentLoaded: (section: DocumentSectionKey) => boolean;
+  reloadDocument: (section: DocumentSectionKey) => boolean;
 } {
   const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = useSpecState();
   const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
@@ -63,9 +63,9 @@ export function useTaskDocuments(
   }, [open, taskId]);
 
   const loadDocument = useCallback(
-    (section: DocumentSectionKey, force: boolean): void => {
+    (section: DocumentSectionKey, force: boolean): boolean => {
       if (!taskId || !open) {
-        return;
+        return false;
       }
 
       let shouldLoad = false;
@@ -87,7 +87,7 @@ export function useTaskDocuments(
       });
 
       if (!shouldLoad) {
-        return;
+        return false;
       }
 
       const sequence = documentLoadSequence.current;
@@ -130,20 +130,21 @@ export function useTaskDocuments(
             },
           }));
         });
+      return true;
     },
     [loadPlanDocument, loadQaReportDocument, loadSpecDocument, open, taskId],
   );
 
   const ensureDocumentLoaded = useCallback(
-    (section: DocumentSectionKey): void => {
-      loadDocument(section, false);
+    (section: DocumentSectionKey): boolean => {
+      return loadDocument(section, false);
     },
     [loadDocument],
   );
 
   const reloadDocument = useCallback(
-    (section: DocumentSectionKey): void => {
-      loadDocument(section, true);
+    (section: DocumentSectionKey): boolean => {
+      return loadDocument(section, true);
     },
     [loadDocument],
   );

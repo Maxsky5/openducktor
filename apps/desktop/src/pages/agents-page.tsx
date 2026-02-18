@@ -512,23 +512,45 @@ export function AgentsPage(): ReactElement {
       }
 
       if (meta.tool === "set_spec") {
-        processedDocumentToolEventsRef.current.add(eventKey);
-        reloadDocument("spec");
+        if (specDoc.isLoading) {
+          continue;
+        }
+        const triggered = reloadDocument("spec");
+        if (triggered) {
+          processedDocumentToolEventsRef.current.add(eventKey);
+        }
         continue;
       }
 
       if (meta.tool === "set_plan") {
-        processedDocumentToolEventsRef.current.add(eventKey);
-        reloadDocument("plan");
+        if (planDoc.isLoading) {
+          continue;
+        }
+        const triggered = reloadDocument("plan");
+        if (triggered) {
+          processedDocumentToolEventsRef.current.add(eventKey);
+        }
         continue;
       }
 
       if (meta.tool === "qa_approved" || meta.tool === "qa_rejected") {
-        processedDocumentToolEventsRef.current.add(eventKey);
-        reloadDocument("qa");
+        if (qaDoc.isLoading) {
+          continue;
+        }
+        const triggered = reloadDocument("qa");
+        if (triggered) {
+          processedDocumentToolEventsRef.current.add(eventKey);
+        }
       }
     }
-  }, [activeSession, reloadDocument, taskId]);
+  }, [
+    activeSession,
+    planDoc.isLoading,
+    qaDoc.isLoading,
+    reloadDocument,
+    specDoc.isLoading,
+    taskId,
+  ]);
 
   return (
     <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
