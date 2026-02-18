@@ -20,9 +20,13 @@ import {
   Bot,
   Brain,
   CheckCircle2,
+  CircleDotDashed,
   LoaderCircle,
+  Play,
+  SendHorizontal,
   ShieldCheck,
   Sparkles,
+  Square,
   Wrench,
 } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,6 +52,17 @@ const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {
     "build_after_human_request_changes",
   ],
   qa: ["qa_review"],
+};
+
+const SCENARIO_LABELS: Record<AgentScenario, string> = {
+  spec_initial: "Initial Spec",
+  spec_revision: "Revise Spec",
+  planner_initial: "Initial Plan",
+  planner_revision: "Revise Plan",
+  build_implementation_start: "Start Implementation",
+  build_after_qa_rejected: "Fix QA Rejection",
+  build_after_human_request_changes: "Apply Human Changes",
+  qa_review: "QA Review",
 };
 
 const isRole = (value: string | null): value is AgentRole =>
@@ -234,6 +249,14 @@ export function AgentsPage(): ReactElement {
     }));
   }, [selectedModelEntry]);
 
+  const scenarioOptions = useMemo<ComboboxOption[]>(() => {
+    return scenarios.map((entry) => ({
+      value: entry,
+      label: SCENARIO_LABELS[entry],
+      description: entry,
+    }));
+  }, [scenarios]);
+
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
   const activeSessionStatus = activeSession?.status ?? "stopped";
@@ -252,17 +275,26 @@ export function AgentsPage(): ReactElement {
   }, [scrollTrigger]);
 
   return (
-    <div className="grid h-full min-w-0 gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Agents Workspace</CardTitle>
-          <CardDescription>
-            Unified Spec, Planner, Build, and QA execution surface powered by OpenCode sessions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-[260px]">
+    <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="flex min-h-0 flex-col overflow-hidden border-slate-200 shadow-sm">
+        <CardHeader className="space-y-3 border-b border-slate-200 bg-white pb-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-xl">Agent Studio</CardTitle>
+              <CardDescription>
+                Chat-first workspace for Spec, Planner, Build, and QA orchestration.
+              </CardDescription>
+            </div>
+            {activeSession ? (
+              <Badge variant={statusBadgeVariant(activeSession.status)}>
+                <CircleDotDashed className="mr-1 size-3" />
+                {activeSession.status}
+              </Badge>
+            ) : null}
+          </div>
+
+          <div className="grid gap-2 lg:grid-cols-[minmax(280px,1fr)_auto]">
+            <div className="min-w-0">
               <TaskSelector
                 tasks={tasks}
                 value={taskId}
@@ -274,112 +306,99 @@ export function AgentsPage(): ReactElement {
                 }}
               />
             </div>
-            {ROLE_OPTIONS.map((entry) => {
-              const Icon = entry.icon;
-              const active = role === entry.role;
-              return (
-                <Button
-                  key={entry.role}
-                  type="button"
-                  size="sm"
-                  variant={active ? "default" : "outline"}
-                  onClick={() =>
-                    updateQuery({
-                      agent: entry.role,
-                      scenario: firstScenario(entry.role),
-                      autostart: undefined,
-                    })
-                  }
-                >
-                  <Icon className="size-3.5" />
-                  {entry.label}
-                </Button>
-              );
-            })}
+            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+              {ROLE_OPTIONS.map((entry) => {
+                const Icon = entry.icon;
+                const active = role === entry.role;
+                return (
+                  <Button
+                    key={entry.role}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "ghost"}
+                    className={cn("h-8", active ? "" : "hover:bg-white")}
+                    onClick={() =>
+                      updateQuery({
+                        agent: entry.role,
+                        scenario: firstScenario(entry.role),
+                        autostart: undefined,
+                      })
+                    }
+                  >
+                    <Icon className="size-3.5" />
+                    {entry.label}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {scenarios.map((entry) => (
+          <div className="grid gap-2 lg:grid-cols-[240px_auto_1fr]">
+            <Combobox
+              value={scenario}
+              options={scenarioOptions}
+              placeholder="Select scenario"
+              onValueChange={(value) => updateQuery({ scenario: value, autostart: undefined })}
+            />
+            <div className="flex flex-wrap gap-2">
               <Button
-                key={entry}
                 type="button"
-                size="sm"
-                variant={scenario === entry ? "secondary" : "outline"}
-                className={cn(
-                  "h-8",
-                  scenario === entry ? "border-sky-200 bg-sky-50 text-sky-700" : "",
-                )}
-                onClick={() => updateQuery({ scenario: entry, autostart: undefined })}
+                disabled={!activeRepo || !taskId || isStarting}
+                onClick={() => void startSession(false)}
               >
-                {entry}
+                {isStarting ? (
+                  <>
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                    Starting
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-3.5" />
+                    Start
+                  </>
+                )}
               </Button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              disabled={!activeRepo || !taskId || isStarting}
-              onClick={() => void startSession(false)}
-            >
-              {isStarting ? "Starting..." : "Start Session"}
-            </Button>
-            {activeSession ? (
-              <>
-                <Badge variant={statusBadgeVariant(activeSession.status)}>
-                  {activeSession.status}
-                </Badge>
+              {activeSession ? (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => void stopAgentSession(activeSession.sessionId)}
                 >
-                  Stop Session
+                  <Square className="size-3.5" />
+                  Stop
                 </Button>
-              </>
-            ) : null}
-            {selectedTask ? (
-              <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
-                {selectedTask.title}
-              </Badge>
-            ) : null}
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+              {selectedTask ? (
+                <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
+                  {selectedTask.title}
+                </Badge>
+              ) : (
+                <span>Select a task to start.</span>
+              )}
+              <span>
+                Messages: <strong>{activeSession?.messages.length ?? 0}</strong>
+              </span>
+              <span>
+                Permissions: <strong>{activeSession?.pendingPermissions.length ?? 0}</strong>
+              </span>
+              <span>
+                Questions: <strong>{activeSession?.pendingQuestions.length ?? 0}</strong>
+              </span>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </CardHeader>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(360px,1.1fr)_minmax(360px,1fr)]">
-        <Card className="min-h-[540px]">
-          <CardHeader>
-            <CardTitle className="text-lg">Session Chat</CardTitle>
-            <CardDescription>
-              Agent conversation and orchestration events for the selected task/role.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex h-[calc(100%-5rem)] flex-col gap-3">
+        <CardContent className="min-h-0 flex-1 bg-slate-50/50 p-0">
+          <div className="flex h-full min-h-0 flex-col">
             <div
               ref={messagesContainerRef}
-              className="flex-1 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/80 p-3"
+              className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
             >
               {!activeSession ? (
-                <div className="rounded-md border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">
+                <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
                   Start a session to begin.
-                </div>
-              ) : null}
-
-              {activeSession ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
-                  <Badge variant={statusBadgeVariant(activeSession.status)}>
-                    {activeSession.status}
-                  </Badge>
-                  <span>
-                    Messages: <strong>{activeSession.messages.length}</strong>
-                  </span>
-                  <span>
-                    Pending permissions: <strong>{activeSession.pendingPermissions.length}</strong>
-                  </span>
-                  <span>
-                    Pending questions: <strong>{activeSession.pendingQuestions.length}</strong>
-                  </span>
                 </div>
               ) : null}
 
@@ -410,176 +429,176 @@ export function AgentsPage(): ReactElement {
             </div>
 
             <form
-              className="space-y-2"
+              className="space-y-3 border-t border-slate-200 bg-white p-3"
               onSubmit={(event) => {
                 event.preventDefault();
                 void onSend();
               }}
             >
-              <div className="rounded-lg border border-slate-200 bg-white">
-                <Textarea
-                  placeholder="# for agents · @ for files · / for commands"
-                  value={input}
-                  disabled={!activeSession || isSending}
-                  className="min-h-24 resize-none border-0 focus-visible:ring-0"
-                  onChange={(event) => setInput(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void onSend();
-                    }
-                  }}
-                />
-                {activeSession ? (
-                  <div className="space-y-2 border-t border-slate-200 px-2 py-2">
-                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                      <div className="min-w-0">
-                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                          Agent
-                        </p>
-                        <Combobox
-                          value={activeSession.selectedModel?.opencodeAgent ?? ""}
-                          options={agentOptions}
-                          placeholder={
-                            activeSession.isLoadingModelCatalog
-                              ? "Loading agents..."
-                              : "Select agent"
-                          }
-                          disabled={activeSession.isLoadingModelCatalog}
-                          onValueChange={(opencodeAgent) => {
-                            const selectedModel =
-                              activeSession.selectedModel ??
-                              (() => {
-                                const firstModel = activeSession.modelCatalog?.models[0];
-                                if (!firstModel) {
-                                  return null;
-                                }
-                                return {
-                                  providerId: firstModel.providerId,
-                                  modelId: firstModel.modelId,
-                                  ...(firstModel.variants[0]
-                                    ? { variant: firstModel.variants[0] }
-                                    : {}),
-                                };
-                              })();
-                            if (!selectedModel) {
-                              return;
-                            }
-                            updateAgentSessionModel(activeSession.sessionId, {
-                              ...selectedModel,
-                              opencodeAgent,
-                            });
-                          }}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                          Model
-                        </p>
-                        <Combobox
-                          value={
-                            activeSession.selectedModel
-                              ? `${activeSession.selectedModel.providerId}/${activeSession.selectedModel.modelId}`
-                              : ""
-                          }
-                          options={modelOptions}
-                          groups={modelGroups}
-                          placeholder={
-                            activeSession.isLoadingModelCatalog
-                              ? "Loading models..."
-                              : "Select model"
-                          }
-                          disabled={activeSession.isLoadingModelCatalog}
-                          onValueChange={(nextValue) => {
-                            if (!activeSession.modelCatalog) {
-                              return;
-                            }
-                            const model = activeSession.modelCatalog.models.find(
-                              (entry) => entry.id === nextValue,
-                            );
-                            if (!model) {
-                              return;
-                            }
-                            updateAgentSessionModel(activeSession.sessionId, {
-                              providerId: model.providerId,
-                              modelId: model.modelId,
-                              ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-                              ...(activeSession.selectedModel?.opencodeAgent
-                                ? { opencodeAgent: activeSession.selectedModel.opencodeAgent }
-                                : {}),
-                            });
-                          }}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                          Variant
-                        </p>
-                        <Combobox
-                          value={activeSession.selectedModel?.variant ?? ""}
-                          options={variantOptions}
-                          placeholder={variantOptions.length > 0 ? "Select variant" : "No variants"}
-                          disabled={variantOptions.length === 0}
-                          onValueChange={(variant) => {
-                            if (!activeSession.selectedModel) {
-                              return;
-                            }
-                            updateAgentSessionModel(activeSession.sessionId, {
-                              ...activeSession.selectedModel,
-                              variant,
-                            });
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-slate-500">
-                        {activeSession.status === "running"
-                          ? "Streaming OpenCode events..."
-                          : activeSession.status === "starting"
-                            ? "Starting session..."
-                            : "Ready"}
-                      </p>
-                      <Button
-                        type="submit"
-                        disabled={
-                          !activeSession ||
-                          isSending ||
-                          input.trim().length === 0 ||
-                          !activeSession.selectedModel?.opencodeAgent
-                        }
-                      >
-                        {isSending ? (
-                          <>
-                            <LoaderCircle className="size-3.5 animate-spin" />
-                            Sending...
-                          </>
-                        ) : (
-                          "Send"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between border-t border-slate-200 px-2 py-2">
-                    <p className="text-xs text-slate-500">Start a session to begin chatting.</p>
-                    <Button type="submit" disabled>
-                      Send
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+              <Textarea
+                placeholder="# for agents · @ for files · / for commands"
+                value={input}
+                disabled={!activeSession || isSending}
+                className="min-h-24 resize-none"
+                onChange={(event) => setInput(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void onSend();
+                  }
+                }}
+              />
 
-        <div className="grid min-h-[540px] gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Pending Permissions</CardTitle>
-              <CardDescription>Human-in-the-loop approval requests from OpenCode.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
+              <div className="grid gap-2 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,0.65fr)_auto]">
+                <div className="min-w-0">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Agent
+                  </p>
+                  <Combobox
+                    value={activeSession?.selectedModel?.opencodeAgent ?? ""}
+                    options={agentOptions}
+                    placeholder={
+                      activeSession?.isLoadingModelCatalog ? "Loading agents..." : "Agent"
+                    }
+                    disabled={!activeSession || activeSession.isLoadingModelCatalog}
+                    onValueChange={(opencodeAgent) => {
+                      if (!activeSession) {
+                        return;
+                      }
+                      const selectedModel =
+                        activeSession.selectedModel ??
+                        (() => {
+                          const firstModel = activeSession.modelCatalog?.models[0];
+                          if (!firstModel) {
+                            return null;
+                          }
+                          return {
+                            providerId: firstModel.providerId,
+                            modelId: firstModel.modelId,
+                            ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
+                          };
+                        })();
+                      if (!selectedModel) {
+                        return;
+                      }
+                      updateAgentSessionModel(activeSession.sessionId, {
+                        ...selectedModel,
+                        opencodeAgent,
+                      });
+                    }}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Model
+                  </p>
+                  <Combobox
+                    value={
+                      activeSession?.selectedModel
+                        ? `${activeSession.selectedModel.providerId}/${activeSession.selectedModel.modelId}`
+                        : ""
+                    }
+                    options={modelOptions}
+                    groups={modelGroups}
+                    placeholder={
+                      activeSession?.isLoadingModelCatalog ? "Loading models..." : "Model"
+                    }
+                    disabled={!activeSession || activeSession.isLoadingModelCatalog}
+                    onValueChange={(nextValue) => {
+                      if (!activeSession?.modelCatalog) {
+                        return;
+                      }
+                      const model = activeSession.modelCatalog.models.find(
+                        (entry) => entry.id === nextValue,
+                      );
+                      if (!model) {
+                        return;
+                      }
+                      updateAgentSessionModel(activeSession.sessionId, {
+                        providerId: model.providerId,
+                        modelId: model.modelId,
+                        ...(model.variants[0] ? { variant: model.variants[0] } : {}),
+                        ...(activeSession.selectedModel?.opencodeAgent
+                          ? { opencodeAgent: activeSession.selectedModel.opencodeAgent }
+                          : {}),
+                      });
+                    }}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Variant
+                  </p>
+                  <Combobox
+                    value={activeSession?.selectedModel?.variant ?? ""}
+                    options={variantOptions}
+                    placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
+                    disabled={!activeSession || variantOptions.length === 0}
+                    onValueChange={(variant) => {
+                      if (!activeSession?.selectedModel) {
+                        return;
+                      }
+                      updateAgentSessionModel(activeSession.sessionId, {
+                        ...activeSession.selectedModel,
+                        variant,
+                      });
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    type="submit"
+                    className="w-full lg:w-auto"
+                    disabled={
+                      !activeSession ||
+                      isSending ||
+                      input.trim().length === 0 ||
+                      !activeSession.selectedModel?.opencodeAgent
+                    }
+                  >
+                    {isSending ? (
+                      <>
+                        <LoaderCircle className="size-3.5 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <SendHorizontal className="size-3.5" />
+                        Send
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                {activeSession?.status === "running"
+                  ? "Streaming OpenCode events..."
+                  : activeSession?.status === "starting"
+                    ? "Starting session..."
+                    : activeSession
+                      ? "Ready"
+                      : "Start a session to begin chatting."}
+              </p>
+            </form>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid min-h-0 gap-4">
+        <Card className="overflow-hidden border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg">Workflow Inbox</CardTitle>
+            <CardDescription>
+              Resolve permissions and questions emitted by the agent.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Pending Permissions
+              </h3>
               {activeSession?.pendingPermissions.length ? null : (
                 <p className="text-sm text-slate-500">No pending permission requests.</p>
               )}
@@ -597,11 +616,13 @@ export function AgentsPage(): ReactElement {
                       type="button"
                       size="sm"
                       onClick={() =>
-                        void replyAgentPermission(
-                          activeSession.sessionId,
-                          request.requestId,
-                          "once",
-                        )
+                        activeSession
+                          ? void replyAgentPermission(
+                              activeSession.sessionId,
+                              request.requestId,
+                              "once",
+                            )
+                          : undefined
                       }
                     >
                       Allow Once
@@ -611,11 +632,13 @@ export function AgentsPage(): ReactElement {
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        void replyAgentPermission(
-                          activeSession.sessionId,
-                          request.requestId,
-                          "always",
-                        )
+                        activeSession
+                          ? void replyAgentPermission(
+                              activeSession.sessionId,
+                              request.requestId,
+                              "always",
+                            )
+                          : undefined
                       }
                     >
                       Always Allow
@@ -625,11 +648,13 @@ export function AgentsPage(): ReactElement {
                       size="sm"
                       variant="destructive"
                       onClick={() =>
-                        void replyAgentPermission(
-                          activeSession.sessionId,
-                          request.requestId,
-                          "reject",
-                        )
+                        activeSession
+                          ? void replyAgentPermission(
+                              activeSession.sessionId,
+                              request.requestId,
+                              "reject",
+                            )
+                          : undefined
                       }
                     >
                       Reject
@@ -637,64 +662,12 @@ export function AgentsPage(): ReactElement {
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Documents</CardTitle>
-              <CardDescription>
-                Current task artifacts for the active repository task.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <section className="space-y-1">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Spec
-                </h3>
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  {specDoc.markdown.trim().length > 0 ? (
-                    <MarkdownRenderer markdown={specDoc.markdown} variant="compact" />
-                  ) : (
-                    <p className="text-sm text-slate-500">No spec document yet.</p>
-                  )}
-                </div>
-              </section>
-
-              <section className="space-y-1">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Implementation Plan
-                </h3>
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  {planDoc.markdown.trim().length > 0 ? (
-                    <MarkdownRenderer markdown={planDoc.markdown} variant="compact" />
-                  ) : (
-                    <p className="text-sm text-slate-500">No implementation plan yet.</p>
-                  )}
-                </div>
-              </section>
-
-              <section className="space-y-1">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  QA Report
-                </h3>
-                <div className="rounded-lg border border-slate-200 bg-white p-3">
-                  {qaDoc.markdown.trim().length > 0 ? (
-                    <MarkdownRenderer markdown={qaDoc.markdown} variant="compact" />
-                  ) : (
-                    <p className="text-sm text-slate-500">No QA report yet.</p>
-                  )}
-                </div>
-              </section>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Pending Questions</CardTitle>
-              <CardDescription>Answer required questions emitted by tool flows.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Pending Questions
+              </h3>
               {activeSession?.pendingQuestions.length ? null : (
                 <p className="text-sm text-slate-500">No pending questions.</p>
               )}
@@ -717,9 +690,13 @@ export function AgentsPage(): ReactElement {
                           size="sm"
                           variant="outline"
                           onClick={() =>
-                            void answerAgentQuestion(activeSession.sessionId, request.requestId, [
-                              [option.label],
-                            ])
+                            activeSession
+                              ? void answerAgentQuestion(
+                                  activeSession.sessionId,
+                                  request.requestId,
+                                  [[option.label]],
+                                )
+                              : undefined
                           }
                         >
                           <CheckCircle2 className="size-3.5" />
@@ -730,9 +707,54 @@ export function AgentsPage(): ReactElement {
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
-        </div>
+            </section>
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-0 overflow-hidden border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg">Documents</CardTitle>
+            <CardDescription>Live task artifacts for the selected task.</CardDescription>
+          </CardHeader>
+          <CardContent className="max-h-[40vh] space-y-4 overflow-y-auto">
+            <section className="space-y-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Spec</h3>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                {specDoc.markdown.trim().length > 0 ? (
+                  <MarkdownRenderer markdown={specDoc.markdown} variant="compact" />
+                ) : (
+                  <p className="text-sm text-slate-500">No spec document yet.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="space-y-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Implementation Plan
+              </h3>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                {planDoc.markdown.trim().length > 0 ? (
+                  <MarkdownRenderer markdown={planDoc.markdown} variant="compact" />
+                ) : (
+                  <p className="text-sm text-slate-500">No implementation plan yet.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="space-y-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                QA Report
+              </h3>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                {qaDoc.markdown.trim().length > 0 ? (
+                  <MarkdownRenderer markdown={qaDoc.markdown} variant="compact" />
+                ) : (
+                  <p className="text-sm text-slate-500">No QA report yet.</p>
+                )}
+              </div>
+            </section>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

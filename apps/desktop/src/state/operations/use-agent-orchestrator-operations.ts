@@ -52,6 +52,16 @@ const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 const runningStates = new Set(["starting", "running", "blocked", "awaiting_done_confirmation"]);
 
 const now = (): string => new Date().toISOString();
+const OBC_TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*[\s\S]*?<\/obp_tool_call>/g;
+const OBC_TOOL_BLOCK_TAIL_PATTERN = /<obp_tool_call>[\s\S]*$/;
+
+const sanitizeStreamingText = (value: string): string => {
+  return value
+    .replace(OBC_TOOL_BLOCK_PATTERN, "")
+    .replace(OBC_TOOL_BLOCK_TAIL_PATTERN, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimStart();
+};
 
 const inferScenario = (
   role: AgentRole,
@@ -217,6 +227,8 @@ export function useAgentOrchestratorOperations({
   const taskRef = useRef<TaskCard[]>(tasks);
   const runsRef = useRef(runs);
   const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
+  const draftRawBySessionRef = useRef<Record<string, string>>({});
+  const draftSourceBySessionRef = useRef<Record<string, "delta" | "part">>({});
 
   useEffect(() => {
     sessionsRef.current = sessionsById;
@@ -288,10 +300,16 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "assistant_delta") {
+          if (draftSourceBySessionRef.current[sessionId] === "part") {
+            return;
+          }
+          draftSourceBySessionRef.current[sessionId] = "delta";
+          const nextRaw = `${draftRawBySessionRef.current[sessionId] ?? ""}${event.delta}`;
+          draftRawBySessionRef.current[sessionId] = nextRaw;
           updateSession(sessionId, (current) => ({
             ...current,
             status: "running",
-            draftAssistantText: `${current.draftAssistantText}${event.delta}`,
+            draftAssistantText: sanitizeStreamingText(nextRaw),
           }));
           return;
         }
@@ -300,10 +318,12 @@ export function useAgentOrchestratorOperations({
           const part = event.part;
           if (part.kind === "text") {
             if (!part.synthetic) {
+              draftSourceBySessionRef.current[sessionId] = "part";
+              draftRawBySessionRef.current[sessionId] = part.text;
               updateSession(sessionId, (current) => ({
                 ...current,
                 status: "running",
-                draftAssistantText: part.text,
+                draftAssistantText: sanitizeStreamingText(part.text),
               }));
             }
             return;
@@ -400,6 +420,8 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "assistant_message") {
+          delete draftRawBySessionRef.current[sessionId];
+          delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => ({
             ...current,
             draftAssistantText: "",
@@ -419,15 +441,20 @@ export function useAgentOrchestratorOperations({
         if (event.type === "tool_call") {
           updateSession(sessionId, (current) => ({
             ...current,
-            messages: [
-              ...current.messages,
-              {
-                id: crypto.randomUUID(),
-                role: "system",
-                content: `Workflow tool call: ${event.call.tool}`,
-                timestamp: event.timestamp,
+            messages: upsertMessage(current.messages, {
+              id: `workflow-tool-call:${event.timestamp}:${event.call.tool}`,
+              role: "tool",
+              content: `Workflow tool call: ${event.call.tool}`,
+              timestamp: event.timestamp,
+              meta: {
+                kind: "tool",
+                partId: `workflow-tool-call:${event.call.tool}`,
+                callId: `workflow-tool-call:${event.call.tool}`,
+                tool: event.call.tool,
+                status: "pending",
+                input: event.call.args as Record<string, unknown>,
               },
-            ],
+            }),
           }));
           return;
         }
@@ -435,15 +462,20 @@ export function useAgentOrchestratorOperations({
         if (event.type === "tool_result") {
           updateSession(sessionId, (current) => ({
             ...current,
-            messages: [
-              ...current.messages,
-              {
-                id: crypto.randomUUID(),
-                role: "system",
-                content: `${event.tool}: ${event.success ? "success" : "error"} - ${event.message}`,
-                timestamp: event.timestamp,
+            messages: upsertMessage(current.messages, {
+              id: `workflow-tool-result:${event.timestamp}:${event.tool}`,
+              role: "tool",
+              content: `${event.tool}: ${event.success ? "success" : "error"} - ${event.message}`,
+              timestamp: event.timestamp,
+              meta: {
+                kind: "tool",
+                partId: `workflow-tool-result:${event.tool}`,
+                callId: `workflow-tool-result:${event.tool}`,
+                tool: event.tool,
+                status: event.success ? "completed" : "error",
+                ...(event.success ? { output: event.message } : { error: event.message }),
               },
-            ],
+            }),
           }));
           if (event.success) {
             void refreshTaskData(repoPath).catch(() => undefined);
@@ -512,6 +544,8 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "session_error") {
+          delete draftRawBySessionRef.current[sessionId];
+          delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => ({
             ...current,
             status: "error",
@@ -529,6 +563,8 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "session_idle") {
+          delete draftRawBySessionRef.current[sessionId];
+          delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => ({
             ...current,
             status: "idle",
@@ -538,6 +574,8 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "session_finished") {
+          delete draftRawBySessionRef.current[sessionId];
+          delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => ({
             ...current,
             status: "stopped",
