@@ -384,7 +384,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.question.replyCalls).toHaveLength(1);
   });
 
-  test("event stream maps delta/part/status/permission events for matching session", async () => {
+  test("event stream maps part updates, buffered deltas, status, and permission events", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({
       streamEvents: [
@@ -396,6 +396,19 @@ describe("OpencodeSdkAdapter", () => {
             partID: "part-1",
             field: "text",
             delta: "Hello",
+          },
+        } as Event,
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "text",
+              text: "",
+              time: { start: Date.now() },
+            },
           },
         } as Event,
         {
@@ -436,18 +449,75 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const events: string[] = [];
+    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
     adapter.subscribeEvents("session-1", (event) => {
-      events.push(event.type);
+      events.push(event as { type: string; part?: { kind: string; text?: string } });
     });
 
     await startDefaultSession(adapter);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(events).toContain("assistant_delta");
-    expect(events).toContain("assistant_part");
-    expect(events).toContain("session_status");
-    expect(events).toContain("permission_required");
+    expect(events.some((event) => event.type === "assistant_part")).toBe(true);
+    expect(events.some((event) => event.type === "session_status")).toBe(true);
+    expect(events.some((event) => event.type === "permission_required")).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "assistant_part" &&
+          event.part?.kind === "text" &&
+          event.part.text === "Hello",
+      ),
+    ).toBe(true);
+  });
+
+  test("reasoning delta updates reasoning part content instead of assistant text stream", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({
+      streamEvents: [
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-reasoning",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "reasoning",
+              text: "",
+              time: { start: Date.now() },
+            },
+          },
+        } as Event,
+        {
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-opencode-1",
+            messageID: "assistant-1",
+            partID: "part-reasoning",
+            field: "text",
+            delta: "Inspecting constraints",
+          },
+        } as Event,
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event as { type: string; part?: { kind: string; text?: string } });
+    });
+
+    await startDefaultSession(adapter);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const reasoningUpdates = events.filter(
+      (event) => event.type === "assistant_part" && event.part?.kind === "reasoning",
+    );
+    expect(reasoningUpdates).toHaveLength(2);
+    expect(reasoningUpdates[1]?.part?.text).toBe("Inspecting constraints");
+    expect(events.some((event) => event.type === "assistant_delta")).toBe(false);
   });
 
   test("startSession defaults to external session id when none provided", async () => {

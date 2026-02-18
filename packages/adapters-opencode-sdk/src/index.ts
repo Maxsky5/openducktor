@@ -386,6 +386,27 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
   }
 };
 
+const normalizePartDeltaField = (field: string): string => {
+  if (field === "reasoning_content" || field === "reasoning_details") {
+    return "text";
+  }
+  return field;
+};
+
+const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
+  const normalizedField = normalizePartDeltaField(field);
+  const partRecord = part as Record<string, unknown>;
+  const existing = partRecord[normalizedField];
+  if (existing !== undefined && typeof existing !== "string") {
+    return null;
+  }
+
+  return {
+    ...partRecord,
+    [normalizedField]: `${typeof existing === "string" ? existing : ""}${delta}`,
+  } as Part;
+};
+
 const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return fallback();
@@ -883,6 +904,8 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       { directory: context.input.workingDirectory },
       { signal: controller.signal },
     );
+    const partsById = new Map<string, Part>();
+    const pendingDeltasByPartId = new Map<string, Array<{ field: string; delta: string }>>();
 
     for await (const event of sse.stream) {
       if (!this.isRelevantEvent(context.externalSessionId, event)) {
@@ -890,14 +913,62 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       }
 
       if (event.type === "message.part.delta") {
-        this.emit(context.sessionId, {
-          type: "assistant_delta",
-          sessionId: context.sessionId,
-          timestamp: this.now(),
-          delta: event.properties.delta,
-        });
+        const deltaEvent = event.properties as {
+          partID?: unknown;
+          field?: unknown;
+          delta?: unknown;
+        };
+        const partId = typeof deltaEvent.partID === "string" ? deltaEvent.partID : "";
+        const field = typeof deltaEvent.field === "string" ? deltaEvent.field : "";
+        const delta = typeof deltaEvent.delta === "string" ? deltaEvent.delta : "";
+        const knownPart = partId ? partsById.get(partId) : undefined;
+
+        if (knownPart && field.length > 0) {
+          const updatedPart = applyDeltaToPart(knownPart, field, delta);
+          if (updatedPart) {
+            partsById.set(partId, updatedPart);
+            const mapped = mapPartToAgentStreamPart(updatedPart);
+            if (mapped) {
+              this.emit(context.sessionId, {
+                type: "assistant_part",
+                sessionId: context.sessionId,
+                timestamp: this.now(),
+                part: mapped,
+              });
+              continue;
+            }
+          }
+        }
+
+        if (partId && field.length > 0) {
+          const pending = pendingDeltasByPartId.get(partId) ?? [];
+          pending.push({ field, delta });
+          pendingDeltasByPartId.set(partId, pending);
+          continue;
+        }
+
+        if (delta.length > 0) {
+          this.emit(context.sessionId, {
+            type: "assistant_delta",
+            sessionId: context.sessionId,
+            timestamp: this.now(),
+            delta,
+          });
+        }
       } else if (event.type === "message.part.updated") {
-        const mapped = mapPartToAgentStreamPart(event.properties.part);
+        let nextPart = event.properties.part;
+        const pendingDeltas = pendingDeltasByPartId.get(nextPart.id);
+        if (pendingDeltas && pendingDeltas.length > 0) {
+          for (const pending of pendingDeltas) {
+            const updated = applyDeltaToPart(nextPart, pending.field, pending.delta);
+            if (updated) {
+              nextPart = updated;
+            }
+          }
+          pendingDeltasByPartId.delete(nextPart.id);
+        }
+        partsById.set(nextPart.id, nextPart);
+        const mapped = mapPartToAgentStreamPart(nextPart);
         if (mapped) {
           this.emit(context.sessionId, {
             type: "assistant_part",
@@ -906,6 +977,9 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
             part: mapped,
           });
         }
+      } else if (event.type === "message.part.removed") {
+        partsById.delete(event.properties.partID);
+        pendingDeltasByPartId.delete(event.properties.partID);
       } else if (event.type === "session.status") {
         const status = event.properties.status;
         if (status.type === "busy" || status.type === "idle") {
