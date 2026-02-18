@@ -134,6 +134,8 @@ const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | 
   return "success";
 };
 
+const NEW_SESSION_SENTINEL = "__new_session__";
+
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
   const { tasks } = useTasksState();
@@ -151,7 +153,6 @@ export function AgentsPage(): ReactElement {
   const [input, setInput] = useState("");
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [isComposingNewSession, setIsComposingNewSession] = useState(false);
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -170,6 +171,7 @@ export function AgentsPage(): ReactElement {
     () => sessions.find((entry) => entry.sessionId === sessionParam) ?? null,
     [sessionParam, sessions],
   );
+  const isComposingNewSession = sessionParam === NEW_SESSION_SENTINEL;
 
   const role: AgentRole = selectedSessionById?.role ?? roleFromQuery;
   const taskId = selectedSessionById?.taskId ?? taskIdParam;
@@ -269,10 +271,9 @@ export function AgentsPage(): ReactElement {
   }, [activeRepo, loadRepoSettings]);
 
   useEffect(() => {
-    if (!sessionParam || selectedSessionById) {
+    if (!sessionParam || selectedSessionById || sessionParam === NEW_SESSION_SENTINEL) {
       return;
     }
-    setIsComposingNewSession(false);
     void updateQuery({ session: undefined });
   }, [selectedSessionById, sessionParam, updateQuery]);
 
@@ -290,13 +291,25 @@ export function AgentsPage(): ReactElement {
   }, [repoSettings?.agentDefaults, role]);
 
   const sessionOptions = useMemo<ComboboxOption[]>(() => {
-    return contextSessions.map((entry) => ({
+    const options = contextSessions.map((entry) => ({
       value: entry.sessionId,
       label: `${SCENARIO_LABELS[entry.scenario]} · ${formatSessionTime(entry.startedAt)}`,
       description: `${SCENARIO_LABELS[entry.scenario]} · ${entry.status}`,
       searchKeywords: [entry.taskId, entry.role, entry.scenario, entry.status, entry.sessionId],
     }));
-  }, [contextSessions]);
+    if (!taskId) {
+      return options;
+    }
+    return [
+      {
+        value: NEW_SESSION_SENTINEL,
+        label: "Start Fresh Session",
+        description: "Create a new session for this task/role on your next message.",
+        searchKeywords: ["new", "fresh", "create", "session"],
+      },
+      ...options,
+    ];
+  }, [contextSessions, taskId]);
 
   useEffect(() => {
     if (!activeSession || !roleDefaultSelection) {
@@ -354,7 +367,6 @@ export function AgentsPage(): ReactElement {
           session: sessionId,
           autostart: undefined,
         });
-        setIsComposingNewSession(false);
         return sessionId;
       } finally {
         setIsStarting(false);
@@ -537,9 +549,12 @@ export function AgentsPage(): ReactElement {
             </div>
           </div>
 
-          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_240px_auto_1fr]">
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_240px_1fr]">
             <Combobox
-              value={isComposingNewSession ? "" : (selectedSessionById?.sessionId ?? "")}
+              value={
+                selectedSessionById?.sessionId ??
+                (isComposingNewSession ? NEW_SESSION_SENTINEL : "")
+              }
               options={sessionOptions}
               placeholder={
                 sessionOptions.length > 0
@@ -548,12 +563,20 @@ export function AgentsPage(): ReactElement {
               }
               searchPlaceholder="Search sessions..."
               emptyText="No matching session."
+              disabled={!taskId}
               onValueChange={(sessionId) => {
+                if (sessionId === NEW_SESSION_SENTINEL) {
+                  setInput("");
+                  void updateQuery({
+                    session: NEW_SESSION_SENTINEL,
+                    autostart: undefined,
+                  });
+                  return;
+                }
                 const selected = sessions.find((entry) => entry.sessionId === sessionId);
                 if (!selected) {
                   return;
                 }
-                setIsComposingNewSession(false);
                 updateQuery({
                   session: selected.sessionId,
                   task: selected.taskId,
@@ -570,30 +593,6 @@ export function AgentsPage(): ReactElement {
               disabled={Boolean(selectedSessionById) && !isComposingNewSession}
               onValueChange={(value) => updateQuery({ scenario: value, autostart: undefined })}
             />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={isComposingNewSession ? "default" : "outline"}
-                disabled={!activeRepo || !taskId}
-                onClick={() => {
-                  setIsComposingNewSession(true);
-                  setInput("");
-                  void updateQuery({ session: undefined, autostart: undefined });
-                }}
-              >
-                New Session
-              </Button>
-              {activeSession && !isComposingNewSession ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void stopAgentSession(activeSession.sessionId)}
-                >
-                  <Square className="size-3.5" />
-                  Stop
-                </Button>
-              ) : null}
-            </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               {selectedTask ? (
                 <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
@@ -621,11 +620,22 @@ export function AgentsPage(): ReactElement {
                   variant="outline"
                   className="h-6 px-2 text-[11px]"
                   onClick={() => {
-                    setIsComposingNewSession(false);
                     void updateQuery({ session: undefined, autostart: undefined });
                   }}
                 >
                   Follow Latest
+                </Button>
+              ) : null}
+              {activeSession && !isComposingNewSession ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[11px]"
+                  onClick={() => void stopAgentSession(activeSession.sessionId)}
+                >
+                  <Square className="size-3.5" />
+                  Stop
                 </Button>
               ) : null}
             </div>
