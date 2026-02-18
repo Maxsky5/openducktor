@@ -490,10 +490,10 @@ describe("OpencodeSdkAdapter", () => {
         {
           type: "message.part.delta",
           properties: {
-            sessionID: "session-opencode-1",
-            messageID: "assistant-1",
-            partID: "part-reasoning",
-            field: "text",
+            sessionId: "session-opencode-1",
+            messageId: "assistant-1",
+            partId: "part-reasoning",
+            field: "reasoning_content",
             delta: "Inspecting constraints",
           },
         } as Event,

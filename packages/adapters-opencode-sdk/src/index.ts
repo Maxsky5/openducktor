@@ -386,6 +386,16 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
   }
 };
 
+const readStringProp = (payload: Record<string, unknown>, keys: string[]): string | undefined => {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
 const normalizePartDeltaField = (field: string): string => {
   if (field === "reasoning_content" || field === "reasoning_details") {
     return "text";
@@ -913,13 +923,9 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       }
 
       if (event.type === "message.part.delta") {
-        const deltaEvent = event.properties as {
-          partID?: unknown;
-          field?: unknown;
-          delta?: unknown;
-        };
-        const partId = typeof deltaEvent.partID === "string" ? deltaEvent.partID : "";
-        const field = typeof deltaEvent.field === "string" ? deltaEvent.field : "";
+        const deltaEvent = event.properties as Record<string, unknown>;
+        const partId = readStringProp(deltaEvent, ["partID", "partId"]) ?? "";
+        const field = readStringProp(deltaEvent, ["field"]) ?? "";
         const delta = typeof deltaEvent.delta === "string" ? deltaEvent.delta : "";
         const knownPart = partId ? partsById.get(partId) : undefined;
 
@@ -978,8 +984,14 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
           });
         }
       } else if (event.type === "message.part.removed") {
-        partsById.delete(event.properties.partID);
-        pendingDeltasByPartId.delete(event.properties.partID);
+        const removedPartId = readStringProp(event.properties as Record<string, unknown>, [
+          "partID",
+          "partId",
+        ]);
+        if (removedPartId) {
+          partsById.delete(removedPartId);
+          pendingDeltasByPartId.delete(removedPartId);
+        }
       } else if (event.type === "session.status") {
         const status = event.properties.status;
         if (status.type === "busy" || status.type === "idle") {
@@ -1052,26 +1064,32 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   }
 
   private isRelevantEvent(externalSessionId: string, event: Event): boolean {
-    if (
-      "sessionID" in event.properties &&
-      typeof event.properties.sessionID === "string" &&
-      event.properties.sessionID
-    ) {
-      return event.properties.sessionID === externalSessionId;
+    const properties = event.properties as Record<string, unknown>;
+    const directSessionId = readStringProp(properties, ["sessionID", "sessionId", "session"]);
+    if (directSessionId) {
+      return directSessionId === externalSessionId;
     }
-    if ("part" in event.properties) {
-      const part = event.properties.part as { sessionID?: unknown } | undefined;
-      if (part && typeof part.sessionID === "string") {
-        return part.sessionID === externalSessionId;
+
+    if ("part" in properties) {
+      const part = properties.part as Record<string, unknown> | undefined;
+      if (part && typeof part === "object") {
+        const partSessionId = readStringProp(part, ["sessionID", "sessionId"]);
+        if (partSessionId) {
+          return partSessionId === externalSessionId;
+        }
       }
     }
-    if ("session" in event.properties && typeof event.properties.session === "string") {
-      return event.properties.session === externalSessionId;
+
+    if ("info" in properties) {
+      const info = properties.info as Record<string, unknown> | undefined;
+      if (info && typeof info === "object") {
+        const infoSessionId = readStringProp(info, ["sessionID", "sessionId"]);
+        if (infoSessionId) {
+          return infoSessionId === externalSessionId;
+        }
+      }
     }
-    if ("info" in event.properties) {
-      const info = event.properties.info as { sessionID?: unknown; id?: unknown };
-      return typeof info.sessionID === "string" && info.sessionID === externalSessionId;
-    }
+
     return false;
   }
 

@@ -478,6 +478,9 @@ export function AgentsPage(): ReactElement {
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
   const activeSessionStatus = activeSession?.status ?? "stopped";
+  const isSessionWorking =
+    Boolean(activeSession) &&
+    (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
   const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}`;
 
   useEffect(() => {
@@ -665,18 +668,6 @@ export function AgentsPage(): ReactElement {
                   Follow Latest
                 </Button>
               ) : null}
-              {activeSession && !isComposingNewSession ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[11px]"
-                  onClick={() => void stopAgentSession(activeSession.sessionId)}
-                >
-                  <Square className="size-3.5" />
-                  Stop
-                </Button>
-              ) : null}
             </div>
           </div>
         </CardHeader>
@@ -839,7 +830,18 @@ export function AgentsPage(): ReactElement {
                   />
                 </div>
 
-                <div className="flex items-end">
+                <div className="flex items-end justify-end gap-2">
+                  {activeSession && isSessionWorking && !isComposingNewSession ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full lg:w-auto"
+                      onClick={() => void stopAgentSession(activeSession.sessionId)}
+                    >
+                      <Square className="size-3.5" />
+                      Stop
+                    </Button>
+                  ) : null}
                   <Button
                     type="submit"
                     className="w-full lg:w-auto"
@@ -861,12 +863,12 @@ export function AgentsPage(): ReactElement {
               </div>
 
               <p className="text-xs text-slate-500">
-                {isStarting
-                  ? "Preparing session..."
-                  : activeSession?.status === "running"
-                    ? "Streaming OpenCode events..."
-                    : activeSession?.status === "starting"
-                      ? "Starting session..."
+                {activeSession?.status === "running"
+                  ? "Streaming OpenCode events..."
+                  : isStarting || activeSession?.status === "starting"
+                    ? "Starting OpenCode session..."
+                    : isSending
+                      ? "Sending message..."
                       : activeSession
                         ? "Ready"
                         : taskId
