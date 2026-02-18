@@ -27,6 +27,7 @@ type UseTaskOperationsResult = {
   refreshTasks: () => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;
@@ -119,6 +120,29 @@ export function useTaskOperations({
       } catch (error) {
         const reason = errorMessage(error);
         toast.error("Failed to update task", {
+          description: reason,
+        });
+        throw error;
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
+  const deleteTask = useCallback(
+    async (taskId: string, deleteSubtasks = false): Promise<void> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+
+      try {
+        await host.taskDelete(activeRepo, taskId, deleteSubtasks);
+        await refreshTaskData(activeRepo);
+        toast.success("Task deleted", {
+          description: taskId,
+        });
+      } catch (error) {
+        const reason = errorMessage(error);
+        toast.error("Failed to delete task", {
           description: reason,
         });
         throw error;
@@ -255,6 +279,7 @@ export function useTaskOperations({
     refreshTasks,
     createTask,
     updateTask,
+    deleteTask,
     transitionTask,
     deferTask,
     resumeDeferredTask,

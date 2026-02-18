@@ -276,6 +276,33 @@ impl AppService {
         Ok(self.enrich_task(updated, &existing))
     }
 
+    pub fn task_delete(&self, repo_path: &str, task_id: &str, delete_subtasks: bool) -> Result<()> {
+        self.ensure_repo_initialized(repo_path)?;
+        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let task = tasks
+            .iter()
+            .find(|entry| entry.id == task_id)
+            .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
+
+        let direct_subtask_ids = tasks
+            .iter()
+            .filter(|entry| entry.parent_id.as_deref() == Some(task.id.as_str()))
+            .map(|entry| entry.id.clone())
+            .collect::<Vec<_>>();
+
+        if !direct_subtask_ids.is_empty() && !delete_subtasks {
+            return Err(anyhow!(
+                "Task {task_id} has {} subtasks. Confirm subtask deletion to continue.",
+                direct_subtask_ids.len()
+            ));
+        }
+
+        self.task_store
+            .delete_task(Path::new(repo_path), task_id, delete_subtasks)
+            .with_context(|| format!("Failed to delete task {task_id}"))?;
+        Ok(())
+    }
+
     pub fn task_transition(
         &self,
         repo_path: &str,

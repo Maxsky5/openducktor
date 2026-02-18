@@ -237,6 +237,21 @@ async fn task_update(
 }
 
 #[tauri::command]
+async fn task_delete(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    delete_subtasks: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    as_error(
+        state
+            .service
+            .task_delete(&repo_path, &task_id, delete_subtasks.unwrap_or(false))
+            .map(|()| serde_json::json!({ "ok": true })),
+    )
+}
+
+#[tauri::command]
 async fn task_transition(
     state: State<'_, AppState>,
     repo_path: String,
@@ -495,7 +510,11 @@ async fn opencode_runtime_start(
     task_id: String,
     role: String,
 ) -> Result<AgentRuntimeSummary, String> {
-    as_error(state.service.opencode_runtime_start(&repo_path, &task_id, &role))
+    as_error(
+        state
+            .service
+            .opencode_runtime_start(&repo_path, &task_id, &role),
+    )
 }
 
 #[tauri::command]
@@ -568,6 +587,7 @@ pub fn run() {
             tasks_list,
             task_create,
             task_update,
+            task_delete,
             task_transition,
             task_defer,
             task_resume_deferred,

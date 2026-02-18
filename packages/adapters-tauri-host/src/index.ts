@@ -92,6 +92,18 @@ export class TauriHostClient implements PlannerTools {
     return taskCardSchema.parse(payload);
   }
 
+  async taskDelete(
+    repoPath: string,
+    taskId: string,
+    deleteSubtasks: boolean = false,
+  ): Promise<{ ok: boolean }> {
+    return this.invokeFn<{ ok: boolean }>("task_delete", {
+      repoPath,
+      taskId,
+      deleteSubtasks,
+    });
+  }
+
   async taskTransition(
     repoPath: string,
     taskId: string,

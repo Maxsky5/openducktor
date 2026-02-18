@@ -75,6 +75,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     refreshTasks,
     createTask,
     updateTask,
+    deleteTask,
     transitionTask,
     deferTask,
     resumeDeferredTask,
@@ -186,6 +187,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       refreshTasks,
       createTask,
       updateTask,
+      deleteTask,
       transitionTask,
       deferTask,
       resumeDeferredTask,
@@ -194,6 +196,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     }),
     [
       createTask,
+      deleteTask,
       deferTask,
       humanApproveTask,
       humanRequestChangesTask,

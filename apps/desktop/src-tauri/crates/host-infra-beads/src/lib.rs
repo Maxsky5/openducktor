@@ -501,6 +501,22 @@ impl TaskStore for BeadsTaskStore {
         self.show_task(repo_path, task_id)
     }
 
+    fn delete_task(&self, repo_path: &Path, task_id: &str, delete_subtasks: bool) -> Result<bool> {
+        let mut args = vec![
+            "delete",
+            task_id,
+            "--force",
+            "--reason",
+            "Deleted from OpenBlueprint",
+        ];
+        if delete_subtasks {
+            args.push("--cascade");
+        }
+
+        self.run_bd(repo_path, &args)?;
+        Ok(true)
+    }
+
     fn get_spec(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata.clone());

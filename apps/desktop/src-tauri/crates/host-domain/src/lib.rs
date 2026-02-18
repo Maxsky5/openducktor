@@ -181,6 +181,7 @@ pub trait TaskStore: Send + Sync {
         task_id: &str,
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard>;
+    fn delete_task(&self, repo_path: &Path, task_id: &str, delete_subtasks: bool) -> Result<bool>;
     fn get_spec(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument>;
     fn set_spec(&self, repo_path: &Path, task_id: &str, markdown: &str) -> Result<SpecDocument>;
     fn get_plan(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument>;

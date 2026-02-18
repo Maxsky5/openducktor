@@ -11,6 +11,14 @@ import { useTaskDocuments } from "@/components/features/task-details/use-task-do
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -18,10 +26,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { errorMessage } from "@/lib/errors";
 import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
 import type { TaskCard } from "@openblueprint/contracts";
-import { CheckSquare, CircleHelp, FileCode, PencilLine, ShieldCheck, Sparkles } from "lucide-react";
-import { type ReactElement, useCallback, useMemo } from "react";
+import {
+  CheckSquare,
+  CircleHelp,
+  FileCode,
+  Loader2,
+  PencilLine,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 
 type TaskDetailsSheetProps = {
   task: TaskCard | null;
@@ -36,6 +54,7 @@ type TaskDetailsSheetProps = {
   onResumeDeferred?: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
+  onDelete?: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
 };
 
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
@@ -67,9 +86,13 @@ export function TaskDetailsSheet({
   onResumeDeferred,
   onHumanApprove,
   onHumanRequestChanges,
+  onDelete,
 }: TaskDetailsSheetProps): ReactElement {
   const taskId = task?.id ?? null;
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(taskId, open);
+  const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
   const subtasks = useMemo(() => {
@@ -81,6 +104,15 @@ export function TaskDetailsSheet({
       .map((subtaskId) => taskById.get(subtaskId))
       .filter((entry): entry is TaskCard => Boolean(entry));
   }, [task, taskById]);
+  const hasSubtasks = subtasks.length > 0;
+
+  useEffect(() => {
+    if (!open) {
+      setDeleteDialogOpen(false);
+      setIsDeleting(false);
+      setDeleteError(null);
+    }
+  }, [open]);
 
   const isEpic = task?.issueType === "epic";
   const shouldRenderSubtasks = isEpic;
@@ -147,6 +179,26 @@ export function TaskDetailsSheet({
   const loadQaDocumentSection = useCallback((): void => {
     ensureDocumentLoaded("qa");
   }, [ensureDocumentLoaded]);
+
+  const confirmDelete = useCallback((): void => {
+    if (!task || !onDelete || isDeleting) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    void onDelete(task.id, { deleteSubtasks: hasSubtasks })
+      .then(() => {
+        setDeleteDialogOpen(false);
+        onOpenChange(false);
+      })
+      .catch((error: unknown) => {
+        setDeleteError(errorMessage(error));
+      })
+      .finally(() => {
+        setIsDeleting(false);
+      });
+  }, [hasSubtasks, isDeleting, onDelete, onOpenChange, task]);
 
   if (!task) {
     return (
@@ -278,6 +330,19 @@ export function TaskDetailsSheet({
 
         <SheetFooter className="mt-0 flex-none flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3">
           <div className="flex flex-wrap items-center gap-2">
+            {onDelete ? (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteDialogOpen(true);
+                }}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Close
             </Button>
@@ -300,6 +365,70 @@ export function TaskDetailsSheet({
           />
         </SheetFooter>
       </SheetContent>
+
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(nextOpen) => {
+          if (isDeleting) {
+            return;
+          }
+          setDeleteDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              {hasSubtasks
+                ? `Delete ${task.id} and its ${subtasks.length} direct subtask${
+                    subtasks.length === 1 ? "" : "s"
+                  }? This cannot be undone.`
+                : `Delete ${task.id}? This cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+            <p className="font-medium">This action permanently removes the task from Beads.</p>
+            {hasSubtasks ? (
+              <p>
+                Direct subtasks will also be deleted to avoid orphaned children in the workflow.
+              </p>
+            ) : null}
+            {deleteError ? <p className="text-rose-700">{deleteError}</p> : null}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeleting}
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={confirmDelete}
+            >
+              {isDeleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+              {isDeleting
+                ? "Deleting..."
+                : hasSubtasks
+                  ? `Delete ${subtasks.length + 1} tasks`
+                  : "Delete task"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

@@ -58,6 +58,7 @@ export type TasksStateContextValue = {
   refreshTasks: () => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
   deferTask: (taskId: string) => Promise<void>;
   resumeDeferredTask: (taskId: string) => Promise<void>;

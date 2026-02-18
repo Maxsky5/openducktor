@@ -73,6 +73,28 @@ describe("TauriHostClient", () => {
     expect(calls).toHaveLength(0);
   });
 
+  test("taskDelete uses expected IPC route and payload", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_delete") {
+        return { ok: true };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.taskDelete("/repo", "epic-1", true);
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([
+      {
+        command: "task_delete",
+        args: {
+          repoPath: "/repo",
+          taskId: "epic-1",
+          deleteSubtasks: true,
+        },
+      },
+    ]);
+  });
+
   test("build and human workflow commands use expected IPC routes", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "build_blocked") {

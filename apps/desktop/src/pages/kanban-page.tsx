@@ -15,6 +15,7 @@ export function KanbanPage(): ReactElement {
     runs,
     refreshTasks,
     isLoadingTasks,
+    deleteTask,
     deferTask,
     resumeDeferredTask,
     humanApproveTask,
@@ -202,6 +203,7 @@ export function KanbanPage(): ReactElement {
             }),
           );
         }}
+        onDelete={(taskId, options) => deleteTask(taskId, options.deleteSubtasks)}
       />
     </div>
   );
