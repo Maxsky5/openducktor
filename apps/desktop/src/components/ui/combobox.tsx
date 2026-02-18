@@ -10,7 +10,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 
 export type ComboboxOption = {
   value: string;
@@ -43,11 +43,27 @@ export function Combobox({
   triggerClassName,
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 
   const selected = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],
   );
+
+  useEffect(() => {
+    if (!open || typeof document === "undefined") {
+      setPortalContainer(null);
+      return;
+    }
+
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) {
+      setPortalContainer(null);
+      return;
+    }
+
+    setPortalContainer(active.closest<HTMLElement>("[data-slot='dialog-content']"));
+  }, [open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -65,7 +81,10 @@ export function Combobox({
           <ChevronsUpDown className="size-4 text-slate-400" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}>
+      <PopoverContent
+        portalContainer={portalContainer}
+        className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
+      >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>

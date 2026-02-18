@@ -33,6 +33,16 @@ type SettingsModalProps = {
   triggerSize?: "default" | "sm" | "lg" | "icon";
 };
 
+const ROLE_DEFAULTS: ReadonlyArray<{
+  role: AgentRole;
+  label: string;
+}> = [
+  { role: "spec", label: "Spec" },
+  { role: "planner", label: "Planner" },
+  { role: "build", label: "Build" },
+  { role: "qa", label: "QA" },
+];
+
 export function SettingsModal({
   triggerClassName,
   triggerSize = "sm",
@@ -186,7 +196,25 @@ export function SettingsModal({
     }));
   };
 
+  const missingRequiredRoleLabels = useMemo(() => {
+    return ROLE_DEFAULTS.filter(({ role }) => {
+      const value = agentDefaults[role];
+      return !(
+        value &&
+        value.providerId.trim().length > 0 &&
+        value.modelId.trim().length > 0 &&
+        value.opencodeAgent.trim().length > 0
+      );
+    }).map(({ label }) => label);
+  }, [agentDefaults]);
+
+  const canSaveRoleDefaults = missingRequiredRoleLabels.length === 0;
+
   const submit = async (): Promise<void> => {
+    if (!canSaveRoleDefaults) {
+      return;
+    }
+
     setIsSaving(true);
     try {
       await saveRepoSettings({
@@ -212,15 +240,15 @@ export function SettingsModal({
           Settings
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden p-0">
-        <DialogHeader className="border-b border-slate-200 px-6 pb-4 pt-6">
+      <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col p-0">
+        <DialogHeader className="shrink-0 border-b border-slate-200 px-6 pb-4 pt-6">
           <DialogTitle>Workspace Settings</DialogTitle>
           <DialogDescription>
             Settings are stored in <code>~/.openblueprint/config.json</code>.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid flex-1 gap-4 overflow-y-auto px-6 py-4">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-6 py-4">
           {!activeRepo ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               Select or add a workspace first, then save settings for that repository.
@@ -280,7 +308,7 @@ export function SettingsModal({
             <div>
               <h3 className="text-sm font-semibold text-slate-800">Agent Defaults (Per Role)</h3>
               <p className="text-xs text-slate-600">
-                Optional defaults applied when sessions start in this repository.
+                Required defaults applied when sessions start in this repository.
               </p>
             </div>
             {isLoadingCatalog ? (
@@ -293,15 +321,13 @@ export function SettingsModal({
                 Failed to load OpenCode values: {catalogError}
               </p>
             ) : null}
+            {!isLoadingCatalog && !canSaveRoleDefaults ? (
+              <p className="text-xs text-rose-700">
+                Agent and model are required for: {missingRequiredRoleLabels.join(", ")}.
+              </p>
+            ) : null}
 
-            {(
-              [
-                ["spec", "Spec"],
-                ["planner", "Planner"],
-                ["build", "Build"],
-                ["qa", "QA"],
-              ] as const
-            ).map(([role, label]) => {
+            {ROLE_DEFAULTS.map(({ role, label }) => {
               const value = ensureAgentDefault(agentDefaults[role]);
               const roleVariantOptions = variantOptionsForRole(role);
               const modelKey = selectedModelKeyForRole(role);
@@ -322,22 +348,14 @@ export function SettingsModal({
                     </Button>
                   </div>
 
-                  <div className="grid gap-2 md:grid-cols-2">
+                  <div className="grid gap-2 md:grid-cols-3">
                     <div className="grid gap-1">
-                      <Label className="text-xs">OpenCode Agent</Label>
+                      <Label className="text-xs">Agent</Label>
                       <Combobox
                         value={value.opencodeAgent}
                         options={agentOptions}
-                        placeholder={
-                          !modelKey
-                            ? "Select model first"
-                            : isLoadingCatalog
-                              ? "Loading agents..."
-                              : "Select agent"
-                        }
-                        disabled={
-                          isLoadingCatalog || isSaving || agentOptions.length === 0 || !modelKey
-                        }
+                        placeholder={isLoadingCatalog ? "Loading agents..." : "Select agent"}
+                        disabled={isLoadingCatalog || isSaving || agentOptions.length === 0}
                         onValueChange={(opencodeAgent) =>
                           updateAgentDefault(role, "opencodeAgent", opencodeAgent)
                         }
@@ -367,7 +385,7 @@ export function SettingsModal({
                         }}
                       />
                     </div>
-                    <div className="grid gap-1 md:col-span-2">
+                    <div className="grid gap-1">
                       <Label className="text-xs">Variant</Label>
                       <Combobox
                         value={value.variant}
@@ -401,14 +419,14 @@ export function SettingsModal({
           </label>
         </div>
 
-        <DialogFooter className="border-t border-slate-200 px-6 pb-6 pt-4">
+        <DialogFooter className="mt-0 shrink-0 border-t border-slate-200 px-6 pb-6 pt-4">
           <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button
             type="button"
             onClick={() => void submit()}
-            disabled={isSaving || isLoadingConfig || !activeRepo}
+            disabled={isSaving || isLoadingConfig || !activeRepo || !canSaveRoleDefaults}
           >
             {isSaving ? "Saving..." : "Save Settings"}
           </Button>
