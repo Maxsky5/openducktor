@@ -1,7 +1,7 @@
 import { errorMessage } from "@/lib/errors";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { OpencodeSdkAdapter } from "@openblueprint/adapters-opencode-sdk";
-import type { RunSummary, TaskCard } from "@openblueprint/contracts";
+import type { AgentSessionRecord, RunSummary, TaskCard } from "@openblueprint/contracts";
 import {
   type AgentModelCatalog,
   type AgentModelSelection,
@@ -22,6 +22,7 @@ type UseAgentOrchestratorOperationsArgs = {
 
 type UseAgentOrchestratorOperationsResult = {
   sessions: AgentSessionState[];
+  loadAgentSessions: (taskId: string) => Promise<void>;
   startAgentSession: (input: {
     taskId: string;
     role: AgentRole;
@@ -54,6 +55,20 @@ const runningStates = new Set(["starting", "running", "blocked", "awaiting_done_
 const now = (): string => new Date().toISOString();
 const OBC_TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*[\s\S]*?<\/obp_tool_call>/g;
 const OBC_TOOL_BLOCK_TAIL_PATTERN = /<obp_tool_call>[\s\S]*$/;
+const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
+const WRITE_PERMISSION_HINTS = [
+  "write",
+  "edit",
+  "patch",
+  "delete",
+  "rename",
+  "move",
+  "mkdir",
+  "create",
+  "bash",
+  "shell",
+  "exec",
+];
 
 const sanitizeStreamingText = (value: string): string => {
   return value
@@ -61,6 +76,37 @@ const sanitizeStreamingText = (value: string): string => {
     .replace(OBC_TOOL_BLOCK_TAIL_PATTERN, "")
     .replace(/\n{3,}/g, "\n\n")
     .trimStart();
+};
+
+const isMutatingPermission = (
+  permission: string,
+  patterns: string[],
+  metadata?: Record<string, unknown>,
+): boolean => {
+  const permissionLower = permission.trim().toLowerCase();
+  if (WRITE_PERMISSION_HINTS.some((entry) => permissionLower.includes(entry))) {
+    return true;
+  }
+
+  if (patterns.some((pattern) => WRITE_PERMISSION_HINTS.some((entry) => pattern.includes(entry)))) {
+    return true;
+  }
+
+  const command =
+    typeof metadata?.command === "string"
+      ? metadata.command.toLowerCase()
+      : typeof metadata?.tool === "string"
+        ? metadata.tool.toLowerCase()
+        : "";
+  if (
+    command &&
+    WRITE_PERMISSION_HINTS.some((entry) => command.includes(entry)) &&
+    !command.includes("read")
+  ) {
+    return true;
+  }
+
+  return false;
 };
 
 const inferScenario = (
@@ -216,6 +262,76 @@ const formatToolContent = (part: {
   return `Tool ${part.tool}${title} queued...`;
 };
 
+const MAX_PERSISTED_MESSAGES = 200;
+
+const normalizePersistedSelection = (
+  selection: AgentSessionRecord["selectedModel"] | undefined,
+): AgentModelSelection | null => {
+  if (!selection) {
+    return null;
+  }
+  return {
+    providerId: selection.providerId,
+    modelId: selection.modelId,
+    ...(selection.variant ? { variant: selection.variant } : {}),
+    ...(selection.opencodeAgent ? { opencodeAgent: selection.opencodeAgent } : {}),
+  };
+};
+
+const toPersistedSessionRecord = (
+  session: AgentSessionState,
+  updatedAt: string,
+): AgentSessionRecord => ({
+  sessionId: session.sessionId,
+  taskId: session.taskId,
+  role: session.role,
+  scenario: session.scenario,
+  status: session.status,
+  startedAt: session.startedAt,
+  updatedAt,
+  ...(session.status === "stopped" || session.status === "error" ? { endedAt: updatedAt } : {}),
+  runtimeId: session.runtimeId ?? undefined,
+  runId: session.runId ?? undefined,
+  baseUrl: session.baseUrl,
+  workingDirectory: session.workingDirectory,
+  selectedModel: session.selectedModel ?? undefined,
+  messages: session.messages.slice(-MAX_PERSISTED_MESSAGES).map((entry) => ({
+    id: entry.id,
+    role: entry.role,
+    content: entry.content,
+    timestamp: entry.timestamp,
+  })),
+});
+
+const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionState => {
+  const normalizedStatus =
+    session.status === "starting" || session.status === "running" ? "stopped" : session.status;
+  return {
+    sessionId: session.sessionId,
+    taskId: session.taskId,
+    role: session.role,
+    scenario: session.scenario,
+    status: normalizedStatus,
+    startedAt: session.startedAt,
+    runtimeId: session.runtimeId ?? null,
+    runId: session.runId ?? null,
+    baseUrl: session.baseUrl,
+    workingDirectory: session.workingDirectory,
+    messages: session.messages.map((entry) => ({
+      id: entry.id,
+      role: entry.role,
+      content: entry.content,
+      timestamp: entry.timestamp,
+    })),
+    draftAssistantText: "",
+    pendingPermissions: [],
+    pendingQuestions: [],
+    modelCatalog: null,
+    selectedModel: normalizePersistedSelection(session.selectedModel),
+    isLoadingModelCatalog: false,
+  };
+};
+
 export function useAgentOrchestratorOperations({
   activeRepo,
   tasks,
@@ -226,6 +342,7 @@ export function useAgentOrchestratorOperations({
   const sessionsRef = useRef<Record<string, AgentSessionState>>({});
   const taskRef = useRef<TaskCard[]>(tasks);
   const runsRef = useRef(runs);
+  const previousRepoRef = useRef<string | null>(null);
   const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
   const draftRawBySessionRef = useRef<Record<string, string>>({});
   const draftSourceBySessionRef = useRef<Record<string, "delta" | "part">>({});
@@ -241,6 +358,22 @@ export function useAgentOrchestratorOperations({
   useEffect(() => {
     runsRef.current = runs;
   }, [runs]);
+
+  useEffect(() => {
+    if (previousRepoRef.current === activeRepo) {
+      return;
+    }
+    previousRepoRef.current = activeRepo;
+
+    const unsubs = [...unsubscribersRef.current.values()];
+    for (const unsubscribe of unsubs) {
+      unsubscribe();
+    }
+    unsubscribersRef.current.clear();
+    draftRawBySessionRef.current = {};
+    draftSourceBySessionRef.current = {};
+    setSessionsById({});
+  }, [activeRepo]);
 
   const adapter = useMemo(() => {
     return new OpencodeSdkAdapter({
@@ -263,20 +396,65 @@ export function useAgentOrchestratorOperations({
     });
   }, []);
 
+  const persistSessionSnapshot = useCallback(
+    async (session: AgentSessionState): Promise<void> => {
+      if (!activeRepo) {
+        return;
+      }
+      const updatedAt = now();
+      await host.agentSessionUpsert(
+        activeRepo,
+        session.taskId,
+        toPersistedSessionRecord(session, updatedAt),
+      );
+    },
+    [activeRepo],
+  );
+
   const updateSession = useCallback(
-    (sessionId: string, updater: (current: AgentSessionState) => AgentSessionState): void => {
+    (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+      options?: { persist?: boolean },
+    ): void => {
+      let nextSession: AgentSessionState | null = null;
       setSessionsById((current) => {
         const entry = current[sessionId];
         if (!entry) {
           return current;
         }
+        nextSession = updater(entry);
         return {
           ...current,
-          [sessionId]: updater(entry),
+          [sessionId]: nextSession,
         };
       });
+      if (options?.persist !== false && nextSession) {
+        void persistSessionSnapshot(nextSession).catch(() => undefined);
+      }
     },
-    [],
+    [persistSessionSnapshot],
+  );
+
+  const loadAgentSessions = useCallback(
+    async (taskId: string): Promise<void> => {
+      if (!activeRepo || taskId.trim().length === 0) {
+        return;
+      }
+
+      const persisted = await host.agentSessionsList(activeRepo, taskId);
+      setSessionsById((current) => {
+        const next = { ...current };
+        for (const record of persisted) {
+          if (next[record.sessionId]) {
+            continue;
+          }
+          next[record.sessionId] = fromPersistedSessionRecord(record);
+        }
+        return next;
+      });
+    },
+    [activeRepo],
   );
 
   const attachSessionListener = useCallback(
@@ -306,11 +484,15 @@ export function useAgentOrchestratorOperations({
           draftSourceBySessionRef.current[sessionId] = "delta";
           const nextRaw = `${draftRawBySessionRef.current[sessionId] ?? ""}${event.delta}`;
           draftRawBySessionRef.current[sessionId] = nextRaw;
-          updateSession(sessionId, (current) => ({
-            ...current,
-            status: "running",
-            draftAssistantText: sanitizeStreamingText(nextRaw),
-          }));
+          updateSession(
+            sessionId,
+            (current) => ({
+              ...current,
+              status: "running",
+              draftAssistantText: sanitizeStreamingText(nextRaw),
+            }),
+            { persist: false },
+          );
           return;
         }
 
@@ -320,101 +502,121 @@ export function useAgentOrchestratorOperations({
             if (!part.synthetic) {
               draftSourceBySessionRef.current[sessionId] = "part";
               draftRawBySessionRef.current[sessionId] = part.text;
-              updateSession(sessionId, (current) => ({
-                ...current,
-                status: "running",
-                draftAssistantText: sanitizeStreamingText(part.text),
-              }));
+              updateSession(
+                sessionId,
+                (current) => ({
+                  ...current,
+                  status: "running",
+                  draftAssistantText: sanitizeStreamingText(part.text),
+                }),
+                { persist: false },
+              );
             }
             return;
           }
 
           if (part.kind === "reasoning") {
-            updateSession(sessionId, (current) => ({
-              ...current,
-              status: "running",
-              messages: upsertMessage(current.messages, {
-                id: `thinking:${part.partId}`,
-                role: "thinking",
-                content: part.text,
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "reasoning",
-                  partId: part.partId,
-                  completed: part.completed,
-                },
+            updateSession(
+              sessionId,
+              (current) => ({
+                ...current,
+                status: "running",
+                messages: upsertMessage(current.messages, {
+                  id: `thinking:${part.partId}`,
+                  role: "thinking",
+                  content: part.text,
+                  timestamp: event.timestamp,
+                  meta: {
+                    kind: "reasoning",
+                    partId: part.partId,
+                    completed: part.completed,
+                  },
+                }),
               }),
-            }));
+              { persist: false },
+            );
             return;
           }
 
           if (part.kind === "tool") {
-            updateSession(sessionId, (current) => ({
-              ...current,
-              status: "running",
-              messages: upsertMessage(current.messages, {
-                id: `tool:${part.partId}`,
-                role: "tool",
-                content: formatToolContent(part),
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "tool",
-                  partId: part.partId,
-                  callId: part.callId,
-                  tool: part.tool,
-                  status: part.status,
-                  ...(part.title ? { title: part.title } : {}),
-                  ...(part.input ? { input: part.input } : {}),
-                  ...(part.output ? { output: part.output } : {}),
-                  ...(part.error ? { error: part.error } : {}),
-                },
+            updateSession(
+              sessionId,
+              (current) => ({
+                ...current,
+                status: "running",
+                messages: upsertMessage(current.messages, {
+                  id: `tool:${part.partId}`,
+                  role: "tool",
+                  content: formatToolContent(part),
+                  timestamp: event.timestamp,
+                  meta: {
+                    kind: "tool",
+                    partId: part.partId,
+                    callId: part.callId,
+                    tool: part.tool,
+                    status: part.status,
+                    ...(part.title ? { title: part.title } : {}),
+                    ...(part.input ? { input: part.input } : {}),
+                    ...(part.output ? { output: part.output } : {}),
+                    ...(part.error ? { error: part.error } : {}),
+                  },
+                }),
               }),
-            }));
+              { persist: false },
+            );
             return;
           }
 
           if (part.kind === "step") {
-            updateSession(sessionId, (current) => ({
-              ...current,
-              status: "running",
-              messages: upsertMessage(current.messages, {
-                id: `step:${part.partId}`,
-                role: "system",
-                content:
-                  part.phase === "start"
-                    ? "Agent step started"
-                    : `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "step",
-                  partId: part.partId,
-                  phase: part.phase,
-                  ...(part.reason ? { reason: part.reason } : {}),
-                  ...(typeof part.cost === "number" ? { cost: part.cost } : {}),
-                },
+            updateSession(
+              sessionId,
+              (current) => ({
+                ...current,
+                status: "running",
+                messages: upsertMessage(current.messages, {
+                  id: `step:${part.partId}`,
+                  role: "system",
+                  content:
+                    part.phase === "start"
+                      ? "Agent step started"
+                      : `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
+                  timestamp: event.timestamp,
+                  meta: {
+                    kind: "step",
+                    partId: part.partId,
+                    phase: part.phase,
+                    ...(part.reason ? { reason: part.reason } : {}),
+                    ...(typeof part.cost === "number" ? { cost: part.cost } : {}),
+                  },
+                }),
               }),
-            }));
+              { persist: false },
+            );
             return;
           }
 
           if (part.kind === "subtask") {
-            updateSession(sessionId, (current) => ({
-              ...current,
-              status: "running",
-              messages: upsertMessage(current.messages, {
-                id: `subtask:${part.partId}`,
-                role: "system",
-                content: `Subtask (${part.agent}): ${part.description}`,
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "subtask",
-                  partId: part.partId,
-                  agent: part.agent,
-                  prompt: part.prompt,
-                  description: part.description,
-                },
+            updateSession(
+              sessionId,
+              (current) => ({
+                ...current,
+                status: "running",
+                messages: upsertMessage(current.messages, {
+                  id: `subtask:${part.partId}`,
+                  role: "system",
+                  content: `Subtask (${part.agent}): ${part.description}`,
+                  timestamp: event.timestamp,
+                  meta: {
+                    kind: "subtask",
+                    partId: part.partId,
+                    agent: part.agent,
+                    prompt: part.prompt,
+                    description: part.description,
+                  },
+                }),
               }),
-            }));
+              { persist: false },
+            );
           }
           return;
         }
@@ -486,23 +688,31 @@ export function useAgentOrchestratorOperations({
         if (event.type === "session_status") {
           const status = event.status;
           if (status.type === "busy") {
-            updateSession(sessionId, (current) => ({
-              ...current,
-              status: "running",
-            }));
+            updateSession(
+              sessionId,
+              (current) => ({
+                ...current,
+                status: "running",
+              }),
+              { persist: false },
+            );
             return;
           }
           if (status.type === "retry") {
-            updateSession(sessionId, (current) => ({
-              ...current,
-              status: "running",
-              messages: upsertMessage(current.messages, {
-                id: `retry:${status.attempt}`,
-                role: "system",
-                content: `Retry ${status.attempt}: ${status.message}`,
-                timestamp: event.timestamp,
+            updateSession(
+              sessionId,
+              (current) => ({
+                ...current,
+                status: "running",
+                messages: upsertMessage(current.messages, {
+                  id: `retry:${status.attempt}`,
+                  role: "system",
+                  content: `Retry ${status.attempt}: ${status.message}`,
+                  timestamp: event.timestamp,
+                }),
               }),
-            }));
+              { persist: false },
+            );
             return;
           }
           updateSession(sessionId, (current) => ({
@@ -514,6 +724,36 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "permission_required") {
+          const role = sessionsRef.current[sessionId]?.role;
+          if (
+            role &&
+            READ_ONLY_ROLES.has(role) &&
+            isMutatingPermission(event.permission, event.patterns, event.metadata)
+          ) {
+            void adapter
+              .replyPermission({
+                sessionId,
+                requestId: event.requestId,
+                reply: "reject",
+                message: `Rejected by OpenBlueprint ${role} read-only policy.`,
+              })
+              .catch(() => undefined);
+
+            updateSession(sessionId, (current) => ({
+              ...current,
+              messages: [
+                ...current.messages,
+                {
+                  id: crypto.randomUUID(),
+                  role: "system",
+                  content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
+                  timestamp: event.timestamp,
+                },
+              ],
+            }));
+            return;
+          }
+
           updateSession(sessionId, (current) => ({
             ...current,
             pendingPermissions: [
@@ -648,6 +888,16 @@ export function useAgentOrchestratorOperations({
         };
       }
 
+      if (role === "qa") {
+        const runtime = await host.opencodeRuntimeStart(repoPath, taskId, "qa");
+        return {
+          runtimeId: runtime.runtimeId,
+          runId: null,
+          baseUrl: toBaseUrl(runtime.port),
+          workingDirectory: runtime.workingDirectory,
+        };
+      }
+
       const runtime = await host.opencodeRepoRuntimeEnsure(repoPath);
       return {
         runtimeId: runtime.runtimeId,
@@ -761,35 +1011,38 @@ export function useAgentOrchestratorOperations({
         baseUrl: runtime.baseUrl,
       });
 
+      const initialSession: AgentSessionState = {
+        sessionId: summary.sessionId,
+        taskId,
+        role,
+        scenario: resolvedScenario,
+        status: "starting",
+        startedAt: summary.startedAt,
+        runtimeId: runtime.runtimeId,
+        runId: runtime.runId,
+        baseUrl: runtime.baseUrl,
+        workingDirectory: runtime.workingDirectory,
+        messages: [
+          {
+            id: crypto.randomUUID(),
+            role: "system",
+            content: `Session started (${role} - ${resolvedScenario})`,
+            timestamp: summary.startedAt,
+          },
+        ],
+        draftAssistantText: "",
+        pendingPermissions: [],
+        pendingQuestions: [],
+        modelCatalog: null,
+        selectedModel: defaultModelSelection,
+        isLoadingModelCatalog: true,
+      };
+
       setSessionsById((current) => ({
         ...current,
-        [summary.sessionId]: {
-          sessionId: summary.sessionId,
-          taskId,
-          role,
-          scenario: resolvedScenario,
-          status: "starting",
-          startedAt: summary.startedAt,
-          runtimeId: runtime.runtimeId,
-          runId: runtime.runId,
-          baseUrl: runtime.baseUrl,
-          workingDirectory: runtime.workingDirectory,
-          messages: [
-            {
-              id: crypto.randomUUID(),
-              role: "system",
-              content: `Session started (${role} - ${resolvedScenario})`,
-              timestamp: summary.startedAt,
-            },
-          ],
-          draftAssistantText: "",
-          pendingPermissions: [],
-          pendingQuestions: [],
-          modelCatalog: null,
-          selectedModel: defaultModelSelection,
-          isLoadingModelCatalog: true,
-        },
+        [summary.sessionId]: initialSession,
       }));
+      void persistSessionSnapshot(initialSession).catch(() => undefined);
 
       attachSessionListener(activeRepo, summary.sessionId);
 
@@ -838,6 +1091,7 @@ export function useAgentOrchestratorOperations({
       ensureRuntime,
       loadRepoDefaultModel,
       loadTaskDocuments,
+      persistSessionSnapshot,
       refreshTaskData,
       sendAgentMessage,
       updateSession,
@@ -931,6 +1185,15 @@ export function useAgentOrchestratorOperations({
 
   return {
     sessions,
+    loadAgentSessions: async (taskId) => {
+      try {
+        await loadAgentSessions(taskId);
+      } catch (error) {
+        toast.error("Failed to load agent sessions", {
+          description: errorMessage(error),
+        });
+      }
+    },
     startAgentSession: async (input) => {
       try {
         return await startAgentSession(input);

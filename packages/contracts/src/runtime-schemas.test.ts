@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentRuntimeSummarySchema,
+  agentSessionRecordSchema,
   repoConfigSchema,
   runEventSchema,
   taskCardSchema,
@@ -107,5 +108,41 @@ describe("runtime schemas", () => {
 
     expect(parsed.runtimeId).toBe("runtime-1");
     expect(parsed.port).toBe(4100);
+  });
+
+  test("agent session record parses persisted history payload", () => {
+    const parsed = agentSessionRecordSchema.parse({
+      sessionId: "obp-session-1",
+      taskId: "task-1",
+      role: "spec",
+      scenario: "spec_revision",
+      status: "idle",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      updatedAt: "2026-02-18T17:14:00.000Z",
+      endedAt: null,
+      runtimeId: "runtime-1",
+      runId: null,
+      baseUrl: "http://127.0.0.1:4173",
+      workingDirectory: "/repo",
+      selectedModel: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        opencodeAgent: "architect",
+      },
+      messages: [
+        {
+          id: "m1",
+          role: "assistant",
+          content: "Drafted and saved spec.",
+          timestamp: "2026-02-18T17:12:00.000Z",
+        },
+      ],
+    });
+
+    expect(parsed.role).toBe("spec");
+    expect(parsed.scenario).toBe("spec_revision");
+    expect(parsed.messages).toHaveLength(1);
+    expect(parsed.selectedModel?.modelId).toBe("gpt-5");
   });
 });

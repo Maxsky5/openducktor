@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    now_rfc3339, AgentRuntimeSummary, BeadsCheck, CreateTaskInput, PlanSubtaskInput, QaVerdict,
-    RunEvent, RunState, RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard,
-    TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
+    now_rfc3339, AgentRuntimeSummary, AgentSessionDocument, BeadsCheck, CreateTaskInput,
+    PlanSubtaskInput, QaVerdict, RunEvent, RunState, RunSummary, RuntimeCheck, SpecDocument,
+    SystemCheck, TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
 };
 use host_infra_system::{
     build_branch_name, command_exists, pick_free_port, remove_worktree, resolve_central_beads_dir,
@@ -41,6 +41,8 @@ struct RunProcess {
 struct AgentRuntimeProcess {
     summary: AgentRuntimeSummary,
     child: Child,
+    cleanup_repo_path: Option<String>,
+    cleanup_worktree_path: Option<String>,
 }
 
 impl AppService {
@@ -603,6 +605,33 @@ impl AppService {
         )
     }
 
+    pub fn agent_sessions_list(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<Vec<AgentSessionDocument>> {
+        self.ensure_repo_initialized(repo_path)?;
+        self.task_store
+            .list_agent_sessions(Path::new(repo_path), task_id)
+            .with_context(|| format!("Failed to read persisted agent sessions for {task_id}"))
+    }
+
+    pub fn agent_session_upsert(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        mut session: AgentSessionDocument,
+    ) -> Result<bool> {
+        self.ensure_repo_initialized(repo_path)?;
+        if session.task_id != task_id {
+            session.task_id = task_id.to_string();
+        }
+        self.task_store
+            .upsert_agent_session(Path::new(repo_path), task_id, session)
+            .with_context(|| format!("Failed to persist agent session for {task_id}"))?;
+        Ok(true)
+    }
+
     pub fn runs_list(&self, repo_path: Option<&str>) -> Result<Vec<RunSummary>> {
         let runs = self
             .runs
@@ -708,6 +737,8 @@ impl AppService {
                 AgentRuntimeProcess {
                     summary: summary.clone(),
                     child,
+                    cleanup_repo_path: None,
+                    cleanup_worktree_path: None,
                 },
             );
         }
@@ -729,9 +760,10 @@ impl AppService {
         }
 
         let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
-        let _task = tasks
+        let task = tasks
             .iter()
             .find(|entry| entry.id == task_id)
+            .cloned()
             .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
 
         {
@@ -750,10 +782,86 @@ impl AppService {
             }
         }
 
+        let mut cleanup_repo_path: Option<String> = None;
+        let mut cleanup_worktree_path: Option<String> = None;
+        let runtime_working_directory = if role == "qa" {
+            let repo_config = self.config_store.repo_config(repo_path)?;
+            let worktree_base = repo_config.worktree_base_path.clone().ok_or_else(|| {
+                anyhow!(
+                    "QA blocked: configure repos.{repo_path}.worktreeBasePath in {}",
+                    self.config_store.path().display()
+                )
+            })?;
+
+            if (!repo_config.hooks.pre_start.is_empty() || !repo_config.hooks.post_complete.is_empty())
+                && !repo_config.trusted_hooks
+            {
+                return Err(anyhow!(
+                    "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
+                ));
+            }
+
+            let worktree_base_path = Path::new(&worktree_base);
+            fs::create_dir_all(worktree_base_path).with_context(|| {
+                format!(
+                    "Failed creating QA worktree base directory {}",
+                    worktree_base_path.display()
+                )
+            })?;
+
+            let qa_worktree = worktree_base_path.join(format!("qa-{task_id}"));
+            if qa_worktree.exists() {
+                return Err(anyhow!(
+                    "QA worktree path already exists for task {}: {}",
+                    task_id,
+                    qa_worktree.display()
+                ));
+            }
+
+            let repo_path_ref = Path::new(repo_path);
+            let branch = build_branch_name(&repo_config.branch_prefix, task_id, &task.title);
+            let qa_worktree_str = qa_worktree
+                .to_str()
+                .ok_or_else(|| anyhow!("Invalid QA worktree path"))?;
+            let checkout_existing =
+                run_command("git", &["worktree", "add", qa_worktree_str, &branch], Some(repo_path_ref));
+            if let Err(existing_error) = checkout_existing {
+                run_command(
+                    "git",
+                    &["worktree", "add", qa_worktree_str, "-b", &branch],
+                    Some(repo_path_ref),
+                )
+                .with_context(|| {
+                    format!("Failed to create or checkout QA branch {branch}: {existing_error}")
+                })?;
+            }
+
+            for hook in &repo_config.hooks.pre_start {
+                let (ok, _stdout, stderr) =
+                    run_command_allow_failure("sh", &["-lc", hook], Some(qa_worktree.as_path()))?;
+                if !ok {
+                    let _ = remove_worktree(repo_path_ref, qa_worktree.as_path());
+                    return Err(anyhow!("QA pre-start hook failed: {hook}\n{stderr}"));
+                }
+            }
+
+            cleanup_repo_path = Some(repo_path.to_string());
+            cleanup_worktree_path = Some(qa_worktree_str.to_string());
+            qa_worktree_str.to_string()
+        } else {
+            repo_path.to_string()
+        };
+
         let port = pick_free_port()?;
-        let mut child = spawn_opencode_server(Path::new(repo_path), port)?;
+        let mut child = spawn_opencode_server(Path::new(&runtime_working_directory), port)?;
         if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
             let _ = child.kill();
+            if let (Some(repo), Some(worktree)) = (
+                cleanup_repo_path.as_deref(),
+                cleanup_worktree_path.as_deref(),
+            ) {
+                let _ = remove_worktree(Path::new(repo), Path::new(worktree));
+            }
             return Err(error)
                 .with_context(|| format!("OpenCode runtime failed to start for task {task_id}"));
         }
@@ -764,7 +872,7 @@ impl AppService {
             repo_path: repo_path.to_string(),
             task_id: task_id.to_string(),
             role: role.to_string(),
-            working_directory: repo_path.to_string(),
+            working_directory: runtime_working_directory,
             port,
             started_at: now_rfc3339(),
         };
@@ -777,6 +885,8 @@ impl AppService {
                 AgentRuntimeProcess {
                     summary: summary.clone(),
                     child,
+                    cleanup_repo_path,
+                    cleanup_worktree_path,
                 },
             );
 
@@ -792,6 +902,14 @@ impl AppService {
             .remove(runtime_id)
             .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
         let _ = runtime.child.kill();
+        if let (Some(repo_path), Some(worktree_path)) = (
+            runtime.cleanup_repo_path.as_deref(),
+            runtime.cleanup_worktree_path.as_deref(),
+        ) {
+            remove_worktree(Path::new(repo_path), Path::new(worktree_path)).with_context(|| {
+                format!("Failed removing QA worktree runtime {worktree_path}")
+            })?;
+        }
         Ok(true)
     }
 
@@ -808,7 +926,15 @@ impl AppService {
             })
             .collect::<Vec<_>>();
         for runtime_id in stale_runtime_ids {
-            runtimes.remove(&runtime_id);
+            if let Some(mut runtime) = runtimes.remove(&runtime_id) {
+                let _ = runtime.child.kill();
+                if let (Some(repo_path), Some(worktree_path)) = (
+                    runtime.cleanup_repo_path.as_deref(),
+                    runtime.cleanup_worktree_path.as_deref(),
+                ) {
+                    let _ = remove_worktree(Path::new(repo_path), Path::new(worktree_path));
+                }
+            }
         }
     }
 

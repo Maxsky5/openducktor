@@ -87,6 +87,7 @@ export type SpecStateContextValue = {
 
 export type AgentStateContextValue = {
   sessions: AgentSessionState[];
+  loadAgentSessions: (taskId: string) => Promise<void>;
   startAgentSession: (input: {
     taskId: string;
     role: AgentRole;

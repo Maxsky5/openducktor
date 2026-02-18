@@ -1,5 +1,6 @@
 import {
   type AgentRuntimeSummary,
+  type AgentSessionRecord,
   type BeadsCheck,
   type RepoConfig,
   type RunSummary,
@@ -11,6 +12,7 @@ import {
   type TaskUpdatePatch,
   type WorkspaceRecord,
   agentRuntimeSummarySchema,
+  agentSessionRecordSchema,
   beadsCheckSchema,
   repoConfigSchema,
   runSummarySchema,
@@ -272,6 +274,26 @@ export class TauriHostClient implements PlannerTools {
       repoPath,
     });
     return agentRuntimeSummarySchema.parse(payload);
+  }
+
+  async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
+    const payload = await this.invokeFn<unknown>("agent_sessions_list", {
+      repoPath,
+      taskId,
+    });
+    return parseArray(agentSessionRecordSchema, payload);
+  }
+
+  async agentSessionUpsert(
+    repoPath: string,
+    taskId: string,
+    session: AgentSessionRecord,
+  ): Promise<void> {
+    await this.invokeFn<unknown>("agent_session_upsert", {
+      repoPath,
+      taskId,
+      session,
+    });
   }
 
   async workspaceUpdateRepoConfig(

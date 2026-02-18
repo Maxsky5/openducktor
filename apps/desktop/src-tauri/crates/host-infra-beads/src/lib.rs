@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    now_rfc3339, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument, TaskCard, TaskStatus,
-    TaskStore, UpdateTaskPatch,
+    now_rfc3339, AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument,
+    TaskCard, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     compute_repo_slug, resolve_central_beads_dir, run_command_allow_failure_with_env,
@@ -686,6 +686,60 @@ impl TaskStore for BeadsTaskStore {
             revision: entry.revision,
         })
     }
+
+    fn list_agent_sessions(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+    ) -> Result<Vec<AgentSessionDocument>> {
+        let issue = self.show_raw_issue(repo_path, task_id)?;
+        let metadata_root = parse_metadata_root(issue.metadata);
+        let mut entries = metadata_namespace(&metadata_root, &self.metadata_namespace)
+            .and_then(|ns| ns.get("agentSessions"))
+            .and_then(parse_agent_sessions)
+            .unwrap_or_default();
+
+        entries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        Ok(entries)
+    }
+
+    fn upsert_agent_session(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        session: AgentSessionDocument,
+    ) -> Result<()> {
+        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let mut sessions = namespace_map
+            .get("agentSessions")
+            .and_then(parse_agent_sessions)
+            .unwrap_or_default();
+
+        if let Some(existing_index) = sessions
+            .iter()
+            .position(|entry| entry.session_id == session.session_id)
+        {
+            sessions[existing_index] = session;
+        } else {
+            sessions.push(session);
+        }
+
+        sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        sessions.truncate(100);
+
+        namespace_map.insert(
+            "agentSessions".to_string(),
+            Value::Array(
+                sessions
+                    .iter()
+                    .map(serde_json::to_value)
+                    .collect::<std::result::Result<Vec<_>, _>>()?,
+            ),
+        );
+
+        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -784,6 +838,15 @@ fn parse_qa_entries(value: &Value) -> Option<Vec<QaEntry>> {
     Some(entries)
 }
 
+fn parse_agent_sessions(value: &Value) -> Option<Vec<AgentSessionDocument>> {
+    let entries = value
+        .as_array()?
+        .iter()
+        .filter_map(|entry| serde_json::from_value::<AgentSessionDocument>(entry.clone()).ok())
+        .collect::<Vec<_>>();
+    Some(entries)
+}
+
 fn normalize_labels(labels: Vec<String>) -> Vec<String> {
     let mut normalized: Vec<String> = labels
         .into_iter()
@@ -827,7 +890,7 @@ mod tests {
     use super::{
         default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace,
         normalize_issue_type, normalize_labels, normalize_text_option, parse_markdown_entries,
-        parse_metadata_root, parse_qa_entries,
+        parse_agent_sessions, parse_metadata_root, parse_qa_entries,
     };
     use serde_json::json;
 
@@ -906,5 +969,42 @@ mod tests {
         .expect("qa entries");
         assert_eq!(qa_entries.len(), 1);
         assert_eq!(qa_entries[0].revision, 2);
+
+        let sessions = parse_agent_sessions(&json!([
+            {
+                "sessionId": "obp-session-1",
+                "taskId": "task-1",
+                "role": "spec",
+                "scenario": "spec_initial",
+                "status": "idle",
+                "startedAt": "2026-02-18T17:20:00Z",
+                "updatedAt": "2026-02-18T17:21:00Z",
+                "endedAt": null,
+                "runtimeId": "runtime-1",
+                "runId": null,
+                "baseUrl": "http://127.0.0.1:4173",
+                "workingDirectory": "/repo",
+                "selectedModel": {
+                    "providerId": "openai",
+                    "modelId": "gpt-5",
+                    "variant": "high",
+                    "opencodeAgent": "architect"
+                },
+                "messages": [
+                    {
+                        "id": "m1",
+                        "role": "assistant",
+                        "content": "Spec persisted.",
+                        "timestamp": "2026-02-18T17:20:10Z"
+                    }
+                ]
+            },
+            {
+                "sessionId": 123
+            }
+        ]))
+        .expect("agent sessions");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "obp-session-1");
     }
 }

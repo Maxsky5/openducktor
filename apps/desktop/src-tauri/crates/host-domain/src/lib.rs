@@ -143,6 +143,43 @@ pub struct QaReportDocument {
     pub revision: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionModelSelection {
+    pub provider_id: String,
+    pub model_id: String,
+    pub variant: Option<String>,
+    pub opencode_agent: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionMessageDocument {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionDocument {
+    pub session_id: String,
+    pub task_id: String,
+    pub role: String,
+    pub scenario: String,
+    pub status: String,
+    pub started_at: String,
+    pub updated_at: String,
+    pub ended_at: Option<String>,
+    pub runtime_id: Option<String>,
+    pub run_id: Option<String>,
+    pub base_url: String,
+    pub working_directory: String,
+    pub selected_model: Option<AgentSessionModelSelection>,
+    pub messages: Vec<AgentSessionMessageDocument>,
+}
+
 pub trait TaskStore: Send + Sync {
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()>;
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>>;
@@ -169,6 +206,14 @@ pub trait TaskStore: Send + Sync {
         markdown: &str,
         verdict: QaVerdict,
     ) -> Result<QaReportDocument>;
+    fn list_agent_sessions(&self, repo_path: &Path, task_id: &str)
+        -> Result<Vec<AgentSessionDocument>>;
+    fn upsert_agent_session(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        session: AgentSessionDocument,
+    ) -> Result<()>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -164,4 +164,57 @@ describe("TauriHostClient", () => {
       "opencode_runtime_stop",
     ]);
   });
+
+  test("agent session history commands use expected IPC routes", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "agent_sessions_list") {
+        return [
+          {
+            sessionId: "obp-session-1",
+            taskId: "task-1",
+            role: "spec",
+            scenario: "spec_initial",
+            status: "idle",
+            startedAt: "2026-02-18T17:20:00Z",
+            updatedAt: "2026-02-18T17:21:00Z",
+            endedAt: null,
+            runtimeId: "runtime-1",
+            runId: null,
+            baseUrl: "http://127.0.0.1:4173",
+            workingDirectory: "/repo",
+            selectedModel: null,
+            messages: [
+              {
+                id: "m1",
+                role: "assistant",
+                content: "Spec saved.",
+                timestamp: "2026-02-18T17:20:10Z",
+              },
+            ],
+          },
+        ];
+      }
+      if (command === "agent_session_upsert") {
+        return { ok: true };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const history = await client.agentSessionsList("/repo", "task-1");
+    const first = history[0];
+    if (!first) {
+      throw new Error("Expected persisted session history entry");
+    }
+    await client.agentSessionUpsert("/repo", "task-1", first);
+
+    expect(history).toHaveLength(1);
+    expect(calls.map((entry) => entry.command)).toEqual([
+      "agent_sessions_list",
+      "agent_session_upsert",
+    ]);
+    expect(calls[0].args).toEqual({
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
+  });
 });

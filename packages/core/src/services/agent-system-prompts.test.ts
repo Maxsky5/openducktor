@@ -29,6 +29,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("- build_completed {");
     expect(prompt).not.toContain("- qa_rejected {");
     expect(prompt).toContain("Feature/epic flow");
+    expect(prompt).toContain("read-only mode");
   });
 
   test("build rework scenario explicitly references QA rejection loop", () => {
@@ -56,5 +57,6 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("qa_rejected");
     expect(prompt).not.toContain("- build_completed {");
     expect(prompt).toContain("latestQaReport");
+    expect(prompt).toContain("read-only mode");
   });
 });

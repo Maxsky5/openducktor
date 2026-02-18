@@ -1,7 +1,7 @@
 use host_application::{AppService, RunEmitter};
 use host_domain::{
-    AgentRuntimeSummary, CreateTaskInput, PlanSubtaskInput, RunEvent, RunSummary, TaskCard,
-    TaskStatus, UpdateTaskPatch,
+    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, RunEvent,
+    RunSummary, TaskCard, TaskStatus, UpdateTaskPatch,
 };
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
@@ -519,6 +519,30 @@ async fn opencode_repo_runtime_ensure(
     as_error(state.service.opencode_repo_runtime_ensure(&repo_path))
 }
 
+#[tauri::command]
+async fn agent_sessions_list(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<Vec<AgentSessionDocument>, String> {
+    as_error(state.service.agent_sessions_list(&repo_path, &task_id))
+}
+
+#[tauri::command]
+async fn agent_session_upsert(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    session: AgentSessionDocument,
+) -> Result<serde_json::Value, String> {
+    as_error(
+        state
+            .service
+            .agent_session_upsert(&repo_path, &task_id, session)
+            .map(|ok| serde_json::json!({ "ok": ok })),
+    )
+}
+
 pub fn run() {
     let config_store = AppConfigStore::new().expect("failed to initialize config store");
     let metadata_namespace = config_store
@@ -567,7 +591,9 @@ pub fn run() {
             opencode_runtime_list,
             opencode_runtime_start,
             opencode_runtime_stop,
-            opencode_repo_runtime_ensure
+            opencode_repo_runtime_ensure,
+            agent_sessions_list,
+            agent_session_upsert
         ])
         .run(tauri::generate_context!())
         .expect("error while running openblueprint");

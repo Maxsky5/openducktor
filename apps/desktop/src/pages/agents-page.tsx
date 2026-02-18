@@ -140,6 +140,7 @@ export function AgentsPage(): ReactElement {
   const { tasks } = useTasksState();
   const {
     sessions,
+    loadAgentSessions,
     startAgentSession,
     sendAgentMessage,
     stopAgentSession,
@@ -214,10 +215,11 @@ export function AgentsPage(): ReactElement {
     if (!taskId) {
       return;
     }
+    void loadAgentSessions(taskId);
     ensureDocumentLoaded("spec");
     ensureDocumentLoaded("plan");
     ensureDocumentLoaded("qa");
-  }, [ensureDocumentLoaded, taskId]);
+  }, [ensureDocumentLoaded, loadAgentSessions, taskId]);
 
   const updateQuery = useCallback(
     (updates: Record<string, string | undefined>) => {
@@ -327,9 +329,9 @@ export function AgentsPage(): ReactElement {
   }, [activeSession, role, roleDefaultSelection, updateAgentSessionModel]);
 
   const startSession = useCallback(
-    async (sendKickoff = false): Promise<void> => {
+    async (sendKickoff = false): Promise<string | undefined> => {
       if (!taskId) {
-        return;
+        return undefined;
       }
       setIsStarting(true);
       try {
@@ -344,6 +346,7 @@ export function AgentsPage(): ReactElement {
           session: sessionId,
           autostart: undefined,
         });
+        return sessionId;
       } finally {
         setIsStarting(false);
       }
@@ -373,17 +376,31 @@ export function AgentsPage(): ReactElement {
 
   const onSend = useCallback(async (): Promise<void> => {
     const message = input.trim();
-    if (!activeSession || !message) {
+    if (!message || !taskId) {
       return;
     }
+
+    let targetSessionId = activeSession?.sessionId;
+    if (
+      !targetSessionId ||
+      activeSession?.status === "stopped" ||
+      activeSession?.status === "error"
+    ) {
+      targetSessionId = await startSession(false);
+    }
+
+    if (!targetSessionId) {
+      return;
+    }
+
     setInput("");
     setIsSending(true);
     try {
-      await sendAgentMessage(activeSession.sessionId, message);
+      await sendAgentMessage(targetSessionId, message);
     } finally {
       setIsSending(false);
     }
-  }, [activeSession, input, sendAgentMessage]);
+  }, [activeSession, input, sendAgentMessage, startSession, taskId]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
     return toPrimaryAgentOptions(activeSession?.modelCatalog ?? null);
@@ -758,10 +775,14 @@ export function AgentsPage(): ReactElement {
                     type="submit"
                     className="w-full lg:w-auto"
                     disabled={
-                      !activeSession ||
                       isSending ||
+                      isStarting ||
+                      !taskId ||
                       input.trim().length === 0 ||
-                      !activeSession.selectedModel?.opencodeAgent
+                      (activeSession &&
+                        activeSession.status !== "stopped" &&
+                        activeSession.status !== "error" &&
+                        !activeSession.selectedModel?.opencodeAgent)
                     }
                   >
                     {isSending ? (

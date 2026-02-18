@@ -97,6 +97,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
 
   const {
     sessions,
+    loadAgentSessions,
     startAgentSession,
     sendAgentMessage,
     stopAgentSession,
@@ -231,6 +232,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const agentStateValue = useMemo<AgentStateContextValue>(
     () => ({
       sessions,
+      loadAgentSessions,
       startAgentSession,
       sendAgentMessage,
       stopAgentSession,
@@ -240,6 +242,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     }),
     [
       answerAgentQuestion,
+      loadAgentSessions,
       replyAgentPermission,
       sendAgentMessage,
       sessions,
