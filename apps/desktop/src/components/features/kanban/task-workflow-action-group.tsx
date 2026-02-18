@@ -7,10 +7,20 @@ import { type ReactElement, useState } from "react";
 import { type TaskWorkflowAction, resolveTaskCardActions } from "./kanban-task-workflow";
 import { TASK_ACTION_ICON, taskActionLabel, taskPrimaryActionVariant } from "./task-action-ui";
 
+type ExtraTaskMenuAction = {
+  id: string;
+  label: string;
+  icon: ReactElement;
+  onSelect: () => void;
+  destructive?: boolean;
+  disabled?: boolean;
+};
+
 type TaskWorkflowActionGroupProps = {
   task: TaskCard;
   onAction: (action: TaskWorkflowAction) => void;
   includeActions?: readonly TaskWorkflowAction[];
+  extraMenuActions?: readonly ExtraTaskMenuAction[];
   menuAlign?: "start" | "center" | "end";
   className?: string;
   primaryClassName?: string;
@@ -24,6 +34,7 @@ export function TaskWorkflowActionGroup({
   task,
   onAction,
   includeActions,
+  extraMenuActions = [],
   menuAlign = "end",
   className,
   primaryClassName,
@@ -36,7 +47,9 @@ export function TaskWorkflowActionGroup({
   const { primaryAction, secondaryActions, allActions } = includeActions
     ? resolveTaskCardActions(task, { include: includeActions })
     : resolveTaskCardActions(task);
-  const hasAnyAction = allActions.length > 0;
+  const hasWorkflowAction = allActions.length > 0;
+  const hasExtraMenuAction = extraMenuActions.length > 0;
+  const hasAnyAction = hasWorkflowAction || hasExtraMenuAction;
 
   if (!hasAnyAction) {
     return (
@@ -52,35 +65,34 @@ export function TaskWorkflowActionGroup({
     );
   }
 
-  const primary = primaryAction ?? allActions[0];
-  if (!primary) {
-    return (
-      <Button
-        type="button"
-        size={size}
-        variant="outline"
-        className={cn("w-full", className)}
-        disabled
-      >
-        {emptyLabel}
-      </Button>
-    );
-  }
-  const showMenu = secondaryActions.length > 0;
+  const primary = primaryAction ?? allActions[0] ?? null;
+  const showMenu = secondaryActions.length > 0 || hasExtraMenuAction;
   const actionItems = showMenu ? secondaryActions : [];
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <Button
-        type="button"
-        size={size}
-        variant={taskPrimaryActionVariant(primary)}
-        className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
-        onClick={() => onAction(primary)}
-      >
-        {TASK_ACTION_ICON[primary]}
-        {taskActionLabel(primary, task)}
-      </Button>
+      {primary ? (
+        <Button
+          type="button"
+          size={size}
+          variant={taskPrimaryActionVariant(primary)}
+          className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
+          onClick={() => onAction(primary)}
+        >
+          {TASK_ACTION_ICON[primary]}
+          {taskActionLabel(primary, task)}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          size={size}
+          variant="outline"
+          className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
+          disabled
+        >
+          {emptyLabel}
+        </Button>
+      )}
 
       {showMenu ? (
         <Popover open={isMenuOpen} onOpenChange={setMenuOpen}>
@@ -115,6 +127,29 @@ export function TaskWorkflowActionGroup({
                 >
                   {TASK_ACTION_ICON[action]}
                   {taskActionLabel(action, task)}
+                </Button>
+              ))}
+              {actionItems.length > 0 && hasExtraMenuAction ? (
+                <div className="my-1 border-t border-slate-200" />
+              ) : null}
+              {extraMenuActions.map((action) => (
+                <Button
+                  key={action.id}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-8 w-full justify-start",
+                    action.destructive ? "text-rose-700 hover:bg-rose-50 hover:text-rose-800" : "",
+                  )}
+                  disabled={action.disabled}
+                  onClick={() => {
+                    action.onSelect();
+                    setMenuOpen(false);
+                  }}
+                >
+                  {action.icon}
+                  {action.label}
                 </Button>
               ))}
             </div>

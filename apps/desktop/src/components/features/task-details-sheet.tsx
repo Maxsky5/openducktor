@@ -330,19 +330,6 @@ export function TaskDetailsSheet({
 
         <SheetFooter className="mt-0 flex-none flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            {onDelete ? (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => {
-                  setDeleteError(null);
-                  setDeleteDialogOpen(true);
-                }}
-              >
-                <Trash2 className="size-4" />
-                Delete
-              </Button>
-            ) : null}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Close
             </Button>
@@ -362,6 +349,22 @@ export function TaskDetailsSheet({
             className="min-w-[240px] justify-end"
             primaryClassName="font-semibold"
             emptyLabel="No available workflow action"
+            {...(onDelete
+              ? {
+                  extraMenuActions: [
+                    {
+                      id: "delete-task",
+                      label: "Delete task",
+                      icon: <Trash2 className="size-3.5" />,
+                      destructive: true,
+                      onSelect: () => {
+                        setDeleteError(null);
+                        setDeleteDialogOpen(true);
+                      },
+                    },
+                  ],
+                }
+              : {})}
           />
         </SheetFooter>
       </SheetContent>
@@ -378,7 +381,7 @@ export function TaskDetailsSheet({
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Delete Task</DialogTitle>
             <DialogDescription>
@@ -400,10 +403,11 @@ export function TaskDetailsSheet({
             {deleteError ? <p className="text-rose-700">{deleteError}</p> : null}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
+              className="w-full sm:w-auto"
               disabled={isDeleting}
               onClick={() => setDeleteDialogOpen(false)}
             >
@@ -412,6 +416,7 @@ export function TaskDetailsSheet({
             <Button
               type="button"
               variant="destructive"
+              className="w-full sm:w-auto sm:min-w-36"
               disabled={isDeleting}
               onClick={confirmDelete}
             >
@@ -420,11 +425,7 @@ export function TaskDetailsSheet({
               ) : (
                 <Trash2 className="size-4" />
               )}
-              {isDeleting
-                ? "Deleting..."
-                : hasSubtasks
-                  ? `Delete ${subtasks.length + 1} tasks`
-                  : "Delete task"}
+              {isDeleting ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
