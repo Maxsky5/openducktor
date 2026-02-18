@@ -44,6 +44,7 @@ export function useTaskDocuments(
   qaDoc: TaskDocumentState;
   ensureDocumentLoaded: (section: DocumentSectionKey) => boolean;
   reloadDocument: (section: DocumentSectionKey) => boolean;
+  applyDocumentUpdate: (section: DocumentSectionKey, payload: TaskDocumentPayload) => void;
 } {
   const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = useSpecState();
   const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
@@ -149,11 +150,28 @@ export function useTaskDocuments(
     [loadDocument],
   );
 
+  const applyDocumentUpdate = useCallback(
+    (section: DocumentSectionKey, payload: TaskDocumentPayload): void => {
+      setDocuments((previous) => ({
+        ...previous,
+        [section]: {
+          markdown: payload.markdown,
+          updatedAt: payload.updatedAt,
+          isLoading: false,
+          error: null,
+          loaded: true,
+        },
+      }));
+    },
+    [],
+  );
+
   return {
     specDoc: documents.spec,
     planDoc: documents.plan,
     qaDoc: documents.qa,
     ensureDocumentLoaded,
     reloadDocument,
+    applyDocumentUpdate,
   };
 }

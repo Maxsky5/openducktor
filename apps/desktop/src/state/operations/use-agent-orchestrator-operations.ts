@@ -328,6 +328,9 @@ const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChat
   for (const message of history) {
     for (const part of message.parts) {
       if (part.kind === "reasoning") {
+        if (part.text.trim().length === 0) {
+          continue;
+        }
         next.push({
           id: `history:thinking:${message.messageId}:${part.partId}`,
           role: "thinking",
@@ -428,6 +431,7 @@ export function useAgentOrchestratorOperations({
   const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
   const draftRawBySessionRef = useRef<Record<string, string>>({});
   const draftSourceBySessionRef = useRef<Record<string, "delta" | "part">>({});
+  const workflowToolMessageBySessionRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     sessionsRef.current = sessionsById;
@@ -454,6 +458,7 @@ export function useAgentOrchestratorOperations({
     unsubscribersRef.current.clear();
     draftRawBySessionRef.current = {};
     draftSourceBySessionRef.current = {};
+    workflowToolMessageBySessionRef.current = {};
     setSessionsById({});
   }, [activeRepo]);
 
@@ -559,6 +564,75 @@ export function useAgentOrchestratorOperations({
             (record.role === "spec" || record.role === "planner") && workspaceRuntime
               ? workspaceRuntime.workingDirectory
               : record.workingDirectory;
+          const existingSession = sessionsRef.current[record.sessionId];
+          if (existingSession && existingSession.messages.length > 0) {
+            updateSession(
+              record.sessionId,
+              (current) => ({
+                ...current,
+                baseUrl,
+                workingDirectory,
+              }),
+              { persist: false },
+            );
+            return;
+          }
+
+          const task = taskRef.current.find((entry) => entry.id === record.taskId);
+          let preludeMessages: AgentChatMessage[] = [
+            {
+              id: `history:session-start:${record.sessionId}`,
+              role: "system",
+              content: `Session started (${record.role} - ${record.scenario})`,
+              timestamp: record.startedAt,
+            },
+          ];
+
+          if (task) {
+            try {
+              const [specMarkdown, planMarkdown, qaMarkdown] = await Promise.all([
+                host
+                  .specGet(activeRepo, record.taskId)
+                  .then((doc) => doc.markdown)
+                  .catch(() => ""),
+                host
+                  .planGet(activeRepo, record.taskId)
+                  .then((doc) => doc.markdown)
+                  .catch(() => ""),
+                host
+                  .qaGetReport(activeRepo, record.taskId)
+                  .then((doc) => doc.markdown)
+                  .catch(() => ""),
+              ]);
+              const systemPrompt = buildAgentSystemPrompt({
+                role: record.role,
+                scenario: record.scenario,
+                task: {
+                  taskId: task.id,
+                  title: task.title,
+                  issueType: task.issueType,
+                  status: task.status,
+                  qaRequired: task.aiReviewEnabled,
+                  description: task.description,
+                  acceptanceCriteria: task.acceptanceCriteria,
+                  specMarkdown,
+                  planMarkdown,
+                  latestQaReportMarkdown: qaMarkdown,
+                },
+              });
+              preludeMessages = [
+                ...preludeMessages,
+                {
+                  id: `history:system-prompt:${record.sessionId}`,
+                  role: "system",
+                  content: `System prompt:\n\n${systemPrompt}`,
+                  timestamp: record.startedAt,
+                },
+              ];
+            } catch {
+              // Keep session prelude even if prompt reconstruction fails.
+            }
+          }
 
           try {
             const history = await adapter.loadSessionHistory({
@@ -573,7 +647,7 @@ export function useAgentOrchestratorOperations({
                 ...current,
                 baseUrl,
                 workingDirectory,
-                messages: historyToChatMessages(history),
+                messages: [...preludeMessages, ...historyToChatMessages(history)],
               }),
               { persist: false },
             );
@@ -648,21 +722,34 @@ export function useAgentOrchestratorOperations({
           if (part.kind === "reasoning") {
             updateSession(
               sessionId,
-              (current) => ({
-                ...current,
-                status: "running",
-                messages: upsertMessage(current.messages, {
-                  id: `thinking:${streamMessageKey}`,
-                  role: "thinking",
-                  content: part.text,
-                  timestamp: event.timestamp,
-                  meta: {
-                    kind: "reasoning",
-                    partId: part.partId,
-                    completed: part.completed,
-                  },
-                }),
-              }),
+              (current) => {
+                const messageId = `thinking:${streamMessageKey}`;
+                const existingMessage = current.messages.find((entry) => entry.id === messageId);
+                const nextContent =
+                  part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
+                if (nextContent.trim().length === 0) {
+                  return {
+                    ...current,
+                    status: "running",
+                  };
+                }
+
+                return {
+                  ...current,
+                  status: "running",
+                  messages: upsertMessage(current.messages, {
+                    id: messageId,
+                    role: "thinking",
+                    content: nextContent,
+                    timestamp: event.timestamp,
+                    meta: {
+                      kind: "reasoning",
+                      partId: part.partId,
+                      completed: part.completed,
+                    },
+                  }),
+                };
+              },
               { persist: false },
             );
             return;
@@ -771,17 +858,22 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "tool_call") {
+          const workflowToolKey = `${sessionId}:${event.call.tool}`;
+          const existingMessageId = workflowToolMessageBySessionRef.current[workflowToolKey];
+          const messageId = existingMessageId ?? `workflow-tool:${crypto.randomUUID()}`;
+          workflowToolMessageBySessionRef.current[workflowToolKey] = messageId;
+
           updateSession(sessionId, (current) => ({
             ...current,
             messages: upsertMessage(current.messages, {
-              id: crypto.randomUUID(),
+              id: messageId,
               role: "tool",
               content: `Workflow tool call: ${event.call.tool}`,
               timestamp: event.timestamp,
               meta: {
                 kind: "tool",
-                partId: crypto.randomUUID(),
-                callId: crypto.randomUUID(),
+                partId: messageId,
+                callId: messageId,
                 tool: event.call.tool,
                 status: "pending",
                 input: event.call.args as Record<string, unknown>,
@@ -792,23 +884,34 @@ export function useAgentOrchestratorOperations({
         }
 
         if (event.type === "tool_result") {
-          updateSession(sessionId, (current) => ({
-            ...current,
-            messages: upsertMessage(current.messages, {
-              id: crypto.randomUUID(),
-              role: "tool",
-              content: `${event.tool}: ${event.success ? "success" : "error"} - ${event.message}`,
-              timestamp: event.timestamp,
-              meta: {
-                kind: "tool",
-                partId: crypto.randomUUID(),
-                callId: crypto.randomUUID(),
-                tool: event.tool,
-                status: event.success ? "completed" : "error",
-                ...(event.success ? { output: event.message } : { error: event.message }),
-              },
-            }),
-          }));
+          const workflowToolKey = `${sessionId}:${event.tool}`;
+          const existingMessageId = workflowToolMessageBySessionRef.current[workflowToolKey];
+          const messageId = existingMessageId ?? `workflow-tool:${crypto.randomUUID()}`;
+
+          updateSession(sessionId, (current) => {
+            const existingMessage = current.messages.find((entry) => entry.id === messageId);
+            const existingInput =
+              existingMessage?.meta?.kind === "tool" ? existingMessage.meta.input : undefined;
+            return {
+              ...current,
+              messages: upsertMessage(current.messages, {
+                id: messageId,
+                role: "tool",
+                content: `${event.tool}: ${event.success ? "success" : "error"} - ${event.message}`,
+                timestamp: event.timestamp,
+                meta: {
+                  kind: "tool",
+                  partId: messageId,
+                  callId: messageId,
+                  tool: event.tool,
+                  status: event.success ? "completed" : "error",
+                  ...(existingInput ? { input: existingInput } : {}),
+                  ...(event.success ? { output: event.message } : { error: event.message }),
+                },
+              }),
+            };
+          });
+          delete workflowToolMessageBySessionRef.current[workflowToolKey];
           if (event.success) {
             void refreshTaskData(repoPath).catch(() => undefined);
           }
@@ -1233,6 +1336,12 @@ export function useAgentOrchestratorOperations({
             id: crypto.randomUUID(),
             role: "system",
             content: `Session started (${role} - ${resolvedScenario})`,
+            timestamp: summary.startedAt,
+          },
+          {
+            id: crypto.randomUUID(),
+            role: "system",
+            content: `System prompt:\n\n${systemPrompt}`,
             timestamp: summary.startedAt,
           },
         ],

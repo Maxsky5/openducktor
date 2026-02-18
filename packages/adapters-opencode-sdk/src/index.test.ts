@@ -624,6 +624,65 @@ describe("OpencodeSdkAdapter", () => {
     expect(reasoningUpdates[1]?.part?.text).toBe("Snake case reasoning");
   });
 
+  test("event stream ignores user text deltas and parts for assistant streaming", async () => {
+    const executor = makeToolExecutor();
+    const mock = makeMockClient({
+      streamEvents: [
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "user-msg-1",
+              sessionID: "session-opencode-1",
+              role: "user",
+            },
+          },
+        } as Event,
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "user-part-1",
+              sessionID: "session-opencode-1",
+              messageID: "user-msg-1",
+              type: "text",
+              text: "Write the initial specification",
+              time: { start: Date.now() },
+            },
+          },
+        } as Event,
+        {
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-opencode-1",
+            messageID: "user-msg-1",
+            field: "text",
+            delta: " and call set_spec",
+          },
+        } as Event,
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter(executor.tools, {
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: Array<{ type: string; part?: { kind: string } }> = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event as { type: string; part?: { kind: string } });
+    });
+
+    await startDefaultSession(adapter);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(
+      events.some(
+        (event) => event.type === "assistant_part" && event.part?.kind === "text",
+      ),
+    ).toBe(false);
+    expect(events.some((event) => event.type === "assistant_delta")).toBe(false);
+  });
+
   test("startSession defaults to external session id when none provided", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({ sessionId: "session-opencode-42" });

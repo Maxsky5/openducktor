@@ -933,6 +933,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       { signal: controller.signal },
     );
     const partsById = new Map<string, Part>();
+    const messageRoleById = new Map<string, string>();
     const pendingDeltasByPartId = new Map<string, Array<{ field: string; delta: string }>>();
 
     for await (const event of sse.stream) {
@@ -940,9 +941,21 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         continue;
       }
 
-      if (event.type === "message.part.delta") {
+      if (event.type === "message.updated") {
+        const info = (event.properties as Record<string, unknown>).info as
+          | Record<string, unknown>
+          | undefined;
+        if (info && typeof info === "object") {
+          const messageId = readStringProp(info, ["id", "messageID", "messageId", "message_id"]);
+          const role = readStringProp(info, ["role"]);
+          if (messageId && role) {
+            messageRoleById.set(messageId, role);
+          }
+        }
+      } else if (event.type === "message.part.delta") {
         const deltaEvent = event.properties as Record<string, unknown>;
         const partId = readStringProp(deltaEvent, ["partID", "partId", "part_id"]) ?? "";
+        const messageId = readStringProp(deltaEvent, ["messageID", "messageId", "message_id"]);
         const field = readStringProp(deltaEvent, ["field"]) ?? "";
         const delta = typeof deltaEvent.delta === "string" ? deltaEvent.delta : "";
         const knownPart = partId ? partsById.get(partId) : undefined;
@@ -953,6 +966,10 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
             partsById.set(partId, updatedPart);
             const mapped = mapPartToAgentStreamPart(updatedPart);
             if (mapped) {
+              const mappedRole = messageRoleById.get(mapped.messageId);
+              if (mappedRole === "user" && mapped.kind === "text") {
+                continue;
+              }
               this.emit(context.sessionId, {
                 type: "assistant_part",
                 sessionId: context.sessionId,
@@ -972,6 +989,12 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         }
 
         if (delta.length > 0) {
+          if (messageId) {
+            const deltaRole = messageRoleById.get(messageId);
+            if (deltaRole === "user") {
+              continue;
+            }
+          }
           this.emit(context.sessionId, {
             type: "assistant_delta",
             sessionId: context.sessionId,
@@ -994,6 +1017,10 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         partsById.set(nextPart.id, nextPart);
         const mapped = mapPartToAgentStreamPart(nextPart);
         if (mapped) {
+          const mappedRole = messageRoleById.get(mapped.messageId);
+          if (mappedRole === "user" && mapped.kind === "text") {
+            continue;
+          }
           this.emit(context.sessionId, {
             type: "assistant_part",
             sessionId: context.sessionId,

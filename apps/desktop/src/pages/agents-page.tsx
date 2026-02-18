@@ -135,6 +135,36 @@ const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | 
 };
 
 const NEW_SESSION_SENTINEL = "__new_session__";
+const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
+
+const parseTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? null : time;
+};
+
+const extractCompletionTimestamp = (
+  value: string | undefined,
+): { raw: string; timestamp: number } | null => {
+  if (!value) {
+    return null;
+  }
+  const match = value.match(ISO_TIMESTAMP_PATTERN);
+  if (!match?.[0]) {
+    return null;
+  }
+  const timestamp = parseTimestamp(match[0]);
+  if (timestamp === null) {
+    return null;
+  }
+  return {
+    raw: match[0],
+    timestamp,
+  };
+};
 
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
@@ -157,6 +187,7 @@ export function AgentsPage(): ReactElement {
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const processedDocumentToolEventsRef = useRef(new Set<string>());
+  const documentReloadAttemptsRef = useRef(new Map<string, number>());
 
   const taskIdParam = searchParams.get("task") ?? "";
   const sessionParam = searchParams.get("session");
@@ -221,10 +252,17 @@ export function AgentsPage(): ReactElement {
       .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1));
   }, [role, sessions, taskId]);
 
-  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded, reloadDocument } = useTaskDocuments(
-    taskId || null,
-    true,
-  );
+  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded, reloadDocument, applyDocumentUpdate } =
+    useTaskDocuments(taskId || null, true);
+  const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
+  const refreshedTaskVersionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    void documentContextKey;
+    processedDocumentToolEventsRef.current.clear();
+    documentReloadAttemptsRef.current.clear();
+    refreshedTaskVersionRef.current = null;
+  }, [documentContextKey]);
 
   useEffect(() => {
     if (!taskId) {
@@ -509,6 +547,22 @@ export function AgentsPage(): ReactElement {
   }, [scrollTrigger]);
 
   useEffect(() => {
+    if (!taskId || !selectedTask) {
+      return;
+    }
+
+    const taskVersionKey = `${taskId}:${selectedTask.updatedAt}`;
+    if (refreshedTaskVersionRef.current === taskVersionKey) {
+      return;
+    }
+
+    refreshedTaskVersionRef.current = taskVersionKey;
+    reloadDocument("spec");
+    reloadDocument("plan");
+    reloadDocument("qa");
+  }, [reloadDocument, selectedTask, taskId]);
+
+  useEffect(() => {
     if (!activeSession || !taskId) {
       return;
     }
@@ -523,47 +577,69 @@ export function AgentsPage(): ReactElement {
       if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
         continue;
       }
-
-      if (meta.tool === "set_spec") {
-        if (specDoc.isLoading) {
-          continue;
-        }
-        const triggered = reloadDocument("spec");
-        if (triggered) {
-          processedDocumentToolEventsRef.current.add(eventKey);
-        }
+      const target =
+        meta.tool === "set_spec"
+          ? { section: "spec" as const, state: specDoc, inputKey: "markdown" as const }
+          : meta.tool === "set_plan"
+            ? { section: "plan" as const, state: planDoc, inputKey: "markdown" as const }
+            : meta.tool === "qa_approved" || meta.tool === "qa_rejected"
+              ? { section: "qa" as const, state: qaDoc, inputKey: "reportMarkdown" as const }
+              : null;
+      if (!target) {
         continue;
       }
 
-      if (meta.tool === "set_plan") {
-        if (planDoc.isLoading) {
-          continue;
+      const completionInfo =
+        extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
+      const toolInput =
+        typeof meta.input === "object" && meta.input !== null
+          ? (meta.input as Record<string, unknown>)
+          : null;
+      const inputMarkdown = toolInput?.[target.inputKey];
+
+      let effectiveUpdatedAtTimestamp = parseTimestamp(target.state.updatedAt);
+      if (typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0) {
+        const shouldApplyOptimisticDocument =
+          target.state.markdown.trim() !== inputMarkdown.trim() ||
+          (completionInfo !== null &&
+            (effectiveUpdatedAtTimestamp === null ||
+              effectiveUpdatedAtTimestamp < completionInfo.timestamp));
+        if (shouldApplyOptimisticDocument) {
+          applyDocumentUpdate(target.section, {
+            markdown: inputMarkdown,
+            updatedAt: completionInfo?.raw ?? target.state.updatedAt ?? new Date().toISOString(),
+          });
+          effectiveUpdatedAtTimestamp = completionInfo?.timestamp ?? effectiveUpdatedAtTimestamp;
         }
-        const triggered = reloadDocument("plan");
-        if (triggered) {
-          processedDocumentToolEventsRef.current.add(eventKey);
-        }
+      }
+
+      if (
+        completionInfo !== null &&
+        effectiveUpdatedAtTimestamp !== null &&
+        effectiveUpdatedAtTimestamp >= completionInfo.timestamp
+      ) {
+        processedDocumentToolEventsRef.current.add(eventKey);
+        documentReloadAttemptsRef.current.delete(eventKey);
         continue;
       }
 
-      if (meta.tool === "qa_approved" || meta.tool === "qa_rejected") {
-        if (qaDoc.isLoading) {
-          continue;
-        }
-        const triggered = reloadDocument("qa");
-        if (triggered) {
-          processedDocumentToolEventsRef.current.add(eventKey);
-        }
+      if (target.state.isLoading) {
+        continue;
+      }
+
+      const attempts = documentReloadAttemptsRef.current.get(eventKey) ?? 0;
+      if (attempts >= 6) {
+        processedDocumentToolEventsRef.current.add(eventKey);
+        documentReloadAttemptsRef.current.delete(eventKey);
+        continue;
+      }
+
+      const triggered = reloadDocument(target.section);
+      if (triggered) {
+        documentReloadAttemptsRef.current.set(eventKey, attempts + 1);
       }
     }
-  }, [
-    activeSession,
-    planDoc.isLoading,
-    qaDoc.isLoading,
-    reloadDocument,
-    specDoc.isLoading,
-    taskId,
-  ]);
+  }, [activeSession, applyDocumentUpdate, planDoc, qaDoc, reloadDocument, specDoc, taskId]);
 
   return (
     <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
