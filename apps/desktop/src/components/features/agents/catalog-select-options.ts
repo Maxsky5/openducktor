@@ -1,11 +1,10 @@
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentDescriptor, AgentModelCatalog } from "@openblueprint/core";
 
+const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
+
 const isPrimaryCatalogAgent = (entry: AgentDescriptor): boolean => {
-  if (entry.hidden) {
-    return false;
-  }
-  return entry.mode === "primary" || entry.mode === "all";
+  return isVisibleAgent(entry) && entry.mode === "primary";
 };
 
 export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): ComboboxOption[] => {
@@ -13,7 +12,13 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
     return [];
   }
 
-  return catalog.agents.filter(isPrimaryCatalogAgent).map((entry) => ({
+  const primaryAgents = catalog.agents.filter(isPrimaryCatalogAgent);
+  const fallbackAgents =
+    primaryAgents.length > 0
+      ? primaryAgents
+      : catalog.agents.filter((entry) => isVisibleAgent(entry) && entry.mode !== "subagent");
+
+  return fallbackAgents.map((entry) => ({
     value: entry.name,
     label: entry.name,
     ...(entry.description ? { description: entry.description } : {}),
