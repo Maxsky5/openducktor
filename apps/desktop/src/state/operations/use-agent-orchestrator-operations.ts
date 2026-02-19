@@ -8,6 +8,7 @@ import {
   type AgentRole,
   type AgentScenario,
   type AgentSessionHistoryMessage,
+  type AgentSessionTodoItem,
   buildAgentSystemPrompt,
   isOdtWorkflowMutationToolName,
 } from "@openblueprint/core";
@@ -292,6 +293,74 @@ const normalizeToolText = (value: unknown): string | undefined => {
   }
 };
 
+const TODO_STATUSES = new Set(["pending", "in_progress", "completed", "cancelled"]);
+const TODO_PRIORITIES = new Set(["high", "medium", "low"]);
+
+const normalizeSessionTodo = (value: unknown): AgentSessionTodoItem | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  const content = typeof record.content === "string" ? record.content.trim() : "";
+  if (!id || !content) {
+    return null;
+  }
+
+  const rawStatus = typeof record.status === "string" ? record.status.trim().toLowerCase() : "";
+  const rawPriority =
+    typeof record.priority === "string" ? record.priority.trim().toLowerCase() : "";
+  const status = TODO_STATUSES.has(rawStatus) ? rawStatus : "pending";
+  const priority = TODO_PRIORITIES.has(rawPriority) ? rawPriority : "medium";
+
+  return {
+    id,
+    content,
+    status: status as AgentSessionTodoItem["status"],
+    priority: priority as AgentSessionTodoItem["priority"],
+  };
+};
+
+const normalizeSessionTodoList = (payload: unknown): AgentSessionTodoItem[] => {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  return payload
+    .map((entry) => normalizeSessionTodo(entry))
+    .filter((entry): entry is AgentSessionTodoItem => entry !== null);
+};
+
+const isTodoToolName = (tool: string): boolean => {
+  const normalized = tool.trim().toLowerCase();
+  return (
+    normalized === "todoread" ||
+    normalized === "todowrite" ||
+    normalized.endsWith("_todoread") ||
+    normalized.endsWith("_todowrite")
+  );
+};
+
+const parseTodosFromToolOutput = (output: string | undefined): AgentSessionTodoItem[] | null => {
+  if (!output || output.trim().length === 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(output) as unknown;
+    if (Array.isArray(parsed)) {
+      return normalizeSessionTodoList(parsed);
+    }
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      if (Array.isArray(record.todos)) {
+        return normalizeSessionTodoList(record.todos);
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 const normalizeSessionErrorMessage = (value: string): string => {
   const trimmed = value.trim();
   const withoutQuotes = trimmed
@@ -454,6 +523,7 @@ const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionSt
     draftAssistantText: "",
     pendingPermissions: [],
     pendingQuestions: [],
+    todos: [],
     modelCatalog: null,
     selectedModel: normalizePersistedSelection(session.selectedModel),
     isLoadingModelCatalog: true,
@@ -707,6 +777,30 @@ export function useAgentOrchestratorOperations({
     [adapter, updateSession],
   );
 
+  const loadSessionTodos = useCallback(
+    async (
+      sessionId: string,
+      baseUrl: string,
+      workingDirectory: string,
+      externalSessionId: string,
+    ): Promise<void> => {
+      const todos = await adapter.loadSessionTodos({
+        baseUrl,
+        workingDirectory,
+        externalSessionId,
+      });
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          todos,
+        }),
+        { persist: false },
+      );
+    },
+    [adapter, updateSession],
+  );
+
   const loadAgentSessions = useCallback(
     async (taskId: string): Promise<void> => {
       if (!activeRepo || taskId.trim().length === 0) {
@@ -736,6 +830,12 @@ export function useAgentOrchestratorOperations({
           if (!session.baseUrl || !session.workingDirectory) {
             continue;
           }
+          void loadSessionTodos(
+            session.sessionId,
+            session.baseUrl,
+            session.workingDirectory,
+            session.externalSessionId,
+          );
           void loadSessionModelCatalog(
             session.sessionId,
             session.baseUrl,
@@ -772,6 +872,12 @@ export function useAgentOrchestratorOperations({
                 workingDirectory,
               }),
               { persist: false },
+            );
+            void loadSessionTodos(
+              record.sessionId,
+              baseUrl,
+              workingDirectory,
+              record.externalSessionId,
             );
             void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory);
             return;
@@ -850,15 +956,27 @@ export function useAgentOrchestratorOperations({
               }),
               { persist: false },
             );
+            void loadSessionTodos(
+              record.sessionId,
+              baseUrl,
+              workingDirectory,
+              record.externalSessionId,
+            );
             void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory);
           } catch {
             // Ignore missing/unavailable external history; metadata pointer remains persisted.
+            void loadSessionTodos(
+              record.sessionId,
+              baseUrl,
+              workingDirectory,
+              record.externalSessionId,
+            );
             void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory);
           }
         }),
       );
     },
-    [activeRepo, adapter, loadSessionModelCatalog, updateSession],
+    [activeRepo, adapter, loadSessionModelCatalog, loadSessionTodos, updateSession],
   );
 
   const attachSessionListener = useCallback(
@@ -960,6 +1078,10 @@ export function useAgentOrchestratorOperations({
             const input = normalizeToolInput(part.input);
             const output = normalizeToolText(part.output);
             const error = normalizeToolText(part.error);
+            const todoUpdateFromOutput =
+              isTodoToolName(part.tool) && part.status === "completed"
+                ? parseTodosFromToolOutput(output)
+                : null;
             let shouldRefreshTaskData = false;
             updateSession(
               sessionId,
@@ -979,6 +1101,7 @@ export function useAgentOrchestratorOperations({
                 return {
                   ...current,
                   status: "running",
+                  ...(todoUpdateFromOutput ? { todos: todoUpdateFromOutput } : {}),
                   messages: upsertMessage(current.messages, {
                     id: messageId,
                     role: "tool",
@@ -1173,6 +1296,18 @@ export function useAgentOrchestratorOperations({
               },
             ],
           }));
+          return;
+        }
+
+        if (event.type === "session_todos_updated") {
+          updateSession(
+            sessionId,
+            (current) => ({
+              ...current,
+              todos: event.todos,
+            }),
+            { persist: false },
+          );
           return;
         }
 
@@ -1397,6 +1532,14 @@ export function useAgentOrchestratorOperations({
       }));
 
       const activeSession = sessionsRef.current[sessionId];
+      if (activeSession) {
+        void loadSessionTodos(
+          sessionId,
+          runtime.baseUrl,
+          runtime.workingDirectory,
+          activeSession.externalSessionId,
+        );
+      }
       if (activeSession && !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog) {
         void loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory);
       }
@@ -1407,6 +1550,7 @@ export function useAgentOrchestratorOperations({
       attachSessionListener,
       ensureRuntime,
       loadSessionModelCatalog,
+      loadSessionTodos,
       loadTaskDocuments,
       updateSession,
     ],
@@ -1551,6 +1695,7 @@ export function useAgentOrchestratorOperations({
         draftAssistantText: "",
         pendingPermissions: [],
         pendingQuestions: [],
+        todos: [],
         modelCatalog: null,
         selectedModel: defaultModelSelection,
         isLoadingModelCatalog: true,
@@ -1568,6 +1713,12 @@ export function useAgentOrchestratorOperations({
 
       attachSessionListener(activeRepo, summary.sessionId);
 
+      void loadSessionTodos(
+        summary.sessionId,
+        runtime.baseUrl,
+        runtime.workingDirectory,
+        summary.externalSessionId,
+      );
       void loadSessionModelCatalog(summary.sessionId, runtime.baseUrl, runtime.workingDirectory);
 
       if (sendKickoff) {
@@ -1588,6 +1739,7 @@ export function useAgentOrchestratorOperations({
       refreshTaskData,
       sendAgentMessage,
       loadSessionModelCatalog,
+      loadSessionTodos,
     ],
   );
 

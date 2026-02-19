@@ -51,6 +51,16 @@ export type AgentModelCatalog = {
   agents: AgentDescriptor[];
 };
 
+export type AgentSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
+export type AgentSessionTodoPriority = "high" | "medium" | "low";
+
+export type AgentSessionTodoItem = {
+  id: string;
+  content: string;
+  status: AgentSessionTodoStatus;
+  priority: AgentSessionTodoPriority;
+};
+
 export type AgentToolCall =
   | {
       tool: "odt_set_spec";
@@ -214,6 +224,12 @@ export type AgentEvent =
       sessionId: string;
       timestamp: string;
       part: AgentStreamPart;
+    }
+  | {
+      type: "session_todos_updated";
+      sessionId: string;
+      timestamp: string;
+      todos: AgentSessionTodoItem[];
     }
   | {
       type: "tool_call";

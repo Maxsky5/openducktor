@@ -3,6 +3,7 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentScenario,
+  AgentSessionTodoItem,
 } from "@openblueprint/core";
 
 export type AgentChatMessageMeta =
@@ -91,6 +92,7 @@ export type AgentSessionState = {
   draftAssistantText: string;
   pendingPermissions: AgentPermissionRequest[];
   pendingQuestions: AgentQuestionRequest[];
+  todos: AgentSessionTodoItem[];
   modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;
   isLoadingModelCatalog: boolean;

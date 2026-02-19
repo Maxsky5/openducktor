@@ -559,6 +559,131 @@ describe("OpencodeSdkAdapter", () => {
     expect(toolPartEvent.part.error).toContain("Task not found");
   });
 
+  test("maps todo.updated events into session_todos_updated", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "todo.updated",
+        properties: {
+          sessionID: "session-opencode-1",
+          todos: [
+            {
+              id: "todo-1",
+              content: "Inspect auth flow",
+              status: "in_progress",
+              priority: "high",
+            },
+            {
+              id: "todo-2",
+              content: "Write spec",
+              status: "completed",
+              priority: "medium",
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await Bun.sleep(0);
+
+    const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
+    expect(todoEvent).toBeDefined();
+    if (!todoEvent || todoEvent.type !== "session_todos_updated") {
+      throw new Error("Expected session_todos_updated event");
+    }
+    expect(todoEvent.todos).toEqual([
+      {
+        id: "todo-1",
+        content: "Inspect auth flow",
+        status: "in_progress",
+        priority: "high",
+      },
+      {
+        id: "todo-2",
+        content: "Write spec",
+        status: "completed",
+        priority: "medium",
+      },
+    ]);
+  });
+
+  test("loadSessionTodos reads /session/:id/todo and normalizes entries", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchCalls: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      fetchCalls.push(typeof input === "string" ? input : input.toString());
+      return new Response(
+        JSON.stringify([
+          {
+            id: "todo-1",
+            content: "Inspect auth flow",
+            status: "in_progress",
+            priority: "high",
+          },
+          {
+            id: "todo-2",
+            content: "Write spec",
+            status: "unexpected_status",
+            priority: "unexpected_priority",
+          },
+        ]),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      );
+    }) as typeof fetch;
+
+    try {
+      const mock = makeMockClient({});
+      const adapter = new OpencodeSdkAdapter({
+        createClient: () => mock.client,
+        now: () => "2026-02-17T12:00:00Z",
+      });
+
+      const todos = await adapter.loadSessionTodos({
+        baseUrl: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+        externalSessionId: "session-opencode-1",
+      });
+
+      expect(fetchCalls).toEqual([
+        "http://127.0.0.1:12345/session/session-opencode-1/todo?directory=%2Frepo",
+      ]);
+      expect(todos).toEqual([
+        {
+          id: "todo-1",
+          content: "Inspect auth flow",
+          status: "in_progress",
+          priority: "high",
+        },
+        {
+          id: "todo-2",
+          content: "Write spec",
+          status: "pending",
+          priority: "medium",
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("listAvailableModels returns provider models and primary agents", async () => {
     const mock = makeMockClient({
       agentsResponse: [

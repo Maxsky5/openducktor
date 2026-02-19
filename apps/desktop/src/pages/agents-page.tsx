@@ -1,5 +1,6 @@
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
+import { AgentSessionTodoPanel } from "@/components/features/agents/agent-session-todo-panel";
 import {
   toModelGroupsByProvider,
   toModelOptions,
@@ -353,6 +354,9 @@ export function AgentsPage(): ReactElement {
   const [draftSelectionByRole, setDraftSelectionByRole] =
     useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
   const [questionDrafts, setQuestionDrafts] = useState<Record<string, string[][]>>({});
+  const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
+    Record<string, boolean>
+  >({});
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
@@ -932,6 +936,9 @@ export function AgentsPage(): ReactElement {
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
   const activeSessionStatus = activeSession?.status ?? "stopped";
+  const isTodoPanelCollapsed = activeSession
+    ? (todoPanelCollapsedBySession[activeSession.sessionId] ?? false)
+    : false;
   const isSessionWorking =
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
@@ -1352,6 +1359,23 @@ export function AgentsPage(): ReactElement {
                 </div>
               ) : null}
             </div>
+
+            {activeSession ? (
+              <div className="px-3 pb-2">
+                <div className="flex justify-end">
+                  <AgentSessionTodoPanel
+                    todos={activeSession.todos}
+                    collapsed={isTodoPanelCollapsed}
+                    onToggleCollapse={() => {
+                      setTodoPanelCollapsedBySession((current) => ({
+                        ...current,
+                        [activeSession.sessionId]: !isTodoPanelCollapsed,
+                      }));
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             <form
               className="space-y-3 border-t border-slate-200 bg-white p-3"

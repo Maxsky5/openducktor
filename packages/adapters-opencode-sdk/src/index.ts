@@ -6,9 +6,11 @@ import {
   type AgentRole,
   type AgentSessionHistoryMessage,
   type AgentSessionSummary,
+  type AgentSessionTodoItem,
   type AgentStreamPart,
   type EventUnsubscribe,
   type LoadAgentSessionHistoryInput,
+  type LoadAgentSessionTodosInput,
   type ReplyPermissionInput,
   type ReplyQuestionInput,
   type ResumeAgentSessionInput,
@@ -155,6 +157,43 @@ const toToolIdList = (payload: unknown): string[] => {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0 && entry !== "invalid");
+};
+
+const TODO_STATUSES = new Set(["pending", "in_progress", "completed", "cancelled"]);
+const TODO_PRIORITIES = new Set(["high", "medium", "low"]);
+
+const normalizeTodoItem = (value: unknown): AgentSessionTodoItem | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  const content = typeof record.content === "string" ? record.content.trim() : "";
+  if (!id || !content) {
+    return null;
+  }
+
+  const rawStatus = typeof record.status === "string" ? record.status.trim().toLowerCase() : "";
+  const rawPriority =
+    typeof record.priority === "string" ? record.priority.trim().toLowerCase() : "";
+  const status = TODO_STATUSES.has(rawStatus) ? rawStatus : "pending";
+  const priority = TODO_PRIORITIES.has(rawPriority) ? rawPriority : "medium";
+
+  return {
+    id,
+    content,
+    status: status as AgentSessionTodoItem["status"],
+    priority: priority as AgentSessionTodoItem["priority"],
+  };
+};
+
+const normalizeTodoList = (payload: unknown): AgentSessionTodoItem[] => {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  return payload
+    .map((entry) => normalizeTodoItem(entry))
+    .filter((entry): entry is AgentSessionTodoItem => entry !== null);
 };
 
 const resolveWorkflowToolSelection = async (input: {
@@ -633,6 +672,31 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       return aTime - bTime;
     });
     return mapped;
+  }
+
+  async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
+    try {
+      const baseUrl = input.baseUrl.replace(/\/+$/, "");
+      const url = new URL(`${baseUrl}/session/${encodeURIComponent(input.externalSessionId)}/todo`);
+      if (input.workingDirectory.trim().length > 0) {
+        url.searchParams.set("directory", input.workingDirectory);
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) {
+        return [];
+      }
+
+      const payload = (await response.json().catch(() => null)) as unknown;
+      return normalizeTodoList(payload);
+    } catch {
+      return [];
+    }
   }
 
   async listAvailableModels(input: {
@@ -1194,6 +1258,15 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
           type: "session_idle",
           sessionId: context.sessionId,
           timestamp: this.now(),
+        });
+      } else if (event.type === "todo.updated") {
+        const props = event.properties as Record<string, unknown>;
+        const todos = normalizeTodoList(props.todos);
+        this.emit(context.sessionId, {
+          type: "session_todos_updated",
+          sessionId: context.sessionId,
+          timestamp: this.now(),
+          todos,
         });
       }
     }

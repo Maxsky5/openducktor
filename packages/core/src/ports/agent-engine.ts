@@ -5,6 +5,7 @@ import type {
   AgentRole,
   AgentScenario,
   AgentSessionContext,
+  AgentSessionTodoItem,
   AgentStreamPart,
 } from "../types/agent-orchestrator";
 
@@ -28,6 +29,12 @@ export type LoadAgentSessionHistoryInput = {
   workingDirectory: string;
   externalSessionId: string;
   limit?: number;
+};
+
+export type LoadAgentSessionTodosInput = {
+  baseUrl: string;
+  workingDirectory: string;
+  externalSessionId: string;
 };
 
 export type AgentSessionHistoryMessage = {
@@ -71,6 +78,7 @@ export interface AgentEnginePort {
   }): Promise<AgentModelCatalog>;
   hasSession(sessionId: string): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
+  loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
