@@ -1019,20 +1019,6 @@ export function AgentsPage(): ReactElement {
                   </Button>
                 </div>
               </div>
-
-              <p className="text-xs text-slate-500">
-                {activeSession?.status === "running"
-                  ? "Streaming OpenCode events..."
-                  : isSending
-                    ? "Sending message..."
-                    : isStarting
-                      ? "Preparing session..."
-                      : activeSession
-                        ? "Ready"
-                        : taskId
-                          ? "Ready to start automatically on your first message."
-                          : "Select a task to start chatting."}
-              </p>
             </form>
           </div>
         </CardContent>

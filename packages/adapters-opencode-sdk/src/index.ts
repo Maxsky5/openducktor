@@ -243,7 +243,7 @@ const sanitizeAssistantMessage = (
   rawMessage: string,
 ): { visible: string; toolCalls: AgentToolCall[] } => {
   const toolCalls = extractToolCalls(rawMessage);
-  const visible = rawMessage.trim();
+  const visible = rawMessage.replace(TOOL_BLOCK_PATTERN, "").trim();
   return { visible, toolCalls };
 };
 
@@ -1074,7 +1074,8 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
           (typeof completedAt === "number" || finish === "stop")
         ) {
           const text = readTextFromParts(normalizedParts);
-          if (text.length > 0) {
+          const visible = sanitizeAssistantMessage(text).visible;
+          if (visible.length > 0) {
             const session = this.sessions.get(context.sessionId);
             const emitted = session?.emittedAssistantMessageIds;
             if (!emitted?.has(messageId)) {
@@ -1082,7 +1083,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
                 type: "assistant_message",
                 sessionId: context.sessionId,
                 timestamp: this.now(),
-                message: text,
+                message: visible,
               });
               emitted?.add(messageId);
             }

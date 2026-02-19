@@ -499,7 +499,7 @@ describe("OpencodeSdkAdapter", () => {
                 sessionID: "session-opencode-1",
                 messageID: "assistant-1",
                 type: "text",
-                text: "Hello",
+                text: `Hello\n<obp_tool_call>{"tool":"set_spec","args":{"markdown":"# Spec"}}</obp_tool_call>`,
                 time: { start: Date.now(), end: Date.now() },
               },
             ],
@@ -530,9 +530,11 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
+    const events: Array<{ type: string; part?: { kind: string; text?: string }; message?: string }> = [];
     adapter.subscribeEvents("session-1", (event) => {
-      events.push(event as { type: string; part?: { kind: string; text?: string } });
+      events.push(
+        event as { type: string; part?: { kind: string; text?: string }; message?: string },
+      );
     });
 
     await startDefaultSession(adapter);
@@ -550,6 +552,8 @@ describe("OpencodeSdkAdapter", () => {
           event.part.text === "Hello",
       ),
     ).toBe(true);
+    const assistantMessage = events.find((event) => event.type === "assistant_message");
+    expect(assistantMessage?.message).toBe("Hello");
   });
 
   test("reasoning delta updates reasoning part content instead of assistant text stream", async () => {
@@ -759,7 +763,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(adapter.hasSession("obp-session-9")).toBe(true);
   });
 
-  test("loadSessionHistory maps assistant parts and preserves raw assistant text", async () => {
+  test("loadSessionHistory maps assistant parts and strips workflow tool payload text", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({
       messagesResponse: [
@@ -801,7 +805,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     expect(history).toHaveLength(1);
-    expect(history[0]?.text).toContain("<obp_tool_call>");
+    expect(history[0]?.text).toBe("Draft complete");
     expect(history[0]?.parts).toHaveLength(1);
     expect(history[0]?.parts[0]?.kind).toBe("reasoning");
     expect(mock.session.messagesCalls).toHaveLength(1);

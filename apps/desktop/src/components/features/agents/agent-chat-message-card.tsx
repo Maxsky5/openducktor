@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { Bot, Brain, Hammer, LoaderCircle, User } from "lucide-react";
+import { Brain, Hammer, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 
 type AgentChatMessageCardProps = {
@@ -37,9 +37,6 @@ const statusBadgeVariant = (
 };
 
 const roleLabel = (role: AgentChatMessage["role"]): string => {
-  if (role === "user") {
-    return "User";
-  }
   if (role === "assistant") {
     return "Assistant";
   }
@@ -57,6 +54,7 @@ const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
 export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): ReactElement {
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
+  const isUserMessage = message.role === "user";
   const isToolMessage = meta?.kind === "tool";
   const isSubtaskMessage = meta?.kind === "subtask";
   const isSystemPromptMessage =
@@ -70,35 +68,34 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
     <article
       className={cn(
         "text-sm",
+        isUserMessage &&
+          "ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm border border-sky-100 bg-sky-50 px-4 py-3 text-slate-900 shadow-sm",
         isToolMessage
           ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900"
           : isSubtaskMessage
             ? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
             : isSystemPromptMessage
               ? "rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800"
-              : "border-none bg-transparent px-0 py-0 text-slate-800",
+              : isUserMessage
+                ? ""
+                : "border-none bg-transparent px-0 py-0 text-slate-800",
       )}
     >
-      <header
-        className={cn(
-          "mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
-          isRichCardMessage ? "" : "px-1",
-        )}
-      >
-        <span className="inline-flex items-center gap-1">
-          {message.role === "user" ? (
-            <User className="size-3" />
-          ) : message.role === "assistant" ? (
-            <Bot className="size-3" />
-          ) : message.role === "thinking" ? (
-            <Brain className="size-3" />
-          ) : message.role === "tool" ? (
-            <Hammer className="size-3" />
-          ) : null}
-          {roleLabel(message.role)}
-        </span>
-        {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
-      </header>
+      {!isUserMessage ? (
+        <header
+          className={cn(
+            "mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
+            isRichCardMessage ? "" : "px-1",
+          )}
+        >
+          <span className="inline-flex items-center gap-1">
+            {message.role === "thinking" ? <Brain className="size-3" /> : null}
+            {message.role === "tool" ? <Hammer className="size-3" /> : null}
+            {roleLabel(message.role)}
+          </span>
+          {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
+        </header>
+      ) : null}
 
       {meta?.kind === "reasoning" ? (
         <p className="whitespace-pre-wrap leading-6 text-slate-700">
@@ -179,11 +176,16 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
           </div>
         </details>
       ) : message.role === "user" ? (
-        <p className="whitespace-pre-wrap leading-6">{message.content}</p>
-      ) : message.role === "assistant" ||
-        message.role === "thinking" ||
-        message.role === "system" ? (
+        <>
+          <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+          {timeLabel ? (
+            <p className="mt-2 text-right text-[11px] font-medium text-slate-500">{timeLabel}</p>
+          ) : null}
+        </>
+      ) : message.role === "thinking" || message.role === "system" ? (
         <p className="whitespace-pre-wrap leading-6 text-slate-700">{message.content}</p>
+      ) : message.role === "assistant" ? (
+        <MarkdownRenderer markdown={message.content} variant="compact" />
       ) : (
         <MarkdownRenderer markdown={message.content} variant="compact" />
       )}
