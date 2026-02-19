@@ -83,6 +83,13 @@ const stripToolPrefix = (tool: string, value: string): string => {
     .trim();
 };
 
+const toSingleLineMarkdown = (value: string): string => {
+  return value
+    .replace(/\s*\n+\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+};
+
 const roleLabel = (role: AgentChatMessage["role"]): string => {
   if (role === "assistant") {
     return "Assistant";
@@ -127,10 +134,66 @@ const hasNonEmptyText = (value: unknown): value is string => {
   return typeof value === "string" && value.trim().length > 0;
 };
 
+const readInputString = (
+  input: Record<string, unknown> | undefined,
+  keys: string[],
+): string | null => {
+  if (!input) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+};
+
+const summarizeSearchToolInput = (
+  tool: string,
+  input: Record<string, unknown> | undefined,
+): string | null => {
+  if (!input) {
+    return null;
+  }
+  const pattern = readInputString(input, [
+    "pattern",
+    "query",
+    "regex",
+    "glob",
+    "expression",
+    "name",
+  ]);
+  const path = readInputString(input, ["path", "cwd", "directory", "root", "basePath"]);
+  const normalizedPath = path && path !== "." ? path : null;
+
+  if (tool === "glob" && pattern && normalizedPath) {
+    return `${pattern} in ${normalizedPath}`;
+  }
+  if ((tool === "glob" || tool === "grep" || tool === "find" || tool === "search") && pattern) {
+    return normalizedPath ? `${pattern} in ${normalizedPath}` : pattern;
+  }
+  if (normalizedPath) {
+    return normalizedPath;
+  }
+  if (path === ".") {
+    return "workspace";
+  }
+  return null;
+};
+
 const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
   const candidate =
     input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
-  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate.trim() : null;
+  if (typeof candidate !== "string") {
+    return null;
+  }
+  const normalized = candidate.trim();
+  if (normalized.length === 0 || normalized === ".") {
+    return null;
+  }
+  return normalized;
 };
 
 const getTaskSummary = (
@@ -200,18 +263,22 @@ const buildToolSummary = (
     return compactText(meta.error, 220);
   }
 
+  if (meta.title && meta.title.trim().length > 0) {
+    return compactText(meta.title, 160);
+  }
+
   const path = extractPathFromInput(meta.input);
-  if (path) {
-    return path;
+  const searchSummary = summarizeSearchToolInput(lowerTool, meta.input);
+  if (searchSummary) {
+    return compactText(searchSummary, 160);
+  }
+  if (path && lowerTool !== "glob" && lowerTool !== "grep") {
+    return compactText(path, 160);
   }
 
   const command = meta.input?.command;
   if (lowerTool === "bash" && typeof command === "string" && command.trim().length > 0) {
     return compactText(command, 120);
-  }
-
-  if (meta.title && meta.title.trim().length > 0) {
-    return compactText(meta.title, 160);
   }
 
   if (!OUTPUT_IGNORED_TOOL_NAMES.has(lowerTool) && hasNonEmptyText(meta.output)) {
@@ -251,9 +318,12 @@ const getToolDuration = (
   return endedAtMs - meta.startedAtMs;
 };
 
-export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): ReactElement {
+export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): ReactElement | null {
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
+  if (meta?.kind === "step") {
+    return null;
+  }
   const isUserMessage = message.role === "user";
   const isToolMessage = meta?.kind === "tool";
   const isWorkflowToolMessage =
@@ -311,9 +381,15 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
       ) : null}
 
       {meta?.kind === "reasoning" ? (
-        <p className="whitespace-pre-wrap leading-6 text-slate-700">
-          {message.content || "Thinking..."}
-        </p>
+        <MarkdownRenderer
+          markdown={toSingleLineMarkdown(message.content || "Thinking...")}
+          variant="compact"
+          className={cn(
+            "overflow-hidden whitespace-nowrap text-ellipsis text-slate-700",
+            "prose-p:my-0 prose-p:inline prose-strong:inline prose-em:inline",
+            "prose-ul:my-0 prose-ol:my-0 prose-li:my-0",
+          )}
+        />
       ) : meta?.kind === "tool" ? (
         (() => {
           const isWorkflowTool = WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());
@@ -401,14 +477,6 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
             </div>
           );
         })()
-      ) : meta?.kind === "step" ? (
-        <div className="space-y-1 text-xs text-slate-600">
-          <p className="font-medium text-slate-700">
-            {meta.phase === "start" ? "Step started" : "Step finished"}
-            {typeof meta.cost === "number" ? ` · cost ${meta.cost.toFixed(2)}` : ""}
-          </p>
-          {meta.reason ? <p>{meta.reason}</p> : null}
-        </div>
       ) : meta?.kind === "subtask" ? (
         <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-violet-700">
           <MessageSquareQuote className="size-3.5 shrink-0 text-violet-500" />
@@ -437,9 +505,9 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
       ) : message.role === "thinking" || message.role === "system" ? (
         <p className="whitespace-pre-wrap leading-6 text-slate-700">{message.content}</p>
       ) : message.role === "assistant" ? (
-        <MarkdownRenderer markdown={message.content} variant="compact" />
+        <MarkdownRenderer markdown={message.content} variant="document" />
       ) : (
-        <MarkdownRenderer markdown={message.content} variant="compact" />
+        <MarkdownRenderer markdown={message.content} variant="document" />
       )}
     </article>
   );

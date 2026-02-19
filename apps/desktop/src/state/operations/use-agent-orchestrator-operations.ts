@@ -362,26 +362,6 @@ const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChat
         continue;
       }
 
-      if (part.kind === "step") {
-        if (part.phase === "start") {
-          continue;
-        }
-        next.push({
-          id: `history:step:${message.messageId}:${part.partId}`,
-          role: "system",
-          content: `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
-          timestamp: message.timestamp,
-          meta: {
-            kind: "step",
-            partId: part.partId,
-            phase: part.phase,
-            ...(part.reason ? { reason: part.reason } : {}),
-            ...(typeof part.cost === "number" ? { cost: part.cost } : {}),
-          },
-        });
-        continue;
-      }
-
       if (part.kind === "subtask") {
         next.push({
           id: `history:subtask:${message.messageId}:${part.partId}`,
@@ -780,37 +760,6 @@ export function useAgentOrchestratorOperations({
                       ? { startedAtMs: part.startedAtMs }
                       : {}),
                     ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-                  },
-                }),
-              }),
-              { persist: false },
-            );
-            return;
-          }
-
-          if (part.kind === "step") {
-            if (part.phase === "start") {
-              return;
-            }
-            updateSession(
-              sessionId,
-              (current) => ({
-                ...current,
-                status: "running",
-                messages: upsertMessage(current.messages, {
-                  id: `step:${streamMessageKey}`,
-                  role: "system",
-                  content:
-                    part.phase === "start"
-                      ? "Agent step started"
-                      : `Agent step finished${part.reason ? ` (${part.reason})` : ""}`,
-                  timestamp: event.timestamp,
-                  meta: {
-                    kind: "step",
-                    partId: part.partId,
-                    phase: part.phase,
-                    ...(part.reason ? { reason: part.reason } : {}),
-                    ...(typeof part.cost === "number" ? { cost: part.cost } : {}),
                   },
                 }),
               }),

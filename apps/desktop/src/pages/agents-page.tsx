@@ -115,6 +115,10 @@ const formatDocumentUpdatedAt = (iso: string | null): string | null => {
   }).format(value);
 };
 
+const hasLabeledCodeFence = (markdown: string): boolean => {
+  return markdown.includes("```") && /```[a-z0-9_-]+/i.test(markdown);
+};
+
 const isRole = (value: string | null): value is AgentRole =>
   value === "spec" || value === "planner" || value === "build" || value === "qa";
 
@@ -1242,7 +1246,11 @@ export function AgentsPage(): ReactElement {
               </summary>
               <div className="border-t border-slate-200 p-3">
                 {specDoc.markdown.trim().length > 0 ? (
-                  <MarkdownRenderer markdown={specDoc.markdown} variant="compact" />
+                  <MarkdownRenderer
+                    markdown={specDoc.markdown}
+                    variant="document"
+                    premiumCodeBlocks={hasLabeledCodeFence(specDoc.markdown)}
+                  />
                 ) : (
                   <p className="text-sm text-slate-500">No spec document yet.</p>
                 )}
@@ -1258,7 +1266,11 @@ export function AgentsPage(): ReactElement {
               </summary>
               <div className="border-t border-slate-200 p-3">
                 {planDoc.markdown.trim().length > 0 ? (
-                  <MarkdownRenderer markdown={planDoc.markdown} variant="compact" />
+                  <MarkdownRenderer
+                    markdown={planDoc.markdown}
+                    variant="document"
+                    premiumCodeBlocks={hasLabeledCodeFence(planDoc.markdown)}
+                  />
                 ) : (
                   <p className="text-sm text-slate-500">No implementation plan yet.</p>
                 )}
@@ -1274,7 +1286,11 @@ export function AgentsPage(): ReactElement {
               </summary>
               <div className="border-t border-slate-200 p-3">
                 {qaDoc.markdown.trim().length > 0 ? (
-                  <MarkdownRenderer markdown={qaDoc.markdown} variant="compact" />
+                  <MarkdownRenderer
+                    markdown={qaDoc.markdown}
+                    variant="document"
+                    premiumCodeBlocks={hasLabeledCodeFence(qaDoc.markdown)}
+                  />
                 ) : (
                   <p className="text-sm text-slate-500">No QA report yet.</p>
                 )}
