@@ -386,6 +386,12 @@ const canSetPlan = (task: TaskCard): boolean => {
 };
 
 const normalizeTitleKey = (value: string): string => value.trim().toLowerCase();
+const toSearchSlug = (value: string): string => {
+  if (!/[a-z0-9]/i.test(value)) {
+    return "";
+  }
+  return sanitizeSlug(value);
+};
 
 export const normalizePlanSubtasks = (inputs: PlanSubtaskInput[]): PlanSubtaskInput[] => {
   const normalized: PlanSubtaskInput[] = [];
@@ -673,20 +679,131 @@ export class OdtTaskStore {
       .map((entry) => issueToTaskCard(entry as RawIssue, this.metadataNamespace));
   }
 
+  private formatTaskRef(task: TaskCard): string {
+    return `${task.id} (${task.title})`;
+  }
+
+  private resolveTaskFromTasks(tasks: TaskCard[], requestedTaskId: string): TaskCard {
+    const requestedLiteral = requestedTaskId.trim();
+    if (requestedLiteral.length === 0) {
+      throw new Error("Missing taskId.");
+    }
+
+    const requestedLower = normalizeTitleKey(requestedLiteral);
+    const requestedSlug = toSearchSlug(requestedLiteral);
+
+    const exact = tasks.find((entry) => entry.id === requestedLiteral);
+    if (exact) {
+      return exact;
+    }
+
+    const byCaseInsensitiveId = tasks.filter(
+      (entry) => normalizeTitleKey(entry.id) === requestedLower,
+    );
+    const caseInsensitiveMatch = byCaseInsensitiveId.at(0);
+    if (byCaseInsensitiveId.length === 1 && caseInsensitiveMatch) {
+      return caseInsensitiveMatch;
+    }
+    if (byCaseInsensitiveId.length > 1) {
+      const candidates = byCaseInsensitiveId.slice(0, 5).map((entry) => this.formatTaskRef(entry));
+      throw new Error(
+        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+      );
+    }
+
+    if (requestedSlug.length > 0) {
+      const byIdSuffix = tasks.filter((entry) => {
+        const idLower = normalizeTitleKey(entry.id);
+        return idLower === requestedSlug || idLower.endsWith(`-${requestedSlug}`);
+      });
+      const idSuffixMatch = byIdSuffix.at(0);
+      if (byIdSuffix.length === 1 && idSuffixMatch) {
+        return idSuffixMatch;
+      }
+      if (byIdSuffix.length > 1) {
+        const candidates = byIdSuffix.slice(0, 5).map((entry) => this.formatTaskRef(entry));
+        throw new Error(
+          `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+        );
+      }
+    }
+
+    const byTitleExact = tasks.filter((entry) => normalizeTitleKey(entry.title) === requestedLower);
+    const titleExactMatch = byTitleExact.at(0);
+    if (byTitleExact.length === 1 && titleExactMatch) {
+      return titleExactMatch;
+    }
+    if (byTitleExact.length > 1) {
+      const candidates = byTitleExact.slice(0, 5).map((entry) => this.formatTaskRef(entry));
+      throw new Error(
+        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+      );
+    }
+
+    if (requestedSlug.length > 0) {
+      const byTitleSlugExact = tasks.filter((entry) => toSearchSlug(entry.title) === requestedSlug);
+      const titleSlugMatch = byTitleSlugExact.at(0);
+      if (byTitleSlugExact.length === 1 && titleSlugMatch) {
+        return titleSlugMatch;
+      }
+      if (byTitleSlugExact.length > 1) {
+        const candidates = byTitleSlugExact.slice(0, 5).map((entry) => this.formatTaskRef(entry));
+        throw new Error(
+          `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+        );
+      }
+    }
+
+    const byTitleContains = tasks.filter((entry) => {
+      const titleLower = normalizeTitleKey(entry.title);
+      const titleSlug = toSearchSlug(entry.title);
+      return (
+        (requestedLower.length > 0 && titleLower.includes(requestedLower)) ||
+        (requestedSlug.length > 0 && titleSlug.includes(requestedSlug))
+      );
+    });
+    const titleContainsMatch = byTitleContains.at(0);
+    if (byTitleContains.length === 1 && titleContainsMatch) {
+      return titleContainsMatch;
+    }
+    if (byTitleContains.length > 1) {
+      const candidates = byTitleContains.slice(0, 5).map((entry) => this.formatTaskRef(entry));
+      throw new Error(
+        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+      );
+    }
+
+    const hints = tasks
+      .filter((entry) => {
+        const idLower = normalizeTitleKey(entry.id);
+        const titleLower = normalizeTitleKey(entry.title);
+        const titleSlug = toSearchSlug(entry.title);
+        return (
+          (requestedLower.length > 0 &&
+            (idLower.includes(requestedLower) || titleLower.includes(requestedLower))) ||
+          (requestedSlug.length > 0 &&
+            (idLower.includes(requestedSlug) || titleSlug.includes(requestedSlug)))
+        );
+      })
+      .slice(0, 5);
+    const fallback = (hints.length > 0 ? hints : tasks.slice(0, 5)).map((entry) =>
+      this.formatTaskRef(entry),
+    );
+    const hintSuffix = fallback.length > 0 ? ` Candidate task ids: ${fallback.join(", ")}` : "";
+    throw new Error(`Task not found: ${requestedTaskId}.${hintSuffix}`);
+  }
+
   private async transitionTask(taskId: string, next: TaskStatus): Promise<TaskCard> {
     const tasks = await this.listTasks();
-    const task = tasks.find((entry) => entry.id === taskId);
-    if (!task) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
+    const task = this.resolveTaskFromTasks(tasks, taskId);
 
     validateTransition(task, tasks, task.status, next);
 
     if (task.status !== next) {
-      await this.runBdJson(["update", taskId, "--status", next]);
+      await this.runBdJson(["update", task.id, "--status", next]);
     }
 
-    const refreshed = await this.showRawIssue(taskId);
+    const refreshed = await this.showRawIssue(task.id);
     return issueToTaskCard(refreshed, this.metadataNamespace);
   }
 
@@ -785,12 +902,14 @@ export class OdtTaskStore {
   async readTask(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = ReadTaskInputSchema.parse(rawInput);
-    const issue = await this.showRawIssue(input.taskId);
-    const task = issueToTaskCard(issue, this.metadataNamespace);
+    const tasks = await this.listTasks();
+    const task = this.resolveTaskFromTasks(tasks, input.taskId);
+    const issue = await this.showRawIssue(task.id);
+    const taskCard = issueToTaskCard(issue, this.metadataNamespace);
     const docs = this.parseDocs(issue);
 
     return {
-      task,
+      task: taskCard,
       documents: docs,
     };
   }
@@ -801,16 +920,13 @@ export class OdtTaskStore {
     const markdown = input.markdown.trim();
 
     const tasks = await this.listTasks();
-    const task = tasks.find((entry) => entry.id === input.taskId);
-    if (!task) {
-      throw new Error(`Task not found: ${input.taskId}`);
-    }
+    const task = this.resolveTaskFromTasks(tasks, input.taskId);
 
     if (!canSetSpecFromStatus(task.status)) {
       throw new Error(`set_spec is only allowed from open/spec_ready (current: ${task.status})`);
     }
 
-    const issue = await this.showRawIssue(input.taskId);
+    const issue = await this.showRawIssue(task.id);
     const { root, namespace, documents } = this.getNamespaceData(issue);
     const nextRevision = (parseMarkdownEntries(documents.spec).at(-1)?.revision ?? 0) + 1;
 
@@ -833,10 +949,10 @@ export class OdtTaskStore {
       documents: nextDocuments,
     };
 
-    await this.writeNamespace(input.taskId, root, nextNamespace);
+    await this.writeNamespace(task.id, root, nextNamespace);
 
     const nextTask =
-      task.status === "open" ? await this.transitionTask(input.taskId, "spec_ready") : task;
+      task.status === "open" ? await this.transitionTask(task.id, "spec_ready") : task;
 
     return {
       task: nextTask,
@@ -854,10 +970,7 @@ export class OdtTaskStore {
     const markdown = input.markdown.trim();
 
     const tasks = await this.listTasks();
-    const task = tasks.find((entry) => entry.id === input.taskId);
-    if (!task) {
-      throw new Error(`Task not found: ${input.taskId}`);
-    }
+    const task = this.resolveTaskFromTasks(tasks, input.taskId);
 
     if (!canSetPlan(task)) {
       throw new Error(
@@ -868,7 +981,7 @@ export class OdtTaskStore {
     const normalizedSubtasks = normalizePlanSubtasks(input.subtasks ?? []);
     validatePlanSubtaskRules(task, tasks, normalizedSubtasks);
 
-    const issue = await this.showRawIssue(input.taskId);
+    const issue = await this.showRawIssue(task.id);
     const { root, namespace, documents } = this.getNamespaceData(issue);
     const nextRevision =
       (parseMarkdownEntries(documents.implementationPlan).at(-1)?.revision ?? 0) + 1;
@@ -892,7 +1005,7 @@ export class OdtTaskStore {
       documents: nextDocuments,
     };
 
-    await this.writeNamespace(input.taskId, root, nextNamespace);
+    await this.writeNamespace(task.id, root, nextNamespace);
 
     const createdSubtaskIds: string[] = [];
     if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
@@ -950,13 +1063,10 @@ export class OdtTaskStore {
     const input = BuildCompletedInputSchema.parse(rawInput);
 
     const tasks = await this.listTasks();
-    const task = tasks.find((entry) => entry.id === input.taskId);
-    if (!task) {
-      throw new Error(`Task not found: ${input.taskId}`);
-    }
+    const task = this.resolveTaskFromTasks(tasks, input.taskId);
 
     const nextStatus: TaskStatus = task.aiReviewEnabled ? "ai_review" : "human_review";
-    const updated = await this.transitionTask(input.taskId, nextStatus);
+    const updated = await this.transitionTask(task.id, nextStatus);
     return {
       task: updated,
       ...(input.summary ? { summary: input.summary } : {}),
@@ -995,32 +1105,33 @@ export class OdtTaskStore {
     await this.writeNamespace(taskId, root, nextNamespace);
   }
 
-  private async ensureQaTransitionAllowed(taskId: string, nextStatus: TaskStatus): Promise<void> {
+  private async ensureQaTransitionAllowed(
+    taskId: string,
+    nextStatus: TaskStatus,
+  ): Promise<TaskCard> {
     const tasks = await this.listTasks();
-    const task = tasks.find((entry) => entry.id === taskId);
-    if (!task) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
+    const task = this.resolveTaskFromTasks(tasks, taskId);
 
     validateTransition(task, tasks, task.status, nextStatus);
+    return task;
   }
 
   async qaApproved(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaApprovedInputSchema.parse(rawInput);
-    await this.ensureQaTransitionAllowed(input.taskId, "human_review");
-    await this.appendQaReport(input.taskId, input.reportMarkdown.trim(), "approved");
-    const task = await this.transitionTask(input.taskId, "human_review");
-    return { task };
+    const task = await this.ensureQaTransitionAllowed(input.taskId, "human_review");
+    await this.appendQaReport(task.id, input.reportMarkdown.trim(), "approved");
+    const updated = await this.transitionTask(task.id, "human_review");
+    return { task: updated };
   }
 
   async qaRejected(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaRejectedInputSchema.parse(rawInput);
-    await this.ensureQaTransitionAllowed(input.taskId, "in_progress");
-    await this.appendQaReport(input.taskId, input.reportMarkdown.trim(), "rejected");
-    const task = await this.transitionTask(input.taskId, "in_progress");
-    return { task };
+    const task = await this.ensureQaTransitionAllowed(input.taskId, "in_progress");
+    await this.appendQaReport(task.id, input.reportMarkdown.trim(), "rejected");
+    const updated = await this.transitionTask(task.id, "in_progress");
+    return { task: updated };
   }
 }
 

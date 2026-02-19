@@ -153,7 +153,7 @@ const roleBasePrompt = (role: AgentRole): string => {
   }
 };
 
-const buildToolProtocol = (role: AgentRole): string => {
+const buildToolProtocol = (role: AgentRole, taskId: string): string => {
   const allowedTools = AGENT_ROLE_TOOL_POLICY[role];
   const toolList = allowedTools.map((tool) => `- ${TOOL_ARG_SPEC[tool]}`).join("\n");
 
@@ -164,7 +164,12 @@ Call them directly as tool invocations; do not emit XML wrappers or pseudo-tool 
 Allowed tools for this role:
 ${toolList}
 
-Always include taskId and use the current task id from context.
+Session task lock:
+- Use this exact taskId literal in every odt_* call: "${taskId}".
+- Never derive taskId from title/slug or rewrite it.
+- If a tool call fails with task-id mismatch, retry with "${taskId}".
+
+Always include taskId in every odt_* tool call.
 Never invent tool names. Never call tools not listed above.
 `;
 };
@@ -196,7 +201,7 @@ Existing documents:
     roleBasePrompt(input.role),
     SCENARIO_DIRECTIVES[input.scenario],
     WORKFLOW_GUARDS,
-    buildToolProtocol(input.role),
+    buildToolProtocol(input.role, task.taskId),
     taskContext,
   ]
     .join("\n")

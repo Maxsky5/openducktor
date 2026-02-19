@@ -178,6 +178,42 @@ const toDisplayText = (value: unknown): string | undefined => {
   }
 };
 
+const outputTextFromMcpPayload = (value: unknown): string | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const content = (value as { content?: unknown }).content;
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const textChunks = content
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const text = (entry as { text?: unknown }).text;
+      return typeof text === "string" ? text.trim() : null;
+    })
+    .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  if (textChunks.length === 0) {
+    return undefined;
+  }
+  return textChunks.join("\n");
+};
+
+const readToolOutputText = (value: unknown): string | undefined => {
+  return outputTextFromMcpPayload(value) ?? toDisplayText(value);
+};
+
+const isToolOutputError = (value: unknown): boolean => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const isError = (value as { isError?: unknown }).isError;
+  return isError === true;
+};
+
 const normalizeMetadata = (value: unknown): Record<string, unknown> | undefined => {
   if (!value || typeof value !== "object") {
     return undefined;
@@ -262,8 +298,23 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
         };
       }
       if (part.state.status === "completed") {
-        const output = toDisplayText(part.state.output);
+        const output = readToolOutputText(part.state.output);
         const title = toDisplayText(part.state.title);
+        if (isToolOutputError(part.state.output)) {
+          return {
+            kind: "tool",
+            messageId: part.messageID,
+            partId: part.id,
+            callId: part.callID,
+            tool: part.tool,
+            status: "error",
+            input: part.state.input,
+            ...(output ? { error: output } : {}),
+            ...(title ? { title } : {}),
+            ...(metadata ? { metadata } : {}),
+            ...timing,
+          };
+        }
         return {
           kind: "tool",
           messageId: part.messageID,

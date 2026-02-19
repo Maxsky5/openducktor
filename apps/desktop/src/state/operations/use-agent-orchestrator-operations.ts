@@ -94,27 +94,32 @@ const inferScenario = (
   return "build_implementation_start";
 };
 
-const kickoffPrompt = (role: AgentRole, scenario: AgentScenario): string => {
+const kickoffPrompt = (role: AgentRole, scenario: AgentScenario, taskId: string): string => {
+  const taskInstruction = `Use taskId "${taskId}" for every odt_* tool call.`;
   if (role === "spec") {
-    return scenario === "spec_revision"
-      ? "Revise the current specification and call odt_set_spec with complete markdown when ready."
-      : "Write the initial specification and call odt_set_spec with complete markdown when ready.";
+    const base =
+      scenario === "spec_revision"
+        ? "Revise the current specification and call odt_set_spec with complete markdown when ready."
+        : "Write the initial specification and call odt_set_spec with complete markdown when ready.";
+    return `${base}\n${taskInstruction}`;
   }
   if (role === "planner") {
-    return scenario === "planner_revision"
-      ? "Revise the current implementation plan and call odt_set_plan when ready."
-      : "Create the initial implementation plan and call odt_set_plan when ready.";
+    const base =
+      scenario === "planner_revision"
+        ? "Revise the current implementation plan and call odt_set_plan when ready."
+        : "Create the initial implementation plan and call odt_set_plan when ready.";
+    return `${base}\n${taskInstruction}`;
   }
   if (role === "qa") {
-    return "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.";
+    return `Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\n${taskInstruction}`;
   }
   if (scenario === "build_after_qa_rejected") {
-    return "Address all QA rejection findings and call odt_build_completed when done.";
+    return `Address all QA rejection findings and call odt_build_completed when done.\n${taskInstruction}`;
   }
   if (scenario === "build_after_human_request_changes") {
-    return "Apply all human-requested changes and call odt_build_completed when done.";
+    return `Apply all human-requested changes and call odt_build_completed when done.\n${taskInstruction}`;
   }
-  return "Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.";
+  return `Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.\n${taskInstruction}`;
 };
 
 const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelection | null => {
@@ -1520,7 +1525,7 @@ export function useAgentOrchestratorOperations({
       void loadSessionModelCatalog(summary.sessionId, runtime.baseUrl, runtime.workingDirectory);
 
       if (sendKickoff) {
-        await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario));
+        await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario, task.id));
         await refreshTaskData(activeRepo);
       }
 

@@ -25,6 +25,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("native MCP tools");
     expect(prompt).toContain("Allowed tools for this role");
     expect(prompt).toContain("odt_set_plan");
+    expect(prompt).toContain('Use this exact taskId literal in every odt_* call: "task-42"');
     expect(prompt).not.toContain("- odt_set_spec(");
     expect(prompt).not.toContain("- odt_build_completed(");
     expect(prompt).not.toContain("- odt_qa_rejected(");

@@ -487,6 +487,78 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("maps completed MCP tool part with isError=true as error status", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            time: {
+              completed: Date.parse("2026-02-17T12:00:05Z"),
+            },
+            finish: "tool-calls",
+          },
+          parts: [
+            {
+              id: "tool-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              callID: "call-1",
+              type: "tool",
+              tool: "openducktor_odt_set_spec",
+              state: {
+                status: "completed",
+                input: { taskId: "facebook-oauth" },
+                output: {
+                  content: [{ type: "text", text: "Task not found: facebook-oauth" }],
+                  isError: true,
+                },
+              },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await Bun.sleep(0);
+
+    const toolPartEvent = events.find((entry) => {
+      if (entry.type !== "assistant_part") {
+        return false;
+      }
+      const part = entry.part;
+      return part.kind === "tool";
+    });
+
+    expect(toolPartEvent).toBeDefined();
+    if (
+      !toolPartEvent ||
+      toolPartEvent.type !== "assistant_part" ||
+      toolPartEvent.part.kind !== "tool"
+    ) {
+      throw new Error("Expected tool part event");
+    }
+    expect(toolPartEvent.part.status).toBe("error");
+    expect(toolPartEvent.part.error).toContain("Task not found");
+  });
+
   test("listAvailableModels returns provider models and primary agents", async () => {
     const mock = makeMockClient({
       agentsResponse: [

@@ -173,6 +173,143 @@ describe("openducktor-mcp lib", () => {
     ).toThrow();
   });
 
+  test("setSpec resolves unique slug-like task identifier to canonical task id", async () => {
+    let metadataTargetTaskId: string | null = null;
+    let statusTargetTaskId: string | null = null;
+    let status = "open";
+
+    const { runProcess } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "fairnest-wsp",
+              title: "Add Facebook OAuth Login",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+            {
+              id: "fairnest-abc",
+              title: "Improve UI spacing",
+              status: "open",
+              issue_type: "task",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "show") {
+        const id = args[2];
+        if (id !== "fairnest-wsp") {
+          return { ok: true, stdout: JSON.stringify([]) };
+        }
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "fairnest-wsp",
+              title: "Add Facebook OAuth Login",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "update" && args.includes("--metadata")) {
+        metadataTargetTaskId = args[2] ?? null;
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "update" && args.includes("--status")) {
+        statusTargetTaskId = args[2] ?? null;
+        status = args[args.indexOf("--status") + 1] ?? status;
+        return { ok: true, stdout: "{}" };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      {
+        runProcess,
+        now: () => "2026-02-19T12:00:00.000Z",
+      },
+    );
+
+    const result = (await store.setSpec({
+      taskId: "facebook-oauth",
+      markdown: "# Spec",
+    })) as { task: { id: string; status: string } };
+
+    expect(result.task.id).toBe("fairnest-wsp");
+    expect(result.task.status).toBe("spec_ready");
+    expect(metadataTargetTaskId).toBe("fairnest-wsp");
+    expect(statusTargetTaskId).toBe("fairnest-wsp");
+  });
+
+  test("setSpec fails with explicit candidates when task identifier is ambiguous", async () => {
+    const { runProcess } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "fairnest-a1",
+              title: "Add Facebook OAuth Login",
+              status: "open",
+              issue_type: "epic",
+              metadata: {},
+            },
+            {
+              id: "fairnest-a2",
+              title: "Harden Facebook OAuth callback",
+              status: "open",
+              issue_type: "feature",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      { runProcess },
+    );
+
+    await expect(
+      store.setSpec({
+        taskId: "facebook-oauth",
+        markdown: "# Spec",
+      }),
+    ).rejects.toThrow('Task identifier "facebook-oauth" is ambiguous');
+  });
+
   test("OdtTaskStore initialization is cached across concurrent calls", async () => {
     const { runProcess, calls } = buildProcessRunner((args) => {
       const command = args[1];
@@ -184,6 +321,20 @@ describe("openducktor-mcp lib", () => {
       }
       if (command === "config") {
         return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Task 1",
+              status: "open",
+              issue_type: "task",
+              metadata: {},
+            },
+          ]),
+        };
       }
       if (command === "show") {
         return {
@@ -219,6 +370,7 @@ describe("openducktor-mcp lib", () => {
 
     expect(calls.filter((entry) => entry.args[1] === "init")).toHaveLength(1);
     expect(calls.filter((entry) => entry.args[1] === "config")).toHaveLength(1);
+    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(3);
     expect(calls.filter((entry) => entry.args[1] === "show")).toHaveLength(3);
     for (const call of calls) {
       expect(call.command).toBe("bd");
