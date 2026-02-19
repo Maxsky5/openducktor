@@ -8,6 +8,7 @@ use host_infra_system::{
     build_branch_name, command_exists, pick_free_port, remove_worktree, resolve_central_beads_dir,
     run_command, run_command_allow_failure, version_command, AppConfigStore, RepoConfig,
 };
+use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -726,7 +727,13 @@ impl AppService {
         }
 
         let port = pick_free_port()?;
-        let mut child = spawn_opencode_server(Path::new(repo_path), port)?;
+        let metadata_namespace = self.config_store.task_metadata_namespace()?;
+        let mut child = spawn_opencode_server(
+            Path::new(repo_path),
+            Path::new(repo_path),
+            metadata_namespace.as_str(),
+            port,
+        )?;
         if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
             let _ = child.kill();
             return Err(error)
@@ -880,7 +887,13 @@ impl AppService {
         };
 
         let port = pick_free_port()?;
-        let mut child = spawn_opencode_server(Path::new(&runtime_working_directory), port)?;
+        let metadata_namespace = self.config_store.task_metadata_namespace()?;
+        let mut child = spawn_opencode_server(
+            Path::new(&runtime_working_directory),
+            Path::new(repo_path),
+            metadata_namespace.as_str(),
+            port,
+        )?;
         if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
             let _ = child.kill();
             if let (Some(repo), Some(worktree)) = (
@@ -1052,8 +1065,14 @@ impl AppService {
         }
 
         let port = pick_free_port()?;
+        let metadata_namespace = self.config_store.task_metadata_namespace()?;
 
-        let mut child = spawn_opencode_server(worktree_dir.as_path(), port)?;
+        let mut child = spawn_opencode_server(
+            worktree_dir.as_path(),
+            Path::new(repo_path),
+            metadata_namespace.as_str(),
+            port,
+        )?;
         if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
             let _ = child.kill();
             return Err(error).with_context(|| {
@@ -1712,14 +1731,116 @@ fn spawn_output_forwarder(
     });
 }
 
-fn spawn_opencode_server(working_directory: &Path, port: u16) -> Result<Child> {
+fn parse_mcp_command_json(raw: &str) -> Result<Vec<String>> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(raw).context("Invalid OPENDUCKTOR_MCP_COMMAND_JSON format")?;
+    let values = parsed
+        .as_array()
+        .ok_or_else(|| anyhow!("OPENDUCKTOR_MCP_COMMAND_JSON must be a JSON string array"))?;
+
+    let command = values
+        .iter()
+        .map(|entry| {
+            entry
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .ok_or_else(|| {
+                    anyhow!("OPENDUCKTOR_MCP_COMMAND_JSON must contain only non-empty strings")
+                })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    if command.is_empty() {
+        return Err(anyhow!("OPENDUCKTOR_MCP_COMMAND_JSON cannot be empty"));
+    }
+    Ok(command)
+}
+
+fn default_mcp_workspace_root() -> Result<String> {
+    let from_env = std::env::var("OPENDUCKTOR_WORKSPACE_ROOT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if let Some(root) = from_env {
+        return Ok(root);
+    }
+
+    let compiled_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = compiled_path
+        .ancestors()
+        .nth(5)
+        .ok_or_else(|| anyhow!("Unable to resolve OpenDucktor workspace root from manifest path"))?;
+    Ok(root.to_string_lossy().to_string())
+}
+
+fn resolve_mcp_command() -> Result<Vec<String>> {
+    if let Ok(raw) = std::env::var("OPENDUCKTOR_MCP_COMMAND_JSON") {
+        return parse_mcp_command_json(raw.as_str());
+    }
+
+    if command_exists("openducktor-mcp") {
+        return Ok(vec!["openducktor-mcp".to_string()]);
+    }
+
+    if !command_exists("bun") {
+        return Err(anyhow!(
+            "Missing MCP runner. Install `openducktor-mcp` on PATH or install bun for workspace fallback."
+        ));
+    }
+
+    let workspace_root = default_mcp_workspace_root()?;
+    Ok(vec![
+        "bun".to_string(),
+        "run".to_string(),
+        "--silent".to_string(),
+        "--cwd".to_string(),
+        workspace_root,
+        "--filter".to_string(),
+        "@openblueprint/openducktor-mcp".to_string(),
+        "start".to_string(),
+    ])
+}
+
+fn build_opencode_config_content(
+    repo_path_for_mcp: &Path,
+    metadata_namespace: &str,
+) -> Result<String> {
+    let mcp_command = resolve_mcp_command()?;
+    let beads_dir = resolve_central_beads_dir(repo_path_for_mcp)?;
+    let config = json!({
+        "logLevel": "info",
+        "mcp": {
+            "openducktor": {
+                "type": "local",
+                "enabled": true,
+                "command": mcp_command,
+                "environment": {
+                    "ODT_REPO_PATH": repo_path_for_mcp.to_string_lossy().to_string(),
+                    "ODT_BEADS_DIR": beads_dir.to_string_lossy().to_string(),
+                    "ODT_METADATA_NAMESPACE": metadata_namespace,
+                }
+            }
+        }
+    });
+    serde_json::to_string(&config).context("Failed to serialize OpenCode MCP config")
+}
+
+fn spawn_opencode_server(
+    working_directory: &Path,
+    repo_path_for_mcp: &Path,
+    metadata_namespace: &str,
+    port: u16,
+) -> Result<Child> {
+    let config_content = build_opencode_config_content(repo_path_for_mcp, metadata_namespace)?;
     Command::new("opencode")
         .arg("serve")
         .arg("--hostname")
         .arg("127.0.0.1")
         .arg("--port")
         .arg(port.to_string())
-        .env("OPENCODE_CONFIG_CONTENT", r#"{"logLevel":"info"}"#)
+        .env("OPENCODE_CONFIG_CONTENT", config_content)
         .current_dir(working_directory)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1750,7 +1871,7 @@ fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
 mod tests {
     use super::{
         allows_transition, can_set_plan, can_set_spec_from_status, derive_available_actions,
-        normalize_required_markdown, normalize_subtask_plan_inputs,
+        normalize_required_markdown, normalize_subtask_plan_inputs, parse_mcp_command_json,
         validate_parent_relationships_for_create, validate_parent_relationships_for_update,
         validate_plan_subtask_rules, validate_transition, wait_for_local_server,
     };
@@ -2058,5 +2179,25 @@ mod tests {
         drop(listener);
         let result = wait_for_local_server(port, Duration::from_millis(250));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_mcp_command_json_accepts_non_empty_string_array() {
+        let parsed = parse_mcp_command_json(r#"["openducktor-mcp","--repo","/tmp/repo"]"#)
+            .expect("command should parse");
+        assert_eq!(
+            parsed,
+            vec![
+                "openducktor-mcp".to_string(),
+                "--repo".to_string(),
+                "/tmp/repo".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_mcp_command_json_rejects_invalid_payloads() {
+        assert!(parse_mcp_command_json("{}").is_err());
+        assert!(parse_mcp_command_json(r#"["openducktor-mcp",""]"#).is_err());
     }
 }
