@@ -481,6 +481,31 @@ describe("OpencodeSdkAdapter", () => {
           },
         } as Event,
         {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: "assistant-1",
+              sessionID: "session-opencode-1",
+              role: "assistant",
+              time: {
+                created: Date.now(),
+                completed: Date.now(),
+              },
+              finish: "stop",
+            },
+            parts: [
+              {
+                id: "part-1",
+                sessionID: "session-opencode-1",
+                messageID: "assistant-1",
+                type: "text",
+                text: "Hello",
+                time: { start: Date.now(), end: Date.now() },
+              },
+            ],
+          },
+        } as Event,
+        {
           type: "session.status",
           properties: {
             sessionID: "session-opencode-1",
@@ -514,6 +539,7 @@ describe("OpencodeSdkAdapter", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(events.some((event) => event.type === "assistant_part")).toBe(true);
+    expect(events.some((event) => event.type === "assistant_message")).toBe(true);
     expect(events.some((event) => event.type === "session_status")).toBe(true);
     expect(events.some((event) => event.type === "permission_required")).toBe(true);
     expect(
@@ -733,7 +759,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(adapter.hasSession("obp-session-9")).toBe(true);
   });
 
-  test("loadSessionHistory maps assistant parts and strips tool XML blocks", async () => {
+  test("loadSessionHistory maps assistant parts and preserves raw assistant text", async () => {
     const executor = makeToolExecutor();
     const mock = makeMockClient({
       messagesResponse: [
@@ -775,7 +801,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     expect(history).toHaveLength(1);
-    expect(history[0]?.text).toBe("Draft complete");
+    expect(history[0]?.text).toContain("<obp_tool_call>");
     expect(history[0]?.parts).toHaveLength(1);
     expect(history[0]?.parts[0]?.kind).toBe("reasoning");
     expect(mock.session.messagesCalls).toHaveLength(1);

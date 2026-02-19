@@ -54,8 +54,6 @@ const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 const runningStates = new Set(["starting", "running", "blocked", "awaiting_done_confirmation"]);
 
 const now = (): string => new Date().toISOString();
-const OBC_TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*[\s\S]*?<\/obp_tool_call>/g;
-const OBC_TOOL_BLOCK_TAIL_PATTERN = /<obp_tool_call>[\s\S]*$/;
 const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 const WRITE_PERMISSION_HINTS = [
   "write",
@@ -72,11 +70,7 @@ const WRITE_PERMISSION_HINTS = [
 ];
 
 const sanitizeStreamingText = (value: string): string => {
-  return value
-    .replace(OBC_TOOL_BLOCK_PATTERN, "")
-    .replace(OBC_TOOL_BLOCK_TAIL_PATTERN, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimStart();
+  return value.replace(/\n{3,}/g, "\n\n").trimStart();
 };
 
 const isMutatingPermission = (

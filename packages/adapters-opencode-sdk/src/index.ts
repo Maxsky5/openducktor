@@ -56,6 +56,7 @@ type SessionRecord = {
   externalSessionId: string;
   streamAbortController: AbortController;
   streamDone: Promise<void>;
+  emittedAssistantMessageIds: Set<string>;
 };
 
 type ClientFactory = (input: { baseUrl: string; workingDirectory: string }) => OpencodeClient;
@@ -242,7 +243,7 @@ const sanitizeAssistantMessage = (
   rawMessage: string,
 ): { visible: string; toolCalls: AgentToolCall[] } => {
   const toolCalls = extractToolCalls(rawMessage);
-  const visible = rawMessage.replace(TOOL_BLOCK_PATTERN, "").trim();
+  const visible = rawMessage.trim();
   return { visible, toolCalls };
 };
 
@@ -788,6 +789,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       externalSessionId: input.externalSessionId,
       streamAbortController: controller,
       streamDone,
+      emittedAssistantMessageIds: new Set<string>(),
     });
 
     this.emit(input.sessionId, {
@@ -819,6 +821,10 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       parts: [{ type: "text", text: userMessage }],
     });
     const responseData = unwrapData(response, "prompt session");
+    const responseMessageId =
+      typeof (responseData as { info?: { id?: unknown } }).info?.id === "string"
+        ? ((responseData as { info: { id: string } }).info.id as string)
+        : null;
 
     for (const responsePart of responseData.parts) {
       const mappedPart = mapPartToAgentStreamPart(responsePart);
@@ -843,6 +849,9 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         timestamp: this.now(),
         message: parsed.visible,
       });
+      if (responseMessageId) {
+        session.emittedAssistantMessageIds.add(responseMessageId);
+      }
       emittedVisibleAssistantMessage = true;
     }
 
@@ -981,14 +990,102 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       }
 
       if (event.type === "message.updated") {
-        const info = (event.properties as Record<string, unknown>).info as
+        const properties = event.properties as Record<string, unknown>;
+        const info = properties.info as
           | Record<string, unknown>
           | undefined;
+        const normalizedParts: Part[] = [];
+        let messageId: string | undefined;
+        let role: string | undefined;
+
         if (info && typeof info === "object") {
-          const messageId = readStringProp(info, ["id", "messageID", "messageId", "message_id"]);
-          const role = readStringProp(info, ["role"]);
+          messageId = readStringProp(info, ["id", "messageID", "messageId", "message_id"]);
+          role = readStringProp(info, ["role"]);
           if (messageId && role) {
             messageRoleById.set(messageId, role);
+          }
+        }
+
+        const rawParts = Array.isArray(properties.parts)
+          ? (properties.parts as Array<unknown>)
+          : info && Array.isArray((info as { parts?: unknown }).parts)
+            ? (((info as { parts: Array<unknown> }).parts as Array<unknown>) ?? [])
+            : [];
+        if (messageId && rawParts.length > 0) {
+          for (const rawPart of rawParts) {
+            if (!rawPart || typeof rawPart !== "object") {
+              continue;
+            }
+            const rawPartRecord = rawPart as Record<string, unknown>;
+            const rawPartId = readStringProp(rawPartRecord, ["id"]);
+            if (!rawPartId) {
+              continue;
+            }
+
+            let nextPart = {
+              ...(rawPartRecord as Part),
+              ...(readStringProp(rawPartRecord, ["sessionID", "sessionId", "session_id"])
+                ? {}
+                : { sessionID: context.externalSessionId }),
+              ...(readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"])
+                ? {}
+                : { messageID: messageId }),
+            } as Part;
+
+            const pendingDeltas = pendingDeltasByPartId.get(rawPartId);
+            if (pendingDeltas && pendingDeltas.length > 0) {
+              for (const pending of pendingDeltas) {
+                const updated = applyDeltaToPart(nextPart, pending.field, pending.delta);
+                if (updated) {
+                  nextPart = updated;
+                }
+              }
+              pendingDeltasByPartId.delete(rawPartId);
+            }
+
+            partsById.set(rawPartId, nextPart);
+            normalizedParts.push(nextPart);
+            const mapped = mapPartToAgentStreamPart(nextPart);
+            if (mapped) {
+              const mappedRole = role ?? messageRoleById.get(mapped.messageId);
+              if (mappedRole === "user" && mapped.kind === "text") {
+                continue;
+              }
+              this.emit(context.sessionId, {
+                type: "assistant_part",
+                sessionId: context.sessionId,
+                timestamp: this.now(),
+                part: mapped,
+              });
+            }
+          }
+        }
+
+        const completedAt =
+          info && typeof info === "object"
+            ? ((info as { time?: { completed?: unknown } }).time?.completed ?? null)
+            : null;
+        const finish =
+          info && typeof info === "object" ? readStringProp(info, ["finish"]) : undefined;
+        if (
+          messageId &&
+          role === "assistant" &&
+          normalizedParts.length > 0 &&
+          (typeof completedAt === "number" || finish === "stop")
+        ) {
+          const text = readTextFromParts(normalizedParts);
+          if (text.length > 0) {
+            const session = this.sessions.get(context.sessionId);
+            const emitted = session?.emittedAssistantMessageIds;
+            if (!emitted?.has(messageId)) {
+              this.emit(context.sessionId, {
+                type: "assistant_message",
+                sessionId: context.sessionId,
+                timestamp: this.now(),
+                message: text,
+              });
+              emitted?.add(messageId);
+            }
           }
         }
       } else if (event.type === "message.part.delta") {

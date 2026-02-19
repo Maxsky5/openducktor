@@ -851,15 +851,14 @@ export function AgentsPage(): ReactElement {
               ))}
 
               {activeSession?.draftAssistantText ? (
-                <article className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                <article className="px-1 py-1 text-sm text-slate-700">
                   <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     assistant (streaming)
                     <LoaderCircle className="size-3 animate-spin" />
                   </header>
-                  <MarkdownRenderer
-                    markdown={`${activeSession.draftAssistantText}▍`}
-                    variant="compact"
-                  />
+                  <p className="whitespace-pre-wrap leading-6 text-slate-700">
+                    {`${activeSession.draftAssistantText}▍`}
+                  </p>
                 </article>
               ) : null}
 

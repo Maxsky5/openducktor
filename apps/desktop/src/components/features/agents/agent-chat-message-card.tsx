@@ -61,6 +61,7 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
   const isSubtaskMessage = meta?.kind === "subtask";
   const isSystemPromptMessage =
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
+  const isRichCardMessage = isToolMessage || isSubtaskMessage || isSystemPromptMessage;
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
@@ -68,15 +69,22 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
   return (
     <article
       className={cn(
-        "rounded-md border px-3 py-2 text-sm",
+        "text-sm",
         isToolMessage
-          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900"
           : isSubtaskMessage
-            ? "border-amber-200 bg-amber-50 text-amber-900"
-            : "border-slate-200 bg-white text-slate-800",
+            ? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
+            : isSystemPromptMessage
+              ? "rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800"
+              : "border-none bg-transparent px-0 py-0 text-slate-800",
       )}
     >
-      <header className="mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <header
+        className={cn(
+          "mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
+          isRichCardMessage ? "" : "px-1",
+        )}
+      >
         <span className="inline-flex items-center gap-1">
           {message.role === "user" ? (
             <User className="size-3" />
@@ -172,7 +180,9 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
         </details>
       ) : message.role === "user" ? (
         <p className="whitespace-pre-wrap leading-6">{message.content}</p>
-      ) : message.role === "thinking" || message.role === "system" ? (
+      ) : message.role === "assistant" ||
+        message.role === "thinking" ||
+        message.role === "system" ? (
         <p className="whitespace-pre-wrap leading-6 text-slate-700">{message.content}</p>
       ) : (
         <MarkdownRenderer markdown={message.content} variant="compact" />
