@@ -9,6 +9,7 @@ import {
   type AgentScenario,
   type AgentSessionHistoryMessage,
   buildAgentSystemPrompt,
+  isOdtWorkflowMutationToolName,
 } from "@openblueprint/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -924,7 +925,7 @@ export function useAgentOrchestratorOperations({
                 const previousStatus =
                   existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
                 if (
-                  part.tool.toLowerCase().startsWith("odt_") &&
+                  isOdtWorkflowMutationToolName(part.tool) &&
                   part.status === "completed" &&
                   previousStatus !== "completed"
                 ) {

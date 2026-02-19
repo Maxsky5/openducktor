@@ -1,5 +1,4 @@
 import {
-  AGENT_ROLE_TOOL_POLICY,
   type AgentEnginePort,
   type AgentEvent,
   type AgentModelCatalog,
@@ -15,6 +14,7 @@ import {
   type ResumeAgentSessionInput,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
+  buildRoleScopedOdtToolSelection,
 } from "@openblueprint/core";
 import {
   type Event,
@@ -58,17 +58,6 @@ const buildDefaultFactory = (): ClientFactory => {
       directory: input.workingDirectory,
     });
 };
-
-const ODT_TOOL_IDS = [
-  "odt_read_task",
-  "odt_set_spec",
-  "odt_set_plan",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
-  "odt_qa_approved",
-  "odt_qa_rejected",
-] as const;
 
 const readTextFromParts = (parts: Part[]): string => {
   return parts
@@ -133,16 +122,36 @@ const normalizeModelInput = (
   };
 };
 
-const buildWorkflowToolSelection = (role: AgentRole): Record<string, boolean> => {
-  const allowed = new Set(AGENT_ROLE_TOOL_POLICY[role]);
-  const map = Object.fromEntries(ODT_TOOL_IDS.map((tool) => [tool, false])) as Record<
-    string,
-    boolean
-  >;
-  for (const tool of allowed) {
-    map[tool] = true;
+const toToolIdList = (payload: unknown): string[] => {
+  if (!Array.isArray(payload)) {
+    return [];
   }
-  return map;
+  return payload
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && entry !== "invalid");
+};
+
+const resolveWorkflowToolSelection = async (input: {
+  client: OpencodeClient;
+  role: AgentRole;
+  workingDirectory: string;
+}): Promise<Record<string, boolean>> => {
+  const selectionFromKnownAliases = buildRoleScopedOdtToolSelection(input.role);
+  try {
+    const response = await input.client.tool.ids({
+      directory: input.workingDirectory,
+    });
+    const runtimeToolIds = toToolIdList(unwrapData(response, "list tool ids for role policy"));
+    if (runtimeToolIds.length === 0) {
+      return selectionFromKnownAliases;
+    }
+    return buildRoleScopedOdtToolSelection(input.role, {
+      runtimeToolIds,
+    });
+  } catch {
+    return selectionFromKnownAliases;
+  }
 };
 
 const toDisplayText = (value: unknown): string | undefined => {
@@ -612,13 +621,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       directory: input.workingDirectory,
     });
     const payload = unwrapData(response, "list tool ids");
-    if (!Array.isArray(payload)) {
-      return [];
-    }
-    return payload
-      .filter((entry): entry is string => typeof entry === "string")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0 && entry !== "invalid");
+    return toToolIdList(payload);
   }
 
   async getMcpStatus(input: {
@@ -673,6 +676,11 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     const session = this.requireSession(input.sessionId);
     const model = input.model ?? session.input.model;
     const modelInput = normalizeModelInput(model);
+    const workflowToolSelection = await resolveWorkflowToolSelection({
+      client: session.client,
+      role: session.input.role,
+      workingDirectory: session.input.workingDirectory,
+    });
     const response = await session.client.session.prompt({
       sessionID: session.externalSessionId,
       directory: session.input.workingDirectory,
@@ -682,7 +690,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       ...(modelInput.model ? { model: modelInput.model } : {}),
       ...(modelInput.variant ? { variant: modelInput.variant } : {}),
       ...(modelInput.agent ? { agent: modelInput.agent } : {}),
-      tools: buildWorkflowToolSelection(session.input.role),
+      tools: workflowToolSelection,
       parts: [{ type: "text", text: input.content }],
     });
     const responseData = unwrapData(response, "prompt session");

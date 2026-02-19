@@ -340,10 +340,37 @@ describe("OpencodeSdkAdapter", () => {
         odt_build_completed: false,
         odt_qa_approved: false,
         odt_qa_rejected: false,
+        openducktor_odt_read_task: true,
+        openducktor_odt_set_spec: true,
+        openducktor_odt_set_plan: false,
       },
     });
     expect(events.some((event) => event.type === "assistant_message")).toBe(true);
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
+  });
+
+  test("sendUserMessage applies runtime workflow aliases when available", async () => {
+    const mock = makeMockClient({
+      toolIdsResponse: ["customprefix_odt_set_spec", "customprefix_odt_set_plan"],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Write and persist spec",
+    });
+
+    expect(mock.session.promptCalls).toHaveLength(1);
+    const tools = (mock.session.promptCalls[0] as { tools?: Record<string, boolean> }).tools;
+    expect(tools).toMatchObject({
+      customprefix_odt_set_spec: true,
+      customprefix_odt_set_plan: false,
+    });
   });
 
   test("loadSessionHistory preserves assistant text and maps streamed parts", async () => {
@@ -551,9 +578,7 @@ describe("OpencodeSdkAdapter", () => {
       name: "openducktor",
     });
 
-    expect(mock.mcp.connectCalls).toEqual([
-      { directory: "/repo", name: "openducktor" },
-    ]);
+    expect(mock.mcp.connectCalls).toEqual([{ directory: "/repo", name: "openducktor" }]);
   });
 
   test("stopSession aborts session and emits finished event", async () => {

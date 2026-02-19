@@ -25,6 +25,7 @@ import type {
   AgentRole,
   AgentScenario,
 } from "@openblueprint/core";
+import { normalizeOdtWorkflowToolName } from "@openblueprint/core";
 import {
   AlertTriangle,
   Bot,
@@ -1019,12 +1020,13 @@ export function AgentsPage(): ReactElement {
       if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
         continue;
       }
+      const normalizedTool = normalizeOdtWorkflowToolName(meta.tool);
       const target =
-        meta.tool === "odt_set_spec"
+        normalizedTool === "odt_set_spec"
           ? { section: "spec" as const, state: specDoc, inputKey: "markdown" as const }
-          : meta.tool === "odt_set_plan"
+          : normalizedTool === "odt_set_plan"
             ? { section: "plan" as const, state: planDoc, inputKey: "markdown" as const }
-            : meta.tool === "odt_qa_approved" || meta.tool === "odt_qa_rejected"
+            : normalizedTool === "odt_qa_approved" || normalizedTool === "odt_qa_rejected"
               ? { section: "qa" as const, state: qaDoc, inputKey: "reportMarkdown" as const }
               : null;
       if (!target) {

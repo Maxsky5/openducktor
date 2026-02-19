@@ -1,7 +1,12 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import type { AgentModelSelection, AgentRole } from "@openblueprint/core";
+import {
+  type AgentModelSelection,
+  type AgentRole,
+  isOdtWorkflowMutationToolName,
+  toOdtWorkflowToolDisplayName,
+} from "@openblueprint/core";
 import {
   Bot,
   Brain,
@@ -26,16 +31,6 @@ type AgentChatMessageCardProps = {
   sessionSelectedModel: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
 };
-
-const WORKFLOW_TOOL_NAMES = new Set([
-  "odt_set_spec",
-  "odt_set_plan",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
-  "odt_qa_approved",
-  "odt_qa_rejected",
-]);
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "read",
@@ -92,10 +87,7 @@ const stripToolPrefix = (tool: string, value: string): string => {
 };
 
 const toolDisplayName = (tool: string): string => {
-  if (tool.toLowerCase().startsWith("odt_")) {
-    return tool.slice(4);
-  }
-  return tool;
+  return toOdtWorkflowToolDisplayName(tool);
 };
 
 const toSingleLineMarkdown = (value: string): string => {
@@ -426,8 +418,7 @@ export function AgentChatMessageCard({
   const isReasoningMessage = meta?.kind === "reasoning";
   const isUserMessage = message.role === "user";
   const isToolMessage = meta?.kind === "tool";
-  const isWorkflowToolMessage =
-    meta?.kind === "tool" && WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());
+  const isWorkflowToolMessage = meta?.kind === "tool" && isOdtWorkflowMutationToolName(meta.tool);
   const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
   const isSubtaskMessage = meta?.kind === "subtask";
   const isSystemPromptMessage =
@@ -526,7 +517,7 @@ export function AgentChatMessageCard({
         )
       ) : meta?.kind === "tool" ? (
         (() => {
-          const isWorkflowTool = WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());
+          const isWorkflowTool = isOdtWorkflowMutationToolName(meta.tool);
           const summary = buildToolSummary(meta, message.content);
           const durationMs = getToolDuration(meta, message.timestamp);
           const hasInput = hasNonEmptyInput(meta.input);
