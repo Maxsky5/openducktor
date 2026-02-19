@@ -122,6 +122,31 @@ const normalizeModelInput = (
   };
 };
 
+const resolveAssistantResponseMessageId = (payload: unknown): string | null => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const infoId = ((payload as { info?: { id?: unknown } }).info?.id ?? null) as unknown;
+  if (typeof infoId === "string" && infoId.trim().length > 0) {
+    return infoId.trim();
+  }
+
+  const parts = (payload as { parts?: unknown }).parts;
+  if (!Array.isArray(parts)) {
+    return null;
+  }
+  for (const part of parts) {
+    if (!part || typeof part !== "object") {
+      continue;
+    }
+    const messageId = (part as { messageID?: unknown }).messageID;
+    if (typeof messageId === "string" && messageId.trim().length > 0) {
+      return messageId.trim();
+    }
+  }
+  return null;
+};
+
 const toToolIdList = (payload: unknown): string[] => {
   if (!Array.isArray(payload)) {
     return [];
@@ -745,10 +770,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       parts: [{ type: "text", text: input.content }],
     });
     const responseData = unwrapData(response, "prompt session");
-    const responseMessageId =
-      typeof (responseData as { info?: { id?: unknown } }).info?.id === "string"
-        ? ((responseData as { info: { id: string } }).info.id as string)
-        : null;
+    const responseMessageId = resolveAssistantResponseMessageId(responseData);
 
     for (const responsePart of responseData.parts) {
       const mappedPart = mapPartToAgentStreamPart(responsePart);

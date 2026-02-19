@@ -62,6 +62,45 @@ const sanitizeStreamingText = (value: string): string => {
   return value.replace(/\n{3,}/g, "\n\n").trimStart();
 };
 
+const isDuplicateAssistantMessage = (
+  messages: AgentChatMessage[],
+  incomingContent: string,
+  incomingTimestamp: string,
+): boolean => {
+  const normalizedIncoming = incomingContent.trim();
+  if (normalizedIncoming.length === 0) {
+    return false;
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const entry = messages[index];
+    if (!entry) {
+      continue;
+    }
+    if (entry.role !== "assistant") {
+      continue;
+    }
+
+    const normalizedExisting = entry.content.trim();
+    if (normalizedExisting !== normalizedIncoming) {
+      return false;
+    }
+
+    if (entry.timestamp === incomingTimestamp) {
+      return true;
+    }
+
+    const existingEpoch = Date.parse(entry.timestamp);
+    const incomingEpoch = Date.parse(incomingTimestamp);
+    if (Number.isNaN(existingEpoch) || Number.isNaN(incomingEpoch)) {
+      return false;
+    }
+    return Math.abs(incomingEpoch - existingEpoch) <= 2_000;
+  }
+
+  return false;
+};
+
 const inferScenario = (
   role: AgentRole,
   task: TaskCard,
@@ -1002,20 +1041,27 @@ export function useAgentOrchestratorOperations({
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => {
+            const messageAlreadyPresent = isDuplicateAssistantMessage(
+              current.messages,
+              event.message,
+              event.timestamp,
+            );
             const durationMs = resolveTurnDurationMs(sessionId, event.timestamp, current.messages);
             return {
               ...current,
               draftAssistantText: "",
-              messages: [
-                ...current.messages,
-                {
-                  id: crypto.randomUUID(),
-                  role: "assistant",
-                  content: event.message,
-                  timestamp: event.timestamp,
-                  meta: toAssistantMessageMeta(current, durationMs),
-                },
-              ],
+              messages: messageAlreadyPresent
+                ? current.messages
+                : [
+                    ...current.messages,
+                    {
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      content: event.message,
+                      timestamp: event.timestamp,
+                      meta: toAssistantMessageMeta(current, durationMs),
+                    },
+                  ],
             };
           });
           return;

@@ -77,6 +77,21 @@ const compactText = (value: string, maxLength = 180): string => {
   return `${normalized.slice(0, maxLength)}...`;
 };
 
+const formatRawJsonLikeText = (value: string): string => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+};
+
 const stripToolPrefix = (tool: string, value: string): string => {
   const escaped = tool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const normalized = value.trim();
@@ -559,7 +574,7 @@ export function AgentChatMessageCard({
                 <span>{toolIcon(meta.tool)}</span>
                 <p
                   className={cn(
-                    "truncate text-xs font-semibold",
+                    "text-xs font-semibold",
                     meta.status === "error"
                       ? "text-rose-900"
                       : meta.status === "completed"
@@ -569,9 +584,6 @@ export function AgentChatMessageCard({
                 >
                   {toolDisplayName(meta.tool)}
                 </p>
-                {summary.length > 0 ? (
-                  <p className="truncate text-xs text-current/80">{summary}</p>
-                ) : null}
                 {isRunning ? <LoaderCircle className="ml-auto size-3 animate-spin" /> : null}
                 {!isRunning && durationMs !== null ? (
                   <span className="ml-auto text-[11px] text-current/75">
@@ -591,10 +603,14 @@ export function AgentChatMessageCard({
                       </pre>
                     ) : null}
                     {hasOutput && meta.output ? (
-                      <MarkdownRenderer markdown={meta.output} variant="compact" />
+                      <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-current">
+                        {formatRawJsonLikeText(meta.output)}
+                      </pre>
                     ) : null}
                     {hasError && meta.error ? (
-                      <MarkdownRenderer markdown={meta.error} variant="compact" />
+                      <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-current">
+                        {formatRawJsonLikeText(meta.error)}
+                      </pre>
                     ) : null}
                   </div>
                 </details>
