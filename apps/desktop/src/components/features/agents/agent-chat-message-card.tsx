@@ -306,11 +306,70 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 };
 
+const isTodoToolName = (tool: string): boolean => {
+  return (
+    tool === "todowrite" ||
+    tool === "todoread" ||
+    tool.endsWith("_todowrite") ||
+    tool.endsWith("_todoread")
+  );
+};
+
+const countTodosFromUnknown = (value: unknown): number | null => {
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.todos)) {
+    return record.todos.length;
+  }
+  if (Array.isArray(record.items)) {
+    return record.items.length;
+  }
+  return null;
+};
+
+const countTodosFromInput = (input: Record<string, unknown> | undefined): number | null => {
+  if (!input) {
+    return null;
+  }
+  return countTodosFromUnknown(input.todos ?? input.items ?? null);
+};
+
+const countTodosFromOutput = (output: string | undefined): number | null => {
+  if (!output || output.trim().length === 0) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(output) as unknown;
+    return countTodosFromUnknown(parsed);
+  } catch {
+    return null;
+  }
+};
+
 const buildToolSummary = (
   meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
   content: string,
 ): string => {
   const lowerTool = meta.tool.toLowerCase();
+  const isTodoTool = isTodoToolName(lowerTool);
+
+  if (isTodoTool) {
+    const todoCount = countTodosFromOutput(meta.output) ?? countTodosFromInput(meta.input);
+    if (todoCount !== null) {
+      return `${todoCount} todo${todoCount === 1 ? "" : "s"}`;
+    }
+    if (meta.status === "running" || meta.status === "pending") {
+      return "updating todos";
+    }
+    if (meta.status === "completed") {
+      return "todos updated";
+    }
+  }
 
   if (lowerTool === "task") {
     const taskSummary = getTaskSummary(meta);

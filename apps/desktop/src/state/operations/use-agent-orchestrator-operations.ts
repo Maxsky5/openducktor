@@ -479,6 +479,66 @@ const mergeTodoListPreservingOrder = (
   });
 };
 
+const isRunningToolStatus = (status: "pending" | "running" | "completed" | "error"): boolean =>
+  status === "pending" || status === "running";
+
+const resolveToolMessageId = (
+  messages: AgentChatMessage[],
+  part: {
+    messageId: string;
+    callId: string;
+    tool: string;
+    status: "pending" | "running" | "completed" | "error";
+  },
+  fallbackId: string,
+): string => {
+  const existingByFallback = messages.find((entry) => entry.id === fallbackId);
+  if (existingByFallback) {
+    return fallbackId;
+  }
+
+  // Prefer same call id regardless of part id.
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const entry = messages[index];
+    if (!entry || entry.role !== "tool" || entry.meta?.kind !== "tool") {
+      continue;
+    }
+    const meta = entry.meta;
+    if (meta.tool !== part.tool || !part.callId) {
+      continue;
+    }
+    if (meta.callId === part.callId) {
+      return entry.id;
+    }
+  }
+
+  if (part.status === "pending" || part.status === "running") {
+    return fallbackId;
+  }
+
+  // When OpenCode emits a new part id on completion/failure without a call id,
+  // collapse into the prior pending/running line for the same tool in the same message.
+  let fallbackCandidateId: string | null = null;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const entry = messages[index];
+    if (!entry || entry.role !== "tool" || entry.meta?.kind !== "tool") {
+      continue;
+    }
+    const meta = entry.meta;
+    if (meta.tool !== part.tool) {
+      continue;
+    }
+    if (!isRunningToolStatus(meta.status)) {
+      continue;
+    }
+    if (entry.id.startsWith(`tool:${part.messageId}:`)) {
+      return entry.id;
+    }
+    fallbackCandidateId = fallbackCandidateId ?? entry.id;
+  }
+  return fallbackCandidateId ?? fallbackId;
+};
+
 const normalizeSessionErrorMessage = (value: string): string => {
   const trimmed = value.trim();
   const withoutQuotes = trimmed
@@ -1208,7 +1268,17 @@ export function useAgentOrchestratorOperations({
             updateSession(
               sessionId,
               (current) => {
-                const messageId = `tool:${streamMessageKey}`;
+                const fallbackMessageId = `tool:${streamMessageKey}`;
+                const messageId = resolveToolMessageId(
+                  current.messages,
+                  {
+                    messageId: part.messageId,
+                    callId: part.callId,
+                    tool: part.tool,
+                    status: part.status,
+                  },
+                  fallbackMessageId,
+                );
                 const existing = current.messages.find((entry) => entry.id === messageId);
                 const previousStatus =
                   existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
