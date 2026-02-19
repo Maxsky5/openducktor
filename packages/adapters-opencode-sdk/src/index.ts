@@ -162,28 +162,61 @@ const toToolIdList = (payload: unknown): string[] => {
 const TODO_STATUSES = new Set(["pending", "in_progress", "completed", "cancelled"]);
 const TODO_PRIORITIES = new Set(["high", "medium", "low"]);
 
-const normalizeTodoItem = (value: unknown): AgentSessionTodoItem | null => {
+const normalizeTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) {
+    return "pending";
+  }
+  if (normalized === "in-progress" || normalized === "in progress") {
+    return "in_progress";
+  }
+  if (normalized === "done" || normalized === "complete") {
+    return "completed";
+  }
+  return TODO_STATUSES.has(normalized) ? (normalized as AgentSessionTodoItem["status"]) : "pending";
+};
+
+const normalizeTodoPriority = (value: unknown): AgentSessionTodoItem["priority"] => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return TODO_PRIORITIES.has(normalized)
+    ? (normalized as AgentSessionTodoItem["priority"])
+    : "medium";
+};
+
+const normalizeTodoItem = (
+  value: unknown,
+  fallbackId: string | null = null,
+): AgentSessionTodoItem | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
   const record = value as Record<string, unknown>;
-  const id = typeof record.id === "string" ? record.id.trim() : "";
-  const content = typeof record.content === "string" ? record.content.trim() : "";
+  const id =
+    (typeof record.id === "string" ? record.id.trim() : "") ||
+    (typeof record.todoId === "string" ? record.todoId.trim() : "") ||
+    fallbackId ||
+    "";
+  const contentCandidate =
+    typeof record.content === "string"
+      ? record.content
+      : typeof record.text === "string"
+        ? record.text
+        : typeof record.title === "string"
+          ? record.title
+          : "";
+  const content = contentCandidate.trim();
   if (!id || !content) {
     return null;
   }
 
-  const rawStatus = typeof record.status === "string" ? record.status.trim().toLowerCase() : "";
-  const rawPriority =
-    typeof record.priority === "string" ? record.priority.trim().toLowerCase() : "";
-  const status = TODO_STATUSES.has(rawStatus) ? rawStatus : "pending";
-  const priority = TODO_PRIORITIES.has(rawPriority) ? rawPriority : "medium";
+  const status = normalizeTodoStatus(record.status);
+  const priority = normalizeTodoPriority(record.priority);
 
   return {
     id,
     content,
-    status: status as AgentSessionTodoItem["status"],
-    priority: priority as AgentSessionTodoItem["priority"],
+    status,
+    priority,
   };
 };
 
@@ -192,7 +225,7 @@ const normalizeTodoList = (payload: unknown): AgentSessionTodoItem[] => {
     return [];
   }
   return payload
-    .map((entry) => normalizeTodoItem(entry))
+    .map((entry, index) => normalizeTodoItem(entry, `todo:${index}`))
     .filter((entry): entry is AgentSessionTodoItem => entry !== null);
 };
 

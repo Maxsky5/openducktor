@@ -620,6 +620,64 @@ describe("OpencodeSdkAdapter", () => {
     ]);
   });
 
+  test("maps todo.updated events with missing id/status aliases", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "todo.updated",
+        properties: {
+          sessionID: "session-opencode-1",
+          todos: [
+            {
+              content: "First",
+              status: "in-progress",
+              priority: "low",
+            },
+            {
+              text: "Second",
+              status: "done",
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await Bun.sleep(0);
+
+    const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
+    expect(todoEvent).toBeDefined();
+    if (!todoEvent || todoEvent.type !== "session_todos_updated") {
+      throw new Error("Expected session_todos_updated event");
+    }
+    expect(todoEvent.todos).toEqual([
+      {
+        id: "todo:0",
+        content: "First",
+        status: "in_progress",
+        priority: "low",
+      },
+      {
+        id: "todo:1",
+        content: "Second",
+        status: "completed",
+        priority: "medium",
+      },
+    ]);
+  });
+
   test("loadSessionTodos reads /session/:id/todo and normalizes entries", async () => {
     const originalFetch = globalThis.fetch;
     const fetchCalls: string[] = [];

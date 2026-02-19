@@ -296,28 +296,61 @@ const normalizeToolText = (value: unknown): string | undefined => {
 const TODO_STATUSES = new Set(["pending", "in_progress", "completed", "cancelled"]);
 const TODO_PRIORITIES = new Set(["high", "medium", "low"]);
 
-const normalizeSessionTodo = (value: unknown): AgentSessionTodoItem | null => {
+const normalizeTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!normalized) {
+    return "pending";
+  }
+  if (normalized === "in-progress" || normalized === "in progress") {
+    return "in_progress";
+  }
+  if (normalized === "done" || normalized === "complete") {
+    return "completed";
+  }
+  return TODO_STATUSES.has(normalized) ? (normalized as AgentSessionTodoItem["status"]) : "pending";
+};
+
+const normalizeTodoPriority = (value: unknown): AgentSessionTodoItem["priority"] => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return TODO_PRIORITIES.has(normalized)
+    ? (normalized as AgentSessionTodoItem["priority"])
+    : "medium";
+};
+
+const normalizeSessionTodo = (
+  value: unknown,
+  fallbackId: string | null = null,
+): AgentSessionTodoItem | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
   const record = value as Record<string, unknown>;
-  const id = typeof record.id === "string" ? record.id.trim() : "";
-  const content = typeof record.content === "string" ? record.content.trim() : "";
+  const id =
+    (typeof record.id === "string" ? record.id.trim() : "") ||
+    (typeof record.todoId === "string" ? record.todoId.trim() : "") ||
+    fallbackId ||
+    "";
+  const contentCandidate =
+    typeof record.content === "string"
+      ? record.content
+      : typeof record.text === "string"
+        ? record.text
+        : typeof record.title === "string"
+          ? record.title
+          : "";
+  const content = contentCandidate.trim();
   if (!id || !content) {
     return null;
   }
 
-  const rawStatus = typeof record.status === "string" ? record.status.trim().toLowerCase() : "";
-  const rawPriority =
-    typeof record.priority === "string" ? record.priority.trim().toLowerCase() : "";
-  const status = TODO_STATUSES.has(rawStatus) ? rawStatus : "pending";
-  const priority = TODO_PRIORITIES.has(rawPriority) ? rawPriority : "medium";
+  const status = normalizeTodoStatus(record.status);
+  const priority = normalizeTodoPriority(record.priority);
 
   return {
     id,
     content,
-    status: status as AgentSessionTodoItem["status"],
-    priority: priority as AgentSessionTodoItem["priority"],
+    status,
+    priority,
   };
 };
 
@@ -326,7 +359,7 @@ const normalizeSessionTodoList = (payload: unknown): AgentSessionTodoItem[] => {
     return [];
   }
   return payload
-    .map((entry) => normalizeSessionTodo(entry))
+    .map((entry, index) => normalizeSessionTodo(entry, `todo:${index}`))
     .filter((entry): entry is AgentSessionTodoItem => entry !== null);
 };
 
@@ -359,6 +392,42 @@ const parseTodosFromToolOutput = (output: string | undefined): AgentSessionTodoI
   } catch {
     return null;
   }
+};
+
+const parseTodosFromToolInput = (
+  input: Record<string, unknown> | undefined,
+): AgentSessionTodoItem[] | null => {
+  if (!input) {
+    return null;
+  }
+  const rawTodos = Array.isArray(input.todos)
+    ? input.todos
+    : Array.isArray(input.items)
+      ? input.items
+      : null;
+  if (!rawTodos) {
+    return null;
+  }
+
+  const normalized = rawTodos
+    .map((entry, index) => {
+      if (typeof entry === "string") {
+        const content = entry.trim();
+        if (!content) {
+          return null;
+        }
+        return {
+          id: `todo:${index}`,
+          content,
+          status: "pending",
+          priority: "medium",
+        } satisfies AgentSessionTodoItem;
+      }
+      return normalizeSessionTodo(entry, `todo:${index}`);
+    })
+    .filter((entry): entry is AgentSessionTodoItem => entry !== null);
+
+  return normalized.length > 0 ? normalized : null;
 };
 
 const normalizeSessionErrorMessage = (value: string): string => {
@@ -1078,11 +1147,12 @@ export function useAgentOrchestratorOperations({
             const input = normalizeToolInput(part.input);
             const output = normalizeToolText(part.output);
             const error = normalizeToolText(part.error);
-            const todoUpdateFromOutput =
-              isTodoToolName(part.tool) && part.status === "completed"
-                ? parseTodosFromToolOutput(output)
-                : null;
+            const isTodoTool = isTodoToolName(part.tool);
+            const todoUpdateFromTool = isTodoTool
+              ? (parseTodosFromToolOutput(output) ?? parseTodosFromToolInput(input))
+              : null;
             let shouldRefreshTaskData = false;
+            let shouldRefreshSessionTodos = false;
             updateSession(
               sessionId,
               (current) => {
@@ -1097,11 +1167,14 @@ export function useAgentOrchestratorOperations({
                 ) {
                   shouldRefreshTaskData = true;
                 }
+                if (isTodoTool && part.status === "completed" && previousStatus !== "completed") {
+                  shouldRefreshSessionTodos = true;
+                }
 
                 return {
                   ...current,
                   status: "running",
-                  ...(todoUpdateFromOutput ? { todos: todoUpdateFromOutput } : {}),
+                  ...(todoUpdateFromTool ? { todos: todoUpdateFromTool } : {}),
                   messages: upsertMessage(current.messages, {
                     id: messageId,
                     role: "tool",
@@ -1130,6 +1203,17 @@ export function useAgentOrchestratorOperations({
             );
             if (shouldRefreshTaskData) {
               void refreshTaskData(repoPath).catch(() => undefined);
+            }
+            if (shouldRefreshSessionTodos) {
+              const session = sessionsRef.current[sessionId];
+              if (session) {
+                void loadSessionTodos(
+                  sessionId,
+                  session.baseUrl,
+                  session.workingDirectory,
+                  session.externalSessionId,
+                ).catch(() => undefined);
+              }
             }
             return;
           }
@@ -1377,7 +1461,14 @@ export function useAgentOrchestratorOperations({
 
       unsubscribersRef.current.set(sessionId, unsubscribe);
     },
-    [adapter, clearTurnDuration, refreshTaskData, resolveTurnDurationMs, updateSession],
+    [
+      adapter,
+      clearTurnDuration,
+      loadSessionTodos,
+      refreshTaskData,
+      resolveTurnDurationMs,
+      updateSession,
+    ],
   );
 
   const loadTaskDocuments = useCallback(async (repoPath: string, taskId: string) => {
