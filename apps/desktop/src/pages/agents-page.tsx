@@ -15,7 +15,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { TaskCard } from "@openblueprint/contracts";
@@ -26,11 +26,13 @@ import type {
   AgentScenario,
 } from "@openblueprint/core";
 import {
+  AlertTriangle,
   Bot,
   Brain,
   CheckCircle2,
   CircleDotDashed,
   LoaderCircle,
+  RefreshCcw,
   SendHorizontal,
   ShieldCheck,
   Sparkles,
@@ -319,6 +321,7 @@ const isSameSelection = (
 
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
+  const { opencodeHealth, isLoadingChecks, refreshChecks } = useChecksState();
   const { tasks } = useTasksState();
   const {
     sessions,
@@ -365,6 +368,18 @@ export function AgentsPage(): ReactElement {
 
   const role: AgentRole = selectedSessionById?.role ?? roleFromQuery;
   const taskId = selectedSessionById?.taskId ?? taskIdParam;
+  const agentStudioReady = Boolean(
+    activeRepo && opencodeHealth?.runtimeOk && opencodeHealth?.mcpOk,
+  );
+  const agentStudioBlockedReason = !activeRepo
+    ? "Select a repository to use Agent Studio."
+    : opencodeHealth?.runtimeError
+      ? opencodeHealth.runtimeError
+      : opencodeHealth?.mcpError
+        ? opencodeHealth.mcpError
+        : isLoadingChecks
+          ? "Checking OpenCode and OpenDucktor MCP health..."
+          : "OpenCode runtime or OpenDucktor MCP is not ready.";
 
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === taskId) ?? null,
@@ -698,7 +713,7 @@ export function AgentsPage(): ReactElement {
   );
 
   const startSession = useCallback(async (): Promise<string | undefined> => {
-    if (!taskId) {
+    if (!taskId || !agentStudioReady) {
       return undefined;
     }
     setIsStarting(true);
@@ -719,6 +734,7 @@ export function AgentsPage(): ReactElement {
       setIsStarting(false);
     }
   }, [
+    agentStudioReady,
     role,
     scenario,
     selectionForNewSession,
@@ -729,7 +745,7 @@ export function AgentsPage(): ReactElement {
   ]);
 
   const startScenarioKickoff = useCallback(async (): Promise<void> => {
-    if (!taskId) {
+    if (!taskId || !agentStudioReady) {
       return;
     }
     const sessionId = await startSession();
@@ -737,10 +753,10 @@ export function AgentsPage(): ReactElement {
       return;
     }
     await sendAgentMessage(sessionId, kickoffPromptForScenario(role, scenario));
-  }, [role, scenario, sendAgentMessage, startSession, taskId]);
+  }, [agentStudioReady, role, scenario, sendAgentMessage, startSession, taskId]);
 
   useEffect(() => {
-    if (!autostart || !activeRepo || !taskId || activeSession) {
+    if (!autostart || !activeRepo || !taskId || activeSession || !agentStudioReady) {
       return;
     }
     const key = `${taskId}:${role}:${scenario}`;
@@ -749,10 +765,19 @@ export function AgentsPage(): ReactElement {
     }
     autoStartExecutedRef.current.add(key);
     void startScenarioKickoff();
-  }, [activeRepo, activeSession, autostart, role, scenario, startScenarioKickoff, taskId]);
+  }, [
+    activeRepo,
+    activeSession,
+    agentStudioReady,
+    autostart,
+    role,
+    scenario,
+    startScenarioKickoff,
+    taskId,
+  ]);
 
   const onSend = useCallback(async (): Promise<void> => {
-    if (isSending || isStarting) {
+    if (isSending || isStarting || !agentStudioReady) {
       return;
     }
 
@@ -787,6 +812,7 @@ export function AgentsPage(): ReactElement {
     }
   }, [
     activeSession,
+    agentStudioReady,
     input,
     isComposingNewSession,
     isSending,
@@ -1057,7 +1083,8 @@ export function AgentsPage(): ReactElement {
     }
   }, [activeSession, applyDocumentUpdate, planDoc, qaDoc, reloadDocument, specDoc, taskId]);
 
-  const canKickoffNewSession = Boolean(taskId) && (!activeSession || isComposingNewSession);
+  const canKickoffNewSession =
+    agentStudioReady && Boolean(taskId) && (!activeSession || isComposingNewSession);
 
   return (
     <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,2fr)_minmax(420px,1fr)]">
@@ -1083,6 +1110,7 @@ export function AgentsPage(): ReactElement {
               <TaskSelector
                 tasks={tasksForSelector}
                 value={taskId}
+                disabled={!agentStudioReady}
                 onValueChange={(nextTaskId) => {
                   updateQuery({
                     task: nextTaskId || undefined,
@@ -1103,6 +1131,7 @@ export function AgentsPage(): ReactElement {
                     size="sm"
                     variant={active ? "default" : "ghost"}
                     className={cn("h-8", active ? "" : "hover:bg-white")}
+                    disabled={!agentStudioReady}
                     onClick={() =>
                       updateQuery({
                         agent: entry.role,
@@ -1133,7 +1162,7 @@ export function AgentsPage(): ReactElement {
               }
               searchPlaceholder="Search sessions..."
               emptyText="No matching session."
-              disabled={!taskId}
+              disabled={!taskId || !agentStudioReady}
               onValueChange={(sessionId) => {
                 if (sessionId === NEW_SESSION_SENTINEL) {
                   setInput("");
@@ -1160,7 +1189,9 @@ export function AgentsPage(): ReactElement {
               value={scenario}
               options={scenarioOptions}
               placeholder="Select scenario"
-              disabled={Boolean(selectedSessionById) && !isComposingNewSession}
+              disabled={
+                (Boolean(selectedSessionById) && !isComposingNewSession) || !agentStudioReady
+              }
               onValueChange={(value) => updateQuery({ scenario: value, autostart: undefined })}
             />
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
@@ -1177,7 +1208,7 @@ export function AgentsPage(): ReactElement {
                   size="sm"
                   variant="outline"
                   className="h-6 px-2 text-[11px]"
-                  disabled={isStarting || isSending || !taskId}
+                  disabled={isStarting || isSending || !taskId || !agentStudioReady}
                   onClick={() => void startScenarioKickoff()}
                 >
                   {isStarting ? (
@@ -1219,6 +1250,26 @@ export function AgentsPage(): ReactElement {
 
         <CardContent className="min-h-0 flex-1 bg-slate-50/50 p-0">
           <div className="flex h-full min-h-0 flex-col">
+            {!agentStudioReady ? (
+              <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <div className="flex min-w-0 items-start gap-2">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  <p className="min-w-0">{agentStudioBlockedReason}</p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-rose-300 bg-white text-rose-700 hover:bg-rose-100"
+                  disabled={isLoadingChecks}
+                  onClick={() => void refreshChecks()}
+                >
+                  <RefreshCcw className={cn("size-3.5", isLoadingChecks ? "animate-spin" : "")} />
+                  Recheck
+                </Button>
+              </div>
+            ) : null}
+
             <div
               ref={messagesContainerRef}
               className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
@@ -1238,7 +1289,7 @@ export function AgentsPage(): ReactElement {
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={isStarting || isSending || !taskId}
+                      disabled={isStarting || isSending || !taskId || !agentStudioReady}
                       onClick={() => void startScenarioKickoff()}
                     >
                       {isStarting ? (
@@ -1320,7 +1371,9 @@ export function AgentsPage(): ReactElement {
                     value={selectedModelSelection?.opencodeAgent ?? ""}
                     options={agentOptions}
                     placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-                    disabled={!taskId || isSelectionCatalogLoading || isStarting}
+                    disabled={
+                      !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady
+                    }
                     onValueChange={(opencodeAgent) => {
                       const baseSelection =
                         selectedModelSelection ??
@@ -1358,7 +1411,9 @@ export function AgentsPage(): ReactElement {
                     options={modelOptions}
                     groups={modelGroups}
                     placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-                    disabled={!taskId || isSelectionCatalogLoading || isStarting}
+                    disabled={
+                      !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady
+                    }
                     onValueChange={(nextValue) => {
                       if (!selectionCatalog) {
                         return;
@@ -1386,7 +1441,9 @@ export function AgentsPage(): ReactElement {
                     value={selectedModelSelection?.variant ?? ""}
                     options={variantOptions}
                     placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
-                    disabled={!taskId || variantOptions.length === 0 || isStarting}
+                    disabled={
+                      !taskId || variantOptions.length === 0 || isStarting || !agentStudioReady
+                    }
                     onValueChange={(variant) => {
                       if (!selectedModelSelection) {
                         return;
@@ -1405,6 +1462,7 @@ export function AgentsPage(): ReactElement {
                       type="button"
                       variant="outline"
                       className="w-full lg:w-auto"
+                      disabled={!agentStudioReady}
                       onClick={() => void stopAgentSession(activeSession.sessionId)}
                     >
                       <Square className="size-3.5" />
@@ -1419,7 +1477,8 @@ export function AgentsPage(): ReactElement {
                       isStarting ||
                       isSessionWorking ||
                       !taskId ||
-                      input.trim().length === 0
+                      input.trim().length === 0 ||
+                      !agentStudioReady
                     }
                   >
                     {isSending ? (
@@ -1470,6 +1529,7 @@ export function AgentsPage(): ReactElement {
                     <Button
                       type="button"
                       size="sm"
+                      disabled={!activeSession || !agentStudioReady}
                       onClick={() =>
                         activeSession
                           ? void replyAgentPermission(
@@ -1486,6 +1546,7 @@ export function AgentsPage(): ReactElement {
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={!activeSession || !agentStudioReady}
                       onClick={() =>
                         activeSession
                           ? void replyAgentPermission(
@@ -1502,6 +1563,7 @@ export function AgentsPage(): ReactElement {
                       type="button"
                       size="sm"
                       variant="destructive"
+                      disabled={!activeSession || !agentStudioReady}
                       onClick={() =>
                         activeSession
                           ? void replyAgentPermission(
@@ -1546,6 +1608,7 @@ export function AgentsPage(): ReactElement {
                             key={`${request.requestId}:${question.header}:${option.label}`}
                             type="button"
                             size="sm"
+                            disabled={!activeSession || !agentStudioReady}
                             variant={
                               questionDrafts[request.requestId]?.[index]?.includes(option.label)
                                 ? "default"
@@ -1588,6 +1651,7 @@ export function AgentsPage(): ReactElement {
                       type="button"
                       size="sm"
                       disabled={
+                        !agentStudioReady ||
                         !activeSession ||
                         request.questions.some((question, index) => {
                           const selected = questionDrafts[request.requestId]?.[index] ?? [];

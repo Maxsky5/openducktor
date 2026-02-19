@@ -11,6 +11,7 @@ import type {
 } from "@openblueprint/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openblueprint/core";
 import type { AgentSessionState } from "./agent-orchestrator";
+import type { RepoOpencodeHealthCheck } from "./diagnostics";
 
 export type RepoAgentDefaultInput = {
   providerId: string;
@@ -47,6 +48,7 @@ export type WorkspaceStateContextValue = {
 export type ChecksStateContextValue = {
   runtimeCheck: RuntimeCheck | null;
   beadsCheck: BeadsCheck | null;
+  opencodeHealth: RepoOpencodeHealthCheck | null;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
 };

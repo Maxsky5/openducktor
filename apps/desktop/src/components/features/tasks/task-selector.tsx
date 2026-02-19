@@ -9,6 +9,7 @@ type TaskSelectorProps = {
   includeEmptyOption?: boolean;
   emptyLabel?: string;
   searchPlaceholder?: string;
+  disabled?: boolean;
 };
 
 const EMPTY_VALUE = "__none__";
@@ -20,6 +21,7 @@ export function TaskSelector({
   includeEmptyOption = true,
   emptyLabel = "Select task",
   searchPlaceholder = "Search tasks...",
+  disabled = false,
 }: TaskSelectorProps) {
   const options = useMemo<ComboboxOption[]>(() => {
     const entries = tasks.map((task) => ({
@@ -40,6 +42,7 @@ export function TaskSelector({
       value={value || EMPTY_VALUE}
       options={options}
       searchPlaceholder={searchPlaceholder}
+      disabled={disabled}
       onValueChange={(nextValue) => onValueChange(nextValue === EMPTY_VALUE ? "" : nextValue)}
     />
   );

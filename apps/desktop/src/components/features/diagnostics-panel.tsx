@@ -19,14 +19,19 @@ import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 
 export function DiagnosticsPanel(): ReactElement {
   const { activeRepo, activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
-  const { runtimeCheck, beadsCheck, refreshChecks, isLoadingChecks } = useChecksState();
+  const { runtimeCheck, beadsCheck, opencodeHealth, refreshChecks, isLoadingChecks } =
+    useChecksState();
   const [isOpen, setOpen] = useState(false);
   const autoOpenedByRepoRef = useRef<Set<string>>(new Set());
 
   const runtimeHealthy = runtimeCheck ? runtimeCheck.gitOk && runtimeCheck.opencodeOk : null;
   const beadsHealthy = beadsCheck ? beadsCheck.beadsOk : null;
+  const opencodeServerHealthy = opencodeHealth ? opencodeHealth.runtimeOk : null;
+  const openducktorMcpHealthy = opencodeHealth ? opencodeHealth.mcpOk : null;
   const runtimeCritical = runtimeHealthy === false;
   const beadsCritical = beadsHealthy === false;
+  const opencodeServerCritical = opencodeServerHealthy === false;
+  const openducktorMcpCritical = openducktorMcpHealthy === false;
   const worktreeConfigured = activeWorkspace?.hasConfig ?? false;
   const repoName = activeRepo?.split("/").filter(Boolean).at(-1) ?? "No repository";
 
@@ -38,11 +43,17 @@ export function DiagnosticsPanel(): ReactElement {
     if (runtimeCritical) {
       reasons.push("Runtime checks failing");
     }
+    if (opencodeServerCritical) {
+      reasons.push("OpenCode server unavailable");
+    }
+    if (openducktorMcpCritical) {
+      reasons.push("OpenDucktor MCP unavailable");
+    }
     if (beadsCritical) {
       reasons.push("Beads store unavailable");
     }
     return reasons;
-  }, [activeRepo, beadsCritical, runtimeCritical]);
+  }, [activeRepo, beadsCritical, opencodeServerCritical, openducktorMcpCritical, runtimeCritical]);
 
   const setupReasons = useMemo(() => {
     const reasons: string[] = [];
@@ -157,7 +168,7 @@ export function DiagnosticsPanel(): ReactElement {
             </DiagnosticsSection>
 
             <DiagnosticsSection
-              title="Runtime Tools"
+              title="CLI Tools"
               badge={{
                 label:
                   runtimeHealthy === null ? "Checking" : runtimeHealthy ? "Available" : "Issue",
@@ -177,6 +188,93 @@ export function DiagnosticsPanel(): ReactElement {
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">Runtime checks are loading...</p>
+              )}
+            </DiagnosticsSection>
+
+            <DiagnosticsSection
+              title="OpenCode Runtime"
+              badge={{
+                label:
+                  opencodeServerHealthy === null
+                    ? "Checking"
+                    : opencodeServerHealthy
+                      ? "Running"
+                      : "Unavailable",
+                variant: healthVariant(opencodeServerHealthy),
+              }}
+            >
+              {activeRepo ? (
+                <div className="space-y-1 text-xs text-slate-700">
+                  {opencodeHealth?.runtime ? (
+                    <>
+                      <p>
+                        runtimeId:{" "}
+                        <span className="font-mono text-[11px] text-slate-600">
+                          {opencodeHealth.runtime.runtimeId}
+                        </span>
+                      </p>
+                      <p>
+                        endpoint:{" "}
+                        <span className="font-mono text-[11px] text-slate-600">
+                          http://127.0.0.1:{opencodeHealth.runtime.port}
+                        </span>
+                      </p>
+                      <p className="break-all text-slate-500">
+                        {opencodeHealth.runtime.workingDirectory}
+                      </p>
+                    </>
+                  ) : null}
+                  {opencodeHealth?.runtimeError ? (
+                    <p className="flex items-start gap-1 text-rose-700">
+                      <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                      <span>{opencodeHealth.runtimeError}</span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">Select a repository first.</p>
+              )}
+            </DiagnosticsSection>
+
+            <DiagnosticsSection
+              title="OpenDucktor MCP"
+              badge={{
+                label:
+                  openducktorMcpHealthy === null
+                    ? "Checking"
+                    : openducktorMcpHealthy
+                      ? "Connected"
+                      : "Unavailable",
+                variant: healthVariant(openducktorMcpHealthy),
+              }}
+            >
+              {activeRepo ? (
+                <div className="space-y-1 text-xs text-slate-700">
+                  {opencodeHealth ? (
+                    <p>
+                      Tools detected:{" "}
+                      <span className="font-mono text-[11px] text-slate-600">
+                        {opencodeHealth.availableToolIds.length}
+                      </span>
+                    </p>
+                  ) : null}
+                  {opencodeHealth?.missingRequiredToolIds.length ? (
+                    <p className="text-rose-700">
+                      Missing tools:{" "}
+                      <span className="font-mono text-[11px]">
+                        {opencodeHealth.missingRequiredToolIds.join(", ")}
+                      </span>
+                    </p>
+                  ) : null}
+                  {opencodeHealth?.mcpError ? (
+                    <p className="flex items-start gap-1 text-rose-700">
+                      <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                      <span>{opencodeHealth.mcpError}</span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">Select a repository first.</p>
               )}
             </DiagnosticsSection>
 

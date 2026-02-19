@@ -13,13 +13,11 @@ import {
   type PropsWithChildren,
   type ReactElement,
   createContext,
-  useCallback,
   useContext,
   useMemo,
   useState,
 } from "react";
 import { useAppLifecycle } from "./lifecycle/use-app-lifecycle";
-import { host } from "./operations/host";
 import { useAgentOrchestratorOperations } from "./operations/use-agent-orchestrator-operations";
 import { useChecks } from "./operations/use-checks";
 import { useDelegationOperations } from "./operations/use-delegation-operations";
@@ -46,21 +44,22 @@ const useRequiredContext = <T,>(context: Context<T | null>, name: string): T => 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
-  const ensureRepoRuntime = useCallback(async (repoPath: string): Promise<void> => {
-    await host.opencodeRepoRuntimeEnsure(repoPath);
-  }, []);
 
   const {
     runtimeCheck,
     activeBeadsCheck,
+    activeRepoOpencodeHealth,
     isLoadingChecks,
     setIsLoadingChecks,
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
+    refreshRepoOpencodeHealthForRepo,
     refreshChecks,
     hasRuntimeCheck,
     hasCachedBeadsCheck,
+    hasCachedRepoOpencodeHealth,
     clearActiveBeadsCheck,
+    clearActiveRepoOpencodeHealth,
   } = useChecks({
     activeRepo,
   });
@@ -130,15 +129,17 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     setEvents,
     refreshWorkspaces,
     refreshRuntimeCheck,
-    ensureRepoRuntime,
     refreshBeadsCheckForRepo,
+    refreshRepoOpencodeHealthForRepo,
     refreshTaskData,
     clearTaskData,
     clearActiveBeadsCheck,
+    clearActiveRepoOpencodeHealth,
     setIsLoadingChecks,
     setIsLoadingTasks,
     hasRuntimeCheck,
     hasCachedBeadsCheck,
+    hasCachedRepoOpencodeHealth,
   });
 
   const activeWorkspace = useMemo(
@@ -173,10 +174,11 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     () => ({
       runtimeCheck,
       beadsCheck: activeBeadsCheck,
+      opencodeHealth: activeRepoOpencodeHealth,
       isLoadingChecks,
       refreshChecks,
     }),
-    [activeBeadsCheck, isLoadingChecks, refreshChecks, runtimeCheck],
+    [activeBeadsCheck, activeRepoOpencodeHealth, isLoadingChecks, refreshChecks, runtimeCheck],
   );
 
   const tasksStateValue = useMemo<TasksStateContextValue>(

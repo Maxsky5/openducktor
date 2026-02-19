@@ -595,6 +595,27 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     };
   }
 
+  async listAvailableToolIds(input: {
+    baseUrl: string;
+    workingDirectory: string;
+  }): Promise<string[]> {
+    const client = this.createClient({
+      baseUrl: input.baseUrl,
+      workingDirectory: input.workingDirectory,
+    });
+    const response = await client.tool.ids({
+      directory: input.workingDirectory,
+    });
+    const payload = unwrapData(response, "list tool ids");
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+    return payload
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0 && entry !== "invalid");
+  }
+
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = this.requireSession(input.sessionId);
     const model = input.model ?? session.input.model;

@@ -16,6 +16,10 @@ type MockSession = {
   }>;
 };
 
+type MockTool = {
+  idsCalls: unknown[];
+};
+
 type MockPermission = {
   replyCalls: unknown[];
 };
@@ -54,6 +58,7 @@ const makeMockClient = ({
     },
   },
   agentsResponse = [],
+  toolIdsResponse = [],
 }: {
   sessionId?: string;
   streamEvents?: Event[];
@@ -64,9 +69,11 @@ const makeMockClient = ({
   }>;
   providerResponse?: unknown;
   agentsResponse?: unknown;
+  toolIdsResponse?: unknown;
 }): {
   client: OpencodeClient;
   session: MockSession;
+  tool: MockTool;
   permission: MockPermission;
   question: MockQuestion;
   stream: MockEventStream;
@@ -82,6 +89,9 @@ const makeMockClient = ({
   };
   const permission: MockPermission = {
     replyCalls: [],
+  };
+  const tool: MockTool = {
+    idsCalls: [],
   };
   const question: MockQuestion = {
     replyCalls: [],
@@ -169,6 +179,15 @@ const makeMockClient = ({
         };
       },
     },
+    tool: {
+      ids: async (input: unknown) => {
+        tool.idsCalls.push(input);
+        return {
+          data: toolIdsResponse,
+          error: undefined,
+        };
+      },
+    },
     event: {
       subscribe: async () => {
         async function* iterator(): AsyncGenerator<Event> {
@@ -181,7 +200,7 @@ const makeMockClient = ({
     },
   } as unknown as OpencodeClient;
 
-  return { client, session, permission, question, stream };
+  return { client, session, tool, permission, question, stream };
 };
 
 const startDefaultSession = async (
@@ -447,6 +466,24 @@ describe("OpencodeSdkAdapter", () => {
       mode: "primary",
       color: "#f59e0b",
     });
+  });
+
+  test("listAvailableToolIds returns normalized tool IDs", async () => {
+    const mock = makeMockClient({
+      toolIdsResponse: ["odt_read_task", " invalid ", "", " odt_set_spec "],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const tools = await adapter.listAvailableToolIds({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+    });
+
+    expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
+    expect(tools).toEqual(["odt_read_task", "odt_set_spec"]);
   });
 
   test("stopSession aborts session and emits finished event", async () => {

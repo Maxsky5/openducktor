@@ -1,6 +1,7 @@
 import { errorMessage } from "@/lib/errors";
 import { subscribeRunEvents } from "@/lib/host-client";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import { type RunEvent, runEventSchema } from "@openblueprint/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -10,7 +11,6 @@ type UseAppLifecycleArgs = {
   setEvents: Dispatch<SetStateAction<RunEvent[]>>;
   refreshWorkspaces: () => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
-  ensureRepoRuntime: (repoPath: string) => Promise<unknown>;
   refreshBeadsCheckForRepo: (
     repoPath: string,
     force?: boolean,
@@ -18,13 +18,19 @@ type UseAppLifecycleArgs = {
     beadsOk: boolean;
     beadsError?: string | null;
   }>;
+  refreshRepoOpencodeHealthForRepo: (
+    repoPath: string,
+    force?: boolean,
+  ) => Promise<RepoOpencodeHealthCheck>;
   refreshTaskData: (repoPath: string) => Promise<void>;
   clearTaskData: () => void;
   clearActiveBeadsCheck: () => void;
+  clearActiveRepoOpencodeHealth: () => void;
   setIsLoadingTasks: (value: boolean) => void;
   setIsLoadingChecks: (value: boolean) => void;
   hasRuntimeCheck: () => boolean;
   hasCachedBeadsCheck: (repoPath: string) => boolean;
+  hasCachedRepoOpencodeHealth: (repoPath: string) => boolean;
 };
 
 export function useAppLifecycle({
@@ -32,15 +38,17 @@ export function useAppLifecycle({
   setEvents,
   refreshWorkspaces,
   refreshRuntimeCheck,
-  ensureRepoRuntime,
   refreshBeadsCheckForRepo,
+  refreshRepoOpencodeHealthForRepo,
   refreshTaskData,
   clearTaskData,
   clearActiveBeadsCheck,
+  clearActiveRepoOpencodeHealth,
   setIsLoadingTasks,
   setIsLoadingChecks,
   hasRuntimeCheck,
   hasCachedBeadsCheck,
+  hasCachedRepoOpencodeHealth,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
 
@@ -88,6 +96,7 @@ export function useAppLifecycle({
     if (!activeRepo) {
       clearTaskData();
       clearActiveBeadsCheck();
+      clearActiveRepoOpencodeHealth();
       setIsLoadingTasks(false);
       setIsLoadingChecks(false);
       return;
@@ -95,7 +104,11 @@ export function useAppLifecycle({
 
     const loadVersion = ++repoLoadVersionRef.current;
     setIsLoadingTasks(true);
-    setIsLoadingChecks(!hasRuntimeCheck() || !hasCachedBeadsCheck(activeRepo));
+    setIsLoadingChecks(
+      !hasRuntimeCheck() ||
+        !hasCachedBeadsCheck(activeRepo) ||
+        !hasCachedRepoOpencodeHealth(activeRepo),
+    );
 
     Promise.allSettled([
       (async () => {
@@ -109,9 +122,9 @@ export function useAppLifecycle({
         await refreshTaskData(activeRepo);
       })(),
       refreshRuntimeCheck(false),
-      ensureRepoRuntime(activeRepo),
+      refreshRepoOpencodeHealthForRepo(activeRepo, false),
     ])
-      .then(([tasksResult, runtimeResult, ensureRuntimeResult]) => {
+      .then(([tasksResult, runtimeResult, opencodeHealthResult]) => {
         if (repoLoadVersionRef.current !== loadVersion) {
           return;
         }
@@ -128,9 +141,18 @@ export function useAppLifecycle({
           });
         }
 
-        if (ensureRuntimeResult.status === "rejected") {
-          toast.error("OpenCode server unavailable", {
-            description: errorMessage(ensureRuntimeResult.reason),
+        if (opencodeHealthResult.status === "rejected") {
+          toast.error("OpenCode + MCP diagnostics unavailable", {
+            description: errorMessage(opencodeHealthResult.reason),
+          });
+          return;
+        }
+
+        if (!opencodeHealthResult.value.runtimeOk || !opencodeHealthResult.value.mcpOk) {
+          toast.error("OpenCode + MCP unavailable", {
+            description:
+              opencodeHealthResult.value.errors.join(" | ") ||
+              "OpenCode runtime or OpenDucktor MCP is not ready.",
           });
         }
       })
@@ -145,11 +167,13 @@ export function useAppLifecycle({
   }, [
     activeRepo,
     clearActiveBeadsCheck,
+    clearActiveRepoOpencodeHealth,
     clearTaskData,
     hasCachedBeadsCheck,
+    hasCachedRepoOpencodeHealth,
     hasRuntimeCheck,
-    ensureRepoRuntime,
     refreshBeadsCheckForRepo,
+    refreshRepoOpencodeHealthForRepo,
     refreshRuntimeCheck,
     refreshTaskData,
     setIsLoadingChecks,
