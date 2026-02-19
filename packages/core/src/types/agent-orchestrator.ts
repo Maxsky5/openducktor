@@ -11,13 +11,14 @@ export type AgentScenario =
   | "qa_review";
 
 export type AgentToolName =
-  | "set_spec"
-  | "set_plan"
-  | "build_blocked"
-  | "build_resumed"
-  | "build_completed"
-  | "qa_approved"
-  | "qa_rejected";
+  | "odt_read_task"
+  | "odt_set_spec"
+  | "odt_set_plan"
+  | "odt_build_blocked"
+  | "odt_build_resumed"
+  | "odt_build_completed"
+  | "odt_qa_approved"
+  | "odt_qa_rejected";
 
 export type AgentModelSelection = {
   providerId: string;
@@ -52,14 +53,16 @@ export type AgentModelCatalog = {
 
 export type AgentToolCall =
   | {
-      tool: "set_spec";
+      tool: "odt_set_spec";
       args: {
+        taskId: string;
         markdown: string;
       };
     }
   | {
-      tool: "set_plan";
+      tool: "odt_set_plan";
       args: {
+        taskId: string;
         markdown: string;
         subtasks?: Array<{
           title: string;
@@ -70,30 +73,36 @@ export type AgentToolCall =
       };
     }
   | {
-      tool: "build_blocked";
+      tool: "odt_build_blocked";
       args: {
+        taskId: string;
         reason: string;
       };
     }
   | {
-      tool: "build_resumed";
-      args: Record<string, never>;
+      tool: "odt_build_resumed";
+      args: {
+        taskId: string;
+      };
     }
   | {
-      tool: "build_completed";
+      tool: "odt_build_completed";
       args: {
+        taskId: string;
         summary?: string;
       };
     }
   | {
-      tool: "qa_approved";
+      tool: "odt_qa_approved";
       args: {
+        taskId: string;
         reportMarkdown: string;
       };
     }
   | {
-      tool: "qa_rejected";
+      tool: "odt_qa_rejected";
       args: {
+        taskId: string;
         reportMarkdown: string;
       };
     };
@@ -175,10 +184,15 @@ export type AgentSessionStatus =
 export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
 
 export const AGENT_ROLE_TOOL_POLICY: AgentRoleToolPolicy = {
-  spec: ["set_spec"],
-  planner: ["set_plan"],
-  build: ["build_blocked", "build_resumed", "build_completed"],
-  qa: ["qa_approved", "qa_rejected"],
+  spec: ["odt_read_task", "odt_set_spec"],
+  planner: ["odt_read_task", "odt_set_plan"],
+  build: [
+    "odt_read_task",
+    "odt_build_blocked",
+    "odt_build_resumed",
+    "odt_build_completed",
+  ],
+  qa: ["odt_read_task", "odt_qa_approved", "odt_qa_rejected"],
 };
 
 export type AgentEvent =

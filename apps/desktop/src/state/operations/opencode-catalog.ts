@@ -2,15 +2,7 @@ import { OpencodeSdkAdapter } from "@openblueprint/adapters-opencode-sdk";
 import type { AgentModelCatalog } from "@openblueprint/core";
 import { host } from "./host";
 
-const adapter = new OpencodeSdkAdapter({
-  setSpec: async () => ({}),
-  setPlan: async () => ({}),
-  buildBlocked: async () => ({}),
-  buildResumed: async () => ({}),
-  buildCompleted: async () => ({}),
-  qaApproved: async () => ({}),
-  qaRejected: async () => ({}),
-});
+const adapter = new OpencodeSdkAdapter();
 
 const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 

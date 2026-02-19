@@ -8,8 +8,6 @@ import {
   type AgentSessionHistoryMessage,
   type AgentSessionSummary,
   type AgentStreamPart,
-  type AgentToolCall,
-  type AgentToolName,
   type EventUnsubscribe,
   type LoadAgentSessionHistoryInput,
   type ReplyPermissionInput,
@@ -24,26 +22,6 @@ import {
   type Part,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2";
-
-type SessionToolExecutor = {
-  setSpec: (repoPath: string, taskId: string, markdown: string) => Promise<{ updatedAt?: string }>;
-  setPlan: (
-    repoPath: string,
-    taskId: string,
-    markdown: string,
-    subtasks?: Array<{
-      title: string;
-      issueType?: "task" | "feature" | "bug";
-      priority?: number;
-      description?: string;
-    }>,
-  ) => Promise<{ updatedAt?: string }>;
-  buildBlocked: (repoPath: string, taskId: string, reason: string) => Promise<unknown>;
-  buildResumed: (repoPath: string, taskId: string) => Promise<unknown>;
-  buildCompleted: (repoPath: string, taskId: string, summary?: string) => Promise<unknown>;
-  qaApproved: (repoPath: string, taskId: string, reportMarkdown: string) => Promise<unknown>;
-  qaRejected: (repoPath: string, taskId: string, reportMarkdown: string) => Promise<unknown>;
-};
 
 type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
   sessionId: string;
@@ -64,7 +42,6 @@ type ClientFactory = (input: { baseUrl: string; workingDirectory: string }) => O
 export type OpencodeSdkAdapterOptions = {
   now?: () => string;
   createClient?: ClientFactory;
-  maxAutoToolLoops?: number;
 };
 
 const nowIso = (): string => new Date().toISOString();
@@ -77,21 +54,16 @@ const buildDefaultFactory = (): ClientFactory => {
     });
 };
 
-const TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*([\s\S]*?)\s*<\/obp_tool_call>/g;
-
-const ROLE_TOOLS: Record<AgentRole, ReadonlySet<AgentToolName>> = {
-  spec: new Set(AGENT_ROLE_TOOL_POLICY.spec),
-  planner: new Set(AGENT_ROLE_TOOL_POLICY.planner),
-  build: new Set(AGENT_ROLE_TOOL_POLICY.build),
-  qa: new Set(AGENT_ROLE_TOOL_POLICY.qa),
-};
-
-const ROLE_TERMINAL_TOOLS: Record<AgentRole, ReadonlySet<AgentToolName>> = {
-  spec: new Set(["set_spec"]),
-  planner: new Set(["set_plan"]),
-  build: new Set(["build_completed"]),
-  qa: new Set(["qa_approved", "qa_rejected"]),
-};
+const ODT_TOOL_IDS = [
+  "odt_read_task",
+  "odt_set_spec",
+  "odt_set_plan",
+  "odt_build_blocked",
+  "odt_build_resumed",
+  "odt_build_completed",
+  "odt_qa_approved",
+  "odt_qa_rejected",
+] as const;
 
 const readTextFromParts = (parts: Part[]): string => {
   return parts
@@ -115,162 +87,7 @@ const readTextFromMessageInfo = (info: unknown): string => {
   return typeof direct === "string" ? direct.trim() : "";
 };
 
-const parseToolCall = (block: string): AgentToolCall | null => {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(block);
-  } catch {
-    return null;
-  }
-
-  if (!parsed || typeof parsed !== "object") {
-    return null;
-  }
-
-  const tool = (parsed as { tool?: unknown }).tool;
-  const args = (parsed as { args?: unknown }).args;
-  if (typeof tool !== "string" || !args || typeof args !== "object") {
-    return null;
-  }
-
-  switch (tool) {
-    case "set_spec": {
-      const markdown = (args as { markdown?: unknown }).markdown;
-      if (typeof markdown !== "string" || markdown.trim().length === 0) {
-        return null;
-      }
-      return { tool, args: { markdown } };
-    }
-    case "set_plan": {
-      const markdown = (args as { markdown?: unknown }).markdown;
-      const subtasks = (args as { subtasks?: unknown }).subtasks;
-      if (typeof markdown !== "string" || markdown.trim().length === 0) {
-        return null;
-      }
-
-      if (subtasks === undefined) {
-        return { tool, args: { markdown } };
-      }
-
-      if (!Array.isArray(subtasks)) {
-        return null;
-      }
-
-      const normalized = subtasks
-        .map((entry) => {
-          if (!entry || typeof entry !== "object") {
-            return null;
-          }
-          const title = (entry as { title?: unknown }).title;
-          const issueType = (entry as { issueType?: unknown }).issueType;
-          const priority = (entry as { priority?: unknown }).priority;
-          const description = (entry as { description?: unknown }).description;
-          if (typeof title !== "string" || title.trim().length === 0) {
-            return null;
-          }
-          if (
-            issueType !== undefined &&
-            issueType !== "task" &&
-            issueType !== "feature" &&
-            issueType !== "bug"
-          ) {
-            return null;
-          }
-          if (priority !== undefined && (typeof priority !== "number" || Number.isNaN(priority))) {
-            return null;
-          }
-          if (description !== undefined && typeof description !== "string") {
-            return null;
-          }
-          return {
-            title,
-            ...(issueType ? { issueType } : {}),
-            ...(typeof priority === "number" ? { priority } : {}),
-            ...(description ? { description } : {}),
-          };
-        })
-        .filter(
-          (
-            entry,
-          ): entry is {
-            title: string;
-            issueType?: "task" | "feature" | "bug";
-            priority?: number;
-            description?: string;
-          } => entry !== null,
-        );
-
-      return { tool, args: { markdown, subtasks: normalized } };
-    }
-    case "build_blocked": {
-      const reason = (args as { reason?: unknown }).reason;
-      if (typeof reason !== "string" || reason.trim().length === 0) {
-        return null;
-      }
-      return { tool, args: { reason } };
-    }
-    case "build_resumed":
-      return { tool, args: {} };
-    case "build_completed": {
-      const summary = (args as { summary?: unknown }).summary;
-      if (summary !== undefined && typeof summary !== "string") {
-        return null;
-      }
-      return { tool, args: summary ? { summary } : {} };
-    }
-    case "qa_approved": {
-      const reportMarkdown = (args as { reportMarkdown?: unknown }).reportMarkdown;
-      if (typeof reportMarkdown !== "string" || reportMarkdown.trim().length === 0) {
-        return null;
-      }
-      return { tool, args: { reportMarkdown } };
-    }
-    case "qa_rejected": {
-      const reportMarkdown = (args as { reportMarkdown?: unknown }).reportMarkdown;
-      if (typeof reportMarkdown !== "string" || reportMarkdown.trim().length === 0) {
-        return null;
-      }
-      return { tool, args: { reportMarkdown } };
-    }
-    default:
-      return null;
-  }
-};
-
-const extractToolCalls = (message: string): AgentToolCall[] => {
-  const calls: AgentToolCall[] = [];
-  const matcher = message.matchAll(TOOL_BLOCK_PATTERN);
-  for (const match of matcher) {
-    const jsonPayload = match[1];
-    if (!jsonPayload) {
-      continue;
-    }
-    const call = parseToolCall(jsonPayload.trim());
-    if (call) {
-      calls.push(call);
-    }
-  }
-  return calls;
-};
-
-const sanitizeAssistantMessage = (
-  rawMessage: string,
-): { visible: string; toolCalls: AgentToolCall[] } => {
-  const toolCalls = extractToolCalls(rawMessage);
-  const visible = rawMessage.replace(TOOL_BLOCK_PATTERN, "").trim();
-  return { visible, toolCalls };
-};
-
-const normalizeToolResult = (tool: AgentToolName, result: unknown): string => {
-  if (!result || typeof result !== "object") {
-    return `${tool} completed`;
-  }
-  const updatedAt = (result as { updatedAt?: unknown }).updatedAt;
-  if (typeof updatedAt === "string" && updatedAt.length > 0) {
-    return `${tool} completed at ${updatedAt}`;
-  }
-  return `${tool} completed`;
-};
+const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
 
 const unwrapData = <T>(
   payload: { data?: T; error?: { message?: string } | unknown },
@@ -309,6 +126,18 @@ const normalizeModelInput = (
     ...(model.variant ? { variant: model.variant } : {}),
     ...(model.opencodeAgent ? { agent: model.opencodeAgent } : {}),
   };
+};
+
+const buildWorkflowToolSelection = (role: AgentRole): Record<string, boolean> => {
+  const allowed = new Set(AGENT_ROLE_TOOL_POLICY[role]);
+  const map = Object.fromEntries(ODT_TOOL_IDS.map((tool) => [tool, false])) as Record<
+    string,
+    boolean
+  >;
+  for (const tool of allowed) {
+    map[tool] = true;
+  }
+  return map;
 };
 
 const toDisplayText = (value: unknown): string | undefined => {
@@ -605,15 +434,10 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   private readonly listeners = new Map<string, Set<(event: AgentEvent) => void>>();
   private readonly now: () => string;
   private readonly createClient: ClientFactory;
-  private readonly maxAutoToolLoops: number;
 
-  constructor(
-    private readonly tools: SessionToolExecutor,
-    options: OpencodeSdkAdapterOptions = {},
-  ) {
+  constructor(options: OpencodeSdkAdapterOptions = {}) {
     this.now = options.now ?? nowIso;
     this.createClient = options.createClient ?? buildDefaultFactory();
-    this.maxAutoToolLoops = options.maxAutoToolLoops ?? 3;
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
@@ -698,8 +522,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       const rawTextFromParts = readTextFromParts(entry.parts);
       const rawText =
         rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
-      const text =
-        entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText).visible : rawText;
+      const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
       const parts = entry.parts
         .map(mapPartToAgentStreamPart)
         .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
@@ -726,9 +549,9 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     baseUrl: string;
     workingDirectory: string;
   }): Promise<AgentModelCatalog> {
-    const client = createOpencodeClient({
+    const client = this.createClient({
       baseUrl: input.baseUrl,
-      directory: input.workingDirectory,
+      workingDirectory: input.workingDirectory,
     });
     const response = await client.config.providers({
       directory: input.workingDirectory,
@@ -774,7 +597,52 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = this.requireSession(input.sessionId);
-    await this.executePromptLoop(session, input.content, 0, input.model ?? session.input.model);
+    const model = input.model ?? session.input.model;
+    const modelInput = normalizeModelInput(model);
+    const response = await session.client.session.prompt({
+      sessionID: session.externalSessionId,
+      directory: session.input.workingDirectory,
+      ...(session.input.systemPrompt.trim().length > 0
+        ? { system: session.input.systemPrompt }
+        : {}),
+      ...(modelInput.model ? { model: modelInput.model } : {}),
+      ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+      ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+      tools: buildWorkflowToolSelection(session.input.role),
+      parts: [{ type: "text", text: input.content }],
+    });
+    const responseData = unwrapData(response, "prompt session");
+    const responseMessageId =
+      typeof (responseData as { info?: { id?: unknown } }).info?.id === "string"
+        ? ((responseData as { info: { id: string } }).info.id as string)
+        : null;
+
+    for (const responsePart of responseData.parts) {
+      const mappedPart = mapPartToAgentStreamPart(responsePart);
+      if (!mappedPart) {
+        continue;
+      }
+      this.emit(session.summary.sessionId, {
+        type: "assistant_part",
+        sessionId: session.summary.sessionId,
+        timestamp: this.now(),
+        part: mappedPart,
+      });
+    }
+
+    const assistantMessage = sanitizeAssistantMessage(readTextFromParts(responseData.parts));
+    if (assistantMessage.length > 0) {
+      this.emit(session.summary.sessionId, {
+        type: "assistant_message",
+        sessionId: session.summary.sessionId,
+        timestamp: this.now(),
+        message: assistantMessage,
+      });
+      if (responseMessageId) {
+        session.emittedAssistantMessageIds.add(responseMessageId);
+      }
+    }
+
     this.emit(session.summary.sessionId, {
       type: "session_idle",
       sessionId: session.summary.sessionId,
@@ -899,171 +767,6 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     return summary;
   }
 
-  private async executePromptLoop(
-    session: SessionRecord,
-    userMessage: string,
-    depth: number,
-    model: AgentModelSelection | undefined,
-  ): Promise<void> {
-    const modelInput = normalizeModelInput(model);
-    const response = await session.client.session.prompt({
-      sessionID: session.externalSessionId,
-      directory: session.input.workingDirectory,
-      ...(session.input.systemPrompt.trim().length > 0
-        ? { system: session.input.systemPrompt }
-        : {}),
-      ...(modelInput.model ? { model: modelInput.model } : {}),
-      ...(modelInput.variant ? { variant: modelInput.variant } : {}),
-      ...(modelInput.agent ? { agent: modelInput.agent } : {}),
-      parts: [{ type: "text", text: userMessage }],
-    });
-    const responseData = unwrapData(response, "prompt session");
-    const responseMessageId =
-      typeof (responseData as { info?: { id?: unknown } }).info?.id === "string"
-        ? ((responseData as { info: { id: string } }).info.id as string)
-        : null;
-
-    for (const responsePart of responseData.parts) {
-      const mappedPart = mapPartToAgentStreamPart(responsePart);
-      if (!mappedPart) {
-        continue;
-      }
-      this.emit(session.summary.sessionId, {
-        type: "assistant_part",
-        sessionId: session.summary.sessionId,
-        timestamp: this.now(),
-        part: mappedPart,
-      });
-    }
-
-    const assistantMessage = readTextFromParts(responseData.parts);
-    const parsed = sanitizeAssistantMessage(assistantMessage);
-    let emittedVisibleAssistantMessage = false;
-    if (parsed.visible) {
-      this.emit(session.summary.sessionId, {
-        type: "assistant_message",
-        sessionId: session.summary.sessionId,
-        timestamp: this.now(),
-        message: parsed.visible,
-      });
-      if (responseMessageId) {
-        session.emittedAssistantMessageIds.add(responseMessageId);
-      }
-      emittedVisibleAssistantMessage = true;
-    }
-
-    const toolCalls = parsed.toolCalls;
-    if (toolCalls.length === 0 || depth >= this.maxAutoToolLoops) {
-      return;
-    }
-
-    const toolResultMessages: string[] = [];
-    let terminalToolCompleted: AgentToolName | null = null;
-    for (const toolCall of toolCalls) {
-      this.emit(session.summary.sessionId, {
-        type: "tool_call",
-        sessionId: session.summary.sessionId,
-        timestamp: this.now(),
-        call: toolCall,
-      });
-
-      if (!this.isToolAllowedForRole(session.input.role, toolCall.tool)) {
-        const message = `Tool ${toolCall.tool} is not allowed for role ${session.input.role}`;
-        this.emit(session.summary.sessionId, {
-          type: "tool_result",
-          sessionId: session.summary.sessionId,
-          timestamp: this.now(),
-          tool: toolCall.tool,
-          success: false,
-          message,
-        });
-        throw new Error(message);
-      }
-
-      try {
-        const result = await this.executeToolCall(session, toolCall);
-        const resultMessage = normalizeToolResult(toolCall.tool, result);
-        this.emit(session.summary.sessionId, {
-          type: "tool_result",
-          sessionId: session.summary.sessionId,
-          timestamp: this.now(),
-          tool: toolCall.tool,
-          success: true,
-          message: resultMessage,
-        });
-        toolResultMessages.push(`${toolCall.tool}: success (${resultMessage})`);
-        if (this.isTerminalToolForRole(session.input.role, toolCall.tool)) {
-          terminalToolCompleted = toolCall.tool;
-          break;
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Tool execution failed";
-        this.emit(session.summary.sessionId, {
-          type: "tool_result",
-          sessionId: session.summary.sessionId,
-          timestamp: this.now(),
-          tool: toolCall.tool,
-          success: false,
-          message,
-        });
-        throw error;
-      }
-    }
-
-    if (terminalToolCompleted) {
-      if (!emittedVisibleAssistantMessage) {
-        this.emit(session.summary.sessionId, {
-          type: "assistant_message",
-          sessionId: session.summary.sessionId,
-          timestamp: this.now(),
-          message: `${terminalToolCompleted} completed.`,
-        });
-      }
-      return;
-    }
-
-    if (toolResultMessages.length === 0) {
-      return;
-    }
-
-    await this.executePromptLoop(
-      session,
-      `OpenBlueprint tool results:\n${toolResultMessages.join("\n")}\nContinue the task.`,
-      depth + 1,
-      model,
-    );
-  }
-
-  private async executeToolCall(session: SessionRecord, toolCall: AgentToolCall): Promise<unknown> {
-    const { repoPath, taskId } = session.input;
-    switch (toolCall.tool) {
-      case "set_spec":
-        return this.tools.setSpec(repoPath, taskId, toolCall.args.markdown);
-      case "set_plan":
-        return this.tools.setPlan(repoPath, taskId, toolCall.args.markdown, toolCall.args.subtasks);
-      case "build_blocked":
-        return this.tools.buildBlocked(repoPath, taskId, toolCall.args.reason);
-      case "build_resumed":
-        return this.tools.buildResumed(repoPath, taskId);
-      case "build_completed":
-        return this.tools.buildCompleted(repoPath, taskId, toolCall.args.summary);
-      case "qa_approved":
-        return this.tools.qaApproved(repoPath, taskId, toolCall.args.reportMarkdown);
-      case "qa_rejected":
-        return this.tools.qaRejected(repoPath, taskId, toolCall.args.reportMarkdown);
-      default:
-        return null;
-    }
-  }
-
-  private isToolAllowedForRole(role: AgentRole, tool: AgentToolName): boolean {
-    return ROLE_TOOLS[role].has(tool);
-  }
-
-  private isTerminalToolForRole(role: AgentRole, tool: AgentToolName): boolean {
-    return ROLE_TERMINAL_TOOLS[role].has(tool);
-  }
-
   private async subscribeOpencodeEvents(
     context: {
       sessionId: string;
@@ -1169,7 +872,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
           (typeof completedAt === "number" || finish === "stop")
         ) {
           const text = readTextFromParts(normalizedParts);
-          const visible = sanitizeAssistantMessage(text).visible;
+          const visible = sanitizeAssistantMessage(text);
           if (visible.length > 0) {
             const session = this.sessions.get(context.sessionId);
             const emitted = session?.emittedAssistantMessageIds;

@@ -76,24 +76,24 @@ const SCENARIO_LABELS: Record<AgentScenario, string> = {
 const kickoffPromptForScenario = (role: AgentRole, scenario: AgentScenario): string => {
   if (role === "spec") {
     return scenario === "spec_revision"
-      ? 'Revise the current specification and emit ONLY an <obp_tool_call> payload for {"tool":"set_spec","args":{"markdown":"..."}} when ready.'
-      : 'Write the initial specification and emit ONLY an <obp_tool_call> payload for {"tool":"set_spec","args":{"markdown":"..."}} when ready.';
+      ? "Revise the current specification and call odt_set_spec with complete markdown when ready."
+      : "Write the initial specification and call odt_set_spec with complete markdown when ready.";
   }
   if (role === "planner") {
     return scenario === "planner_revision"
-      ? 'Revise the current implementation plan and emit ONLY an <obp_tool_call> payload for {"tool":"set_plan","args":{"markdown":"..."}} when ready.'
-      : 'Create the initial implementation plan and emit ONLY an <obp_tool_call> payload for {"tool":"set_plan","args":{"markdown":"..."}} when ready.';
+      ? "Revise the current implementation plan and call odt_set_plan when ready."
+      : "Create the initial implementation plan and call odt_set_plan when ready.";
   }
   if (role === "qa") {
-    return 'Perform QA review now and emit ONLY one <obp_tool_call> payload: {"tool":"qa_approved","args":{"reportMarkdown":"..."}} or {"tool":"qa_rejected","args":{"reportMarkdown":"..."}}.';
+    return "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.";
   }
   if (scenario === "build_after_qa_rejected") {
-    return 'Address all QA rejection findings and emit ONLY an <obp_tool_call> payload for {"tool":"build_completed","args":{"summary":"..."}} when done.';
+    return "Address all QA rejection findings and call odt_build_completed when done.";
   }
   if (scenario === "build_after_human_request_changes") {
-    return 'Apply all human-requested changes and emit ONLY an <obp_tool_call> payload for {"tool":"build_completed","args":{"summary":"..."}} when done.';
+    return "Apply all human-requested changes and call odt_build_completed when done.";
   }
-  return 'Start implementation now and emit bridge tool payloads via <obp_tool_call> for {"tool":"build_blocked"| "build_resumed" | "build_completed", "args":{...}} as status changes.';
+  return "Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.";
 };
 
 const isTaskEligibleForRole = (task: TaskCard, role: AgentRole): boolean => {
@@ -994,11 +994,11 @@ export function AgentsPage(): ReactElement {
         continue;
       }
       const target =
-        meta.tool === "set_spec"
+        meta.tool === "odt_set_spec"
           ? { section: "spec" as const, state: specDoc, inputKey: "markdown" as const }
-          : meta.tool === "set_plan"
+          : meta.tool === "odt_set_plan"
             ? { section: "plan" as const, state: planDoc, inputKey: "markdown" as const }
-            : meta.tool === "qa_approved" || meta.tool === "qa_rejected"
+            : meta.tool === "odt_qa_approved" || meta.tool === "odt_qa_rejected"
               ? { section: "qa" as const, state: qaDoc, inputKey: "reportMarkdown" as const }
               : null;
       if (!target) {

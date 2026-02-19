@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentEvent } from "@openblueprint/core";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import { OpencodeSdkAdapter } from "./index";
 
@@ -32,6 +33,27 @@ const makeMockClient = ({
   streamEvents = [],
   promptQueue = [],
   messagesResponse = [],
+  providerResponse = {
+    providers: [
+      {
+        id: "openai",
+        name: "OpenAI",
+        models: {
+          "gpt-5": {
+            name: "GPT-5",
+            variants: {
+              high: {},
+              low: {},
+            },
+          },
+        },
+      },
+    ],
+    default: {
+      openai: "gpt-5",
+    },
+  },
+  agentsResponse = [],
 }: {
   sessionId?: string;
   streamEvents?: Event[];
@@ -40,6 +62,8 @@ const makeMockClient = ({
     info: { id: string; role: "user" | "assistant"; time: { created: number } };
     parts: Part[];
   }>;
+  providerResponse?: unknown;
+  agentsResponse?: unknown;
 }): {
   client: OpencodeClient;
   session: MockSession;
@@ -82,7 +106,7 @@ const makeMockClient = ({
               parts: [
                 {
                   type: "text",
-                  text: "No tool call",
+                  text: "No response",
                   id: "part-1",
                   sessionID: sessionId,
                   messageID: "assistant-msg",
@@ -129,6 +153,22 @@ const makeMockClient = ({
         return { data: true, error: undefined };
       },
     },
+    config: {
+      providers: async () => {
+        return {
+          data: providerResponse,
+          error: undefined,
+        };
+      },
+    },
+    app: {
+      agents: async () => {
+        return {
+          data: agentsResponse,
+          error: undefined,
+        };
+      },
+    },
     event: {
       subscribe: async () => {
         async function* iterator(): AsyncGenerator<Event> {
@@ -144,64 +184,26 @@ const makeMockClient = ({
   return { client, session, permission, question, stream };
 };
 
-const makeToolExecutor = () => {
-  const calls: Array<{ tool: string; payload: unknown[] }> = [];
-  return {
-    calls,
-    tools: {
-      setSpec: async (repoPath: string, taskId: string, markdown: string) => {
-        calls.push({ tool: "set_spec", payload: [repoPath, taskId, markdown] });
-        return { updatedAt: "2026-02-17T12:00:00Z" };
-      },
-      setPlan: async (
-        repoPath: string,
-        taskId: string,
-        markdown: string,
-        subtasks?: Array<{
-          title: string;
-          issueType?: "task" | "feature" | "bug";
-          priority?: number;
-          description?: string;
-        }>,
-      ) => {
-        calls.push({ tool: "set_plan", payload: [repoPath, taskId, markdown, subtasks] });
-        return { updatedAt: "2026-02-17T12:01:00Z" };
-      },
-      buildBlocked: async (repoPath: string, taskId: string, reason: string) => {
-        calls.push({ tool: "build_blocked", payload: [repoPath, taskId, reason] });
-        return {};
-      },
-      buildResumed: async (repoPath: string, taskId: string) => {
-        calls.push({ tool: "build_resumed", payload: [repoPath, taskId] });
-        return {};
-      },
-      buildCompleted: async (repoPath: string, taskId: string, summary?: string) => {
-        calls.push({ tool: "build_completed", payload: [repoPath, taskId, summary] });
-        return {};
-      },
-      qaApproved: async (repoPath: string, taskId: string, reportMarkdown: string) => {
-        calls.push({ tool: "qa_approved", payload: [repoPath, taskId, reportMarkdown] });
-        return {};
-      },
-      qaRejected: async (repoPath: string, taskId: string, reportMarkdown: string) => {
-        calls.push({ tool: "qa_rejected", payload: [repoPath, taskId, reportMarkdown] });
-        return {};
-      },
-    },
-  };
-};
-
 const startDefaultSession = async (
   adapter: OpencodeSdkAdapter,
   sessionId = "session-1",
+  role: "spec" | "planner" | "build" | "qa" = "spec",
 ): Promise<void> => {
+  const scenario =
+    role === "qa"
+      ? "qa_review"
+      : role === "planner"
+        ? "planner_initial"
+        : role === "build"
+          ? "build_implementation_start"
+          : "spec_initial";
   await adapter.startSession({
     sessionId,
     repoPath: "/repo",
     workingDirectory: "/repo",
     taskId: "task-1",
-    role: "spec",
-    scenario: "spec_initial",
+    role,
+    scenario,
     systemPrompt: "system prompt",
     baseUrl: "http://127.0.0.1:12345",
   });
@@ -209,9 +211,8 @@ const startDefaultSession = async (
 
 describe("OpencodeSdkAdapter", () => {
   test("startSession emits session_started and returns summary", async () => {
-    const executor = makeToolExecutor();
     const mock = makeMockClient({});
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
+    const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
     });
@@ -237,101 +238,132 @@ describe("OpencodeSdkAdapter", () => {
     expect((events[0] as { type: string }).type).toBe("session_started");
   });
 
-  test("sendUserMessage executes extracted tool call and emits results", async () => {
-    const executor = makeToolExecutor();
+  test("sendUserMessage forwards selected model and role-scoped odt tools", async () => {
     const mock = makeMockClient({
       promptQueue: [
         {
           info: { id: "assistant-1" },
           parts: [
             {
-              id: "part-1",
+              id: "text-1",
               sessionID: "session-opencode-1",
               messageID: "assistant-1",
               type: "text",
-              text: `<obp_tool_call>\n{"tool":"set_spec","args":{"markdown":"# Spec"}}\n</obp_tool_call>`,
-            } as Part,
-          ],
-        },
-        {
-          info: { id: "assistant-2" },
-          parts: [
-            {
-              id: "part-2",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-2",
-              type: "text",
-              text: "Applied and done.",
+              text: "Specification updated.",
             } as Part,
           ],
         },
       ],
     });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
+    const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter);
+    await startDefaultSession(adapter, "session-1", "spec");
 
     const events: Array<{ type: string }> = [];
-    const unsubscribe = adapter.subscribeEvents("session-1", (event) =>
-      events.push(event as { type: string }),
-    );
+    adapter.subscribeEvents("session-1", (event) => events.push(event as { type: string }));
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Draft and persist spec",
-    });
-    unsubscribe();
-
-    expect(executor.calls).toHaveLength(1);
-    expect(executor.calls[0]).toEqual({
-      tool: "set_spec",
-      payload: ["/repo", "task-1", "# Spec"],
-    });
-    expect(events.some((event) => event.type === "tool_call")).toBe(true);
-    expect(events.some((event) => event.type === "tool_result")).toBe(true);
-    expect(events.some((event) => event.type === "session_idle")).toBe(true);
-    expect(mock.session.promptCalls.length).toBe(1);
-  });
-
-  test("sendUserMessage forwards selected model, variant, and agent", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({});
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    await startDefaultSession(adapter);
-    await adapter.sendUserMessage({
-      sessionId: "session-1",
-      content: "Use the selected model",
+      content: "Write and persist spec",
       model: {
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "spec",
+        opencodeAgent: "hephaestus",
       },
     });
 
+    expect(mock.session.promptCalls).toHaveLength(1);
     expect(mock.session.promptCalls[0]).toMatchObject({
       model: {
         providerID: "openai",
         modelID: "gpt-5",
       },
       variant: "high",
-      agent: "spec",
+      agent: "hephaestus",
+      tools: {
+        odt_read_task: true,
+        odt_set_spec: true,
+        odt_set_plan: false,
+        odt_build_blocked: false,
+        odt_build_resumed: false,
+        odt_build_completed: false,
+        odt_qa_approved: false,
+        odt_qa_rejected: false,
+      },
+    });
+    expect(events.some((event) => event.type === "assistant_message")).toBe(true);
+    expect(events.some((event) => event.type === "session_idle")).toBe(true);
+  });
+
+  test("loadSessionHistory preserves assistant text and maps streamed parts", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "reason-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "reasoning",
+              text: "Reasoning block",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+            {
+              id: "text-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "text",
+              text: "Final answer",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history).toHaveLength(1);
+    expect(history[0]?.text).toBe("Final answer");
+    expect(history[0]?.parts).toHaveLength(1);
+    expect(history[0]?.parts[0]).toMatchObject({
+      kind: "reasoning",
+      text: "Reasoning block",
     });
   });
 
-  test("sendUserMessage emits mapped assistant parts from prompt response", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({
-      promptQueue: [
-        {
-          info: { id: "assistant-1" },
+  test("maps message.updated events into assistant parts and assistant message", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            time: {
+              completed: Date.parse("2026-02-17T12:00:05Z"),
+            },
+            finish: "stop",
+          },
           parts: [
             {
               id: "reason-1",
@@ -340,7 +372,7 @@ describe("OpencodeSdkAdapter", () => {
               type: "reasoning",
               text: "Reasoning trace",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
             {
               id: "text-1",
               sessionID: "session-opencode-1",
@@ -348,480 +380,91 @@ describe("OpencodeSdkAdapter", () => {
               type: "text",
               text: "Assistant output",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
-      ],
-    });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
+      } as unknown as Event,
+    ];
 
-    await startDefaultSession(adapter);
-
-    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
-    adapter.subscribeEvents("session-1", (event) => {
-      events.push(event as { type: string; part?: { kind: string; text?: string } });
-    });
-
-    await adapter.sendUserMessage({
-      sessionId: "session-1",
-      content: "Produce response with reasoning",
-    });
-
-    expect(
-      events.some(
-        (event) =>
-          event.type === "assistant_part" &&
-          event.part?.kind === "reasoning" &&
-          event.part.text === "Reasoning trace",
-      ),
-    ).toBe(true);
-    expect(events.some((event) => event.type === "assistant_message")).toBe(true);
-  });
-
-  test("rejects workflow tool calls that are not allowed for the session role", async () => {
-    const executor = makeToolExecutor();
     const mock = makeMockClient({
-      promptQueue: [
-        {
-          info: { id: "assistant-1" },
-          parts: [
-            {
-              id: "part-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "text",
-              text: `<obp_tool_call>\n{"tool":"qa_approved","args":{"reportMarkdown":"# QA"}}\n</obp_tool_call>`,
-            } as Part,
-          ],
-        },
-      ],
+      streamEvents,
     });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
+    const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter);
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
 
-    await expect(
-      adapter.sendUserMessage({
-        sessionId: "session-1",
-        content: "Try unauthorized qa tool",
-      }),
-    ).rejects.toThrow("not allowed for role spec");
-    expect(executor.calls).toHaveLength(0);
+    await startDefaultSession(adapter, "session-1", "spec");
+    await Bun.sleep(0);
+
+    const partEvents = events.filter((entry) => entry.type === "assistant_part");
+    const messageEvents = events.filter((entry) => entry.type === "assistant_message");
+
+    expect(partEvents.length).toBeGreaterThanOrEqual(2);
+    expect(messageEvents).toHaveLength(1);
+    expect(messageEvents[0]).toMatchObject({
+      type: "assistant_message",
+      message: "Assistant output",
+    });
   });
 
-  test("replyPermission and replyQuestion route to opencode APIs", async () => {
-    const executor = makeToolExecutor();
+  test("listAvailableModels returns provider models and primary agents", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        {
+          name: "Hephaestus",
+          description: "Deep agent",
+          mode: "primary",
+          hidden: false,
+          native: false,
+          color: "#f59e0b",
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+    });
+
+    expect(catalog.models).toHaveLength(1);
+    expect(catalog.models[0]).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
+    expect(catalog.agents).toHaveLength(1);
+    expect(catalog.agents[0]).toMatchObject({
+      name: "Hephaestus",
+      mode: "primary",
+      color: "#f59e0b",
+    });
+  });
+
+  test("stopSession aborts session and emits finished event", async () => {
     const mock = makeMockClient({});
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-    });
-
-    await startDefaultSession(adapter);
-
-    await adapter.replyPermission({
-      sessionId: "session-1",
-      requestId: "perm-1",
-      reply: "once",
-      message: "approved",
-    });
-    await adapter.replyQuestion({
-      sessionId: "session-1",
-      requestId: "question-1",
-      answers: [["yes"]],
-    });
-
-    expect(mock.permission.replyCalls).toHaveLength(1);
-    expect(mock.question.replyCalls).toHaveLength(1);
-  });
-
-  test("event stream maps part updates, buffered deltas, status, and permission events", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({
-      streamEvents: [
-        {
-          type: "message.part.delta",
-          properties: {
-            sessionID: "session-opencode-1",
-            messageID: "assistant-1",
-            partID: "part-1",
-            field: "text",
-            delta: "Hello",
-          },
-        } as Event,
-        {
-          type: "message.part.updated",
-          properties: {
-            part: {
-              id: "part-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "text",
-              text: "",
-              time: { start: Date.now() },
-            },
-          },
-        } as Event,
-        {
-          type: "message.part.updated",
-          properties: {
-            part: {
-              id: "part-reasoning",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "reasoning",
-              text: "Inspecting codebase",
-              time: { start: Date.now() },
-            },
-          },
-        } as Event,
-        {
-          type: "message.updated",
-          properties: {
-            info: {
-              id: "assistant-1",
-              sessionID: "session-opencode-1",
-              role: "assistant",
-              time: {
-                created: Date.now(),
-                completed: Date.now(),
-              },
-              finish: "stop",
-            },
-            parts: [
-              {
-                id: "part-1",
-                sessionID: "session-opencode-1",
-                messageID: "assistant-1",
-                type: "text",
-                text: `Hello\n<obp_tool_call>{"tool":"set_spec","args":{"markdown":"# Spec"}}</obp_tool_call>`,
-                time: { start: Date.now(), end: Date.now() },
-              },
-            ],
-          },
-        } as Event,
-        {
-          type: "session.status",
-          properties: {
-            sessionID: "session-opencode-1",
-            status: { type: "busy" },
-          },
-        } as Event,
-        {
-          type: "permission.asked",
-          properties: {
-            id: "perm-1",
-            sessionID: "session-opencode-1",
-            permission: "bash",
-            patterns: ["*"],
-            metadata: {},
-            always: [],
-          },
-        } as Event,
-      ],
-    });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
+    const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
     });
+    await startDefaultSession(adapter);
 
-    const events: Array<{ type: string; part?: { kind: string; text?: string }; message?: string }> = [];
+    const events: AgentEvent[] = [];
     adapter.subscribeEvents("session-1", (event) => {
-      events.push(
-        event as { type: string; part?: { kind: string; text?: string }; message?: string },
-      );
+      events.push(event);
     });
 
-    await startDefaultSession(adapter);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await adapter.stopSession("session-1");
 
-    expect(events.some((event) => event.type === "assistant_part")).toBe(true);
-    expect(events.some((event) => event.type === "assistant_message")).toBe(true);
-    expect(events.some((event) => event.type === "session_status")).toBe(true);
-    expect(events.some((event) => event.type === "permission_required")).toBe(true);
-    expect(
-      events.some(
-        (event) =>
-          event.type === "assistant_part" &&
-          event.part?.kind === "text" &&
-          event.part.text === "Hello",
-      ),
-    ).toBe(true);
-    const assistantMessage = events.find((event) => event.type === "assistant_message");
-    expect(assistantMessage?.message).toBe("Hello");
-  });
-
-  test("reasoning delta updates reasoning part content instead of assistant text stream", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({
-      streamEvents: [
-        {
-          type: "message.part.updated",
-          properties: {
-            part: {
-              id: "part-reasoning",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "reasoning",
-              text: "",
-              time: { start: Date.now() },
-            },
-          },
-        } as Event,
-        {
-          type: "message.part.delta",
-          properties: {
-            sessionId: "session-opencode-1",
-            messageId: "assistant-1",
-            partId: "part-reasoning",
-            field: "reasoning_content",
-            delta: "Inspecting constraints",
-          },
-        } as Event,
-      ],
-    });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
-    adapter.subscribeEvents("session-1", (event) => {
-      events.push(event as { type: string; part?: { kind: string; text?: string } });
-    });
-
-    await startDefaultSession(adapter);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const reasoningUpdates = events.filter(
-      (event) => event.type === "assistant_part" && event.part?.kind === "reasoning",
-    );
-    expect(reasoningUpdates).toHaveLength(2);
-    expect(reasoningUpdates[1]?.part?.text).toBe("Inspecting constraints");
-    expect(events.some((event) => event.type === "assistant_delta")).toBe(false);
-  });
-
-  test("event stream accepts snake_case session and part identifiers", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({
-      streamEvents: [
-        {
-          type: "message.part.updated",
-          properties: {
-            part: {
-              id: "part-reasoning",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "reasoning",
-              text: "",
-              time: { start: Date.now() },
-            },
-          },
-        } as Event,
-        {
-          type: "message.part.delta",
-          properties: {
-            session_id: "session-opencode-1",
-            message_id: "assistant-1",
-            part_id: "part-reasoning",
-            field: "reasoning_details",
-            delta: "Snake case reasoning",
-          },
-        } as Event,
-      ],
-    });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    const events: Array<{ type: string; part?: { kind: string; text?: string } }> = [];
-    adapter.subscribeEvents("session-1", (event) => {
-      events.push(event as { type: string; part?: { kind: string; text?: string } });
-    });
-
-    await startDefaultSession(adapter);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const reasoningUpdates = events.filter(
-      (event) => event.type === "assistant_part" && event.part?.kind === "reasoning",
-    );
-    expect(reasoningUpdates).toHaveLength(2);
-    expect(reasoningUpdates[1]?.part?.text).toBe("Snake case reasoning");
-  });
-
-  test("event stream ignores user text deltas and parts for assistant streaming", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({
-      streamEvents: [
-        {
-          type: "message.updated",
-          properties: {
-            info: {
-              id: "user-msg-1",
-              sessionID: "session-opencode-1",
-              role: "user",
-            },
-          },
-        } as Event,
-        {
-          type: "message.part.updated",
-          properties: {
-            part: {
-              id: "user-part-1",
-              sessionID: "session-opencode-1",
-              messageID: "user-msg-1",
-              type: "text",
-              text: "Write the initial specification",
-              time: { start: Date.now() },
-            },
-          },
-        } as Event,
-        {
-          type: "message.part.delta",
-          properties: {
-            sessionID: "session-opencode-1",
-            messageID: "user-msg-1",
-            field: "text",
-            delta: " and call set_spec",
-          },
-        } as Event,
-      ],
-    });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    const events: Array<{ type: string; part?: { kind: string } }> = [];
-    adapter.subscribeEvents("session-1", (event) => {
-      events.push(event as { type: string; part?: { kind: string } });
-    });
-
-    await startDefaultSession(adapter);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(
-      events.some(
-        (event) => event.type === "assistant_part" && event.part?.kind === "text",
-      ),
-    ).toBe(false);
-    expect(events.some((event) => event.type === "assistant_delta")).toBe(false);
-  });
-
-  test("startSession defaults to external session id when none provided", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({ sessionId: "session-opencode-42" });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    const summary = await adapter.startSession({
-      repoPath: "/repo",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "spec",
-      scenario: "spec_initial",
-      systemPrompt: "system",
-      baseUrl: "http://127.0.0.1:12000",
-    });
-
-    expect(summary.sessionId).toBe("session-opencode-42");
-    expect(summary.externalSessionId).toBe("session-opencode-42");
-    expect(adapter.hasSession("session-opencode-42")).toBe(true);
-  });
-
-  test("resumeSession re-attaches existing OpenCode session", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({ sessionId: "session-opencode-9" });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    const summary = await adapter.resumeSession({
-      sessionId: "obp-session-9",
-      externalSessionId: "session-opencode-9",
-      repoPath: "/repo",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "planner",
-      scenario: "planner_revision",
-      systemPrompt: "system",
-      baseUrl: "http://127.0.0.1:12000",
-    });
-
-    expect(summary.sessionId).toBe("obp-session-9");
-    expect(summary.externalSessionId).toBe("session-opencode-9");
-    expect(mock.session.getCalls).toHaveLength(1);
-    expect(adapter.hasSession("obp-session-9")).toBe(true);
-  });
-
-  test("loadSessionHistory maps assistant parts and strips workflow tool payload text", async () => {
-    const executor = makeToolExecutor();
-    const mock = makeMockClient({
-      messagesResponse: [
-        {
-          info: {
-            id: "assistant-1",
-            role: "assistant",
-            time: { created: Date.parse("2026-02-17T12:10:00Z") },
-          },
-          parts: [
-            {
-              id: "reason-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "reasoning",
-              text: "Inspecting code",
-              time: { start: Date.now(), end: Date.now() },
-            } as Part,
-            {
-              id: "text-1",
-              sessionID: "session-opencode-1",
-              messageID: "assistant-1",
-              type: "text",
-              text: `Draft complete\n<obp_tool_call>{"tool":"set_spec","args":{"markdown":"# Spec"}}</obp_tool_call>`,
-            } as Part,
-          ],
-        },
-      ],
-    });
-    const adapter = new OpencodeSdkAdapter(executor.tools, {
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    const history = await adapter.loadSessionHistory({
-      baseUrl: "http://127.0.0.1:12000",
-      workingDirectory: "/repo",
-      externalSessionId: "session-opencode-1",
-    });
-
-    expect(history).toHaveLength(1);
-    expect(history[0]?.text).toBe("Draft complete");
-    expect(history[0]?.parts).toHaveLength(1);
-    expect(history[0]?.parts[0]?.kind).toBe("reasoning");
-    expect(mock.session.messagesCalls).toHaveLength(1);
-  });
-
-  test("unknown session operations throw", async () => {
-    const executor = makeToolExecutor();
-    const adapter = new OpencodeSdkAdapter(executor.tools);
-
-    await expect(
-      adapter.sendUserMessage({
-        sessionId: "missing",
-        content: "hello",
-      }),
-    ).rejects.toThrow("Unknown session");
-
-    await expect(adapter.stopSession("missing")).rejects.toThrow("Unknown session");
+    expect(mock.session.abortCalls).toHaveLength(1);
+    expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 });

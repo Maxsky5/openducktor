@@ -28,13 +28,13 @@ type AgentChatMessageCardProps = {
 };
 
 const WORKFLOW_TOOL_NAMES = new Set([
-  "set_spec",
-  "set_plan",
-  "build_blocked",
-  "build_resumed",
-  "build_completed",
-  "qa_approved",
-  "qa_rejected",
+  "odt_set_spec",
+  "odt_set_plan",
+  "odt_build_blocked",
+  "odt_build_resumed",
+  "odt_build_completed",
+  "odt_qa_approved",
+  "odt_qa_rejected",
 ]);
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
@@ -89,6 +89,13 @@ const stripToolPrefix = (tool: string, value: string): string => {
     .replace(new RegExp(`^Tool\\s+${escaped}\\s*`, "i"), "")
     .replace(/^(queued|running|completed|failed)\s*[:.-]?\s*/i, "")
     .trim();
+};
+
+const toolDisplayName = (tool: string): string => {
+  if (tool.toLowerCase().startsWith("odt_")) {
+    return tool.slice(4);
+  }
+  return tool;
 };
 
 const toSingleLineMarkdown = (value: string): string => {
@@ -540,7 +547,7 @@ export function AgentChatMessageCard({
                 <span className={cn(meta.status === "error" ? "text-rose-500" : "text-slate-500")}>
                   {toolIcon(meta.tool)}
                 </span>
-                <p className="shrink-0 font-medium text-current">{meta.tool}</p>
+                <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
                 {summaryText.length > 0 ? (
                   <p className="truncate text-slate-600">{summaryText}</p>
                 ) : null}
@@ -569,7 +576,7 @@ export function AgentChatMessageCard({
                         : "text-amber-900",
                   )}
                 >
-                  {meta.tool}
+                  {toolDisplayName(meta.tool)}
                 </p>
                 {summary.length > 0 ? (
                   <p className="truncate text-xs text-current/80">{summary}</p>

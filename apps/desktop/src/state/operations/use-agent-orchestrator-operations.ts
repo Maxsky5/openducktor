@@ -55,16 +55,10 @@ const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 const runningStates = new Set(["starting", "running", "blocked", "awaiting_done_confirmation"]);
 
 const now = (): string => new Date().toISOString();
-const OBC_TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*[\s\S]*?<\/obp_tool_call>/g;
-const OBC_TOOL_BLOCK_TAIL_PATTERN = /<obp_tool_call>[\s\S]*$/;
 const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
 
 const sanitizeStreamingText = (value: string): string => {
-  return value
-    .replace(OBC_TOOL_BLOCK_PATTERN, "")
-    .replace(OBC_TOOL_BLOCK_TAIL_PATTERN, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimStart();
+  return value.replace(/\n{3,}/g, "\n\n").trimStart();
 };
 
 const inferScenario = (
@@ -102,24 +96,24 @@ const inferScenario = (
 const kickoffPrompt = (role: AgentRole, scenario: AgentScenario): string => {
   if (role === "spec") {
     return scenario === "spec_revision"
-      ? 'Revise the current specification and emit ONLY an <obp_tool_call> payload for {"tool":"set_spec","args":{"markdown":"..."}} when ready.'
-      : 'Write the initial specification and emit ONLY an <obp_tool_call> payload for {"tool":"set_spec","args":{"markdown":"..."}} when ready.';
+      ? "Revise the current specification and call odt_set_spec with complete markdown when ready."
+      : "Write the initial specification and call odt_set_spec with complete markdown when ready.";
   }
   if (role === "planner") {
     return scenario === "planner_revision"
-      ? 'Revise the current implementation plan and emit ONLY an <obp_tool_call> payload for {"tool":"set_plan","args":{"markdown":"..."}} when ready.'
-      : 'Create the initial implementation plan and emit ONLY an <obp_tool_call> payload for {"tool":"set_plan","args":{"markdown":"..."}} when ready.';
+      ? "Revise the current implementation plan and call odt_set_plan when ready."
+      : "Create the initial implementation plan and call odt_set_plan when ready.";
   }
   if (role === "qa") {
-    return 'Perform QA review now and emit ONLY one <obp_tool_call> payload: {"tool":"qa_approved","args":{"reportMarkdown":"..."}} or {"tool":"qa_rejected","args":{"reportMarkdown":"..."}}.';
+    return "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.";
   }
   if (scenario === "build_after_qa_rejected") {
-    return 'Address all QA rejection findings and emit ONLY an <obp_tool_call> payload for {"tool":"build_completed","args":{"summary":"..."}} when done.';
+    return "Address all QA rejection findings and call odt_build_completed when done.";
   }
   if (scenario === "build_after_human_request_changes") {
-    return 'Apply all human-requested changes and emit ONLY an <obp_tool_call> payload for {"tool":"build_completed","args":{"summary":"..."}} when done.';
+    return "Apply all human-requested changes and call odt_build_completed when done.";
   }
-  return 'Start implementation now and emit bridge tool payloads via <obp_tool_call> for {"tool":"build_blocked"| "build_resumed" | "build_completed", "args":{...}} as status changes.';
+  return "Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.";
 };
 
 const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelection | null => {
@@ -516,7 +510,6 @@ export function useAgentOrchestratorOperations({
   const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
   const draftRawBySessionRef = useRef<Record<string, string>>({});
   const draftSourceBySessionRef = useRef<Record<string, "delta" | "part">>({});
-  const workflowToolMessageBySessionRef = useRef<Record<string, string>>({});
   const turnStartedAtBySessionRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
@@ -544,32 +537,12 @@ export function useAgentOrchestratorOperations({
     unsubscribersRef.current.clear();
     draftRawBySessionRef.current = {};
     draftSourceBySessionRef.current = {};
-    workflowToolMessageBySessionRef.current = {};
     turnStartedAtBySessionRef.current = {};
     sessionsRef.current = {};
     setSessionsById({});
   }, [activeRepo]);
 
-  const adapter = useMemo(() => {
-    return new OpencodeSdkAdapter({
-      setSpec: async (repoPath, taskId, markdown) => host.setSpec({ repoPath, taskId, markdown }),
-      setPlan: async (repoPath, taskId, markdown, subtasks) =>
-        host.setPlan({
-          repoPath,
-          taskId,
-          markdown,
-          ...(subtasks ? { subtasks } : {}),
-        }),
-      buildBlocked: async (repoPath, taskId, reason) => host.buildBlocked(repoPath, taskId, reason),
-      buildResumed: async (repoPath, taskId) => host.buildResumed(repoPath, taskId),
-      buildCompleted: async (repoPath, taskId, summary) =>
-        host.buildCompleted(repoPath, taskId, summary),
-      qaApproved: async (repoPath, taskId, reportMarkdown) =>
-        host.qaApproved(repoPath, taskId, reportMarkdown),
-      qaRejected: async (repoPath, taskId, reportMarkdown) =>
-        host.qaRejected(repoPath, taskId, reportMarkdown),
-    });
-  }, []);
+  const adapter = useMemo(() => new OpencodeSdkAdapter(), []);
 
   const persistSessionSnapshot = useCallback(
     async (session: AgentSessionState): Promise<void> => {
@@ -942,36 +915,54 @@ export function useAgentOrchestratorOperations({
             const input = normalizeToolInput(part.input);
             const output = normalizeToolText(part.output);
             const error = normalizeToolText(part.error);
+            let shouldRefreshTaskData = false;
             updateSession(
               sessionId,
-              (current) => ({
-                ...current,
-                status: "running",
-                messages: upsertMessage(current.messages, {
-                  id: `tool:${streamMessageKey}`,
-                  role: "tool",
-                  content: formatToolContent(part),
-                  timestamp: event.timestamp,
-                  meta: {
-                    kind: "tool",
-                    partId: part.partId,
-                    callId: part.callId,
-                    tool: part.tool,
-                    status: part.status,
-                    ...(part.title ? { title: part.title } : {}),
-                    ...(input ? { input } : {}),
-                    ...(output ? { output } : {}),
-                    ...(error ? { error } : {}),
-                    ...(part.metadata ? { metadata: part.metadata } : {}),
-                    ...(typeof part.startedAtMs === "number"
-                      ? { startedAtMs: part.startedAtMs }
-                      : {}),
-                    ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-                  },
-                }),
-              }),
+              (current) => {
+                const messageId = `tool:${streamMessageKey}`;
+                const existing = current.messages.find((entry) => entry.id === messageId);
+                const previousStatus =
+                  existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
+                if (
+                  part.tool.toLowerCase().startsWith("odt_") &&
+                  part.status === "completed" &&
+                  previousStatus !== "completed"
+                ) {
+                  shouldRefreshTaskData = true;
+                }
+
+                return {
+                  ...current,
+                  status: "running",
+                  messages: upsertMessage(current.messages, {
+                    id: messageId,
+                    role: "tool",
+                    content: formatToolContent(part),
+                    timestamp: event.timestamp,
+                    meta: {
+                      kind: "tool",
+                      partId: part.partId,
+                      callId: part.callId,
+                      tool: part.tool,
+                      status: part.status,
+                      ...(part.title ? { title: part.title } : {}),
+                      ...(input ? { input } : {}),
+                      ...(output ? { output } : {}),
+                      ...(error ? { error } : {}),
+                      ...(part.metadata ? { metadata: part.metadata } : {}),
+                      ...(typeof part.startedAtMs === "number"
+                        ? { startedAtMs: part.startedAtMs }
+                        : {}),
+                      ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+                    },
+                  }),
+                };
+              },
               { persist: false },
             );
+            if (shouldRefreshTaskData) {
+              void refreshTaskData(repoPath).catch(() => undefined);
+            }
             return;
           }
 
@@ -1021,67 +1012,6 @@ export function useAgentOrchestratorOperations({
               ],
             };
           });
-          return;
-        }
-
-        if (event.type === "tool_call") {
-          const workflowToolKey = `${sessionId}:${event.call.tool}`;
-          const existingMessageId = workflowToolMessageBySessionRef.current[workflowToolKey];
-          const messageId = existingMessageId ?? `workflow-tool:${crypto.randomUUID()}`;
-          workflowToolMessageBySessionRef.current[workflowToolKey] = messageId;
-
-          updateSession(sessionId, (current) => ({
-            ...current,
-            messages: upsertMessage(current.messages, {
-              id: messageId,
-              role: "tool",
-              content: `Workflow tool call: ${event.call.tool}`,
-              timestamp: event.timestamp,
-              meta: {
-                kind: "tool",
-                partId: messageId,
-                callId: messageId,
-                tool: event.call.tool,
-                status: "pending",
-                input: event.call.args as Record<string, unknown>,
-              },
-            }),
-          }));
-          return;
-        }
-
-        if (event.type === "tool_result") {
-          const workflowToolKey = `${sessionId}:${event.tool}`;
-          const existingMessageId = workflowToolMessageBySessionRef.current[workflowToolKey];
-          const messageId = existingMessageId ?? `workflow-tool:${crypto.randomUUID()}`;
-
-          updateSession(sessionId, (current) => {
-            const existingMessage = current.messages.find((entry) => entry.id === messageId);
-            const existingInput =
-              existingMessage?.meta?.kind === "tool" ? existingMessage.meta.input : undefined;
-            return {
-              ...current,
-              messages: upsertMessage(current.messages, {
-                id: messageId,
-                role: "tool",
-                content: `${event.tool}: ${event.success ? "success" : "error"} - ${event.message}`,
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "tool",
-                  partId: messageId,
-                  callId: messageId,
-                  tool: event.tool,
-                  status: event.success ? "completed" : "error",
-                  ...(existingInput ? { input: existingInput } : {}),
-                  ...(event.success ? { output: event.message } : { error: event.message }),
-                },
-              }),
-            };
-          });
-          delete workflowToolMessageBySessionRef.current[workflowToolKey];
-          if (event.success) {
-            void refreshTaskData(repoPath).catch(() => undefined);
-          }
           return;
         }
 
