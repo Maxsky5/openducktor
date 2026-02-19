@@ -592,28 +592,38 @@ export function AgentChatMessageCard({
                 ) : null}
               </div>
               {(hasInput || hasOutput || hasError) && (
-                <details className="rounded border border-current/20 bg-white/55">
-                  <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
-                    Details
-                  </summary>
-                  <div className="space-y-2 px-2 pb-2">
-                    {hasInput && meta.input ? (
-                      <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-current">
+                <div className="space-y-2">
+                  {hasInput && meta.input ? (
+                    <details className="rounded border border-current/20 bg-white/55">
+                      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
+                        Input
+                      </summary>
+                      <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-current">
                         {JSON.stringify(meta.input, null, 2)}
                       </pre>
-                    ) : null}
-                    {hasOutput && meta.output ? (
-                      <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-current">
+                    </details>
+                  ) : null}
+                  {hasOutput && meta.output ? (
+                    <details className="rounded border border-current/20 bg-white/55">
+                      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
+                        Output
+                      </summary>
+                      <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-current">
                         {formatRawJsonLikeText(meta.output)}
                       </pre>
-                    ) : null}
-                    {hasError && meta.error ? (
-                      <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-current">
+                    </details>
+                  ) : null}
+                  {hasError && meta.error ? (
+                    <details className="rounded border border-current/20 bg-white/55">
+                      <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
+                        Error
+                      </summary>
+                      <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-current">
                         {formatRawJsonLikeText(meta.error)}
                       </pre>
-                    ) : null}
-                  </div>
-                </details>
+                    </details>
+                  ) : null}
+                </div>
               )}
             </div>
           );

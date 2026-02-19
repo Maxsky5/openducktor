@@ -1339,7 +1339,7 @@ export function AgentsPage(): ReactElement {
                     );
                   })()}
                   <p className="whitespace-pre-wrap leading-6 text-slate-700">
-                    {`${activeSession.draftAssistantText}▍`}
+                    {activeSession.draftAssistantText}
                   </p>
                 </article>
               ) : null}
