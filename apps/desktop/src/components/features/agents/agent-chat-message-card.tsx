@@ -1,6 +1,7 @@
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentModelSelection, AgentRole } from "@openblueprint/core";
 import {
   Brain,
   FileText,
@@ -17,6 +18,8 @@ import type { ReactElement } from "react";
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
+  sessionRole: AgentRole | null;
+  sessionSelectedModel: AgentModelSelection | null;
 };
 
 const WORKFLOW_TOOL_NAMES = new Set([
@@ -90,9 +93,16 @@ const toSingleLineMarkdown = (value: string): string => {
     .trim();
 };
 
-const roleLabel = (role: AgentChatMessage["role"]): string => {
+const AGENT_ROLE_LABEL: Record<AgentRole, string> = {
+  spec: "Spec",
+  planner: "Planner",
+  build: "Builder",
+  qa: "QA",
+};
+
+const roleLabel = (role: AgentChatMessage["role"], sessionRole: AgentRole | null): string => {
   if (role === "assistant") {
-    return "Assistant";
+    return sessionRole ? AGENT_ROLE_LABEL[sessionRole] : "Assistant";
   }
   if (role === "thinking") {
     return "Thinking";
@@ -318,7 +328,44 @@ const getToolDuration = (
   return endedAtMs - meta.startedAtMs;
 };
 
-export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): ReactElement | null {
+const getAssistantFooterParts = (
+  message: AgentChatMessage,
+  sessionSelectedModel: AgentModelSelection | null,
+): string[] => {
+  if (message.role !== "assistant") {
+    return [];
+  }
+
+  const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+  const parts: string[] = [];
+
+  const agentLabel = assistantMeta?.opencodeAgent ?? sessionSelectedModel?.opencodeAgent;
+  if (typeof agentLabel === "string" && agentLabel.trim().length > 0) {
+    parts.push(agentLabel.trim());
+  }
+
+  const modelLabel = assistantMeta?.modelId ?? sessionSelectedModel?.modelId;
+  if (typeof modelLabel === "string" && modelLabel.trim().length > 0) {
+    parts.push(modelLabel.trim());
+  }
+
+  const variantLabel = assistantMeta?.variant ?? sessionSelectedModel?.variant;
+  if (typeof variantLabel === "string" && variantLabel.trim().length > 0) {
+    parts.push(variantLabel.trim());
+  }
+
+  if (assistantMeta?.durationMs && assistantMeta.durationMs > 0) {
+    parts.push(formatDuration(assistantMeta.durationMs));
+  }
+
+  return parts;
+};
+
+export function AgentChatMessageCard({
+  message,
+  sessionRole,
+  sessionSelectedModel,
+}: AgentChatMessageCardProps): ReactElement | null {
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
   const isReasoningMessage = meta?.kind === "reasoning";
@@ -370,7 +417,7 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
               <span className="inline-flex items-center gap-1">
                 {message.role === "thinking" ? <Brain className="size-3" /> : null}
                 {message.role === "tool" ? <Hammer className="size-3" /> : null}
-                {roleLabel(message.role)}
+                {roleLabel(message.role, sessionRole)}
               </span>
               {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
             </>
@@ -512,7 +559,21 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
       ) : message.role === "thinking" || message.role === "system" ? (
         <p className="whitespace-pre-wrap leading-6 text-slate-700">{message.content}</p>
       ) : message.role === "assistant" ? (
-        <MarkdownRenderer markdown={message.content} variant="document" />
+        <div className="space-y-2">
+          <MarkdownRenderer markdown={message.content} variant="document" />
+          {(() => {
+            const footerParts = getAssistantFooterParts(message, sessionSelectedModel);
+            if (footerParts.length === 0) {
+              return null;
+            }
+            return (
+              <p className="inline-flex items-center gap-2 text-xs text-slate-500">
+                <span className="size-1.5 rounded-sm bg-amber-500" />
+                {footerParts.join(" · ")}
+              </p>
+            );
+          })()}
+        </div>
       ) : (
         <MarkdownRenderer markdown={message.content} variant="document" />
       )}

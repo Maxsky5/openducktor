@@ -300,9 +300,27 @@ const normalizeRetryStatusMessage = (value: string): string => {
   return normalized;
 };
 
+const toAssistantMessageMeta = (
+  session: AgentSessionState,
+  durationMs?: number,
+): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
+  return {
+    kind: "assistant",
+    agentRole: session.role,
+    ...(session.selectedModel?.providerId ? { providerId: session.selectedModel.providerId } : {}),
+    ...(session.selectedModel?.modelId ? { modelId: session.selectedModel.modelId } : {}),
+    ...(session.selectedModel?.variant ? { variant: session.selectedModel.variant } : {}),
+    ...(session.selectedModel?.opencodeAgent
+      ? { opencodeAgent: session.selectedModel.opencodeAgent }
+      : {}),
+    ...(typeof durationMs === "number" ? { durationMs } : {}),
+  };
+};
+
 const finalizeDraftAssistantMessage = (
   session: AgentSessionState,
   timestamp: string,
+  durationMs?: number,
 ): AgentSessionState => {
   const draft = session.draftAssistantText.trim();
   if (draft.length === 0) {
@@ -312,9 +330,19 @@ const finalizeDraftAssistantMessage = (
   const lastMessage = session.messages[session.messages.length - 1];
   const alreadyAppended = lastMessage?.role === "assistant" && lastMessage.content.trim() === draft;
   if (alreadyAppended) {
+    const nextMessages = [...session.messages];
+    const lastIndex = nextMessages.length - 1;
+    const existing = nextMessages[lastIndex];
+    if (existing && (!existing.meta || existing.meta.kind !== "assistant")) {
+      nextMessages[lastIndex] = {
+        ...existing,
+        meta: toAssistantMessageMeta(session, durationMs),
+      };
+    }
     return {
       ...session,
       draftAssistantText: "",
+      messages: nextMessages,
     };
   }
 
@@ -328,6 +356,7 @@ const finalizeDraftAssistantMessage = (
         role: "assistant",
         content: draft,
         timestamp,
+        meta: toAssistantMessageMeta(session, durationMs),
       },
     ],
   };
@@ -388,7 +417,7 @@ const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionSt
     pendingQuestions: [],
     modelCatalog: null,
     selectedModel: normalizePersistedSelection(session.selectedModel),
-    isLoadingModelCatalog: false,
+    isLoadingModelCatalog: true,
   };
 };
 
@@ -488,6 +517,7 @@ export function useAgentOrchestratorOperations({
   const draftRawBySessionRef = useRef<Record<string, string>>({});
   const draftSourceBySessionRef = useRef<Record<string, "delta" | "part">>({});
   const workflowToolMessageBySessionRef = useRef<Record<string, string>>({});
+  const turnStartedAtBySessionRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     sessionsRef.current = sessionsById;
@@ -515,6 +545,7 @@ export function useAgentOrchestratorOperations({
     draftRawBySessionRef.current = {};
     draftSourceBySessionRef.current = {};
     workflowToolMessageBySessionRef.current = {};
+    turnStartedAtBySessionRef.current = {};
     sessionsRef.current = {};
     setSessionsById({});
   }, [activeRepo]);
@@ -581,6 +612,71 @@ export function useAgentOrchestratorOperations({
     [persistSessionSnapshot],
   );
 
+  const resolveTurnDurationMs = useCallback(
+    (sessionId: string, timestamp: string): number | undefined => {
+      const startedAt = turnStartedAtBySessionRef.current[sessionId];
+      if (typeof startedAt !== "number") {
+        return undefined;
+      }
+      const parsedTimestamp = Date.parse(timestamp);
+      const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
+      return Math.max(0, endedAt - startedAt);
+    },
+    [],
+  );
+
+  const clearTurnDuration = useCallback((sessionId: string): void => {
+    delete turnStartedAtBySessionRef.current[sessionId];
+  }, []);
+
+  const loadSessionModelCatalog = useCallback(
+    async (sessionId: string, baseUrl: string, workingDirectory: string): Promise<void> => {
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          isLoadingModelCatalog: true,
+        }),
+        { persist: false },
+      );
+
+      try {
+        const catalog = await adapter.listAvailableModels({
+          baseUrl,
+          workingDirectory,
+        });
+        updateSession(
+          sessionId,
+          (current) => ({
+            ...current,
+            modelCatalog: catalog,
+            selectedModel:
+              normalizeSelectionForCatalog(catalog, current.selectedModel) ??
+              pickDefaultModel(catalog),
+            isLoadingModelCatalog: false,
+          }),
+          { persist: false },
+        );
+      } catch (error) {
+        updateSession(
+          sessionId,
+          (current) => ({
+            ...current,
+            isLoadingModelCatalog: false,
+            messages: upsertMessage(current.messages, {
+              id: `model-catalog:${sessionId}`,
+              role: "system",
+              content: `Model catalog unavailable: ${errorMessage(error)}`,
+              timestamp: now(),
+            }),
+          }),
+          { persist: false },
+        );
+      }
+    },
+    [adapter, updateSession],
+  );
+
   const loadAgentSessions = useCallback(
     async (taskId: string): Promise<void> => {
       if (!activeRepo || taskId.trim().length === 0) {
@@ -603,6 +699,19 @@ export function useAgentOrchestratorOperations({
       });
 
       if (recordsToHydrate.length === 0) {
+        const existingSessions = Object.values(sessionsRef.current).filter(
+          (entry) => entry.taskId === taskId && !entry.modelCatalog && !entry.isLoadingModelCatalog,
+        );
+        for (const session of existingSessions) {
+          if (!session.baseUrl || !session.workingDirectory) {
+            continue;
+          }
+          void loadSessionModelCatalog(
+            session.sessionId,
+            session.baseUrl,
+            session.workingDirectory,
+          );
+        }
         return;
       }
 
@@ -634,6 +743,7 @@ export function useAgentOrchestratorOperations({
               }),
               { persist: false },
             );
+            void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory);
             return;
           }
 
@@ -710,13 +820,15 @@ export function useAgentOrchestratorOperations({
               }),
               { persist: false },
             );
+            void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory);
           } catch {
             // Ignore missing/unavailable external history; metadata pointer remains persisted.
+            void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory);
           }
         }),
       );
     },
-    [activeRepo, adapter, updateSession],
+    [activeRepo, adapter, loadSessionModelCatalog, updateSession],
   );
 
   const attachSessionListener = useCallback(
@@ -880,6 +992,7 @@ export function useAgentOrchestratorOperations({
         if (event.type === "assistant_message") {
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
+          const durationMs = resolveTurnDurationMs(sessionId, event.timestamp);
           updateSession(sessionId, (current) => ({
             ...current,
             draftAssistantText: "",
@@ -890,6 +1003,7 @@ export function useAgentOrchestratorOperations({
                 role: "assistant",
                 content: event.message,
                 timestamp: event.timestamp,
+                meta: toAssistantMessageMeta(current, durationMs),
               },
             ],
           }));
@@ -995,9 +1109,14 @@ export function useAgentOrchestratorOperations({
             return;
           }
           updateSession(sessionId, (current) => ({
-            ...finalizeDraftAssistantMessage(current, event.timestamp),
+            ...finalizeDraftAssistantMessage(
+              current,
+              event.timestamp,
+              resolveTurnDurationMs(sessionId, event.timestamp),
+            ),
             ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
           }));
+          clearTurnDuration(sessionId);
           return;
         }
 
@@ -1066,7 +1185,11 @@ export function useAgentOrchestratorOperations({
           delete draftSourceBySessionRef.current[sessionId];
           const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
           updateSession(sessionId, (current) => {
-            const finalized = finalizeDraftAssistantMessage(current, event.timestamp);
+            const finalized = finalizeDraftAssistantMessage(
+              current,
+              event.timestamp,
+              resolveTurnDurationMs(sessionId, event.timestamp),
+            );
             return {
               ...finalized,
               status: "error",
@@ -1081,6 +1204,7 @@ export function useAgentOrchestratorOperations({
               ],
             };
           });
+          clearTurnDuration(sessionId);
           return;
         }
 
@@ -1088,12 +1212,17 @@ export function useAgentOrchestratorOperations({
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => {
-            const finalized = finalizeDraftAssistantMessage(current, event.timestamp);
+            const finalized = finalizeDraftAssistantMessage(
+              current,
+              event.timestamp,
+              resolveTurnDurationMs(sessionId, event.timestamp),
+            );
             return {
               ...finalized,
               ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
             };
           });
+          clearTurnDuration(sessionId);
           return;
         }
 
@@ -1101,18 +1230,23 @@ export function useAgentOrchestratorOperations({
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => {
-            const finalized = finalizeDraftAssistantMessage(current, event.timestamp);
+            const finalized = finalizeDraftAssistantMessage(
+              current,
+              event.timestamp,
+              resolveTurnDurationMs(sessionId, event.timestamp),
+            );
             return {
               ...finalized,
               status: "stopped",
             };
           });
+          clearTurnDuration(sessionId);
         }
       });
 
       unsubscribersRef.current.set(sessionId, unsubscribe);
     },
-    [adapter, refreshTaskData, updateSession],
+    [adapter, clearTurnDuration, refreshTaskData, resolveTurnDurationMs, updateSession],
   );
 
   const loadTaskDocuments = useCallback(async (repoPath: string, taskId: string) => {
@@ -1265,8 +1399,21 @@ export function useAgentOrchestratorOperations({
         baseUrl: runtime.baseUrl,
         workingDirectory: runtime.workingDirectory,
       }));
+
+      const activeSession = sessionsRef.current[sessionId];
+      if (activeSession && !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog) {
+        void loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory);
+      }
     },
-    [activeRepo, adapter, attachSessionListener, ensureRuntime, loadTaskDocuments, updateSession],
+    [
+      activeRepo,
+      adapter,
+      attachSessionListener,
+      ensureRuntime,
+      loadSessionModelCatalog,
+      loadTaskDocuments,
+      updateSession,
+    ],
   );
 
   const sendAgentMessage = useCallback(
@@ -1279,6 +1426,7 @@ export function useAgentOrchestratorOperations({
       await ensureSessionReady(sessionId);
 
       const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
+      turnStartedAtBySessionRef.current[sessionId] = Date.now();
 
       updateSession(sessionId, (current) => ({
         ...current,
@@ -1320,9 +1468,10 @@ export function useAgentOrchestratorOperations({
             }),
             { persist: false },
           );
+          clearTurnDuration(sessionId);
         });
     },
-    [adapter, ensureSessionReady, updateSession],
+    [adapter, clearTurnDuration, ensureSessionReady, updateSession],
   );
 
   const startAgentSession = useCallback(
@@ -1423,36 +1572,7 @@ export function useAgentOrchestratorOperations({
 
       attachSessionListener(activeRepo, summary.sessionId);
 
-      void adapter
-        .listAvailableModels({
-          baseUrl: runtime.baseUrl,
-          workingDirectory: runtime.workingDirectory,
-        })
-        .then((catalog) => {
-          updateSession(summary.sessionId, (current) => ({
-            ...current,
-            modelCatalog: catalog,
-            selectedModel:
-              normalizeSelectionForCatalog(catalog, current.selectedModel) ??
-              pickDefaultModel(catalog),
-            isLoadingModelCatalog: false,
-          }));
-        })
-        .catch((error) => {
-          updateSession(summary.sessionId, (current) => ({
-            ...current,
-            isLoadingModelCatalog: false,
-            messages: [
-              ...current.messages,
-              {
-                id: crypto.randomUUID(),
-                role: "system",
-                content: `Model catalog unavailable: ${errorMessage(error)}`,
-                timestamp: now(),
-              },
-            ],
-          }));
-        });
+      void loadSessionModelCatalog(summary.sessionId, runtime.baseUrl, runtime.workingDirectory);
 
       if (sendKickoff) {
         await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario));
@@ -1471,7 +1591,7 @@ export function useAgentOrchestratorOperations({
       persistSessionSnapshot,
       refreshTaskData,
       sendAgentMessage,
-      updateSession,
+      loadSessionModelCatalog,
     ],
   );
 
@@ -1489,6 +1609,7 @@ export function useAgentOrchestratorOperations({
       if (adapter.hasSession(sessionId)) {
         await adapter.stopSession(sessionId);
       }
+      clearTurnDuration(sessionId);
 
       updateSession(sessionId, (current) => ({
         ...current,
@@ -1496,7 +1617,7 @@ export function useAgentOrchestratorOperations({
         draftAssistantText: "",
       }));
     },
-    [adapter, updateSession],
+    [adapter, clearTurnDuration, updateSession],
   );
 
   const updateAgentSessionModel = useCallback(

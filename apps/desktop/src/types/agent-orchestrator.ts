@@ -26,6 +26,15 @@ export type AgentChatMessageMeta =
       endedAtMs?: number;
     }
   | {
+      kind: "assistant";
+      agentRole: AgentRole;
+      providerId?: string;
+      modelId?: string;
+      variant?: string;
+      opencodeAgent?: string;
+      durationMs?: number;
+    }
+  | {
       kind: "step";
       partId: string;
       phase: "start" | "finish";

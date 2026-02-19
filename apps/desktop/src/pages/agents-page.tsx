@@ -512,12 +512,40 @@ export function AgentsPage(): ReactElement {
   ]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
-    return toPrimaryAgentOptions(activeSession?.modelCatalog ?? null);
-  }, [activeSession?.modelCatalog]);
+    const options = toPrimaryAgentOptions(activeSession?.modelCatalog ?? null);
+    if (options.length > 0) {
+      return options;
+    }
+    const fallbackAgent = activeSession?.selectedModel?.opencodeAgent;
+    if (fallbackAgent && fallbackAgent.trim().length > 0) {
+      return [
+        {
+          value: fallbackAgent,
+          label: fallbackAgent,
+          description: "Current session agent",
+        },
+      ];
+    }
+    return [];
+  }, [activeSession?.modelCatalog, activeSession?.selectedModel?.opencodeAgent]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
-    return toModelOptions(activeSession?.modelCatalog ?? null);
-  }, [activeSession?.modelCatalog]);
+    const options = toModelOptions(activeSession?.modelCatalog ?? null);
+    if (options.length > 0) {
+      return options;
+    }
+    const selected = activeSession?.selectedModel;
+    if (selected?.providerId && selected.modelId) {
+      return [
+        {
+          value: `${selected.providerId}/${selected.modelId}`,
+          label: selected.modelId,
+          description: `${selected.providerId} (current session model)`,
+        },
+      ];
+    }
+    return [];
+  }, [activeSession?.modelCatalog, activeSession?.selectedModel]);
 
   const modelGroups = useMemo(
     () => toModelGroupsByProvider(activeSession?.modelCatalog ?? null),
@@ -539,13 +567,22 @@ export function AgentsPage(): ReactElement {
 
   const variantOptions = useMemo(() => {
     if (!selectedModelEntry) {
+      const selectedVariant = activeSession?.selectedModel?.variant;
+      if (selectedVariant && selectedVariant.trim().length > 0) {
+        return [
+          {
+            value: selectedVariant,
+            label: selectedVariant,
+          },
+        ];
+      }
       return [];
     }
     return selectedModelEntry.variants.map((variant) => ({
       value: variant,
       label: variant,
     }));
-  }, [selectedModelEntry]);
+  }, [activeSession?.selectedModel?.variant, selectedModelEntry]);
 
   const scenarioOptions = useMemo<ComboboxOption[]>(() => {
     return scenarios.map((entry) => ({
@@ -879,7 +916,12 @@ export function AgentsPage(): ReactElement {
               ) : null}
 
               {activeSession?.messages.map((message) => (
-                <AgentChatMessageCard key={message.id} message={message} />
+                <AgentChatMessageCard
+                  key={message.id}
+                  message={message}
+                  sessionRole={activeSession.role}
+                  sessionSelectedModel={activeSession.selectedModel}
+                />
               ))}
 
               {activeSession?.draftAssistantText ? (
