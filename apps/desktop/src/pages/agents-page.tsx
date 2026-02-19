@@ -15,9 +15,15 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { TaskCard } from "@openblueprint/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openblueprint/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentRole,
+  AgentScenario,
+} from "@openblueprint/core";
 import {
   Bot,
   Brain,
@@ -155,6 +161,7 @@ const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | 
 };
 
 const NEW_SESSION_SENTINEL = "__new_session__";
+const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openblueprint:agent-studio:context";
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
 
@@ -193,6 +200,99 @@ const isNearBottom = (element: HTMLElement): boolean => {
   );
 };
 
+const toContextStorageKey = (repoPath: string): string =>
+  `${AGENT_STUDIO_CONTEXT_STORAGE_PREFIX}:${repoPath}`;
+
+const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | null> => ({
+  spec: null,
+  planner: null,
+  build: null,
+  qa: null,
+});
+
+const pickDefaultSelectionForCatalog = (
+  catalog: AgentModelCatalog | null,
+): AgentModelSelection | null => {
+  if (!catalog || catalog.models.length === 0) {
+    return null;
+  }
+  const defaultProvider = Object.entries(catalog.defaultModelsByProvider).find(([, modelId]) =>
+    catalog.models.some((entry) => entry.modelId === modelId),
+  );
+  const selectedModel = defaultProvider
+    ? (catalog.models.find(
+        (entry) => entry.providerId === defaultProvider[0] && entry.modelId === defaultProvider[1],
+      ) ?? catalog.models[0])
+    : catalog.models[0];
+  if (!selectedModel) {
+    return null;
+  }
+
+  const primaryAgent = catalog.agents.find((entry) => !entry.hidden && entry.mode === "primary");
+  const fallbackAgent = catalog.agents.find((entry) => !entry.hidden && entry.mode !== "subagent");
+  const selectedAgent = primaryAgent?.name ?? fallbackAgent?.name ?? undefined;
+
+  return {
+    providerId: selectedModel.providerId,
+    modelId: selectedModel.modelId,
+    ...(selectedModel.variants[0] ? { variant: selectedModel.variants[0] } : {}),
+    ...(selectedAgent ? { opencodeAgent: selectedAgent } : {}),
+  };
+};
+
+const normalizeSelectionForCatalog = (
+  catalog: AgentModelCatalog | null,
+  selection: AgentModelSelection | null,
+): AgentModelSelection | null => {
+  if (!catalog || !selection) {
+    return selection;
+  }
+  const model = catalog.models.find(
+    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
+  );
+  if (!model) {
+    return null;
+  }
+
+  const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
+  const hasAgent = Boolean(
+    selection.opencodeAgent &&
+      catalog.agents.some(
+        (agent) =>
+          agent.name === selection.opencodeAgent && !agent.hidden && agent.mode !== "subagent",
+      ),
+  );
+
+  return {
+    providerId: model.providerId,
+    modelId: model.modelId,
+    ...(hasVariant
+      ? { variant: selection.variant }
+      : model.variants[0]
+        ? { variant: model.variants[0] }
+        : {}),
+    ...(hasAgent ? { opencodeAgent: selection.opencodeAgent } : {}),
+  };
+};
+
+const isSameSelection = (
+  a: AgentModelSelection | null | undefined,
+  b: AgentModelSelection | null | undefined,
+): boolean => {
+  if (!a && !b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    a.providerId === b.providerId &&
+    a.modelId === b.modelId &&
+    (a.variant ?? "") === (b.variant ?? "") &&
+    (a.opencodeAgent ?? "") === (b.opencodeAgent ?? "")
+  );
+};
+
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
   const { tasks } = useTasksState();
@@ -211,12 +311,17 @@ export function AgentsPage(): ReactElement {
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
+  const [composerCatalog, setComposerCatalog] = useState<AgentModelCatalog | null>(null);
+  const [isLoadingComposerCatalog, setIsLoadingComposerCatalog] = useState(false);
+  const [draftSelectionByRole, setDraftSelectionByRole] =
+    useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
   const [questionDrafts, setQuestionDrafts] = useState<Record<string, string[][]>>({});
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const documentReloadAttemptsRef = useRef(new Map<string, number>());
+  const restoredContextRepoRef = useRef<string | null>(null);
 
   const taskIdParam = searchParams.get("task") ?? "";
   const sessionParam = searchParams.get("session");
@@ -320,6 +425,111 @@ export function AgentsPage(): ReactElement {
 
   useEffect(() => {
     if (!activeRepo) {
+      setComposerCatalog(null);
+      setIsLoadingComposerCatalog(false);
+      restoredContextRepoRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    setComposerCatalog(null);
+    setIsLoadingComposerCatalog(true);
+    void loadRepoOpencodeCatalog(activeRepo)
+      .then((catalog) => {
+        if (!cancelled) {
+          setComposerCatalog(catalog);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setComposerCatalog(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingComposerCatalog(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRepo]);
+
+  useEffect(() => {
+    if (!activeRepo) {
+      return;
+    }
+    if (restoredContextRepoRef.current === activeRepo) {
+      return;
+    }
+
+    const hasExplicitQuery =
+      Boolean(searchParams.get("task")) ||
+      Boolean(searchParams.get("session")) ||
+      Boolean(searchParams.get("agent")) ||
+      Boolean(searchParams.get("scenario")) ||
+      Boolean(searchParams.get("autostart"));
+    if (hasExplicitQuery) {
+      restoredContextRepoRef.current = activeRepo;
+      return;
+    }
+
+    restoredContextRepoRef.current = activeRepo;
+    const raw = globalThis.localStorage.getItem(toContextStorageKey(activeRepo));
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        taskId?: string;
+        role?: string;
+        scenario?: string;
+        sessionId?: string;
+      };
+      const persistedRole = isRole(parsed.role ?? null) ? (parsed.role as AgentRole) : null;
+      const persistedScenario = isScenario(parsed.scenario ?? null)
+        ? (parsed.scenario as AgentScenario)
+        : null;
+      const next = new URLSearchParams(searchParams);
+      if (parsed.taskId && parsed.taskId.trim().length > 0) {
+        next.set("task", parsed.taskId);
+      }
+      if (persistedRole) {
+        next.set("agent", persistedRole);
+      }
+      if (
+        persistedScenario &&
+        (!persistedRole || SCENARIOS_BY_ROLE[persistedRole].includes(persistedScenario))
+      ) {
+        next.set("scenario", persistedScenario);
+      }
+      if (parsed.sessionId && parsed.sessionId.trim().length > 0) {
+        next.set("session", parsed.sessionId);
+      }
+      if (next.toString() !== searchParams.toString()) {
+        setSearchParams(next, { replace: true });
+      }
+    } catch {
+      // Ignore malformed persisted context and continue with query defaults.
+    }
+  }, [activeRepo, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!activeRepo || restoredContextRepoRef.current !== activeRepo) {
+      return;
+    }
+    const payload = {
+      taskId: taskId || undefined,
+      role,
+      scenario,
+      sessionId: isComposingNewSession ? undefined : activeSession?.sessionId,
+    };
+    globalThis.localStorage.setItem(toContextStorageKey(activeRepo), JSON.stringify(payload));
+  }, [activeRepo, activeSession?.sessionId, isComposingNewSession, role, scenario, taskId]);
+
+  useEffect(() => {
+    if (!activeRepo) {
       setRepoSettings(null);
       return;
     }
@@ -361,6 +571,27 @@ export function AgentsPage(): ReactElement {
     };
   }, [repoSettings?.agentDefaults, role]);
 
+  useEffect(() => {
+    if (activeSession) {
+      return;
+    }
+    setDraftSelectionByRole((current) => {
+      const existing = current[role];
+      const preferredBase =
+        existing ?? roleDefaultSelection ?? pickDefaultSelectionForCatalog(composerCatalog);
+      const normalized =
+        normalizeSelectionForCatalog(composerCatalog, preferredBase) ??
+        pickDefaultSelectionForCatalog(composerCatalog);
+      if (isSameSelection(existing, normalized)) {
+        return current;
+      }
+      return {
+        ...current,
+        [role]: normalized,
+      };
+    });
+  }, [activeSession, composerCatalog, role, roleDefaultSelection]);
+
   const sessionOptions = useMemo<ComboboxOption[]>(() => {
     const options = contextSessions.map((entry) => ({
       value: entry.sessionId,
@@ -383,42 +614,64 @@ export function AgentsPage(): ReactElement {
   }, [contextSessions, taskId]);
 
   useEffect(() => {
-    if (!activeSession || !roleDefaultSelection) {
+    if (!activeSession) {
       return;
     }
-    if (activeSession.role !== role) {
+    const preferredSelection =
+      normalizeSelectionForCatalog(
+        activeSession.modelCatalog,
+        activeSession.selectedModel ??
+          roleDefaultSelection ??
+          pickDefaultSelectionForCatalog(activeSession.modelCatalog),
+      ) ?? pickDefaultSelectionForCatalog(activeSession.modelCatalog);
+    if (!preferredSelection || isSameSelection(activeSession.selectedModel, preferredSelection)) {
       return;
     }
+    updateAgentSessionModel(activeSession.sessionId, preferredSelection);
+  }, [activeSession, roleDefaultSelection, updateAgentSessionModel]);
 
-    const selectedModel = activeSession.selectedModel;
-    if (!selectedModel) {
-      updateAgentSessionModel(activeSession.sessionId, roleDefaultSelection);
-      return;
-    }
+  const draftSelection = draftSelectionByRole[role];
+  const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
+  const isSelectionCatalogLoading = activeSession
+    ? activeSession.isLoadingModelCatalog
+    : isLoadingComposerCatalog;
+  const fallbackCatalogSelection = useMemo(
+    () => pickDefaultSelectionForCatalog(selectionCatalog),
+    [selectionCatalog],
+  );
+  const selectedModelSelection = useMemo(
+    () =>
+      activeSession?.selectedModel ??
+      draftSelection ??
+      roleDefaultSelection ??
+      fallbackCatalogSelection ??
+      null,
+    [activeSession?.selectedModel, draftSelection, fallbackCatalogSelection, roleDefaultSelection],
+  );
 
-    let changed = false;
-    const nextSelection: AgentModelSelection = { ...selectedModel };
+  const applySelection = useCallback(
+    (selection: AgentModelSelection | null): void => {
+      if (activeSession) {
+        updateAgentSessionModel(activeSession.sessionId, selection);
+        return;
+      }
+      setDraftSelectionByRole((current) => ({
+        ...current,
+        [role]: selection,
+      }));
+    },
+    [activeSession, role, updateAgentSessionModel],
+  );
 
-    if (!nextSelection.providerId || !nextSelection.modelId) {
-      changed = true;
-      nextSelection.providerId = roleDefaultSelection.providerId;
-      nextSelection.modelId = roleDefaultSelection.modelId;
-    }
-
-    if (roleDefaultSelection.variant && !nextSelection.variant) {
-      changed = true;
-      nextSelection.variant = roleDefaultSelection.variant;
-    }
-
-    if (roleDefaultSelection.opencodeAgent && !nextSelection.opencodeAgent) {
-      changed = true;
-      nextSelection.opencodeAgent = roleDefaultSelection.opencodeAgent;
-    }
-
-    if (changed) {
-      updateAgentSessionModel(activeSession.sessionId, nextSelection);
-    }
-  }, [activeSession, role, roleDefaultSelection, updateAgentSessionModel]);
+  const selectionForNewSession = useMemo(
+    () =>
+      draftSelection ??
+      roleDefaultSelection ??
+      normalizeSelectionForCatalog(selectionCatalog, fallbackCatalogSelection) ??
+      fallbackCatalogSelection ??
+      null,
+    [draftSelection, fallbackCatalogSelection, roleDefaultSelection, selectionCatalog],
+  );
 
   const startSession = useCallback(
     async (sendKickoff = false): Promise<string | undefined> => {
@@ -428,8 +681,8 @@ export function AgentsPage(): ReactElement {
       setIsStarting(true);
       try {
         const sessionId = await startAgentSession({ taskId, role, scenario, sendKickoff });
-        if (roleDefaultSelection) {
-          updateAgentSessionModel(sessionId, roleDefaultSelection);
+        if (selectionForNewSession) {
+          updateAgentSessionModel(sessionId, selectionForNewSession);
         }
         await updateQuery({
           task: taskId,
@@ -445,8 +698,8 @@ export function AgentsPage(): ReactElement {
     },
     [
       role,
-      roleDefaultSelection,
       scenario,
+      selectionForNewSession,
       startAgentSession,
       taskId,
       updateAgentSessionModel,
@@ -512,11 +765,11 @@ export function AgentsPage(): ReactElement {
   ]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toPrimaryAgentOptions(activeSession?.modelCatalog ?? null);
+    const options = toPrimaryAgentOptions(selectionCatalog);
     if (options.length > 0) {
       return options;
     }
-    const fallbackAgent = activeSession?.selectedModel?.opencodeAgent;
+    const fallbackAgent = selectedModelSelection?.opencodeAgent;
     if (fallbackAgent && fallbackAgent.trim().length > 0) {
       return [
         {
@@ -527,14 +780,14 @@ export function AgentsPage(): ReactElement {
       ];
     }
     return [];
-  }, [activeSession?.modelCatalog, activeSession?.selectedModel?.opencodeAgent]);
+  }, [selectedModelSelection?.opencodeAgent, selectionCatalog]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toModelOptions(activeSession?.modelCatalog ?? null);
+    const options = toModelOptions(selectionCatalog);
     if (options.length > 0) {
       return options;
     }
-    const selected = activeSession?.selectedModel;
+    const selected = selectedModelSelection;
     if (selected?.providerId && selected.modelId) {
       return [
         {
@@ -545,29 +798,26 @@ export function AgentsPage(): ReactElement {
       ];
     }
     return [];
-  }, [activeSession?.modelCatalog, activeSession?.selectedModel]);
+  }, [selectedModelSelection, selectionCatalog]);
 
-  const modelGroups = useMemo(
-    () => toModelGroupsByProvider(activeSession?.modelCatalog ?? null),
-    [activeSession?.modelCatalog],
-  );
+  const modelGroups = useMemo(() => toModelGroupsByProvider(selectionCatalog), [selectionCatalog]);
 
   const selectedModelEntry = useMemo(() => {
-    if (!activeSession?.modelCatalog || !activeSession.selectedModel) {
+    if (!selectionCatalog || !selectedModelSelection) {
       return null;
     }
     return (
-      activeSession.modelCatalog.models.find(
+      selectionCatalog.models.find(
         (entry) =>
-          entry.providerId === activeSession.selectedModel?.providerId &&
-          entry.modelId === activeSession.selectedModel?.modelId,
+          entry.providerId === selectedModelSelection.providerId &&
+          entry.modelId === selectedModelSelection.modelId,
       ) ?? null
     );
-  }, [activeSession?.modelCatalog, activeSession?.selectedModel]);
+  }, [selectedModelSelection, selectionCatalog]);
 
   const variantOptions = useMemo(() => {
     if (!selectedModelEntry) {
-      const selectedVariant = activeSession?.selectedModel?.variant;
+      const selectedVariant = selectedModelSelection?.variant;
       if (selectedVariant && selectedVariant.trim().length > 0) {
         return [
           {
@@ -582,7 +832,7 @@ export function AgentsPage(): ReactElement {
       value: variant,
       label: variant,
     }));
-  }, [activeSession?.selectedModel?.variant, selectedModelEntry]);
+  }, [selectedModelEntry, selectedModelSelection?.variant]);
 
   const scenarioOptions = useMemo<ComboboxOption[]>(() => {
     return scenarios.map((entry) => ({
@@ -820,8 +1070,7 @@ export function AgentsPage(): ReactElement {
           <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_240px_1fr]">
             <Combobox
               value={
-                selectedSessionById?.sessionId ??
-                (isComposingNewSession ? NEW_SESSION_SENTINEL : "")
+                isComposingNewSession ? NEW_SESSION_SENTINEL : (activeSession?.sessionId ?? "")
               }
               options={sessionOptions}
               placeholder={
@@ -926,10 +1175,18 @@ export function AgentsPage(): ReactElement {
 
               {activeSession?.draftAssistantText ? (
                 <article className="px-1 py-1 text-sm text-slate-700">
-                  <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    assistant (streaming)
-                    <LoaderCircle className="size-3 animate-spin" />
-                  </header>
+                  {(() => {
+                    const roleDisplay =
+                      ROLE_OPTIONS.find((entry) => entry.role === activeSession.role) ?? null;
+                    const StreamingRoleIcon = roleDisplay?.icon ?? Bot;
+                    return (
+                      <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <StreamingRoleIcon className="size-3" />
+                        {roleDisplay?.label ?? "Assistant"} (streaming)
+                        <LoaderCircle className="size-3 animate-spin" />
+                      </header>
+                    );
+                  })()}
                   <p className="whitespace-pre-wrap leading-6 text-slate-700">
                     {`${activeSession.draftAssistantText}▍`}
                   </p>
@@ -971,20 +1228,15 @@ export function AgentsPage(): ReactElement {
                     Agent
                   </p>
                   <Combobox
-                    value={activeSession?.selectedModel?.opencodeAgent ?? ""}
+                    value={selectedModelSelection?.opencodeAgent ?? ""}
                     options={agentOptions}
-                    placeholder={
-                      activeSession?.isLoadingModelCatalog ? "Loading agents..." : "Agent"
-                    }
-                    disabled={!activeSession || activeSession.isLoadingModelCatalog || isStarting}
+                    placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
+                    disabled={!taskId || isSelectionCatalogLoading || isStarting}
                     onValueChange={(opencodeAgent) => {
-                      if (!activeSession) {
-                        return;
-                      }
-                      const selectedModel =
-                        activeSession.selectedModel ??
+                      const baseSelection =
+                        selectedModelSelection ??
                         (() => {
-                          const firstModel = activeSession.modelCatalog?.models[0];
+                          const firstModel = selectionCatalog?.models[0];
                           if (!firstModel) {
                             return null;
                           }
@@ -992,13 +1244,13 @@ export function AgentsPage(): ReactElement {
                             providerId: firstModel.providerId,
                             modelId: firstModel.modelId,
                             ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
-                          };
+                          } satisfies AgentModelSelection;
                         })();
-                      if (!selectedModel) {
+                      if (!baseSelection) {
                         return;
                       }
-                      updateAgentSessionModel(activeSession.sessionId, {
-                        ...selectedModel,
+                      applySelection({
+                        ...baseSelection,
                         opencodeAgent,
                       });
                     }}
@@ -1010,32 +1262,28 @@ export function AgentsPage(): ReactElement {
                   </p>
                   <Combobox
                     value={
-                      activeSession?.selectedModel
-                        ? `${activeSession.selectedModel.providerId}/${activeSession.selectedModel.modelId}`
+                      selectedModelSelection
+                        ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
                         : ""
                     }
                     options={modelOptions}
                     groups={modelGroups}
-                    placeholder={
-                      activeSession?.isLoadingModelCatalog ? "Loading models..." : "Model"
-                    }
-                    disabled={!activeSession || activeSession.isLoadingModelCatalog || isStarting}
+                    placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
+                    disabled={!taskId || isSelectionCatalogLoading || isStarting}
                     onValueChange={(nextValue) => {
-                      if (!activeSession?.modelCatalog) {
+                      if (!selectionCatalog) {
                         return;
                       }
-                      const model = activeSession.modelCatalog.models.find(
-                        (entry) => entry.id === nextValue,
-                      );
+                      const model = selectionCatalog.models.find((entry) => entry.id === nextValue);
                       if (!model) {
                         return;
                       }
-                      updateAgentSessionModel(activeSession.sessionId, {
+                      applySelection({
                         providerId: model.providerId,
                         modelId: model.modelId,
                         ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-                        ...(activeSession.selectedModel?.opencodeAgent
-                          ? { opencodeAgent: activeSession.selectedModel.opencodeAgent }
+                        ...(selectedModelSelection?.opencodeAgent
+                          ? { opencodeAgent: selectedModelSelection.opencodeAgent }
                           : {}),
                       });
                     }}
@@ -1046,16 +1294,16 @@ export function AgentsPage(): ReactElement {
                     Variant
                   </p>
                   <Combobox
-                    value={activeSession?.selectedModel?.variant ?? ""}
+                    value={selectedModelSelection?.variant ?? ""}
                     options={variantOptions}
                     placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
-                    disabled={!activeSession || variantOptions.length === 0 || isStarting}
+                    disabled={!taskId || variantOptions.length === 0 || isStarting}
                     onValueChange={(variant) => {
-                      if (!activeSession?.selectedModel) {
+                      if (!selectedModelSelection) {
                         return;
                       }
-                      updateAgentSessionModel(activeSession.sessionId, {
-                        ...activeSession.selectedModel,
+                      applySelection({
+                        ...selectedModelSelection,
                         variant,
                       });
                     }}

@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentModelSelection, AgentRole } from "@openblueprint/core";
 import {
+  Bot,
   Brain,
   FileText,
   Folder,
@@ -11,6 +12,8 @@ import {
   LoaderCircle,
   MessageSquareQuote,
   Search,
+  ShieldCheck,
+  Sparkles,
   Terminal,
   Wrench,
 } from "lucide-react";
@@ -100,9 +103,40 @@ const AGENT_ROLE_LABEL: Record<AgentRole, string> = {
   qa: "QA",
 };
 
-const roleLabel = (role: AgentChatMessage["role"], sessionRole: AgentRole | null): string => {
+const assistantRoleFromMessage = (
+  message: AgentChatMessage,
+  sessionRole: AgentRole | null,
+): AgentRole | null => {
+  if (message.role !== "assistant") {
+    return null;
+  }
+  if (message.meta?.kind === "assistant") {
+    return message.meta.agentRole;
+  }
+  return sessionRole;
+};
+
+const assistantRoleIcon = (role: AgentRole): ReactElement => {
+  if (role === "spec") {
+    return <Sparkles className="size-3" />;
+  }
+  if (role === "planner") {
+    return <Bot className="size-3" />;
+  }
+  if (role === "build") {
+    return <Wrench className="size-3" />;
+  }
+  return <ShieldCheck className="size-3" />;
+};
+
+const roleLabel = (
+  role: AgentChatMessage["role"],
+  sessionRole: AgentRole | null,
+  message: AgentChatMessage,
+): string => {
   if (role === "assistant") {
-    return sessionRole ? AGENT_ROLE_LABEL[sessionRole] : "Assistant";
+    const assistantRole = assistantRoleFromMessage(message, sessionRole);
+    return assistantRole ? AGENT_ROLE_LABEL[assistantRole] : "Assistant";
   }
   if (role === "thinking") {
     return "Thinking";
@@ -349,11 +383,6 @@ const getAssistantFooterParts = (
     parts.push(modelLabel.trim());
   }
 
-  const variantLabel = assistantMeta?.variant ?? sessionSelectedModel?.variant;
-  if (typeof variantLabel === "string" && variantLabel.trim().length > 0) {
-    parts.push(variantLabel.trim());
-  }
-
   if (assistantMeta?.durationMs && assistantMeta.durationMs > 0) {
     parts.push(formatDuration(assistantMeta.durationMs));
   }
@@ -378,6 +407,7 @@ export function AgentChatMessageCard({
   const isSystemPromptMessage =
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
   const isRichCardMessage = isToolMessage || isSubtaskMessage || isSystemPromptMessage;
+  const assistantRole = assistantRoleFromMessage(message, sessionRole);
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
@@ -417,7 +447,10 @@ export function AgentChatMessageCard({
               <span className="inline-flex items-center gap-1">
                 {message.role === "thinking" ? <Brain className="size-3" /> : null}
                 {message.role === "tool" ? <Hammer className="size-3" /> : null}
-                {roleLabel(message.role, sessionRole)}
+                {message.role === "assistant" && assistantRole
+                  ? assistantRoleIcon(assistantRole)
+                  : null}
+                {roleLabel(message.role, sessionRole, message)}
               </span>
               {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
             </>
@@ -426,24 +459,41 @@ export function AgentChatMessageCard({
       ) : null}
 
       {meta?.kind === "reasoning" ? (
-        <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-slate-700">
-          <Brain className="size-3.5 shrink-0 text-slate-500" />
-          <span className="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
-            Thinking
-          </span>
-          <MarkdownRenderer
-            markdown={toSingleLineMarkdown(message.content || "Thinking...")}
-            variant="compact"
-            className={cn(
-              "min-w-0 flex-1 text-slate-700",
-              "prose-p:my-0 prose-p:inline prose-strong:inline prose-em:inline",
-              "prose-ul:my-0 prose-ol:my-0 prose-li:my-0",
-            )}
-          />
-          {timeLabel ? (
-            <span className="shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
-          ) : null}
-        </div>
+        meta.completed ? (
+          <details className="px-1 py-0.5">
+            <summary className="flex min-h-6 cursor-pointer items-center gap-2 text-xs text-slate-700">
+              <Brain className="size-3.5 shrink-0 text-slate-500" />
+              <span className="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
+                Thinking
+              </span>
+              <span className="min-w-0 flex-1 truncate text-slate-600">
+                {toSingleLineMarkdown(message.content || "Reasoning complete")}
+              </span>
+              {timeLabel ? (
+                <span className="shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
+              ) : null}
+            </summary>
+            <div className="pl-6 pt-2">
+              <MarkdownRenderer
+                markdown={message.content || "Reasoning complete"}
+                variant="compact"
+              />
+            </div>
+          </details>
+        ) : (
+          <div className="space-y-1 px-1 py-0.5 text-xs text-slate-700">
+            <div className="flex min-h-6 items-center gap-2">
+              <Brain className="size-3.5 shrink-0 text-slate-500" />
+              <span className="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
+                Thinking
+              </span>
+              {timeLabel ? (
+                <span className="ml-auto shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
+              ) : null}
+            </div>
+            <MarkdownRenderer markdown={message.content || "Thinking..."} variant="compact" />
+          </div>
+        )
       ) : meta?.kind === "tool" ? (
         (() => {
           const isWorkflowTool = WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());
