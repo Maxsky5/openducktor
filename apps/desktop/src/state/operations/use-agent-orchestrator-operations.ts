@@ -354,6 +354,9 @@ const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChat
             ...(input ? { input } : {}),
             ...(output ? { output } : {}),
             ...(error ? { error } : {}),
+            ...(part.metadata ? { metadata: part.metadata } : {}),
+            ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
           },
         });
         continue;
@@ -772,6 +775,11 @@ export function useAgentOrchestratorOperations({
                     ...(input ? { input } : {}),
                     ...(output ? { output } : {}),
                     ...(error ? { error } : {}),
+                    ...(part.metadata ? { metadata: part.metadata } : {}),
+                    ...(typeof part.startedAtMs === "number"
+                      ? { startedAtMs: part.startedAtMs }
+                      : {}),
+                    ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
                   },
                 }),
               }),

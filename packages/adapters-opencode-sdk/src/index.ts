@@ -321,6 +321,37 @@ const toDisplayText = (value: unknown): string | undefined => {
   }
 };
 
+const normalizeMetadata = (value: unknown): Record<string, unknown> | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const normalized = value as Record<string, unknown>;
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+const extractPartTiming = (
+  part: Part,
+): {
+  startedAtMs?: number;
+  endedAtMs?: number;
+} => {
+  const direct = (part as { time?: { start?: unknown; end?: unknown } }).time;
+  const fromDirectStart = typeof direct?.start === "number" ? direct.start : undefined;
+  const fromDirectEnd = typeof direct?.end === "number" ? direct.end : undefined;
+
+  const stateTime = (part as { state?: { time?: { start?: unknown; end?: unknown } } }).state?.time;
+  const fromStateStart = typeof stateTime?.start === "number" ? stateTime.start : undefined;
+  const fromStateEnd = typeof stateTime?.end === "number" ? stateTime.end : undefined;
+
+  const startedAtMs = fromDirectStart ?? fromStateStart;
+  const endedAtMs = fromDirectEnd ?? fromStateEnd;
+
+  return {
+    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+  };
+};
+
 const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
   switch (part.type) {
     case "text":
@@ -341,6 +372,10 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
         completed: Boolean(part.time?.end),
       };
     case "tool": {
+      const timing = extractPartTiming(part);
+      const metadata = normalizeMetadata(
+        (part as { state?: { metadata?: unknown } }).state?.metadata,
+      );
       if (part.state.status === "pending") {
         return {
           kind: "tool",
@@ -350,6 +385,8 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           tool: part.tool,
           status: "pending",
           input: part.state.input,
+          ...(metadata ? { metadata } : {}),
+          ...timing,
         };
       }
       if (part.state.status === "running") {
@@ -363,6 +400,8 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           status: "running",
           input: part.state.input,
           ...(title ? { title } : {}),
+          ...(metadata ? { metadata } : {}),
+          ...timing,
         };
       }
       if (part.state.status === "completed") {
@@ -378,6 +417,8 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           input: part.state.input,
           ...(output ? { output } : {}),
           ...(title ? { title } : {}),
+          ...(metadata ? { metadata } : {}),
+          ...timing,
         };
       }
       const error = toDisplayText(part.state.error);
@@ -390,6 +431,8 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
         status: "error",
         input: part.state.input,
         ...(error ? { error } : {}),
+        ...(metadata ? { metadata } : {}),
+        ...timing,
       };
     }
     case "step-start":

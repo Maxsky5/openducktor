@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
@@ -9,6 +8,7 @@ import {
   Globe,
   Hammer,
   LoaderCircle,
+  MessageSquareQuote,
   Search,
   Terminal,
   Wrench,
@@ -29,6 +29,21 @@ const WORKFLOW_TOOL_NAMES = new Set([
   "qa_rejected",
 ]);
 
+const OUTPUT_IGNORED_TOOL_NAMES = new Set([
+  "read",
+  "glob",
+  "grep",
+  "find",
+  "search",
+  "list",
+  "ls",
+  "distill",
+]);
+
+const REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES = new Set(["task", "subtask", "delegate"]);
+
+const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
+
 const formatTime = (timestamp: string): string => {
   const value = new Date(timestamp);
   if (Number.isNaN(value.getTime())) {
@@ -41,29 +56,31 @@ const formatTime = (timestamp: string): string => {
   }).format(value);
 };
 
-const statusBadgeVariant = (
-  status: "pending" | "running" | "completed" | "error",
-): "default" | "warning" | "success" | "danger" => {
-  if (status === "error") {
-    return "danger";
+const formatDuration = (durationMs: number): string => {
+  if (durationMs < 1_000) {
+    return `${Math.max(1, Math.round(durationMs))}ms`;
   }
-  if (status === "completed") {
-    return "success";
+  if (durationMs < 10_000) {
+    return `${(durationMs / 1_000).toFixed(1)}s`;
   }
-  if (status === "running") {
-    return "warning";
-  }
-  return "default";
+  return `${Math.round(durationMs / 1_000)}s`;
 };
 
-const toolBadgeVariant = (
-  status: "pending" | "running" | "completed" | "error",
-  isWorkflowTool: boolean,
-): "default" | "warning" | "success" | "danger" => {
-  if (!isWorkflowTool && status === "completed") {
-    return "default";
+const compactText = (value: string, maxLength = 180): string => {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
   }
-  return statusBadgeVariant(status);
+  return `${normalized.slice(0, maxLength)}...`;
+};
+
+const stripToolPrefix = (tool: string, value: string): string => {
+  const escaped = tool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const normalized = value.trim();
+  return normalized
+    .replace(new RegExp(`^Tool\\s+${escaped}\\s*`, "i"), "")
+    .replace(/^(queued|running|completed|failed)\s*[:.-]?\s*/i, "")
+    .trim();
 };
 
 const roleLabel = (role: AgentChatMessage["role"]): string => {
@@ -77,27 +94,6 @@ const roleLabel = (role: AgentChatMessage["role"]): string => {
     return "Activity";
   }
   return "System";
-};
-
-const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
-
-const hasNonEmptyInput = (input: Record<string, unknown> | undefined): boolean => {
-  if (!input) {
-    return false;
-  }
-  return Object.keys(input).length > 0;
-};
-
-const hasNonEmptyText = (value: unknown): value is string => {
-  return typeof value === "string" && value.trim().length > 0;
-};
-
-const compactText = (value: string, maxLength = 180): string => {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return `${normalized.slice(0, maxLength)}...`;
 };
 
 const toolIcon = (toolName: string): ReactElement => {
@@ -120,36 +116,139 @@ const toolIcon = (toolName: string): ReactElement => {
   return <Wrench className="size-3.5" />;
 };
 
-const toToolSummary = (input: {
-  tool: string;
-  title?: string;
-  content: string;
-  args?: Record<string, unknown>;
-}): string => {
-  if (input.tool === "read") {
-    const pathCandidate =
-      input.args?.filePath ??
-      input.args?.file_path ??
-      input.args?.path ??
-      input.args?.file ??
-      input.args?.filename;
-    if (typeof pathCandidate === "string" && pathCandidate.trim().length > 0) {
-      return pathCandidate;
+const hasNonEmptyInput = (input: Record<string, unknown> | undefined): boolean => {
+  if (!input) {
+    return false;
+  }
+  return Object.keys(input).length > 0;
+};
+
+const hasNonEmptyText = (value: unknown): value is string => {
+  return typeof value === "string" && value.trim().length > 0;
+};
+
+const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
+  const candidate =
+    input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
+  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate.trim() : null;
+};
+
+const getTaskSummary = (
+  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
+): string | null => {
+  const summary = meta.metadata?.summary;
+  if (Array.isArray(summary)) {
+    return `${summary.length} subagent tool step${summary.length === 1 ? "" : "s"}`;
+  }
+  const sessionId = meta.metadata?.sessionId;
+  if (typeof sessionId === "string" && sessionId.trim().length > 0) {
+    return `Subagent session ${sessionId.slice(0, 8)}`;
+  }
+  return null;
+};
+
+const parseStructuredOutputSummary = (output: string): string | null => {
+  const trimmed = output.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.length > 0
+        ? `${parsed.length} subagent result${parsed.length === 1 ? "" : "s"}`
+        : null;
+    }
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    const record = parsed as Record<string, unknown>;
+    if (Array.isArray(record.summary)) {
+      return `${record.summary.length} subagent result${record.summary.length === 1 ? "" : "s"}`;
+    }
+
+    if (typeof record.message === "string" && record.message.trim().length > 0) {
+      return compactText(record.message, 160);
+    }
+
+    if (typeof record.result === "string" && record.result.trim().length > 0) {
+      return compactText(record.result, 160);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const buildToolSummary = (
+  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
+  content: string,
+): string => {
+  const lowerTool = meta.tool.toLowerCase();
+
+  if (lowerTool === "task") {
+    const taskSummary = getTaskSummary(meta);
+    if (taskSummary) {
+      return taskSummary;
     }
   }
 
-  if (input.tool === "bash") {
-    const command = input.args?.command;
-    if (typeof command === "string" && command.trim().length > 0) {
-      return compactText(command, 120);
+  if (meta.status === "error" && hasNonEmptyText(meta.error)) {
+    return compactText(meta.error, 220);
+  }
+
+  const path = extractPathFromInput(meta.input);
+  if (path) {
+    return path;
+  }
+
+  const command = meta.input?.command;
+  if (lowerTool === "bash" && typeof command === "string" && command.trim().length > 0) {
+    return compactText(command, 120);
+  }
+
+  if (meta.title && meta.title.trim().length > 0) {
+    return compactText(meta.title, 160);
+  }
+
+  if (!OUTPUT_IGNORED_TOOL_NAMES.has(lowerTool) && hasNonEmptyText(meta.output)) {
+    if (REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES.has(lowerTool)) {
+      const structured = parseStructuredOutputSummary(meta.output);
+      if (structured) {
+        return structured;
+      }
     }
+    return compactText(meta.output, 160);
   }
 
-  if (input.title && input.title.trim().length > 0) {
-    return input.title.trim();
+  const fromContent = stripToolPrefix(meta.tool, content);
+  if (fromContent.length > 0) {
+    return compactText(fromContent, 160);
   }
 
-  return compactText(input.content, 120);
+  return "";
+};
+
+const getToolDuration = (
+  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
+  messageTimestamp: string,
+): number | null => {
+  if (typeof meta.startedAtMs !== "number") {
+    return null;
+  }
+  const endedAtMs =
+    typeof meta.endedAtMs === "number"
+      ? meta.endedAtMs
+      : meta.status === "running" || meta.status === "pending"
+        ? null
+        : Date.parse(messageTimestamp);
+  if (endedAtMs === null || Number.isNaN(endedAtMs) || endedAtMs < meta.startedAtMs) {
+    return null;
+  }
+  return endedAtMs - meta.startedAtMs;
 };
 
 export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): ReactElement {
@@ -159,6 +258,7 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
   const isToolMessage = meta?.kind === "tool";
   const isWorkflowToolMessage =
     meta?.kind === "tool" && WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());
+  const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
   const isSubtaskMessage = meta?.kind === "subtask";
   const isSystemPromptMessage =
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
@@ -194,15 +294,19 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
         <header
           className={cn(
             "mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
-            isRichCardMessage ? "" : "px-1",
+            isRichCardMessage && !isRegularToolMessage ? "" : "px-1",
           )}
         >
-          <span className="inline-flex items-center gap-1">
-            {message.role === "thinking" ? <Brain className="size-3" /> : null}
-            {message.role === "tool" ? <Hammer className="size-3" /> : null}
-            {roleLabel(message.role)}
-          </span>
-          {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
+          {isRegularToolMessage ? null : (
+            <>
+              <span className="inline-flex items-center gap-1">
+                {message.role === "thinking" ? <Brain className="size-3" /> : null}
+                {message.role === "tool" ? <Hammer className="size-3" /> : null}
+                {roleLabel(message.role)}
+              </span>
+              {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}
+            </>
+          )}
         </header>
       ) : null}
 
@@ -211,122 +315,92 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
           {message.content || "Thinking..."}
         </p>
       ) : meta?.kind === "tool" ? (
-        <div className="space-y-2">
-          {(() => {
-            const isWorkflowTool = WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());
-            const hasInput = hasNonEmptyInput(meta.input);
-            const hasOutput = hasNonEmptyText(meta.output);
-            const hasError = hasNonEmptyText(meta.error);
-            const summary = toToolSummary({
-              tool: meta.tool,
-              content: message.content,
-              ...(meta.title ? { title: meta.title } : {}),
-              ...(meta.input ? { args: meta.input } : {}),
-            });
+        (() => {
+          const isWorkflowTool = WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());
+          const summary = buildToolSummary(meta, message.content);
+          const durationMs = getToolDuration(meta, message.timestamp);
+          const hasInput = hasNonEmptyInput(meta.input);
+          const hasOutput = hasNonEmptyText(meta.output);
+          const hasError = hasNonEmptyText(meta.error);
+          const isRunning = meta.status === "running" || meta.status === "pending";
 
+          if (!isWorkflowTool) {
+            const summaryText =
+              summary.length > 0 ? summary : meta.status === "error" ? "Tool failed" : "";
             return (
-              <>
-                <div className="flex items-center gap-2">
-                  <Badge variant={toolBadgeVariant(meta.status, isWorkflowTool)}>
-                    {meta.status}
-                  </Badge>
-                  <p
-                    className={cn(
-                      "truncate text-xs font-semibold",
-                      isWorkflowTool
-                        ? meta.status === "error"
-                          ? "text-rose-900"
-                          : meta.status === "completed"
-                            ? "text-emerald-900"
-                            : "text-amber-900"
-                        : "text-slate-800",
-                    )}
-                  >
-                    {meta.tool}
-                  </p>
-                  {meta.status === "running" ? (
-                    <LoaderCircle className="size-3 animate-spin" />
+              <div
+                className={cn(
+                  "flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs",
+                  meta.status === "error" ? "text-rose-700" : "text-slate-700",
+                )}
+              >
+                <span className={cn(meta.status === "error" ? "text-rose-500" : "text-slate-500")}>
+                  {toolIcon(meta.tool)}
+                </span>
+                <p className="shrink-0 font-medium text-current">{meta.tool}</p>
+                {summaryText.length > 0 ? (
+                  <p className="truncate text-slate-600">{summaryText}</p>
+                ) : null}
+                <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+                  {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
+                  {!isRunning && durationMs !== null ? (
+                    <span>{formatDuration(durationMs)}</span>
                   ) : null}
-                </div>
+                  {timeLabel ? <span>{timeLabel}</span> : null}
+                </span>
+              </div>
+            );
+          }
 
-                {!isWorkflowTool ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-                      <span className="text-slate-500">{toolIcon(meta.tool)}</span>
-                      <p className="truncate text-xs font-medium text-slate-800">{meta.tool}</p>
-                      {summary.length > 0 ? (
-                        <p className="truncate text-xs text-slate-600">{summary}</p>
-                      ) : null}
-                      {meta.status === "running" ? (
-                        <LoaderCircle className="ml-auto size-3 animate-spin text-slate-500" />
-                      ) : null}
-                    </div>
-                    {hasError && meta.error ? (
-                      <p className="text-xs text-rose-700">{compactText(meta.error)}</p>
-                    ) : null}
-                    {(hasInput || hasOutput || hasError) &&
-                    (meta.status === "completed" || meta.status === "error") ? (
-                      <details className="rounded border border-slate-200 bg-slate-50/70">
-                        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-slate-700">
-                          Details
-                        </summary>
-                        <div className="space-y-2 px-2 pb-2">
-                          {hasInput && meta.input ? (
-                            <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-slate-700">
-                              {JSON.stringify(meta.input, null, 2)}
-                            </pre>
-                          ) : null}
-                          {hasOutput && meta.output ? (
-                            <MarkdownRenderer markdown={meta.output} variant="compact" />
-                          ) : null}
-                          {hasError && meta.error ? (
-                            <MarkdownRenderer markdown={meta.error} variant="compact" />
-                          ) : null}
-                        </div>
-                      </details>
-                    ) : null}
-                  </div>
-                ) : (
-                  <>
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span>{toolIcon(meta.tool)}</span>
+                <p
+                  className={cn(
+                    "truncate text-xs font-semibold",
+                    meta.status === "error"
+                      ? "text-rose-900"
+                      : meta.status === "completed"
+                        ? "text-emerald-900"
+                        : "text-amber-900",
+                  )}
+                >
+                  {meta.tool}
+                </p>
+                {summary.length > 0 ? (
+                  <p className="truncate text-xs text-current/80">{summary}</p>
+                ) : null}
+                {isRunning ? <LoaderCircle className="ml-auto size-3 animate-spin" /> : null}
+                {!isRunning && durationMs !== null ? (
+                  <span className="ml-auto text-[11px] text-current/75">
+                    {formatDuration(durationMs)}
+                  </span>
+                ) : null}
+              </div>
+              {(hasInput || hasOutput || hasError) && (
+                <details className="rounded border border-current/20 bg-white/55">
+                  <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
+                    Details
+                  </summary>
+                  <div className="space-y-2 px-2 pb-2">
                     {hasInput && meta.input ? (
-                      <details className="rounded border border-emerald-200 bg-white/60">
-                        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-emerald-900">
-                          Input
-                        </summary>
-                        <pre className="overflow-x-auto px-2 pb-2 text-[11px] text-emerald-900">
-                          {JSON.stringify(meta.input, null, 2)}
-                        </pre>
-                      </details>
+                      <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-current">
+                        {JSON.stringify(meta.input, null, 2)}
+                      </pre>
                     ) : null}
                     {hasOutput && meta.output ? (
-                      <details open className="rounded border border-emerald-200 bg-white/60">
-                        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-emerald-900">
-                          Output
-                        </summary>
-                        <div className="px-2 pb-2">
-                          <MarkdownRenderer markdown={meta.output} variant="compact" />
-                        </div>
-                      </details>
+                      <MarkdownRenderer markdown={meta.output} variant="compact" />
                     ) : null}
                     {hasError && meta.error ? (
-                      <details open className="rounded border border-rose-300 bg-rose-100/40">
-                        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-rose-800">
-                          Error
-                        </summary>
-                        <div className="px-2 pb-2">
-                          <MarkdownRenderer markdown={meta.error} variant="compact" />
-                        </div>
-                      </details>
+                      <MarkdownRenderer markdown={meta.error} variant="compact" />
                     ) : null}
-                    {!hasOutput && !hasError && message.content ? (
-                      <MarkdownRenderer markdown={message.content} variant="compact" />
-                    ) : null}
-                  </>
-                )}
-              </>
-            );
-          })()}
-        </div>
+                  </div>
+                </details>
+              )}
+            </div>
+          );
+        })()
       ) : meta?.kind === "step" ? (
         <div className="space-y-1 text-xs text-slate-600">
           <p className="font-medium text-slate-700">
@@ -336,18 +410,12 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
           {meta.reason ? <p>{meta.reason}</p> : null}
         </div>
       ) : meta?.kind === "subtask" ? (
-        <div className="space-y-1 rounded border border-amber-200 bg-amber-100/40 p-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
-            Subtask · {meta.agent}
-          </p>
-          <p className="text-xs text-amber-900">{meta.description}</p>
-          {meta.prompt ? (
-            <details>
-              <summary className="cursor-pointer text-xs font-medium text-amber-900">
-                Prompt
-              </summary>
-              <p className="whitespace-pre-wrap text-xs text-amber-900">{meta.prompt}</p>
-            </details>
+        <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-violet-700">
+          <MessageSquareQuote className="size-3.5 shrink-0 text-violet-500" />
+          <p className="shrink-0 font-medium">subagent {meta.agent}</p>
+          <p className="truncate text-violet-700/90">{meta.description}</p>
+          {timeLabel ? (
+            <span className="ml-auto shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
           ) : null}
         </div>
       ) : isSystemPromptMessage ? (

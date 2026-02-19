@@ -21,6 +21,9 @@ export type AgentChatMessageMeta =
       input?: Record<string, unknown>;
       output?: string;
       error?: string;
+      metadata?: Record<string, unknown>;
+      startedAtMs?: number;
+      endedAtMs?: number;
     }
   | {
       kind: "step";

@@ -152,6 +152,7 @@ const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | 
 
 const NEW_SESSION_SENTINEL = "__new_session__";
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
+const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
 
 const parseTimestamp = (value: string | null | undefined): number | null => {
   if (!value) {
@@ -182,6 +183,12 @@ const extractCompletionTimestamp = (
   };
 };
 
+const isNearBottom = (element: HTMLElement): boolean => {
+  return (
+    element.scrollHeight - element.scrollTop - element.clientHeight <= CHAT_AUTOSCROLL_THRESHOLD_PX
+  );
+};
+
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
   const { tasks } = useTasksState();
@@ -203,6 +210,7 @@ export function AgentsPage(): ReactElement {
   const [questionDrafts, setQuestionDrafts] = useState<Record<string, string[][]>>({});
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const documentReloadAttemptsRef = useRef(new Map<string, number>());
 
@@ -554,14 +562,20 @@ export function AgentsPage(): ReactElement {
   useEffect(() => {
     void scrollTrigger;
     const container = messagesContainerRef.current;
-    if (!container) {
+    if (!container || !isPinnedToBottom) {
       return;
     }
     container.scrollTo({
       top: container.scrollHeight,
       behavior: "smooth",
     });
-  }, [scrollTrigger]);
+  }, [isPinnedToBottom, scrollTrigger]);
+
+  useEffect(() => {
+    void activeSession?.sessionId;
+    void taskId;
+    setIsPinnedToBottom(true);
+  }, [activeSession?.sessionId, taskId]);
 
   useEffect(() => {
     const pending = activeSession?.pendingQuestions ?? [];
@@ -837,6 +851,9 @@ export function AgentsPage(): ReactElement {
             <div
               ref={messagesContainerRef}
               className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
+              onScroll={(event) => {
+                setIsPinnedToBottom(isNearBottom(event.currentTarget));
+              }}
             >
               {!activeSession ? (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
