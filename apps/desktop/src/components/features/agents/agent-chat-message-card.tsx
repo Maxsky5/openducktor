@@ -388,7 +388,7 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
             markdown={toSingleLineMarkdown(message.content || "Thinking...")}
             variant="compact"
             className={cn(
-              "min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ellipsis text-slate-700",
+              "min-w-0 flex-1 text-slate-700",
               "prose-p:my-0 prose-p:inline prose-strong:inline prose-em:inline",
               "prose-ul:my-0 prose-ol:my-0 prose-li:my-0",
             )}

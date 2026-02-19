@@ -300,6 +300,39 @@ const normalizeRetryStatusMessage = (value: string): string => {
   return normalized;
 };
 
+const finalizeDraftAssistantMessage = (
+  session: AgentSessionState,
+  timestamp: string,
+): AgentSessionState => {
+  const draft = session.draftAssistantText.trim();
+  if (draft.length === 0) {
+    return session;
+  }
+
+  const lastMessage = session.messages[session.messages.length - 1];
+  const alreadyAppended = lastMessage?.role === "assistant" && lastMessage.content.trim() === draft;
+  if (alreadyAppended) {
+    return {
+      ...session,
+      draftAssistantText: "",
+    };
+  }
+
+  return {
+    ...session,
+    draftAssistantText: "",
+    messages: [
+      ...session.messages,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: draft,
+        timestamp,
+      },
+    ],
+  };
+};
+
 const normalizePersistedSelection = (
   selection: AgentSessionRecord["selectedModel"] | undefined,
 ): AgentModelSelection | null => {
@@ -665,7 +698,7 @@ export function useAgentOrchestratorOperations({
               baseUrl,
               workingDirectory,
               externalSessionId: record.externalSessionId,
-              limit: 250,
+              limit: 2000,
             });
             updateSession(
               record.sessionId,
@@ -962,9 +995,8 @@ export function useAgentOrchestratorOperations({
             return;
           }
           updateSession(sessionId, (current) => ({
-            ...current,
-            status: "idle",
-            draftAssistantText: "",
+            ...finalizeDraftAssistantMessage(current, event.timestamp),
+            ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
           }));
           return;
         }
@@ -1033,42 +1065,48 @@ export function useAgentOrchestratorOperations({
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
           const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
-          updateSession(sessionId, (current) => ({
-            ...current,
-            status: "error",
-            draftAssistantText: "",
-            messages: [
-              ...current.messages,
-              {
-                id: crypto.randomUUID(),
-                role: "system",
-                content: `Session error: ${sessionErrorMessage}`,
-                timestamp: event.timestamp,
-              },
-            ],
-          }));
+          updateSession(sessionId, (current) => {
+            const finalized = finalizeDraftAssistantMessage(current, event.timestamp);
+            return {
+              ...finalized,
+              status: "error",
+              messages: [
+                ...finalized.messages,
+                {
+                  id: crypto.randomUUID(),
+                  role: "system",
+                  content: `Session error: ${sessionErrorMessage}`,
+                  timestamp: event.timestamp,
+                },
+              ],
+            };
+          });
           return;
         }
 
         if (event.type === "session_idle") {
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
-          updateSession(sessionId, (current) => ({
-            ...current,
-            status: "idle",
-            draftAssistantText: "",
-          }));
+          updateSession(sessionId, (current) => {
+            const finalized = finalizeDraftAssistantMessage(current, event.timestamp);
+            return {
+              ...finalized,
+              ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
+            };
+          });
           return;
         }
 
         if (event.type === "session_finished") {
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
-          updateSession(sessionId, (current) => ({
-            ...current,
-            status: "stopped",
-            draftAssistantText: "",
-          }));
+          updateSession(sessionId, (current) => {
+            const finalized = finalizeDraftAssistantMessage(current, event.timestamp);
+            return {
+              ...finalized,
+              status: "stopped",
+            };
+          });
         }
       });
 

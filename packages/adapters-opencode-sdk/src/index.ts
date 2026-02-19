@@ -101,6 +101,20 @@ const readTextFromParts = (parts: Part[]): string => {
     .trim();
 };
 
+const readTextFromMessageInfo = (info: unknown): string => {
+  if (!info || typeof info !== "object") {
+    return "";
+  }
+  const record = info as Record<string, unknown>;
+  const direct =
+    record.text ??
+    record.content ??
+    (record.message && typeof record.message === "object"
+      ? (record.message as Record<string, unknown>).text
+      : undefined);
+  return typeof direct === "string" ? direct.trim() : "";
+};
+
 const parseToolCall = (block: string): AgentToolCall | null => {
   let parsed: unknown;
   try {
@@ -680,10 +694,13 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
     });
     const data = unwrapData(response, "load session messages");
-    return data.map((entry) => {
-      const rawText = readTextFromParts(entry.parts);
+    const mapped = data.map((entry) => {
+      const rawTextFromParts = readTextFromParts(entry.parts);
+      const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
       const text =
-        entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText).visible : rawText;
+        entry.info.role === "assistant"
+          ? sanitizeAssistantMessage(rawText).visible
+          : rawText;
       const parts = entry.parts
         .map(mapPartToAgentStreamPart)
         .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
@@ -695,6 +712,15 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         parts,
       };
     });
+    mapped.sort((a, b) => {
+      const aTime = Date.parse(a.timestamp);
+      const bTime = Date.parse(b.timestamp);
+      if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+        return 0;
+      }
+      return aTime - bTime;
+    });
+    return mapped;
   }
 
   async listAvailableModels(input: {
