@@ -170,7 +170,20 @@ const normalizeTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => 
   if (normalized === "in-progress" || normalized === "in progress") {
     return "in_progress";
   }
+  if (
+    normalized === "inprogress" ||
+    normalized === "active" ||
+    normalized === "current" ||
+    normalized === "started" ||
+    normalized === "ongoing" ||
+    normalized === "doing"
+  ) {
+    return "in_progress";
+  }
   if (normalized === "done" || normalized === "complete") {
+    return "completed";
+  }
+  if (normalized === "finished") {
     return "completed";
   }
   return TODO_STATUSES.has(normalized) ? (normalized as AgentSessionTodoItem["status"]) : "pending";
@@ -210,12 +223,18 @@ const normalizeTodoItem = (
   }
 
   const status = normalizeTodoStatus(record.status);
+  const statusFromBoolean =
+    typeof record.completed === "boolean"
+      ? record.completed
+        ? "completed"
+        : "pending"
+      : undefined;
   const priority = normalizeTodoPriority(record.priority);
 
   return {
     id,
     content,
-    status,
+    status: statusFromBoolean ?? status,
     priority,
   };
 };

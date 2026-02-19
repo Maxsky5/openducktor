@@ -304,7 +304,20 @@ const normalizeTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => 
   if (normalized === "in-progress" || normalized === "in progress") {
     return "in_progress";
   }
+  if (
+    normalized === "inprogress" ||
+    normalized === "active" ||
+    normalized === "current" ||
+    normalized === "started" ||
+    normalized === "ongoing" ||
+    normalized === "doing"
+  ) {
+    return "in_progress";
+  }
   if (normalized === "done" || normalized === "complete") {
+    return "completed";
+  }
+  if (normalized === "finished") {
     return "completed";
   }
   return TODO_STATUSES.has(normalized) ? (normalized as AgentSessionTodoItem["status"]) : "pending";
@@ -344,12 +357,18 @@ const normalizeSessionTodo = (
   }
 
   const status = normalizeTodoStatus(record.status);
+  const statusFromBoolean =
+    typeof record.completed === "boolean"
+      ? record.completed
+        ? "completed"
+        : "pending"
+      : undefined;
   const priority = normalizeTodoPriority(record.priority);
 
   return {
     id,
     content,
-    status,
+    status: statusFromBoolean ?? status,
     priority,
   };
 };
@@ -428,6 +447,36 @@ const parseTodosFromToolInput = (
     .filter((entry): entry is AgentSessionTodoItem => entry !== null);
 
   return normalized.length > 0 ? normalized : null;
+};
+
+const mergeTodoListPreservingOrder = (
+  previous: AgentSessionTodoItem[],
+  incoming: AgentSessionTodoItem[],
+): AgentSessionTodoItem[] => {
+  if (incoming.length === 0) {
+    return [];
+  }
+  const deduped = new Map<string, AgentSessionTodoItem>();
+  for (const todo of incoming) {
+    deduped.set(todo.id, todo);
+  }
+  const normalizedIncoming = [...deduped.values()];
+  const previousOrder = new Map(previous.map((todo, index) => [todo.id, index]));
+
+  return [...normalizedIncoming].sort((a, b) => {
+    const aIndex = previousOrder.get(a.id);
+    const bIndex = previousOrder.get(b.id);
+    if (aIndex !== undefined && bIndex !== undefined) {
+      return aIndex - bIndex;
+    }
+    if (aIndex !== undefined) {
+      return -1;
+    }
+    if (bIndex !== undefined) {
+      return 1;
+    }
+    return 0;
+  });
 };
 
 const normalizeSessionErrorMessage = (value: string): string => {
@@ -862,7 +911,7 @@ export function useAgentOrchestratorOperations({
         sessionId,
         (current) => ({
           ...current,
-          todos,
+          todos: mergeTodoListPreservingOrder(current.todos, todos),
         }),
         { persist: false },
       );
@@ -1089,7 +1138,10 @@ export function useAgentOrchestratorOperations({
 
         if (event.type === "assistant_part") {
           const part = event.part;
-          const streamMessageKey = `${part.messageId}:${part.partId}`;
+          const streamMessageKey =
+            part.kind === "tool"
+              ? `${part.messageId}:${part.callId || part.partId}`
+              : `${part.messageId}:${part.partId}`;
           if (part.kind === "text") {
             if (!part.synthetic) {
               draftSourceBySessionRef.current[sessionId] = "part";
@@ -1174,7 +1226,9 @@ export function useAgentOrchestratorOperations({
                 return {
                   ...current,
                   status: "running",
-                  ...(todoUpdateFromTool ? { todos: todoUpdateFromTool } : {}),
+                  ...(todoUpdateFromTool
+                    ? { todos: mergeTodoListPreservingOrder(current.todos, todoUpdateFromTool) }
+                    : {}),
                   messages: upsertMessage(current.messages, {
                     id: messageId,
                     role: "tool",
@@ -1388,7 +1442,7 @@ export function useAgentOrchestratorOperations({
             sessionId,
             (current) => ({
               ...current,
-              todos: event.todos,
+              todos: mergeTodoListPreservingOrder(current.todos, event.todos),
             }),
             { persist: false },
           );

@@ -629,12 +629,12 @@ describe("OpencodeSdkAdapter", () => {
           todos: [
             {
               content: "First",
-              status: "in-progress",
+              status: "active",
               priority: "low",
             },
             {
               text: "Second",
-              status: "done",
+              completed: true,
             },
           ],
         },

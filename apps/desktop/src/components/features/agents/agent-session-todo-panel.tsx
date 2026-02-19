@@ -10,13 +10,6 @@ type AgentSessionTodoPanelProps = {
   className?: string;
 };
 
-const STATUS_ORDER: Record<AgentSessionTodoItem["status"], number> = {
-  in_progress: 0,
-  pending: 1,
-  completed: 2,
-  cancelled: 3,
-};
-
 const statusIcon = (status: AgentSessionTodoItem["status"]): ReactElement => {
   if (status === "completed") {
     return <CheckCircle2 className="size-3.5 text-emerald-600" />;
@@ -33,9 +26,7 @@ export function AgentSessionTodoPanel({
   onToggleCollapse,
   className,
 }: AgentSessionTodoPanelProps): ReactElement | null {
-  const visibleTodos = [...todos]
-    .filter((todo) => todo.status !== "cancelled")
-    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+  const visibleTodos = todos.filter((todo) => todo.status !== "cancelled");
   if (visibleTodos.length === 0) {
     return null;
   }
@@ -64,21 +55,23 @@ export function AgentSessionTodoPanel({
       )}
       aria-label="Agent todo list"
     >
-      <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-slate-100"
+        onClick={onToggleCollapse}
+        aria-label={collapsed ? "Expand todo list" : "Collapse todo list"}
+      >
         <ListTodo className="size-3.5 text-slate-600" />
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Todo</p>
         <p className="ml-auto text-xs text-slate-500">
           {completedCount}/{visibleTodos.length}
         </p>
-        <button
-          type="button"
-          className="inline-flex items-center justify-center rounded p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-          onClick={onToggleCollapse}
-          aria-label={collapsed ? "Expand todo list" : "Collapse todo list"}
-        >
-          {collapsed ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-        </button>
-      </div>
+        {collapsed ? (
+          <ChevronUp className="size-3.5 text-slate-500" />
+        ) : (
+          <ChevronDown className="size-3.5 text-slate-500" />
+        )}
+      </button>
 
       {collapsed ? (
         <div className="mt-2 flex items-start gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700">
@@ -93,6 +86,7 @@ export function AgentSessionTodoPanel({
               <span
                 className={cn(
                   "leading-5 text-slate-700",
+                  todo.status === "in_progress" && "font-medium text-slate-900",
                   todo.status === "completed" && "text-slate-500 line-through",
                 )}
               >

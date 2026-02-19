@@ -359,7 +359,9 @@ export function AgentsPage(): ReactElement {
   >({});
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const composerFormRef = useRef<HTMLFormElement | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
+  const [composerFormHeight, setComposerFormHeight] = useState(0);
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const documentReloadAttemptsRef = useRef(new Map<string, number>());
   const restoredContextRepoRef = useRef<string | null>(null);
@@ -942,6 +944,7 @@ export function AgentsPage(): ReactElement {
   const isSessionWorking =
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
+  const todoPanelBottomOffset = Math.max(composerFormHeight + 12, 120);
   const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}`;
 
   useEffect(() => {
@@ -954,6 +957,28 @@ export function AgentsPage(): ReactElement {
     }
     setIsSending(false);
   }, [activeSessionStatus, isSending]);
+
+  useEffect(() => {
+    const form = composerFormRef.current;
+    if (!form) {
+      setComposerFormHeight(0);
+      return;
+    }
+    const measure = () => {
+      setComposerFormHeight(form.offsetHeight);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      measure();
+    });
+    observer.observe(form);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     void scrollTrigger;
@@ -1267,7 +1292,7 @@ export function AgentsPage(): ReactElement {
         </CardHeader>
 
         <CardContent className="min-h-0 flex-1 bg-slate-50/50 p-0">
-          <div className="flex h-full min-h-0 flex-col">
+          <div className="relative flex h-full min-h-0 flex-col">
             {!agentStudioReady ? (
               <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
                 <div className="flex min-w-0 items-start gap-2">
@@ -1361,23 +1386,26 @@ export function AgentsPage(): ReactElement {
             </div>
 
             {activeSession ? (
-              <div className="px-3 pb-2">
-                <div className="flex justify-end">
-                  <AgentSessionTodoPanel
-                    todos={activeSession.todos}
-                    collapsed={isTodoPanelCollapsed}
-                    onToggleCollapse={() => {
-                      setTodoPanelCollapsedBySession((current) => ({
-                        ...current,
-                        [activeSession.sessionId]: !isTodoPanelCollapsed,
-                      }));
-                    }}
-                  />
-                </div>
+              <div
+                className="pointer-events-none absolute right-3 z-20"
+                style={{ bottom: `${todoPanelBottomOffset}px` }}
+              >
+                <AgentSessionTodoPanel
+                  todos={activeSession.todos}
+                  collapsed={isTodoPanelCollapsed}
+                  className="pointer-events-auto"
+                  onToggleCollapse={() => {
+                    setTodoPanelCollapsedBySession((current) => ({
+                      ...current,
+                      [activeSession.sessionId]: !isTodoPanelCollapsed,
+                    }));
+                  }}
+                />
               </div>
             ) : null}
 
             <form
+              ref={composerFormRef}
               className="space-y-3 border-t border-slate-200 bg-white p-3"
               onSubmit={(event) => {
                 event.preventDefault();
