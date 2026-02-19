@@ -1870,14 +1870,17 @@ fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        allows_transition, can_set_plan, can_set_spec_from_status, derive_available_actions,
-        normalize_required_markdown, normalize_subtask_plan_inputs, parse_mcp_command_json,
-        validate_parent_relationships_for_create, validate_parent_relationships_for_update,
-        validate_plan_subtask_rules, validate_transition, wait_for_local_server,
+        allows_transition, build_opencode_config_content, can_set_plan, can_set_spec_from_status,
+        derive_available_actions, normalize_required_markdown, normalize_subtask_plan_inputs,
+        parse_mcp_command_json, validate_parent_relationships_for_create,
+        validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
+        wait_for_local_server,
     };
     use host_domain::{
         CreateTaskInput, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
     };
+    use serde_json::Value;
+    use std::path::Path;
     use std::net::TcpListener;
     use std::time::Duration;
 
@@ -2198,6 +2201,53 @@ mod tests {
     #[test]
     fn parse_mcp_command_json_rejects_invalid_payloads() {
         assert!(parse_mcp_command_json("{}").is_err());
+        assert!(parse_mcp_command_json("[]").is_err());
         assert!(parse_mcp_command_json(r#"["openducktor-mcp",""]"#).is_err());
+    }
+
+    #[test]
+    fn parse_mcp_command_json_trims_entries() {
+        let parsed =
+            parse_mcp_command_json(r#"["  openducktor-mcp  "," --repo "," /tmp/repo "]"#)
+                .expect("command should parse");
+        assert_eq!(
+            parsed,
+            vec![
+                "openducktor-mcp".to_string(),
+                "--repo".to_string(),
+                "/tmp/repo".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn build_opencode_config_content_embeds_mcp_command_and_env() {
+        let previous = std::env::var("OPENDUCKTOR_MCP_COMMAND_JSON").ok();
+        std::env::set_var(
+            "OPENDUCKTOR_MCP_COMMAND_JSON",
+            r#"["/usr/local/bin/openducktor-mcp","--stdio"]"#,
+        );
+
+        let config = build_opencode_config_content(Path::new("/tmp/openducktor-repo"), "odt-ns")
+            .expect("config should serialize");
+
+        match previous {
+            Some(value) => std::env::set_var("OPENDUCKTOR_MCP_COMMAND_JSON", value),
+            None => std::env::remove_var("OPENDUCKTOR_MCP_COMMAND_JSON"),
+        }
+
+        let parsed: Value = serde_json::from_str(&config).expect("valid json");
+        let command = parsed["mcp"]["openducktor"]["command"]
+            .as_array()
+            .expect("command array")
+            .iter()
+            .filter_map(|entry| entry.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(command, vec!["/usr/local/bin/openducktor-mcp", "--stdio"]);
+
+        let env = &parsed["mcp"]["openducktor"]["environment"];
+        assert_eq!(env["ODT_REPO_PATH"].as_str(), Some("/tmp/openducktor-repo"));
+        assert_eq!(env["ODT_METADATA_NAMESPACE"].as_str(), Some("odt-ns"));
+        assert!(env["ODT_BEADS_DIR"].as_str().is_some());
     }
 }

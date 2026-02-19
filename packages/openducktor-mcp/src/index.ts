@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
 import { ODT_TOOL_SCHEMAS, type OdtStoreContext, OdtTaskStore, resolveStoreContext } from "./lib";
 
 type ToolResult = {
@@ -73,177 +72,83 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
   return next;
 };
 
-const registerTools = (server: McpServer, store: OdtTaskStore): void => {
+type RegisteredTool = {
+  name: keyof typeof ODT_TOOL_SCHEMAS;
+  description: string;
+  execute: (store: OdtTaskStore, input: unknown) => Promise<unknown>;
+};
+
+const registerOdtTool = (server: McpServer, store: OdtTaskStore, tool: RegisteredTool): void => {
+  const schema = ODT_TOOL_SCHEMAS[tool.name];
+
   server.registerTool(
-    "odt_read_task",
+    tool.name,
     {
+      description: tool.description,
+      inputSchema: schema.shape,
+    },
+    async (input: unknown) => {
+      try {
+        const parsed = schema.parse(input);
+        const result = await tool.execute(store, parsed);
+        return toToolResult(result);
+      } catch (error) {
+        return toToolError(error);
+      }
+    },
+  );
+};
+
+const registerTools = (server: McpServer, store: OdtTaskStore): void => {
+  const tools: RegisteredTool[] = [
+    {
+      name: "odt_read_task",
       description:
         "Read one OpenDucktor task with its current status and agent documents (spec/plan/latest QA).",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-      },
+      execute: (currentStore, input) => currentStore.readTask(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_read_task.parse(input);
-        const result = await store.readTask(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    "odt_set_spec",
     {
+      name: "odt_set_spec",
       description:
         "Persist specification markdown for a task and transition open->spec_ready when needed.",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-        markdown: z.string().trim().min(1),
-      },
+      execute: (currentStore, input) => currentStore.setSpec(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_set_spec.parse(input);
-        const result = await store.setSpec(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    "odt_set_plan",
     {
+      name: "odt_set_plan",
       description:
         "Persist implementation plan markdown and transition task to ready_for_dev (with optional epic subtask proposals).",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-        markdown: z.string().trim().min(1),
-        subtasks: z
-          .array(
-            z.object({
-              title: z.string().trim().min(1),
-              issueType: z.enum(["task", "feature", "bug"]).optional(),
-              priority: z.number().int().min(0).max(4).optional(),
-              description: z.string().optional(),
-            }),
-          )
-          .optional(),
-      },
+      execute: (currentStore, input) => currentStore.setPlan(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_set_plan.parse(input);
-        const result = await store.setPlan(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    "odt_build_blocked",
     {
+      name: "odt_build_blocked",
       description: "Transition task to blocked with explicit reason.",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-        reason: z.string().trim().min(1),
-      },
+      execute: (currentStore, input) => currentStore.buildBlocked(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_build_blocked.parse(input);
-        const result = await store.buildBlocked(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    "odt_build_resumed",
     {
+      name: "odt_build_resumed",
       description: "Transition blocked task back to in_progress.",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-      },
+      execute: (currentStore, input) => currentStore.buildResumed(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_build_resumed.parse(input);
-        const result = await store.buildResumed(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    "odt_build_completed",
     {
+      name: "odt_build_completed",
       description: "Transition in_progress task to ai_review/human_review according to qaRequired.",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-        summary: z.string().optional(),
-      },
+      execute: (currentStore, input) => currentStore.buildCompleted(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_build_completed.parse(input);
-        const result = await store.buildCompleted(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    "odt_qa_approved",
     {
+      name: "odt_qa_approved",
       description: "Append approved QA report and transition ai_review->human_review.",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-        reportMarkdown: z.string().trim().min(1),
-      },
+      execute: (currentStore, input) => currentStore.qaApproved(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_qa_approved.parse(input);
-        const result = await store.qaApproved(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    "odt_qa_rejected",
     {
+      name: "odt_qa_rejected",
       description: "Append rejected QA report and transition ai_review->in_progress.",
-      inputSchema: {
-        taskId: z.string().trim().min(1),
-        reportMarkdown: z.string().trim().min(1),
-      },
+      execute: (currentStore, input) => currentStore.qaRejected(input),
     },
-    async (input) => {
-      try {
-        const parsed = ODT_TOOL_SCHEMAS.odt_qa_rejected.parse(input);
-        const result = await store.qaRejected(parsed);
-        return toToolResult(result);
-      } catch (error) {
-        return toToolError(error);
-      }
-    },
-  );
+  ];
+
+  for (const tool of tools) {
+    registerOdtTool(server, store, tool);
+  }
 };
 
 export const createOpenducktorMcpServer = async (

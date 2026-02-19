@@ -139,6 +139,21 @@ export const ODT_TOOL_SCHEMAS = {
 } as const;
 
 const nowIso = (): string => new Date().toISOString();
+const EMPTY_ENV_SENTINELS = new Set(["undefined", "null"]);
+
+const normalizeOptionalInput = (value: string | undefined): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  if (EMPTY_ENV_SENTINELS.has(trimmed.toLowerCase())) {
+    return undefined;
+  }
+  return trimmed;
+};
 
 const sanitizeSlug = (input: string): string => {
   let slug = "";
@@ -442,12 +457,22 @@ const validateTransition = (
   }
 };
 
-const runProcess = async (
+type ProcessResult = { ok: boolean; stdout: string; stderr: string };
+type ProcessRunner = (
   command: string,
   args: string[],
   cwd: string,
   env: Record<string, string>,
-): Promise<{ ok: boolean; stdout: string; stderr: string }> => {
+) => Promise<ProcessResult>;
+type BeadsDirResolver = (repoPath: string) => Promise<string>;
+type TimeProvider = () => string;
+
+const runProcess: ProcessRunner = async (
+  command: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+): Promise<ProcessResult> => {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {
       cwd,
@@ -512,15 +537,31 @@ type OdtStoreOptions = {
   metadataNamespace: string;
 };
 
+export type OdtTaskStoreDeps = {
+  runProcess?: ProcessRunner;
+  resolveBeadsDir?: BeadsDirResolver;
+  now?: TimeProvider;
+};
+
 export class OdtTaskStore {
   readonly repoPath: string;
   readonly metadataNamespace: string;
   private beadsDir: string | null;
+  private readonly runProcess: ProcessRunner;
+  private readonly resolveBeadsDir: BeadsDirResolver;
+  private readonly now: TimeProvider;
+  private initialized: boolean;
+  private initializationPromise: Promise<void> | null;
 
-  constructor(options: OdtStoreOptions) {
+  constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.repoPath = options.repoPath;
     this.metadataNamespace = options.metadataNamespace;
     this.beadsDir = options.beadsDir ?? null;
+    this.runProcess = deps.runProcess ?? runProcess;
+    this.resolveBeadsDir = deps.resolveBeadsDir ?? resolveCentralBeadsDir;
+    this.now = deps.now ?? nowIso;
+    this.initialized = false;
+    this.initializationPromise = null;
   }
 
   private async ensureBeadsDir(): Promise<string> {
@@ -528,7 +569,7 @@ export class OdtTaskStore {
       return this.beadsDir;
     }
 
-    this.beadsDir = await resolveCentralBeadsDir(this.repoPath);
+    this.beadsDir = await this.resolveBeadsDir(this.repoPath);
     return this.beadsDir;
   }
 
@@ -542,7 +583,7 @@ export class OdtTaskStore {
       finalArgs.push("--json");
     }
 
-    const result = await runProcess("bd", finalArgs, this.repoPath, {
+    const result = await this.runProcess("bd", finalArgs, this.repoPath, {
       BEADS_DIR: beadsDir,
     });
 
@@ -564,29 +605,47 @@ export class OdtTaskStore {
   }
 
   private async ensureInitialized(): Promise<void> {
-    const whereOutput = await this.runBd(["where"], { json: true, allowFailure: true });
-    let ready = false;
+    if (this.initialized) {
+      return;
+    }
+
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+      return;
+    }
+
+    this.initializationPromise = (async () => {
+      const whereOutput = await this.runBd(["where"], { json: true, allowFailure: true });
+      let ready = false;
+
+      try {
+        const parsed = JSON.parse(whereOutput) as { path?: unknown };
+        ready = typeof parsed.path === "string" && parsed.path.trim().length > 0;
+      } catch {
+        ready = false;
+      }
+
+      if (!ready) {
+        const slug = sanitizeSlug(basename(this.repoPath));
+        await this.runBd([
+          "init",
+          "--quiet",
+          "--skip-hooks",
+          "--skip-merge-driver",
+          "--prefix",
+          slug,
+        ]);
+      }
+
+      await this.runBd(["config", "set", "status.custom", CUSTOM_STATUS_VALUES]);
+      this.initialized = true;
+    })();
 
     try {
-      const parsed = JSON.parse(whereOutput) as { path?: unknown };
-      ready = typeof parsed.path === "string" && parsed.path.trim().length > 0;
-    } catch {
-      ready = false;
+      await this.initializationPromise;
+    } finally {
+      this.initializationPromise = null;
     }
-
-    if (!ready) {
-      const slug = sanitizeSlug(basename(this.repoPath));
-      await this.runBd([
-        "init",
-        "--quiet",
-        "--skip-hooks",
-        "--skip-merge-driver",
-        "--prefix",
-        slug,
-      ]);
-    }
-
-    await this.runBd(["config", "set", "status.custom", CUSTOM_STATUS_VALUES]);
   }
 
   private async showRawIssue(taskId: string): Promise<RawIssue> {
@@ -755,7 +814,7 @@ export class OdtTaskStore {
     const { root, namespace, documents } = this.getNamespaceData(issue);
     const nextRevision = (parseMarkdownEntries(documents.spec).at(-1)?.revision ?? 0) + 1;
 
-    const updatedAt = nowIso();
+    const updatedAt = this.now();
     const entry: MarkdownEntry = {
       markdown,
       updatedAt,
@@ -814,7 +873,7 @@ export class OdtTaskStore {
     const nextRevision =
       (parseMarkdownEntries(documents.implementationPlan).at(-1)?.revision ?? 0) + 1;
 
-    const updatedAt = nowIso();
+    const updatedAt = this.now();
     const entry: MarkdownEntry = {
       markdown,
       updatedAt,
@@ -917,7 +976,7 @@ export class OdtTaskStore {
     const entry: QaEntry = {
       markdown,
       verdict,
-      updatedAt: nowIso(),
+      updatedAt: this.now(),
       updatedBy: "qa-agent",
       sourceTool: verdict === "approved" ? "odt_qa_approved" : "odt_qa_rejected",
       revision: nextRevision,
@@ -936,9 +995,20 @@ export class OdtTaskStore {
     await this.writeNamespace(taskId, root, nextNamespace);
   }
 
+  private async ensureQaTransitionAllowed(taskId: string, nextStatus: TaskStatus): Promise<void> {
+    const tasks = await this.listTasks();
+    const task = tasks.find((entry) => entry.id === taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+
+    validateTransition(task, tasks, task.status, nextStatus);
+  }
+
   async qaApproved(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaApprovedInputSchema.parse(rawInput);
+    await this.ensureQaTransitionAllowed(input.taskId, "human_review");
     await this.appendQaReport(input.taskId, input.reportMarkdown.trim(), "approved");
     const task = await this.transitionTask(input.taskId, "human_review");
     return { task };
@@ -947,6 +1017,7 @@ export class OdtTaskStore {
   async qaRejected(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaRejectedInputSchema.parse(rawInput);
+    await this.ensureQaTransitionAllowed(input.taskId, "in_progress");
     await this.appendQaReport(input.taskId, input.reportMarkdown.trim(), "rejected");
     const task = await this.transitionTask(input.taskId, "in_progress");
     return { task };
@@ -960,19 +1031,24 @@ export type OdtStoreContext = {
 };
 
 export const resolveStoreContext = async (context: OdtStoreContext): Promise<OdtStoreOptions> => {
-  const repoPath = (context.repoPath ?? process.env.ODT_REPO_PATH ?? process.cwd()).trim();
+  const repoPath =
+    normalizeOptionalInput(context.repoPath) ??
+    normalizeOptionalInput(process.env.ODT_REPO_PATH) ??
+    process.cwd();
   if (!repoPath) {
     throw new Error("Missing repository path for OpenDucktor MCP.");
   }
 
   const normalizedRepoPath = await resolveCanonicalPath(repoPath);
   const metadataNamespace =
-    context.metadataNamespace?.trim() ||
-    process.env.ODT_METADATA_NAMESPACE?.trim() ||
+    normalizeOptionalInput(context.metadataNamespace) ??
+    normalizeOptionalInput(process.env.ODT_METADATA_NAMESPACE) ??
     "openducktor";
 
   const beadsDir =
-    context.beadsDir?.trim() || process.env.ODT_BEADS_DIR?.trim() || process.env.BEADS_DIR?.trim();
+    normalizeOptionalInput(context.beadsDir) ??
+    normalizeOptionalInput(process.env.ODT_BEADS_DIR) ??
+    normalizeOptionalInput(process.env.BEADS_DIR);
 
   return {
     repoPath: normalizedRepoPath,
