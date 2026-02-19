@@ -20,6 +20,11 @@ type MockTool = {
   idsCalls: unknown[];
 };
 
+type MockMcp = {
+  statusCalls: unknown[];
+  connectCalls: unknown[];
+};
+
 type MockPermission = {
   replyCalls: unknown[];
 };
@@ -59,6 +64,7 @@ const makeMockClient = ({
   },
   agentsResponse = [],
   toolIdsResponse = [],
+  mcpStatusResponse = {},
 }: {
   sessionId?: string;
   streamEvents?: Event[];
@@ -70,10 +76,12 @@ const makeMockClient = ({
   providerResponse?: unknown;
   agentsResponse?: unknown;
   toolIdsResponse?: unknown;
+  mcpStatusResponse?: unknown;
 }): {
   client: OpencodeClient;
   session: MockSession;
   tool: MockTool;
+  mcp: MockMcp;
   permission: MockPermission;
   question: MockQuestion;
   stream: MockEventStream;
@@ -92,6 +100,10 @@ const makeMockClient = ({
   };
   const tool: MockTool = {
     idsCalls: [],
+  };
+  const mcp: MockMcp = {
+    statusCalls: [],
+    connectCalls: [],
   };
   const question: MockQuestion = {
     replyCalls: [],
@@ -188,6 +200,22 @@ const makeMockClient = ({
         };
       },
     },
+    mcp: {
+      status: async (input: unknown) => {
+        mcp.statusCalls.push(input);
+        return {
+          data: mcpStatusResponse,
+          error: undefined,
+        };
+      },
+      connect: async (input: unknown) => {
+        mcp.connectCalls.push(input);
+        return {
+          data: true,
+          error: undefined,
+        };
+      },
+    },
     event: {
       subscribe: async () => {
         async function* iterator(): AsyncGenerator<Event> {
@@ -200,7 +228,7 @@ const makeMockClient = ({
     },
   } as unknown as OpencodeClient;
 
-  return { client, session, tool, permission, question, stream };
+  return { client, session, tool, mcp, permission, question, stream };
 };
 
 const startDefaultSession = async (
@@ -484,6 +512,48 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
     expect(tools).toEqual(["odt_read_task", "odt_set_spec"]);
+  });
+
+  test("getMcpStatus returns normalized server status map", async () => {
+    const mock = makeMockClient({
+      mcpStatusResponse: {
+        openducktor: { status: "connected" },
+        vibe_kanban: { status: "failed", error: "Connection closed" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const status = await adapter.getMcpStatus({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+    });
+
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
+    expect(status).toEqual({
+      openducktor: { status: "connected" },
+      vibe_kanban: { status: "failed", error: "Connection closed" },
+    });
+  });
+
+  test("connectMcpServer forwards server name and directory", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await adapter.connectMcpServer({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+      name: "openducktor",
+    });
+
+    expect(mock.mcp.connectCalls).toEqual([
+      { directory: "/repo", name: "openducktor" },
+    ]);
   });
 
   test("stopSession aborts session and emits finished event", async () => {

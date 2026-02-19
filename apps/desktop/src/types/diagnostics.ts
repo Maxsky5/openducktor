@@ -6,8 +6,10 @@ export type RepoOpencodeHealthCheck = {
   runtime: AgentRuntimeSummary | null;
   mcpOk: boolean;
   mcpError: string | null;
+  mcpServerName: string;
+  mcpServerStatus: string | null;
+  mcpServerError: string | null;
   availableToolIds: string[];
-  missingRequiredToolIds: string[];
   checkedAt: string;
   errors: string[];
 };

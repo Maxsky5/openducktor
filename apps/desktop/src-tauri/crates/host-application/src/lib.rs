@@ -1791,6 +1791,19 @@ fn resolve_mcp_command() -> Result<Vec<String>> {
     }
 
     let workspace_root = default_mcp_workspace_root()?;
+    let direct_entrypoint = Path::new(&workspace_root)
+        .join("packages")
+        .join("openducktor-mcp")
+        .join("src")
+        .join("index.ts");
+
+    if direct_entrypoint.exists() {
+        return Ok(vec![
+            "bun".to_string(),
+            direct_entrypoint.to_string_lossy().to_string(),
+        ]);
+    }
+
     Ok(vec![
         "bun".to_string(),
         "run".to_string(),

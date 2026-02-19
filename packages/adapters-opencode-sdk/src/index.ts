@@ -44,6 +44,11 @@ export type OpencodeSdkAdapterOptions = {
   createClient?: ClientFactory;
 };
 
+export type McpServerStatus = {
+  status: string;
+  error?: string;
+};
+
 const nowIso = (): string => new Date().toISOString();
 
 const buildDefaultFactory = (): ClientFactory => {
@@ -614,6 +619,54 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       .filter((entry): entry is string => typeof entry === "string")
       .map((entry) => entry.trim())
       .filter((entry) => entry.length > 0 && entry !== "invalid");
+  }
+
+  async getMcpStatus(input: {
+    baseUrl: string;
+    workingDirectory: string;
+  }): Promise<Record<string, McpServerStatus>> {
+    const client = this.createClient({
+      baseUrl: input.baseUrl,
+      workingDirectory: input.workingDirectory,
+    });
+    const response = await client.mcp.status({
+      directory: input.workingDirectory,
+    });
+    const payload = unwrapData(response, "get mcp status");
+    if (!payload || typeof payload !== "object") {
+      return {};
+    }
+
+    const statusByServer: Record<string, McpServerStatus> = {};
+    for (const [name, rawStatus] of Object.entries(payload as Record<string, unknown>)) {
+      if (!rawStatus || typeof rawStatus !== "object") {
+        continue;
+      }
+      const status = (rawStatus as { status?: unknown }).status;
+      if (typeof status !== "string" || status.trim().length === 0) {
+        continue;
+      }
+      const error = (rawStatus as { error?: unknown }).error;
+      statusByServer[name] =
+        typeof error === "string" && error.trim().length > 0 ? { status, error } : { status };
+    }
+    return statusByServer;
+  }
+
+  async connectMcpServer(input: {
+    baseUrl: string;
+    workingDirectory: string;
+    name: string;
+  }): Promise<void> {
+    const client = this.createClient({
+      baseUrl: input.baseUrl,
+      workingDirectory: input.workingDirectory,
+    });
+    const response = await client.mcp.connect({
+      directory: input.workingDirectory,
+      name: input.name,
+    });
+    unwrapData(response, `connect mcp server ${input.name}`);
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {

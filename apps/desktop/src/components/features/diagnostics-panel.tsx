@@ -250,6 +250,21 @@ export function DiagnosticsPanel(): ReactElement {
             >
               {activeRepo ? (
                 <div className="space-y-1 text-xs text-slate-700">
+                  {opencodeHealth?.mcpServerStatus ? (
+                    <p>
+                      Server{" "}
+                      <span className="font-mono text-[11px]">{opencodeHealth.mcpServerName}</span>:{" "}
+                      <span className="font-medium">{opencodeHealth.mcpServerStatus}</span>
+                    </p>
+                  ) : (
+                    <p>
+                      Server{" "}
+                      <span className="font-mono text-[11px]">
+                        {opencodeHealth?.mcpServerName ?? "openducktor"}
+                      </span>
+                      : <span className="text-slate-500">unavailable</span>
+                    </p>
+                  )}
                   {opencodeHealth ? (
                     <p>
                       Tools detected:{" "}
@@ -258,18 +273,10 @@ export function DiagnosticsPanel(): ReactElement {
                       </span>
                     </p>
                   ) : null}
-                  {opencodeHealth?.missingRequiredToolIds.length ? (
-                    <p className="text-rose-700">
-                      Missing tools:{" "}
-                      <span className="font-mono text-[11px]">
-                        {opencodeHealth.missingRequiredToolIds.join(", ")}
-                      </span>
-                    </p>
-                  ) : null}
-                  {opencodeHealth?.mcpError ? (
+                  {opencodeHealth?.mcpServerError || opencodeHealth?.mcpError ? (
                     <p className="flex items-start gap-1 text-rose-700">
                       <AlertTriangle className="mt-0.5 size-3 shrink-0" />
-                      <span>{opencodeHealth.mcpError}</span>
+                      <span>{opencodeHealth.mcpServerError ?? opencodeHealth.mcpError}</span>
                     </p>
                   ) : null}
                 </div>
