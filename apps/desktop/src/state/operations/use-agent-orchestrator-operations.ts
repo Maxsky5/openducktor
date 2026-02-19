@@ -613,13 +613,25 @@ export function useAgentOrchestratorOperations({
   );
 
   const resolveTurnDurationMs = useCallback(
-    (sessionId: string, timestamp: string): number | undefined => {
+    (
+      sessionId: string,
+      timestamp: string,
+      messages: AgentChatMessage[] = [],
+    ): number | undefined => {
       const startedAt = turnStartedAtBySessionRef.current[sessionId];
-      if (typeof startedAt !== "number") {
-        return undefined;
-      }
       const parsedTimestamp = Date.parse(timestamp);
       const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
+      if (typeof startedAt !== "number") {
+        const latestUserMessage = [...messages].reverse().find((entry) => entry.role === "user");
+        if (!latestUserMessage) {
+          return undefined;
+        }
+        const userTimestamp = Date.parse(latestUserMessage.timestamp);
+        if (Number.isNaN(userTimestamp) || endedAt < userTimestamp) {
+          return undefined;
+        }
+        return Math.max(0, endedAt - userTimestamp);
+      }
       return Math.max(0, endedAt - startedAt);
     },
     [],
@@ -992,21 +1004,23 @@ export function useAgentOrchestratorOperations({
         if (event.type === "assistant_message") {
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
-          const durationMs = resolveTurnDurationMs(sessionId, event.timestamp);
-          updateSession(sessionId, (current) => ({
-            ...current,
-            draftAssistantText: "",
-            messages: [
-              ...current.messages,
-              {
-                id: crypto.randomUUID(),
-                role: "assistant",
-                content: event.message,
-                timestamp: event.timestamp,
-                meta: toAssistantMessageMeta(current, durationMs),
-              },
-            ],
-          }));
+          updateSession(sessionId, (current) => {
+            const durationMs = resolveTurnDurationMs(sessionId, event.timestamp, current.messages);
+            return {
+              ...current,
+              draftAssistantText: "",
+              messages: [
+                ...current.messages,
+                {
+                  id: crypto.randomUUID(),
+                  role: "assistant",
+                  content: event.message,
+                  timestamp: event.timestamp,
+                  meta: toAssistantMessageMeta(current, durationMs),
+                },
+              ],
+            };
+          });
           return;
         }
 
@@ -1112,7 +1126,7 @@ export function useAgentOrchestratorOperations({
             ...finalizeDraftAssistantMessage(
               current,
               event.timestamp,
-              resolveTurnDurationMs(sessionId, event.timestamp),
+              resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
             ),
             ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
           }));
@@ -1188,7 +1202,7 @@ export function useAgentOrchestratorOperations({
             const finalized = finalizeDraftAssistantMessage(
               current,
               event.timestamp,
-              resolveTurnDurationMs(sessionId, event.timestamp),
+              resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
             );
             return {
               ...finalized,
@@ -1215,7 +1229,7 @@ export function useAgentOrchestratorOperations({
             const finalized = finalizeDraftAssistantMessage(
               current,
               event.timestamp,
-              resolveTurnDurationMs(sessionId, event.timestamp),
+              resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
             );
             return {
               ...finalized,
@@ -1233,7 +1247,7 @@ export function useAgentOrchestratorOperations({
             const finalized = finalizeDraftAssistantMessage(
               current,
               event.timestamp,
-              resolveTurnDurationMs(sessionId, event.timestamp),
+              resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
             );
             return {
               ...finalized,

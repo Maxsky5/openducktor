@@ -41,6 +41,7 @@ export type AgentDescriptor = {
   mode: "subagent" | "primary" | "all";
   hidden?: boolean;
   native?: boolean;
+  color?: string;
 };
 
 export type AgentModelCatalog = {

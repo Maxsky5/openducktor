@@ -1,3 +1,4 @@
+import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
 import {
   toModelGroupsByProvider,
@@ -70,6 +71,29 @@ const SCENARIO_LABELS: Record<AgentScenario, string> = {
   build_after_qa_rejected: "Fix QA Rejection",
   build_after_human_request_changes: "Apply Human Changes",
   qa_review: "QA Review",
+};
+
+const kickoffPromptForScenario = (role: AgentRole, scenario: AgentScenario): string => {
+  if (role === "spec") {
+    return scenario === "spec_revision"
+      ? "Revise the current specification and call set_spec with the updated markdown."
+      : "Write the initial specification and call set_spec with complete markdown.";
+  }
+  if (role === "planner") {
+    return scenario === "planner_revision"
+      ? "Revise the current implementation plan and call set_plan with the updated markdown."
+      : "Create the initial implementation plan and call set_plan with concrete execution steps.";
+  }
+  if (role === "qa") {
+    return "Perform QA review now and call qa_approved or qa_rejected exactly once with a complete report.";
+  }
+  if (scenario === "build_after_qa_rejected") {
+    return "Address all QA rejection findings and call build_completed with a concise rework summary.";
+  }
+  if (scenario === "build_after_human_request_changes") {
+    return "Apply all human-requested changes and call build_completed with a concise summary.";
+  }
+  return "Start implementation now and use build_blocked/build_resumed/build_completed as progress changes.";
 };
 
 const isTaskEligibleForRole = (task: TaskCard, role: AgentRole): boolean => {
@@ -673,39 +697,47 @@ export function AgentsPage(): ReactElement {
     [draftSelection, fallbackCatalogSelection, roleDefaultSelection, selectionCatalog],
   );
 
-  const startSession = useCallback(
-    async (sendKickoff = false): Promise<string | undefined> => {
-      if (!taskId) {
-        return undefined;
+  const startSession = useCallback(async (): Promise<string | undefined> => {
+    if (!taskId) {
+      return undefined;
+    }
+    setIsStarting(true);
+    try {
+      const sessionId = await startAgentSession({ taskId, role, scenario, sendKickoff: false });
+      if (selectionForNewSession) {
+        updateAgentSessionModel(sessionId, selectionForNewSession);
       }
-      setIsStarting(true);
-      try {
-        const sessionId = await startAgentSession({ taskId, role, scenario, sendKickoff });
-        if (selectionForNewSession) {
-          updateAgentSessionModel(sessionId, selectionForNewSession);
-        }
-        await updateQuery({
-          task: taskId,
-          agent: role,
-          scenario,
-          session: sessionId,
-          autostart: undefined,
-        });
-        return sessionId;
-      } finally {
-        setIsStarting(false);
-      }
-    },
-    [
-      role,
-      scenario,
-      selectionForNewSession,
-      startAgentSession,
-      taskId,
-      updateAgentSessionModel,
-      updateQuery,
-    ],
-  );
+      await updateQuery({
+        task: taskId,
+        agent: role,
+        scenario,
+        session: sessionId,
+        autostart: undefined,
+      });
+      return sessionId;
+    } finally {
+      setIsStarting(false);
+    }
+  }, [
+    role,
+    scenario,
+    selectionForNewSession,
+    startAgentSession,
+    taskId,
+    updateAgentSessionModel,
+    updateQuery,
+  ]);
+
+  const startScenarioKickoff = useCallback(async (): Promise<void> => {
+    if (!taskId) {
+      return;
+    }
+    const sessionId = await startSession();
+    if (!sessionId) {
+      return;
+    }
+    await sendAgentMessage(sessionId, kickoffPromptForScenario(role, scenario));
+  }, [role, scenario, sendAgentMessage, startSession, taskId]);
 
   useEffect(() => {
     if (!autostart || !activeRepo || !taskId || activeSession) {
@@ -716,8 +748,8 @@ export function AgentsPage(): ReactElement {
       return;
     }
     autoStartExecutedRef.current.add(key);
-    void startSession(true);
-  }, [activeRepo, activeSession, autostart, role, scenario, startSession, taskId]);
+    void startScenarioKickoff();
+  }, [activeRepo, activeSession, autostart, role, scenario, startScenarioKickoff, taskId]);
 
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting) {
@@ -732,7 +764,7 @@ export function AgentsPage(): ReactElement {
     const shouldStartNew = isComposingNewSession || !activeSession;
     let targetSessionId = activeSession?.sessionId;
     if (shouldStartNew) {
-      targetSessionId = await startSession(false);
+      targetSessionId = await startSession();
     }
 
     if (!targetSessionId) {
@@ -745,7 +777,7 @@ export function AgentsPage(): ReactElement {
       await sendAgentMessage(targetSessionId, message);
     } catch {
       if (!shouldStartNew && activeSession && targetSessionId === activeSession.sessionId) {
-        const fallbackSessionId = await startSession(false);
+        const fallbackSessionId = await startSession();
         if (fallbackSessionId) {
           await sendAgentMessage(fallbackSessionId, message);
         }
@@ -770,12 +802,14 @@ export function AgentsPage(): ReactElement {
       return options;
     }
     const fallbackAgent = selectedModelSelection?.opencodeAgent;
+    const fallbackAgentColor = resolveAgentAccentColor(fallbackAgent);
     if (fallbackAgent && fallbackAgent.trim().length > 0) {
       return [
         {
           value: fallbackAgent,
           label: fallbackAgent,
           description: "Current session agent",
+          ...(fallbackAgentColor ? { accentColor: fallbackAgentColor } : {}),
         },
       ];
     }
@@ -841,6 +875,23 @@ export function AgentsPage(): ReactElement {
       description: entry,
     }));
   }, [scenarios]);
+
+  const activeSessionAgentColors = useMemo<Record<string, string>>(() => {
+    if (!activeSession?.modelCatalog) {
+      return {};
+    }
+    const map: Record<string, string> = {};
+    for (const descriptor of activeSession.modelCatalog.agents) {
+      if (!descriptor.name) {
+        continue;
+      }
+      const color = resolveAgentAccentColor(descriptor.name, descriptor.color);
+      if (color) {
+        map[descriptor.name] = color;
+      }
+    }
+    return map;
+  }, [activeSession?.modelCatalog]);
 
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
@@ -1006,8 +1057,10 @@ export function AgentsPage(): ReactElement {
     }
   }, [activeSession, applyDocumentUpdate, planDoc, qaDoc, reloadDocument, specDoc, taskId]);
 
+  const canKickoffNewSession = Boolean(taskId) && (!activeSession || isComposingNewSession);
+
   return (
-    <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,2fr)_minmax(420px,1fr)]">
       <Card className="flex h-full min-h-0 flex-col overflow-hidden border-slate-200 shadow-sm">
         <CardHeader className="space-y-3 border-b border-slate-200 bg-white pb-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1118,6 +1171,23 @@ export function AgentsPage(): ReactElement {
               ) : (
                 <span>Select a task to chat.</span>
               )}
+              {canKickoffNewSession ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[11px]"
+                  disabled={isStarting || isSending || !taskId}
+                  onClick={() => void startScenarioKickoff()}
+                >
+                  {isStarting ? (
+                    <LoaderCircle className="size-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3" />
+                  )}
+                  {role === "spec" ? "Start Spec" : `Start ${SCENARIO_LABELS[scenario]}`}
+                </Button>
+              ) : null}
               <span>
                 Sessions: <strong>{contextSessions.length}</strong>
               </span>
@@ -1157,10 +1227,28 @@ export function AgentsPage(): ReactElement {
               }}
             >
               {!activeSession ? (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                  {taskId
-                    ? "Send a message to start a new session automatically."
-                    : "Select a task to begin."}
+                <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+                  <p>
+                    {taskId
+                      ? "Send a message to start a new session automatically."
+                      : "Select a task to begin."}
+                  </p>
+                  {canKickoffNewSession ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isStarting || isSending || !taskId}
+                      onClick={() => void startScenarioKickoff()}
+                    >
+                      {isStarting ? (
+                        <LoaderCircle className="size-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-3.5" />
+                      )}
+                      {role === "spec" ? "Start Spec" : `Start ${SCENARIO_LABELS[scenario]}`}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1170,6 +1258,7 @@ export function AgentsPage(): ReactElement {
                   message={message}
                   sessionRole={activeSession.role}
                   sessionSelectedModel={activeSession.selectedModel}
+                  sessionAgentColors={activeSessionAgentColors}
                 />
               ))}
 

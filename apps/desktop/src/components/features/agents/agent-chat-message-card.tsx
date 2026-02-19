@@ -18,11 +18,13 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
+import { resolveAgentAccentColor } from "./agent-accent-color";
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   sessionRole: AgentRole | null;
   sessionSelectedModel: AgentModelSelection | null;
+  sessionAgentColors?: Record<string, string>;
 };
 
 const WORKFLOW_TOOL_NAMES = new Set([
@@ -390,10 +392,27 @@ const getAssistantFooterParts = (
   return parts;
 };
 
+const resolveAssistantAgentColor = (
+  message: AgentChatMessage,
+  sessionSelectedModel: AgentModelSelection | null,
+  sessionAgentColors: Record<string, string> | undefined,
+): string | undefined => {
+  if (message.role !== "assistant") {
+    return undefined;
+  }
+  const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+  const agentName = assistantMeta?.opencodeAgent ?? sessionSelectedModel?.opencodeAgent;
+  if (!agentName) {
+    return undefined;
+  }
+  return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
+};
+
 export function AgentChatMessageCard({
   message,
   sessionRole,
   sessionSelectedModel,
+  sessionAgentColors,
 }: AgentChatMessageCardProps): ReactElement | null {
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
@@ -408,6 +427,11 @@ export function AgentChatMessageCard({
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
   const isRichCardMessage = isToolMessage || isSubtaskMessage || isSystemPromptMessage;
   const assistantRole = assistantRoleFromMessage(message, sessionRole);
+  const assistantAccentColor = resolveAssistantAgentColor(
+    message,
+    sessionSelectedModel,
+    sessionAgentColors,
+  );
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
@@ -430,15 +454,18 @@ export function AgentChatMessageCard({
             ? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
             : isSystemPromptMessage
               ? "rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800"
-              : isUserMessage
-                ? ""
-                : "border-none bg-transparent px-0 py-0 text-slate-800",
+              : message.role === "assistant"
+                ? "border-l-2 border-slate-200 pl-3 pr-1 py-1 text-slate-800"
+                : isUserMessage
+                  ? ""
+                  : "border-none bg-transparent px-0 py-0 text-slate-800",
       )}
     >
       {!isUserMessage ? (
         <header
           className={cn(
             "mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
+            message.role === "assistant" ? "mb-2" : "mb-1",
             isRichCardMessage && !isRegularToolMessage ? "" : "px-1",
           )}
         >
@@ -463,9 +490,7 @@ export function AgentChatMessageCard({
           <details className="px-1 py-0.5">
             <summary className="flex min-h-6 cursor-pointer items-center gap-2 text-xs text-slate-700">
               <Brain className="size-3.5 shrink-0 text-slate-500" />
-              <span className="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
-                Thinking
-              </span>
+              <span className="shrink-0 font-medium text-slate-500">Thinking</span>
               <span className="min-w-0 flex-1 truncate text-slate-600">
                 {toSingleLineMarkdown(message.content || "Reasoning complete")}
               </span>
@@ -484,9 +509,7 @@ export function AgentChatMessageCard({
           <div className="space-y-1 px-1 py-0.5 text-xs text-slate-700">
             <div className="flex min-h-6 items-center gap-2">
               <Brain className="size-3.5 shrink-0 text-slate-500" />
-              <span className="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
-                Thinking
-              </span>
+              <span className="shrink-0 font-medium text-slate-500">Thinking</span>
               {timeLabel ? (
                 <span className="ml-auto shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
               ) : null}
@@ -618,7 +641,12 @@ export function AgentChatMessageCard({
             }
             return (
               <p className="inline-flex items-center gap-2 text-xs text-slate-500">
-                <span className="size-1.5 rounded-sm bg-amber-500" />
+                <span
+                  className="size-1.5 rounded-sm bg-amber-500"
+                  style={
+                    assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined
+                  }
+                />
                 {footerParts.join(" · ")}
               </p>
             );

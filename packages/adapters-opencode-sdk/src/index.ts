@@ -696,11 +696,10 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     const data = unwrapData(response, "load session messages");
     const mapped = data.map((entry) => {
       const rawTextFromParts = readTextFromParts(entry.parts);
-      const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
+      const rawText =
+        rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
       const text =
-        entry.info.role === "assistant"
-          ? sanitizeAssistantMessage(rawText).visible
-          : rawText;
+        entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText).visible : rawText;
       const parts = entry.parts
         .map(mapPartToAgentStreamPart)
         .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
@@ -763,6 +762,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
             mode: entry.mode,
             ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
             ...(entry.native !== undefined ? { native: entry.native } : {}),
+            ...(typeof entry.color === "string" ? { color: entry.color } : {}),
           }))
           .sort((a, b) => a.name.localeCompare(b.name))
       : [];
@@ -1088,9 +1088,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
 
       if (event.type === "message.updated") {
         const properties = event.properties as Record<string, unknown>;
-        const info = properties.info as
-          | Record<string, unknown>
-          | undefined;
+        const info = properties.info as Record<string, unknown> | undefined;
         const normalizedParts: Part[] = [];
         let messageId: string | undefined;
         let role: string | undefined;

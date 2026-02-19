@@ -17,6 +17,7 @@ export type ComboboxOption = {
   label: string;
   searchKeywords?: string[];
   description?: string;
+  accentColor?: string;
 };
 
 export type ComboboxGroup = {
@@ -99,7 +100,19 @@ export function Combobox({
           )}
         >
           <span className="min-w-0 flex-1 truncate pr-2 text-left">
-            {selected?.label ?? placeholder}
+            {selected ? (
+              <span className="inline-flex min-w-0 items-center gap-2">
+                {selected.accentColor ? (
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: selected.accentColor }}
+                  />
+                ) : null}
+                <span className="truncate">{selected.label}</span>
+              </span>
+            ) : (
+              placeholder
+            )}
           </span>
           <ChevronsUpDown className="size-4 shrink-0 text-slate-400" />
         </Button>
@@ -127,7 +140,15 @@ export function Combobox({
                       className="justify-between"
                     >
                       <div className="min-w-0">
-                        <p className="truncate">{option.label}</p>
+                        <p className="inline-flex min-w-0 items-center gap-2 truncate">
+                          {option.accentColor ? (
+                            <span
+                              className="size-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: option.accentColor }}
+                            />
+                          ) : null}
+                          <span className="truncate">{option.label}</span>
+                        </p>
                         {option.description ? (
                           <p className="truncate text-xs text-slate-500">{option.description}</p>
                         ) : null}
@@ -156,7 +177,15 @@ export function Combobox({
                     className="justify-between"
                   >
                     <div className="min-w-0">
-                      <p className="truncate">{option.label}</p>
+                      <p className="inline-flex min-w-0 items-center gap-2 truncate">
+                        {option.accentColor ? (
+                          <span
+                            className="size-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: option.accentColor }}
+                          />
+                        ) : null}
+                        <span className="truncate">{option.label}</span>
+                      </p>
                       {option.description ? (
                         <p className="truncate text-xs text-slate-500">{option.description}</p>
                       ) : null}

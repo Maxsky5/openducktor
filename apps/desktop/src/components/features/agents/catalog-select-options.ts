@@ -1,5 +1,6 @@
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentDescriptor, AgentModelCatalog } from "@openblueprint/core";
+import { resolveAgentAccentColor } from "./agent-accent-color";
 
 const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
 
@@ -18,11 +19,15 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
       ? primaryAgents
       : catalog.agents.filter((entry) => isVisibleAgent(entry) && entry.mode !== "subagent");
 
-  return fallbackAgents.map((entry) => ({
-    value: entry.name,
-    label: entry.name,
-    ...(entry.description ? { description: entry.description } : {}),
-  }));
+  return fallbackAgents.map((entry) => {
+    const accentColor = resolveAgentAccentColor(entry.name, entry.color);
+    return {
+      value: entry.name,
+      label: entry.name,
+      ...(entry.description ? { description: entry.description } : {}),
+      ...(accentColor ? { accentColor } : {}),
+    };
+  });
 };
 
 export const toModelOptions = (catalog: AgentModelCatalog | null): ComboboxOption[] => {
