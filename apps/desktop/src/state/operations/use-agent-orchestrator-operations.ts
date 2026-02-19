@@ -253,6 +253,53 @@ const normalizeToolText = (value: unknown): string | undefined => {
   }
 };
 
+const normalizeSessionErrorMessage = (value: string): string => {
+  const trimmed = value.trim();
+  const withoutQuotes = trimmed
+    .replace(/^["'“”]+/, "")
+    .replace(/["'“”]+$/, "")
+    .trim();
+
+  if (!withoutQuotes.startsWith("{")) {
+    return withoutQuotes;
+  }
+
+  try {
+    const parsed = JSON.parse(withoutQuotes) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return withoutQuotes;
+    }
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim().length > 0) {
+      return record.message.trim();
+    }
+    const nestedError = record.error;
+    if (
+      nestedError &&
+      typeof nestedError === "object" &&
+      typeof (nestedError as Record<string, unknown>).message === "string"
+    ) {
+      return String((nestedError as Record<string, unknown>).message).trim();
+    }
+    return withoutQuotes;
+  } catch {
+    return withoutQuotes;
+  }
+};
+
+const normalizeRetryStatusMessage = (value: string): string => {
+  const normalized = normalizeSessionErrorMessage(value);
+  if (!normalized.startsWith("{")) {
+    return normalized;
+  }
+
+  const messageMatch = normalized.match(/message["':\s]+([^",}]+|"[^"]+")/i);
+  if (messageMatch?.[1]) {
+    return messageMatch[1].replace(/^"|"$/g, "").trim();
+  }
+  return normalized;
+};
+
 const normalizePersistedSelection = (
   selection: AgentSessionRecord["selectedModel"] | undefined,
 ): AgentModelSelection | null => {
@@ -435,6 +482,7 @@ export function useAgentOrchestratorOperations({
     draftRawBySessionRef.current = {};
     draftSourceBySessionRef.current = {};
     workflowToolMessageBySessionRef.current = {};
+    sessionsRef.current = {};
     setSessionsById({});
   }, [activeRepo]);
 
@@ -480,19 +528,20 @@ export function useAgentOrchestratorOperations({
       updater: (current: AgentSessionState) => AgentSessionState,
       options?: { persist?: boolean },
     ): void => {
-      let nextSession: AgentSessionState | null = null;
-      setSessionsById((current) => {
-        const entry = current[sessionId];
-        if (!entry) {
-          return current;
-        }
-        nextSession = updater(entry);
-        return {
-          ...current,
-          [sessionId]: nextSession,
-        };
-      });
-      if (options?.persist !== false && nextSession) {
+      const currentSessions = sessionsRef.current;
+      const current = currentSessions[sessionId];
+      if (!current) {
+        return;
+      }
+      const nextSession = updater(current);
+      const nextSessions = {
+        ...currentSessions,
+        [sessionId]: nextSession,
+      };
+      sessionsRef.current = nextSessions;
+      setSessionsById(nextSessions);
+
+      if (options?.persist !== false) {
         void persistSessionSnapshot(nextSession).catch(() => undefined);
       }
     },
@@ -516,6 +565,7 @@ export function useAgentOrchestratorOperations({
           }
           next[record.sessionId] = fromPersistedSessionRecord(record);
         }
+        sessionsRef.current = next;
         return next;
       });
 
@@ -879,27 +929,34 @@ export function useAgentOrchestratorOperations({
           if (status.type === "busy") {
             updateSession(
               sessionId,
-              (current) => ({
-                ...current,
-                status: "running",
-              }),
+              (current) =>
+                current.status === "error"
+                  ? current
+                  : {
+                      ...current,
+                      status: "running",
+                    },
               { persist: false },
             );
             return;
           }
           if (status.type === "retry") {
+            const retryMessage = normalizeRetryStatusMessage(status.message);
             updateSession(
               sessionId,
-              (current) => ({
-                ...current,
-                status: "running",
-                messages: upsertMessage(current.messages, {
-                  id: `retry:${status.attempt}`,
-                  role: "system",
-                  content: `Retry ${status.attempt}: ${status.message}`,
-                  timestamp: event.timestamp,
-                }),
-              }),
+              (current) =>
+                current.status === "error"
+                  ? current
+                  : {
+                      ...current,
+                      status: "running",
+                      messages: upsertMessage(current.messages, {
+                        id: `retry:${status.attempt}`,
+                        role: "system",
+                        content: `Retry ${status.attempt}: ${retryMessage}`,
+                        timestamp: event.timestamp,
+                      }),
+                    },
               { persist: false },
             );
             return;
@@ -975,15 +1032,17 @@ export function useAgentOrchestratorOperations({
         if (event.type === "session_error") {
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
+          const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
           updateSession(sessionId, (current) => ({
             ...current,
             status: "error",
+            draftAssistantText: "",
             messages: [
               ...current.messages,
               {
                 id: crypto.randomUUID(),
                 role: "system",
-                content: `Session error: ${event.message}`,
+                content: `Session error: ${sessionErrorMessage}`,
                 timestamp: event.timestamp,
               },
             ],
@@ -1186,6 +1245,7 @@ export function useAgentOrchestratorOperations({
       updateSession(sessionId, (current) => ({
         ...current,
         status: "running",
+        draftAssistantText: "",
         messages: [
           ...current.messages,
           {
@@ -1197,28 +1257,32 @@ export function useAgentOrchestratorOperations({
         ],
       }));
 
-      try {
-        await adapter.sendUserMessage({
+      void adapter
+        .sendUserMessage({
           sessionId,
           content: trimmed,
           ...(selectedModel ? { model: selectedModel } : {}),
+        })
+        .catch((error) => {
+          updateSession(
+            sessionId,
+            (current) => ({
+              ...current,
+              status: "error",
+              draftAssistantText: "",
+              messages: [
+                ...current.messages,
+                {
+                  id: crypto.randomUUID(),
+                  role: "system",
+                  content: `Failed to send message: ${errorMessage(error)}`,
+                  timestamp: now(),
+                },
+              ],
+            }),
+            { persist: false },
+          );
         });
-      } catch (error) {
-        updateSession(sessionId, (current) => ({
-          ...current,
-          status: "error",
-          messages: [
-            ...current.messages,
-            {
-              id: crypto.randomUUID(),
-              role: "system",
-              content: `Failed to send message: ${errorMessage(error)}`,
-              timestamp: now(),
-            },
-          ],
-        }));
-        throw error;
-      }
     },
     [adapter, ensureSessionReady, updateSession],
   );
@@ -1309,10 +1373,14 @@ export function useAgentOrchestratorOperations({
         isLoadingModelCatalog: true,
       };
 
-      setSessionsById((current) => ({
-        ...current,
-        [summary.sessionId]: initialSession,
-      }));
+      setSessionsById((current) => {
+        const next = {
+          ...current,
+          [summary.sessionId]: initialSession,
+        };
+        sessionsRef.current = next;
+        return next;
+      });
       void persistSessionSnapshot(initialSession).catch(() => undefined);
 
       attachSessionListener(activeRepo, summary.sessionId);

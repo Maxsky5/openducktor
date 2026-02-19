@@ -321,9 +321,7 @@ const getToolDuration = (
 export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): ReactElement | null {
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
-  if (meta?.kind === "step") {
-    return null;
-  }
+  const isReasoningMessage = meta?.kind === "reasoning";
   const isUserMessage = message.role === "user";
   const isToolMessage = meta?.kind === "tool";
   const isWorkflowToolMessage =
@@ -367,7 +365,7 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
             isRichCardMessage && !isRegularToolMessage ? "" : "px-1",
           )}
         >
-          {isRegularToolMessage ? null : (
+          {isRegularToolMessage || isReasoningMessage ? null : (
             <>
               <span className="inline-flex items-center gap-1">
                 {message.role === "thinking" ? <Brain className="size-3" /> : null}
@@ -381,15 +379,24 @@ export function AgentChatMessageCard({ message }: AgentChatMessageCardProps): Re
       ) : null}
 
       {meta?.kind === "reasoning" ? (
-        <MarkdownRenderer
-          markdown={toSingleLineMarkdown(message.content || "Thinking...")}
-          variant="compact"
-          className={cn(
-            "overflow-hidden whitespace-nowrap text-ellipsis text-slate-700",
-            "prose-p:my-0 prose-p:inline prose-strong:inline prose-em:inline",
-            "prose-ul:my-0 prose-ol:my-0 prose-li:my-0",
-          )}
-        />
+        <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-slate-700">
+          <Brain className="size-3.5 shrink-0 text-slate-500" />
+          <span className="shrink-0 font-semibold uppercase tracking-wide text-slate-500">
+            Thinking
+          </span>
+          <MarkdownRenderer
+            markdown={toSingleLineMarkdown(message.content || "Thinking...")}
+            variant="compact"
+            className={cn(
+              "min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ellipsis text-slate-700",
+              "prose-p:my-0 prose-p:inline prose-strong:inline prose-em:inline",
+              "prose-ul:my-0 prose-ol:my-0 prose-li:my-0",
+            )}
+          />
+          {timeLabel ? (
+            <span className="shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
+          ) : null}
+        </div>
       ) : meta?.kind === "tool" ? (
         (() => {
           const isWorkflowTool = WORKFLOW_TOOL_NAMES.has(meta.tool.toLowerCase());

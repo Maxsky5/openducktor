@@ -564,6 +564,17 @@ export function AgentsPage(): ReactElement {
   const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}`;
 
   useEffect(() => {
+    if (!isSending) {
+      return;
+    }
+    if (activeSessionStatus !== "starting" && activeSessionStatus !== "running") {
+      setIsSending(false);
+      return;
+    }
+    setIsSending(false);
+  }, [activeSessionStatus, isSending]);
+
+  useEffect(() => {
     void scrollTrigger;
     const container = messagesContainerRef.current;
     if (!container || !isPinnedToBottom) {
@@ -1024,7 +1035,13 @@ export function AgentsPage(): ReactElement {
                   <Button
                     type="submit"
                     className="w-full lg:w-auto"
-                    disabled={isSending || isStarting || !taskId || input.trim().length === 0}
+                    disabled={
+                      isSending ||
+                      isStarting ||
+                      isSessionWorking ||
+                      !taskId ||
+                      input.trim().length === 0
+                    }
                   >
                     {isSending ? (
                       <>
