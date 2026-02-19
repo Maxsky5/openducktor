@@ -14,6 +14,12 @@ import {
 } from "@openblueprint/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  formatToolContent,
+  isRunningToolStatus,
+  isTodoToolName,
+  settleDanglingTodoToolMessages,
+} from "./agent-tool-messages";
 import { host } from "./host";
 import { isMutatingPermission } from "./permission-policy";
 
@@ -240,26 +246,6 @@ const upsertMessage = (
   return next;
 };
 
-const formatToolContent = (part: {
-  tool: string;
-  status: "pending" | "running" | "completed" | "error";
-  title?: string;
-  output?: string;
-  error?: string;
-}): string => {
-  const title = part.title ? ` (${part.title})` : "";
-  if (part.status === "completed") {
-    return `Tool ${part.tool}${title} completed${part.output ? `\n\n${part.output}` : ""}`;
-  }
-  if (part.status === "error") {
-    return `Tool ${part.tool}${title} failed${part.error ? `\n\n${part.error}` : ""}`;
-  }
-  if (part.status === "running") {
-    return `Tool ${part.tool}${title} running...`;
-  }
-  return `Tool ${part.tool}${title} queued...`;
-};
-
 const normalizeToolInput = (
   input: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined => {
@@ -382,16 +368,6 @@ const normalizeSessionTodoList = (payload: unknown): AgentSessionTodoItem[] => {
     .filter((entry): entry is AgentSessionTodoItem => entry !== null);
 };
 
-const isTodoToolName = (tool: string): boolean => {
-  const normalized = tool.trim().toLowerCase();
-  return (
-    normalized === "todoread" ||
-    normalized === "todowrite" ||
-    normalized.endsWith("_todoread") ||
-    normalized.endsWith("_todowrite")
-  );
-};
-
 const parseTodosFromToolOutput = (output: string | undefined): AgentSessionTodoItem[] | null => {
   if (!output || output.trim().length === 0) {
     return null;
@@ -478,9 +454,6 @@ const mergeTodoListPreservingOrder = (
     return 0;
   });
 };
-
-const isRunningToolStatus = (status: "pending" | "running" | "completed" | "error"): boolean =>
-  status === "pending" || status === "running";
 
 const resolveToolMessageId = (
   messages: AgentChatMessage[],
@@ -1202,17 +1175,37 @@ export function useAgentOrchestratorOperations({
             part.kind === "tool"
               ? `${part.messageId}:${part.callId || part.partId}`
               : `${part.messageId}:${part.partId}`;
+          const shouldSettleTodoToolRows = part.kind !== "tool" || !isTodoToolName(part.tool);
+          const applyPrePartTodoSettlement = (current: AgentSessionState): AgentSessionState => {
+            if (!shouldSettleTodoToolRows) {
+              return current;
+            }
+            const settledMessages = settleDanglingTodoToolMessages(
+              current.messages,
+              event.timestamp,
+            );
+            if (settledMessages === current.messages) {
+              return current;
+            }
+            return {
+              ...current,
+              messages: settledMessages,
+            };
+          };
           if (part.kind === "text") {
             if (!part.synthetic) {
               draftSourceBySessionRef.current[sessionId] = "part";
               draftRawBySessionRef.current[sessionId] = part.text;
               updateSession(
                 sessionId,
-                (current) => ({
-                  ...current,
-                  status: "running",
-                  draftAssistantText: sanitizeStreamingText(part.text),
-                }),
+                (current) => {
+                  const prepared = applyPrePartTodoSettlement(current);
+                  return {
+                    ...prepared,
+                    status: "running",
+                    draftAssistantText: sanitizeStreamingText(part.text),
+                  };
+                },
                 { persist: false },
               );
             }
@@ -1223,21 +1216,22 @@ export function useAgentOrchestratorOperations({
             updateSession(
               sessionId,
               (current) => {
+                const prepared = applyPrePartTodoSettlement(current);
                 const messageId = `thinking:${streamMessageKey}`;
-                const existingMessage = current.messages.find((entry) => entry.id === messageId);
+                const existingMessage = prepared.messages.find((entry) => entry.id === messageId);
                 const nextContent =
                   part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
                 if (nextContent.trim().length === 0) {
                   return {
-                    ...current,
+                    ...prepared,
                     status: "running",
                   };
                 }
 
                 return {
-                  ...current,
+                  ...prepared,
                   status: "running",
-                  messages: upsertMessage(current.messages, {
+                  messages: upsertMessage(prepared.messages, {
                     id: messageId,
                     role: "thinking",
                     content: nextContent,
@@ -1268,9 +1262,10 @@ export function useAgentOrchestratorOperations({
             updateSession(
               sessionId,
               (current) => {
+                const prepared = applyPrePartTodoSettlement(current);
                 const fallbackMessageId = `tool:${streamMessageKey}`;
                 const messageId = resolveToolMessageId(
-                  current.messages,
+                  prepared.messages,
                   {
                     messageId: part.messageId,
                     callId: part.callId,
@@ -1279,7 +1274,7 @@ export function useAgentOrchestratorOperations({
                   },
                   fallbackMessageId,
                 );
-                const existing = current.messages.find((entry) => entry.id === messageId);
+                const existing = prepared.messages.find((entry) => entry.id === messageId);
                 const previousStatus =
                   existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
                 if (
@@ -1294,12 +1289,12 @@ export function useAgentOrchestratorOperations({
                 }
 
                 return {
-                  ...current,
+                  ...prepared,
                   status: "running",
                   ...(todoUpdateFromTool
-                    ? { todos: mergeTodoListPreservingOrder(current.todos, todoUpdateFromTool) }
+                    ? { todos: mergeTodoListPreservingOrder(prepared.todos, todoUpdateFromTool) }
                     : {}),
-                  messages: upsertMessage(current.messages, {
+                  messages: upsertMessage(prepared.messages, {
                     id: messageId,
                     role: "tool",
                     content: formatToolContent(part),
@@ -1345,23 +1340,26 @@ export function useAgentOrchestratorOperations({
           if (part.kind === "subtask") {
             updateSession(
               sessionId,
-              (current) => ({
-                ...current,
-                status: "running",
-                messages: upsertMessage(current.messages, {
-                  id: `subtask:${streamMessageKey}`,
-                  role: "system",
-                  content: `Subtask (${part.agent}): ${part.description}`,
-                  timestamp: event.timestamp,
-                  meta: {
-                    kind: "subtask",
-                    partId: part.partId,
-                    agent: part.agent,
-                    prompt: part.prompt,
-                    description: part.description,
-                  },
-                }),
-              }),
+              (current) => {
+                const prepared = applyPrePartTodoSettlement(current);
+                return {
+                  ...prepared,
+                  status: "running",
+                  messages: upsertMessage(prepared.messages, {
+                    id: `subtask:${streamMessageKey}`,
+                    role: "system",
+                    content: `Subtask (${part.agent}): ${part.description}`,
+                    timestamp: event.timestamp,
+                    meta: {
+                      kind: "subtask",
+                      partId: part.partId,
+                      agent: part.agent,
+                      prompt: part.prompt,
+                      description: part.description,
+                    },
+                  }),
+                };
+              },
               { persist: false },
             );
           }
@@ -1372,19 +1370,23 @@ export function useAgentOrchestratorOperations({
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
           updateSession(sessionId, (current) => {
-            const messageAlreadyPresent = isDuplicateAssistantMessage(
+            const settledMessages = settleDanglingTodoToolMessages(
               current.messages,
+              event.timestamp,
+            );
+            const messageAlreadyPresent = isDuplicateAssistantMessage(
+              settledMessages,
               event.message,
               event.timestamp,
             );
-            const durationMs = resolveTurnDurationMs(sessionId, event.timestamp, current.messages);
+            const durationMs = resolveTurnDurationMs(sessionId, event.timestamp, settledMessages);
             return {
               ...current,
               draftAssistantText: "",
               messages: messageAlreadyPresent
-                ? current.messages
+                ? settledMessages
                 : [
-                    ...current.messages,
+                    ...settledMessages,
                     {
                       id: crypto.randomUUID(),
                       role: "assistant",
@@ -1435,14 +1437,18 @@ export function useAgentOrchestratorOperations({
             );
             return;
           }
-          updateSession(sessionId, (current) => ({
-            ...finalizeDraftAssistantMessage(
+          updateSession(sessionId, (current) => {
+            const finalized = finalizeDraftAssistantMessage(
               current,
               event.timestamp,
               resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
-            ),
-            ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
-          }));
+            );
+            return {
+              ...finalized,
+              messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
+              ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
+            };
+          });
           clearTurnDuration(sessionId);
           return;
         }
@@ -1513,6 +1519,7 @@ export function useAgentOrchestratorOperations({
             (current) => ({
               ...current,
               todos: mergeTodoListPreservingOrder(current.todos, event.todos),
+              messages: settleDanglingTodoToolMessages(current.messages, event.timestamp),
             }),
             { persist: false },
           );
@@ -1529,11 +1536,19 @@ export function useAgentOrchestratorOperations({
               event.timestamp,
               resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
             );
+            const settledMessages = settleDanglingTodoToolMessages(
+              finalized.messages,
+              event.timestamp,
+              {
+                outcome: "error",
+                errorMessage: sessionErrorMessage,
+              },
+            );
             return {
               ...finalized,
               status: "error",
               messages: [
-                ...finalized.messages,
+                ...settledMessages,
                 {
                   id: crypto.randomUUID(),
                   role: "system",
@@ -1558,6 +1573,7 @@ export function useAgentOrchestratorOperations({
             );
             return {
               ...finalized,
+              messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
               ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
             };
           });
@@ -1576,6 +1592,7 @@ export function useAgentOrchestratorOperations({
             );
             return {
               ...finalized,
+              messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
               status: "stopped",
             };
           });

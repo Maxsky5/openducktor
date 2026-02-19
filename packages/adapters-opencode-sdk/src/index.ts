@@ -381,11 +381,31 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
         completed: Boolean(part.time?.end),
       };
     case "tool": {
+      const toolState = part.state as Record<string, unknown>;
       const timing = extractPartTiming(part);
       const metadata = normalizeMetadata(
         (part as { state?: { metadata?: unknown } }).state?.metadata,
       );
-      if (part.state.status === "pending") {
+      const rawStatus =
+        typeof part.state.status === "string" ? part.state.status.trim().toLowerCase() : "";
+      const hasEndedTiming = typeof timing.endedAtMs === "number";
+      const normalizedStatus: "pending" | "running" | "completed" | "error" = (() => {
+        if (rawStatus === "completed") {
+          return "completed";
+        }
+        if (rawStatus === "error" || rawStatus === "failed") {
+          return "error";
+        }
+        if (rawStatus === "pending") {
+          return hasEndedTiming ? "completed" : "pending";
+        }
+        if (rawStatus === "running" || rawStatus === "started") {
+          return hasEndedTiming ? "completed" : "running";
+        }
+        return hasEndedTiming ? "completed" : "running";
+      })();
+
+      if (normalizedStatus === "pending") {
         return {
           kind: "tool",
           messageId: part.messageID,
@@ -398,8 +418,8 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           ...timing,
         };
       }
-      if (part.state.status === "running") {
-        const title = toDisplayText(part.state.title);
+      if (normalizedStatus === "running") {
+        const title = toDisplayText(toolState.title);
         return {
           kind: "tool",
           messageId: part.messageID,
@@ -413,10 +433,12 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           ...timing,
         };
       }
-      if (part.state.status === "completed") {
-        const output = readToolOutputText(part.state.output);
-        const title = toDisplayText(part.state.title);
-        if (isToolOutputError(part.state.output)) {
+      if (normalizedStatus === "completed") {
+        const output = readToolOutputText(toolState.output);
+        const error = toDisplayText(toolState.error);
+        const title = toDisplayText(toolState.title);
+        if (isToolOutputError(toolState.output) || (error && error.trim().length > 0)) {
+          const errorText = output ?? error ?? "Tool failed";
           return {
             kind: "tool",
             messageId: part.messageID,
@@ -425,7 +447,7 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
             tool: part.tool,
             status: "error",
             input: part.state.input,
-            ...(output ? { error: output } : {}),
+            error: errorText,
             ...(title ? { title } : {}),
             ...(metadata ? { metadata } : {}),
             ...timing,
@@ -445,7 +467,7 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           ...timing,
         };
       }
-      const error = toDisplayText(part.state.error);
+      const error = toDisplayText(toolState.error);
       return {
         kind: "tool",
         messageId: part.messageID,

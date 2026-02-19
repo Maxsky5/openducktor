@@ -559,6 +559,82 @@ describe("OpencodeSdkAdapter", () => {
     expect(toolPartEvent.part.error).toContain("Task not found");
   });
 
+  test("maps todowrite tool part with ended timing to completed even when status is pending", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+          },
+          parts: [
+            {
+              id: "tool-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              callID: "call-1",
+              type: "tool",
+              tool: "todowrite",
+              state: {
+                status: "pending",
+                input: {
+                  todos: [
+                    {
+                      id: "todo-1",
+                      content: "A",
+                    },
+                  ],
+                },
+                time: {
+                  start: 100,
+                  end: 175,
+                },
+              },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await Bun.sleep(0);
+
+    const toolPartEvent = events.find((entry) => {
+      if (entry.type !== "assistant_part") {
+        return false;
+      }
+      return entry.part.kind === "tool" && entry.part.tool === "todowrite";
+    });
+
+    expect(toolPartEvent).toBeDefined();
+    if (
+      !toolPartEvent ||
+      toolPartEvent.type !== "assistant_part" ||
+      toolPartEvent.part.kind !== "tool"
+    ) {
+      throw new Error("Expected todowrite tool part event");
+    }
+
+    expect(toolPartEvent.part.status).toBe("completed");
+    expect(toolPartEvent.part.startedAtMs).toBe(100);
+    expect(toolPartEvent.part.endedAtMs).toBe(175);
+  });
+
   test("maps todo.updated events into session_todos_updated", async () => {
     const streamEvents: Event[] = [
       {
