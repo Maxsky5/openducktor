@@ -25,13 +25,13 @@ export type BuildAgentPromptInput = {
 };
 
 const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
-  set_spec: `set_spec { "markdown": string }`,
-  set_plan: `set_plan { "markdown": string, "subtasks"?: [{ "title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: number, "description"?: string }] }`,
-  build_blocked: `build_blocked { "reason": string }`,
-  build_resumed: "build_resumed { }",
-  build_completed: `build_completed { "summary"?: string }`,
-  qa_approved: `qa_approved { "reportMarkdown": string }`,
-  qa_rejected: `qa_rejected { "reportMarkdown": string }`,
+  set_spec: `{"tool":"set_spec","args":{"markdown": string}}`,
+  set_plan: `{"tool":"set_plan","args":{"markdown": string, "subtasks"?: [{"title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: number, "description"?: string}]}}`,
+  build_blocked: `{"tool":"build_blocked","args":{"reason": string}}`,
+  build_resumed: `{"tool":"build_resumed","args":{}}`,
+  build_completed: `{"tool":"build_completed","args":{"summary"?: string}}`,
+  qa_approved: `{"tool":"qa_approved","args":{"reportMarkdown": string}}`,
+  qa_rejected: `{"tool":"qa_rejected","args":{"reportMarkdown": string}}`,
 };
 
 const WORKFLOW_GUARDS = `
@@ -49,7 +49,7 @@ Workflow constraints you must obey:
 const SPEC_AGENT_BASE = `
 You are the Spec Agent for OpenBlueprint.
 Your job is to produce or refine a complete, implementation-ready specification in markdown.
-The canonical spec must be persisted via set_spec.
+The canonical spec must be persisted via the OpenBlueprint bridge protocol (obp_tool_call set_spec payload).
 
 Spec quality bar:
 - Include clear purpose, problem, goals, non-goals, scope, API/interfaces, risks, and test plan.
@@ -101,39 +101,39 @@ QA policy:
 const SCENARIO_DIRECTIVES: Record<AgentScenario, string> = {
   spec_initial: `
 Scenario: Initial specification authoring.
-Produce the first complete spec revision and call set_spec.
+Produce the first complete spec revision and emit the set_spec obp_tool_call payload.
 `,
   spec_revision: `
 Scenario: Spec revision.
 Refine the existing spec while preserving structure and improving clarity.
-Call set_spec with the updated markdown.
+Emit set_spec obp_tool_call with the updated markdown.
 `,
   planner_initial: `
 Scenario: Initial planning.
-Author the first implementation plan and call set_plan.
+Author the first implementation plan and emit set_plan obp_tool_call.
 `,
   planner_revision: `
 Scenario: Plan revision.
 Update plan scope/order/validation based on new constraints.
-Call set_plan with the revised markdown.
+Emit set_plan obp_tool_call with the revised markdown.
 `,
   build_implementation_start: `
 Scenario: Initial implementation run.
 Implement the task from current spec/plan context.
-Call build_completed once implementation and checks are done.
+Emit build_completed obp_tool_call once implementation and checks are done.
 `,
   build_after_qa_rejected: `
 Scenario: Rework after QA rejection.
-Address every QA rejection item before calling build_completed again.
+Address every QA rejection item before emitting build_completed obp_tool_call again.
 `,
   build_after_human_request_changes: `
 Scenario: Rework after human requested changes.
-Incorporate requested changes and provide a clean completion summary via build_completed.
+Incorporate requested changes and provide a clean completion summary via build_completed obp_tool_call.
 `,
   qa_review: `
 Scenario: QA review.
 Evaluate the implementation and produce a QA report markdown.
-Call qa_approved or qa_rejected exactly once per review pass.
+Emit qa_approved or qa_rejected obp_tool_call exactly once per review pass.
 `,
 };
 
@@ -157,6 +157,9 @@ const buildToolProtocol = (role: AgentRole): string => {
   const toolList = allowedTools.map((tool) => `- ${TOOL_ARG_SPEC[tool]}`).join("\n");
 
   return `
+OpenBlueprint workflow tools are bridge payloads, not native OpenCode tools.
+They may NOT appear in the runtime tool list. That is expected.
+
 When you need to execute an OpenBlueprint workflow tool, output ONLY this XML block format:
 
 <obp_tool_call>
@@ -168,6 +171,8 @@ ${toolList}
 
 Never invent tool names. Never emit multiple tool calls in a single block.
 Do not call tools that are not explicitly listed above.
+Never attempt native tool invocation syntax for these names.
+If you see an "Invalid Tool" runtime message for one of these names, immediately retry by emitting a valid obp_tool_call payload.
 `;
 };
 

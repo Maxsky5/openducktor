@@ -52,7 +52,7 @@ describe("buildAgentSystemPrompt", () => {
       task: taskContext,
     });
 
-    expect(prompt).toContain("Call qa_approved or qa_rejected exactly once");
+    expect(prompt).toContain("Emit qa_approved or qa_rejected obp_tool_call exactly once");
     expect(prompt).toContain("qa_approved");
     expect(prompt).toContain("qa_rejected");
     expect(prompt).not.toContain("- build_completed {");
@@ -70,6 +70,9 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Ground the spec in repository evidence");
     expect(prompt).toContain("inspect relevant project files");
     expect(prompt).toContain("cite concrete file paths");
-    expect(prompt).toContain("set_spec");
+    expect(prompt).toContain('{"tool":"set_spec"');
+    expect(prompt).toContain("not native OpenCode tools");
+    expect(prompt).toContain("may NOT appear in the runtime tool list");
+    expect(prompt).toContain("Invalid Tool");
   });
 });

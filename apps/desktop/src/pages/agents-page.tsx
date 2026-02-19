@@ -76,24 +76,24 @@ const SCENARIO_LABELS: Record<AgentScenario, string> = {
 const kickoffPromptForScenario = (role: AgentRole, scenario: AgentScenario): string => {
   if (role === "spec") {
     return scenario === "spec_revision"
-      ? "Revise the current specification and call set_spec with the updated markdown."
-      : "Write the initial specification and call set_spec with complete markdown.";
+      ? 'Revise the current specification and emit ONLY an <obp_tool_call> payload for {"tool":"set_spec","args":{"markdown":"..."}} when ready.'
+      : 'Write the initial specification and emit ONLY an <obp_tool_call> payload for {"tool":"set_spec","args":{"markdown":"..."}} when ready.';
   }
   if (role === "planner") {
     return scenario === "planner_revision"
-      ? "Revise the current implementation plan and call set_plan with the updated markdown."
-      : "Create the initial implementation plan and call set_plan with concrete execution steps.";
+      ? 'Revise the current implementation plan and emit ONLY an <obp_tool_call> payload for {"tool":"set_plan","args":{"markdown":"..."}} when ready.'
+      : 'Create the initial implementation plan and emit ONLY an <obp_tool_call> payload for {"tool":"set_plan","args":{"markdown":"..."}} when ready.';
   }
   if (role === "qa") {
-    return "Perform QA review now and call qa_approved or qa_rejected exactly once with a complete report.";
+    return 'Perform QA review now and emit ONLY one <obp_tool_call> payload: {"tool":"qa_approved","args":{"reportMarkdown":"..."}} or {"tool":"qa_rejected","args":{"reportMarkdown":"..."}}.';
   }
   if (scenario === "build_after_qa_rejected") {
-    return "Address all QA rejection findings and call build_completed with a concise rework summary.";
+    return 'Address all QA rejection findings and emit ONLY an <obp_tool_call> payload for {"tool":"build_completed","args":{"summary":"..."}} when done.';
   }
   if (scenario === "build_after_human_request_changes") {
-    return "Apply all human-requested changes and call build_completed with a concise summary.";
+    return 'Apply all human-requested changes and emit ONLY an <obp_tool_call> payload for {"tool":"build_completed","args":{"summary":"..."}} when done.';
   }
-  return "Start implementation now and use build_blocked/build_resumed/build_completed as progress changes.";
+  return 'Start implementation now and emit bridge tool payloads via <obp_tool_call> for {"tool":"build_blocked"| "build_resumed" | "build_completed", "args":{...}} as status changes.';
 };
 
 const isTaskEligibleForRole = (task: TaskCard, role: AgentRole): boolean => {
