@@ -59,4 +59,17 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("latestQaReport");
     expect(prompt).toContain("read-only mode");
   });
+
+  test("spec prompt requires repository evidence before persisting spec", () => {
+    const prompt = buildAgentSystemPrompt({
+      role: "spec",
+      scenario: "spec_initial",
+      task: taskContext,
+    });
+
+    expect(prompt).toContain("Ground the spec in repository evidence");
+    expect(prompt).toContain("inspect relevant project files");
+    expect(prompt).toContain("cite concrete file paths");
+    expect(prompt).toContain("set_spec");
+  });
 });

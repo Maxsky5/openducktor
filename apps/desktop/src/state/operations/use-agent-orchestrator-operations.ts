@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";
+import { isMutatingPermission } from "./permission-policy";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeRepo: string | null;
@@ -57,19 +58,6 @@ const now = (): string => new Date().toISOString();
 const OBC_TOOL_BLOCK_PATTERN = /<obp_tool_call>\s*[\s\S]*?<\/obp_tool_call>/g;
 const OBC_TOOL_BLOCK_TAIL_PATTERN = /<obp_tool_call>[\s\S]*$/;
 const READ_ONLY_ROLES = new Set<AgentRole>(["spec", "planner", "qa"]);
-const WRITE_PERMISSION_HINTS = [
-  "write",
-  "edit",
-  "patch",
-  "delete",
-  "rename",
-  "move",
-  "mkdir",
-  "create",
-  "bash",
-  "shell",
-  "exec",
-];
 
 const sanitizeStreamingText = (value: string): string => {
   return value
@@ -77,37 +65,6 @@ const sanitizeStreamingText = (value: string): string => {
     .replace(OBC_TOOL_BLOCK_TAIL_PATTERN, "")
     .replace(/\n{3,}/g, "\n\n")
     .trimStart();
-};
-
-const isMutatingPermission = (
-  permission: string,
-  patterns: string[],
-  metadata?: Record<string, unknown>,
-): boolean => {
-  const permissionLower = permission.trim().toLowerCase();
-  if (WRITE_PERMISSION_HINTS.some((entry) => permissionLower.includes(entry))) {
-    return true;
-  }
-
-  if (patterns.some((pattern) => WRITE_PERMISSION_HINTS.some((entry) => pattern.includes(entry)))) {
-    return true;
-  }
-
-  const command =
-    typeof metadata?.command === "string"
-      ? metadata.command.toLowerCase()
-      : typeof metadata?.tool === "string"
-        ? metadata.tool.toLowerCase()
-        : "";
-  if (
-    command &&
-    WRITE_PERMISSION_HINTS.some((entry) => command.includes(entry)) &&
-    !command.includes("read")
-  ) {
-    return true;
-  }
-
-  return false;
 };
 
 const inferScenario = (
@@ -263,6 +220,39 @@ const formatToolContent = (part: {
   return `Tool ${part.tool}${title} queued...`;
 };
 
+const normalizeToolInput = (
+  input: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined => {
+  if (!input) {
+    return undefined;
+  }
+  return Object.keys(input).length > 0 ? input : undefined;
+};
+
+const normalizeToolText = (value: unknown): string | undefined => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value) && value.length === 0) {
+    return undefined;
+  }
+  if (typeof value === "object" && Object.keys(value as Record<string, unknown>).length === 0) {
+    return undefined;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
 const normalizePersistedSelection = (
   selection: AgentSessionRecord["selectedModel"] | undefined,
 ): AgentModelSelection | null => {
@@ -346,6 +336,9 @@ const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChat
       }
 
       if (part.kind === "tool") {
+        const input = normalizeToolInput(part.input);
+        const output = normalizeToolText(part.output);
+        const error = normalizeToolText(part.error);
         next.push({
           id: `history:tool:${message.messageId}:${part.partId}`,
           role: "tool",
@@ -358,9 +351,9 @@ const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChat
             tool: part.tool,
             status: part.status,
             ...(part.title ? { title: part.title } : {}),
-            ...(part.input ? { input: part.input } : {}),
-            ...(part.output ? { output: part.output } : {}),
-            ...(part.error ? { error: part.error } : {}),
+            ...(input ? { input } : {}),
+            ...(output ? { output } : {}),
+            ...(error ? { error } : {}),
           },
         });
         continue;
@@ -756,6 +749,9 @@ export function useAgentOrchestratorOperations({
           }
 
           if (part.kind === "tool") {
+            const input = normalizeToolInput(part.input);
+            const output = normalizeToolText(part.output);
+            const error = normalizeToolText(part.error);
             updateSession(
               sessionId,
               (current) => ({
@@ -773,9 +769,9 @@ export function useAgentOrchestratorOperations({
                     tool: part.tool,
                     status: part.status,
                     ...(part.title ? { title: part.title } : {}),
-                    ...(part.input ? { input: part.input } : {}),
-                    ...(part.output ? { output: part.output } : {}),
-                    ...(part.error ? { error: part.error } : {}),
+                    ...(input ? { input } : {}),
+                    ...(output ? { output } : {}),
+                    ...(error ? { error } : {}),
                   },
                 }),
               }),

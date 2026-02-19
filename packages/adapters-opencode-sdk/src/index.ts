@@ -297,6 +297,30 @@ const normalizeModelInput = (
   };
 };
 
+const toDisplayText = (value: unknown): string | undefined => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value) && value.length === 0) {
+    return undefined;
+  }
+  if (typeof value === "object" && Object.keys(value as Record<string, unknown>).length === 0) {
+    return undefined;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
 const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
   switch (part.type) {
     case "text":
@@ -329,6 +353,7 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
         };
       }
       if (part.state.status === "running") {
+        const title = toDisplayText(part.state.title);
         return {
           kind: "tool",
           messageId: part.messageID,
@@ -337,10 +362,12 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           tool: part.tool,
           status: "running",
           input: part.state.input,
-          ...(part.state.title ? { title: part.state.title } : {}),
+          ...(title ? { title } : {}),
         };
       }
       if (part.state.status === "completed") {
+        const output = toDisplayText(part.state.output);
+        const title = toDisplayText(part.state.title);
         return {
           kind: "tool",
           messageId: part.messageID,
@@ -349,10 +376,11 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
           tool: part.tool,
           status: "completed",
           input: part.state.input,
-          output: part.state.output,
-          title: part.state.title,
+          ...(output ? { output } : {}),
+          ...(title ? { title } : {}),
         };
       }
+      const error = toDisplayText(part.state.error);
       return {
         kind: "tool",
         messageId: part.messageID,
@@ -361,7 +389,7 @@ const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
         tool: part.tool,
         status: "error",
         input: part.state.input,
-        error: part.state.error,
+        ...(error ? { error } : {}),
       };
     }
     case "step-start":

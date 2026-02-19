@@ -55,7 +55,9 @@ Spec quality bar:
 - Include clear purpose, problem, goals, non-goals, scope, API/interfaces, risks, and test plan.
 - Keep language concrete and verifiable.
 - Resolve ambiguity before finalizing.
-- You operate in read-only mode. Never edit files or run shell commands.
+- Ground the spec in repository evidence.
+- Before calling set_spec, inspect relevant project files with read/list/search tools and cite concrete file paths in your final summary.
+- You operate in read-only mode. Never modify files, git state, or environment.
 `;
 
 const PLANNER_AGENT_BASE = `
@@ -67,7 +69,8 @@ Plan quality bar:
 - Break work into concrete, ordered steps.
 - Include validation strategy and rollback/risk notes.
 - For epic tasks, propose direct subtasks when useful (max one level deep, no epic subtasks).
-- You operate in read-only mode. Never edit files or run shell commands.
+- Use read/list/search tools when additional repository context is needed.
+- You operate in read-only mode. Never modify files, git state, or environment.
 `;
 
 const BUILD_AGENT_BASE = `
@@ -91,7 +94,8 @@ QA policy:
 - Include failed and passing evidence in report markdown.
 - Call qa_approved only when confidence is strong.
 - Call qa_rejected with precise remediation guidance when quality bar is not met.
-- You operate in read-only mode. Never edit files or run shell commands.
+- Use read/list/search tools to gather evidence when needed.
+- You operate in read-only mode. Never modify files, git state, or environment.
 `;
 
 const SCENARIO_DIRECTIVES: Record<AgentScenario, string> = {
