@@ -428,11 +428,32 @@ const normalizeAnswerGroups = (value: unknown): string[][] => {
     return [];
   }
   const record = value as Record<string, unknown>;
-  const nested = record.answers ?? record.responses ?? record.result ?? record.value;
+  const nested =
+    record.answers ??
+    record.answer ??
+    record.responses ??
+    record.response ??
+    record.result ??
+    record.value;
   if (nested === undefined) {
-    return [];
+    const fallback = Object.values(record)
+      .map((entry) => normalizeAnswerValues(entry))
+      .filter((entry) => entry.length > 0);
+    return fallback;
   }
   return normalizeAnswerGroups(nested);
+};
+
+const firstNonEmptyAnswerGroups = (candidates: unknown[]): string[][] => {
+  for (const candidate of candidates) {
+    const groups = normalizeAnswerGroups(candidate)
+      .map((entry) => entry.filter((value) => value.trim().length > 0))
+      .filter((entry) => entry.length > 0);
+    if (groups.length > 0) {
+      return groups;
+    }
+  }
+  return [];
 };
 
 const questionToolDetails = (
@@ -465,11 +486,25 @@ const questionToolDetails = (
     parsedOutput && typeof parsedOutput === "object"
       ? (parsedOutput as Record<string, unknown>)
       : undefined;
-  const answerGroups = normalizeAnswerGroups(
-    outputRecord?.answers ?? outputRecord?.responses ?? outputRecord?.result,
-  )
-    .map((entry) => entry.filter((value) => value.trim().length > 0))
-    .filter((entry) => entry.length > 0);
+  const answerGroups = firstNonEmptyAnswerGroups([
+    outputRecord,
+    outputRecord?.answers,
+    outputRecord?.answer,
+    outputRecord?.responses,
+    outputRecord?.response,
+    outputRecord?.result,
+    outputRecord?.value,
+    meta.metadata,
+    meta.metadata?.answers,
+    meta.metadata?.answer,
+    meta.metadata?.responses,
+    meta.metadata?.response,
+    meta.input,
+    meta.input?.answers,
+    meta.input?.answer,
+    meta.input?.responses,
+    meta.input?.response,
+  ]);
 
   if (answerGroups.length === 0) {
     return questions;

@@ -689,6 +689,13 @@ const assistantDurationFromHistory = (
     return undefined;
   }
 
+  const assistantTimestampMs = Date.parse(message.timestamp);
+  if (previousUserTimestampMs !== null && !Number.isNaN(assistantTimestampMs)) {
+    if (assistantTimestampMs >= previousUserTimestampMs) {
+      return assistantTimestampMs - previousUserTimestampMs;
+    }
+  }
+
   let startedAtMs: number | null = null;
   let endedAtMs: number | null = null;
   for (const part of message.parts) {
@@ -706,13 +713,6 @@ const assistantDurationFromHistory = (
 
   if (startedAtMs !== null && endedAtMs !== null && endedAtMs >= startedAtMs) {
     return endedAtMs - startedAtMs;
-  }
-
-  const assistantTimestampMs = Date.parse(message.timestamp);
-  if (previousUserTimestampMs !== null && !Number.isNaN(assistantTimestampMs)) {
-    if (assistantTimestampMs >= previousUserTimestampMs) {
-      return assistantTimestampMs - previousUserTimestampMs;
-    }
   }
 
   return undefined;
@@ -930,21 +930,23 @@ export function useAgentOrchestratorOperations({
       timestamp: string,
       messages: AgentChatMessage[] = [],
     ): number | undefined => {
-      const startedAt = turnStartedAtBySessionRef.current[sessionId];
       const parsedTimestamp = Date.parse(timestamp);
       const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
-      if (typeof startedAt !== "number") {
-        const latestUserMessage = [...messages].reverse().find((entry) => entry.role === "user");
-        if (!latestUserMessage) {
-          return undefined;
-        }
+
+      const latestUserMessage = [...messages].reverse().find((entry) => entry.role === "user");
+      if (latestUserMessage) {
         const userTimestamp = Date.parse(latestUserMessage.timestamp);
-        if (Number.isNaN(userTimestamp) || endedAt < userTimestamp) {
-          return undefined;
+        if (!Number.isNaN(userTimestamp) && endedAt >= userTimestamp) {
+          return Math.max(0, endedAt - userTimestamp);
         }
-        return Math.max(0, endedAt - userTimestamp);
       }
-      return Math.max(0, endedAt - startedAt);
+
+      const startedAt = turnStartedAtBySessionRef.current[sessionId];
+      if (typeof startedAt === "number" && endedAt >= startedAt) {
+        return Math.max(0, endedAt - startedAt);
+      }
+
+      return undefined;
     },
     [],
   );
@@ -2116,10 +2118,76 @@ export function useAgentOrchestratorOperations({
   const answerAgentQuestion = useCallback(
     async (sessionId: string, requestId: string, answers: string[][]): Promise<void> => {
       await adapter.replyQuestion({ sessionId, requestId, answers });
-      updateSession(sessionId, (current) => ({
-        ...current,
-        pendingQuestions: current.pendingQuestions.filter((entry) => entry.requestId !== requestId),
-      }));
+      updateSession(sessionId, (current) => {
+        const answeredRequest = current.pendingQuestions.find(
+          (entry) => entry.requestId === requestId,
+        );
+        const pendingQuestions = current.pendingQuestions.filter(
+          (entry) => entry.requestId !== requestId,
+        );
+
+        if (!answeredRequest || answeredRequest.questions.length === 0) {
+          return {
+            ...current,
+            pendingQuestions,
+          };
+        }
+
+        const answeredQuestionsWithAnswers = answeredRequest.questions.map((question, index) => ({
+          ...question,
+          answers: answers[index] ?? [],
+        }));
+
+        const messages = [...current.messages];
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+          const message = messages[index];
+          if (!message || message.role !== "tool" || message.meta?.kind !== "tool") {
+            continue;
+          }
+
+          const toolName = message.meta.tool.toLowerCase();
+          const isQuestionTool =
+            toolName === "question" ||
+            toolName.endsWith("_question") ||
+            toolName.includes("question");
+          if (!isQuestionTool) {
+            continue;
+          }
+
+          const metadata = message.meta.metadata ?? {};
+          const metadataRequestId =
+            typeof metadata.requestId === "string"
+              ? metadata.requestId
+              : typeof metadata.requestID === "string"
+                ? metadata.requestID
+                : typeof metadata.questionRequestId === "string"
+                  ? metadata.questionRequestId
+                  : null;
+          if (metadataRequestId && metadataRequestId !== requestId) {
+            continue;
+          }
+
+          messages[index] = {
+            ...message,
+            meta: {
+              ...message.meta,
+              metadata: {
+                ...metadata,
+                requestId,
+                questions: answeredQuestionsWithAnswers,
+                answers,
+              },
+            },
+          };
+          break;
+        }
+
+        return {
+          ...current,
+          pendingQuestions,
+          messages,
+        };
+      });
     },
     [adapter, updateSession],
   );

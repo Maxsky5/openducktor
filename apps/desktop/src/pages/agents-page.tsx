@@ -1036,6 +1036,18 @@ export function AgentsPage(): ReactElement {
   }, [input, resizeComposerTextarea]);
 
   useEffect(() => {
+    void composerFormHeight;
+    const container = messagesContainerRef.current;
+    if (!container || !isPinnedToBottom) {
+      return;
+    }
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "auto",
+    });
+  }, [composerFormHeight, isPinnedToBottom]);
+
+  useEffect(() => {
     void scrollTrigger;
     const container = messagesContainerRef.current;
     if (!container || !isPinnedToBottom) {
