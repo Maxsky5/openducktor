@@ -69,6 +69,78 @@ fn default_task_metadata_namespace() -> String {
     "openducktor".to_string()
 }
 
+fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|entry| {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn normalize_hook_commands(commands: &mut Vec<String>) {
+    *commands = std::mem::take(commands)
+        .into_iter()
+        .filter_map(|command| {
+            let trimmed = command.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect();
+}
+
+fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
+    let Some(entry) = value.as_mut() else {
+        return;
+    };
+
+    entry.provider_id = entry.provider_id.trim().to_string();
+    entry.model_id = entry.model_id.trim().to_string();
+    entry.variant = normalize_optional_non_empty(entry.variant.take());
+    entry.opencode_agent = normalize_optional_non_empty(entry.opencode_agent.take());
+
+    if entry.provider_id.is_empty() || entry.model_id.is_empty() {
+        *value = None;
+    }
+}
+
+fn normalize_repo_config(repo: &mut RepoConfig) {
+    repo.worktree_base_path = normalize_optional_non_empty(repo.worktree_base_path.take());
+    let branch_prefix = repo.branch_prefix.trim();
+    repo.branch_prefix = if branch_prefix.is_empty() {
+        default_branch_prefix()
+    } else {
+        branch_prefix.to_string()
+    };
+    normalize_hook_commands(&mut repo.hooks.pre_start);
+    normalize_hook_commands(&mut repo.hooks.post_complete);
+    normalize_agent_model_default(&mut repo.agent_defaults.spec);
+    normalize_agent_model_default(&mut repo.agent_defaults.planner);
+    normalize_agent_model_default(&mut repo.agent_defaults.build);
+    normalize_agent_model_default(&mut repo.agent_defaults.qa);
+}
+
+fn normalize_global_config(config: &mut GlobalConfig) {
+    let namespace = config.task_metadata_namespace.trim();
+    config.task_metadata_namespace = if namespace.is_empty() {
+        default_task_metadata_namespace()
+    } else {
+        namespace.to_string()
+    };
+    for repo in config.repos.values_mut() {
+        normalize_repo_config(repo);
+    }
+}
+
+fn has_configured_worktree(repo: &RepoConfig) -> bool {
+    repo.worktree_base_path.is_some()
+}
+
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
@@ -181,8 +253,9 @@ impl AppConfigStore {
 
         let data = fs::read_to_string(&self.path)
             .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
-        let parsed: GlobalConfig = serde_json::from_str(&data)
+        let mut parsed: GlobalConfig = serde_json::from_str(&data)
             .with_context(|| format!("Failed parsing config file {}", self.path.display()))?;
+        normalize_global_config(&mut parsed);
         Ok(parsed)
     }
 
@@ -202,7 +275,9 @@ impl AppConfigStore {
                 format!("Failed creating config directory {}", parent.display())
             })?;
         }
-        let payload = serde_json::to_string_pretty(config)?;
+        let mut normalized = config.clone();
+        normalize_global_config(&mut normalized);
+        let payload = serde_json::to_string_pretty(&normalized)?;
         fs::write(&self.path, payload)
             .with_context(|| format!("Failed writing config file {}", self.path.display()))?;
         Ok(())
@@ -216,7 +291,7 @@ impl AppConfigStore {
             .map(|(path, repo)| WorkspaceRecord {
                 path: path.clone(),
                 is_active: config.active_repo.as_deref() == Some(path.as_str()),
-                has_config: repo.worktree_base_path.is_some(),
+                has_config: has_configured_worktree(repo),
                 configured_worktree_base_path: repo.worktree_base_path.clone(),
             })
             .collect();
@@ -249,8 +324,8 @@ impl AppConfigStore {
             has_config: config
                 .repos
                 .get(repo_path)
-                .and_then(|repo| repo.worktree_base_path.as_ref())
-                .is_some(),
+                .map(has_configured_worktree)
+                .unwrap_or(false),
             configured_worktree_base_path: config
                 .repos
                 .get(repo_path)
@@ -274,7 +349,7 @@ impl AppConfigStore {
         Ok(WorkspaceRecord {
             path: repo_path.to_string(),
             is_active: true,
-            has_config: repo.worktree_base_path.is_some(),
+            has_config: has_configured_worktree(repo),
             configured_worktree_base_path: repo.worktree_base_path.clone(),
         })
     }
@@ -282,8 +357,9 @@ impl AppConfigStore {
     pub fn update_repo_config(
         &self,
         repo_path: &str,
-        repo_config: RepoConfig,
+        mut repo_config: RepoConfig,
     ) -> Result<WorkspaceRecord> {
+        normalize_repo_config(&mut repo_config);
         let mut config = self.load()?;
         config
             .repos
@@ -297,7 +373,7 @@ impl AppConfigStore {
         Ok(WorkspaceRecord {
             path: repo_path.to_string(),
             is_active: config.active_repo.as_deref() == Some(repo_path),
-            has_config: repo_config.worktree_base_path.is_some(),
+            has_config: has_configured_worktree(&repo_config),
             configured_worktree_base_path: repo_config.worktree_base_path,
         })
     }
@@ -325,7 +401,7 @@ impl AppConfigStore {
                 .ok_or_else(|| anyhow!("Repository is not configured"))?;
             repo.trusted_hooks = trusted;
             (
-                repo.worktree_base_path.is_some(),
+                has_configured_worktree(repo),
                 repo.worktree_base_path.clone(),
             )
         };
@@ -349,6 +425,7 @@ fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {
 #[cfg(test)]
 mod tests {
     use super::{touch_recent, AppConfigStore, GlobalConfig, RepoConfig};
+    use serde_json::json;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -494,12 +571,16 @@ mod tests {
         let select_error = store
             .select_workspace(missing_repo_str.as_str())
             .expect_err("missing workspace select should fail");
-        assert!(select_error.to_string().contains("Workspace not found in config"));
+        assert!(select_error
+            .to_string()
+            .contains("Workspace not found in config"));
 
         let config_error = store
             .repo_config(missing_repo_str.as_str())
             .expect_err("repo config should fail when missing");
-        assert!(config_error.to_string().contains("Repository is not configured"));
+        assert!(config_error
+            .to_string()
+            .contains("Repository is not configured"));
 
         let optional = store
             .repo_config_optional(missing_repo_str.as_str())
@@ -509,7 +590,9 @@ mod tests {
         let trust_error = store
             .set_repo_trust_hooks(missing_repo_str.as_str(), true)
             .expect_err("set trust should fail when repo missing");
-        assert!(trust_error.to_string().contains("Repository is not configured"));
+        assert!(trust_error
+            .to_string()
+            .contains("Repository is not configured"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -555,13 +638,46 @@ mod tests {
     }
 
     #[test]
+    fn update_repo_config_normalizes_blank_worktree_path() {
+        let (store, root) = test_store("normalize-worktree");
+        let repo = root.join("repo");
+        fs::create_dir_all(repo.join(".git")).expect("repo");
+        let repo_str = repo.to_string_lossy().to_string();
+
+        store.add_workspace(&repo_str).expect("add workspace");
+        let updated = store
+            .update_repo_config(
+                &repo_str,
+                RepoConfig {
+                    worktree_base_path: Some("   ".to_string()),
+                    branch_prefix: "duck".to_string(),
+                    trusted_hooks: false,
+                    hooks: Default::default(),
+                    agent_defaults: Default::default(),
+                },
+            )
+            .expect("update config");
+
+        assert!(!updated.has_config);
+        assert!(updated.configured_worktree_base_path.is_none());
+
+        let loaded = store.repo_config(&repo_str).expect("load repo config");
+        assert!(loaded.worktree_base_path.is_none());
+        assert_eq!(loaded.branch_prefix, "duck");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn save_and_load_report_io_and_parse_errors() {
         let (store, root) = test_store("config-io-errors");
 
         fs::create_dir_all(&root).expect("temp root should exist");
         fs::write(store.path(), "{ invalid json").expect("invalid config should write");
         let parse_error = store.load().expect_err("invalid json should fail parsing");
-        assert!(parse_error.to_string().contains("Failed parsing config file"));
+        assert!(parse_error
+            .to_string()
+            .contains("Failed parsing config file"));
 
         let blocked_parent = root.join("not-a-directory");
         fs::write(&blocked_parent, "file").expect("blocking file should write");
@@ -569,7 +685,9 @@ mod tests {
         let save_error = blocked_store
             .save(&GlobalConfig::default())
             .expect_err("save should fail when parent is a file");
-        assert!(save_error.to_string().contains("Failed creating config directory"));
+        assert!(save_error
+            .to_string()
+            .contains("Failed creating config directory"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -585,6 +703,82 @@ mod tests {
         let custom_path = unique_temp_path("custom-path").join("custom-config.json");
         let from_path = AppConfigStore::from_path(custom_path.clone());
         assert_eq!(from_path.path(), custom_path.as_path());
+    }
+
+    #[test]
+    fn load_normalizes_legacy_blank_repo_config_values() {
+        let (store, root) = test_store("normalize-legacy");
+        let repo = root.join("repo");
+        let repo_str = repo.to_string_lossy().to_string();
+
+        fs::create_dir_all(store.path.parent().expect("config parent")).expect("create config dir");
+        let mut repos = serde_json::Map::new();
+        repos.insert(
+            repo_str.clone(),
+            json!({
+                "worktreeBasePath": "",
+                "branchPrefix": "   ",
+                "trustedHooks": false,
+                "hooks": {
+                    "preStart": ["  echo pre  ", "   "],
+                    "postComplete": ["  echo post  "]
+                },
+                "agentDefaults": {
+                    "spec": {
+                        "providerId": " openai ",
+                        "modelId": " gpt-5 ",
+                        "variant": "  ",
+                        "opencodeAgent": "  "
+                    }
+                }
+            }),
+        );
+        let payload = json!({
+            "version": 1,
+            "activeRepo": repo_str,
+            "taskMetadataNamespace": "   ",
+            "repos": repos,
+            "recentRepos": [],
+            "scheduler": {
+                "softGuardrails": {
+                    "cpuHighWatermarkPercent": 85,
+                    "minFreeMemoryMb": 2048,
+                    "backoffSeconds": 30
+                }
+            }
+        });
+        fs::write(
+            &store.path,
+            serde_json::to_string_pretty(&payload).expect("serialize payload"),
+        )
+        .expect("write config");
+
+        let workspaces = store.list_workspaces().expect("list workspaces");
+        assert_eq!(workspaces.len(), 1);
+        assert!(!workspaces[0].has_config);
+        assert!(workspaces[0].configured_worktree_base_path.is_none());
+
+        let repo_config = store
+            .repo_config(workspaces[0].path.as_str())
+            .expect("repo config");
+        assert!(repo_config.worktree_base_path.is_none());
+        assert_eq!(repo_config.branch_prefix, "obp");
+        assert_eq!(repo_config.hooks.pre_start, vec!["echo pre".to_string()]);
+        assert_eq!(
+            repo_config.hooks.post_complete,
+            vec!["echo post".to_string()]
+        );
+
+        let spec = repo_config.agent_defaults.spec.expect("spec default");
+        assert_eq!(spec.provider_id, "openai");
+        assert_eq!(spec.model_id, "gpt-5");
+        assert!(spec.variant.is_none());
+        assert!(spec.opencode_agent.is_none());
+
+        let namespace = store.task_metadata_namespace().expect("namespace");
+        assert_eq!(namespace, "openducktor");
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

@@ -50,19 +50,22 @@ export function AppShell(): ReactElement {
                 <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Repository
                 </p>
-                <RepositorySwitcher />
+                <div className="flex items-center gap-2">
+                  <RepositorySwitcher className="min-w-0 flex-1" />
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="shrink-0 bg-sky-600 text-white hover:bg-sky-500"
+                    onClick={() => setRepositoryModalOpen(true)}
+                    aria-label="Open repository"
+                    title="Open repository"
+                  >
+                    <FolderOpen className="size-4" />
+                  </Button>
+                </div>
               </div>
 
               <DiagnosticsPanel />
-
-              <Button
-                type="button"
-                className="w-full justify-start bg-sky-600 text-white hover:bg-sky-500"
-                onClick={() => setRepositoryModalOpen(true)}
-              >
-                <FolderOpen className="size-4" />
-                Open Repository
-              </Button>
 
               <SidebarNavigation hasActiveRepo={Boolean(activeRepo)} />
               <WorkspaceSummaryCard activeRepo={activeRepo} />

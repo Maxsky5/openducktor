@@ -32,6 +32,7 @@ import type { RepoAgentDefaultInput } from "@/types/state-slices";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 type SettingsModalProps = {
   triggerClassName?: string;
@@ -59,6 +60,7 @@ export function SettingsModal({
   const [isSaving, setIsSaving] = useState(false);
   const [catalog, setCatalog] = useState<AgentModelCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [worktreeBasePath, setWorktreeBasePath] = useState("");
   const [branchPrefix, setBranchPrefix] = useState(DEFAULT_BRANCH_PREFIX);
   const [trustedHooks, setTrustedHooks] = useState(false);
@@ -109,6 +111,12 @@ export function SettingsModal({
   const findCatalogModel = (modelKey: string) => {
     return catalog?.models.find((entry) => entry.id === modelKey) ?? null;
   };
+
+  useEffect(() => {
+    if (!open) {
+      setSaveError(null);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open || !activeRepo) {
@@ -206,6 +214,7 @@ export function SettingsModal({
     }
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       await saveRepoSettings({
         worktreeBasePath,
@@ -217,13 +226,27 @@ export function SettingsModal({
       });
 
       setOpen(false);
+    } catch (error: unknown) {
+      const reason = errorMessage(error);
+      setSaveError(reason);
+      toast.error("Failed to save workspace settings", {
+        description: reason,
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && isSaving) {
+          return;
+        }
+        setOpen(nextOpen);
+      }}
+    >
       <DialogTrigger asChild>
         <Button type="button" variant="outline" size={triggerSize} className={cn(triggerClassName)}>
           <Settings2 className="size-4" />
@@ -410,17 +433,25 @@ export function SettingsModal({
           </label>
         </div>
 
-        <DialogFooter className="mt-0 shrink-0 border-t border-slate-200 px-6 pb-6 pt-4">
-          <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => void submit()}
-            disabled={isSaving || isLoadingConfig || !activeRepo || !canSaveRoleDefaults}
-          >
-            {isSaving ? "Saving..." : "Save Settings"}
-          </Button>
+        <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-slate-200 px-6 pb-6 pt-4">
+          {saveError ? <p className="text-sm text-rose-700">{saveError}</p> : <span />}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setOpen(false)}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void submit()}
+              disabled={isSaving || isLoadingConfig || !activeRepo || !canSaveRoleDefaults}
+            >
+              {isSaving ? "Saving..." : "Save Settings"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

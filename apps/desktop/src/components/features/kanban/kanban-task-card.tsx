@@ -123,7 +123,10 @@ export function KanbanTaskCard({
         onClick={() => onOpenDetails(task.id)}
       >
         <div className="min-w-0 space-y-1">
-          <p className="break-words text-sm font-semibold leading-tight text-slate-900 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+          <p
+            className="line-clamp-2 break-words text-sm font-semibold leading-tight text-slate-900"
+            title={task.title}
+          >
             {task.title}
           </p>
           <p className="truncate font-mono text-[11px] text-slate-500">{task.id}</p>

@@ -29,7 +29,7 @@ export function RepositorySwitcher({ className, triggerClassName }: RepositorySw
   const selectedValue = activeRepo ?? options[0]?.value ?? "";
 
   return (
-    <div className={cn("w-full", className)}>
+    <div className={cn("min-w-0", className)}>
       <Combobox
         value={selectedValue}
         options={options}

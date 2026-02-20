@@ -39,7 +39,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type TaskDetailsSheetProps = {
   task: TaskCard | null;
@@ -93,6 +93,7 @@ export function TaskDetailsSheet({
   const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteRequestInFlightRef = useRef(false);
 
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
   const subtasks = useMemo(() => {
@@ -111,6 +112,7 @@ export function TaskDetailsSheet({
       setDeleteDialogOpen(false);
       setIsDeleting(false);
       setDeleteError(null);
+      deleteRequestInFlightRef.current = false;
     }
   }, [open]);
 
@@ -181,10 +183,11 @@ export function TaskDetailsSheet({
   }, [ensureDocumentLoaded]);
 
   const confirmDelete = useCallback((): void => {
-    if (!task || !onDelete || isDeleting) {
+    if (!task || !onDelete || deleteRequestInFlightRef.current) {
       return;
     }
 
+    deleteRequestInFlightRef.current = true;
     setIsDeleting(true);
     setDeleteError(null);
     void onDelete(task.id, { deleteSubtasks: hasSubtasks })
@@ -196,9 +199,11 @@ export function TaskDetailsSheet({
         setDeleteError(errorMessage(error));
       })
       .finally(() => {
+        deleteRequestInFlightRef.current = false;
         setIsDeleting(false);
       });
-  }, [hasSubtasks, isDeleting, onDelete, onOpenChange, task]);
+  }, [hasSubtasks, onDelete, onOpenChange, task]);
+  const isDeletePending = isDeleting || deleteRequestInFlightRef.current;
 
   if (!task) {
     return (
@@ -372,7 +377,7 @@ export function TaskDetailsSheet({
       <Dialog
         open={isDeleteDialogOpen}
         onOpenChange={(nextOpen) => {
-          if (isDeleting) {
+          if (deleteRequestInFlightRef.current) {
             return;
           }
           setDeleteDialogOpen(nextOpen);
@@ -407,8 +412,8 @@ export function TaskDetailsSheet({
             <Button
               type="button"
               variant="outline"
-              className="w-[132px] justify-center"
-              disabled={isDeleting}
+              className="w-[132px] justify-center disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100"
+              disabled={isDeletePending}
               onClick={() => setDeleteDialogOpen(false)}
             >
               Cancel
@@ -416,17 +421,17 @@ export function TaskDetailsSheet({
             <Button
               type="button"
               variant="destructive"
-              className="w-[132px] justify-center"
-              disabled={isDeleting}
-              aria-busy={isDeleting}
+              className="w-[132px] justify-center disabled:bg-rose-400 disabled:text-rose-50 disabled:opacity-100"
+              disabled={isDeletePending}
+              aria-busy={isDeletePending}
               onClick={confirmDelete}
             >
-              {isDeleting ? (
+              {isDeletePending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Trash2 className="size-4" />
               )}
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeletePending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>

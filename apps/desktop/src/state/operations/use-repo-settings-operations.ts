@@ -95,10 +95,12 @@ export function useRepoSettingsOperations({
       const plannerDefault = toConfigDefault(input.agentDefaults.planner);
       const buildDefault = toConfigDefault(input.agentDefaults.build);
       const qaDefault = toConfigDefault(input.agentDefaults.qa);
+      const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
+      const normalizedBranchPrefix = input.branchPrefix.trim();
 
       await host.workspaceUpdateRepoConfig(activeRepo, {
-        worktreeBasePath: input.worktreeBasePath,
-        branchPrefix: input.branchPrefix,
+        worktreeBasePath: normalizedWorktreeBasePath,
+        branchPrefix: normalizedBranchPrefix,
         trustedHooks: input.trustedHooks,
         hooks: {
           preStart: input.preStartHooks,
