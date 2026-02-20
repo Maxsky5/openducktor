@@ -70,7 +70,7 @@ struct RepoConfigPayload {
 }
 
 fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
-    result.map_err(|error| error.to_string())
+    result.map_err(|error| format!("{error:#}"))
 }
 
 fn run_emitter(app: AppHandle) -> RunEmitter {

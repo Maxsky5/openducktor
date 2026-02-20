@@ -12,7 +12,7 @@ use host_infra_system::{
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -131,8 +131,8 @@ impl AppService {
             git_version: version_command("git", &["--version"]),
             opencode_ok,
             opencode_version: opencode_binary
-                .as_deref()
-                .and_then(|binary| read_binary_version(binary, &["--version"])),
+                .as_ref()
+                .map(|binary| format!("installed ({binary})")),
             errors,
         })
     }
@@ -746,7 +746,8 @@ impl AppService {
             metadata_namespace.as_str(),
             port,
         )?;
-        if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
+        if let Err(error) = wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
+        {
             terminate_child_process(&mut child);
             return Err(error)
                 .with_context(|| format!("OpenCode workspace runtime failed to start for {repo_path}"));
@@ -907,7 +908,8 @@ impl AppService {
             metadata_namespace.as_str(),
             port,
         )?;
-        if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
+        if let Err(error) = wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
+        {
             terminate_child_process(&mut child);
             if let (Some(repo), Some(worktree)) = (
                 cleanup_repo_path.as_deref(),
@@ -1086,7 +1088,8 @@ impl AppService {
             metadata_namespace.as_str(),
             port,
         )?;
-        if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
+        if let Err(error) = wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
+        {
             terminate_child_process(&mut child);
             return Err(error).with_context(|| {
                 format!("OpenCode build runtime failed to start for task {task_id}")
@@ -1894,40 +1897,6 @@ fn build_opencode_config_content(
     serde_json::to_string(&config).context("Failed to serialize OpenCode MCP config")
 }
 
-fn read_binary_version(binary: &str, args: &[&str]) -> Option<String> {
-    let mut child = Command::new(binary)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let deadline = Instant::now() + Duration::from_secs(2);
-
-    loop {
-        match child.try_wait().ok()? {
-            Some(status) => {
-                if !status.success() {
-                    return None;
-                }
-                let output = child.wait_with_output().ok()?;
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                return stdout
-                    .lines()
-                    .find(|line| !line.trim().is_empty())
-                    .map(|line| line.trim().to_string());
-            }
-            None => {
-                if Instant::now() >= deadline {
-                    terminate_child_process(&mut child);
-                    return None;
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-        }
-    }
-}
-
 fn resolve_opencode_binary_path() -> Option<String> {
     if let Some(resolved) = command_path("opencode") {
         return Some(resolved);
@@ -2007,6 +1976,7 @@ fn spawn_opencode_server(
     })
 }
 
+#[cfg(test)]
 fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
     let deadline = Instant::now() + timeout;
     let address: SocketAddr = format!("127.0.0.1:{port}")
@@ -2026,14 +1996,58 @@ fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
     ))
 }
 
+fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
+    let Some(mut reader) = pipe.take() else {
+        return String::new();
+    };
+    let mut output = String::new();
+    let _ = reader.read_to_string(&mut output);
+    output.trim().to_string()
+}
+
+fn wait_for_local_server_with_process(child: &mut Child, port: u16, timeout: Duration) -> Result<()> {
+    let deadline = Instant::now() + timeout;
+    let address: SocketAddr = format!("127.0.0.1:{port}")
+        .parse()
+        .context("Invalid localhost address")?;
+
+    while Instant::now() < deadline {
+        if TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok() {
+            return Ok(());
+        }
+
+        if let Some(status) = child.try_wait().context("Failed checking OpenCode process state")? {
+            let stderr = read_child_pipe(&mut child.stderr);
+            let stdout = read_child_pipe(&mut child.stdout);
+            let details = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                format!("process exited with status {status}")
+            };
+            return Err(anyhow!(
+                "OpenCode process exited before runtime became reachable: {details}"
+            ));
+        }
+
+        std::thread::sleep(Duration::from_millis(150));
+    }
+
+    Err(anyhow!(
+        "Timed out waiting for OpenCode runtime on 127.0.0.1:{}",
+        port
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         allows_transition, build_opencode_config_content, can_set_plan, can_set_spec_from_status,
         derive_available_actions, normalize_required_markdown, normalize_subtask_plan_inputs,
-        parse_mcp_command_json, read_binary_version, validate_parent_relationships_for_create,
+        parse_mcp_command_json, validate_parent_relationships_for_create,
         validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
-        terminate_child_process, wait_for_local_server,
+        terminate_child_process, wait_for_local_server, wait_for_local_server_with_process,
     };
     use host_domain::{
         CreateTaskInput, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
@@ -2042,7 +2056,7 @@ mod tests {
     use std::net::TcpListener;
     use std::path::Path;
     use std::process::Command;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskCard {
         TaskCard {
@@ -2357,22 +2371,21 @@ mod tests {
     }
 
     #[test]
-    fn read_binary_version_extracts_first_non_empty_line() {
-        let version = read_binary_version("sh", &["-lc", "printf '\\nversion-123\\nextra'"]);
-        assert_eq!(version.as_deref(), Some("version-123"));
-    }
+    fn wait_for_local_server_with_process_returns_early_when_child_exits() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+        let port = listener.local_addr().expect("addr").port();
+        drop(listener);
 
-    #[test]
-    fn read_binary_version_times_out_for_hanging_command() {
-        let started = Instant::now();
-        let version = read_binary_version("sh", &["-lc", "sleep 5"]);
-        let elapsed = started.elapsed();
-        assert!(version.is_none());
-        assert!(
-            elapsed < Duration::from_secs(4),
-            "version command should timeout quickly, elapsed: {:?}",
-            elapsed
-        );
+        let mut child = Command::new("sh")
+            .arg("-lc")
+            .arg("echo startup failed >&2; exit 42")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn failing process");
+        let error = wait_for_local_server_with_process(&mut child, port, Duration::from_secs(2))
+            .expect_err("should report early process exit");
+        assert!(error.to_string().contains("startup failed"));
     }
 
     #[test]
