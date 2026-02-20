@@ -1,4 +1,4 @@
-type DiagnosticsSummary = {
+export type DiagnosticsSummary = {
   label: string;
   toneClass: string;
   iconClass: string;
