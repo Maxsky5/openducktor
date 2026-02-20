@@ -2,6 +2,10 @@ import {
   type AgentRuntimeSummary,
   type AgentSessionRecord,
   type BeadsCheck,
+  type GitBranch,
+  type GitCurrentBranch,
+  type GitPushSummary,
+  type GitWorktreeSummary,
   type RepoConfig,
   type RunSummary,
   type RuntimeCheck,
@@ -14,6 +18,10 @@ import {
   agentRuntimeSummarySchema,
   agentSessionRecordSchema,
   beadsCheckSchema,
+  gitBranchSchema,
+  gitCurrentBranchSchema,
+  gitPushSummarySchema,
+  gitWorktreeSummarySchema,
   repoConfigSchema,
   runSummarySchema,
   runtimeCheckSchema,
@@ -341,6 +349,80 @@ export class TauriHostClient implements PlannerTools {
       trusted,
     });
     return workspaceRecordSchema.parse(payload);
+  }
+
+  async gitGetBranches(repoPath: string): Promise<GitBranch[]> {
+    const payload = await this.invokeFn<unknown>("git_get_branches", { repoPath });
+    return parseArray(gitBranchSchema, payload);
+  }
+
+  async gitGetBranchs(repoPath: string): Promise<GitBranch[]> {
+    const payload = await this.invokeFn<unknown>("git_get_branchs", { repoPath });
+    return parseArray(gitBranchSchema, payload);
+  }
+
+  async gitGetCurrentBranch(repoPath: string): Promise<GitCurrentBranch> {
+    const payload = await this.invokeFn<unknown>("git_get_current_branch", { repoPath });
+    return gitCurrentBranchSchema.parse(payload);
+  }
+
+  async gitSwitchBranch(
+    repoPath: string,
+    branch: string,
+    options?: { create?: boolean },
+  ): Promise<GitCurrentBranch> {
+    const payload = await this.invokeFn<unknown>("git_switch_branch", {
+      repoPath,
+      branch,
+      create: options?.create ?? false,
+    });
+    return gitCurrentBranchSchema.parse(payload);
+  }
+
+  async gitCreateWorktree(
+    repoPath: string,
+    worktreePath: string,
+    branch: string,
+    options?: { createBranch?: boolean },
+  ): Promise<GitWorktreeSummary> {
+    const payload = await this.invokeFn<unknown>("git_create_worktree", {
+      repoPath,
+      worktreePath,
+      branch,
+      createBranch: options?.createBranch ?? false,
+    });
+    return gitWorktreeSummarySchema.parse(payload);
+  }
+
+  async gitRemoveWorktree(
+    repoPath: string,
+    worktreePath: string,
+    options?: { force?: boolean },
+  ): Promise<{ ok: boolean }> {
+    return this.invokeFn<{ ok: boolean }>("git_remove_worktree", {
+      repoPath,
+      worktreePath,
+      force: options?.force ?? false,
+    });
+  }
+
+  async gitPushBranch(
+    repoPath: string,
+    branch: string,
+    options?: {
+      remote?: string;
+      setUpstream?: boolean;
+      forceWithLease?: boolean;
+    },
+  ): Promise<GitPushSummary> {
+    const payload = await this.invokeFn<unknown>("git_push_branch", {
+      repoPath,
+      branch,
+      remote: options?.remote,
+      setUpstream: options?.setUpstream ?? false,
+      forceWithLease: options?.forceWithLease ?? false,
+    });
+    return gitPushSummarySchema.parse(payload);
   }
 
   async buildStart(repoPath: string, taskId: string): Promise<RunSummary> {

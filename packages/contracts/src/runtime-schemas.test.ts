@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   agentRuntimeSummarySchema,
   agentSessionRecordSchema,
+  gitBranchSchema,
+  gitCurrentBranchSchema,
+  gitPushSummarySchema,
+  gitWorktreeSummarySchema,
   repoConfigSchema,
   runEventSchema,
   taskCardSchema,
@@ -93,6 +97,38 @@ describe("runtime schemas", () => {
     expect(parsed.agentDefaults.spec?.modelId).toBe("gpt-5");
     expect(parsed.agentDefaults.spec?.variant).toBe("high");
     expect(parsed.agentDefaults.spec?.opencodeAgent).toBe("build");
+  });
+
+  test("git schemas parse branch and current branch payloads", () => {
+    const branch = gitBranchSchema.parse({
+      name: "main",
+      isCurrent: true,
+      isRemote: false,
+    });
+    const current = gitCurrentBranchSchema.parse({
+      name: null,
+      detached: true,
+    });
+
+    expect(branch.name).toBe("main");
+    expect(branch.isCurrent).toBe(true);
+    expect(current.name).toBeUndefined();
+    expect(current.detached).toBe(true);
+  });
+
+  test("git schemas parse worktree and push payloads", () => {
+    const worktree = gitWorktreeSummarySchema.parse({
+      branch: "feature/task-1",
+      worktreePath: "/tmp/worktrees/task-1",
+    });
+    const push = gitPushSummarySchema.parse({
+      remote: "origin",
+      branch: "feature/task-1",
+      output: "Everything up-to-date",
+    });
+
+    expect(worktree.branch).toBe("feature/task-1");
+    expect(push.remote).toBe("origin");
   });
 
   test("agent runtime summary parses host payload", () => {

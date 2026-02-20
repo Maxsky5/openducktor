@@ -1,5 +1,6 @@
 mod beads;
 mod config;
+mod git;
 mod process;
 mod worktree;
 
@@ -8,6 +9,7 @@ pub use config::{
     AgentDefaults, AgentModelDefault, AppConfigStore, GlobalConfig, HookSet, RepoConfig,
     SchedulerConfig, SoftGuardrails,
 };
+pub use git::GitCliPort;
 pub use process::{
     command_exists, command_path, run_command, run_command_allow_failure,
     run_command_allow_failure_with_env, run_command_with_env, version_command,

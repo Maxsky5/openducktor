@@ -166,6 +166,10 @@ impl AppConfigStore {
         Ok(Self { path })
     }
 
+    pub fn from_path(path: PathBuf) -> Self {
+        Self { path }
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -346,7 +350,7 @@ fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {
 mod tests {
     use super::{touch_recent, AppConfigStore, GlobalConfig, RepoConfig};
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_temp_path(name: &str) -> PathBuf {
@@ -361,6 +365,10 @@ mod tests {
         let root = unique_temp_path(name);
         let path = root.join("config.json");
         (AppConfigStore { path }, root)
+    }
+
+    fn fake_git_workspace(path: &Path) {
+        fs::create_dir_all(path.join(".git")).expect("git directory should be created");
     }
 
     #[test]
@@ -384,6 +392,20 @@ mod tests {
 
         let namespace = store.task_metadata_namespace().expect("namespace");
         assert_eq!(namespace, "openducktor");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn task_metadata_namespace_trims_non_empty_value() {
+        let (store, root) = test_store("namespace-trim");
+        let config = GlobalConfig {
+            task_metadata_namespace: "  custom-ns  ".to_string(),
+            ..GlobalConfig::default()
+        };
+        store.save(&config).expect("save config");
+
+        let namespace = store.task_metadata_namespace().expect("namespace");
+        assert_eq!(namespace, "custom-ns");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -443,6 +465,126 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn add_workspace_rejects_missing_and_non_git_paths() {
+        let (store, root) = test_store("workspace-invalid");
+        let missing = root.join("missing");
+        let missing_error = store
+            .add_workspace(missing.to_string_lossy().as_ref())
+            .expect_err("missing path should fail");
+        assert!(missing_error.to_string().contains("does not exist"));
+
+        let non_git = root.join("plain-folder");
+        fs::create_dir_all(&non_git).expect("plain folder should be created");
+        let non_git_error = store
+            .add_workspace(non_git.to_string_lossy().as_ref())
+            .expect_err("non-git path should fail");
+        assert!(non_git_error.to_string().contains("not a git repository"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn select_and_repo_config_accessors_report_missing_entries() {
+        let (store, root) = test_store("workspace-missing-config");
+        let missing_repo = root.join("missing-repo");
+        let missing_repo_str = missing_repo.to_string_lossy().to_string();
+
+        let select_error = store
+            .select_workspace(missing_repo_str.as_str())
+            .expect_err("missing workspace select should fail");
+        assert!(select_error.to_string().contains("Workspace not found in config"));
+
+        let config_error = store
+            .repo_config(missing_repo_str.as_str())
+            .expect_err("repo config should fail when missing");
+        assert!(config_error.to_string().contains("Repository is not configured"));
+
+        let optional = store
+            .repo_config_optional(missing_repo_str.as_str())
+            .expect("optional lookup should succeed");
+        assert!(optional.is_none());
+
+        let trust_error = store
+            .set_repo_trust_hooks(missing_repo_str.as_str(), true)
+            .expect_err("set trust should fail when repo missing");
+        assert!(trust_error.to_string().contains("Repository is not configured"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
+        let (store, root) = test_store("repo-config-roundtrip");
+        let repo = root.join("repo-main");
+        fake_git_workspace(&repo);
+        let repo_str = repo.to_string_lossy().to_string();
+
+        let updated = store
+            .update_repo_config(
+                repo_str.as_str(),
+                RepoConfig {
+                    worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
+                    branch_prefix: "duck".to_string(),
+                    trusted_hooks: false,
+                    hooks: Default::default(),
+                    agent_defaults: Default::default(),
+                },
+            )
+            .expect("repo config update should succeed");
+        assert!(updated.is_active, "first update should mark repo active");
+        assert!(updated.has_config);
+
+        let trusted = store
+            .set_repo_trust_hooks(repo_str.as_str(), true)
+            .expect("set trust should succeed");
+        assert!(trusted.is_active);
+        assert!(trusted.has_config);
+        assert!(trusted.configured_worktree_base_path.is_some());
+
+        let repo_config = store
+            .repo_config(repo_str.as_str())
+            .expect("repo config should exist");
+        assert!(repo_config.trusted_hooks);
+
+        let optional = store
+            .repo_config_optional(repo_str.as_str())
+            .expect("optional lookup should succeed");
+        assert!(optional.is_some());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn save_and_load_report_io_and_parse_errors() {
+        let (store, root) = test_store("config-io-errors");
+
+        fs::create_dir_all(&root).expect("temp root should exist");
+        fs::write(store.path(), "{ invalid json").expect("invalid config should write");
+        let parse_error = store.load().expect_err("invalid json should fail parsing");
+        assert!(parse_error.to_string().contains("Failed parsing config file"));
+
+        let blocked_parent = root.join("not-a-directory");
+        fs::write(&blocked_parent, "file").expect("blocking file should write");
+        let blocked_store = AppConfigStore::from_path(blocked_parent.join("config.json"));
+        let save_error = blocked_store
+            .save(&GlobalConfig::default())
+            .expect_err("save should fail when parent is a file");
+        assert!(save_error.to_string().contains("Failed creating config directory"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn app_config_store_constructors_expose_expected_paths() {
+        let store = AppConfigStore::new().expect("new store should resolve home path");
+        let resolved = store.path().to_string_lossy().to_string();
+        assert!(
+            resolved.ends_with("/.openducktor/config.json"),
+            "unexpected config path: {resolved}"
+        );
+
+        let custom_path = unique_temp_path("custom-path").join("custom-config.json");
+        let from_path = AppConfigStore::from_path(custom_path.clone());
+        assert_eq!(from_path.path(), custom_path.as_path());
     }
 
     #[test]

@@ -1,13 +1,14 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, AgentRuntimeSummary, AgentSessionDocument, BeadsCheck, CreateTaskInput,
-    PlanSubtaskInput, QaVerdict, RunEvent, RunState, RunSummary, RuntimeCheck, SpecDocument,
-    SystemCheck, TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
+    GitBranch, GitCurrentBranch, GitPort, GitPushSummary, GitWorktreeSummary, PlanSubtaskInput,
+    QaVerdict, RunEvent, RunState, RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction,
+    TaskCard, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
 };
 use host_infra_system::{
     build_branch_name, command_exists, command_path, pick_free_port, remove_worktree,
     resolve_central_beads_dir, run_command, run_command_allow_failure, version_command,
-    AppConfigStore, RepoConfig,
+    AppConfigStore, GitCliPort, RepoConfig,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -25,6 +26,7 @@ pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
 #[derive(Clone)]
 pub struct AppService {
     task_store: Arc<dyn TaskStore>,
+    git_port: Arc<dyn GitPort>,
     config_store: AppConfigStore,
     runs: Arc<Mutex<HashMap<String, RunProcess>>>,
     agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
@@ -58,8 +60,17 @@ impl AppService {
     const WORKSPACE_RUNTIME_TASK_ID: &'static str = "__workspace__";
 
     pub fn new(task_store: Arc<dyn TaskStore>, config_store: AppConfigStore) -> Self {
+        Self::with_git_port(task_store, config_store, Arc::new(GitCliPort::new()))
+    }
+
+    pub fn with_git_port(
+        task_store: Arc<dyn TaskStore>,
+        config_store: AppConfigStore,
+        git_port: Arc<dyn GitPort>,
+    ) -> Self {
         Self {
             task_store,
+            git_port,
             config_store,
             runs: Arc::new(Mutex::new(HashMap::new())),
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
@@ -236,6 +247,91 @@ impl AppService {
         trusted: bool,
     ) -> Result<WorkspaceRecord> {
         self.config_store.set_repo_trust_hooks(repo_path, trusted)
+    }
+
+    pub fn git_get_branches(&self, repo_path: &str) -> Result<Vec<GitBranch>> {
+        self.ensure_repo_initialized(repo_path)?;
+        self.git_port.get_branches(Path::new(repo_path))
+    }
+
+    pub fn git_get_current_branch(&self, repo_path: &str) -> Result<GitCurrentBranch> {
+        self.ensure_repo_initialized(repo_path)?;
+        self.git_port.get_current_branch(Path::new(repo_path))
+    }
+
+    pub fn git_switch_branch(
+        &self,
+        repo_path: &str,
+        branch: &str,
+        create: bool,
+    ) -> Result<GitCurrentBranch> {
+        self.ensure_repo_initialized(repo_path)?;
+        self.git_port
+            .switch_branch(Path::new(repo_path), branch, create)
+    }
+
+    pub fn git_create_worktree(
+        &self,
+        repo_path: &str,
+        worktree_path: &str,
+        branch: &str,
+        create_branch: bool,
+    ) -> Result<GitWorktreeSummary> {
+        self.ensure_repo_initialized(repo_path)?;
+        let worktree = worktree_path.trim();
+        if worktree.is_empty() {
+            return Err(anyhow!("worktree path cannot be empty"));
+        }
+
+        self.git_port.create_worktree(
+            Path::new(repo_path),
+            Path::new(worktree),
+            branch,
+            create_branch,
+        )?;
+
+        Ok(GitWorktreeSummary {
+            branch: branch.trim().to_string(),
+            worktree_path: worktree.to_string(),
+        })
+    }
+
+    pub fn git_remove_worktree(
+        &self,
+        repo_path: &str,
+        worktree_path: &str,
+        force: bool,
+    ) -> Result<bool> {
+        self.ensure_repo_initialized(repo_path)?;
+        let worktree = worktree_path.trim();
+        if worktree.is_empty() {
+            return Err(anyhow!("worktree path cannot be empty"));
+        }
+        self.git_port
+            .remove_worktree(Path::new(repo_path), Path::new(worktree), force)?;
+        Ok(true)
+    }
+
+    pub fn git_push_branch(
+        &self,
+        repo_path: &str,
+        remote: Option<&str>,
+        branch: &str,
+        set_upstream: bool,
+        force_with_lease: bool,
+    ) -> Result<GitPushSummary> {
+        self.ensure_repo_initialized(repo_path)?;
+        let remote = remote
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("origin");
+        self.git_port.push_branch(
+            Path::new(repo_path),
+            remote,
+            branch,
+            set_upstream,
+            force_with_lease,
+        )
     }
 
     pub fn tasks_list(&self, repo_path: &str) -> Result<Vec<TaskCard>> {
@@ -1938,6 +2034,13 @@ fn read_opencode_version(binary: &str) -> Option<String> {
 }
 
 fn resolve_opencode_binary_path() -> Option<String> {
+    if let Ok(override_binary) = std::env::var("OPENDUCKTOR_OPENCODE_BINARY") {
+        let trimmed = override_binary.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
     if let Some(resolved) = command_path("opencode") {
         return Some(resolved);
     }
@@ -2084,19 +2187,30 @@ fn wait_for_local_server_with_process(child: &mut Child, port: u16, timeout: Dur
 mod tests {
     use super::{
         allows_transition, build_opencode_config_content, can_set_plan, can_set_spec_from_status,
+        default_mcp_workspace_root,
         derive_available_actions, normalize_required_markdown, normalize_subtask_plan_inputs,
-        parse_mcp_command_json, validate_parent_relationships_for_create,
+        parse_mcp_command_json, read_opencode_version, resolve_mcp_command,
+        resolve_opencode_binary_path, validate_parent_relationships_for_create,
         validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
         terminate_child_process, wait_for_local_server, wait_for_local_server_with_process,
+        AppService,
     };
+    use anyhow::{anyhow, Result};
     use host_domain::{
-        CreateTaskInput, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
+        AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort,
+        GitPushSummary, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+        RunSummary, SpecDocument, TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch,
     };
+    use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
     use serde_json::Value;
-    use std::net::TcpListener;
-    use std::path::Path;
-    use std::process::Command;
-    use std::time::Duration;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::io::Write;
+    use std::net::{TcpListener, TcpStream};
+    use std::path::{Path, PathBuf};
+    use std::process::{Command, Stdio};
+    use std::sync::{Arc, LazyLock, Mutex};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskCard {
         TaskCard {
@@ -2116,6 +2230,738 @@ mod tests {
             subtask_ids: Vec::new(),
             updated_at: "2026-01-01T00:00:00Z".to_string(),
             created_at: "2026-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct TaskStoreState {
+        ensure_calls: Vec<String>,
+        ensure_error: Option<String>,
+        tasks: Vec<TaskCard>,
+        list_error: Option<String>,
+        delete_calls: Vec<(String, bool)>,
+        created_inputs: Vec<CreateTaskInput>,
+        updated_patches: Vec<(String, UpdateTaskPatch)>,
+        spec_get_calls: Vec<String>,
+        spec_set_calls: Vec<(String, String)>,
+        plan_get_calls: Vec<String>,
+        plan_set_calls: Vec<(String, String)>,
+        qa_append_calls: Vec<(String, String, QaVerdict)>,
+        latest_qa_report: Option<QaReportDocument>,
+        agent_sessions: Vec<AgentSessionDocument>,
+        upserted_sessions: Vec<(String, AgentSessionDocument)>,
+    }
+
+    #[derive(Clone)]
+    struct FakeTaskStore {
+        state: Arc<Mutex<TaskStoreState>>,
+    }
+
+    impl TaskStore for FakeTaskStore {
+        fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            if let Some(message) = state.ensure_error.as_ref() {
+                return Err(anyhow!(message.clone()));
+            }
+            state
+                .ensure_calls
+                .push(repo_path.to_string_lossy().to_string());
+            Ok(())
+        }
+
+        fn list_tasks(&self, _repo_path: &Path) -> Result<Vec<TaskCard>> {
+            let state = self.state.lock().expect("task store lock poisoned");
+            if let Some(message) = state.list_error.as_ref() {
+                return Err(anyhow!(message.clone()));
+            }
+            Ok(state.tasks.clone())
+        }
+
+        fn create_task(&self, _repo_path: &Path, input: CreateTaskInput) -> Result<TaskCard> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state.created_inputs.push(input.clone());
+            let task = TaskCard {
+                id: format!("generated-{}", state.tasks.len() + 1),
+                title: input.title,
+                description: input.description.unwrap_or_default(),
+                acceptance_criteria: input.acceptance_criteria.unwrap_or_default(),
+                notes: String::new(),
+                status: TaskStatus::Open,
+                priority: input.priority,
+                issue_type: input.issue_type,
+                ai_review_enabled: input.ai_review_enabled.unwrap_or(true),
+                available_actions: Vec::new(),
+                labels: input.labels.unwrap_or_default(),
+                assignee: None,
+                parent_id: input.parent_id,
+                subtask_ids: Vec::new(),
+                updated_at: "2026-01-01T00:00:00Z".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+            };
+            state.tasks.push(task.clone());
+            Ok(task)
+        }
+
+        fn update_task(
+            &self,
+            _repo_path: &Path,
+            task_id: &str,
+            patch: UpdateTaskPatch,
+        ) -> Result<TaskCard> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state
+                .updated_patches
+                .push((task_id.to_string(), patch.clone()));
+            let index = state
+                .tasks
+                .iter()
+                .position(|task| task.id == task_id)
+                .ok_or_else(|| anyhow!("task not found: {task_id}"))?;
+
+            let mut updated = state.tasks[index].clone();
+            if let Some(title) = patch.title {
+                updated.title = title;
+            }
+            if let Some(status) = patch.status {
+                updated.status = status;
+            }
+            if let Some(issue_type) = patch.issue_type {
+                updated.issue_type = issue_type;
+            }
+            if let Some(ai_review_enabled) = patch.ai_review_enabled {
+                updated.ai_review_enabled = ai_review_enabled;
+            }
+            if let Some(parent_id) = patch.parent_id {
+                updated.parent_id = Some(parent_id);
+            }
+            if let Some(labels) = patch.labels {
+                updated.labels = labels;
+            }
+
+            state.tasks[index] = updated.clone();
+            Ok(updated)
+        }
+
+        fn delete_task(
+            &self,
+            _repo_path: &Path,
+            task_id: &str,
+            delete_subtasks: bool,
+        ) -> Result<bool> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state
+                .delete_calls
+                .push((task_id.to_string(), delete_subtasks));
+            Ok(true)
+        }
+
+        fn get_spec(&self, _repo_path: &Path, _task_id: &str) -> Result<SpecDocument> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state.spec_get_calls.push(_task_id.to_string());
+            Ok(SpecDocument {
+                markdown: String::new(),
+                updated_at: None,
+            })
+        }
+
+        fn set_spec(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            markdown: &str,
+        ) -> Result<SpecDocument> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state
+                .spec_set_calls
+                .push((_task_id.to_string(), markdown.to_string()));
+            Ok(SpecDocument {
+                markdown: markdown.to_string(),
+                updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            })
+        }
+
+        fn get_plan(&self, _repo_path: &Path, _task_id: &str) -> Result<SpecDocument> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state.plan_get_calls.push(_task_id.to_string());
+            Ok(SpecDocument {
+                markdown: String::new(),
+                updated_at: None,
+            })
+        }
+
+        fn set_plan(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            markdown: &str,
+        ) -> Result<SpecDocument> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state
+                .plan_set_calls
+                .push((_task_id.to_string(), markdown.to_string()));
+            Ok(SpecDocument {
+                markdown: markdown.to_string(),
+                updated_at: Some("2026-01-01T00:00:00Z".to_string()),
+            })
+        }
+
+        fn get_latest_qa_report(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+        ) -> Result<Option<QaReportDocument>> {
+            let state = self.state.lock().expect("task store lock poisoned");
+            Ok(state.latest_qa_report.clone())
+        }
+
+        fn append_qa_report(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            markdown: &str,
+            verdict: QaVerdict,
+        ) -> Result<QaReportDocument> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state.qa_append_calls.push((
+                _task_id.to_string(),
+                markdown.to_string(),
+                verdict.clone(),
+            ));
+            Ok(QaReportDocument {
+                markdown: markdown.to_string(),
+                verdict,
+                updated_at: "2026-01-01T00:00:00Z".to_string(),
+                revision: 1,
+            })
+        }
+
+        fn list_agent_sessions(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+        ) -> Result<Vec<AgentSessionDocument>> {
+            let state = self.state.lock().expect("task store lock poisoned");
+            Ok(state.agent_sessions.clone())
+        }
+
+        fn upsert_agent_session(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            session: AgentSessionDocument,
+        ) -> Result<()> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state
+                .upserted_sessions
+                .push((_task_id.to_string(), session.clone()));
+            if let Some(index) = state
+                .agent_sessions
+                .iter()
+                .position(|entry| entry.session_id == session.session_id)
+            {
+                state.agent_sessions[index] = session;
+            } else {
+                state.agent_sessions.push(session);
+            }
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum GitCall {
+        GetBranches {
+            repo_path: String,
+        },
+        GetCurrentBranch {
+            repo_path: String,
+        },
+        SwitchBranch {
+            repo_path: String,
+            branch: String,
+            create: bool,
+        },
+        CreateWorktree {
+            repo_path: String,
+            worktree_path: String,
+            branch: String,
+            create_branch: bool,
+        },
+        RemoveWorktree {
+            repo_path: String,
+            worktree_path: String,
+            force: bool,
+        },
+        PushBranch {
+            repo_path: String,
+            remote: String,
+            branch: String,
+            set_upstream: bool,
+            force_with_lease: bool,
+        },
+    }
+
+    #[derive(Debug)]
+    struct GitState {
+        calls: Vec<GitCall>,
+        branches: Vec<GitBranch>,
+        current_branch: GitCurrentBranch,
+    }
+
+    #[derive(Clone)]
+    struct FakeGitPort {
+        state: Arc<Mutex<GitState>>,
+    }
+
+    impl GitPort for FakeGitPort {
+        fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>> {
+            let mut state = self.state.lock().expect("git state lock poisoned");
+            state.calls.push(GitCall::GetBranches {
+                repo_path: repo_path.to_string_lossy().to_string(),
+            });
+            Ok(state.branches.clone())
+        }
+
+        fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch> {
+            let mut state = self.state.lock().expect("git state lock poisoned");
+            state.calls.push(GitCall::GetCurrentBranch {
+                repo_path: repo_path.to_string_lossy().to_string(),
+            });
+            Ok(state.current_branch.clone())
+        }
+
+        fn switch_branch(
+            &self,
+            repo_path: &Path,
+            branch: &str,
+            create: bool,
+        ) -> Result<GitCurrentBranch> {
+            let mut state = self.state.lock().expect("git state lock poisoned");
+            state.calls.push(GitCall::SwitchBranch {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                branch: branch.to_string(),
+                create,
+            });
+            state.current_branch = GitCurrentBranch {
+                name: Some(branch.to_string()),
+                detached: false,
+            };
+            Ok(state.current_branch.clone())
+        }
+
+        fn create_worktree(
+            &self,
+            repo_path: &Path,
+            worktree_path: &Path,
+            branch: &str,
+            create_branch: bool,
+        ) -> Result<()> {
+            let mut state = self.state.lock().expect("git state lock poisoned");
+            state.calls.push(GitCall::CreateWorktree {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                worktree_path: worktree_path.to_string_lossy().to_string(),
+                branch: branch.to_string(),
+                create_branch,
+            });
+            Ok(())
+        }
+
+        fn remove_worktree(&self, repo_path: &Path, worktree_path: &Path, force: bool) -> Result<()> {
+            let mut state = self.state.lock().expect("git state lock poisoned");
+            state.calls.push(GitCall::RemoveWorktree {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                worktree_path: worktree_path.to_string_lossy().to_string(),
+                force,
+            });
+            Ok(())
+        }
+
+        fn push_branch(
+            &self,
+            repo_path: &Path,
+            remote: &str,
+            branch: &str,
+            set_upstream: bool,
+            force_with_lease: bool,
+        ) -> Result<GitPushSummary> {
+            let mut state = self.state.lock().expect("git state lock poisoned");
+            state.calls.push(GitCall::PushBranch {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                remote: remote.to_string(),
+                branch: branch.to_string(),
+                set_upstream,
+                force_with_lease,
+            });
+            Ok(GitPushSummary {
+                remote: remote.to_string(),
+                branch: branch.to_string(),
+                output: "ok".to_string(),
+            })
+        }
+    }
+
+    fn build_service_with_state(
+        tasks: Vec<TaskCard>,
+        branches: Vec<GitBranch>,
+        current_branch: GitCurrentBranch,
+    ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
+        let task_state = Arc::new(Mutex::new(TaskStoreState {
+            ensure_calls: Vec::new(),
+            ensure_error: None,
+            tasks,
+            list_error: None,
+            delete_calls: Vec::new(),
+            created_inputs: Vec::new(),
+            updated_patches: Vec::new(),
+            spec_get_calls: Vec::new(),
+            spec_set_calls: Vec::new(),
+            plan_get_calls: Vec::new(),
+            plan_set_calls: Vec::new(),
+            qa_append_calls: Vec::new(),
+            latest_qa_report: None,
+            agent_sessions: Vec::new(),
+            upserted_sessions: Vec::new(),
+        }));
+        let git_state = Arc::new(Mutex::new(GitState {
+            calls: Vec::new(),
+            branches,
+            current_branch,
+        }));
+        let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+            state: task_state.clone(),
+        });
+        let git_port: Arc<dyn GitPort> = Arc::new(FakeGitPort {
+            state: git_state.clone(),
+        });
+        let config_store = AppConfigStore::from_path(unique_temp_path("host-app-config"));
+        let service = AppService::with_git_port(task_store, config_store, git_port);
+        (service, task_state, git_state)
+    }
+
+    fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocument {
+        AgentSessionDocument {
+            session_id: session_id.to_string(),
+            external_session_id: format!("external-{session_id}"),
+            task_id: task_id.to_string(),
+            role: "build".to_string(),
+            scenario: "build_default".to_string(),
+            status: "running".to_string(),
+            started_at: "2026-02-20T12:00:00Z".to_string(),
+            updated_at: "2026-02-20T12:00:10Z".to_string(),
+            ended_at: None,
+            runtime_id: Some("runtime-1".to_string()),
+            run_id: Some("run-1".to_string()),
+            base_url: "http://127.0.0.1:4173".to_string(),
+            working_directory: "/tmp/repo".to_string(),
+            selected_model: None,
+        }
+    }
+
+    #[test]
+    fn app_service_new_constructor_is_callable() -> Result<()> {
+        let config_store = AppConfigStore::from_path(unique_temp_path("new-constructor"));
+        let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+            state: Arc::new(Mutex::new(TaskStoreState {
+                ensure_calls: Vec::new(),
+                ensure_error: None,
+                tasks: Vec::new(),
+                list_error: None,
+                delete_calls: Vec::new(),
+                created_inputs: Vec::new(),
+                updated_patches: Vec::new(),
+                spec_get_calls: Vec::new(),
+                spec_set_calls: Vec::new(),
+                plan_get_calls: Vec::new(),
+                plan_set_calls: Vec::new(),
+                qa_append_calls: Vec::new(),
+                latest_qa_report: None,
+                agent_sessions: Vec::new(),
+                upserted_sessions: Vec::new(),
+            })),
+        });
+
+        let service = AppService::new(task_store, config_store);
+        let _ = service.runtime_check()?;
+        Ok(())
+    }
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    fn lock_env<'a>() -> std::sync::MutexGuard<'a, ()> {
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    fn unique_temp_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("openducktor-host-app-{name}-{nonce}"))
+    }
+
+    fn write_executable_script(path: &Path, script: &str) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = fs::File::create(path)?;
+        file.write_all(script.as_bytes())?;
+        let status = Command::new("chmod")
+            .arg("+x")
+            .arg(path)
+            .status()
+            .map_err(|error| anyhow!("failed running chmod: {error}"))?;
+        if !status.success() {
+            return Err(anyhow!("chmod +x failed for {}", path.display()));
+        }
+        Ok(())
+    }
+
+    fn init_git_repo(path: &Path) -> Result<()> {
+        fs::create_dir_all(path)?;
+        Command::new("git")
+            .arg("init")
+            .arg(path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .arg("config")
+            .arg("user.email")
+            .arg("odt-test@example.com")
+            .status()?;
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .arg("config")
+            .arg("user.name")
+            .arg("OpenDucktor Test")
+            .status()?;
+        fs::write(path.join("README.md"), "# test\n")?;
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .arg("add")
+            .arg(".")
+            .status()?;
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .arg("commit")
+            .arg("-m")
+            .arg("initial")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        Ok(())
+    }
+
+    fn create_fake_opencode(path: &Path) -> Result<()> {
+        let script = r#"#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "opencode-fake 0.0.1"
+  exit 0
+fi
+
+if [ "$1" = "serve" ]; then
+  HOST="127.0.0.1"
+  PORT="0"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --hostname)
+        HOST="$2"
+        shift 2
+        ;;
+      --port)
+        PORT="$2"
+        shift 2
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+  echo "permission requested: git push"
+  echo "tool execution heartbeat" >&2
+  exec python3 - "$HOST" "$PORT" <<'PY'
+import signal
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind((host, port))
+server.listen(16)
+
+def _stop(*_):
+    try:
+        server.close()
+    finally:
+        raise SystemExit(0)
+
+signal.signal(signal.SIGTERM, _stop)
+signal.signal(signal.SIGINT, _stop)
+
+while True:
+    conn, _ = server.accept()
+    try:
+        conn.recv(1024)
+    except Exception:
+        pass
+    finally:
+        conn.close()
+PY
+fi
+
+echo "unsupported opencode invocation" >&2
+exit 1
+"#;
+        write_executable_script(path, script)
+    }
+
+    fn create_failing_opencode(path: &Path) -> Result<()> {
+        let script = r#"#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "opencode-fake 0.0.1"
+  exit 0
+fi
+
+if [ "$1" = "serve" ]; then
+  echo "simulated startup failure" >&2
+  exit 42
+fi
+
+echo "unsupported opencode invocation" >&2
+exit 1
+"#;
+        write_executable_script(path, script)
+    }
+
+    fn create_fake_bd(path: &Path) -> Result<()> {
+        let script = r#"#!/bin/sh
+echo "bd-fake"
+"#;
+        write_executable_script(path, script)
+    }
+
+    struct EnvVarGuard {
+        key: String,
+        previous: Option<OsString>,
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = self.previous.clone() {
+                std::env::set_var(self.key.as_str(), previous);
+            } else {
+                std::env::remove_var(self.key.as_str());
+            }
+        }
+    }
+
+    fn set_env_var(key: &str, value: &str) -> EnvVarGuard {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, value);
+        EnvVarGuard {
+            key: key.to_string(),
+            previous,
+        }
+    }
+
+    fn remove_env_var(key: &str) -> EnvVarGuard {
+        let previous = std::env::var_os(key);
+        std::env::remove_var(key);
+        EnvVarGuard {
+            key: key.to_string(),
+            previous,
+        }
+    }
+
+    fn prepend_path(path_prefix: &Path) -> EnvVarGuard {
+        let previous = std::env::var_os("PATH");
+        let mut parts = vec![path_prefix.to_string_lossy().to_string()];
+        if let Some(current) = previous.as_ref() {
+            parts.push(current.to_string_lossy().to_string());
+        }
+        let value = parts.join(":");
+        std::env::set_var("PATH", value);
+        EnvVarGuard {
+            key: "PATH".to_string(),
+            previous,
+        }
+    }
+
+    fn build_service_with_store(
+        tasks: Vec<TaskCard>,
+        branches: Vec<GitBranch>,
+        current_branch: GitCurrentBranch,
+        config_store: AppConfigStore,
+    ) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
+        let task_state = Arc::new(Mutex::new(TaskStoreState {
+            ensure_calls: Vec::new(),
+            ensure_error: None,
+            tasks,
+            list_error: None,
+            delete_calls: Vec::new(),
+            created_inputs: Vec::new(),
+            updated_patches: Vec::new(),
+            spec_get_calls: Vec::new(),
+            spec_set_calls: Vec::new(),
+            plan_get_calls: Vec::new(),
+            plan_set_calls: Vec::new(),
+            qa_append_calls: Vec::new(),
+            latest_qa_report: None,
+            agent_sessions: Vec::new(),
+            upserted_sessions: Vec::new(),
+        }));
+        let git_state = Arc::new(Mutex::new(GitState {
+            calls: Vec::new(),
+            branches,
+            current_branch,
+        }));
+        let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+            state: task_state.clone(),
+        });
+        let git_port: Arc<dyn GitPort> = Arc::new(FakeGitPort {
+            state: git_state.clone(),
+        });
+        let service = AppService::with_git_port(task_store, config_store, git_port);
+        (service, task_state, git_state)
+    }
+
+    fn make_emitter(events: Arc<Mutex<Vec<RunEvent>>>) -> Arc<dyn Fn(RunEvent) + Send + Sync> {
+        Arc::new(move |event| {
+            events.lock().expect("events lock poisoned").push(event);
+        })
+    }
+
+    fn spawn_sleep_process(seconds: u64) -> std::process::Child {
+        Command::new("/bin/sh")
+            .arg("-lc")
+            .arg(format!("sleep {seconds}"))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn sleep process")
+    }
+
+    fn empty_patch() -> UpdateTaskPatch {
+        UpdateTaskPatch {
+            title: None,
+            description: None,
+            acceptance_criteria: None,
+            notes: None,
+            status: None,
+            priority: None,
+            issue_type: None,
+            ai_review_enabled: None,
+            labels: None,
+            assignee: None,
+            parent_id: None,
         }
     }
 
@@ -2389,18 +3235,25 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    fn find_closed_low_port() -> u16 {
+        for port in 1..1024 {
+            if TcpStream::connect(("127.0.0.1", port)).is_err() {
+                return port;
+            }
+        }
+        panic!("expected at least one closed privileged localhost port");
+    }
+
     #[test]
     fn wait_for_local_server_times_out_when_port_is_closed() {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
-        let port = listener.local_addr().expect("addr").port();
-        drop(listener);
+        let port = find_closed_low_port();
         let result = wait_for_local_server(port, Duration::from_millis(250));
         assert!(result.is_err());
     }
 
     #[test]
     fn terminate_child_process_stops_background_process() {
-        let mut child = Command::new("sh")
+        let mut child = Command::new("/bin/sh")
             .arg("-lc")
             .arg("sleep 5")
             .spawn()
@@ -2416,7 +3269,7 @@ mod tests {
         let port = listener.local_addr().expect("addr").port();
         drop(listener);
 
-        let mut child = Command::new("sh")
+        let mut child = Command::new("/bin/sh")
             .arg("-lc")
             .arg("echo startup failed >&2; exit 42")
             .stdout(std::process::Stdio::piped())
@@ -2426,6 +3279,2084 @@ mod tests {
         let error = wait_for_local_server_with_process(&mut child, port, Duration::from_secs(2))
             .expect_err("should report early process exit");
         assert!(error.to_string().contains("startup failed"));
+    }
+
+    #[test]
+    fn git_get_branches_initializes_repo_and_returns_git_data() -> Result<()> {
+        let repo_path = "/tmp/odt-repo";
+        let expected = vec![
+            GitBranch {
+                name: "main".to_string(),
+                is_current: true,
+                is_remote: false,
+            },
+            GitBranch {
+                name: "origin/main".to_string(),
+                is_current: false,
+                is_remote: true,
+            },
+        ];
+        let (service, task_state, git_state) = build_service_with_state(
+            vec![],
+            expected.clone(),
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let branches = service.git_get_branches(repo_path)?;
+        assert_eq!(branches, expected);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.ensure_calls, vec![repo_path.to_string()]);
+        drop(task_state);
+
+        let git_state = git_state.lock().expect("git lock poisoned");
+        assert_eq!(
+            git_state.calls,
+            vec![GitCall::GetBranches {
+                repo_path: repo_path.to_string()
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn git_get_current_branch_uses_repo_init_cache() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-cache";
+        let (service, task_state, git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("feature/demo".to_string()),
+                detached: false,
+            },
+        );
+
+        let first = service.git_get_current_branch(repo_path)?;
+        let second = service.git_get_current_branch(repo_path)?;
+        assert_eq!(first.name.as_deref(), Some("feature/demo"));
+        assert_eq!(second.name.as_deref(), Some("feature/demo"));
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.ensure_calls.len(), 1);
+        drop(task_state);
+
+        let git_state = git_state.lock().expect("git lock poisoned");
+        assert_eq!(
+            git_state.calls,
+            vec![
+                GitCall::GetCurrentBranch {
+                    repo_path: repo_path.to_string()
+                },
+                GitCall::GetCurrentBranch {
+                    repo_path: repo_path.to_string()
+                }
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn git_switch_branch_forwards_create_flag() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-switch";
+        let (service, _task_state, git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let branch = service.git_switch_branch(repo_path, "feature/new-ui", true)?;
+        assert_eq!(branch.name.as_deref(), Some("feature/new-ui"));
+        assert!(!branch.detached);
+
+        let git_state = git_state.lock().expect("git lock poisoned");
+        assert!(git_state.calls.contains(&GitCall::SwitchBranch {
+            repo_path: repo_path.to_string(),
+            branch: "feature/new-ui".to_string(),
+            create: true,
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn git_create_worktree_rejects_empty_path() {
+        let repo_path = "/tmp/odt-repo-worktree";
+        let (service, task_state, git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .git_create_worktree(repo_path, "   ", "feature/new", true)
+            .expect_err("empty worktree path should fail");
+        assert!(error.to_string().contains("worktree path cannot be empty"));
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.ensure_calls, vec![repo_path.to_string()]);
+        drop(task_state);
+
+        let git_state = git_state.lock().expect("git lock poisoned");
+        assert!(git_state
+            .calls
+            .iter()
+            .all(|call| !matches!(call, GitCall::CreateWorktree { .. })));
+    }
+
+    #[test]
+    fn git_remove_worktree_forwards_force_flag() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-remove-worktree";
+        let (service, _task_state, git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        assert!(service.git_remove_worktree(repo_path, "/tmp/wt-1", true)?);
+
+        let git_state = git_state.lock().expect("git lock poisoned");
+        assert!(git_state.calls.contains(&GitCall::RemoveWorktree {
+            repo_path: repo_path.to_string(),
+            worktree_path: "/tmp/wt-1".to_string(),
+            force: true,
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn git_push_branch_defaults_remote_to_origin() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-push";
+        let (service, _task_state, git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let summary = service.git_push_branch(repo_path, Some("   "), "feature/x", true, false)?;
+        assert_eq!(summary.remote, "origin");
+        assert_eq!(summary.branch, "feature/x");
+
+        let git_state = git_state.lock().expect("git lock poisoned");
+        assert!(git_state.calls.contains(&GitCall::PushBranch {
+            repo_path: repo_path.to_string(),
+            remote: "origin".to_string(),
+            branch: "feature/x".to_string(),
+            set_upstream: true,
+            force_with_lease: false,
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn task_update_rejects_direct_status_changes() {
+        let repo_path = "/tmp/odt-repo-task-update";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .task_update(
+                repo_path,
+                "task-1",
+                UpdateTaskPatch {
+                    title: None,
+                    description: None,
+                    acceptance_criteria: None,
+                    notes: None,
+                    status: Some(TaskStatus::Closed),
+                    priority: None,
+                    issue_type: None,
+                    ai_review_enabled: None,
+                    labels: None,
+                    assignee: None,
+                    parent_id: None,
+                },
+            )
+            .expect_err("direct status updates should fail");
+        assert!(error
+            .to_string()
+            .contains("Status cannot be updated directly"));
+    }
+
+    #[test]
+    fn validate_parent_relationships_for_update_enforces_hierarchy_constraints() {
+        let epic = make_task("epic-1", "epic", TaskStatus::Open);
+        let current = make_task("task-1", "task", TaskStatus::Open);
+        let mut direct_subtask = make_task("sub-1", "task", TaskStatus::Open);
+        direct_subtask.parent_id = Some("task-1".to_string());
+        let feature_parent = make_task("feature-1", "feature", TaskStatus::Open);
+        let mut nested_parent = make_task("nested-parent", "epic", TaskStatus::Open);
+        nested_parent.parent_id = Some("epic-1".to_string());
+
+        let tasks = vec![
+            epic.clone(),
+            current.clone(),
+            direct_subtask.clone(),
+            feature_parent.clone(),
+            nested_parent.clone(),
+        ];
+
+        let mut epic_parent_patch = empty_patch();
+        epic_parent_patch.parent_id = Some("task-1".to_string());
+        let epic_error = validate_parent_relationships_for_update(&tasks, &epic, &epic_parent_patch)
+            .expect_err("epic should not become subtask");
+        assert!(epic_error
+            .to_string()
+            .contains("Epics cannot be converted to subtasks."));
+
+        let mut become_subtask_patch = empty_patch();
+        become_subtask_patch.parent_id = Some("epic-1".to_string());
+        let parent_error =
+            validate_parent_relationships_for_update(&tasks, &current, &become_subtask_patch)
+                .expect_err("task with direct subtasks cannot become subtask");
+        assert!(parent_error
+            .to_string()
+            .contains("Tasks with subtasks cannot become subtasks."));
+
+        let mut non_epic_patch = empty_patch();
+        non_epic_patch.issue_type = Some("feature".to_string());
+        let type_error = validate_parent_relationships_for_update(&tasks, &current, &non_epic_patch)
+            .expect_err("task with direct subtasks must remain epic");
+        assert!(type_error.to_string().contains("Only epics can have subtasks."));
+
+        let standalone = make_task("standalone", "task", TaskStatus::Open);
+        let tasks_for_parent_checks = vec![
+            epic.clone(),
+            standalone.clone(),
+            feature_parent.clone(),
+            nested_parent.clone(),
+        ];
+
+        let mut bad_parent_patch = empty_patch();
+        bad_parent_patch.parent_id = Some("feature-1".to_string());
+        let bad_parent_error = validate_parent_relationships_for_update(
+            &tasks_for_parent_checks,
+            &standalone,
+            &bad_parent_patch,
+        )
+        .expect_err("non-epic parent should be rejected");
+        assert!(bad_parent_error
+            .to_string()
+            .contains("Only epics can be selected as parents."));
+
+        let mut nested_parent_patch = empty_patch();
+        nested_parent_patch.parent_id = Some("nested-parent".to_string());
+        let nested_parent_error = validate_parent_relationships_for_update(
+            &tasks_for_parent_checks,
+            &standalone,
+            &nested_parent_patch,
+        )
+        .expect_err("nested parent should be rejected");
+        assert!(nested_parent_error
+            .to_string()
+            .contains("Subtask depth is limited to one level."));
+
+        let mut clear_parent_patch = empty_patch();
+        clear_parent_patch.parent_id = Some("   ".to_string());
+        let mut current_with_parent = standalone.clone();
+        current_with_parent.parent_id = Some("epic-1".to_string());
+        assert!(validate_parent_relationships_for_update(
+            &tasks_for_parent_checks,
+            &current_with_parent,
+            &clear_parent_patch,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn task_delete_blocks_when_subtasks_exist_without_confirmation() {
+        let repo_path = "/tmp/odt-repo-task-delete";
+        let parent = make_task("parent-1", "epic", TaskStatus::Open);
+        let mut child = make_task("child-1", "task", TaskStatus::Open);
+        child.parent_id = Some("parent-1".to_string());
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![parent, child],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .task_delete(repo_path, "parent-1", false)
+            .expect_err("delete must require subtask confirmation");
+        assert!(error.to_string().contains("Confirm subtask deletion"));
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert!(task_state.delete_calls.is_empty());
+    }
+
+    #[test]
+    fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-task-delete-cascade";
+        let parent = make_task("parent-1", "epic", TaskStatus::Open);
+        let mut child = make_task("child-1", "task", TaskStatus::Open);
+        child.parent_id = Some("parent-1".to_string());
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![parent, child],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        service.task_delete(repo_path, "parent-1", true)?;
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(
+            task_state.delete_calls,
+            vec![("parent-1".to_string(), true)]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn build_blocked_requires_non_empty_reason() {
+        let repo_path = "/tmp/odt-repo-build";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .build_blocked(repo_path, "task-1", Some("   "))
+            .expect_err("blank reason should fail");
+        assert!(error.to_string().contains("requires a non-empty reason"));
+    }
+
+    #[test]
+    fn build_resumed_human_actions_and_resume_deferred_paths_work() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-human-actions";
+        let mut deferred = make_task("task-deferred", "task", TaskStatus::Deferred);
+        deferred.parent_id = None;
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![
+                make_task("task-blocked", "task", TaskStatus::Blocked),
+                make_task("task-human-review", "task", TaskStatus::HumanReview),
+                make_task("task-approve", "task", TaskStatus::HumanReview),
+                deferred,
+            ],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let resumed = service.build_resumed(repo_path, "task-blocked")?;
+        assert_eq!(resumed.status, TaskStatus::InProgress);
+
+        let requested_changes = service.human_request_changes(repo_path, "task-human-review", None)?;
+        assert_eq!(requested_changes.status, TaskStatus::InProgress);
+
+        let approved = service.human_approve(repo_path, "task-approve")?;
+        assert_eq!(approved.status, TaskStatus::Closed);
+
+        let resumed_deferred = service.task_resume_deferred(repo_path, "task-deferred")?;
+        assert_eq!(resumed_deferred.status, TaskStatus::Open);
+        Ok(())
+    }
+
+    #[test]
+    fn task_resume_deferred_requires_deferred_state() {
+        let repo_path = "/tmp/odt-repo-resume";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .task_resume_deferred(repo_path, "task-1")
+            .expect_err("non-deferred task should fail");
+        assert!(error.to_string().contains("Task is not deferred"));
+    }
+
+    #[test]
+    fn tasks_list_enriches_available_actions() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-list";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![make_task("feature-1", "feature", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let tasks = service.tasks_list(repo_path)?;
+        assert_eq!(tasks.len(), 1);
+        assert!(tasks[0].available_actions.contains(&TaskAction::SetSpec));
+        assert!(tasks[0].available_actions.contains(&TaskAction::ViewDetails));
+        Ok(())
+    }
+
+    #[test]
+    fn task_create_normalizes_issue_type_and_defaults_ai_review() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-create";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let created = service.task_create(
+            repo_path,
+            CreateTaskInput {
+                title: "New task".to_string(),
+                issue_type: "something-unknown".to_string(),
+                priority: 2,
+                description: None,
+                acceptance_criteria: None,
+                labels: None,
+                ai_review_enabled: None,
+                parent_id: None,
+            },
+        )?;
+        assert_eq!(created.issue_type, "task");
+        assert!(created.ai_review_enabled);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.created_inputs.len(), 1);
+        assert_eq!(task_state.created_inputs[0].issue_type, "task");
+        assert_eq!(task_state.created_inputs[0].ai_review_enabled, Some(true));
+        Ok(())
+    }
+
+    #[test]
+    fn task_transition_returns_current_task_when_status_is_unchanged() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-transition-same";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let task = service.task_transition(repo_path, "task-1", TaskStatus::Open, None)?;
+        assert_eq!(task.status, TaskStatus::Open);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert!(task_state.updated_patches.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn task_transition_updates_status_when_valid() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-transition-update";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("bug-1", "bug", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let task = service.task_transition(repo_path, "bug-1", TaskStatus::InProgress, None)?;
+        assert_eq!(task.status, TaskStatus::InProgress);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.updated_patches.len(), 1);
+        assert_eq!(
+            task_state.updated_patches[0].1.status,
+            Some(TaskStatus::InProgress)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn build_completed_routes_to_ai_review_when_enabled() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-build-ai";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let task = service.build_completed(repo_path, "task-1", Some("done"))?;
+        assert_eq!(task.status, TaskStatus::AiReview);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::AiReview)));
+        Ok(())
+    }
+
+    #[test]
+    fn build_completed_routes_to_human_review_when_ai_is_disabled() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-build-human";
+        let mut task = make_task("task-1", "task", TaskStatus::InProgress);
+        task.ai_review_enabled = false;
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![task],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let task = service.build_completed(repo_path, "task-1", None)?;
+        assert_eq!(task.status, TaskStatus::HumanReview);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+        Ok(())
+    }
+
+    #[test]
+    fn task_defer_rejects_subtasks() {
+        let repo_path = "/tmp/odt-repo-defer-subtask";
+        let mut subtask = make_task("task-1", "task", TaskStatus::Open);
+        subtask.parent_id = Some("epic-1".to_string());
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![subtask],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .task_defer(repo_path, "task-1", Some("later"))
+            .expect_err("subtasks cannot be deferred");
+        assert!(error.to_string().contains("Subtasks cannot be deferred"));
+    }
+
+    #[test]
+    fn task_defer_transitions_open_parent_task() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-defer-parent";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let task = service.task_defer(repo_path, "task-1", Some("later"))?;
+        assert_eq!(task.status, TaskStatus::Deferred);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::Deferred)));
+        Ok(())
+    }
+
+    #[test]
+    fn task_defer_rejects_closed_tasks() {
+        let repo_path = "/tmp/odt-repo-defer-closed";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::Closed)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .task_defer(repo_path, "task-1", None)
+            .expect_err("closed tasks cannot be deferred");
+        assert!(error.to_string().contains("Only non-closed open-state tasks"));
+    }
+
+    #[test]
+    fn set_spec_persists_trimmed_markdown_and_transitions_open_task() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-spec";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "feature", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let spec = service.set_spec(repo_path, "task-1", "  # Spec  ")?;
+        assert_eq!(spec.markdown, "# Spec");
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(
+            task_state.spec_set_calls,
+            vec![("task-1".to_string(), "# Spec".to_string())]
+        );
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::SpecReady)));
+        Ok(())
+    }
+
+    #[test]
+    fn set_spec_rejects_invalid_status() {
+        let repo_path = "/tmp/odt-repo-spec-invalid";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .set_spec(repo_path, "task-1", "# Spec")
+            .expect_err("set_spec should be blocked in in_progress");
+        assert!(error.to_string().contains("set_spec is only allowed"));
+    }
+
+    #[test]
+    fn set_plan_for_non_epic_transitions_ready_for_dev() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-plan-task";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let plan = service.set_plan(repo_path, "task-1", "  # Plan  ", None)?;
+        assert_eq!(plan.markdown, "# Plan");
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(
+            task_state.plan_set_calls,
+            vec![("task-1".to_string(), "# Plan".to_string())]
+        );
+        assert_eq!(task_state.created_inputs.len(), 0);
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::ReadyForDev)));
+        Ok(())
+    }
+
+    #[test]
+    fn set_plan_rejects_invalid_status_for_feature() {
+        let repo_path = "/tmp/odt-repo-plan-invalid";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "feature", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .set_plan(repo_path, "task-1", "# Plan", None)
+            .expect_err("feature/open should not allow plan");
+        assert!(error.to_string().contains("set_plan is not allowed"));
+    }
+
+    #[test]
+    fn set_plan_for_epic_creates_unique_missing_subtasks() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-plan-epic";
+        let epic = make_task("epic-1", "epic", TaskStatus::SpecReady);
+        let mut existing_child = make_task("child-1", "task", TaskStatus::Open);
+        existing_child.title = "Build API".to_string();
+        existing_child.parent_id = Some("epic-1".to_string());
+
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![epic, existing_child],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let plan = service.set_plan(
+            repo_path,
+            "epic-1",
+            "# Epic Plan",
+            Some(vec![
+                PlanSubtaskInput {
+                    title: "Build API".to_string(),
+                    issue_type: Some("task".to_string()),
+                    priority: Some(2),
+                    description: None,
+                },
+                PlanSubtaskInput {
+                    title: "Build UI".to_string(),
+                    issue_type: Some("feature".to_string()),
+                    priority: Some(2),
+                    description: Some("Add interface".to_string()),
+                },
+                PlanSubtaskInput {
+                    title: "Build UI".to_string(),
+                    issue_type: Some("feature".to_string()),
+                    priority: Some(2),
+                    description: Some("Duplicate".to_string()),
+                },
+            ]),
+        )?;
+        assert_eq!(plan.markdown, "# Epic Plan");
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.created_inputs.len(), 1);
+        assert_eq!(task_state.created_inputs[0].title, "Build UI");
+        assert_eq!(
+            task_state.created_inputs[0].parent_id.as_deref(),
+            Some("epic-1")
+        );
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::ReadyForDev)));
+        Ok(())
+    }
+
+    #[test]
+    fn qa_get_report_returns_latest_markdown_when_present() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-qa-report";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+        {
+            let mut state = task_state.lock().expect("task lock poisoned");
+            state.latest_qa_report = Some(QaReportDocument {
+                markdown: "QA body".to_string(),
+                verdict: QaVerdict::Approved,
+                updated_at: "2026-02-20T12:00:00Z".to_string(),
+                revision: 2,
+            });
+        }
+
+        let report = service.qa_get_report(repo_path, "task-1")?;
+        assert_eq!(report.markdown, "QA body");
+        assert_eq!(report.updated_at.as_deref(), Some("2026-02-20T12:00:00Z"));
+        Ok(())
+    }
+
+    #[test]
+    fn qa_get_report_returns_empty_when_not_present() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-qa-empty";
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let report = service.qa_get_report(repo_path, "task-1")?;
+        assert!(report.markdown.is_empty());
+        assert!(report.updated_at.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn spec_get_and_plan_get_delegate_to_task_store() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-docs-read";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let _ = service.spec_get(repo_path, "task-1")?;
+        let _ = service.plan_get(repo_path, "task-1")?;
+
+        let state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(state.spec_get_calls, vec!["task-1".to_string()]);
+        assert_eq!(state.plan_get_calls, vec!["task-1".to_string()]);
+        Ok(())
+    }
+
+    #[test]
+    fn qa_approved_appends_report_and_transitions_to_human_review() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-qa-approved";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::AiReview)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let task = service.qa_approved(repo_path, "task-1", "Looks good")?;
+        assert_eq!(task.status, TaskStatus::HumanReview);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(
+            task_state.qa_append_calls,
+            vec![(
+                "task-1".to_string(),
+                "Looks good".to_string(),
+                QaVerdict::Approved
+            )]
+        );
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+        Ok(())
+    }
+
+    #[test]
+    fn qa_rejected_appends_report_and_transitions_to_in_progress() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-qa-rejected";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "task", TaskStatus::AiReview)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let task = service.qa_rejected(repo_path, "task-1", "Needs work")?;
+        assert_eq!(task.status, TaskStatus::InProgress);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(
+            task_state.qa_append_calls,
+            vec![(
+                "task-1".to_string(),
+                "Needs work".to_string(),
+                QaVerdict::Rejected
+            )]
+        );
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::InProgress)));
+        Ok(())
+    }
+
+    #[test]
+    fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-sessions";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+        {
+            let mut state = task_state.lock().expect("task lock poisoned");
+            state.agent_sessions = vec![make_session("task-1", "session-1")];
+        }
+
+        let sessions = service.agent_sessions_list(repo_path, "task-1")?;
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, "session-1");
+
+        let upserted = service.agent_session_upsert(
+            repo_path,
+            "task-1",
+            make_session("wrong-task", "session-2"),
+        )?;
+        assert!(upserted);
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.upserted_sessions.len(), 1);
+        assert_eq!(task_state.upserted_sessions[0].0, "task-1");
+        assert_eq!(task_state.upserted_sessions[0].1.task_id, "task-1");
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("runtime-workspace");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let bin_dir = root.join("bin");
+        let fake_opencode = bin_dir.join("opencode");
+        let fake_bd = bin_dir.join("bd");
+        create_fake_opencode(&fake_opencode)?;
+        create_fake_bd(&fake_bd)?;
+
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            fake_opencode.to_string_lossy().as_ref(),
+        );
+        let _path_guard = prepend_path(&bin_dir);
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        let repo_path = repo.to_string_lossy().to_string();
+        let runtime = service.runtime_check()?;
+        assert!(runtime.git_ok);
+        assert!(runtime.opencode_ok);
+        assert!(runtime
+            .opencode_version
+            .as_deref()
+            .unwrap_or_default()
+            .contains("opencode-fake"));
+
+        let beads = service.beads_check(repo_path.as_str())?;
+        assert!(beads.beads_ok);
+        assert!(beads.beads_path.is_some());
+
+        let system = service.system_check(repo_path.as_str())?;
+        assert!(system.git_ok);
+        assert!(system.beads_ok);
+        assert!(system.opencode_ok);
+        assert!(system.errors.is_empty());
+
+        let workspace = service.workspace_add(repo_path.as_str())?;
+        assert!(workspace.is_active);
+        let selected = service.workspace_select(repo_path.as_str())?;
+        assert!(selected.is_active);
+
+        let worktree_base = root.join("worktrees").to_string_lossy().to_string();
+        let updated = service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.clone()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: false,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+        assert!(updated.has_config);
+
+        let config = service.workspace_get_repo_config(repo_path.as_str())?;
+        assert_eq!(config.branch_prefix, "odt");
+        assert_eq!(config.worktree_base_path.as_deref(), Some(worktree_base.as_str()));
+        assert!(service
+            .workspace_get_repo_config_optional(repo_path.as_str())?
+            .is_some());
+        let trusted = service.workspace_set_trusted_hooks(repo_path.as_str(), true)?;
+        assert!(trusted.has_config);
+
+        let records = service.workspace_list()?;
+        assert_eq!(records.len(), 1);
+        assert!(records[0].is_active);
+
+        let state = task_state.lock().expect("task lock poisoned");
+        assert!(!state.ensure_calls.is_empty());
+        drop(state);
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn beads_check_reports_task_store_init_error() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("beads-error");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let bin_dir = root.join("bin");
+        create_fake_bd(&bin_dir.join("bd"))?;
+        let _path_guard = prepend_path(&bin_dir);
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        task_state
+            .lock()
+            .expect("task lock poisoned")
+            .ensure_error = Some("init failed".to_string());
+
+        let repo_path = repo.to_string_lossy().to_string();
+        let check = service.beads_check(repo_path.as_str())?;
+        assert!(!check.beads_ok);
+        let beads_error = check.beads_error.unwrap_or_default();
+        assert!(
+            beads_error.contains("Failed to initialize task store"),
+            "unexpected beads error: {beads_error}"
+        );
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("beads-missing-binary");
+        let _path_guard = set_env_var("PATH", "/usr/bin:/bin");
+
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let beads = service.beads_check("/tmp/does-not-matter")?;
+        assert!(!beads.beads_ok);
+        assert!(beads.beads_path.is_none());
+        assert!(
+            beads
+                .beads_error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("bd not found in PATH")
+        );
+
+        let system = service.system_check("/tmp/does-not-matter")?;
+        assert!(system
+            .errors
+            .iter()
+            .any(|entry| entry.contains("beads: bd not found in PATH")));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_workspace_runtime_ensure_list_and_stop_flow() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("runtime-workspace-flow");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            fake_opencode.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        let repo_path = repo.to_string_lossy().to_string();
+        let first = service.opencode_repo_runtime_ensure(repo_path.as_str())?;
+        let second = service.opencode_repo_runtime_ensure(repo_path.as_str())?;
+        assert_eq!(first.runtime_id, second.runtime_id);
+
+        let listed = service.opencode_runtime_list(Some(repo_path.as_str()))?;
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].runtime_id, first.runtime_id);
+
+        assert!(service.opencode_runtime_stop(first.runtime_id.as_str())?);
+        assert!(service.opencode_runtime_list(Some(repo_path.as_str()))?.is_empty());
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("runtime-start");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            fake_opencode.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("qa-worktrees");
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let spec_runtime = service.opencode_runtime_start(repo_path.as_str(), "task-1", "spec")?;
+        assert_eq!(spec_runtime.role, "spec");
+        assert!(service.opencode_runtime_stop(spec_runtime.runtime_id.as_str())?);
+
+        let qa_runtime = service.opencode_runtime_start(repo_path.as_str(), "task-1", "qa")?;
+        assert_eq!(qa_runtime.role, "qa");
+        let qa_worktree = PathBuf::from(qa_runtime.working_directory.clone());
+        assert!(qa_worktree.exists());
+        assert!(service.opencode_runtime_stop(qa_runtime.runtime_id.as_str())?);
+        assert!(!qa_worktree.exists());
+
+        let bad_role = service
+            .opencode_runtime_start(repo_path.as_str(), "task-1", "build")
+            .expect_err("unsupported role should fail");
+        assert!(bad_role
+            .to_string()
+            .contains("Unsupported agent runtime role"));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_start_reports_missing_task() -> Result<()> {
+        let root = unique_temp_path("runtime-missing-task");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        let repo_path = repo.to_string_lossy().to_string();
+        let error = service
+            .opencode_runtime_start(repo_path.as_str(), "missing-task", "spec")
+            .expect_err("missing task should fail");
+        assert!(error.to_string().contains("Task not found: missing-task"));
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Result<()> {
+        let root = unique_temp_path("runtime-qa-guards");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("qa-worktrees");
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: None,
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+        let missing_base_error = service
+            .opencode_runtime_start(repo_path.as_str(), "task-1", "qa")
+            .expect_err("qa runtime should require worktree base path");
+        assert!(missing_base_error
+            .to_string()
+            .contains("QA blocked: configure repos."));
+
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: false,
+                hooks: HookSet {
+                    pre_start: vec!["echo pre-hook".to_string()],
+                    post_complete: Vec::new(),
+                },
+                agent_defaults: Default::default(),
+            },
+        )?;
+        let trust_error = service
+            .opencode_runtime_start(repo_path.as_str(), "task-1", "qa")
+            .expect_err("qa runtime should reject untrusted hooks");
+        assert!(trust_error
+            .to_string()
+            .contains("Hooks are configured but not trusted"));
+
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+        fs::create_dir_all(worktree_base.join("qa-task-1"))?;
+        let existing_path_error = service
+            .opencode_runtime_start(repo_path.as_str(), "task-1", "qa")
+            .expect_err("existing qa worktree should fail");
+        assert!(existing_path_error
+            .to_string()
+            .contains("QA worktree path already exists"));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_start_reuses_existing_runtime_for_same_task_and_role() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("runtime-reuse");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            fake_opencode.to_string_lossy().as_ref(),
+        );
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        let repo_path = repo.to_string_lossy().to_string();
+
+        let first = service.opencode_runtime_start(repo_path.as_str(), "task-1", "spec")?;
+        let second = service.opencode_runtime_start(repo_path.as_str(), "task-1", "spec")?;
+        assert_eq!(first.runtime_id, second.runtime_id);
+        assert!(service.opencode_runtime_stop(first.runtime_id.as_str())?);
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_stop_reports_cleanup_failure() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let runtime_id = "runtime-cleanup-error".to_string();
+        service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .insert(
+                runtime_id.clone(),
+                super::AgentRuntimeProcess {
+                    summary: AgentRuntimeSummary {
+                        runtime_id: runtime_id.clone(),
+                        repo_path: "/tmp/repo".to_string(),
+                        task_id: "task-1".to_string(),
+                        role: "qa".to_string(),
+                        working_directory: "/tmp/repo".to_string(),
+                        port: 1,
+                        started_at: "2026-02-20T12:00:00Z".to_string(),
+                    },
+                    child: spawn_sleep_process(20),
+                    cleanup_repo_path: Some("/tmp/non-existent-repo-for-stop".to_string()),
+                    cleanup_worktree_path: Some("/tmp/non-existent-worktree-for-stop".to_string()),
+                },
+            );
+
+        let error = service
+            .opencode_runtime_stop(runtime_id.as_str())
+            .expect_err("cleanup failure should bubble up");
+        assert!(error
+            .to_string()
+            .contains("Failed removing QA worktree runtime"));
+        assert!(service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_list_prunes_stale_entries() -> Result<()> {
+        let root = unique_temp_path("runtime-prune");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        let stale_child = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg("exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn stale child");
+        let summary = AgentRuntimeSummary {
+            runtime_id: "runtime-stale".to_string(),
+            repo_path: repo.to_string_lossy().to_string(),
+            task_id: "task-1".to_string(),
+            role: "spec".to_string(),
+            working_directory: repo.to_string_lossy().to_string(),
+            port: 1,
+            started_at: "2026-02-20T12:00:00Z".to_string(),
+        };
+        service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .insert(
+                summary.runtime_id.clone(),
+                super::AgentRuntimeProcess {
+                    summary,
+                    child: stale_child,
+                    cleanup_repo_path: None,
+                    cleanup_worktree_path: None,
+                },
+            );
+
+        std::thread::sleep(Duration::from_millis(50));
+        let listed = service.opencode_runtime_list(None)?;
+        assert!(listed.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("build-success");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            fake_opencode.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("builder-worktrees");
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "bug", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
+        let emitter = make_emitter(events.clone());
+
+        let run = service.build_start(repo_path.as_str(), "task-1", emitter.clone())?;
+        assert!(matches!(run.state, RunState::Running));
+        assert_eq!(service.runs_list(Some(repo_path.as_str()))?.len(), 1);
+
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(service.build_respond(
+            run.run_id.as_str(),
+            "approve",
+            Some("Allow git push"),
+            emitter.clone()
+        )?);
+
+        assert!(service.build_cleanup(run.run_id.as_str(), "success", emitter.clone())?);
+        assert!(service.runs_list(Some(repo_path.as_str()))?.is_empty());
+
+        let state = task_state.lock().expect("task lock poisoned");
+        assert!(state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::InProgress)));
+        assert!(state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::AiReview)));
+        drop(state);
+
+        let emitted = events.lock().expect("events lock poisoned");
+        assert!(emitted.iter().any(|event| matches!(event, RunEvent::RunStarted { .. })));
+        assert!(emitted
+            .iter()
+            .any(|event| matches!(event, RunEvent::PermissionRequired { .. })));
+        assert!(emitted
+            .iter()
+            .any(|event| matches!(event, RunEvent::ToolExecution { .. })));
+        assert!(emitted
+            .iter()
+            .any(|event| matches!(event, RunEvent::RunFinished { success: true, .. })));
+        drop(emitted);
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
+        let root = unique_temp_path("build-failure");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "bug", TaskStatus::InProgress)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        let run_id = "run-local".to_string();
+        service.runs.lock().expect("run lock poisoned").insert(
+            run_id.clone(),
+            super::RunProcess {
+                summary: RunSummary {
+                    run_id: run_id.clone(),
+                    repo_path: repo_path.clone(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: repo_path.clone(),
+                    port: 1,
+                    state: RunState::Running,
+                    last_message: None,
+                    started_at: "2026-02-20T12:00:00Z".to_string(),
+                },
+                child: spawn_sleep_process(20),
+                repo_path: repo_path.clone(),
+                task_id: "task-1".to_string(),
+                worktree_path: repo_path.clone(),
+                repo_config: RepoConfig {
+                    worktree_base_path: None,
+                    branch_prefix: "odt".to_string(),
+                    trusted_hooks: true,
+                    hooks: HookSet::default(),
+                    agent_defaults: Default::default(),
+                },
+            },
+        );
+
+        let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
+        let emitter = make_emitter(events.clone());
+        assert!(service.build_respond(run_id.as_str(), "message", Some("note"), emitter.clone())?);
+        assert!(service.build_respond(run_id.as_str(), "deny", None, emitter.clone())?);
+        let unknown = service
+            .build_respond(run_id.as_str(), "nope", None, emitter.clone())
+            .expect_err("unknown action should fail");
+        assert!(unknown.to_string().contains("Unknown build response action"));
+
+        assert!(service.build_stop(run_id.as_str(), emitter.clone())?);
+        assert!(service.build_cleanup(run_id.as_str(), "failure", emitter.clone())?);
+        assert!(service.runs_list(Some(repo_path.as_str()))?.is_empty());
+
+        let state = task_state.lock().expect("task lock poisoned");
+        assert!(state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::Blocked)));
+        drop(state);
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("build-hooks");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            fake_opencode.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("hook-worktrees");
+        let (service, task_state, _git_state) = build_service_with_store(
+            vec![
+                make_task("task-1", "bug", TaskStatus::Open),
+                make_task("task-2", "bug", TaskStatus::Open),
+            ],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet {
+                    pre_start: vec!["echo pre-fail >&2; exit 1".to_string()],
+                    post_complete: Vec::new(),
+                },
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let pre_start_error = service
+            .build_start(
+                repo_path.as_str(),
+                "task-1",
+                make_emitter(Arc::new(Mutex::new(Vec::new()))),
+            )
+            .expect_err("pre-start failure should fail");
+        assert!(pre_start_error.to_string().contains("Pre-start hook failed"));
+
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet {
+                    pre_start: Vec::new(),
+                    post_complete: vec!["echo post-fail >&2; exit 1".to_string()],
+                },
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
+        let emitter = make_emitter(events.clone());
+        let run = service.build_start(repo_path.as_str(), "task-2", emitter.clone())?;
+        let cleaned = service.build_cleanup(run.run_id.as_str(), "success", emitter.clone())?;
+        assert!(!cleaned, "post-hook failure should report false");
+
+        let invalid_mode = service
+            .build_cleanup("run-missing", "unknown", emitter)
+            .expect_err("unknown mode should fail");
+        assert!(invalid_mode.to_string().contains("Run not found"));
+
+        let state = task_state.lock().expect("task lock poisoned");
+        assert!(state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::Blocked)));
+        drop(state);
+
+        let emitted = events.lock().expect("events lock poisoned");
+        assert!(emitted
+            .iter()
+            .any(|event| matches!(event, RunEvent::PostHookStarted { .. })));
+        assert!(emitted
+            .iter()
+            .any(|event| matches!(event, RunEvent::PostHookFailed { .. })));
+        drop(emitted);
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn build_start_requires_worktree_base_path() -> Result<()> {
+        let root = unique_temp_path("build-no-worktree-base");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "bug", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: None,
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = service
+            .build_start(
+                repo_path.as_str(),
+                "task-1",
+                make_emitter(Arc::new(Mutex::new(Vec::new()))),
+            )
+            .expect_err("build_start should require worktree base");
+        assert!(error
+            .to_string()
+            .contains("Build blocked: configure repos."));
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
+        let root = unique_temp_path("build-untrusted-hooks");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("worktrees");
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "bug", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: false,
+                hooks: HookSet {
+                    pre_start: vec!["echo pre-hook".to_string()],
+                    post_complete: Vec::new(),
+                },
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = service
+            .build_start(
+                repo_path.as_str(),
+                "task-1",
+                make_emitter(Arc::new(Mutex::new(Vec::new()))),
+            )
+            .expect_err("hooks should be rejected when not trusted");
+        assert!(error
+            .to_string()
+            .contains("Hooks are configured but not trusted"));
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn build_start_rejects_existing_worktree_directory() -> Result<()> {
+        let root = unique_temp_path("build-existing-worktree");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("worktrees");
+        let task_worktree = worktree_base.join("task-1");
+        fs::create_dir_all(&task_worktree)?;
+
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "bug", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = service
+            .build_start(
+                repo_path.as_str(),
+                "task-1",
+                make_emitter(Arc::new(Mutex::new(Vec::new()))),
+            )
+            .expect_err("existing worktree path should be rejected");
+        assert!(error
+            .to_string()
+            .contains("Worktree path already exists for task task-1"));
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn build_start_reports_opencode_startup_failure() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("build-startup-failure");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let failing_opencode = root.join("opencode");
+        create_failing_opencode(&failing_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            failing_opencode.to_string_lossy().as_ref(),
+        );
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("worktrees");
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "bug", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = service
+            .build_start(
+                repo_path.as_str(),
+                "task-1",
+                make_emitter(Arc::new(Mutex::new(Vec::new()))),
+            )
+            .expect_err("startup failure should bubble up");
+        let message = error.to_string();
+        assert!(message.contains("OpenCode build runtime failed to start"));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
+        let (service, _task_state, _git_state) = build_service_with_state(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let run_id = "run-shutdown".to_string();
+        service.runs.lock().expect("run lock poisoned").insert(
+            run_id.clone(),
+            super::RunProcess {
+                summary: RunSummary {
+                    run_id: run_id.clone(),
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    branch: "odt/task-1".to_string(),
+                    worktree_path: "/tmp/worktree".to_string(),
+                    port: 1,
+                    state: RunState::Running,
+                    last_message: None,
+                    started_at: "2026-02-20T12:00:00Z".to_string(),
+                },
+                child: spawn_sleep_process(20),
+                repo_path: "/tmp/repo".to_string(),
+                task_id: "task-1".to_string(),
+                worktree_path: "/tmp/worktree".to_string(),
+                repo_config: RepoConfig {
+                    worktree_base_path: None,
+                    branch_prefix: "odt".to_string(),
+                    trusted_hooks: true,
+                    hooks: HookSet::default(),
+                    agent_defaults: Default::default(),
+                },
+            },
+        );
+
+        let runtime_id = "runtime-shutdown".to_string();
+        service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .insert(
+                runtime_id.clone(),
+                super::AgentRuntimeProcess {
+                    summary: AgentRuntimeSummary {
+                        runtime_id,
+                        repo_path: "/tmp/repo".to_string(),
+                        task_id: "task-1".to_string(),
+                        role: "qa".to_string(),
+                        working_directory: "/tmp/worktree".to_string(),
+                        port: 1,
+                        started_at: "2026-02-20T12:00:00Z".to_string(),
+                    },
+                    child: spawn_sleep_process(20),
+                    cleanup_repo_path: Some("/tmp/non-existent-repo-for-shutdown".to_string()),
+                    cleanup_worktree_path: Some("/tmp/non-existent-worktree-for-shutdown".to_string()),
+                },
+            );
+
+        let error = service
+            .shutdown()
+            .expect_err("shutdown should aggregate runtime cleanup failures");
+        assert!(error
+            .to_string()
+            .contains("Failed removing QA worktree runtime"));
+        assert!(service.runs.lock().expect("run lock poisoned").is_empty());
+        assert!(service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn helper_functions_cover_mcp_and_opencode_resolution_paths() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("helpers");
+        let fake_opencode = root.join("opencode");
+        create_fake_opencode(&fake_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            fake_opencode.to_string_lossy().as_ref(),
+        );
+
+        let version = read_opencode_version(fake_opencode.to_string_lossy().as_ref());
+        assert_eq!(version.as_deref(), Some("opencode-fake 0.0.1"));
+        assert_eq!(
+            resolve_opencode_binary_path().as_deref(),
+            Some(fake_opencode.to_string_lossy().as_ref())
+        );
+
+        let _workspace_guard = set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", root.to_string_lossy().as_ref());
+        let _command_guard = set_env_var("OPENDUCKTOR_MCP_COMMAND_JSON", "[\"mcp-bin\",\"--stdio\"]");
+        let parsed = resolve_mcp_command()?;
+        assert_eq!(parsed, vec!["mcp-bin".to_string(), "--stdio".to_string()]);
+        assert_eq!(default_mcp_workspace_root()?, root.to_string_lossy().to_string());
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missing() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("opencode-home-fallback");
+        let home_bin = root.join(".opencode").join("bin");
+        fs::create_dir_all(&home_bin)?;
+        let home_opencode = home_bin.join("opencode");
+        create_fake_opencode(&home_opencode)?;
+        let empty_bin = root.join("empty-bin");
+        fs::create_dir_all(&empty_bin)?;
+        let fallback_path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
+
+        let _override_guard = set_env_var("OPENDUCKTOR_OPENCODE_BINARY", "   ");
+        let _home_guard = set_env_var("HOME", root.to_string_lossy().as_ref());
+        let _path_guard = set_env_var("PATH", fallback_path.as_str());
+
+        let resolved = resolve_opencode_binary_path();
+        assert_eq!(resolved.as_deref(), Some(home_opencode.to_string_lossy().as_ref()));
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("mcp-command-fallbacks");
+        let cli_bin = root.join("cli-bin");
+        let empty_bin = root.join("empty-bin");
+        let bun_bin = root.join("bun-bin");
+        fs::create_dir_all(&cli_bin)?;
+        fs::create_dir_all(&empty_bin)?;
+        fs::create_dir_all(&bun_bin)?;
+        write_executable_script(&cli_bin.join("openducktor-mcp"), "#!/bin/sh\nexit 0\n")?;
+        write_executable_script(&bun_bin.join("bun"), "#!/bin/sh\nexit 0\n")?;
+
+        let _mcp_env_guard = remove_env_var("OPENDUCKTOR_MCP_COMMAND_JSON");
+
+        {
+            let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
+            let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
+            let _path_guard = set_env_var("PATH", path.as_str());
+            let command = resolve_mcp_command()?;
+            assert_eq!(command, vec!["openducktor-mcp".to_string()]);
+        }
+
+        {
+            let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
+            let path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
+            let _path_guard = set_env_var("PATH", path.as_str());
+            let error = resolve_mcp_command().expect_err("missing mcp + bun should fail");
+            assert!(error.to_string().contains("Missing MCP runner"));
+        }
+
+        let workspace_direct = root.join("workspace-direct");
+        let direct_entrypoint = workspace_direct
+            .join("packages")
+            .join("openducktor-mcp")
+            .join("src")
+            .join("index.ts");
+        fs::create_dir_all(
+            direct_entrypoint
+                .parent()
+                .expect("entrypoint parent should exist"),
+        )?;
+        fs::write(&direct_entrypoint, "console.log('mcp');\n")?;
+
+        {
+            let path = format!("{}:/usr/bin:/bin", bun_bin.to_string_lossy());
+            let _path_guard = set_env_var("PATH", path.as_str());
+            let _workspace_guard =
+                set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", workspace_direct.to_string_lossy().as_ref());
+            let command = resolve_mcp_command()?;
+            assert_eq!(
+                command,
+                vec![
+                    "bun".to_string(),
+                    direct_entrypoint.to_string_lossy().to_string()
+                ]
+            );
+        }
+
+        let workspace_filter = root.join("workspace-filter");
+        fs::create_dir_all(&workspace_filter)?;
+        {
+            let path = format!("{}:/usr/bin:/bin", bun_bin.to_string_lossy());
+            let _path_guard = set_env_var("PATH", path.as_str());
+            let _workspace_guard =
+                set_env_var("OPENDUCKTOR_WORKSPACE_ROOT", workspace_filter.to_string_lossy().as_ref());
+            let command = resolve_mcp_command()?;
+            assert_eq!(
+                command,
+                vec![
+                    "bun".to_string(),
+                    "run".to_string(),
+                    "--silent".to_string(),
+                    "--cwd".to_string(),
+                    workspace_filter.to_string_lossy().to_string(),
+                    "--filter".to_string(),
+                    "@openducktor/openducktor-mcp".to_string(),
+                    "start".to_string(),
+                ]
+            );
+        }
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
     }
 
     #[test]
