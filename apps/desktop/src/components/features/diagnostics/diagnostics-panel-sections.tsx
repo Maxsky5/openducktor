@@ -1,5 +1,5 @@
 import { AlertTriangle } from "lucide-react";
-import type { ReactElement } from "react";
+import { Fragment, type ReactElement } from "react";
 import { DiagnosticsKeyValueRow } from "./diagnostics-key-value-row";
 import type { DiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsSection } from "./diagnostics-section";
@@ -19,11 +19,14 @@ const renderSection = ({
         <p className="text-xs text-slate-500">{section.emptyMessage}</p>
       ) : (
         <div className="space-y-1 text-xs text-slate-700">
-          {section.rows.map((row) => (
-            <DiagnosticsKeyValueRow key={row.label} {...row} />
+          {section.rows.map((row, index) => (
+            <DiagnosticsKeyValueRow key={`${row.label}-${index}`} {...row} />
           ))}
-          {section.errors.map((error) => (
-            <p key={error} className="flex items-start gap-1 text-rose-700">
+          {section.errors.map((error, index) => (
+            <p
+              key={`${section.title}-${error}-${index}`}
+              className="flex items-start gap-1 text-rose-700"
+            >
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
               <span>{error}</span>
             </p>
@@ -35,13 +38,19 @@ const renderSection = ({
 };
 
 export function DiagnosticsPanelSections({ model }: DiagnosticsPanelSectionsProps): ReactElement {
+  const orderedSections = [
+    model.sections.repository,
+    model.sections.cliTools,
+    model.sections.opencodeRuntime,
+    model.sections.openducktorMcp,
+    model.sections.beadsStore,
+  ] as const;
+
   return (
     <div className="space-y-3">
-      {renderSection({ section: model.sections.repository })}
-      {renderSection({ section: model.sections.cliTools })}
-      {renderSection({ section: model.sections.opencodeRuntime })}
-      {renderSection({ section: model.sections.openducktorMcp })}
-      {renderSection({ section: model.sections.beadsStore })}
+      {orderedSections.map((section) => (
+        <Fragment key={section.title}>{renderSection({ section })}</Fragment>
+      ))}
     </div>
   );
 }

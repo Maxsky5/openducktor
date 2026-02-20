@@ -5,6 +5,22 @@ import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
 describe("DiagnosticsPanelSections", () => {
+  test("renders repository-first empty messages when no repository is selected", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: null,
+      activeWorkspace: null,
+      runtimeCheck: null,
+      beadsCheck: null,
+      opencodeHealth: null,
+      isLoadingChecks: false,
+    });
+
+    const html = renderToStaticMarkup(createElement(DiagnosticsPanelSections, { model }));
+
+    expect(html).toContain("Select a repository to load diagnostics.");
+    expect(html).toContain("Select a repository first.");
+  });
+
   test("renders key-value labels consistently across sections", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/Users/dev/fairnest",

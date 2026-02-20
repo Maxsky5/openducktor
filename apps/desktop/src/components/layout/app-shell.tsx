@@ -1,4 +1,4 @@
-import { DiagnosticsPanel } from "@/components/features/diagnostics-panel";
+import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/open-repository-modal";
 import { RepositorySwitcher } from "@/components/features/repository-switcher";
 import { SettingsModal } from "@/components/features/settings-modal";
