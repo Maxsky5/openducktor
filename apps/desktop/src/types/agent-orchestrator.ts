@@ -25,6 +25,8 @@ export type AgentChatMessageMeta =
       metadata?: Record<string, unknown>;
       startedAtMs?: number;
       endedAtMs?: number;
+      observedStartedAtMs?: number;
+      observedEndedAtMs?: number;
     }
   | {
       kind: "assistant";

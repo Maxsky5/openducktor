@@ -1380,6 +1380,10 @@ export function useAgentOrchestratorOperations({
             const output = normalizeToolText(part.output);
             const error = normalizeToolText(part.error);
             const isTodoTool = isTodoToolName(part.tool);
+            const parsedEventTimestamp = Date.parse(event.timestamp);
+            const observedEventTimestampMs = Number.isNaN(parsedEventTimestamp)
+              ? Date.now()
+              : parsedEventTimestamp;
             const todoUpdateFromTool = isTodoTool
               ? (parseTodosFromToolOutput(output) ?? parseTodosFromToolInput(input))
               : null;
@@ -1403,6 +1407,15 @@ export function useAgentOrchestratorOperations({
                 const existing = prepared.messages.find((entry) => entry.id === messageId);
                 const previousStatus =
                   existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
+                const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
+                const observedStartedAtMs =
+                  typeof existingToolMeta?.observedStartedAtMs === "number"
+                    ? existingToolMeta.observedStartedAtMs
+                    : observedEventTimestampMs;
+                const observedEndedAtMs =
+                  part.status === "completed" || part.status === "error"
+                    ? observedEventTimestampMs
+                    : undefined;
                 if (
                   isOdtWorkflowMutationToolName(part.tool) &&
                   part.status === "completed" &&
@@ -1440,6 +1453,8 @@ export function useAgentOrchestratorOperations({
                         ? { startedAtMs: part.startedAtMs }
                         : {}),
                       ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+                      ...(typeof observedStartedAtMs === "number" ? { observedStartedAtMs } : {}),
+                      ...(typeof observedEndedAtMs === "number" ? { observedEndedAtMs } : {}),
                     },
                   }),
                 };

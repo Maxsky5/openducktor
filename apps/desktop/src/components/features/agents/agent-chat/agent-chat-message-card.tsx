@@ -597,6 +597,23 @@ const getToolDuration = (
   meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
   messageTimestamp: string,
 ): number | null => {
+  const observedStartedAtMs =
+    typeof meta.observedStartedAtMs === "number" ? meta.observedStartedAtMs : null;
+  const observedEndedAtMs =
+    typeof meta.observedEndedAtMs === "number"
+      ? meta.observedEndedAtMs
+      : meta.status === "running" || meta.status === "pending"
+        ? null
+        : Date.parse(messageTimestamp);
+  if (
+    observedStartedAtMs !== null &&
+    observedEndedAtMs !== null &&
+    !Number.isNaN(observedEndedAtMs) &&
+    observedEndedAtMs >= observedStartedAtMs
+  ) {
+    return observedEndedAtMs - observedStartedAtMs;
+  }
+
   if (typeof meta.startedAtMs !== "number") {
     return null;
   }
