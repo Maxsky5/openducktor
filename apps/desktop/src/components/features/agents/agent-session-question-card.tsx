@@ -214,7 +214,7 @@ export function AgentSessionQuestionCard({
                       type="button"
                       disabled={disabled || isSubmitting}
                       className={cn(
-                        "w-full cursor-pointer rounded-md border px-2.5 py-1.5 text-left transition-colors",
+                        "w-full cursor-pointer rounded-md border px-2 py-1 text-left transition-colors",
                         isSelected
                           ? "border-slate-500 bg-slate-200 text-slate-900"
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
@@ -259,8 +259,8 @@ export function AgentSessionQuestionCard({
                         }
                       }}
                     >
-                      <div className="flex items-start gap-2">
-                        <span className="mt-0.5 inline-flex size-4 items-center justify-center">
+                      <div className="flex items-start gap-1.5">
+                        <span className="inline-flex size-4 shrink-0 items-center justify-center pt-0.5">
                           {activeQuestion.multiple ? (
                             isSelected ? (
                               <CheckSquare className="size-3.5 text-slate-700" />
@@ -274,8 +274,10 @@ export function AgentSessionQuestionCard({
                           )}
                         </span>
                         <span className="min-w-0">
-                          <span className="text-[13px] font-medium">{option.label}</span>
-                          <span className="block text-[11px] text-slate-500">
+                          <span className="block text-[12px] font-medium leading-4">
+                            {option.label}
+                          </span>
+                          <span className="block text-[10px] leading-4 text-slate-500">
                             {option.description}
                           </span>
                         </span>
