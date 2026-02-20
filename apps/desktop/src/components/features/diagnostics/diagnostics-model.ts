@@ -15,16 +15,26 @@ export const healthVariant = (
 
 export const buildDiagnosticsSummary = ({
   hasActiveRepo,
+  isChecking,
   hasCriticalIssues,
   hasSetupIssues,
 }: {
   hasActiveRepo: boolean;
+  isChecking: boolean;
   hasCriticalIssues: boolean;
   hasSetupIssues: boolean;
 }): DiagnosticsSummary => {
   if (!hasActiveRepo) {
     return {
       label: "No repository selected",
+      toneClass: "text-slate-500",
+      iconClass: "text-slate-500",
+    };
+  }
+
+  if (isChecking) {
+    return {
+      label: "Checking...",
       toneClass: "text-slate-500",
       iconClass: "text-slate-500",
     };

@@ -66,14 +66,19 @@ export function DiagnosticsPanel(): ReactElement {
     return reasons;
   }, [activeRepo, worktreeConfigured]);
 
+  const isSummaryChecking =
+    Boolean(activeRepo) &&
+    (isLoadingChecks || runtimeCheck === null || beadsCheck === null || opencodeHealth === null);
+
   const summaryState = useMemo(
     () =>
       buildDiagnosticsSummary({
         hasActiveRepo: Boolean(activeRepo),
+        isChecking: isSummaryChecking,
         hasCriticalIssues: criticalReasons.length > 0,
         hasSetupIssues: setupReasons.length > 0,
       }),
-    [activeRepo, criticalReasons.length, setupReasons.length],
+    [activeRepo, criticalReasons.length, isSummaryChecking, setupReasons.length],
   );
 
   useEffect(() => {
@@ -96,7 +101,11 @@ export function DiagnosticsPanel(): ReactElement {
         <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
-              <ShieldCheck className={cn("size-3.5", summaryState.iconClass)} />
+              {isSummaryChecking ? (
+                <RefreshCcw className={cn("size-3.5 animate-spin", summaryState.iconClass)} />
+              ) : (
+                <ShieldCheck className={cn("size-3.5", summaryState.iconClass)} />
+              )}
               Diagnostics
             </p>
             <p className={cn("truncate text-xs font-medium", summaryState.toneClass)}>
