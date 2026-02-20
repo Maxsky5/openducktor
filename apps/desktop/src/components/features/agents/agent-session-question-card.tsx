@@ -96,17 +96,17 @@ export function AgentSessionQuestionCard({
 
   return (
     <section className="rounded-xl border border-slate-300 bg-slate-100 shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-slate-300 px-3 py-2">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-300 px-3 py-1.5">
         <div className="flex items-center gap-2 text-slate-900">
           <CircleDotDashed className="size-4 text-slate-600" />
-          <p className="text-sm font-semibold">Input needed</p>
+          <p className="text-[13px] font-semibold">Input needed</p>
         </div>
-        <p className="text-xs font-medium text-slate-700">
+        <p className="text-[11px] font-medium text-slate-700">
           {answeredCount}/{requiredCount} answered
         </p>
       </header>
 
-      <div className="space-y-3 p-3">
+      <div className="space-y-2 p-2.5">
         {hasMultipleQuestions ? (
           <div className="flex flex-wrap gap-1">
             {request.questions.map((question, index) => {
@@ -155,27 +155,27 @@ export function AgentSessionQuestionCard({
         ) : null}
 
         {isSummaryTab ? (
-          <div className="space-y-2 rounded-lg border border-slate-300 bg-white p-2">
+          <div className="space-y-1.5 rounded-lg border border-slate-300 bg-white p-1.5">
             {request.questions.map((question, index) => {
               const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
               return (
                 <button
                   key={`${request.requestId}:summary:${question.header}:${index}`}
                   type="button"
-                  className="w-full cursor-pointer rounded-md px-2 py-1.5 text-left hover:bg-slate-50"
+                  className="w-full cursor-pointer rounded-md px-2 py-1 text-left hover:bg-slate-50"
                   onClick={() => setActiveTabId(String(index))}
                 >
-                  <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                     {answered ? (
-                      <CheckCircle2 className="size-3.5 text-emerald-500" />
+                      <CheckCircle2 className="size-3 text-emerald-500" />
                     ) : (
-                      <Circle className="size-3.5 text-slate-400" />
+                      <Circle className="size-3 text-slate-400" />
                     )}
                     {question.header?.trim() || `Question ${index + 1}`}
                   </p>
                   <p
                     className={cn(
-                      "mt-1 text-sm",
+                      "mt-0.5 text-xs",
                       answered ? "text-slate-700" : "italic text-slate-500",
                     )}
                   >
@@ -186,22 +186,24 @@ export function AgentSessionQuestionCard({
             })}
           </div>
         ) : activeQuestion ? (
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {activeQuestion.header?.trim() || `Question ${activeQuestionIndex + 1}`}
-              </p>
-              <p className="mt-1 text-sm font-medium text-slate-900">{activeQuestion.question}</p>
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {activeQuestion.header?.trim() || `Question ${activeQuestionIndex + 1}`}
+                </p>
+                <p className="text-[13px] font-medium text-slate-900">{activeQuestion.question}</p>
+              </div>
               {activeQuestion.multiple ? (
-                <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                  <CheckSquare className="size-3.5" />
+                <p className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-200 px-1.5 py-0 text-[10px] font-semibold text-slate-700">
+                  <CheckSquare className="size-3" />
                   Multiple choice - select one or more answers
                 </p>
               ) : null}
             </div>
 
             {activeQuestion.options.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {activeQuestion.options.map((option) => {
                   const isSelected = Boolean(
                     activeEntry?.selectedOptionLabels.includes(option.label),
@@ -212,7 +214,7 @@ export function AgentSessionQuestionCard({
                       type="button"
                       disabled={disabled || isSubmitting}
                       className={cn(
-                        "w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition-colors",
+                        "w-full cursor-pointer rounded-md border px-2.5 py-1.5 text-left transition-colors",
                         isSelected
                           ? "border-slate-500 bg-slate-200 text-slate-900"
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
@@ -272,8 +274,10 @@ export function AgentSessionQuestionCard({
                           )}
                         </span>
                         <span className="min-w-0">
-                          <span className="text-sm font-medium">{option.label}</span>
-                          <span className="block text-xs text-slate-500">{option.description}</span>
+                          <span className="text-[13px] font-medium">{option.label}</span>
+                          <span className="block text-[11px] text-slate-500">
+                            {option.description}
+                          </span>
                         </span>
                       </div>
                     </button>
@@ -288,7 +292,7 @@ export function AgentSessionQuestionCard({
                 size="sm"
                 variant="outline"
                 className={cn(
-                  "h-7 cursor-pointer border-slate-300 text-[11px]",
+                  "h-6 cursor-pointer border-slate-300 px-2 text-[11px]",
                   activeEntry?.useFreeText
                     ? "bg-slate-900 text-white hover:bg-slate-800"
                     : "bg-white text-slate-700 hover:bg-slate-50",
@@ -322,11 +326,11 @@ export function AgentSessionQuestionCard({
 
             {activeQuestion.options.length === 0 || activeEntry?.useFreeText ? (
               <div className="space-y-1">
-                <p className="text-xs text-slate-500">Free text answer</p>
+                <p className="text-[11px] text-slate-500">Free text answer</p>
                 <Textarea
                   value={activeEntry?.freeText ?? ""}
                   disabled={disabled || isSubmitting}
-                  className="min-h-20 bg-white"
+                  className="min-h-16 bg-white text-sm"
                   placeholder="Write your answer..."
                   onChange={(event) => {
                     setSubmitError(null);
@@ -361,8 +365,8 @@ export function AgentSessionQuestionCard({
           </p>
         ) : null}
 
-        <footer className="flex items-center justify-between gap-2 border-t border-slate-300 pt-2">
-          <p className="text-xs text-slate-500">
+        <footer className="flex items-center justify-between gap-2 border-t border-slate-300 pt-1.5">
+          <p className="text-[11px] text-slate-500">
             {isComplete ? "All questions answered." : "Answer all questions to confirm."}
           </p>
           <div className="flex items-center gap-2">
@@ -370,7 +374,7 @@ export function AgentSessionQuestionCard({
               type="button"
               size="sm"
               variant="outline"
-              className="h-8"
+              className="h-7"
               disabled={disabled || isSubmitting}
               onClick={() => {
                 setSubmitError(null);
@@ -382,7 +386,7 @@ export function AgentSessionQuestionCard({
             <Button
               type="button"
               size="sm"
-              className="h-8"
+              className="h-7"
               disabled={disabled || isSubmitting || !isComplete}
               onClick={() => {
                 setSubmitError(null);
