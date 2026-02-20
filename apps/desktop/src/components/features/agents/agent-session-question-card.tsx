@@ -4,12 +4,14 @@ import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   CheckCircle2,
+  CheckSquare,
   Circle,
   CircleDotDashed,
   ListChecks,
   LoaderCircle,
   MessageSquarePlus,
   Sparkles,
+  Square,
 } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import {
@@ -117,7 +119,7 @@ export function AgentSessionQuestionCard({
                   type="button"
                   size="sm"
                   variant={isTabActive ? "default" : "outline"}
-                  className={cn("h-7 px-2 text-[11px]", !isTabActive && "bg-white")}
+                  className={cn("h-7 cursor-pointer px-2 text-[11px]", !isTabActive && "bg-white")}
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
@@ -133,7 +135,7 @@ export function AgentSessionQuestionCard({
               type="button"
               size="sm"
               variant={isSummaryTab ? "default" : "outline"}
-              className={cn("h-7 px-2 text-[11px]", !isSummaryTab && "bg-white")}
+              className={cn("h-7 cursor-pointer px-2 text-[11px]", !isSummaryTab && "bg-white")}
               onClick={() => setActiveTabId(SUMMARY_TAB_ID)}
             >
               <ListChecks className="size-3.5" />
@@ -150,7 +152,7 @@ export function AgentSessionQuestionCard({
                 <button
                   key={`${request.requestId}:summary:${question.header}:${index}`}
                   type="button"
-                  className="w-full rounded-md px-2 py-1.5 text-left hover:bg-slate-50"
+                  className="w-full cursor-pointer rounded-md px-2 py-1.5 text-left hover:bg-slate-50"
                   onClick={() => setActiveTabId(String(index))}
                 >
                   <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -181,7 +183,10 @@ export function AgentSessionQuestionCard({
               </p>
               <p className="mt-1 text-sm font-medium text-slate-900">{activeQuestion.question}</p>
               {activeQuestion.multiple ? (
-                <p className="mt-1 text-xs text-slate-500">Select one or more answers.</p>
+                <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                  <CheckSquare className="size-3.5" />
+                  Multiple choice - select one or more answers
+                </p>
               ) : null}
             </div>
 
@@ -197,7 +202,7 @@ export function AgentSessionQuestionCard({
                       type="button"
                       disabled={disabled || isSubmitting}
                       className={cn(
-                        "w-full rounded-lg border px-3 py-2 text-left transition-colors",
+                        "w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition-colors",
                         isSelected
                           ? "border-sky-300 bg-sky-50 text-sky-900"
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
@@ -205,6 +210,7 @@ export function AgentSessionQuestionCard({
                       )}
                       onClick={() => {
                         setSubmitError(null);
+                        let shouldAdvance = false;
                         setDraft((current) => {
                           const next = normalizeAgentQuestionDraft(request, current);
                           const target = next[activeQuestionIndex] ?? {
@@ -212,18 +218,38 @@ export function AgentSessionQuestionCard({
                             freeText: "",
                             useFreeText: false,
                           };
-                          next[activeQuestionIndex] = toggleAgentQuestionOption(
+                          const wasSelected = target.selectedOptionLabels.includes(option.label);
+                          const nextEntry = toggleAgentQuestionOption(
                             activeQuestion,
                             target,
                             option.label,
                           );
+                          next[activeQuestionIndex] = nextEntry;
+                          shouldAdvance =
+                            !activeQuestion.multiple &&
+                            !wasSelected &&
+                            nextEntry.selectedOptionLabels.length > 0;
                           return next;
                         });
+                        if (shouldAdvance && hasMultipleQuestions) {
+                          const nextQuestionIndex = activeQuestionIndex + 1;
+                          setActiveTabId(
+                            nextQuestionIndex < request.questions.length
+                              ? String(nextQuestionIndex)
+                              : SUMMARY_TAB_ID,
+                          );
+                        }
                       }}
                     >
                       <div className="flex items-start gap-2">
                         <span className="mt-0.5 inline-flex size-4 items-center justify-center">
-                          {isSelected ? (
+                          {activeQuestion.multiple ? (
+                            isSelected ? (
+                              <CheckSquare className="size-3.5 text-sky-600" />
+                            ) : (
+                              <Square className="size-3.5 text-slate-400" />
+                            )
+                          ) : isSelected ? (
                             <CheckCircle2 className="size-3.5 text-sky-600" />
                           ) : (
                             <Circle className="size-3.5 text-slate-400" />
@@ -259,6 +285,7 @@ export function AgentSessionQuestionCard({
                     next[activeQuestionIndex] = {
                       ...target,
                       useFreeText: !target.useFreeText,
+                      selectedOptionLabels: target.useFreeText ? target.selectedOptionLabels : [],
                     };
                     return next;
                   });
@@ -291,6 +318,7 @@ export function AgentSessionQuestionCard({
                         ...target,
                         freeText: value,
                         useFreeText: true,
+                        selectedOptionLabels: [],
                       };
                       return next;
                     });
