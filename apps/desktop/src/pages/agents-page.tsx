@@ -1420,17 +1420,20 @@ export function AgentsPage(): ReactElement {
                   message.role === "assistant" &&
                   typeof turnDurationMs === "number" &&
                   turnDurationMs > 0;
+                const isUserMessage = message.role === "user";
                 return (
                   <Fragment key={message.id}>
                     {shouldShowTurnDuration ? (
                       <AgentTurnDurationSeparator durationMs={turnDurationMs} />
                     ) : null}
-                    <AgentChatMessageCard
-                      message={message}
-                      sessionRole={activeSession.role}
-                      sessionSelectedModel={activeSession.selectedModel}
-                      sessionAgentColors={activeSessionAgentColors}
-                    />
+                    <div className={cn(isUserMessage ? "pt-4" : undefined)}>
+                      <AgentChatMessageCard
+                        message={message}
+                        sessionRole={activeSession.role}
+                        sessionSelectedModel={activeSession.selectedModel}
+                        sessionAgentColors={activeSessionAgentColors}
+                        />
+                    </div>
                   </Fragment>
                 );
               })}
