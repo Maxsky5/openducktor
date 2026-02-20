@@ -202,6 +202,8 @@ const NEW_SESSION_SENTINEL = "__new_session__";
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openblueprint:agent-studio:context";
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
+const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 40;
+const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
 
 const parseTimestamp = (value: string | null | undefined): number | null => {
   if (!value) {
@@ -363,6 +365,7 @@ export function AgentsPage(): ReactElement {
   const autoStartExecutedRef = useRef(new Set<string>());
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [composerFormHeight, setComposerFormHeight] = useState(0);
   const processedDocumentToolEventsRef = useRef(new Set<string>());
@@ -841,6 +844,21 @@ export function AgentsPage(): ReactElement {
     taskId,
   ]);
 
+  const resizeComposerTextarea = useCallback((): void => {
+    const textarea = composerTextareaRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = "0px";
+    const nextHeight = Math.min(
+      COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
+      Math.max(COMPOSER_TEXTAREA_MIN_HEIGHT_PX, textarea.scrollHeight),
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT_PX ? "auto" : "hidden";
+  }, []);
+
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
       if (!activeSession || !agentStudioReady) {
@@ -1011,6 +1029,11 @@ export function AgentsPage(): ReactElement {
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    void input;
+    resizeComposerTextarea();
+  }, [input, resizeComposerTextarea]);
 
   useEffect(() => {
     void scrollTrigger;
@@ -1449,10 +1472,15 @@ export function AgentsPage(): ReactElement {
             >
               <div className="rounded-2xl border border-slate-300 bg-slate-50/80 shadow-sm transition-[border-color,box-shadow,background-color] focus-within:border-sky-400 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(14,165,233,0.14)]">
                 <Textarea
+                  ref={composerTextareaRef}
+                  rows={1}
                   placeholder="@ for files/agents; / for commands; ! for shell"
                   value={input}
-                  className="min-h-24 resize-none border-0 bg-transparent px-3 py-3 text-[15px] leading-6 shadow-none focus-visible:ring-0"
+                  className="!min-h-0 h-10 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
                   onChange={(event) => setInput(event.currentTarget.value)}
+                  onInput={() => {
+                    resizeComposerTextarea();
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();

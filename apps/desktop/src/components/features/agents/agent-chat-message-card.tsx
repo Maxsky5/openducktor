@@ -66,7 +66,33 @@ const formatDuration = (durationMs: number): string => {
   if (durationMs < 10_000) {
     return `${(durationMs / 1_000).toFixed(1)}s`;
   }
-  return `${Math.round(durationMs / 1_000)}s`;
+
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1_000));
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    if (minutes > 0 && seconds > 0) {
+      return `${hours}h${minutes}m${seconds}s`;
+    }
+    if (minutes > 0) {
+      return `${hours}h${minutes}m`;
+    }
+    if (seconds > 0) {
+      return `${hours}h${seconds}s`;
+    }
+    return `${hours}h`;
+  }
+
+  if (seconds > 0) {
+    return `${minutes}m${seconds}s`;
+  }
+  return `${minutes}m`;
 };
 
 const compactText = (value: string, maxLength = 180): string => {
@@ -306,6 +332,155 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 };
 
+type QuestionToolDetail = {
+  prompt: string;
+  answers: string[];
+};
+
+const parseJsonIfPossible = (value: string | undefined): unknown => {
+  if (!value || value.trim().length === 0) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return undefined;
+  }
+};
+
+const isQuestionToolName = (tool: string): boolean =>
+  tool.toLowerCase() === "question" || tool.toLowerCase().endsWith("_question");
+
+const readQuestionPrompt = (value: unknown): string | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const candidates = [
+    record.question,
+    record.prompt,
+    record.header,
+    record.title,
+    record.label,
+    record.name,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+  return null;
+};
+
+const normalizeAnswerValues = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? [trimmed] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => normalizeAnswerValues(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  return normalizeAnswerValues(
+    record.answers ??
+      record.answer ??
+      record.response ??
+      record.responses ??
+      record.value ??
+      record.text,
+  );
+};
+
+const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => {
+      const prompt = readQuestionPrompt(entry);
+      if (!prompt) {
+        return null;
+      }
+      const record = entry as Record<string, unknown>;
+      const answers = normalizeAnswerValues(
+        record.answers ?? record.answer ?? record.response ?? record.responses,
+      );
+      return {
+        prompt,
+        answers,
+      };
+    })
+    .filter((entry): entry is QuestionToolDetail => entry !== null);
+};
+
+const normalizeAnswerGroups = (value: unknown): string[][] => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeAnswerValues(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  const nested = record.answers ?? record.responses ?? record.result ?? record.value;
+  if (nested === undefined) {
+    return [];
+  }
+  return normalizeAnswerGroups(nested);
+};
+
+const questionToolDetails = (
+  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
+): QuestionToolDetail[] => {
+  if (!isQuestionToolName(meta.tool)) {
+    return [];
+  }
+
+  const inputQuestions = collectQuestionDetails(meta.input?.questions);
+  const metadataQuestions = collectQuestionDetails(meta.metadata?.questions);
+  const parsedOutput = parseJsonIfPossible(meta.output);
+  const outputQuestions = collectQuestionDetails(
+    parsedOutput && typeof parsedOutput === "object"
+      ? (parsedOutput as Record<string, unknown>).questions
+      : undefined,
+  );
+  const questions =
+    inputQuestions.length > 0
+      ? inputQuestions
+      : metadataQuestions.length > 0
+        ? metadataQuestions
+        : outputQuestions;
+
+  if (questions.length === 0) {
+    return [];
+  }
+
+  const outputRecord =
+    parsedOutput && typeof parsedOutput === "object"
+      ? (parsedOutput as Record<string, unknown>)
+      : undefined;
+  const answerGroups = normalizeAnswerGroups(
+    outputRecord?.answers ?? outputRecord?.responses ?? outputRecord?.result,
+  )
+    .map((entry) => entry.filter((value) => value.trim().length > 0))
+    .filter((entry) => entry.length > 0);
+
+  if (answerGroups.length === 0) {
+    return questions;
+  }
+
+  return questions.map((entry, index) => ({
+    prompt: entry.prompt,
+    answers: entry.answers.length > 0 ? entry.answers : (answerGroups[index] ?? []),
+  }));
+};
+
 const isTodoToolName = (tool: string): boolean => {
   return (
     tool === "todowrite" ||
@@ -437,12 +612,15 @@ const getToolDuration = (
   return endedAtMs - meta.startedAtMs;
 };
 
-const getAssistantFooterParts = (
+const getAssistantFooterData = (
   message: AgentChatMessage,
   sessionSelectedModel: AgentModelSelection | null,
-): string[] => {
+): {
+  infoParts: string[];
+  durationLabel: string | null;
+} => {
   if (message.role !== "assistant") {
-    return [];
+    return { infoParts: [], durationLabel: null };
   }
 
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
@@ -458,11 +636,13 @@ const getAssistantFooterParts = (
     parts.push(modelLabel.trim());
   }
 
-  if (assistantMeta?.durationMs && assistantMeta.durationMs > 0) {
-    parts.push(formatDuration(assistantMeta.durationMs));
-  }
-
-  return parts;
+  return {
+    infoParts: parts,
+    durationLabel:
+      assistantMeta?.durationMs && assistantMeta.durationMs > 0
+        ? formatDuration(assistantMeta.durationMs)
+        : null,
+  };
 };
 
 const resolveAssistantAgentColor = (
@@ -602,27 +782,54 @@ export function AgentChatMessageCard({
           if (!isWorkflowTool) {
             const summaryText =
               summary.length > 0 ? summary : meta.status === "error" ? "Tool failed" : "";
+            const questionDetails = questionToolDetails(meta);
             return (
-              <div
-                className={cn(
-                  "flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs",
-                  meta.status === "error" ? "text-rose-700" : "text-slate-700",
-                )}
-              >
-                <span className={cn(meta.status === "error" ? "text-rose-500" : "text-slate-500")}>
-                  {toolIcon(meta.tool)}
-                </span>
-                <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
-                {summaryText.length > 0 ? (
-                  <p className="truncate text-slate-600">{summaryText}</p>
-                ) : null}
-                <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
-                  {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
-                  {!isRunning && durationMs !== null ? (
-                    <span>{formatDuration(durationMs)}</span>
+              <div className="space-y-1 px-1 py-0.5">
+                <div
+                  className={cn(
+                    "flex min-h-6 items-center gap-2 text-xs",
+                    meta.status === "error" ? "text-rose-700" : "text-slate-700",
+                  )}
+                >
+                  <span
+                    className={cn(meta.status === "error" ? "text-rose-500" : "text-slate-500")}
+                  >
+                    {toolIcon(meta.tool)}
+                  </span>
+                  <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
+                  {summaryText.length > 0 ? (
+                    <p className="truncate text-slate-600">{summaryText}</p>
                   ) : null}
-                  {timeLabel ? <span>{timeLabel}</span> : null}
-                </span>
+                  <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+                    {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
+                    {!isRunning && durationMs !== null ? (
+                      <span>{formatDuration(durationMs)}</span>
+                    ) : null}
+                    {timeLabel ? <span>{timeLabel}</span> : null}
+                  </span>
+                </div>
+                {questionDetails.length > 0 ? (
+                  <details className="ml-5 rounded border border-slate-200 bg-white/80">
+                    <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-slate-700">
+                      Questions and answers
+                    </summary>
+                    <div className="space-y-2 border-t border-slate-200 px-2 py-2 text-xs text-slate-700">
+                      {questionDetails.map((entry, index) => (
+                        <div key={`${meta.callId}:question:${index}`} className="space-y-0.5">
+                          <p className="font-medium text-slate-700">{entry.prompt}</p>
+                          <p
+                            className={cn(
+                              "whitespace-pre-wrap",
+                              entry.answers.length > 0 ? "text-slate-900" : "italic text-slate-500",
+                            )}
+                          >
+                            {entry.answers.length > 0 ? entry.answers.join(", ") : "No answer yet"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
               </div>
             );
           }
@@ -718,20 +925,27 @@ export function AgentChatMessageCard({
         <div className="space-y-2">
           <MarkdownRenderer markdown={message.content} variant="document" />
           {(() => {
-            const footerParts = getAssistantFooterParts(message, sessionSelectedModel);
-            if (footerParts.length === 0) {
+            const footer = getAssistantFooterData(message, sessionSelectedModel);
+            if (footer.infoParts.length === 0 && !footer.durationLabel) {
               return null;
             }
             return (
-              <p className="inline-flex items-center gap-2 text-xs text-slate-500">
-                <span
-                  className="size-1.5 rounded-sm bg-amber-500"
-                  style={
-                    assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined
-                  }
-                />
-                {footerParts.join(" · ")}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                {footer.infoParts.length > 0 ? (
+                  <>
+                    <span
+                      className="size-1.5 rounded-sm bg-amber-500"
+                      style={
+                        assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined
+                      }
+                    />
+                    <span className="min-w-0 truncate">{footer.infoParts.join(" · ")}</span>
+                  </>
+                ) : null}
+                {footer.durationLabel ? (
+                  <span className="ml-auto shrink-0">{footer.durationLabel}</span>
+                ) : null}
+              </div>
             );
           })()}
         </div>

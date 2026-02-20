@@ -681,8 +681,52 @@ const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionSt
   };
 };
 
-const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChatMessage[] => {
+const assistantDurationFromHistory = (
+  message: AgentSessionHistoryMessage,
+  previousUserTimestampMs: number | null,
+): number | undefined => {
+  if (message.role !== "assistant") {
+    return undefined;
+  }
+
+  let startedAtMs: number | null = null;
+  let endedAtMs: number | null = null;
+  for (const part of message.parts) {
+    if (part.kind !== "tool") {
+      continue;
+    }
+    if (typeof part.startedAtMs === "number") {
+      startedAtMs =
+        startedAtMs === null ? part.startedAtMs : Math.min(startedAtMs, part.startedAtMs);
+    }
+    if (typeof part.endedAtMs === "number") {
+      endedAtMs = endedAtMs === null ? part.endedAtMs : Math.max(endedAtMs, part.endedAtMs);
+    }
+  }
+
+  if (startedAtMs !== null && endedAtMs !== null && endedAtMs >= startedAtMs) {
+    return endedAtMs - startedAtMs;
+  }
+
+  const assistantTimestampMs = Date.parse(message.timestamp);
+  if (previousUserTimestampMs !== null && !Number.isNaN(assistantTimestampMs)) {
+    if (assistantTimestampMs >= previousUserTimestampMs) {
+      return assistantTimestampMs - previousUserTimestampMs;
+    }
+  }
+
+  return undefined;
+};
+
+const historyToChatMessages = (
+  history: AgentSessionHistoryMessage[],
+  sessionContext: {
+    role: AgentRole;
+    selectedModel: AgentModelSelection | null;
+  },
+): AgentChatMessage[] => {
   const next: AgentChatMessage[] = [];
+  let previousUserTimestampMs: number | null = null;
 
   for (const message of history) {
     for (const part of message.parts) {
@@ -750,12 +794,41 @@ const historyToChatMessages = (history: AgentSessionHistoryMessage[]): AgentChat
 
     const content = message.text.trim();
     if (content.length > 0) {
+      const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
       next.push({
         id: `history:text:${message.messageId}`,
         role: message.role,
         content,
         timestamp: message.timestamp,
+        ...(message.role === "assistant"
+          ? {
+              meta: {
+                kind: "assistant",
+                agentRole: sessionContext.role,
+                ...(sessionContext.selectedModel?.providerId
+                  ? { providerId: sessionContext.selectedModel.providerId }
+                  : {}),
+                ...(sessionContext.selectedModel?.modelId
+                  ? { modelId: sessionContext.selectedModel.modelId }
+                  : {}),
+                ...(sessionContext.selectedModel?.variant
+                  ? { variant: sessionContext.selectedModel.variant }
+                  : {}),
+                ...(sessionContext.selectedModel?.opencodeAgent
+                  ? { opencodeAgent: sessionContext.selectedModel.opencodeAgent }
+                  : {}),
+                ...(typeof assistantDurationMs === "number" && assistantDurationMs > 0
+                  ? { durationMs: assistantDurationMs }
+                  : {}),
+              } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>,
+            }
+          : {}),
       });
+    }
+
+    if (message.role === "user") {
+      const parsed = Date.parse(message.timestamp);
+      previousUserTimestampMs = Number.isNaN(parsed) ? previousUserTimestampMs : parsed;
     }
   }
 
@@ -1103,7 +1176,13 @@ export function useAgentOrchestratorOperations({
                 ...current,
                 baseUrl,
                 workingDirectory,
-                messages: [...preludeMessages, ...historyToChatMessages(history)],
+                messages: [
+                  ...preludeMessages,
+                  ...historyToChatMessages(history, {
+                    role: record.role,
+                    selectedModel: normalizePersistedSelection(record.selectedModel),
+                  }),
+                ],
               }),
               { persist: false },
             );
