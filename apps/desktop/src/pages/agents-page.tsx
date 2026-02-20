@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   Bot,
   Brain,
+  BrainCog,
   CircleDotDashed,
   LoaderCircle,
   RefreshCcw,
@@ -1502,7 +1503,7 @@ export function AgentsPage(): ReactElement {
                     </div>
 
                     <div className="relative">
-                      <CircleDotDashed className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
+                      <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
                       <Combobox
                         value={
                           selectedModelSelection
@@ -1541,7 +1542,7 @@ export function AgentsPage(): ReactElement {
                     </div>
 
                     <div className="relative">
-                      <Sparkles className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
+                      <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
                       <Combobox
                         value={selectedModelSelection?.variant ?? ""}
                         options={variantOptions}

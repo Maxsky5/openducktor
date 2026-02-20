@@ -5,7 +5,7 @@ import { resolveAgentAccentColor } from "./agent-accent-color";
 const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
 
 const isPrimaryCatalogAgent = (entry: AgentDescriptor): boolean => {
-  return isVisibleAgent(entry) && entry.mode === "primary";
+  return isVisibleAgent(entry) && (entry.mode === "primary" || entry.mode === "all");
 };
 
 export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): ComboboxOption[] => {
