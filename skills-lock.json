@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "clean-ddd-hexagonal": {
+      "source": "ccheney/robust-skills",
+      "sourceType": "github",
+      "computedHash": "b9a54e257685086d0034bd8277964452b7208e2f18bf68d158996936ce667b6a"
+    }
+  }
+}
