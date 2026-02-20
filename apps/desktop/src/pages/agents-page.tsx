@@ -1,24 +1,20 @@
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
-import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
-import { AgentContextUsageIndicator } from "@/components/features/agents/agent-context-usage-indicator";
-import { AgentSessionQuestionCard } from "@/components/features/agents/agent-session-question-card";
-import { AgentSessionTodoPanel } from "@/components/features/agents/agent-session-todo-panel";
-import { AgentTurnDurationSeparator } from "@/components/features/agents/agent-turn-duration-separator";
+import { AgentChat } from "@/components/features/agents/agent-chat";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat.types";
 import {
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents/catalog-select-options";
+import {
+  isNearBottom,
+  useAgentChatLayout,
+} from "@/components/features/agents/use-agent-chat-layout";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
-import { TaskSelector } from "@/components/features/tasks";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { Combobox } from "@/components/ui/combobox";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -30,23 +26,10 @@ import type {
   AgentScenario,
 } from "@openblueprint/core";
 import { normalizeOdtWorkflowToolName } from "@openblueprint/core";
+import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import {
-  AlertTriangle,
-  Bot,
-  Brain,
-  BrainCog,
-  CircleDotDashed,
-  LoaderCircle,
-  RefreshCcw,
-  SendHorizontal,
-  ShieldCheck,
-  Sparkles,
-  Square,
-  Wrench,
-} from "lucide-react";
-import {
-  Fragment,
   type ReactElement,
+  type UIEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -195,25 +178,9 @@ const firstScenario = (role: AgentRole): AgentScenario => {
   return "spec_initial";
 };
 
-const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | "success" => {
-  if (status === "running" || status === "starting") {
-    return "warning";
-  }
-  if (status === "error") {
-    return "danger";
-  }
-  if (status === "idle") {
-    return "default";
-  }
-  return "success";
-};
-
 const NEW_SESSION_SENTINEL = "__new_session__";
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openblueprint:agent-studio:context";
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
-const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
-const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 40;
-const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
 
 const parseTimestamp = (value: string | null | undefined): number | null => {
   if (!value) {
@@ -242,12 +209,6 @@ const extractCompletionTimestamp = (
     raw: match[0],
     timestamp,
   };
-};
-
-const isNearBottom = (element: HTMLElement): boolean => {
-  return (
-    element.scrollHeight - element.scrollTop - element.clientHeight <= CHAT_AUTOSCROLL_THRESHOLD_PX
-  );
 };
 
 const toContextStorageKey = (repoPath: string): string =>
@@ -373,11 +334,6 @@ export function AgentsPage(): ReactElement {
     Record<string, boolean>
   >({});
   const autoStartExecutedRef = useRef(new Set<string>());
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-  const composerFormRef = useRef<HTMLFormElement | null>(null);
-  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
-  const [composerFormHeight, setComposerFormHeight] = useState(0);
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const documentReloadAttemptsRef = useRef(new Map<string, number>());
   const restoredContextRepoRef = useRef<string | null>(null);
@@ -446,9 +402,11 @@ export function AgentsPage(): ReactElement {
     if (selectedSessionById) {
       return selectedSessionById;
     }
-    return sessions
-      .filter((entry) => entry.taskId === taskId && entry.role === role)
-      .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1))[0];
+    return (
+      sessions
+        .filter((entry) => entry.taskId === taskId && entry.role === role)
+        .sort((a, b) => (a.startedAt > b.startedAt ? -1 : 1))[0] ?? null
+    );
   }, [isComposingNewSession, role, selectedSessionById, sessions, taskId]);
 
   const contextSessions = useMemo(() => {
@@ -462,8 +420,8 @@ export function AgentsPage(): ReactElement {
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const refreshedTaskVersionRef = useRef<string | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Context key is used as explicit reset trigger.
   useEffect(() => {
-    void documentContextKey;
     processedDocumentToolEventsRef.current.clear();
     documentReloadAttemptsRef.current.clear();
     refreshedTaskVersionRef.current = null;
@@ -854,21 +812,6 @@ export function AgentsPage(): ReactElement {
     taskId,
   ]);
 
-  const resizeComposerTextarea = useCallback((): void => {
-    const textarea = composerTextareaRef.current;
-    if (!textarea) {
-      return;
-    }
-    textarea.style.height = "0px";
-    const nextHeight = Math.min(
-      COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
-      Math.max(COMPOSER_TEXTAREA_MIN_HEIGHT_PX, textarea.scrollHeight),
-    );
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY =
-      textarea.scrollHeight > COMPOSER_TEXTAREA_MAX_HEIGHT_PX ? "auto" : "hidden";
-  }, []);
-
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
       if (!activeSession || !agentStudioReady) {
@@ -1041,10 +984,21 @@ export function AgentsPage(): ReactElement {
   const isSessionWorking =
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
-  const todoPanelBottomOffset = Math.max(composerFormHeight + 12, 120);
   const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
     activeSession?.pendingQuestions.length ?? 0
   }`;
+  const {
+    messagesContainerRef,
+    composerFormRef,
+    composerTextareaRef,
+    setIsPinnedToBottom,
+    todoPanelBottomOffset,
+    resizeComposerTextarea,
+  } = useAgentChatLayout({
+    input,
+    scrollTrigger,
+    activeSessionId: activeSession?.sessionId ?? null,
+  });
 
   useEffect(() => {
     if (!isSending) {
@@ -1057,65 +1011,8 @@ export function AgentsPage(): ReactElement {
     setIsSending(false);
   }, [activeSessionStatus, isSending]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Session change resets pending submit state map.
   useEffect(() => {
-    const form = composerFormRef.current;
-    if (!form) {
-      setComposerFormHeight(0);
-      return;
-    }
-    const measure = () => {
-      setComposerFormHeight(form.offsetHeight);
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-    const observer = new ResizeObserver(() => {
-      measure();
-    });
-    observer.observe(form);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    void input;
-    resizeComposerTextarea();
-  }, [input, resizeComposerTextarea]);
-
-  useEffect(() => {
-    void composerFormHeight;
-    const container = messagesContainerRef.current;
-    if (!container || !isPinnedToBottom) {
-      return;
-    }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "auto",
-    });
-  }, [composerFormHeight, isPinnedToBottom]);
-
-  useEffect(() => {
-    void scrollTrigger;
-    const container = messagesContainerRef.current;
-    if (!container || !isPinnedToBottom) {
-      return;
-    }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [isPinnedToBottom, scrollTrigger]);
-
-  useEffect(() => {
-    void activeSession?.sessionId;
-    void taskId;
-    setIsPinnedToBottom(true);
-  }, [activeSession?.sessionId, taskId]);
-
-  useEffect(() => {
-    void activeSession?.sessionId;
     setIsSubmittingQuestionByRequestId({});
   }, [activeSession?.sessionId]);
 
@@ -1235,491 +1132,255 @@ export function AgentsPage(): ReactElement {
 
   const canKickoffNewSession =
     agentStudioReady && Boolean(taskId) && (!activeSession || isComposingNewSession);
+  const selectedSessionValue = isComposingNewSession
+    ? NEW_SESSION_SENTINEL
+    : (activeSession?.sessionId ?? "");
+  const kickoffLabel = role === "spec" ? "Start Spec" : `Start ${SCENARIO_LABELS[scenario]}`;
+  const canStopSession = Boolean(activeSession && isSessionWorking && !isComposingNewSession);
+
+  const handleTaskChange = useCallback(
+    (nextTaskId: string) => {
+      updateQuery({
+        task: nextTaskId || undefined,
+        session: undefined,
+        autostart: undefined,
+      });
+    },
+    [updateQuery],
+  );
+
+  const handleRoleChange = useCallback(
+    (nextRole: AgentRole) => {
+      updateQuery({
+        agent: nextRole,
+        scenario: firstScenario(nextRole),
+        session: undefined,
+        autostart: undefined,
+      });
+    },
+    [updateQuery],
+  );
+
+  const handleSessionChange = useCallback(
+    (sessionId: string) => {
+      if (sessionId === NEW_SESSION_SENTINEL) {
+        setInput("");
+        void updateQuery({
+          session: NEW_SESSION_SENTINEL,
+          autostart: undefined,
+        });
+        return;
+      }
+      const selected = sessions.find((entry) => entry.sessionId === sessionId);
+      if (!selected) {
+        return;
+      }
+      updateQuery({
+        session: selected.sessionId,
+        task: selected.taskId,
+        agent: selected.role,
+        scenario: selected.scenario,
+        autostart: undefined,
+      });
+    },
+    [sessions, updateQuery],
+  );
+
+  const handleScenarioChange = useCallback(
+    (nextScenario: string) => {
+      updateQuery({ scenario: nextScenario, autostart: undefined });
+    },
+    [updateQuery],
+  );
+
+  const handleFollowLatest = useCallback(() => {
+    void updateQuery({ session: undefined, autostart: undefined });
+  }, [updateQuery]);
+
+  const handleSelectAgent = useCallback(
+    (opencodeAgent: string) => {
+      const baseSelection =
+        selectedModelSelection ??
+        (() => {
+          const firstModel = selectionCatalog?.models[0];
+          if (!firstModel) {
+            return null;
+          }
+          return {
+            providerId: firstModel.providerId,
+            modelId: firstModel.modelId,
+            ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
+          } satisfies AgentModelSelection;
+        })();
+      if (!baseSelection) {
+        return;
+      }
+      applySelection({
+        ...baseSelection,
+        opencodeAgent,
+      });
+    },
+    [applySelection, selectedModelSelection, selectionCatalog],
+  );
+
+  const handleSelectModel = useCallback(
+    (nextValue: string) => {
+      if (!selectionCatalog) {
+        return;
+      }
+      const model = selectionCatalog.models.find((entry) => entry.id === nextValue);
+      if (!model) {
+        return;
+      }
+      applySelection({
+        providerId: model.providerId,
+        modelId: model.modelId,
+        ...(model.variants[0] ? { variant: model.variants[0] } : {}),
+        ...(selectedModelSelection?.opencodeAgent
+          ? { opencodeAgent: selectedModelSelection.opencodeAgent }
+          : {}),
+      });
+    },
+    [applySelection, selectedModelSelection?.opencodeAgent, selectionCatalog],
+  );
+
+  const handleSelectVariant = useCallback(
+    (variant: string) => {
+      if (!selectedModelSelection) {
+        return;
+      }
+      applySelection({
+        ...selectedModelSelection,
+        variant,
+      });
+    },
+    [applySelection, selectedModelSelection],
+  );
+
+  const handleMessagesScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      setIsPinnedToBottom(isNearBottom(event.currentTarget));
+    },
+    [setIsPinnedToBottom],
+  );
+
+  const agentChatModel: AgentChatModel = {
+    header: {
+      sessionStatus: activeSession?.status ?? null,
+      taskId,
+      tasks: tasksForSelector,
+      onTaskChange: handleTaskChange,
+      selectedTaskTitle: selectedTask?.title ?? null,
+      roleOptions: ROLE_OPTIONS,
+      role,
+      onRoleChange: handleRoleChange,
+      sessionOptions,
+      selectedSessionValue,
+      onSessionChange: handleSessionChange,
+      scenario,
+      scenarioOptions,
+      scenarioDisabled: Boolean(selectedSessionById) && !isComposingNewSession,
+      onScenarioChange: handleScenarioChange,
+      canKickoffNewSession,
+      kickoffLabel,
+      onKickoff: () => {
+        void startScenarioKickoff();
+      },
+      isStarting,
+      isSending,
+      showFollowLatest: Boolean(selectedSessionById),
+      onFollowLatest: handleFollowLatest,
+      stats: {
+        sessions: contextSessions.length,
+        messages: activeSession?.messages.length ?? 0,
+        permissions: activeSession?.pendingPermissions.length ?? 0,
+        questions: activeSession?.pendingQuestions.length ?? 0,
+      },
+      agentStudioReady,
+    },
+    thread: {
+      session: activeSession,
+      roleOptions: ROLE_OPTIONS,
+      agentStudioReady,
+      blockedReason: agentStudioBlockedReason,
+      isLoadingChecks,
+      onRefreshChecks: () => {
+        void refreshChecks();
+      },
+      taskSelected: Boolean(taskId),
+      canKickoffNewSession,
+      kickoffLabel,
+      onKickoff: () => {
+        void startScenarioKickoff();
+      },
+      isStarting,
+      isSending,
+      sessionAgentColors: activeSessionAgentColors,
+      isSubmittingQuestionByRequestId,
+      onSubmitQuestionAnswers,
+      todoPanelCollapsed: activeSession
+        ? (todoPanelCollapsedBySession[activeSession.sessionId] ?? false)
+        : false,
+      onToggleTodoPanel: () => {
+        if (!activeSession) {
+          return;
+        }
+        const collapsed = todoPanelCollapsedBySession[activeSession.sessionId] ?? false;
+        setTodoPanelCollapsedBySession((current) => ({
+          ...current,
+          [activeSession.sessionId]: !collapsed,
+        }));
+      },
+      todoPanelBottomOffset,
+      messagesContainerRef,
+      onMessagesScroll: handleMessagesScroll,
+    },
+    composer: {
+      taskId,
+      agentStudioReady,
+      input,
+      onInputChange: setInput,
+      onSend: () => {
+        void onSend();
+      },
+      isSending,
+      isStarting,
+      isSessionWorking,
+      selectedModelSelection,
+      isSelectionCatalogLoading,
+      agentOptions,
+      modelOptions,
+      modelGroups,
+      variantOptions,
+      onSelectAgent: handleSelectAgent,
+      onSelectModel: handleSelectModel,
+      onSelectVariant: handleSelectVariant,
+      contextUsage:
+        activeSessionContextUsage === null
+          ? null
+          : {
+              totalTokens: activeSessionContextUsage.totalTokens,
+              contextWindow: activeSessionContextUsage.contextWindow,
+              ...(typeof activeSessionContextUsage.outputLimit === "number"
+                ? { outputLimit: activeSessionContextUsage.outputLimit }
+                : {}),
+            },
+      canStopSession,
+      onStopSession: () => {
+        if (!activeSession) {
+          return;
+        }
+        void stopAgentSession(activeSession.sessionId);
+      },
+      composerFormRef,
+      composerTextareaRef,
+      onComposerTextareaInput: resizeComposerTextarea,
+    },
+  };
 
   return (
     <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,2fr)_minmax(420px,1fr)]">
-      <Card className="flex h-full min-h-0 flex-col overflow-hidden border-slate-200 shadow-sm">
-        <CardHeader className="space-y-3 border-b border-slate-200 bg-white pb-4">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <CardTitle className="text-xl">Agent Studio</CardTitle>
-              <CardDescription>
-                Chat-first workspace for Spec, Planner, Build, and QA orchestration.
-              </CardDescription>
-            </div>
-            {activeSession ? (
-              <Badge variant={statusBadgeVariant(activeSession.status)}>
-                <CircleDotDashed className="mr-1 size-3" />
-                {activeSession.status}
-              </Badge>
-            ) : null}
-          </div>
-
-          <div className="grid gap-2 lg:grid-cols-[minmax(280px,1fr)_auto]">
-            <div className="min-w-0">
-              <TaskSelector
-                tasks={tasksForSelector}
-                value={taskId}
-                disabled={!agentStudioReady}
-                onValueChange={(nextTaskId) => {
-                  updateQuery({
-                    task: nextTaskId || undefined,
-                    session: undefined,
-                    autostart: undefined,
-                  });
-                }}
-              />
-            </div>
-            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
-              {ROLE_OPTIONS.map((entry) => {
-                const Icon = entry.icon;
-                const active = role === entry.role;
-                return (
-                  <Button
-                    key={entry.role}
-                    type="button"
-                    size="sm"
-                    variant={active ? "default" : "ghost"}
-                    className={cn("h-8", active ? "" : "hover:bg-white")}
-                    disabled={!agentStudioReady}
-                    onClick={() =>
-                      updateQuery({
-                        agent: entry.role,
-                        scenario: firstScenario(entry.role),
-                        session: undefined,
-                        autostart: undefined,
-                      })
-                    }
-                  >
-                    <Icon className="size-3.5" />
-                    {entry.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_240px_1fr]">
-            <Combobox
-              value={
-                isComposingNewSession ? NEW_SESSION_SENTINEL : (activeSession?.sessionId ?? "")
-              }
-              options={sessionOptions}
-              placeholder={
-                sessionOptions.length > 0
-                  ? "Select session (latest used by default)"
-                  : "No session yet for this task/role"
-              }
-              searchPlaceholder="Search sessions..."
-              emptyText="No matching session."
-              disabled={!taskId || !agentStudioReady}
-              onValueChange={(sessionId) => {
-                if (sessionId === NEW_SESSION_SENTINEL) {
-                  setInput("");
-                  void updateQuery({
-                    session: NEW_SESSION_SENTINEL,
-                    autostart: undefined,
-                  });
-                  return;
-                }
-                const selected = sessions.find((entry) => entry.sessionId === sessionId);
-                if (!selected) {
-                  return;
-                }
-                updateQuery({
-                  session: selected.sessionId,
-                  task: selected.taskId,
-                  agent: selected.role,
-                  scenario: selected.scenario,
-                  autostart: undefined,
-                });
-              }}
-            />
-            <Combobox
-              value={scenario}
-              options={scenarioOptions}
-              placeholder="Select scenario"
-              disabled={
-                (Boolean(selectedSessionById) && !isComposingNewSession) || !agentStudioReady
-              }
-              onValueChange={(value) => updateQuery({ scenario: value, autostart: undefined })}
-            />
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-              {selectedTask ? (
-                <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
-                  {selectedTask.title}
-                </Badge>
-              ) : (
-                <span>Select a task to chat.</span>
-              )}
-              {canKickoffNewSession ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[11px]"
-                  disabled={isStarting || isSending || !taskId || !agentStudioReady}
-                  onClick={() => void startScenarioKickoff()}
-                >
-                  {isStarting ? (
-                    <LoaderCircle className="size-3 animate-spin" />
-                  ) : (
-                    <Sparkles className="size-3" />
-                  )}
-                  {role === "spec" ? "Start Spec" : `Start ${SCENARIO_LABELS[scenario]}`}
-                </Button>
-              ) : null}
-              <span>
-                Sessions: <strong>{contextSessions.length}</strong>
-              </span>
-              <span>
-                Messages: <strong>{activeSession?.messages.length ?? 0}</strong>
-              </span>
-              <span>
-                Permissions: <strong>{activeSession?.pendingPermissions.length ?? 0}</strong>
-              </span>
-              <span>
-                Questions: <strong>{activeSession?.pendingQuestions.length ?? 0}</strong>
-              </span>
-              {selectedSessionById ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[11px]"
-                  onClick={() => {
-                    void updateQuery({ session: undefined, autostart: undefined });
-                  }}
-                >
-                  Follow Latest
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="min-h-0 flex-1 bg-slate-50/50 p-0">
-          <div className="relative flex h-full min-h-0 flex-col">
-            {!agentStudioReady ? (
-              <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                <div className="flex min-w-0 items-start gap-2">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  <p className="min-w-0">{agentStudioBlockedReason}</p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 border-rose-300 bg-white text-rose-700 hover:bg-rose-100"
-                  disabled={isLoadingChecks}
-                  onClick={() => void refreshChecks()}
-                >
-                  <RefreshCcw className={cn("size-3.5", isLoadingChecks ? "animate-spin" : "")} />
-                  Recheck
-                </Button>
-              </div>
-            ) : null}
-
-            <div
-              ref={messagesContainerRef}
-              className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
-              onScroll={(event) => {
-                setIsPinnedToBottom(isNearBottom(event.currentTarget));
-              }}
-            >
-              {!activeSession ? (
-                <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                  <p>
-                    {taskId
-                      ? "Send a message to start a new session automatically."
-                      : "Select a task to begin."}
-                  </p>
-                  {canKickoffNewSession ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={isStarting || isSending || !taskId || !agentStudioReady}
-                      onClick={() => void startScenarioKickoff()}
-                    >
-                      {isStarting ? (
-                        <LoaderCircle className="size-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="size-3.5" />
-                      )}
-                      {role === "spec" ? "Start Spec" : `Start ${SCENARIO_LABELS[scenario]}`}
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {activeSession?.messages.map((message) => {
-                const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-                const turnDurationMs = assistantMeta?.durationMs;
-                const shouldShowTurnDuration =
-                  message.role === "assistant" &&
-                  typeof turnDurationMs === "number" &&
-                  turnDurationMs > 0;
-                const isUserMessage = message.role === "user";
-                return (
-                  <Fragment key={message.id}>
-                    {shouldShowTurnDuration ? (
-                      <AgentTurnDurationSeparator durationMs={turnDurationMs} />
-                    ) : null}
-                    <div className={cn(isUserMessage ? "pt-4" : undefined)}>
-                      <AgentChatMessageCard
-                        message={message}
-                        sessionRole={activeSession.role}
-                        sessionSelectedModel={activeSession.selectedModel}
-                        sessionAgentColors={activeSessionAgentColors}
-                      />
-                    </div>
-                  </Fragment>
-                );
-              })}
-
-              {activeSession?.draftAssistantText ? (
-                <article className="px-1 py-1 text-sm text-slate-700">
-                  {(() => {
-                    const roleDisplay =
-                      ROLE_OPTIONS.find((entry) => entry.role === activeSession.role) ?? null;
-                    const StreamingRoleIcon = roleDisplay?.icon ?? Bot;
-                    return (
-                      <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                        <StreamingRoleIcon className="size-3" />
-                        {roleDisplay?.label ?? "Assistant"} (streaming)
-                        <LoaderCircle className="size-3 animate-spin" />
-                      </header>
-                    );
-                  })()}
-                  <p className="whitespace-pre-wrap leading-6 text-slate-700">
-                    {activeSession.draftAssistantText}
-                  </p>
-                </article>
-              ) : null}
-
-              {activeSession?.status === "running" &&
-              !activeSession?.draftAssistantText &&
-              (activeSession.pendingQuestions.length ?? 0) === 0 ? (
-                <div className="flex items-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
-                  <LoaderCircle className="size-3.5 animate-spin text-slate-500" />
-                  <Brain className="size-3.5 text-violet-600" />
-                  Agent is thinking...
-                </div>
-              ) : null}
-
-              {activeSession?.pendingQuestions.map((request) => (
-                <AgentSessionQuestionCard
-                  key={`${activeSession.sessionId}:${request.requestId}`}
-                  request={request}
-                  disabled={!agentStudioReady}
-                  isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
-                  onSubmit={onSubmitQuestionAnswers}
-                />
-              ))}
-            </div>
-
-            {activeSession ? (
-              <div
-                className="pointer-events-none absolute right-3 z-20"
-                style={{ bottom: `${todoPanelBottomOffset}px` }}
-              >
-                <AgentSessionTodoPanel
-                  todos={activeSession.todos}
-                  collapsed={isTodoPanelCollapsed}
-                  className="pointer-events-auto"
-                  onToggleCollapse={() => {
-                    setTodoPanelCollapsedBySession((current) => ({
-                      ...current,
-                      [activeSession.sessionId]: !isTodoPanelCollapsed,
-                    }));
-                  }}
-                />
-              </div>
-            ) : null}
-
-            <form
-              ref={composerFormRef}
-              className="border-t border-slate-200 bg-white p-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void onSend();
-              }}
-            >
-              <div className="rounded-2xl border border-slate-300 bg-slate-50/80 shadow-sm transition-[border-color,box-shadow,background-color] focus-within:border-sky-400 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(14,165,233,0.14)]">
-                <Textarea
-                  ref={composerTextareaRef}
-                  rows={1}
-                  placeholder="@ for files/agents; / for commands; ! for shell"
-                  value={input}
-                  className="!min-h-0 h-10 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
-                  onChange={(event) => setInput(event.currentTarget.value)}
-                  onInput={() => {
-                    resizeComposerTextarea();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void onSend();
-                    }
-                  }}
-                />
-
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 px-2.5 py-2">
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                    <div className="relative">
-                      <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
-                      <Combobox
-                        value={selectedModelSelection?.opencodeAgent ?? ""}
-                        options={agentOptions}
-                        className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
-                        placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-                        searchPlaceholder="Search agent..."
-                        triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
-                        disabled={
-                          !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady
-                        }
-                        onValueChange={(opencodeAgent) => {
-                          const baseSelection =
-                            selectedModelSelection ??
-                            (() => {
-                              const firstModel = selectionCatalog?.models[0];
-                              if (!firstModel) {
-                                return null;
-                              }
-                              return {
-                                providerId: firstModel.providerId,
-                                modelId: firstModel.modelId,
-                                ...(firstModel.variants[0]
-                                  ? { variant: firstModel.variants[0] }
-                                  : {}),
-                              } satisfies AgentModelSelection;
-                            })();
-                          if (!baseSelection) {
-                            return;
-                          }
-                          applySelection({
-                            ...baseSelection,
-                            opencodeAgent,
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <div className="relative">
-                      <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
-                      <Combobox
-                        value={
-                          selectedModelSelection
-                            ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
-                            : ""
-                        }
-                        options={modelOptions}
-                        groups={modelGroups}
-                        className="w-[26rem] max-w-[min(90vw,34rem)] p-0"
-                        placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-                        searchPlaceholder="Search model..."
-                        triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
-                        disabled={
-                          !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady
-                        }
-                        onValueChange={(nextValue) => {
-                          if (!selectionCatalog) {
-                            return;
-                          }
-                          const model = selectionCatalog.models.find(
-                            (entry) => entry.id === nextValue,
-                          );
-                          if (!model) {
-                            return;
-                          }
-                          applySelection({
-                            providerId: model.providerId,
-                            modelId: model.modelId,
-                            ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-                            ...(selectedModelSelection?.opencodeAgent
-                              ? { opencodeAgent: selectedModelSelection.opencodeAgent }
-                              : {}),
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <div className="relative">
-                      <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
-                      <Combobox
-                        value={selectedModelSelection?.variant ?? ""}
-                        options={variantOptions}
-                        className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
-                        placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
-                        searchPlaceholder="Search variant..."
-                        triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
-                        disabled={
-                          !taskId || variantOptions.length === 0 || isStarting || !agentStudioReady
-                        }
-                        onValueChange={(variant) => {
-                          if (!selectedModelSelection) {
-                            return;
-                          }
-                          applySelection({
-                            ...selectedModelSelection,
-                            variant,
-                          });
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {activeSessionContextUsage ? (
-                      <AgentContextUsageIndicator
-                        totalTokens={activeSessionContextUsage.totalTokens}
-                        contextWindow={activeSessionContextUsage.contextWindow}
-                        {...(typeof activeSessionContextUsage.outputLimit === "number"
-                          ? { outputLimit: activeSessionContextUsage.outputLimit }
-                          : {})}
-                      />
-                    ) : null}
-                    {activeSession && isSessionWorking && !isComposingNewSession ? (
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="size-8 rounded-full border-slate-300 bg-white hover:bg-slate-100"
-                        disabled={!agentStudioReady}
-                        aria-label="Stop session"
-                        onClick={() => void stopAgentSession(activeSession.sessionId)}
-                      >
-                        <Square className="size-3.5" />
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="submit"
-                      size="icon"
-                      className="size-8 rounded-full"
-                      aria-label={isSending ? "Sending message" : "Send message"}
-                      disabled={
-                        isSending ||
-                        isStarting ||
-                        isSessionWorking ||
-                        !taskId ||
-                        input.trim().length === 0 ||
-                        !agentStudioReady
-                      }
-                    >
-                      {isSending ? (
-                        <LoaderCircle className="size-3.5 animate-spin" />
-                      ) : (
-                        <SendHorizontal className="size-3.5" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </div>
-        </CardContent>
-      </Card>
+      <AgentChat model={agentChatModel} />
 
       <div className="grid h-full min-h-0 content-start gap-4 overflow-y-auto pr-1">
         <Card className="overflow-hidden border-slate-200 shadow-sm">

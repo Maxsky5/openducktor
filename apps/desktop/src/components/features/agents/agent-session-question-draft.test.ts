@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
+  type AgentQuestionDraftEntry,
   buildAgentQuestionAnswers,
   createAgentQuestionDraft,
   isAgentQuestionRequestComplete,
@@ -7,7 +9,7 @@ import {
   toggleAgentQuestionOption,
 } from "./agent-session-question-draft";
 
-const request = {
+const request: AgentQuestionRequest = {
   requestId: "req-1",
   questions: [
     {
@@ -56,12 +58,20 @@ describe("agent-session-question-draft", () => {
   });
 
   test("single-choice toggle keeps only one selected option", () => {
-    let entry = { selectedOptionLabels: [], freeText: "", useFreeText: false };
-    entry = toggleAgentQuestionOption(request.questions[0], entry, "A");
+    const singleChoiceQuestion = request.questions[0];
+    if (!singleChoiceQuestion) {
+      throw new Error("Missing single-choice test fixture");
+    }
+    let entry: AgentQuestionDraftEntry = {
+      selectedOptionLabels: [],
+      freeText: "",
+      useFreeText: false,
+    };
+    entry = toggleAgentQuestionOption(singleChoiceQuestion, entry, "A");
     expect(entry.selectedOptionLabels).toEqual(["A"]);
-    entry = toggleAgentQuestionOption(request.questions[0], entry, "B");
+    entry = toggleAgentQuestionOption(singleChoiceQuestion, entry, "B");
     expect(entry.selectedOptionLabels).toEqual(["B"]);
-    entry = toggleAgentQuestionOption(request.questions[0], entry, "B");
+    entry = toggleAgentQuestionOption(singleChoiceQuestion, entry, "B");
     expect(entry.selectedOptionLabels).toEqual([]);
   });
 
