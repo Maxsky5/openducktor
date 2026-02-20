@@ -1,15 +1,19 @@
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
-import { AgentChat } from "@/components/features/agents/agent-chat";
-import type { AgentChatModel } from "@/components/features/agents/agent-chat.types";
+import {
+  AgentChat,
+  type AgentChatModel,
+  isNearBottom,
+  useAgentChatLayout,
+} from "@/components/features/agents/agent-chat";
+import {
+  AgentStudioHeader,
+  type AgentStudioHeaderModel,
+} from "@/components/features/agents/agent-studio-header";
 import {
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents/catalog-select-options";
-import {
-  isNearBottom,
-  useAgentChatLayout,
-} from "@/components/features/agents/use-agent-chat-layout";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1264,40 +1268,41 @@ export function AgentsPage(): ReactElement {
     [setIsPinnedToBottom],
   );
 
-  const agentChatModel: AgentChatModel = {
-    header: {
-      sessionStatus: activeSession?.status ?? null,
-      taskId,
-      tasks: tasksForSelector,
-      onTaskChange: handleTaskChange,
-      selectedTaskTitle: selectedTask?.title ?? null,
-      roleOptions: ROLE_OPTIONS,
-      role,
-      onRoleChange: handleRoleChange,
-      sessionOptions,
-      selectedSessionValue,
-      onSessionChange: handleSessionChange,
-      scenario,
-      scenarioOptions,
-      scenarioDisabled: Boolean(selectedSessionById) && !isComposingNewSession,
-      onScenarioChange: handleScenarioChange,
-      canKickoffNewSession,
-      kickoffLabel,
-      onKickoff: () => {
-        void startScenarioKickoff();
-      },
-      isStarting,
-      isSending,
-      showFollowLatest: Boolean(selectedSessionById),
-      onFollowLatest: handleFollowLatest,
-      stats: {
-        sessions: contextSessions.length,
-        messages: activeSession?.messages.length ?? 0,
-        permissions: activeSession?.pendingPermissions.length ?? 0,
-        questions: activeSession?.pendingQuestions.length ?? 0,
-      },
-      agentStudioReady,
+  const agentStudioHeaderModel: AgentStudioHeaderModel = {
+    sessionStatus: activeSession?.status ?? null,
+    taskId,
+    tasks: tasksForSelector,
+    onTaskChange: handleTaskChange,
+    selectedTaskTitle: selectedTask?.title ?? null,
+    roleOptions: ROLE_OPTIONS,
+    role,
+    onRoleChange: handleRoleChange,
+    sessionOptions,
+    selectedSessionValue,
+    onSessionChange: handleSessionChange,
+    scenario,
+    scenarioOptions,
+    scenarioDisabled: Boolean(selectedSessionById) && !isComposingNewSession,
+    onScenarioChange: handleScenarioChange,
+    canKickoffNewSession,
+    kickoffLabel,
+    onKickoff: () => {
+      void startScenarioKickoff();
     },
+    isStarting,
+    isSending,
+    showFollowLatest: Boolean(selectedSessionById),
+    onFollowLatest: handleFollowLatest,
+    stats: {
+      sessions: contextSessions.length,
+      messages: activeSession?.messages.length ?? 0,
+      permissions: activeSession?.pendingPermissions.length ?? 0,
+      questions: activeSession?.pendingQuestions.length ?? 0,
+    },
+    agentStudioReady,
+  };
+
+  const agentChatModel: AgentChatModel = {
     thread: {
       session: activeSession,
       roleOptions: ROLE_OPTIONS,
@@ -1380,7 +1385,10 @@ export function AgentsPage(): ReactElement {
 
   return (
     <div className="grid h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-4 overflow-hidden xl:grid-cols-[minmax(0,2fr)_minmax(420px,1fr)]">
-      <AgentChat model={agentChatModel} />
+      <AgentChat
+        header={<AgentStudioHeader model={agentStudioHeaderModel} />}
+        model={agentChatModel}
+      />
 
       <div className="grid h-full min-h-0 content-start gap-4 overflow-y-auto pr-1">
         <Card className="overflow-hidden border-slate-200 shadow-sm">

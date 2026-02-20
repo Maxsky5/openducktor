@@ -4,9 +4,43 @@ import { Button } from "@/components/ui/button";
 import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
+import type { TaskCard } from "@openblueprint/contracts";
+import type { AgentRole, AgentScenario } from "@openblueprint/core";
 import { CircleDotDashed, LoaderCircle, Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
-import type { AgentChatHeaderModel } from "./agent-chat.types";
+import type { AgentRoleOption } from "./agent-chat/agent-chat.types";
+
+export type AgentStudioHeaderModel = {
+  sessionStatus: "starting" | "running" | "idle" | "error" | "stopped" | null;
+  taskId: string;
+  tasks: TaskCard[];
+  onTaskChange: (taskId: string) => void;
+  selectedTaskTitle: string | null;
+  roleOptions: AgentRoleOption[];
+  role: AgentRole;
+  onRoleChange: (role: AgentRole) => void;
+  sessionOptions: ComboboxOption[];
+  selectedSessionValue: string;
+  onSessionChange: (sessionId: string) => void;
+  scenario: AgentScenario;
+  scenarioOptions: ComboboxOption[];
+  scenarioDisabled: boolean;
+  onScenarioChange: (scenario: string) => void;
+  canKickoffNewSession: boolean;
+  kickoffLabel: string;
+  onKickoff: () => void;
+  isStarting: boolean;
+  isSending: boolean;
+  showFollowLatest: boolean;
+  onFollowLatest: () => void;
+  stats: {
+    sessions: number;
+    messages: number;
+    permissions: number;
+    questions: number;
+  };
+  agentStudioReady: boolean;
+};
 
 const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | "success" => {
   if (status === "running" || status === "starting") {
@@ -21,10 +55,10 @@ const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | 
   return "success";
 };
 
-export function AgentChatHeader({
+export function AgentStudioHeader({
   model,
 }: {
-  model: AgentChatHeaderModel;
+  model: AgentStudioHeaderModel;
 }): ReactElement {
   const {
     sessionStatus,

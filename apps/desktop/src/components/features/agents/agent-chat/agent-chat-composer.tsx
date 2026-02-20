@@ -1,10 +1,10 @@
-import { AgentContextUsageIndicator } from "@/components/features/agents/agent-context-usage-indicator";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
 import { Bot, Brain, BrainCog, LoaderCircle, SendHorizontal, Square } from "lucide-react";
 import type { ReactElement } from "react";
 import type { AgentChatComposerModel } from "./agent-chat.types";
+import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 
 export function AgentChatComposer({
   model,

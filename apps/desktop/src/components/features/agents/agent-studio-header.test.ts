@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AgentChatHeader } from "./agent-chat-header";
-import { TEST_ROLE_OPTIONS, buildTask } from "./agent-chat-test-fixtures";
+import { TEST_ROLE_OPTIONS, buildTask } from "./agent-chat/agent-chat-test-fixtures";
+import { AgentStudioHeader } from "./agent-studio-header";
 
 const buildModel = () => ({
   sessionStatus: "running" as const,
@@ -42,10 +42,10 @@ const buildModel = () => ({
   agentStudioReady: true,
 });
 
-describe("AgentChatHeader", () => {
+describe("AgentStudioHeader", () => {
   test("renders core controls and chat stats", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentChatHeader, {
+      createElement(AgentStudioHeader, {
         model: buildModel(),
       }),
     );
@@ -61,7 +61,7 @@ describe("AgentChatHeader", () => {
 
   test("hides optional actions when not applicable", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentChatHeader, {
+      createElement(AgentStudioHeader, {
         model: {
           ...buildModel(),
           sessionStatus: "idle",
@@ -78,7 +78,7 @@ describe("AgentChatHeader", () => {
 
   test("disables task and role controls when studio is blocked", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentChatHeader, {
+      createElement(AgentStudioHeader, {
         model: {
           ...buildModel(),
           agentStudioReady: false,

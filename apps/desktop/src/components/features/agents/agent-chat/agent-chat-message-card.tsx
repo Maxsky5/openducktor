@@ -23,7 +23,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
-import { resolveAgentAccentColor } from "./agent-accent-color";
+import { resolveAgentAccentColor } from "../agent-accent-color";
 import { formatAgentDuration } from "./format-agent-duration";
 
 type AgentChatMessageCardProps = {

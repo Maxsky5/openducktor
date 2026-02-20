@@ -1,12 +1,12 @@
-import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
-import { AgentSessionQuestionCard } from "@/components/features/agents/agent-session-question-card";
-import { AgentSessionTodoPanel } from "@/components/features/agents/agent-session-todo-panel";
-import { AgentTurnDurationSeparator } from "@/components/features/agents/agent-turn-duration-separator";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
 import { Fragment, type ReactElement, type ReactNode } from "react";
+import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatThreadModel } from "./agent-chat.types";
+import { AgentSessionQuestionCard } from "./agent-session-question-card";
+import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
+import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 
 export function AgentChatThread({
   model,

@@ -1,7 +1,6 @@
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
-import type { TaskCard } from "@openblueprint/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openblueprint/core";
+import type { AgentModelSelection, AgentRole } from "@openblueprint/core";
 import type { LucideIcon } from "lucide-react";
 import type { RefObject, UIEvent } from "react";
 
@@ -9,38 +8,6 @@ export type AgentRoleOption = {
   role: AgentRole;
   label: string;
   icon: LucideIcon;
-};
-
-export type AgentChatHeaderModel = {
-  sessionStatus: AgentSessionState["status"] | null;
-  taskId: string;
-  tasks: TaskCard[];
-  onTaskChange: (taskId: string) => void;
-  selectedTaskTitle: string | null;
-  roleOptions: AgentRoleOption[];
-  role: AgentRole;
-  onRoleChange: (role: AgentRole) => void;
-  sessionOptions: ComboboxOption[];
-  selectedSessionValue: string;
-  onSessionChange: (sessionId: string) => void;
-  scenario: AgentScenario;
-  scenarioOptions: ComboboxOption[];
-  scenarioDisabled: boolean;
-  onScenarioChange: (scenario: string) => void;
-  canKickoffNewSession: boolean;
-  kickoffLabel: string;
-  onKickoff: () => void;
-  isStarting: boolean;
-  isSending: boolean;
-  showFollowLatest: boolean;
-  onFollowLatest: () => void;
-  stats: {
-    sessions: number;
-    messages: number;
-    permissions: number;
-    questions: number;
-  };
-  agentStudioReady: boolean;
 };
 
 export type AgentChatThreadModel = {
@@ -97,7 +64,6 @@ export type AgentChatComposerModel = {
 };
 
 export type AgentChatModel = {
-  header: AgentChatHeaderModel;
   thread: AgentChatThreadModel;
   composer: AgentChatComposerModel;
 };

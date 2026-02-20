@@ -1,7 +1,7 @@
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentDescriptor, AgentModelCatalog } from "@openblueprint/core";
 import { resolveAgentAccentColor } from "./agent-accent-color";
-import { formatTokenCompact } from "./format-token-count";
+import { formatTokenCompact } from "./agent-chat/format-token-count";
 
 const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
 
