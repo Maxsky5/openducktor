@@ -95,13 +95,13 @@ export function AgentSessionQuestionCard({
   }
 
   return (
-    <section className="rounded-xl border border-sky-200 bg-gradient-to-b from-sky-50 to-white shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-sky-100 px-3 py-2">
-        <div className="flex items-center gap-2 text-slate-800">
-          <CircleDotDashed className="size-4 text-sky-600" />
+    <section className="rounded-xl border border-slate-300 bg-slate-100 shadow-sm">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-300 px-3 py-2">
+        <div className="flex items-center gap-2 text-slate-900">
+          <CircleDotDashed className="size-4 text-slate-600" />
           <p className="text-sm font-semibold">Input needed</p>
         </div>
-        <p className="text-xs font-medium text-slate-600">
+        <p className="text-xs font-medium text-slate-700">
           {answeredCount}/{requiredCount} answered
         </p>
       </header>
@@ -118,8 +118,13 @@ export function AgentSessionQuestionCard({
                   key={`${request.requestId}:${question.header}:${index}`}
                   type="button"
                   size="sm"
-                  variant={isTabActive ? "default" : "outline"}
-                  className={cn("h-7 cursor-pointer px-2 text-[11px]", !isTabActive && "bg-white")}
+                  variant="outline"
+                  className={cn(
+                    "h-7 cursor-pointer border-slate-300 px-2 text-[11px]",
+                    isTabActive
+                      ? "bg-slate-900 text-white hover:bg-slate-800"
+                      : "bg-white text-slate-700 hover:bg-slate-50",
+                  )}
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
@@ -134,8 +139,13 @@ export function AgentSessionQuestionCard({
             <Button
               type="button"
               size="sm"
-              variant={isSummaryTab ? "default" : "outline"}
-              className={cn("h-7 cursor-pointer px-2 text-[11px]", !isSummaryTab && "bg-white")}
+              variant="outline"
+              className={cn(
+                "h-7 cursor-pointer border-slate-300 px-2 text-[11px]",
+                isSummaryTab
+                  ? "bg-slate-900 text-white hover:bg-slate-800"
+                  : "bg-white text-slate-700 hover:bg-slate-50",
+              )}
               onClick={() => setActiveTabId(SUMMARY_TAB_ID)}
             >
               <ListChecks className="size-3.5" />
@@ -145,7 +155,7 @@ export function AgentSessionQuestionCard({
         ) : null}
 
         {isSummaryTab ? (
-          <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+          <div className="space-y-2 rounded-lg border border-slate-300 bg-white p-2">
             {request.questions.map((question, index) => {
               const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
               return (
@@ -183,7 +193,7 @@ export function AgentSessionQuestionCard({
               </p>
               <p className="mt-1 text-sm font-medium text-slate-900">{activeQuestion.question}</p>
               {activeQuestion.multiple ? (
-                <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
                   <CheckSquare className="size-3.5" />
                   Multiple choice - select one or more answers
                 </p>
@@ -204,7 +214,7 @@ export function AgentSessionQuestionCard({
                       className={cn(
                         "w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition-colors",
                         isSelected
-                          ? "border-sky-300 bg-sky-50 text-sky-900"
+                          ? "border-slate-500 bg-slate-200 text-slate-900"
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
                         (disabled || isSubmitting) && "cursor-not-allowed opacity-70",
                       )}
@@ -224,7 +234,13 @@ export function AgentSessionQuestionCard({
                             target,
                             option.label,
                           );
-                          next[activeQuestionIndex] = nextEntry;
+                          next[activeQuestionIndex] =
+                            !activeQuestion.multiple && nextEntry.selectedOptionLabels.length > 0
+                              ? {
+                                  ...nextEntry,
+                                  useFreeText: false,
+                                }
+                              : nextEntry;
                           shouldAdvance =
                             !activeQuestion.multiple &&
                             !wasSelected &&
@@ -245,12 +261,12 @@ export function AgentSessionQuestionCard({
                         <span className="mt-0.5 inline-flex size-4 items-center justify-center">
                           {activeQuestion.multiple ? (
                             isSelected ? (
-                              <CheckSquare className="size-3.5 text-sky-600" />
+                              <CheckSquare className="size-3.5 text-slate-700" />
                             ) : (
                               <Square className="size-3.5 text-slate-400" />
                             )
                           ) : isSelected ? (
-                            <CheckCircle2 className="size-3.5 text-sky-600" />
+                            <CheckCircle2 className="size-3.5 text-slate-700" />
                           ) : (
                             <Circle className="size-3.5 text-slate-400" />
                           )}
@@ -270,8 +286,13 @@ export function AgentSessionQuestionCard({
               <Button
                 type="button"
                 size="sm"
-                variant={activeEntry?.useFreeText ? "default" : "outline"}
-                className="h-7 text-[11px]"
+                variant="outline"
+                className={cn(
+                  "h-7 cursor-pointer border-slate-300 text-[11px]",
+                  activeEntry?.useFreeText
+                    ? "bg-slate-900 text-white hover:bg-slate-800"
+                    : "bg-white text-slate-700 hover:bg-slate-50",
+                )}
                 disabled={disabled || isSubmitting}
                 onClick={() => {
                   setSubmitError(null);
@@ -285,7 +306,10 @@ export function AgentSessionQuestionCard({
                     next[activeQuestionIndex] = {
                       ...target,
                       useFreeText: !target.useFreeText,
-                      selectedOptionLabels: target.useFreeText ? target.selectedOptionLabels : [],
+                      selectedOptionLabels:
+                        !target.useFreeText && !activeQuestion.multiple
+                          ? []
+                          : target.selectedOptionLabels,
                     };
                     return next;
                   });
@@ -318,7 +342,9 @@ export function AgentSessionQuestionCard({
                         ...target,
                         freeText: value,
                         useFreeText: true,
-                        selectedOptionLabels: [],
+                        selectedOptionLabels: activeQuestion.multiple
+                          ? target.selectedOptionLabels
+                          : [],
                       };
                       return next;
                     });
@@ -335,7 +361,7 @@ export function AgentSessionQuestionCard({
           </p>
         ) : null}
 
-        <footer className="flex items-center justify-between gap-2 border-t border-sky-100 pt-2">
+        <footer className="flex items-center justify-between gap-2 border-t border-slate-300 pt-2">
           <p className="text-xs text-slate-500">
             {isComplete ? "All questions answered." : "Answer all questions to confirm."}
           </p>
