@@ -21,6 +21,7 @@ Goals for agent contributions:
 - `packages/core`: Core domain services and ports.
 - `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
 - `packages/adapters-tauri-host`: Frontend IPC adapter.
+- `packages/openducktor-mcp`: MCP server exposing `odt_*` workflow tools.
 
 ## Architectural Guardrails
 
@@ -84,7 +85,10 @@ Goals for agent contributions:
 - Repository selection is modal-driven (not a standalone page).
 - First launch with no repo: repository modal opens and is non-dismissible.
 - Diagnostics open in a panel/modal and should auto-open only for critical failures.
-- Runtime checks (`git`, `opencode`) are global; repo-specific Beads checks are per repo and cached.
+- Runtime checks (`git`, `opencode`) are global.
+- Repo-specific diagnostics (Beads + OpenCode/MCP health) are per repo and cached.
+- Agent Studio is blocked unless `activeRepo` is set and repo OpenCode+MCP health is ready.
+- Agent Studio role/scenario URL state (`task`, `session`, `agent`, `scenario`, `autostart`) is part of UX contract; preserve deep-link behavior.
 
 ## Backend / Tauri Standards
 
@@ -110,13 +114,26 @@ Goals for agent contributions:
   - `documents.spec` (latest-only list in V1)
   - `documents.implementationPlan` (latest-only list in V1)
   - `documents.qaReports` (append-only history)
-- Tool naming:
-  - planner: `set_spec`, `set_plan`
-  - builder: `build_*`
-  - QA: `qa_approved`, `qa_rejected`
+- Task action names are defined in `packages/contracts/src/index.ts` (`taskActionSchema`).
 - Detailed workflow docs:
   - `docs/task-workflow-status-model.md`
   - `docs/task-workflow-transition-matrix.md`
+  - `docs/task-workflow-actions.md`
+
+## MCP and Agent Studio Contract (Critical)
+
+Keep this contract stable. If you change any item below, update all related layers in the same change.
+
+- Canonical MCP server name is `openducktor`.
+- Canonical tool list and schemas live in `packages/openducktor-mcp/src/lib.ts` (`ODT_TOOL_SCHEMAS`).
+- MCP workflow tools: `odt_read_task`, `odt_set_spec`, `odt_set_plan`, `odt_build_blocked`, `odt_build_resumed`, `odt_build_completed`, `odt_qa_approved`, `odt_qa_rejected`.
+- Canonical role-to-tool policy lives in `packages/core/src/types/agent-orchestrator.ts` (`AGENT_ROLE_TOOL_POLICY`).
+- Role allowlist: `spec` => `odt_read_task, odt_set_spec`; `planner` => `odt_read_task, odt_set_plan`; `build` => `odt_read_task, odt_build_blocked, odt_build_resumed, odt_build_completed`; `qa` => `odt_read_task, odt_qa_approved, odt_qa_rejected`.
+- Workflow tool normalization/alias handling lives in `packages/core/src/services/odt-workflow-tools.ts`.
+- Agent Studio orchestration source-of-truth is `apps/desktop/src/pages/agents-page.tsx`.
+- Agent runtime/session orchestration and permission guardrails live in `apps/desktop/src/state/operations/use-agent-orchestrator-operations.ts`.
+- Read-only roles (`spec`, `planner`, `qa`) must keep mutating permission auto-rejection behavior.
+- Do not rename `odt_*` workflow tools or change role allowlists in a single layer; update MCP, core policy, adapter, and frontend together.
 
 ## Testing Policy
 
@@ -126,7 +143,8 @@ Goals for agent contributions:
   - Rust backend crates
   - `packages/core`
   - adapter packages (`packages/adapters-*`)
-- Frontend/UI component tests are intentionally deferred for now.
+  - `packages/openducktor-mcp`
+- Frontend tests are active and required for touched frontend behavior.
 
 ### Required checks before finishing non-UI changes
 
@@ -142,6 +160,8 @@ Goals for agent contributions:
 - `bun run --filter @openblueprint/core test`
 - `bun run --filter @openblueprint/adapters-tauri-host test`
 - `bun run --filter @openblueprint/adapters-opencode-sdk test`
+- `bun run --filter @openblueprint/openducktor-mcp test`
+- `bun run --filter @openblueprint/desktop test`
 - `cd apps/desktop/src-tauri && cargo test -p host-domain`
 - `cd apps/desktop/src-tauri && cargo test -p host-infra-system`
 - `cd apps/desktop/src-tauri && cargo test -p host-infra-beads`
@@ -182,6 +202,7 @@ Minimum validation for most frontend tasks:
 
 - `bun run --filter @openblueprint/desktop typecheck`
 - `bun run --filter @openblueprint/desktop lint`
+- `bun run --filter @openblueprint/desktop test`
 
 Add Rust check when host code changes:
 
