@@ -1,8 +1,8 @@
 {
   "$schema": "./gen/schemas/desktop-schema.json",
-  "productName": "OpenBlueprint",
+  "productName": "OpenDucktor",
   "version": "0.1.0",
-  "identifier": "dev.openblueprint.desktop",
+  "identifier": "dev.openducktor.desktop",
   "build": {
     "beforeDevCommand": "cd .. && bun run dev",
     "beforeBuildCommand": "cd .. && bun run build",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpenBlueprint",
+        "title": "OpenDucktor",
         "width": 1500,
         "height": 980,
         "resizable": true

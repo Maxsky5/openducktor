@@ -507,7 +507,7 @@ impl TaskStore for BeadsTaskStore {
             task_id,
             "--force",
             "--reason",
-            "Deleted from OpenBlueprint",
+            "Deleted from OpenDucktor",
         ];
         if delete_subtasks {
             args.push("--cascade");

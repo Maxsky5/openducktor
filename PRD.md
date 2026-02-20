@@ -1,7 +1,7 @@
-# Product Requirements Document (PRD): OpenBlueprint
+# Product Requirements Document (PRD): OpenDucktor
 
 ## 1. Product Vision & Overview
-**OpenBlueprint** is a cross-platform desktop application (prioritizing macOS) designed for software developers. It acts as an advanced orchestrator for specialized AI development agents (like Opencode).
+**OpenDucktor** is a cross-platform desktop application (prioritizing macOS) designed for software developers. It acts as an advanced orchestrator for specialized AI development agents (like Opencode).
 The goal is to shift the developer-AI interaction from a simple "Chat" to a rigorous, asynchronous, and parallel engineering workflow:
 1. **Plan First:** Co-author a detailed Markdown feature specification with an AI Architect agent before writing any code.
 2. **Organize:** Manage and visualize all tasks and their statuses through a central Kanban dashboard.
@@ -17,7 +17,7 @@ The goal is to shift the developer-AI interaction from a simple "Chat" to a rigo
   * *Crucial Implementation Detail:* The `bd` binary is bundled directly into the application using **Tauri's Sidecar** feature. It runs completely under the hood. There is no SQLite fallback; Beads is the sole source of truth for task state, metadata, and linked Markdown files. No manual installation of `bd` is required from the user.
 
 ## 3. System Requirements (Verified on Startup)
-Since OpenBlueprint acts as an orchestrator, it relies on the developer's existing environment for the underlying tools. On startup, Tauri will check the host system for:
+Since OpenDucktor acts as an orchestrator, it relies on the developer's existing environment for the underlying tools. On startup, Tauri will check the host system for:
 1. `git` (must support worktrees).
 2. `opencode` CLI (must be installed globally, e.g., via npm, and accessible in the user's `$PATH`).
 
@@ -49,7 +49,7 @@ Since OpenBlueprint acts as an orchestrator, it relies on the developer's existi
 * **Creation Lifecycle (Managed by Rust):**
   1. User triggers task execution ("Delegate Task").
   2. Tauri executes `git worktree add <temp-path-outside-project> -b <feature-branch-id>`.
-  3. **Pre-start Hooks:** Execution of user-defined workspace setup commands configured via a `.openblueprint.json` file (e.g., `npm install`, `cp ../.env .`).
+  3. **Pre-start Hooks:** Execution of user-defined workspace setup commands configured via a `.openducktor.json` file (e.g., `npm install`, `cp ../.env .`).
   4. Tauri spawns a new `opencode serve --port <DYNAMIC_PORT>` process **exclusively** within this isolated worktree directory.
 * **Cleanup Lifecycle:**
   1. Once the task is completed and validated.
@@ -79,7 +79,7 @@ For the initial release (V1), development will focus on the following milestones
    * Define and inject JSON schema Tools for Opencode to generate and modify the Markdown spec.
 3. **The Worktree Engine:**
    * Implement Rust commands for `git worktree add/remove`.
-   * Implement basic configuration parsing (`.openblueprint.json`) for user-defined Pre/Post execution hooks.
+   * Implement basic configuration parsing (`.openducktor.json`) for user-defined Pre/Post execution hooks.
 4. **The "Builder" Execution UI:**
    * Rust logic to dynamically spawn/kill `opencode serve` instances on available ports.
    * Frontend integration of `@opencode-ai/sdk` parsing SSE streams into the high-level activity UI.

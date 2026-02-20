@@ -8,8 +8,8 @@ import type {
   TaskStatus,
   TaskUpdatePatch,
   WorkspaceRecord,
-} from "@openblueprint/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openblueprint/core";
+} from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentSessionState } from "./agent-orchestrator";
 import type { RepoOpencodeHealthCheck } from "./diagnostics";
 

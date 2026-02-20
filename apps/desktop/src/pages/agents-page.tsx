@@ -22,14 +22,14 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import type { TaskCard } from "@openblueprint/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
   AgentScenario,
-} from "@openblueprint/core";
-import { normalizeOdtWorkflowToolName } from "@openblueprint/core";
+} from "@openducktor/core";
+import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import {
   type ReactElement,
@@ -183,7 +183,7 @@ const firstScenario = (role: AgentRole): AgentScenario => {
 };
 
 const NEW_SESSION_SENTINEL = "__new_session__";
-const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openblueprint:agent-studio:context";
+const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 
 const parseTimestamp = (value: string | null | undefined): number | null => {

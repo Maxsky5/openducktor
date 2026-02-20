@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/sheet";
 import { errorMessage } from "@/lib/errors";
 import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
-import type { TaskCard } from "@openblueprint/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import {
   CheckSquare,
   CircleHelp,

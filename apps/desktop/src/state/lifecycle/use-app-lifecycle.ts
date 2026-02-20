@@ -2,7 +2,7 @@ import { errorMessage } from "@/lib/errors";
 import { subscribeRunEvents } from "@/lib/host-client";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
-import { type RunEvent, runEventSchema } from "@openblueprint/contracts";
+import { type RunEvent, runEventSchema } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { toast } from "sonner";
 

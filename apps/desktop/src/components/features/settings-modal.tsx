@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
-import type { AgentModelCatalog, AgentRole } from "@openblueprint/core";
+import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 
@@ -234,7 +234,7 @@ export function SettingsModal({
         <DialogHeader className="shrink-0 border-b border-slate-200 px-6 pb-4 pt-6">
           <DialogTitle>Workspace Settings</DialogTitle>
           <DialogDescription>
-            Settings are stored in <code>~/.openblueprint/config.json</code>.
+            Settings are stored in <code>~/.openducktor/config.json</code>.
           </DialogDescription>
         </DialogHeader>
 

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openblueprint/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { Layers3 } from "lucide-react";
 import { type ReactElement, memo } from "react";
 

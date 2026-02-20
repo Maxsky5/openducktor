@@ -28,7 +28,7 @@ pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
 pub fn resolve_central_beads_dir(repo_path: &Path) -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
     let repo_id = compute_repo_id(repo_path)?;
-    let repo_root = home.join(".openblueprint").join("beads").join(repo_id);
+    let repo_root = home.join(".openducktor").join("beads").join(repo_id);
     fs::create_dir_all(&repo_root).with_context(|| {
         format!(
             "Failed to create centralized Beads directory {}",
@@ -116,10 +116,10 @@ mod tests {
 
     #[test]
     fn central_beads_dir_uses_expected_layout_suffix() {
-        let resolved = resolve_central_beads_dir(Path::new("/tmp/openblueprint-test/repo"))
+        let resolved = resolve_central_beads_dir(Path::new("/tmp/openducktor-test/repo"))
             .expect("beads dir");
         let as_string = resolved.to_string_lossy();
-        assert!(as_string.contains(".openblueprint/beads/"));
+        assert!(as_string.contains(".openducktor/beads/"));
         assert!(as_string.ends_with("/.beads"));
     }
 }

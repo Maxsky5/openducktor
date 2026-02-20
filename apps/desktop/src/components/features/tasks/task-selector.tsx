@@ -1,5 +1,5 @@
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import type { TaskCard } from "@openblueprint/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { useMemo } from "react";
 
 type TaskSelectorProps = {

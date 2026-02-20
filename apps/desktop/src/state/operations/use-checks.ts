@@ -1,6 +1,6 @@
 import { errorMessage } from "@/lib/errors";
 import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
-import type { BeadsCheck, RuntimeCheck } from "@openblueprint/contracts";
+import type { BeadsCheck, RuntimeCheck } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";

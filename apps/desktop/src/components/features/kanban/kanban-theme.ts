@@ -1,4 +1,4 @@
-import type { KanbanColumnId } from "@openblueprint/core";
+import type { KanbanColumnId } from "@openducktor/core";
 
 type KanbanLaneTheme = {
   boardSurfaceClass: string;

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "openblueprint",
+      "name": "openducktor",
       "devDependencies": {
         "@biomejs/biome": "^1.9.4",
         "@types/node": "^24.3.0",
@@ -11,14 +11,14 @@
       },
     },
     "apps/desktop": {
-      "name": "@openblueprint/desktop",
+      "name": "@openducktor/desktop",
       "version": "0.1.0",
       "dependencies": {
         "@ai-sdk/react": "^2.0.31",
-        "@openblueprint/adapters-opencode-sdk": "workspace:*",
-        "@openblueprint/adapters-tauri-host": "workspace:*",
-        "@openblueprint/contracts": "workspace:*",
-        "@openblueprint/core": "workspace:*",
+        "@openducktor/adapters-opencode-sdk": "workspace:*",
+        "@openducktor/adapters-tauri-host": "workspace:*",
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
         "@radix-ui/react-dialog": "^1.1.14",
         "@radix-ui/react-popover": "^1.1.15",
         "@radix-ui/react-slot": "^1.2.3",
@@ -54,39 +54,39 @@
       },
     },
     "packages/adapters-opencode-sdk": {
-      "name": "@openblueprint/adapters-opencode-sdk",
+      "name": "@openducktor/adapters-opencode-sdk",
       "version": "0.1.0",
       "dependencies": {
-        "@openblueprint/contracts": "workspace:*",
-        "@openblueprint/core": "workspace:*",
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
         "@opencode-ai/sdk": "^1.2.6",
       },
     },
     "packages/adapters-tauri-host": {
-      "name": "@openblueprint/adapters-tauri-host",
+      "name": "@openducktor/adapters-tauri-host",
       "version": "0.1.0",
       "dependencies": {
-        "@openblueprint/contracts": "workspace:*",
-        "@openblueprint/core": "workspace:*",
+        "@openducktor/contracts": "workspace:*",
+        "@openducktor/core": "workspace:*",
         "zod": "^3.24.1",
       },
     },
     "packages/contracts": {
-      "name": "@openblueprint/contracts",
+      "name": "@openducktor/contracts",
       "version": "0.1.0",
       "dependencies": {
         "zod": "^3.24.1",
       },
     },
     "packages/core": {
-      "name": "@openblueprint/core",
+      "name": "@openducktor/core",
       "version": "0.1.0",
       "dependencies": {
-        "@openblueprint/contracts": "workspace:*",
+        "@openducktor/contracts": "workspace:*",
       },
     },
     "packages/openducktor-mcp": {
-      "name": "@openblueprint/openducktor-mcp",
+      "name": "@openducktor/openducktor-mcp",
       "version": "0.1.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.17.5",
@@ -235,17 +235,17 @@
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.26.0", "", { "dependencies": { "@hono/node-server": "^1.19.9", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-Y5RmPncpiDtTXDbLKswIJzTqu2hyBKxTNsgKqKclDbhIgg1wgtf1fRuvxgTnRfcnxtvvgbIEcqUOzZrJ6iSReg=="],
 
-    "@openblueprint/adapters-opencode-sdk": ["@openblueprint/adapters-opencode-sdk@workspace:packages/adapters-opencode-sdk"],
+    "@openducktor/adapters-opencode-sdk": ["@openducktor/adapters-opencode-sdk@workspace:packages/adapters-opencode-sdk"],
 
-    "@openblueprint/adapters-tauri-host": ["@openblueprint/adapters-tauri-host@workspace:packages/adapters-tauri-host"],
+    "@openducktor/adapters-tauri-host": ["@openducktor/adapters-tauri-host@workspace:packages/adapters-tauri-host"],
 
-    "@openblueprint/contracts": ["@openblueprint/contracts@workspace:packages/contracts"],
+    "@openducktor/contracts": ["@openducktor/contracts@workspace:packages/contracts"],
 
-    "@openblueprint/core": ["@openblueprint/core@workspace:packages/core"],
+    "@openducktor/core": ["@openducktor/core@workspace:packages/core"],
 
-    "@openblueprint/desktop": ["@openblueprint/desktop@workspace:apps/desktop"],
+    "@openducktor/desktop": ["@openducktor/desktop@workspace:apps/desktop"],
 
-    "@openblueprint/openducktor-mcp": ["@openblueprint/openducktor-mcp@workspace:packages/openducktor-mcp"],
+    "@openducktor/openducktor-mcp": ["@openducktor/openducktor-mcp@workspace:packages/openducktor-mcp"],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@1.2.6", "", {}, "sha512-dWMF8Aku4h7fh8sw5tQ2FtbqRLbIFT8FcsukpxTird49ax7oUXP+gzqxM/VdxHjfksQvzLBjLZyMdDStc5g7xA=="],
 

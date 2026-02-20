@@ -7,7 +7,7 @@ import type {
   TaskCreateInput,
   TaskStatus,
   TaskUpdatePatch,
-} from "@openblueprint/contracts";
+} from "@openducktor/contracts";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";

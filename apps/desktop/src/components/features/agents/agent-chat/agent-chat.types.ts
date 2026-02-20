@@ -1,6 +1,6 @@
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentModelSelection, AgentRole } from "@openblueprint/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
 import type { RefObject, UIEvent } from "react";
 

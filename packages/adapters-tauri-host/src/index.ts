@@ -23,8 +23,8 @@ import {
   taskStatusSchema,
   taskUpdatePatchSchema,
   workspaceRecordSchema,
-} from "@openblueprint/contracts";
-import type { PlannerTools, SetPlanOutput, SetSpecOutput } from "@openblueprint/core";
+} from "@openducktor/contracts";
+import type { PlannerTools, SetPlanOutput, SetSpecOutput } from "@openducktor/core";
 
 type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -95,7 +95,7 @@ export class TauriHostClient implements PlannerTools {
   async taskDelete(
     repoPath: string,
     taskId: string,
-    deleteSubtasks: boolean = false,
+    deleteSubtasks = false,
   ): Promise<{ ok: boolean }> {
     return this.invokeFn<{ ok: boolean }>("task_delete", {
       repoPath,

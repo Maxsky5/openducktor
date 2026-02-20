@@ -1,12 +1,12 @@
 [package]
-name = "openblueprint-desktop"
+name = "openducktor-desktop"
 version = "0.1.0"
-description = "OpenBlueprint Desktop"
-authors = ["OpenBlueprint"]
+description = "OpenDucktor Desktop"
+authors = ["OpenDucktor"]
 edition = "2021"
 
 [lib]
-name = "openblueprint_desktop_lib"
+name = "openducktor_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

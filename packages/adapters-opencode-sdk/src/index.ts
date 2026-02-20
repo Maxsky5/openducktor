@@ -1,4 +1,10 @@
 import {
+  type Event,
+  type OpencodeClient,
+  type Part,
+  createOpencodeClient,
+} from "@opencode-ai/sdk/v2";
+import {
   type AgentEnginePort,
   type AgentEvent,
   type AgentModelCatalog,
@@ -17,13 +23,7 @@ import {
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
   buildRoleScopedOdtToolSelection,
-} from "@openblueprint/core";
-import {
-  type Event,
-  type OpencodeClient,
-  type Part,
-  createOpencodeClient,
-} from "@opencode-ai/sdk/v2";
+} from "@openducktor/core";
 
 type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
   sessionId: string;
@@ -133,7 +133,9 @@ const extractMessageTotalTokens = (
   parts: Array<Part | Record<string, unknown>>,
 ): number | undefined => {
   const infoTokens =
-    info && typeof info === "object" ? toTokenTotal((info as { tokens?: unknown }).tokens) : undefined;
+    info && typeof info === "object"
+      ? toTokenTotal((info as { tokens?: unknown }).tokens)
+      : undefined;
   if (typeof infoTokens === "number" && infoTokens > 0) {
     return infoTokens;
   }
@@ -678,11 +680,11 @@ const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
         const limitRaw = (rawModel as { limit?: unknown }).limit;
         const contextWindow =
           limitRaw && typeof limitRaw === "object"
-            ? toFiniteNumber((limitRaw as { context?: unknown }).context) ?? undefined
+            ? (toFiniteNumber((limitRaw as { context?: unknown }).context) ?? undefined)
             : undefined;
         const outputLimit =
           limitRaw && typeof limitRaw === "object"
-            ? toFiniteNumber((limitRaw as { output?: unknown }).output) ?? undefined
+            ? (toFiniteNumber((limitRaw as { output?: unknown }).output) ?? undefined)
             : undefined;
         const variants =
           variantsRaw && typeof variantsRaw === "object"

@@ -3,13 +3,13 @@ import type {
   AgentQuestionRequest,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { TaskCard } from "@openblueprint/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
   AgentSessionTodoItem,
-} from "@openblueprint/core";
+} from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import type { AgentRoleOption } from "./agent-chat.types";
 

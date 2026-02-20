@@ -1,5 +1,5 @@
 {
-  "name": "@openblueprint/adapters-opencode-sdk",
+  "name": "@openducktor/adapters-opencode-sdk",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.2.6",
-    "@openblueprint/contracts": "workspace:*",
-    "@openblueprint/core": "workspace:*"
+    "@openducktor/contracts": "workspace:*",
+    "@openducktor/core": "workspace:*"
   }
 }

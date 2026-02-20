@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useTasksState, useWorkspaceState } from "@/state";
 import type { ComposerMode, ComposerState, ComposerStep } from "@/types/task-composer";
-import type { TaskCard, TaskCreateInput, TaskUpdatePatch } from "@openblueprint/contracts";
+import type { TaskCard, TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
 import { ArrowLeft, Flag, Loader2, Sparkles, WandSparkles } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 

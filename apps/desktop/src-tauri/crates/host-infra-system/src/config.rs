@@ -162,7 +162,7 @@ impl AppConfigStore {
     pub fn new() -> Result<Self> {
         let home =
             dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
-        let path = home.join(".openblueprint").join("config.json");
+        let path = home.join(".openducktor").join("config.json");
         Ok(Self { path })
     }
 
@@ -354,7 +354,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time")
             .as_nanos();
-        std::env::temp_dir().join(format!("openblueprint-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("openducktor-{name}-{nonce}"))
     }
 
     fn test_store(name: &str) -> (AppConfigStore, PathBuf) {

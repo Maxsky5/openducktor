@@ -8,7 +8,7 @@ export function AppBrand(): ReactElement {
         <Bot className="size-5" />
       </div>
       <div>
-        <p className="text-lg font-semibold tracking-tight">OpenBlueprint</p>
+        <p className="text-lg font-semibold tracking-tight">OpenDucktor</p>
         <p className="text-xs text-slate-500">Agent Orchestration</p>
       </div>
     </div>

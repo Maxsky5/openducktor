@@ -1,4 +1,4 @@
-import type { TaskCard, TaskStatus } from "@openblueprint/contracts";
+import type { TaskCard, TaskStatus } from "@openducktor/contracts";
 
 export type KanbanColumnId =
   | "open"

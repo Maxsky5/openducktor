@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openblueprint/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { mapToKanbanColumns } from "./kanban-mapper";
 
 const makeTask = (partial: Partial<TaskCard> & Pick<TaskCard, "id" | "title">): TaskCard => ({

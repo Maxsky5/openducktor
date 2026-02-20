@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEvent } from "@openblueprint/core";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
+import type { AgentEvent } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
 
 type MockSession = {

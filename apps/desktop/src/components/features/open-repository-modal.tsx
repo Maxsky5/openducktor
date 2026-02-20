@@ -95,7 +95,7 @@ export function OpenRepositoryModal({
             Open a Repository
           </DialogTitle>
           <DialogDescription>
-            Select the repository you want to orchestrate. OpenBlueprint will contextualize Kanban,
+            Select the repository you want to orchestrate. OpenDucktor will contextualize Kanban,
             Planner, and Builder to this repo.
           </DialogDescription>
         </DialogHeader>

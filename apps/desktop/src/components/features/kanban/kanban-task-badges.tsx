@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import type { IssueType, RunSummary } from "@openblueprint/contracts";
+import type { IssueType, RunSummary } from "@openducktor/contracts";
 import {
   AlertTriangle,
   Bug,

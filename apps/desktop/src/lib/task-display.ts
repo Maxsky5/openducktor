@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openblueprint/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 
 type ToneVariant = "secondary" | "warning" | "danger" | "success";
 

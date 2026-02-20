@@ -6,7 +6,7 @@ import {
   type AgentRole,
   isOdtWorkflowMutationToolName,
   toOdtWorkflowToolDisplayName,
-} from "@openblueprint/core";
+} from "@openducktor/core";
 import {
   Bot,
   Brain,

@@ -1872,7 +1872,7 @@ fn resolve_mcp_command() -> Result<Vec<String>> {
         "--cwd".to_string(),
         workspace_root,
         "--filter".to_string(),
-        "@openblueprint/openducktor-mcp".to_string(),
+        "@openducktor/openducktor-mcp".to_string(),
         "start".to_string(),
     ])
 }

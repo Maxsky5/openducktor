@@ -2,7 +2,7 @@ import {
   defaultSpecTemplateMarkdown,
   missingSpecSections,
   validateSpecMarkdown,
-} from "@openblueprint/contracts";
+} from "@openducktor/contracts";
 import type { PlannerTools } from "../types/planner";
 
 export class PlannerSpecService {

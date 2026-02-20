@@ -1,7 +1,7 @@
 import { errorMessage } from "@/lib/errors";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
-import { OpencodeSdkAdapter } from "@openblueprint/adapters-opencode-sdk";
-import type { AgentSessionRecord, RunSummary, TaskCard } from "@openblueprint/contracts";
+import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
   type AgentModelSelection,
@@ -11,7 +11,7 @@ import {
   type AgentSessionTodoItem,
   buildAgentSystemPrompt,
   isOdtWorkflowMutationToolName,
-} from "@openblueprint/core";
+} from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -1620,7 +1620,7 @@ export function useAgentOrchestratorOperations({
                 sessionId,
                 requestId: event.requestId,
                 reply: "reject",
-                message: `Rejected by OpenBlueprint ${role} read-only policy.`,
+                message: `Rejected by OpenDucktor ${role} read-only policy.`,
               })
               .catch(() => undefined);
 

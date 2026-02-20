@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for OpenBlueprint",
+  "description": "Default capability for OpenDucktor",
   "windows": ["main"],
   "permissions": [
     "core:default",

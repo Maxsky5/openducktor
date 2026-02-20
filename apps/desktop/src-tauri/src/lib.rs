@@ -75,7 +75,7 @@ fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
 
 fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
-        let _ = app.emit("openblueprint://run-event", event);
+        let _ = app.emit("openducktor://run-event", event);
     })
 }
 
@@ -617,7 +617,7 @@ pub fn run() {
             agent_session_upsert
         ])
         .build(tauri::generate_context!())
-        .expect("error while building openblueprint")
+        .expect("error while building openducktor")
         .run(move |_handle, event| {
             if matches!(
                 event,

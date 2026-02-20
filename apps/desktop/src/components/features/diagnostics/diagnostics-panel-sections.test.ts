@@ -39,7 +39,7 @@ describe("DiagnosticsPanelSections", () => {
       },
       beadsCheck: {
         beadsOk: true,
-        beadsPath: "/Users/dev/.openblueprint/beads/fairnest/.beads",
+        beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
         beadsError: null,
       },
       opencodeHealth: {

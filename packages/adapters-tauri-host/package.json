@@ -1,5 +1,5 @@
 {
-  "name": "@openblueprint/adapters-tauri-host",
+  "name": "@openducktor/adapters-tauri-host",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -11,8 +11,8 @@
     "lint": "biome check src"
   },
   "dependencies": {
-    "@openblueprint/contracts": "workspace:*",
-    "@openblueprint/core": "workspace:*",
+    "@openducktor/contracts": "workspace:*",
+    "@openducktor/core": "workspace:*",
     "zod": "^3.24.1"
   }
 }

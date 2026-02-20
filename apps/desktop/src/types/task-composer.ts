@@ -1,4 +1,4 @@
-import type { IssueType } from "@openblueprint/contracts";
+import type { IssueType } from "@openducktor/contracts";
 import type { LucideIcon } from "lucide-react";
 
 export type ComposerMode = "create" | "edit";

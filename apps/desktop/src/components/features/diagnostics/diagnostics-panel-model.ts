@@ -1,5 +1,5 @@
 import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
-import type { BeadsCheck, RuntimeCheck, WorkspaceRecord } from "@openblueprint/contracts";
+import type { BeadsCheck, RuntimeCheck, WorkspaceRecord } from "@openducktor/contracts";
 import {
   type DiagnosticsSummary,
   buildDiagnosticsSummary,

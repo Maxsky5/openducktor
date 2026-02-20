@@ -1,4 +1,4 @@
-import type { AgentRuntimeSummary } from "@openblueprint/contracts";
+import type { AgentRuntimeSummary } from "@openducktor/contracts";
 
 export type RepoOpencodeHealthCheck = {
   runtimeOk: boolean;

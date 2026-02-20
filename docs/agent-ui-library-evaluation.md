@@ -1,7 +1,7 @@
 # Agent UI Library Evaluation (V1)
 
 ## Question
-What is the best React library strategy for OpenBlueprint agent pages (Spec, Planner, Build, QA)?
+What is the best React library strategy for OpenDucktor agent pages (Spec, Planner, Build, QA)?
 
 ## Evaluated Options
 
@@ -11,22 +11,22 @@ What is the best React library strategy for OpenBlueprint agent pages (Spec, Pla
   - Strong typing and ecosystem maturity.
 - Limitation for this project:
   - It is a headless state layer, not a complete agent workflow component system.
-  - OpenBlueprint needs custom orchestration surfaces: permission requests, question replies,
+  - OpenDucktor needs custom orchestration surfaces: permission requests, question replies,
     tool-call timelines, task-document panes, and Tauri/runtime controls.
 
 ### 2) Assistant-focused component libraries
 - Strengths:
   - Faster bootstrap for generic chat experiences.
 - Limitation for this project:
-  - OpenBlueprint agent UX is tightly coupled to local OpenCode runtime lifecycle, Beads workflow
+  - OpenDucktor agent UX is tightly coupled to local OpenCode runtime lifecycle, Beads workflow
     transitions, and Tauri host commands.
   - The app needs custom role/scenario controls and tool-result semantics that are not generic chat UI.
 
 ## Decision
 Use **project-native shadcn + Tailwind composition** for the agent UI layer and pair it with:
-- `@openblueprint/adapters-opencode-sdk` for OpenCode session/event orchestration.
-- `@openblueprint/adapters-tauri-host` for task transitions and runtime control.
+- `@openducktor/adapters-opencode-sdk` for OpenCode session/event orchestration.
+- `@openducktor/adapters-tauri-host` for task transitions and runtime control.
 
-This keeps the UI fully aligned with OpenBlueprint workflow semantics while preserving replaceable
+This keeps the UI fully aligned with OpenDucktor workflow semantics while preserving replaceable
 adapter boundaries (hexagonal architecture).
 

@@ -1,4 +1,4 @@
-import type { TaskAction, TaskCard } from "@openblueprint/contracts";
+import type { TaskAction, TaskCard } from "@openducktor/contracts";
 
 export type TaskWorkflowAction = Exclude<TaskAction, "view_details">;
 

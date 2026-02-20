@@ -4,7 +4,7 @@ import type {
   AgentRole,
   AgentScenario,
   AgentSessionTodoItem,
-} from "@openblueprint/core";
+} from "@openducktor/core";
 
 export type AgentChatMessageMeta =
   | {

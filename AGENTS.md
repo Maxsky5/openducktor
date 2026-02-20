@@ -5,7 +5,7 @@ Use it as the default source of truth for project-specific implementation rules.
 
 ## Purpose
 
-OpenBlueprint is a Bun monorepo for a macOS-first Tauri v2 desktop app that orchestrates AI planning/building workflows with Beads as task source-of-truth.
+OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app that orchestrates AI planning/building workflows with Beads as task source-of-truth.
 
 Goals for agent contributions:
 
@@ -38,8 +38,8 @@ Goals for agent contributions:
 
 ### Configuration and storage policies (V1)
 
-- Global config path is fixed: `~/.openblueprint/config.json`
-- Beads store path is fixed per repo: `~/.openblueprint/beads/<repo-id>/.beads`
+- Global config path is fixed: `~/.openducktor/config.json`
+- Beads store path is fixed per repo: `~/.openducktor/beads/<repo-id>/.beads`
 - `BEADS_DIR` must be used for Beads CLI execution.
 - No user-facing Beads storage path configuration in V1.
 - No migration from repo-local `.beads` in V1.
@@ -157,11 +157,11 @@ Keep this contract stable. If you change any item below, update all related laye
 
 ### Package-level targets for focused iteration
 
-- `bun run --filter @openblueprint/core test`
-- `bun run --filter @openblueprint/adapters-tauri-host test`
-- `bun run --filter @openblueprint/adapters-opencode-sdk test`
-- `bun run --filter @openblueprint/openducktor-mcp test`
-- `bun run --filter @openblueprint/desktop test`
+- `bun run --filter @openducktor/core test`
+- `bun run --filter @openducktor/adapters-tauri-host test`
+- `bun run --filter @openducktor/adapters-opencode-sdk test`
+- `bun run --filter @openducktor/openducktor-mcp test`
+- `bun run --filter @openducktor/desktop test`
 - `cd apps/desktop/src-tauri && cargo test -p host-domain`
 - `cd apps/desktop/src-tauri && cargo test -p host-infra-system`
 - `cd apps/desktop/src-tauri && cargo test -p host-infra-beads`
@@ -200,9 +200,9 @@ Run from repo root unless stated otherwise:
 
 Minimum validation for most frontend tasks:
 
-- `bun run --filter @openblueprint/desktop typecheck`
-- `bun run --filter @openblueprint/desktop lint`
-- `bun run --filter @openblueprint/desktop test`
+- `bun run --filter @openducktor/desktop typecheck`
+- `bun run --filter @openducktor/desktop lint`
+- `bun run --filter @openducktor/desktop test`
 
 Add Rust check when host code changes:
 

@@ -7,7 +7,7 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import type { RunEvent } from "@openblueprint/contracts";
+import type { RunEvent } from "@openducktor/contracts";
 import {
   type Context,
   type PropsWithChildren,

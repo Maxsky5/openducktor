@@ -1,6 +1,6 @@
-# OpenBlueprint V1
+# OpenDucktor V1
 
-OpenBlueprint is a macOS-first Tauri v2 desktop app with a Bun monorepo, React frontend, and Rust host runtime.
+OpenDucktor is a macOS-first Tauri v2 desktop app with a Bun monorepo, React frontend, and Rust host runtime.
 
 ## Monorepo Layout
 
@@ -14,19 +14,19 @@ OpenBlueprint is a macOS-first Tauri v2 desktop app with a Bun monorepo, React f
 
 Replaceable ports:
 
-- `AgentEnginePort` in `/Users/20017260/.codex/worktrees/1317/openblueprint/packages/core/src/ports/agent-engine.ts`
-- `TaskStore` trait in `/Users/20017260/.codex/worktrees/1317/openblueprint/apps/desktop/src-tauri/crates/host-domain/src/lib.rs`
+- `AgentEnginePort` in `/Users/20017260/.codex/worktrees/1317/openducktor/packages/core/src/ports/agent-engine.ts`
+- `TaskStore` trait in `/Users/20017260/.codex/worktrees/1317/openducktor/apps/desktop/src-tauri/crates/host-domain/src/lib.rs`
 
 Current adapters:
 
-- Opencode adapter: `/Users/20017260/.codex/worktrees/1317/openblueprint/packages/adapters-opencode-sdk/src/index.ts`
-- Beads adapter: `/Users/20017260/.codex/worktrees/1317/openblueprint/apps/desktop/src-tauri/crates/host-infra-beads/src/lib.rs`
+- Opencode adapter: `/Users/20017260/.codex/worktrees/1317/openducktor/packages/adapters-opencode-sdk/src/index.ts`
+- Beads adapter: `/Users/20017260/.codex/worktrees/1317/openducktor/apps/desktop/src-tauri/crates/host-infra-beads/src/lib.rs`
 
 ## Home Config
 
-OpenBlueprint stores config at:
+OpenDucktor stores config at:
 
-- `~/.openblueprint/config.json`
+- `~/.openducktor/config.json`
 
 Example:
 
@@ -60,14 +60,14 @@ Example:
 
 Beads storage is centrally managed per repository and is not user-configurable in V1.
 
-- Base directory: `~/.openblueprint/beads/`
-- Per repo store: `~/.openblueprint/beads/<repo-id>/.beads`
+- Base directory: `~/.openducktor/beads/`
+- Per repo store: `~/.openducktor/beads/<repo-id>/.beads`
 - `repo-id`: `<slug>-<short-hash>` derived from canonical absolute repo path
 
 Behavior:
 
-- On repository add/select, OpenBlueprint auto-initializes Beads if needed.
-- OpenBlueprint always sets `BEADS_DIR` for `bd` commands.
+- On repository add/select, OpenDucktor auto-initializes Beads if needed.
+- OpenDucktor always sets `BEADS_DIR` for `bd` commands.
 - Existing repo-local `.beads` is ignored in V1 (no migration yet).
 
 ## Planner Rules
@@ -96,7 +96,7 @@ bun run build
 bun run test
 
 # frontend (browser only)
-bun run --filter @openblueprint/desktop dev
+bun run --filter @openducktor/desktop dev
 
 # tauri CLI/version
 bun run tauri -- --version
@@ -118,4 +118,4 @@ cd apps/desktop/src-tauri && cargo check
 - `delegate_start`, `delegate_respond`, `delegate_stop`, `delegate_cleanup`
 - `runs_list`
 
-Run events emit on `openblueprint://run-event`.
+Run events emit on `openducktor://run-event`.

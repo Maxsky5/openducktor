@@ -1,4 +1,4 @@
-import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openblueprint/contracts";
+import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
 import { useCallback } from "react";
 import { host } from "./host";
 

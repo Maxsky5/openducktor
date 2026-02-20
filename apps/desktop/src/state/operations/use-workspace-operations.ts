@@ -1,5 +1,5 @@
 import { errorMessage } from "@/lib/errors";
-import type { WorkspaceRecord } from "@openblueprint/contracts";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";

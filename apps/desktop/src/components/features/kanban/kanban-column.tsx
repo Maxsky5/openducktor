@@ -2,8 +2,8 @@ import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { RunSummary } from "@openblueprint/contracts";
-import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openblueprint/core";
+import type { RunSummary } from "@openducktor/contracts";
+import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openducktor/core";
 import { Inbox } from "lucide-react";
 import type { ReactElement } from "react";
 

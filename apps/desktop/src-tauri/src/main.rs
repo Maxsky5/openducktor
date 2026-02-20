@@ -1,3 +1,3 @@
 fn main() {
-    openblueprint_desktop_lib::run();
+    openducktor_desktop_lib::run();
 }

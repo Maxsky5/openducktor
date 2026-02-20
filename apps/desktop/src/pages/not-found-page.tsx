@@ -9,7 +9,7 @@ export function NotFoundPage(): ReactElement {
       <Card className="max-w-md">
         <CardHeader>
           <CardTitle>Page not found</CardTitle>
-          <CardDescription>This route does not exist in OpenBlueprint.</CardDescription>
+          <CardDescription>This route does not exist in OpenDucktor.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild>

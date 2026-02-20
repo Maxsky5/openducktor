@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { AgentSessionTodoItem } from "@openblueprint/core";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { CheckCircle2, ChevronDown, ChevronUp, Circle, ListTodo, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 
