@@ -12,6 +12,7 @@ type ListCatalogInput = {
 
 type OpencodeCatalogDependencies = {
   ensureRuntime: (repoPath: string) => Promise<AgentRuntimeSummary>;
+  stopRuntime: (runtimeId: string) => Promise<{ ok: boolean }>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
   listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
   getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, McpServerStatus>>;
@@ -21,6 +22,8 @@ type OpencodeCatalogDependencies = {
 const ODT_MCP_SERVER_NAME = "openducktor";
 const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 const toNowIso = (): string => new Date().toISOString();
+const isOpencodeConfigInvalidError = (message: string): boolean =>
+  /configinvaliderror|opencode_config_content|loglevel|invalid option/i.test(message);
 
 const resolveMcpStatusError = (
   statusByServer: Record<string, McpServerStatus>,
@@ -83,20 +86,47 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
     try {
       statusByServer = await deps.getMcpStatus(runtimeInput);
     } catch (error) {
-      const mcpError = `Failed to query OpenCode MCP status: ${errorMessage(error)}`;
-      return {
-        runtimeOk: true,
-        runtimeError: null,
-        runtime,
-        mcpOk: false,
-        mcpError,
-        mcpServerName: ODT_MCP_SERVER_NAME,
-        mcpServerStatus: null,
-        mcpServerError: mcpError,
-        availableToolIds: [],
-        checkedAt,
-        errors: [mcpError],
-      };
+      const rawMessage = errorMessage(error);
+      if (runtime && isOpencodeConfigInvalidError(rawMessage)) {
+        try {
+          await deps.stopRuntime(runtime.runtimeId);
+          runtime = await deps.ensureRuntime(repoPath);
+          statusByServer = await deps.getMcpStatus({
+            baseUrl: toBaseUrl(runtime.port),
+            workingDirectory: runtime.workingDirectory,
+          });
+        } catch (retryError) {
+          const mcpError = `Failed to query OpenCode MCP status: ${errorMessage(retryError)}`;
+          return {
+            runtimeOk: true,
+            runtimeError: null,
+            runtime,
+            mcpOk: false,
+            mcpError,
+            mcpServerName: ODT_MCP_SERVER_NAME,
+            mcpServerStatus: null,
+            mcpServerError: mcpError,
+            availableToolIds: [],
+            checkedAt,
+            errors: [mcpError],
+          };
+        }
+      } else {
+        const mcpError = `Failed to query OpenCode MCP status: ${rawMessage}`;
+        return {
+          runtimeOk: true,
+          runtimeError: null,
+          runtime,
+          mcpOk: false,
+          mcpError,
+          mcpServerName: ODT_MCP_SERVER_NAME,
+          mcpServerStatus: null,
+          mcpServerError: mcpError,
+          availableToolIds: [],
+          checkedAt,
+          errors: [mcpError],
+        };
+      }
     }
 
     let { status: mcpServerStatus, error: mcpServerError } = resolveMcpStatusError(statusByServer);
@@ -154,6 +184,7 @@ const adapter = new OpencodeSdkAdapter();
 
 const opencodeCatalogOperations = createOpencodeCatalogOperations({
   ensureRuntime: (repoPath) => host.opencodeRepoRuntimeEnsure(repoPath),
+  stopRuntime: (runtimeId) => host.opencodeRuntimeStop(runtimeId),
   listAvailableModels: (input) => adapter.listAvailableModels(input),
   listAvailableToolIds: (input) => adapter.listAvailableToolIds(input),
   getMcpStatus: (input) => adapter.getMcpStatus(input),

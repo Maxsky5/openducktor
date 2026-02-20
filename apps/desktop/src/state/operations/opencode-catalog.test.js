@@ -41,6 +41,7 @@ describe("createOpencodeCatalogOperations", () => {
         modelCalls.push(input);
         return catalogFixture;
       },
+      stopRuntime: async () => ({ ok: true }),
       listAvailableToolIds: async () => [],
       getMcpStatus: async () => ({}),
       connectMcpServer: async () => {},
@@ -65,6 +66,7 @@ describe("createOpencodeCatalogOperations", () => {
         throw new Error("runtime boot failed");
       },
       listAvailableModels: async () => catalogFixture,
+      stopRuntime: async () => ({ ok: true }),
       listAvailableToolIds: async () => [],
       getMcpStatus: async () => {
         mcpStatusCalled = true;
@@ -88,6 +90,7 @@ describe("createOpencodeCatalogOperations", () => {
     const operations = createOpencodeCatalogOperations({
       ensureRuntime: async () => runtimeFixture,
       listAvailableModels: async () => catalogFixture,
+      stopRuntime: async () => ({ ok: true }),
       listAvailableToolIds: async () => ["read", "glob"],
       getMcpStatus: async () => ({
         openducktor: { status: "connected" },
@@ -112,6 +115,7 @@ describe("createOpencodeCatalogOperations", () => {
     const operations = createOpencodeCatalogOperations({
       ensureRuntime: async () => runtimeFixture,
       listAvailableModels: async () => catalogFixture,
+      stopRuntime: async () => ({ ok: true }),
       listAvailableToolIds: async () => [],
       getMcpStatus: async (input) => {
         statusCalls.push(input);
@@ -149,6 +153,7 @@ describe("createOpencodeCatalogOperations", () => {
     const operations = createOpencodeCatalogOperations({
       ensureRuntime: async () => runtimeFixture,
       listAvailableModels: async () => catalogFixture,
+      stopRuntime: async () => ({ ok: true }),
       listAvailableToolIds: async () => [],
       getMcpStatus: async () => {
         throw new Error("status unavailable");
@@ -169,6 +174,7 @@ describe("createOpencodeCatalogOperations", () => {
     const operations = createOpencodeCatalogOperations({
       ensureRuntime: async () => runtimeFixture,
       listAvailableModels: async () => catalogFixture,
+      stopRuntime: async () => ({ ok: true }),
       listAvailableToolIds: async () => [],
       getMcpStatus: async () => ({
         context7: { status: "connected" },
@@ -181,5 +187,53 @@ describe("createOpencodeCatalogOperations", () => {
     expect(health.mcpOk).toBe(false);
     expect(health.mcpServerStatus).toBeNull();
     expect(health.mcpError).toContain("MCP server 'openducktor' is not configured");
+  });
+
+  test("checkRepoOpencodeHealth restarts runtime once on config-invalid mcp status errors", async () => {
+    let ensureCalls = 0;
+    const stopCalls = [];
+    const statusCalls = [];
+    const operations = createOpencodeCatalogOperations({
+      ensureRuntime: async () => {
+        ensureCalls += 1;
+        if (ensureCalls === 1) {
+          return runtimeFixture;
+        }
+        return {
+          ...runtimeFixture,
+          runtimeId: "runtime-spec-main-restarted",
+          port: 43122,
+        };
+      },
+      listAvailableModels: async () => catalogFixture,
+      stopRuntime: async (runtimeId) => {
+        stopCalls.push(runtimeId);
+        return { ok: true };
+      },
+      listAvailableToolIds: async () => ["openducktor_odt_set_spec"],
+      getMcpStatus: async (input) => {
+        statusCalls.push(input);
+        if (statusCalls.length === 1) {
+          throw new Error(
+            "OpenCode request failed: get mcp status: ConfigInvalidError (OPENCODE_CONFIG_CONTENT logLevel)",
+          );
+        }
+        return {
+          openducktor: { status: "connected" },
+        };
+      },
+      connectMcpServer: async () => {},
+    });
+
+    const health = await operations.checkRepoOpencodeHealth("/repo");
+
+    expect(stopCalls).toEqual(["runtime-spec-main"]);
+    expect(statusCalls).toEqual([
+      { baseUrl: "http://127.0.0.1:43121", workingDirectory: "/repo" },
+      { baseUrl: "http://127.0.0.1:43122", workingDirectory: "/repo" },
+    ]);
+    expect(health.runtimeOk).toBe(true);
+    expect(health.mcpOk).toBe(true);
+    expect(health.runtime?.runtimeId).toBe("runtime-spec-main-restarted");
   });
 });

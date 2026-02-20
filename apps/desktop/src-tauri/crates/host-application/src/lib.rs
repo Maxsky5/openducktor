@@ -130,9 +130,13 @@ impl AppService {
             git_ok,
             git_version: version_command("git", &["--version"]),
             opencode_ok,
-            opencode_version: opencode_binary
-                .as_ref()
-                .map(|binary| format!("installed ({binary})")),
+            opencode_version: opencode_binary.as_ref().map(|binary| {
+                if let Some(version) = read_opencode_version(binary.as_str()) {
+                    format!("{version} ({binary})")
+                } else {
+                    format!("installed ({binary})")
+                }
+            }),
             errors,
         })
     }
@@ -1880,7 +1884,7 @@ fn build_opencode_config_content(
     let mcp_command = resolve_mcp_command()?;
     let beads_dir = resolve_central_beads_dir(repo_path_for_mcp)?;
     let config = json!({
-        "logLevel": "info",
+        "logLevel": "INFO",
         "mcp": {
             "openducktor": {
                 "type": "local",
@@ -1895,6 +1899,42 @@ fn build_opencode_config_content(
         }
     });
     serde_json::to_string(&config).context("Failed to serialize OpenCode MCP config")
+}
+
+fn read_opencode_version(binary: &str) -> Option<String> {
+    let mut command = Command::new(binary);
+    command
+        .arg("--version")
+        .env("OPENCODE_CONFIG_CONTENT", r#"{"logLevel":"INFO"}"#)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    configure_process_group(&mut command);
+
+    let mut child = command.spawn().ok()?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match child.try_wait().ok()? {
+            Some(status) => {
+                if !status.success() {
+                    return None;
+                }
+                let output = child.wait_with_output().ok()?;
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                return stdout
+                    .lines()
+                    .find(|line| !line.trim().is_empty())
+                    .map(|line| line.trim().to_string());
+            }
+            None => {
+                if Instant::now() >= deadline {
+                    terminate_child_process(&mut child);
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
 }
 
 fn resolve_opencode_binary_path() -> Option<String> {
@@ -2441,6 +2481,7 @@ mod tests {
         }
 
         let parsed: Value = serde_json::from_str(&config).expect("valid json");
+        assert_eq!(parsed["logLevel"].as_str(), Some("INFO"));
         let command = parsed["mcp"]["openducktor"]["command"]
             .as_array()
             .expect("command array")
