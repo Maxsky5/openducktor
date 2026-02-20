@@ -689,13 +689,6 @@ const assistantDurationFromHistory = (
     return undefined;
   }
 
-  const assistantTimestampMs = Date.parse(message.timestamp);
-  if (previousUserTimestampMs !== null && !Number.isNaN(assistantTimestampMs)) {
-    if (assistantTimestampMs >= previousUserTimestampMs) {
-      return assistantTimestampMs - previousUserTimestampMs;
-    }
-  }
-
   let startedAtMs: number | null = null;
   let endedAtMs: number | null = null;
   for (const part of message.parts) {
@@ -713,6 +706,13 @@ const assistantDurationFromHistory = (
 
   if (startedAtMs !== null && endedAtMs !== null && endedAtMs >= startedAtMs) {
     return endedAtMs - startedAtMs;
+  }
+
+  const assistantTimestampMs = Date.parse(message.timestamp);
+  if (previousUserTimestampMs !== null && !Number.isNaN(assistantTimestampMs)) {
+    if (assistantTimestampMs >= previousUserTimestampMs) {
+      return assistantTimestampMs - previousUserTimestampMs;
+    }
   }
 
   return undefined;
@@ -933,17 +933,17 @@ export function useAgentOrchestratorOperations({
       const parsedTimestamp = Date.parse(timestamp);
       const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
 
+      const startedAt = turnStartedAtBySessionRef.current[sessionId];
+      if (typeof startedAt === "number" && endedAt >= startedAt) {
+        return Math.max(0, endedAt - startedAt);
+      }
+
       const latestUserMessage = [...messages].reverse().find((entry) => entry.role === "user");
       if (latestUserMessage) {
         const userTimestamp = Date.parse(latestUserMessage.timestamp);
         if (!Number.isNaN(userTimestamp) && endedAt >= userTimestamp) {
           return Math.max(0, endedAt - userTimestamp);
         }
-      }
-
-      const startedAt = turnStartedAtBySessionRef.current[sessionId];
-      if (typeof startedAt === "number" && endedAt >= startedAt) {
-        return Math.max(0, endedAt - startedAt);
       }
 
       return undefined;
@@ -1484,6 +1484,12 @@ export function useAgentOrchestratorOperations({
         if (event.type === "session_status") {
           const status = event.status;
           if (status.type === "busy") {
+            if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
+              const busyStart = Date.parse(event.timestamp);
+              turnStartedAtBySessionRef.current[sessionId] = Number.isNaN(busyStart)
+                ? Date.now()
+                : busyStart;
+            }
             updateSession(
               sessionId,
               (current) =>
@@ -2098,6 +2104,7 @@ export function useAgentOrchestratorOperations({
       reply: "once" | "always" | "reject",
       message?: string,
     ): Promise<void> => {
+      turnStartedAtBySessionRef.current[sessionId] = Date.now();
       await adapter.replyPermission({
         sessionId,
         requestId,
@@ -2117,6 +2124,7 @@ export function useAgentOrchestratorOperations({
 
   const answerAgentQuestion = useCallback(
     async (sessionId: string, requestId: string, answers: string[][]): Promise<void> => {
+      turnStartedAtBySessionRef.current[sessionId] = Date.now();
       await adapter.replyQuestion({ sessionId, requestId, answers });
       updateSession(sessionId, (current) => {
         const answeredRequest = current.pendingQuestions.find(
