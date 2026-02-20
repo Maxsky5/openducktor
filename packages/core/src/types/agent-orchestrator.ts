@@ -34,6 +34,8 @@ export type AgentModelDescriptor = {
   modelId: string;
   modelName: string;
   variants: string[];
+  contextWindow?: number;
+  outputLimit?: number;
 };
 
 export type AgentDescriptor = {
@@ -218,6 +220,7 @@ export type AgentEvent =
       sessionId: string;
       timestamp: string;
       message: string;
+      totalTokens?: number;
     }
   | {
       type: "assistant_part";

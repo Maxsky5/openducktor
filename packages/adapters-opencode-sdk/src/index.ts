@@ -85,6 +85,73 @@ const readTextFromMessageInfo = (info: unknown): string => {
 
 const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
 
+type TokenBreakdown = {
+  input?: number;
+  output?: number;
+  reasoning?: number;
+  cache?: {
+    read?: number;
+    write?: number;
+  };
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+    return null;
+  }
+  return value;
+};
+
+const sumTokenBreakdown = (breakdown: TokenBreakdown | null | undefined): number => {
+  if (!breakdown || typeof breakdown !== "object") {
+    return 0;
+  }
+  const input = toFiniteNumber(breakdown.input) ?? 0;
+  const output = toFiniteNumber(breakdown.output) ?? 0;
+  const reasoning = toFiniteNumber(breakdown.reasoning) ?? 0;
+  const cacheRead = toFiniteNumber(breakdown.cache?.read) ?? 0;
+  const cacheWrite = toFiniteNumber(breakdown.cache?.write) ?? 0;
+  return Math.max(0, input + output + reasoning + cacheRead + cacheWrite);
+};
+
+const toTokenTotal = (value: unknown): number | undefined => {
+  const direct = toFiniteNumber(value);
+  if (direct !== null) {
+    return Math.max(0, direct);
+  }
+  if (value && typeof value === "object") {
+    const summed = sumTokenBreakdown(value as TokenBreakdown);
+    if (summed > 0) {
+      return summed;
+    }
+  }
+  return undefined;
+};
+
+const extractMessageTotalTokens = (
+  info: unknown,
+  parts: Array<Part | Record<string, unknown>>,
+): number | undefined => {
+  const infoTokens =
+    info && typeof info === "object" ? toTokenTotal((info as { tokens?: unknown }).tokens) : undefined;
+  if (typeof infoTokens === "number" && infoTokens > 0) {
+    return infoTokens;
+  }
+
+  let maxPartTokens = 0;
+  for (const part of parts) {
+    if (!part || typeof part !== "object") {
+      continue;
+    }
+    const partTokens = toTokenTotal((part as { tokens?: unknown }).tokens);
+    if (typeof partTokens === "number" && partTokens > maxPartTokens) {
+      maxPartTokens = partTokens;
+    }
+  }
+
+  return maxPartTokens > 0 ? maxPartTokens : undefined;
+};
+
 const unwrapData = <T>(
   payload: { data?: T; error?: { message?: string } | unknown },
   action: string,
@@ -608,6 +675,15 @@ const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
         }
         const modelName = (rawModel as { name?: unknown }).name;
         const variantsRaw = (rawModel as { variants?: unknown }).variants;
+        const limitRaw = (rawModel as { limit?: unknown }).limit;
+        const contextWindow =
+          limitRaw && typeof limitRaw === "object"
+            ? toFiniteNumber((limitRaw as { context?: unknown }).context) ?? undefined
+            : undefined;
+        const outputLimit =
+          limitRaw && typeof limitRaw === "object"
+            ? toFiniteNumber((limitRaw as { output?: unknown }).output) ?? undefined
+            : undefined;
         const variants =
           variantsRaw && typeof variantsRaw === "object"
             ? Object.keys(variantsRaw as Record<string, unknown>)
@@ -620,6 +696,8 @@ const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
           modelId,
           modelName: typeof modelName === "string" ? modelName : modelId,
           variants,
+          ...(typeof contextWindow === "number" ? { contextWindow } : {}),
+          ...(typeof outputLimit === "number" ? { outputLimit } : {}),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -726,6 +804,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       const rawText =
         rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
       const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
+      const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
       const parts = entry.parts
         .map(mapPartToAgentStreamPart)
         .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
@@ -734,6 +813,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         role: entry.info.role,
         timestamp: toIsoFromEpoch(entry.info.time.created, this.now),
         text,
+        ...(typeof totalTokens === "number" ? { totalTokens } : {}),
         parts,
       };
     });
@@ -924,12 +1004,17 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     }
 
     const assistantMessage = sanitizeAssistantMessage(readTextFromParts(responseData.parts));
+    const totalTokens = extractMessageTotalTokens(
+      (responseData as { info?: unknown }).info,
+      responseData.parts,
+    );
     if (assistantMessage.length > 0) {
       this.emit(session.summary.sessionId, {
         type: "assistant_message",
         sessionId: session.summary.sessionId,
         timestamp: this.now(),
         message: assistantMessage,
+        ...(typeof totalTokens === "number" ? { totalTokens } : {}),
       });
       if (responseMessageId) {
         session.emittedAssistantMessageIds.add(responseMessageId);
@@ -1166,6 +1251,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
         ) {
           const text = readTextFromParts(normalizedParts);
           const visible = sanitizeAssistantMessage(text);
+          const totalTokens = extractMessageTotalTokens(info, normalizedParts);
           if (visible.length > 0) {
             const session = this.sessions.get(context.sessionId);
             const emitted = session?.emittedAssistantMessageIds;
@@ -1175,6 +1261,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
                 sessionId: context.sessionId,
                 timestamp: this.now(),
                 message: visible,
+                ...(typeof totalTokens === "number" ? { totalTokens } : {}),
               });
               emitted?.add(messageId);
             }

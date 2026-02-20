@@ -9,9 +9,14 @@ type MockSession = {
   abortCalls: unknown[];
   getCalls: unknown[];
   messagesCalls: unknown[];
-  promptQueue: Array<{ info: { id: string }; parts: Part[] }>;
+  promptQueue: Array<{ info: { id: string; [key: string]: unknown }; parts: Part[] }>;
   messagesResponse: Array<{
-    info: { id: string; role: "user" | "assistant"; time: { created: number } };
+    info: {
+      id: string;
+      role: "user" | "assistant";
+      time: { created: number };
+      [key: string]: unknown;
+    };
     parts: Part[];
   }>;
 };
@@ -50,6 +55,10 @@ const makeMockClient = ({
         models: {
           "gpt-5": {
             name: "GPT-5",
+            limit: {
+              context: 400_000,
+              output: 32_000,
+            },
             variants: {
               high: {},
               low: {},
@@ -68,9 +77,14 @@ const makeMockClient = ({
 }: {
   sessionId?: string;
   streamEvents?: Event[];
-  promptQueue?: Array<{ info: { id: string }; parts: Part[] }>;
+  promptQueue?: Array<{ info: { id: string; [key: string]: unknown }; parts: Part[] }>;
   messagesResponse?: Array<{
-    info: { id: string; role: "user" | "assistant"; time: { created: number } };
+    info: {
+      id: string;
+      role: "user" | "assistant";
+      time: { created: number };
+      [key: string]: unknown;
+    };
     parts: Part[];
   }>;
   providerResponse?: unknown;
@@ -289,7 +303,13 @@ describe("OpencodeSdkAdapter", () => {
     const mock = makeMockClient({
       promptQueue: [
         {
-          info: { id: "assistant-1" },
+          info: {
+            id: "assistant-1",
+            tokens: {
+              input: 900,
+              output: 200,
+            },
+          },
           parts: [
             {
               id: "text-1",
@@ -346,6 +366,11 @@ describe("OpencodeSdkAdapter", () => {
       },
     });
     expect(events.some((event) => event.type === "assistant_message")).toBe(true);
+    const assistantMessage = events.find((event) => event.type === "assistant_message");
+    expect(assistantMessage).toMatchObject({
+      type: "assistant_message",
+      totalTokens: 1_100,
+    });
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
   });
 
@@ -380,6 +405,10 @@ describe("OpencodeSdkAdapter", () => {
           info: {
             id: "assistant-1",
             role: "assistant",
+            tokens: {
+              input: 2_000,
+              output: 450,
+            },
             time: { created: Date.parse("2026-02-17T12:00:00Z") },
           },
           parts: [
@@ -417,6 +446,7 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(history).toHaveLength(1);
     expect(history[0]?.text).toBe("Final answer");
+    expect(history[0]?.totalTokens).toBe(2_450);
     expect(history[0]?.parts).toHaveLength(1);
     expect(history[0]?.parts[0]).toMatchObject({
       kind: "reasoning",
@@ -433,6 +463,11 @@ describe("OpencodeSdkAdapter", () => {
             id: "assistant-1",
             role: "assistant",
             sessionID: "session-opencode-1",
+            tokens: {
+              input: 1_200,
+              output: 300,
+              reasoning: 90,
+            },
             time: {
               completed: Date.parse("2026-02-17T12:00:05Z"),
             },
@@ -484,6 +519,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(messageEvents[0]).toMatchObject({
       type: "assistant_message",
       message: "Assistant output",
+      totalTokens: 1_590,
     });
   });
 
@@ -845,6 +881,8 @@ describe("OpencodeSdkAdapter", () => {
     expect(catalog.models[0]).toMatchObject({
       providerId: "openai",
       modelId: "gpt-5",
+      contextWindow: 400_000,
+      outputLimit: 32_000,
     });
     expect(catalog.agents).toHaveLength(1);
     expect(catalog.agents[0]).toMatchObject({

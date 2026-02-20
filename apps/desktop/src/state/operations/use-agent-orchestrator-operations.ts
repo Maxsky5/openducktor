@@ -559,10 +559,25 @@ const normalizeRetryStatusMessage = (value: string): string => {
   return normalized;
 };
 
+const resolveSelectedModelDescriptor = (session: AgentSessionState) => {
+  if (!session.selectedModel || !session.modelCatalog) {
+    return null;
+  }
+  return (
+    session.modelCatalog.models.find(
+      (entry) =>
+        entry.providerId === session.selectedModel?.providerId &&
+        entry.modelId === session.selectedModel?.modelId,
+    ) ?? null
+  );
+};
+
 const toAssistantMessageMeta = (
   session: AgentSessionState,
   durationMs?: number,
+  totalTokens?: number,
 ): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
+  const selectedModelDescriptor = resolveSelectedModelDescriptor(session);
   return {
     kind: "assistant",
     agentRole: session.role,
@@ -573,6 +588,13 @@ const toAssistantMessageMeta = (
       ? { opencodeAgent: session.selectedModel.opencodeAgent }
       : {}),
     ...(typeof durationMs === "number" ? { durationMs } : {}),
+    ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
+    ...(typeof selectedModelDescriptor?.contextWindow === "number"
+      ? { contextWindow: selectedModelDescriptor.contextWindow }
+      : {}),
+    ...(typeof selectedModelDescriptor?.outputLimit === "number"
+      ? { outputLimit: selectedModelDescriptor.outputLimit }
+      : {}),
   };
 };
 
@@ -580,6 +602,7 @@ const finalizeDraftAssistantMessage = (
   session: AgentSessionState,
   timestamp: string,
   durationMs?: number,
+  totalTokens?: number,
 ): AgentSessionState => {
   const draft = session.draftAssistantText.trim();
   if (draft.length === 0) {
@@ -595,7 +618,7 @@ const finalizeDraftAssistantMessage = (
     if (existing && (!existing.meta || existing.meta.kind !== "assistant")) {
       nextMessages[lastIndex] = {
         ...existing,
-        meta: toAssistantMessageMeta(session, durationMs),
+        meta: toAssistantMessageMeta(session, durationMs, totalTokens),
       };
     }
     return {
@@ -615,7 +638,7 @@ const finalizeDraftAssistantMessage = (
         role: "assistant",
         content: draft,
         timestamp,
-        meta: toAssistantMessageMeta(session, durationMs),
+        meta: toAssistantMessageMeta(session, durationMs, totalTokens),
       },
     ],
   };
@@ -838,6 +861,9 @@ const historyToChatMessages = (
                   : {}),
                 ...(typeof assistantDurationMs === "number" && assistantDurationMs > 0
                   ? { durationMs: assistantDurationMs }
+                  : {}),
+                ...(typeof message.totalTokens === "number" && message.totalTokens > 0
+                  ? { totalTokens: message.totalTokens }
                   : {}),
               } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>,
             }
@@ -1492,7 +1518,7 @@ export function useAgentOrchestratorOperations({
                       role: "assistant",
                       content: event.message,
                       timestamp: event.timestamp,
-                      meta: toAssistantMessageMeta(current, durationMs),
+                      meta: toAssistantMessageMeta(current, durationMs, event.totalTokens),
                     },
                   ],
             };

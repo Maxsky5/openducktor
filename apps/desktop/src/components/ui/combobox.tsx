@@ -18,6 +18,7 @@ export type ComboboxOption = {
   searchKeywords?: string[];
   description?: string;
   accentColor?: string;
+  secondaryLabel?: string;
 };
 
 export type ComboboxGroup = {
@@ -139,7 +140,7 @@ export function Combobox({
                       }}
                       className="justify-between"
                     >
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="inline-flex min-w-0 items-center gap-2 truncate">
                           {option.accentColor ? (
                             <span
@@ -153,6 +154,11 @@ export function Combobox({
                           <p className="truncate text-xs text-slate-500">{option.description}</p>
                         ) : null}
                       </div>
+                      {option.secondaryLabel ? (
+                        <span className="mr-1 shrink-0 text-xs font-medium text-slate-500">
+                          {option.secondaryLabel}
+                        </span>
+                      ) : null}
                       <Check
                         className={cn(
                           "ml-2 size-4 text-sky-600 transition-opacity",
@@ -176,7 +182,7 @@ export function Combobox({
                     }}
                     className="justify-between"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="inline-flex min-w-0 items-center gap-2 truncate">
                         {option.accentColor ? (
                           <span
@@ -190,6 +196,11 @@ export function Combobox({
                         <p className="truncate text-xs text-slate-500">{option.description}</p>
                       ) : null}
                     </div>
+                    {option.secondaryLabel ? (
+                      <span className="mr-1 shrink-0 text-xs font-medium text-slate-500">
+                        {option.secondaryLabel}
+                      </span>
+                    ) : null}
                     <Check
                       className={cn(
                         "ml-2 size-4 text-sky-600 transition-opacity",

@@ -42,6 +42,7 @@ export type AgentSessionHistoryMessage = {
   role: "user" | "assistant";
   timestamp: string;
   text: string;
+  totalTokens?: number;
   parts: AgentStreamPart[];
 };
 

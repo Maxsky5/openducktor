@@ -1,5 +1,6 @@
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
+import { AgentContextUsageIndicator } from "@/components/features/agents/agent-context-usage-indicator";
 import { AgentSessionQuestionCard } from "@/components/features/agents/agent-session-question-card";
 import { AgentSessionTodoPanel } from "@/components/features/agents/agent-session-todo-panel";
 import { AgentTurnDurationSeparator } from "@/components/features/agents/agent-turn-duration-separator";
@@ -992,6 +993,45 @@ export function AgentsPage(): ReactElement {
     return map;
   }, [activeSession?.modelCatalog]);
 
+  const activeSessionContextUsage = useMemo(() => {
+    if (!activeSession) {
+      return null;
+    }
+
+    const messages = activeSession.messages;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (!message || message.role !== "assistant" || message.meta?.kind !== "assistant") {
+        continue;
+      }
+      const totalTokens = message.meta.totalTokens;
+      if (typeof totalTokens !== "number" || totalTokens <= 0) {
+        continue;
+      }
+
+      const metaProviderId = message.meta.providerId;
+      const metaModelId = message.meta.modelId;
+      const modelDescriptor = activeSession.modelCatalog?.models.find(
+        (entry) => entry.providerId === metaProviderId && entry.modelId === metaModelId,
+      );
+      const contextWindow =
+        message.meta.contextWindow ??
+        modelDescriptor?.contextWindow ??
+        selectedModelEntry?.contextWindow;
+      if (typeof contextWindow !== "number" || contextWindow <= 0) {
+        return null;
+      }
+
+      return {
+        totalTokens,
+        contextWindow,
+        outputLimit: message.meta.outputLimit ?? modelDescriptor?.outputLimit,
+      };
+    }
+
+    return null;
+  }, [activeSession, selectedModelEntry?.contextWindow]);
+
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
   const activeSessionStatus = activeSession?.status ?? "stopped";
@@ -1432,7 +1472,7 @@ export function AgentsPage(): ReactElement {
                         sessionRole={activeSession.role}
                         sessionSelectedModel={activeSession.selectedModel}
                         sessionAgentColors={activeSessionAgentColors}
-                        />
+                      />
                     </div>
                   </Fragment>
                 );
@@ -1631,6 +1671,15 @@ export function AgentsPage(): ReactElement {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1.5">
+                    {activeSessionContextUsage ? (
+                      <AgentContextUsageIndicator
+                        totalTokens={activeSessionContextUsage.totalTokens}
+                        contextWindow={activeSessionContextUsage.contextWindow}
+                        {...(typeof activeSessionContextUsage.outputLimit === "number"
+                          ? { outputLimit: activeSessionContextUsage.outputLimit }
+                          : {})}
+                      />
+                    ) : null}
                     {activeSession && isSessionWorking && !isComposingNewSession ? (
                       <Button
                         type="button"

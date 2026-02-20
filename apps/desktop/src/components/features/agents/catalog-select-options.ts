@@ -1,6 +1,7 @@
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentDescriptor, AgentModelCatalog } from "@openblueprint/core";
 import { resolveAgentAccentColor } from "./agent-accent-color";
+import { formatTokenCompact } from "./format-token-count";
 
 const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
 
@@ -35,17 +36,22 @@ export const toModelOptions = (catalog: AgentModelCatalog | null): ComboboxOptio
     return [];
   }
 
-  return catalog.models.map((entry) => ({
-    value: entry.id,
-    label: entry.modelName,
-    description: entry.modelId,
-    searchKeywords: [
-      entry.modelId,
-      entry.providerId,
-      entry.providerName,
-      ...entry.variants.map((variant) => `variant:${variant}`),
-    ],
-  }));
+  return catalog.models.map((entry) => {
+    const contextWindowLabel = formatTokenCompact(entry.contextWindow);
+    return {
+      value: entry.id,
+      label: entry.modelName,
+      description: entry.modelId,
+      ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : {}),
+      searchKeywords: [
+        entry.modelId,
+        entry.providerId,
+        entry.providerName,
+        ...(contextWindowLabel ? [contextWindowLabel, `${contextWindowLabel} context`] : []),
+        ...entry.variants.map((variant) => `variant:${variant}`),
+      ],
+    };
+  });
 };
 
 export const toModelGroupsByProvider = (catalog: AgentModelCatalog | null): ComboboxGroup[] => {
@@ -57,14 +63,17 @@ export const toModelGroupsByProvider = (catalog: AgentModelCatalog | null): Comb
   for (const model of catalog.models) {
     const label = model.providerName || model.providerId;
     const options = grouped.get(label) ?? [];
+    const contextWindowLabel = formatTokenCompact(model.contextWindow);
     options.push({
       value: model.id,
       label: model.modelName,
       description: model.modelId,
+      ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : {}),
       searchKeywords: [
         model.modelId,
         model.providerId,
         model.providerName,
+        ...(contextWindowLabel ? [contextWindowLabel, `${contextWindowLabel} context`] : []),
         ...model.variants.map((variant) => `variant:${variant}`),
       ],
     });

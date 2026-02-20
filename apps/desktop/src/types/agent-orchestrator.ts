@@ -34,6 +34,9 @@ export type AgentChatMessageMeta =
       variant?: string;
       opencodeAgent?: string;
       durationMs?: number;
+      totalTokens?: number;
+      contextWindow?: number;
+      outputLimit?: number;
     }
   | {
       kind: "step";
