@@ -718,6 +718,25 @@ const assistantDurationFromHistory = (
   return undefined;
 };
 
+const isSyntheticHistoryUserMessage = (message: AgentSessionHistoryMessage): boolean => {
+  if (message.role !== "user") {
+    return false;
+  }
+
+  let hasTextPart = false;
+  for (const part of message.parts) {
+    if (part.kind !== "text") {
+      continue;
+    }
+    hasTextPart = true;
+    if (!part.synthetic) {
+      return false;
+    }
+  }
+
+  return hasTextPart;
+};
+
 const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
@@ -826,7 +845,7 @@ const historyToChatMessages = (
       });
     }
 
-    if (message.role === "user") {
+    if (message.role === "user" && !isSyntheticHistoryUserMessage(message)) {
       const parsed = Date.parse(message.timestamp);
       previousUserTimestampMs = Number.isNaN(parsed) ? previousUserTimestampMs : parsed;
     }
@@ -1478,6 +1497,7 @@ export function useAgentOrchestratorOperations({
                   ],
             };
           });
+          clearTurnDuration(sessionId);
           return;
         }
 
@@ -1524,19 +1544,26 @@ export function useAgentOrchestratorOperations({
             );
             return;
           }
+          let shouldClear = false;
           updateSession(sessionId, (current) => {
             const finalized = finalizeDraftAssistantMessage(
               current,
               event.timestamp,
               resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
             );
+            shouldClear =
+              current.draftAssistantText.trim().length > 0 &&
+              current.pendingPermissions.length === 0 &&
+              current.pendingQuestions.length === 0;
             return {
               ...finalized,
               messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
               ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
             };
           });
-          clearTurnDuration(sessionId);
+          if (shouldClear) {
+            clearTurnDuration(sessionId);
+          }
           return;
         }
 
@@ -1652,19 +1679,26 @@ export function useAgentOrchestratorOperations({
         if (event.type === "session_idle") {
           delete draftRawBySessionRef.current[sessionId];
           delete draftSourceBySessionRef.current[sessionId];
+          let shouldClear = false;
           updateSession(sessionId, (current) => {
             const finalized = finalizeDraftAssistantMessage(
               current,
               event.timestamp,
               resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
             );
+            shouldClear =
+              current.draftAssistantText.trim().length > 0 &&
+              current.pendingPermissions.length === 0 &&
+              current.pendingQuestions.length === 0;
             return {
               ...finalized,
               messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
               ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
             };
           });
-          clearTurnDuration(sessionId);
+          if (shouldClear) {
+            clearTurnDuration(sessionId);
+          }
           return;
         }
 
@@ -2104,7 +2138,9 @@ export function useAgentOrchestratorOperations({
       reply: "once" | "always" | "reject",
       message?: string,
     ): Promise<void> => {
-      turnStartedAtBySessionRef.current[sessionId] = Date.now();
+      if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
+        turnStartedAtBySessionRef.current[sessionId] = Date.now();
+      }
       await adapter.replyPermission({
         sessionId,
         requestId,
@@ -2124,7 +2160,9 @@ export function useAgentOrchestratorOperations({
 
   const answerAgentQuestion = useCallback(
     async (sessionId: string, requestId: string, answers: string[][]): Promise<void> => {
-      turnStartedAtBySessionRef.current[sessionId] = Date.now();
+      if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
+        turnStartedAtBySessionRef.current[sessionId] = Date.now();
+      }
       await adapter.replyQuestion({ sessionId, requestId, answers });
       updateSession(sessionId, (current) => {
         const answeredRequest = current.pendingQuestions.find(

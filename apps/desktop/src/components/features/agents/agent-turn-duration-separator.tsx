@@ -1,0 +1,23 @@
+import { cn } from "@/lib/utils";
+import type { ReactElement } from "react";
+import { formatAgentDuration } from "./format-agent-duration";
+
+type AgentTurnDurationSeparatorProps = {
+  durationMs: number;
+  className?: string;
+};
+
+export function AgentTurnDurationSeparator({
+  durationMs,
+  className,
+}: AgentTurnDurationSeparatorProps): ReactElement {
+  return (
+    <div className={cn("flex items-center gap-3 px-1 py-1 text-xs text-slate-500", className)}>
+      <div className="h-px flex-1 bg-slate-200" aria-hidden />
+      <span className="shrink-0 font-medium tracking-wide">
+        Worked for {formatAgentDuration(durationMs)}
+      </span>
+      <div className="h-px flex-1 bg-slate-200" aria-hidden />
+    </div>
+  );
+}

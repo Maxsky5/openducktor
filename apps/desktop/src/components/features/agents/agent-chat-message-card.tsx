@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { resolveAgentAccentColor } from "./agent-accent-color";
+import { formatAgentDuration } from "./format-agent-duration";
 
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
@@ -57,42 +58,6 @@ const formatTime = (timestamp: string): string => {
     minute: "2-digit",
     second: "2-digit",
   }).format(value);
-};
-
-const formatDuration = (durationMs: number): string => {
-  if (durationMs < 1_000) {
-    return `${Math.max(1, Math.round(durationMs))}ms`;
-  }
-  if (durationMs < 10_000) {
-    return `${(durationMs / 1_000).toFixed(1)}s`;
-  }
-
-  const totalSeconds = Math.max(1, Math.round(durationMs / 1_000));
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const hours = Math.floor(totalSeconds / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    if (minutes > 0 && seconds > 0) {
-      return `${hours}h${minutes}m${seconds}s`;
-    }
-    if (minutes > 0) {
-      return `${hours}h${minutes}m`;
-    }
-    if (seconds > 0) {
-      return `${hours}h${seconds}s`;
-    }
-    return `${hours}h`;
-  }
-
-  if (seconds > 0) {
-    return `${minutes}m${seconds}s`;
-  }
-  return `${minutes}m`;
 };
 
 const compactText = (value: string, maxLength = 180): string => {
@@ -650,12 +615,9 @@ const getToolDuration = (
 const getAssistantFooterData = (
   message: AgentChatMessage,
   sessionSelectedModel: AgentModelSelection | null,
-): {
-  infoParts: string[];
-  durationLabel: string | null;
-} => {
+): { infoParts: string[] } => {
   if (message.role !== "assistant") {
-    return { infoParts: [], durationLabel: null };
+    return { infoParts: [] };
   }
 
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
@@ -671,13 +633,7 @@ const getAssistantFooterData = (
     parts.push(modelLabel.trim());
   }
 
-  return {
-    infoParts: parts,
-    durationLabel:
-      assistantMeta?.durationMs && assistantMeta.durationMs > 0
-        ? formatDuration(assistantMeta.durationMs)
-        : null,
-  };
+  return { infoParts: parts };
 };
 
 const resolveAssistantAgentColor = (
@@ -838,7 +794,7 @@ export function AgentChatMessageCard({
                   <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
                     {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
                     {!isRunning && durationMs !== null ? (
-                      <span>{formatDuration(durationMs)}</span>
+                      <span>{formatAgentDuration(durationMs)}</span>
                     ) : null}
                     {timeLabel ? <span>{timeLabel}</span> : null}
                   </span>
@@ -888,7 +844,7 @@ export function AgentChatMessageCard({
                 {isRunning ? <LoaderCircle className="ml-auto size-3 animate-spin" /> : null}
                 {!isRunning && durationMs !== null ? (
                   <span className="ml-auto text-[11px] text-current/75">
-                    {formatDuration(durationMs)}
+                    {formatAgentDuration(durationMs)}
                   </span>
                 ) : null}
               </div>
@@ -961,25 +917,18 @@ export function AgentChatMessageCard({
           <MarkdownRenderer markdown={message.content} variant="document" />
           {(() => {
             const footer = getAssistantFooterData(message, sessionSelectedModel);
-            if (footer.infoParts.length === 0 && !footer.durationLabel) {
+            if (footer.infoParts.length === 0) {
               return null;
             }
             return (
               <div className="flex items-center gap-2 text-xs text-slate-500">
-                {footer.infoParts.length > 0 ? (
-                  <>
-                    <span
-                      className="size-1.5 rounded-sm bg-amber-500"
-                      style={
-                        assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined
-                      }
-                    />
-                    <span className="min-w-0 truncate">{footer.infoParts.join(" · ")}</span>
-                  </>
-                ) : null}
-                {footer.durationLabel ? (
-                  <span className="ml-auto shrink-0">{footer.durationLabel}</span>
-                ) : null}
+                <span
+                  className="size-1.5 rounded-sm bg-amber-500"
+                  style={
+                    assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined
+                  }
+                />
+                <span className="min-w-0 truncate">{footer.infoParts.join(" · ")}</span>
               </div>
             );
           })()}

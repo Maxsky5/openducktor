@@ -2,6 +2,7 @@ import { resolveAgentAccentColor } from "@/components/features/agents/agent-acce
 import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
 import { AgentSessionQuestionCard } from "@/components/features/agents/agent-session-question-card";
 import { AgentSessionTodoPanel } from "@/components/features/agents/agent-session-todo-panel";
+import { AgentTurnDurationSeparator } from "@/components/features/agents/agent-turn-duration-separator";
 import {
   toModelGroupsByProvider,
   toModelOptions,
@@ -42,7 +43,15 @@ import {
   Square,
   Wrench,
 } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 
 const ROLE_OPTIONS: Array<{
@@ -1404,15 +1413,27 @@ export function AgentsPage(): ReactElement {
                 </div>
               ) : null}
 
-              {activeSession?.messages.map((message) => (
-                <AgentChatMessageCard
-                  key={message.id}
-                  message={message}
-                  sessionRole={activeSession.role}
-                  sessionSelectedModel={activeSession.selectedModel}
-                  sessionAgentColors={activeSessionAgentColors}
-                />
-              ))}
+              {activeSession?.messages.map((message) => {
+                const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+                const turnDurationMs = assistantMeta?.durationMs;
+                const shouldShowTurnDuration =
+                  message.role === "assistant" &&
+                  typeof turnDurationMs === "number" &&
+                  turnDurationMs > 0;
+                return (
+                  <Fragment key={message.id}>
+                    {shouldShowTurnDuration ? (
+                      <AgentTurnDurationSeparator durationMs={turnDurationMs} />
+                    ) : null}
+                    <AgentChatMessageCard
+                      message={message}
+                      sessionRole={activeSession.role}
+                      sessionSelectedModel={activeSession.selectedModel}
+                      sessionAgentColors={activeSessionAgentColors}
+                    />
+                  </Fragment>
+                );
+              })}
 
               {activeSession?.draftAssistantText ? (
                 <article className="px-1 py-1 text-sm text-slate-700">
