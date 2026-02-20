@@ -17,6 +17,37 @@ import { useChecksState, useWorkspaceState } from "@/state";
 import { AlertTriangle, ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 
+type DiagnosticKeyValueRowProps = {
+  label: string;
+  value: string;
+  mono?: boolean;
+  breakAll?: boolean;
+  valueClassName?: string;
+};
+
+function DiagnosticKeyValueRow({
+  label,
+  value,
+  mono = false,
+  breakAll = false,
+  valueClassName,
+}: DiagnosticKeyValueRowProps): ReactElement {
+  return (
+    <p className="text-xs text-slate-700">
+      <span className="font-medium text-slate-600">{label}:</span>{" "}
+      <span
+        className={cn(
+          mono ? "font-mono text-[11px]" : "",
+          breakAll ? "break-all" : "",
+          valueClassName,
+        )}
+      >
+        {value}
+      </span>
+    </p>
+  );
+}
+
 export function DiagnosticsPanel(): ReactElement {
   const { activeRepo, activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const { runtimeCheck, beadsCheck, opencodeHealth, refreshChecks, isLoadingChecks } =
@@ -167,10 +198,25 @@ export function DiagnosticsPanel(): ReactElement {
               }}
             >
               {activeWorkspace ? (
-                <>
-                  <p className="text-sm font-semibold text-slate-900">{repoName}</p>
-                  <p className="break-all text-xs text-slate-500">{activeWorkspace.path}</p>
-                </>
+                <div className="space-y-1">
+                  <DiagnosticKeyValueRow label="Repository" value={repoName} />
+                  <DiagnosticKeyValueRow
+                    label="Repository path"
+                    value={activeWorkspace.path}
+                    breakAll
+                    valueClassName="text-slate-500"
+                  />
+                  <DiagnosticKeyValueRow
+                    label="Worktree directory"
+                    value={activeWorkspace.configuredWorktreeBasePath ?? "Not configured"}
+                    breakAll
+                    valueClassName={
+                      activeWorkspace.configuredWorktreeBasePath
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                    }
+                  />
+                </div>
               ) : (
                 <p className="text-xs text-slate-500">Select a repository to load diagnostics.</p>
               )}
@@ -186,13 +232,15 @@ export function DiagnosticsPanel(): ReactElement {
             >
               {runtimeCheck ? (
                 <div className="space-y-1 text-xs text-slate-700">
-                  <p>git: {runtimeCheck.gitVersion ?? "missing"}</p>
-                  <p>
-                    opencode:{" "}
-                    {runtimeCheck.opencodeOk
-                      ? (runtimeCheck.opencodeVersion ?? "detected")
-                      : "missing"}
-                  </p>
+                  <DiagnosticKeyValueRow label="Git" value={runtimeCheck.gitVersion ?? "missing"} />
+                  <DiagnosticKeyValueRow
+                    label="OpenCode"
+                    value={
+                      runtimeCheck.opencodeOk
+                        ? (runtimeCheck.opencodeVersion ?? "detected")
+                        : "missing"
+                    }
+                  />
                   {runtimeCheck.errors.length > 0 ? (
                     <p className="flex items-start gap-1 text-rose-700">
                       <AlertTriangle className="mt-0.5 size-3 shrink-0" />
@@ -221,21 +269,24 @@ export function DiagnosticsPanel(): ReactElement {
                 <div className="space-y-1 text-xs text-slate-700">
                   {opencodeHealth?.runtime ? (
                     <>
-                      <p>
-                        runtimeId:{" "}
-                        <span className="font-mono text-[11px] text-slate-600">
-                          {opencodeHealth.runtime.runtimeId}
-                        </span>
-                      </p>
-                      <p>
-                        endpoint:{" "}
-                        <span className="font-mono text-[11px] text-slate-600">
-                          http://127.0.0.1:{opencodeHealth.runtime.port}
-                        </span>
-                      </p>
-                      <p className="break-all text-slate-500">
-                        {opencodeHealth.runtime.workingDirectory}
-                      </p>
+                      <DiagnosticKeyValueRow
+                        label="Runtime ID"
+                        value={opencodeHealth.runtime.runtimeId}
+                        mono
+                        valueClassName="text-slate-600"
+                      />
+                      <DiagnosticKeyValueRow
+                        label="Endpoint"
+                        value={`http://127.0.0.1:${opencodeHealth.runtime.port}`}
+                        mono
+                        valueClassName="text-slate-600"
+                      />
+                      <DiagnosticKeyValueRow
+                        label="Working directory"
+                        value={opencodeHealth.runtime.workingDirectory}
+                        breakAll
+                        valueClassName="text-slate-500"
+                      />
                     </>
                   ) : null}
                   {opencodeHealth?.runtimeError ? (
@@ -264,28 +315,25 @@ export function DiagnosticsPanel(): ReactElement {
             >
               {activeRepo ? (
                 <div className="space-y-1 text-xs text-slate-700">
-                  {opencodeHealth?.mcpServerStatus ? (
-                    <p>
-                      Server{" "}
-                      <span className="font-mono text-[11px]">{opencodeHealth.mcpServerName}</span>:{" "}
-                      <span className="font-medium">{opencodeHealth.mcpServerStatus}</span>
-                    </p>
-                  ) : (
-                    <p>
-                      Server{" "}
-                      <span className="font-mono text-[11px]">
-                        {opencodeHealth?.mcpServerName ?? "openducktor"}
-                      </span>
-                      : <span className="text-slate-500">unavailable</span>
-                    </p>
-                  )}
+                  <DiagnosticKeyValueRow
+                    label="Server name"
+                    value={opencodeHealth?.mcpServerName ?? "openducktor"}
+                    mono
+                  />
+                  <DiagnosticKeyValueRow
+                    label="Status"
+                    value={opencodeHealth?.mcpServerStatus ?? "unavailable"}
+                    valueClassName={
+                      opencodeHealth?.mcpServerStatus ? "font-medium" : "text-slate-500"
+                    }
+                  />
                   {opencodeHealth ? (
-                    <p>
-                      Tools detected:{" "}
-                      <span className="font-mono text-[11px] text-slate-600">
-                        {opencodeHealth.availableToolIds.length}
-                      </span>
-                    </p>
+                    <DiagnosticKeyValueRow
+                      label="Tools detected"
+                      value={String(opencodeHealth.availableToolIds.length)}
+                      mono
+                      valueClassName="text-slate-600"
+                    />
                   ) : null}
                   {opencodeHealth?.mcpServerError || opencodeHealth?.mcpError ? (
                     <p className="flex items-start gap-1 text-rose-700">
@@ -309,7 +357,12 @@ export function DiagnosticsPanel(): ReactElement {
               {activeRepo ? (
                 <div className="space-y-1 text-xs text-slate-700">
                   {beadsCheck?.beadsPath ? (
-                    <p className="break-all text-slate-500">{beadsCheck.beadsPath}</p>
+                    <DiagnosticKeyValueRow
+                      label="Store path"
+                      value={beadsCheck.beadsPath}
+                      breakAll
+                      valueClassName="text-slate-500"
+                    />
                   ) : null}
                   {beadsCheck?.beadsError ? (
                     <p className="flex items-start gap-1 text-rose-700">
