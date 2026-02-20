@@ -1,5 +1,6 @@
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import { AgentChatMessageCard } from "@/components/features/agents/agent-chat-message-card";
+import { AgentSessionQuestionCard } from "@/components/features/agents/agent-session-question-card";
 import { AgentSessionTodoPanel } from "@/components/features/agents/agent-session-todo-panel";
 import {
   toModelGroupsByProvider,
@@ -31,7 +32,6 @@ import {
   AlertTriangle,
   Bot,
   Brain,
-  CheckCircle2,
   CircleDotDashed,
   LoaderCircle,
   RefreshCcw,
@@ -353,7 +353,9 @@ export function AgentsPage(): ReactElement {
   const [isLoadingComposerCatalog, setIsLoadingComposerCatalog] = useState(false);
   const [draftSelectionByRole, setDraftSelectionByRole] =
     useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
-  const [questionDrafts, setQuestionDrafts] = useState<Record<string, string[][]>>({});
+  const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
+    Record<string, boolean>
+  >({});
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
@@ -838,6 +840,33 @@ export function AgentsPage(): ReactElement {
     taskId,
   ]);
 
+  const onSubmitQuestionAnswers = useCallback(
+    async (requestId: string, answers: string[][]): Promise<void> => {
+      if (!activeSession || !agentStudioReady) {
+        return;
+      }
+
+      const sessionId = activeSession.sessionId;
+      setIsSubmittingQuestionByRequestId((current) => ({
+        ...current,
+        [requestId]: true,
+      }));
+      try {
+        await answerAgentQuestion(sessionId, requestId, answers);
+      } finally {
+        setIsSubmittingQuestionByRequestId((current) => {
+          if (!current[requestId]) {
+            return current;
+          }
+          const next = { ...current };
+          delete next[requestId];
+          return next;
+        });
+      }
+    },
+    [activeSession, agentStudioReady, answerAgentQuestion],
+  );
+
   const agentOptions = useMemo<ComboboxOption[]>(() => {
     const options = toPrimaryAgentOptions(selectionCatalog);
     if (options.length > 0) {
@@ -945,7 +974,9 @@ export function AgentsPage(): ReactElement {
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
   const todoPanelBottomOffset = Math.max(composerFormHeight + 12, 120);
-  const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}`;
+  const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
+    activeSession?.pendingQuestions.length ?? 0
+  }`;
 
   useEffect(() => {
     if (!isSending) {
@@ -999,34 +1030,25 @@ export function AgentsPage(): ReactElement {
   }, [activeSession?.sessionId, taskId]);
 
   useEffect(() => {
-    const pending = activeSession?.pendingQuestions ?? [];
-    setQuestionDrafts((previous) => {
-      const next: Record<string, string[][]> = {};
+    void activeSession?.sessionId;
+    setIsSubmittingQuestionByRequestId({});
+  }, [activeSession?.sessionId]);
+
+  useEffect(() => {
+    const activeRequestIds = new Set(
+      (activeSession?.pendingQuestions ?? []).map((entry) => entry.requestId),
+    );
+    setIsSubmittingQuestionByRequestId((current) => {
       let changed = false;
-
-      for (const request of pending) {
-        const existing = previous[request.requestId] ?? [];
-        const requestDraft = request.questions.map((question, index) => {
-          const current = existing[index] ?? [];
-          if (question.multiple) {
-            return current;
-          }
-          return current.slice(0, 1);
-        });
-        next[request.requestId] = requestDraft;
-        if (
-          !previous[request.requestId] ||
-          previous[request.requestId]?.length !== requestDraft.length
-        ) {
+      const next: Record<string, boolean> = {};
+      for (const [requestId, isSubmitting] of Object.entries(current)) {
+        if (!activeRequestIds.has(requestId)) {
           changed = true;
+          continue;
         }
+        next[requestId] = isSubmitting;
       }
-
-      const previousKeys = Object.keys(previous);
-      if (!changed && previousKeys.length === Object.keys(next).length) {
-        return previous;
-      }
-      return next;
+      return changed ? next : current;
     });
   }, [activeSession?.pendingQuestions]);
 
@@ -1376,13 +1398,25 @@ export function AgentsPage(): ReactElement {
                 </article>
               ) : null}
 
-              {activeSession?.status === "running" && !activeSession?.draftAssistantText ? (
+              {activeSession?.status === "running" &&
+              !activeSession?.draftAssistantText &&
+              (activeSession.pendingQuestions.length ?? 0) === 0 ? (
                 <div className="flex items-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
                   <LoaderCircle className="size-3.5 animate-spin text-slate-500" />
                   <Brain className="size-3.5 text-violet-600" />
                   Agent is thinking...
                 </div>
               ) : null}
+
+              {activeSession?.pendingQuestions.map((request) => (
+                <AgentSessionQuestionCard
+                  key={`${activeSession.sessionId}:${request.requestId}`}
+                  request={request}
+                  disabled={!agentStudioReady}
+                  isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
+                  onSubmit={onSubmitQuestionAnswers}
+                />
+              ))}
             </div>
 
             {activeSession ? (
@@ -1567,9 +1601,7 @@ export function AgentsPage(): ReactElement {
         <Card className="overflow-hidden border-slate-200 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Workflow Inbox</CardTitle>
-            <CardDescription>
-              Resolve permissions and questions emitted by the agent.
-            </CardDescription>
+            <CardDescription>Resolve permission requests emitted by the agent.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <section className="space-y-2">
@@ -1648,108 +1680,11 @@ export function AgentsPage(): ReactElement {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Pending Questions
               </h3>
-              {activeSession?.pendingQuestions.length ? null : (
-                <p className="text-sm text-slate-500">No pending questions.</p>
-              )}
-              {activeSession?.pendingQuestions.map((request) => (
-                <div
-                  key={request.requestId}
-                  className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                >
-                  {request.questions.map((question, index) => (
-                    <div
-                      key={`${request.requestId}:${question.header}:${index}`}
-                      className="space-y-2"
-                    >
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        {question.header}
-                      </p>
-                      <p className="text-sm font-medium text-slate-800">{question.question}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {question.options.map((option) => (
-                          <Button
-                            key={`${request.requestId}:${question.header}:${option.label}`}
-                            type="button"
-                            size="sm"
-                            disabled={!activeSession || !agentStudioReady}
-                            variant={
-                              questionDrafts[request.requestId]?.[index]?.includes(option.label)
-                                ? "default"
-                                : "outline"
-                            }
-                            onClick={() => {
-                              setQuestionDrafts((previous) => {
-                                const next = { ...previous };
-                                const existing = next[request.requestId];
-                                const current = existing
-                                  ? existing.map((entry) => [...entry])
-                                  : request.questions.map(() => []);
-                                const selected = [...(current[index] ?? [])];
-                                const isSelected = selected.includes(option.label);
-                                let nextSelected = selected;
-
-                                if (question.multiple) {
-                                  nextSelected = isSelected
-                                    ? selected.filter((entry) => entry !== option.label)
-                                    : [...selected, option.label];
-                                } else {
-                                  nextSelected = isSelected ? [] : [option.label];
-                                }
-
-                                current[index] = nextSelected;
-                                next[request.requestId] = current;
-                                return next;
-                              });
-                            }}
-                          >
-                            <CheckCircle2 className="size-3.5" />
-                            {option.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={
-                        !agentStudioReady ||
-                        !activeSession ||
-                        request.questions.some((question, index) => {
-                          const selected = questionDrafts[request.requestId]?.[index] ?? [];
-                          if (question.custom && question.options.length === 0) {
-                            return false;
-                          }
-                          return selected.length === 0;
-                        })
-                      }
-                      onClick={() => {
-                        if (!activeSession) {
-                          return;
-                        }
-                        const answers = request.questions.map((question, index) => {
-                          const selected = questionDrafts[request.requestId]?.[index] ?? [];
-                          if (selected.length > 0) {
-                            return selected;
-                          }
-                          if (question.options[0]?.label) {
-                            return [question.options[0].label];
-                          }
-                          return [];
-                        });
-                        void answerAgentQuestion(
-                          activeSession.sessionId,
-                          request.requestId,
-                          answers,
-                        );
-                      }}
-                    >
-                      Submit Answers
-                    </Button>
-                  </div>
-                </div>
-              ))}
+              <p className="text-sm text-slate-500">
+                {activeSession?.pendingQuestions.length
+                  ? `${activeSession.pendingQuestions.length} question request(s) waiting for input in chat.`
+                  : "No pending questions."}
+              </p>
             </section>
           </CardContent>
         </Card>
