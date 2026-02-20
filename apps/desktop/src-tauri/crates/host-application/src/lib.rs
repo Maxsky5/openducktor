@@ -5,15 +5,16 @@ use host_domain::{
     SystemCheck, TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
 };
 use host_infra_system::{
-    build_branch_name, command_exists, pick_free_port, remove_worktree, resolve_central_beads_dir,
-    run_command, run_command_allow_failure, version_command, AppConfigStore, RepoConfig,
+    build_branch_name, command_exists, command_path, pick_free_port, remove_worktree,
+    resolve_central_beads_dir, run_command, run_command_allow_failure, version_command,
+    AppConfigStore, RepoConfig,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -44,6 +45,12 @@ struct AgentRuntimeProcess {
     child: Child,
     cleanup_repo_path: Option<String>,
     cleanup_worktree_path: Option<String>,
+}
+
+impl Drop for AppService {
+    fn drop(&mut self) {
+        let _ = self.shutdown();
+    }
 }
 
 impl AppService {
@@ -108,7 +115,8 @@ impl AppService {
 
     pub fn runtime_check(&self) -> Result<RuntimeCheck> {
         let git_ok = command_exists("git");
-        let opencode_ok = command_exists("opencode");
+        let opencode_binary = resolve_opencode_binary_path();
+        let opencode_ok = opencode_binary.is_some();
 
         let mut errors = Vec::new();
         if !git_ok {
@@ -122,7 +130,9 @@ impl AppService {
             git_ok,
             git_version: version_command("git", &["--version"]),
             opencode_ok,
-            opencode_version: version_command("opencode", &["--version"]),
+            opencode_version: opencode_binary
+                .as_deref()
+                .and_then(|binary| read_binary_version(binary, &["--version"])),
             errors,
         })
     }
@@ -686,6 +696,7 @@ impl AppService {
         &self,
         repo_path: Option<&str>,
     ) -> Result<Vec<AgentRuntimeSummary>> {
+        let repo_key_filter = repo_path.map(Self::repo_key);
         let mut runtimes = self
             .agent_runtimes
             .lock()
@@ -695,8 +706,8 @@ impl AppService {
         let mut list = runtimes
             .values()
             .filter(|runtime| {
-                if let Some(path) = repo_path {
-                    runtime.summary.repo_path == path
+                if let Some(path_key) = repo_key_filter.as_deref() {
+                    Self::repo_key(runtime.summary.repo_path.as_str()) == path_key
                 } else {
                     true
                 }
@@ -710,6 +721,7 @@ impl AppService {
 
     pub fn opencode_repo_runtime_ensure(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
         self.ensure_repo_initialized(repo_path)?;
+        let repo_key = Self::repo_key(repo_path);
 
         {
             let mut runtimes = self
@@ -719,7 +731,7 @@ impl AppService {
             Self::prune_stale_runtimes(&mut runtimes);
 
             if let Some(existing) = runtimes.values().find(|runtime| {
-                runtime.summary.repo_path == repo_path
+                Self::repo_key(runtime.summary.repo_path.as_str()) == repo_key
                     && runtime.summary.role == Self::WORKSPACE_RUNTIME_ROLE
             }) {
                 return Ok(existing.summary.clone());
@@ -735,7 +747,7 @@ impl AppService {
             port,
         )?;
         if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
-            let _ = child.kill();
+            terminate_child_process(&mut child);
             return Err(error)
                 .with_context(|| format!("OpenCode workspace runtime failed to start for {repo_path}"));
         }
@@ -743,10 +755,10 @@ impl AppService {
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let summary = AgentRuntimeSummary {
             runtime_id: runtime_id.clone(),
-            repo_path: repo_path.to_string(),
+            repo_path: repo_key.clone(),
             task_id: Self::WORKSPACE_RUNTIME_TASK_ID.to_string(),
             role: Self::WORKSPACE_RUNTIME_ROLE.to_string(),
-            working_directory: repo_path.to_string(),
+            working_directory: repo_key.clone(),
             port,
             started_at: now_rfc3339(),
         };
@@ -759,10 +771,10 @@ impl AppService {
             Self::prune_stale_runtimes(&mut runtimes);
 
             if let Some(existing) = runtimes.values().find(|runtime| {
-                runtime.summary.repo_path == repo_path
+                Self::repo_key(runtime.summary.repo_path.as_str()) == repo_key
                     && runtime.summary.role == Self::WORKSPACE_RUNTIME_ROLE
             }) {
-                let _ = child.kill();
+                terminate_child_process(&mut child);
                 return Ok(existing.summary.clone());
             }
 
@@ -787,6 +799,7 @@ impl AppService {
         role: &str,
     ) -> Result<AgentRuntimeSummary> {
         self.ensure_repo_initialized(repo_path)?;
+        let repo_key = Self::repo_key(repo_path);
         if !matches!(role, "spec" | "planner" | "qa") {
             return Err(anyhow!(
                 "Unsupported agent runtime role: {role}. Supported: spec, planner, qa"
@@ -808,7 +821,7 @@ impl AppService {
             Self::prune_stale_runtimes(&mut runtimes);
 
             if let Some(existing) = runtimes.values().find(|runtime| {
-                runtime.summary.repo_path == repo_path
+                Self::repo_key(runtime.summary.repo_path.as_str()) == repo_key
                     && runtime.summary.task_id == task_id
                     && runtime.summary.role == role
             }) {
@@ -895,7 +908,7 @@ impl AppService {
             port,
         )?;
         if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
-            let _ = child.kill();
+            terminate_child_process(&mut child);
             if let (Some(repo), Some(worktree)) = (
                 cleanup_repo_path.as_deref(),
                 cleanup_worktree_path.as_deref(),
@@ -909,7 +922,7 @@ impl AppService {
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let summary = AgentRuntimeSummary {
             runtime_id: runtime_id.clone(),
-            repo_path: repo_path.to_string(),
+            repo_path: repo_key,
             task_id: task_id.to_string(),
             role: role.to_string(),
             working_directory: runtime_working_directory,
@@ -941,7 +954,7 @@ impl AppService {
         let mut runtime = runtimes
             .remove(runtime_id)
             .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
-        let _ = runtime.child.kill();
+        terminate_child_process(&mut runtime.child);
         if let (Some(repo_path), Some(worktree_path)) = (
             runtime.cleanup_repo_path.as_deref(),
             runtime.cleanup_worktree_path.as_deref(),
@@ -967,7 +980,7 @@ impl AppService {
             .collect::<Vec<_>>();
         for runtime_id in stale_runtime_ids {
             if let Some(mut runtime) = runtimes.remove(&runtime_id) {
-                let _ = runtime.child.kill();
+                terminate_child_process(&mut runtime.child);
                 if let (Some(repo_path), Some(worktree_path)) = (
                     runtime.cleanup_repo_path.as_deref(),
                     runtime.cleanup_worktree_path.as_deref(),
@@ -1074,7 +1087,7 @@ impl AppService {
             port,
         )?;
         if let Err(error) = wait_for_local_server(port, Duration::from_secs(8)) {
-            let _ = child.kill();
+            terminate_child_process(&mut child);
             return Err(error).with_context(|| {
                 format!("OpenCode build runtime failed to start for task {task_id}")
             });
@@ -1212,7 +1225,7 @@ impl AppService {
             .get_mut(run_id)
             .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
 
-        let _ = run.child.kill();
+        terminate_child_process(&mut run.child);
         run.summary.state = RunState::Stopped;
         run.summary.last_message = Some("Run stopped by user".to_string());
 
@@ -1238,7 +1251,7 @@ impl AppService {
             .remove(run_id)
             .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
 
-        let _ = run.child.kill();
+        terminate_child_process(&mut run.child);
 
         match mode {
             "failure" => {
@@ -1350,6 +1363,47 @@ impl AppService {
         );
 
         Ok(true)
+    }
+
+    pub fn shutdown(&self) -> Result<()> {
+        {
+            let mut runs = self
+                .runs
+                .lock()
+                .map_err(|_| anyhow!("Run state lock poisoned"))?;
+            for (_, mut run) in runs.drain() {
+                terminate_child_process(&mut run.child);
+            }
+        }
+
+        let mut cleanup_errors = Vec::new();
+        {
+            let mut runtimes = self
+                .agent_runtimes
+                .lock()
+                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+            for (_, mut runtime) in runtimes.drain() {
+                terminate_child_process(&mut runtime.child);
+                if let (Some(repo_path), Some(worktree_path)) = (
+                    runtime.cleanup_repo_path.as_deref(),
+                    runtime.cleanup_worktree_path.as_deref(),
+                ) {
+                    if let Err(error) = remove_worktree(Path::new(repo_path), Path::new(worktree_path))
+                    {
+                        cleanup_errors.push(format!(
+                            "Failed removing QA worktree runtime {}: {}",
+                            worktree_path, error
+                        ));
+                    }
+                }
+            }
+        }
+
+        if cleanup_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(anyhow!(cleanup_errors.join("\n")))
+        }
     }
 }
 
@@ -1840,6 +1894,90 @@ fn build_opencode_config_content(
     serde_json::to_string(&config).context("Failed to serialize OpenCode MCP config")
 }
 
+fn read_binary_version(binary: &str, args: &[&str]) -> Option<String> {
+    let mut child = Command::new(binary)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+
+    loop {
+        match child.try_wait().ok()? {
+            Some(status) => {
+                if !status.success() {
+                    return None;
+                }
+                let output = child.wait_with_output().ok()?;
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                return stdout
+                    .lines()
+                    .find(|line| !line.trim().is_empty())
+                    .map(|line| line.trim().to_string());
+            }
+            None => {
+                if Instant::now() >= deadline {
+                    terminate_child_process(&mut child);
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+}
+
+fn resolve_opencode_binary_path() -> Option<String> {
+    if let Some(resolved) = command_path("opencode") {
+        return Some(resolved);
+    }
+
+    let home = std::env::var_os("HOME")?;
+    let candidate = PathBuf::from(home)
+        .join(".opencode")
+        .join("bin")
+        .join("opencode");
+    if candidate.is_file() {
+        return candidate.to_str().map(|value| value.to_string());
+    }
+
+    None
+}
+
+#[cfg(unix)]
+fn configure_process_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn configure_process_group(_command: &mut Command) {}
+
+#[cfg(unix)]
+fn terminate_process_group_if_owned(child: &Child) {
+    let pid = child.id() as i32;
+    if pid <= 0 {
+        return;
+    }
+    // Only signal the process group if this process is the group leader.
+    let pgid = unsafe { libc::getpgid(pid) };
+    if pgid == pid {
+        unsafe {
+            libc::killpg(pid, libc::SIGTERM);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn terminate_process_group_if_owned(_child: &Child) {}
+
+fn terminate_child_process(child: &mut Child) {
+    terminate_process_group_if_owned(child);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn spawn_opencode_server(
     working_directory: &Path,
     repo_path_for_mcp: &Path,
@@ -1847,7 +1985,10 @@ fn spawn_opencode_server(
     port: u16,
 ) -> Result<Child> {
     let config_content = build_opencode_config_content(repo_path_for_mcp, metadata_namespace)?;
-    Command::new("opencode")
+    let opencode_binary = resolve_opencode_binary_path()
+        .ok_or_else(|| anyhow!("opencode binary not found in PATH or ~/.opencode/bin"))?;
+    let mut command = Command::new(&opencode_binary);
+    command
         .arg("serve")
         .arg("--hostname")
         .arg("127.0.0.1")
@@ -1856,9 +1997,14 @@ fn spawn_opencode_server(
         .env("OPENCODE_CONFIG_CONTENT", config_content)
         .current_dir(working_directory)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to spawn opencode serve")
+        .stderr(Stdio::piped());
+    configure_process_group(&mut command);
+    command.spawn().with_context(|| {
+        format!(
+            "Failed to spawn opencode serve with binary {}",
+            opencode_binary
+        )
+    })
 }
 
 fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
@@ -1885,17 +2031,18 @@ mod tests {
     use super::{
         allows_transition, build_opencode_config_content, can_set_plan, can_set_spec_from_status,
         derive_available_actions, normalize_required_markdown, normalize_subtask_plan_inputs,
-        parse_mcp_command_json, validate_parent_relationships_for_create,
+        parse_mcp_command_json, read_binary_version, validate_parent_relationships_for_create,
         validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
-        wait_for_local_server,
+        terminate_child_process, wait_for_local_server,
     };
     use host_domain::{
         CreateTaskInput, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
     };
     use serde_json::Value;
-    use std::path::Path;
     use std::net::TcpListener;
-    use std::time::Duration;
+    use std::path::Path;
+    use std::process::Command;
+    use std::time::{Duration, Instant};
 
     fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskCard {
         TaskCard {
@@ -2195,6 +2342,37 @@ mod tests {
         drop(listener);
         let result = wait_for_local_server(port, Duration::from_millis(250));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn terminate_child_process_stops_background_process() {
+        let mut child = Command::new("sh")
+            .arg("-lc")
+            .arg("sleep 5")
+            .spawn()
+            .expect("spawn sleep");
+        terminate_child_process(&mut child);
+        let status = child.try_wait().expect("try_wait should succeed");
+        assert!(status.is_some(), "child process should be terminated");
+    }
+
+    #[test]
+    fn read_binary_version_extracts_first_non_empty_line() {
+        let version = read_binary_version("sh", &["-lc", "printf '\\nversion-123\\nextra'"]);
+        assert_eq!(version.as_deref(), Some("version-123"));
+    }
+
+    #[test]
+    fn read_binary_version_times_out_for_hanging_command() {
+        let started = Instant::now();
+        let version = read_binary_version("sh", &["-lc", "sleep 5"]);
+        let elapsed = started.elapsed();
+        assert!(version.is_none());
+        assert!(
+            elapsed < Duration::from_secs(4),
+            "version command should timeout quickly, elapsed: {:?}",
+            elapsed
+        );
     }
 
     #[test]

@@ -85,24 +85,26 @@ pub fn run_command_allow_failure_with_env(
     ))
 }
 
+pub fn command_path(program: &str) -> Option<String> {
+    let lookup = format!("command -v {} 2>/dev/null", shell_escape(program));
+    run_command("sh", &["-lc", &lookup], None)
+        .ok()
+        .and_then(|output| {
+            output
+                .lines()
+                .find(|line| !line.trim().is_empty())
+                .map(|line| line.trim().to_string())
+        })
+        .filter(|path| !path.is_empty())
+}
+
 pub fn command_exists(program: &str) -> bool {
-    Command::new("sh")
-        .arg("-lc")
-        .arg(format!(
-            "command -v {} >/dev/null 2>&1",
-            shell_escape(program)
-        ))
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    command_path(program).is_some()
 }
 
 pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
-    if !command_exists(program) {
-        return None;
-    }
-
-    run_command(program, args, None).ok().and_then(|output| {
+    let resolved = command_path(program)?;
+    run_command(&resolved, args, None).ok().and_then(|output| {
         output
             .lines()
             .find(|line| !line.trim().is_empty())
@@ -117,8 +119,8 @@ fn shell_escape(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        command_exists, run_command, run_command_allow_failure, run_command_allow_failure_with_env,
-        run_command_with_env, version_command,
+        command_exists, command_path, run_command, run_command_allow_failure,
+        run_command_allow_failure_with_env, run_command_with_env, version_command,
     };
 
     #[test]
@@ -175,8 +177,10 @@ mod tests {
     #[test]
     fn command_exists_and_version_command_behave_consistently() {
         assert!(command_exists("sh"));
+        assert!(command_path("sh").is_some());
         let version = version_command("sh", &["-lc", "echo v-test"]);
         assert_eq!(version.as_deref(), Some("v-test"));
         assert!(!command_exists("definitely_not_a_real_binary_name"));
+        assert!(command_path("definitely_not_a_real_binary_name").is_none());
     }
 }

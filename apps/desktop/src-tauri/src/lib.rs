@@ -7,7 +7,7 @@ use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
 use serde::Deserialize;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent, State};
 
 struct AppState {
     service: Arc<AppService>,
@@ -570,6 +570,7 @@ pub fn run() {
     let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(&metadata_namespace));
     let service = Arc::new(AppService::new(task_store, config_store));
 
+    let app_service = service.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -615,6 +616,14 @@ pub fn run() {
             agent_sessions_list,
             agent_session_upsert
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running openblueprint");
+        .build(tauri::generate_context!())
+        .expect("error while building openblueprint")
+        .run(move |_handle, event| {
+            if matches!(
+                event,
+                TauriRunEvent::ExitRequested { .. } | TauriRunEvent::Exit
+            ) {
+                let _ = app_service.shutdown();
+            }
+        });
 }

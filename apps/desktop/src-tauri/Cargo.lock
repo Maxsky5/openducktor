@@ -1224,6 +1224,7 @@ dependencies = [
  "chrono",
  "host-domain",
  "host-infra-system",
+ "libc",
  "serde",
  "serde_json",
  "tokio",
