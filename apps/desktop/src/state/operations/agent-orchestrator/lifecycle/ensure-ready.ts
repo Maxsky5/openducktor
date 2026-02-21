@@ -1,0 +1,183 @@
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { TaskCard } from "@openducktor/contracts";
+import { buildAgentSystemPrompt } from "@openducktor/core";
+import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import { shouldReattachListenerForAttachedSession } from "../support/utils";
+
+type EnsureSessionReadyDependencies = {
+  activeRepo: string | null;
+  adapter: OpencodeSdkAdapter;
+  repoEpochRef: { current: number };
+  previousRepoRef: { current: string | null };
+  sessionsRef: { current: Record<string, AgentSessionState> };
+  taskRef: { current: TaskCard[] };
+  unsubscribersRef: { current: Map<string, () => void> };
+  updateSession: (
+    sessionId: string,
+    updater: (current: AgentSessionState) => AgentSessionState,
+    options?: { persist?: boolean },
+  ) => void;
+  attachSessionListener: (repoPath: string, sessionId: string) => void;
+  ensureRuntime: (
+    repoPath: string,
+    taskId: string,
+    role: AgentSessionState["role"],
+  ) => Promise<RuntimeInfo>;
+  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  loadSessionTodos: (
+    sessionId: string,
+    baseUrl: string,
+    workingDirectory: string,
+    externalSessionId: string,
+  ) => Promise<void>;
+  loadSessionModelCatalog: (
+    sessionId: string,
+    baseUrl: string,
+    workingDirectory: string,
+  ) => Promise<void>;
+};
+
+export const createEnsureSessionReady = ({
+  activeRepo,
+  adapter,
+  repoEpochRef,
+  previousRepoRef,
+  sessionsRef,
+  taskRef,
+  unsubscribersRef,
+  updateSession,
+  attachSessionListener,
+  ensureRuntime,
+  loadTaskDocuments,
+  loadSessionTodos,
+  loadSessionModelCatalog,
+}: EnsureSessionReadyDependencies) => {
+  return async (sessionId: string): Promise<void> => {
+    if (!activeRepo) {
+      throw new Error("Select a workspace first.");
+    }
+
+    const repoPath = activeRepo;
+    const repoEpochAtStart = repoEpochRef.current;
+    const isStaleRepoOperation = (): boolean =>
+      repoEpochRef.current !== repoEpochAtStart || previousRepoRef.current !== repoPath;
+
+    if (isStaleRepoOperation()) {
+      throw new Error("Workspace changed while preparing session.");
+    }
+
+    if (adapter.hasSession(sessionId)) {
+      const attachedSession = sessionsRef.current[sessionId];
+      if (
+        shouldReattachListenerForAttachedSession(
+          attachedSession?.status,
+          unsubscribersRef.current.has(sessionId),
+        )
+      ) {
+        attachSessionListener(repoPath, sessionId);
+      }
+      if (attachedSession?.status !== "error") {
+        return;
+      }
+      const existingUnsubscriber = unsubscribersRef.current.get(sessionId);
+      if (existingUnsubscriber) {
+        existingUnsubscriber();
+        unsubscribersRef.current.delete(sessionId);
+      }
+      await adapter.stopSession(sessionId).catch(() => undefined);
+      if (isStaleRepoOperation()) {
+        throw new Error("Workspace changed while preparing session.");
+      }
+    }
+
+    const session = sessionsRef.current[sessionId];
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const task = taskRef.current.find((entry) => entry.id === session.taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${session.taskId}`);
+    }
+
+    const docs = await loadTaskDocuments(repoPath, session.taskId);
+    if (isStaleRepoOperation()) {
+      throw new Error("Workspace changed while preparing session.");
+    }
+    const runtime = await ensureRuntime(repoPath, session.taskId, session.role);
+    if (isStaleRepoOperation()) {
+      throw new Error("Workspace changed while preparing session.");
+    }
+    const systemPrompt = buildAgentSystemPrompt({
+      role: session.role,
+      scenario: session.scenario,
+      task: {
+        taskId: task.id,
+        title: task.title,
+        issueType: task.issueType,
+        status: task.status,
+        qaRequired: task.aiReviewEnabled,
+        description: task.description,
+        acceptanceCriteria: task.acceptanceCriteria,
+        specMarkdown: docs.specMarkdown,
+        planMarkdown: docs.planMarkdown,
+        latestQaReportMarkdown: docs.qaMarkdown,
+      },
+    });
+
+    await adapter.resumeSession({
+      sessionId: session.sessionId,
+      externalSessionId: session.externalSessionId,
+      repoPath,
+      workingDirectory: runtime.workingDirectory,
+      taskId: session.taskId,
+      role: session.role,
+      scenario: session.scenario,
+      systemPrompt,
+      baseUrl: runtime.baseUrl,
+    });
+
+    if (isStaleRepoOperation()) {
+      throw new Error("Workspace changed while preparing session.");
+    }
+
+    if (!unsubscribersRef.current.has(sessionId)) {
+      attachSessionListener(repoPath, sessionId);
+    }
+
+    if (isStaleRepoOperation()) {
+      throw new Error("Workspace changed while preparing session.");
+    }
+
+    updateSession(sessionId, (current) => ({
+      ...current,
+      status: "idle",
+      pendingPermissions: [],
+      pendingQuestions: [],
+      runtimeId: runtime.runtimeId,
+      runId: runtime.runId,
+      baseUrl: runtime.baseUrl,
+      workingDirectory: runtime.workingDirectory,
+    }));
+
+    if (isStaleRepoOperation()) {
+      return;
+    }
+
+    const activeSession = sessionsRef.current[sessionId];
+    if (activeSession) {
+      void loadSessionTodos(
+        sessionId,
+        runtime.baseUrl,
+        runtime.workingDirectory,
+        activeSession.externalSessionId,
+      ).catch(() => undefined);
+    }
+    if (activeSession && !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog) {
+      void loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory).catch(
+        () => undefined,
+      );
+    }
+  };
+};

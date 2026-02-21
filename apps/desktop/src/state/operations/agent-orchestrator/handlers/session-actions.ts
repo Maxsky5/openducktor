@@ -1,0 +1,278 @@
+import { errorMessage } from "@/lib/errors";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
+import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import { annotateQuestionToolMessage } from "../support/question-messages";
+import { now } from "../support/utils";
+import { createStartAgentSession } from "./start-session";
+
+type SessionActionsDependencies = {
+  activeRepo: string | null;
+  adapter: OpencodeSdkAdapter;
+  setSessionsById: (
+    updater:
+      | Record<string, AgentSessionState>
+      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+  ) => void;
+  sessionsRef: { current: Record<string, AgentSessionState> };
+  taskRef: { current: TaskCard[] };
+  repoEpochRef: { current: number };
+  previousRepoRef: { current: string | null };
+  inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
+  unsubscribersRef: { current: Map<string, () => void> };
+  turnStartedAtBySessionRef: { current: Record<string, number> };
+  updateSession: (
+    sessionId: string,
+    updater: (current: AgentSessionState) => AgentSessionState,
+    options?: { persist?: boolean },
+  ) => void;
+  attachSessionListener: (repoPath: string, sessionId: string) => void;
+  ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
+  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
+  loadSessionTodos: (
+    sessionId: string,
+    baseUrl: string,
+    workingDirectory: string,
+    externalSessionId: string,
+  ) => Promise<void>;
+  loadSessionModelCatalog: (
+    sessionId: string,
+    baseUrl: string,
+    workingDirectory: string,
+  ) => Promise<void>;
+  loadAgentSessions: (taskId: string) => Promise<void>;
+  clearTurnDuration: (sessionId: string) => void;
+  refreshTaskData: (repoPath: string) => Promise<void>;
+  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
+};
+
+export const createAgentSessionActions = ({
+  activeRepo,
+  adapter,
+  setSessionsById,
+  sessionsRef,
+  taskRef,
+  repoEpochRef,
+  previousRepoRef,
+  inFlightStartsByRepoTaskRef,
+  unsubscribersRef,
+  turnStartedAtBySessionRef,
+  updateSession,
+  attachSessionListener,
+  ensureRuntime,
+  loadTaskDocuments,
+  loadRepoDefaultModel,
+  loadSessionTodos,
+  loadSessionModelCatalog,
+  loadAgentSessions,
+  clearTurnDuration,
+  refreshTaskData,
+  persistSessionSnapshot,
+}: SessionActionsDependencies) => {
+  const ensureSessionReady = createEnsureSessionReady({
+    activeRepo,
+    adapter,
+    repoEpochRef,
+    previousRepoRef,
+    sessionsRef,
+    taskRef,
+    unsubscribersRef,
+    updateSession,
+    attachSessionListener,
+    ensureRuntime,
+    loadTaskDocuments,
+    loadSessionTodos,
+    loadSessionModelCatalog,
+  });
+
+  const sendAgentMessage = async (sessionId: string, content: string): Promise<void> => {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    await ensureSessionReady(sessionId);
+
+    const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
+    turnStartedAtBySessionRef.current[sessionId] = Date.now();
+
+    updateSession(sessionId, (current) => ({
+      ...current,
+      status: "running",
+      draftAssistantText: "",
+      messages: [
+        ...current.messages,
+        {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: trimmed,
+          timestamp: now(),
+        },
+      ],
+    }));
+
+    void adapter
+      .sendUserMessage({
+        sessionId,
+        content: trimmed,
+        ...(selectedModel ? { model: selectedModel } : {}),
+      })
+      .catch((error) => {
+        updateSession(
+          sessionId,
+          (current) => ({
+            ...current,
+            status: "error",
+            draftAssistantText: "",
+            messages: [
+              ...current.messages,
+              {
+                id: crypto.randomUUID(),
+                role: "system",
+                content: `Failed to send message: ${errorMessage(error)}`,
+                timestamp: now(),
+              },
+            ],
+          }),
+          { persist: false },
+        );
+        clearTurnDuration(sessionId);
+      });
+  };
+
+  const startAgentSession = createStartAgentSession({
+    activeRepo,
+    adapter,
+    setSessionsById,
+    sessionsRef,
+    taskRef,
+    repoEpochRef,
+    previousRepoRef,
+    inFlightStartsByRepoTaskRef,
+    attachSessionListener,
+    ensureRuntime,
+    loadTaskDocuments,
+    loadRepoDefaultModel,
+    loadSessionTodos,
+    loadSessionModelCatalog,
+    loadAgentSessions,
+    refreshTaskData,
+    persistSessionSnapshot,
+    sendAgentMessage,
+  });
+
+  const stopAgentSession = async (sessionId: string): Promise<void> => {
+    const session = sessionsRef.current[sessionId];
+    if (!session) {
+      return;
+    }
+
+    const unsubscribe = unsubscribersRef.current.get(sessionId);
+    unsubscribe?.();
+    unsubscribersRef.current.delete(sessionId);
+
+    if (adapter.hasSession(sessionId)) {
+      await adapter.stopSession(sessionId);
+    }
+    clearTurnDuration(sessionId);
+
+    updateSession(sessionId, (current) => ({
+      ...current,
+      status: "stopped",
+      draftAssistantText: "",
+      pendingPermissions: [],
+      pendingQuestions: [],
+    }));
+  };
+
+  const updateAgentSessionModel = (
+    sessionId: string,
+    selection: AgentModelSelection | null,
+  ): void => {
+    updateSession(sessionId, (current) => ({
+      ...current,
+      selectedModel: selection,
+    }));
+  };
+
+  const replyAgentPermission = async (
+    sessionId: string,
+    requestId: string,
+    reply: "once" | "always" | "reject",
+    message?: string,
+  ): Promise<void> => {
+    if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
+      turnStartedAtBySessionRef.current[sessionId] = Date.now();
+    }
+    await adapter.replyPermission({
+      sessionId,
+      requestId,
+      reply,
+      ...(message ? { message } : {}),
+    });
+
+    updateSession(sessionId, (current) => ({
+      ...current,
+      pendingPermissions: current.pendingPermissions.filter(
+        (entry) => entry.requestId !== requestId,
+      ),
+    }));
+  };
+
+  const answerAgentQuestion = async (
+    sessionId: string,
+    requestId: string,
+    answers: string[][],
+  ): Promise<void> => {
+    if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
+      turnStartedAtBySessionRef.current[sessionId] = Date.now();
+    }
+    await adapter.replyQuestion({ sessionId, requestId, answers });
+    updateSession(sessionId, (current) => {
+      const answeredRequest = current.pendingQuestions.find(
+        (entry) => entry.requestId === requestId,
+      );
+      const pendingQuestions = current.pendingQuestions.filter(
+        (entry) => entry.requestId !== requestId,
+      );
+
+      if (!answeredRequest || answeredRequest.questions.length === 0) {
+        return {
+          ...current,
+          pendingQuestions,
+        };
+      }
+
+      const answeredQuestionsWithAnswers = answeredRequest.questions.map((question, index) => ({
+        ...question,
+        answers: answers[index] ?? [],
+      }));
+      const messages = annotateQuestionToolMessage(
+        current.messages,
+        requestId,
+        answeredQuestionsWithAnswers,
+        answers,
+      );
+
+      return {
+        ...current,
+        pendingQuestions,
+        messages,
+      };
+    });
+  };
+
+  return {
+    ensureSessionReady,
+    sendAgentMessage,
+    startAgentSession,
+    stopAgentSession,
+    updateAgentSessionModel,
+    replyAgentPermission,
+    answerAgentQuestion,
+  };
+};

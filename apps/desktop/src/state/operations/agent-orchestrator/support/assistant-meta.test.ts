@@ -1,0 +1,68 @@
+import { describe, expect, test } from "bun:test";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assistant-meta";
+
+const sessionFixture: AgentSessionState = {
+  sessionId: "session-1",
+  externalSessionId: "external-1",
+  taskId: "task-1",
+  role: "build",
+  scenario: "build_implementation_start",
+  status: "running",
+  startedAt: "2026-02-22T08:00:00.000Z",
+  runtimeId: null,
+  runId: "run-1",
+  baseUrl: "http://127.0.0.1:4444",
+  workingDirectory: "/tmp/repo/worktree",
+  messages: [],
+  draftAssistantText: "Draft answer",
+  pendingPermissions: [],
+  pendingQuestions: [],
+  todos: [],
+  modelCatalog: {
+    models: [
+      {
+        id: "openai/gpt-5",
+        providerId: "openai",
+        providerName: "OpenAI",
+        modelId: "gpt-5",
+        modelName: "GPT-5",
+        variants: ["high"],
+        contextWindow: 200000,
+        outputLimit: 8000,
+      },
+    ],
+    defaultModelsByProvider: { openai: "gpt-5" },
+    agents: [],
+  },
+  selectedModel: {
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "high",
+  },
+  isLoadingModelCatalog: false,
+};
+
+describe("agent-orchestrator/support/assistant-meta", () => {
+  test("builds assistant meta from session context", () => {
+    const meta = toAssistantMessageMeta(sessionFixture, 1200, 42);
+    expect(meta.kind).toBe("assistant");
+    expect(meta.providerId).toBe("openai");
+    expect(meta.durationMs).toBe(1200);
+    expect(meta.totalTokens).toBe(42);
+  });
+
+  test("finalizes draft assistant text into a message", () => {
+    const finalized = finalizeDraftAssistantMessage(
+      sessionFixture,
+      "2026-02-22T08:00:01.000Z",
+      900,
+      24,
+    );
+
+    expect(finalized.draftAssistantText).toBe("");
+    expect(finalized.messages).toHaveLength(1);
+    expect(finalized.messages[0]?.role).toBe("assistant");
+    expect(finalized.messages[0]?.content).toBe("Draft answer");
+  });
+});
