@@ -136,6 +136,88 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
+  test("keeps local stop cleanup even when remote stop throws", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    let clearCalls = 0;
+
+    adapter.hasSession = () => true;
+    adapter.stopSession = async () => {
+      throw new Error("remote stop failed");
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          pendingPermissions: [{ requestId: "perm-1", permission: "read", patterns: ["*"] }],
+          pendingQuestions: [
+            {
+              requestId: "question-1",
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Confirm",
+                  options: [],
+                  multiple: false,
+                  custom: false,
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: null,
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {
+        clearCalls += 1;
+      },
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+    });
+
+    try {
+      await actions.stopAgentSession("session-1");
+      expect(clearCalls).toBe(1);
+      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(0);
+      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
+    }
+  });
+
   test("updates selected model and removes resolved permission", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalReplyPermission = adapter.replyPermission;
@@ -416,7 +498,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await actions.sendAgentMessage("session-1", "hello");
-      await Promise.resolve();
       expect(sessionsRef.current["session-1"]?.status).toBe("error");
       expect(
         sessionsRef.current["session-1"]?.messages.some((message) =>

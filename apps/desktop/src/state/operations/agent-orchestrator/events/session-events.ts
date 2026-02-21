@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { isOdtWorkflowMutationToolName } from "@openducktor/core";
@@ -39,6 +40,10 @@ type ResolveTurnDuration = (
 
 export type SessionEventAdapter = Pick<OpencodeSdkAdapter, "subscribeEvents" | "replyPermission">;
 
+type SessionEvent = Parameters<Parameters<SessionEventAdapter["subscribeEvents"]>[1]>[0];
+type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;
+type SessionPart = SessionPartEvent["part"];
+
 type AttachAgentSessionListenerParams = {
   adapter: SessionEventAdapter;
   repoPath: string;
@@ -59,519 +64,651 @@ type AttachAgentSessionListenerParams = {
   ) => Promise<void>;
 };
 
-export const attachAgentSessionListener = ({
-  adapter,
-  repoPath,
-  sessionId,
-  sessionsRef,
-  draftRawBySessionRef,
-  draftSourceBySessionRef,
-  turnStartedAtBySessionRef,
-  updateSession,
-  resolveTurnDurationMs,
-  clearTurnDuration,
-  refreshTaskData,
-  loadSessionTodos,
-}: AttachAgentSessionListenerParams): (() => void) => {
-  return adapter.subscribeEvents(sessionId, (event) => {
-    if (event.type === "session_started") {
-      updateSession(sessionId, (current) => ({
-        ...current,
+type SessionEventContext = AttachAgentSessionListenerParams;
+
+const clearDraftBuffers = (context: SessionEventContext): void => {
+  delete context.draftRawBySessionRef.current[context.sessionId];
+  delete context.draftSourceBySessionRef.current[context.sessionId];
+};
+
+const eventTimestampMs = (timestamp: string): number => {
+  const parsed = Date.parse(timestamp);
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+};
+
+const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean => {
+  return (
+    current.draftAssistantText.trim().length > 0 &&
+    current.pendingPermissions.length === 0 &&
+    current.pendingQuestions.length === 0
+  );
+};
+
+const settleDraftToIdle = (context: SessionEventContext, timestamp: string): boolean => {
+  let shouldClear = false;
+  context.updateSession(context.sessionId, (current) => {
+    const finalized = finalizeDraftAssistantMessage(
+      current,
+      timestamp,
+      context.resolveTurnDurationMs(context.sessionId, timestamp, current.messages),
+    );
+    shouldClear = shouldClearTurnFromCurrentState(current);
+    return {
+      ...finalized,
+      messages: settleDanglingTodoToolMessages(finalized.messages, timestamp),
+      ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
+    };
+  });
+  return shouldClear;
+};
+
+const toPartStreamKey = (part: SessionPart): string => {
+  if (part.kind === "tool") {
+    return `${part.messageId}:${part.callId || part.partId}`;
+  }
+  return `${part.messageId}:${part.partId}`;
+};
+
+const createPrePartTodoSettlement = (
+  part: SessionPart,
+  timestamp: string,
+): ((current: AgentSessionState) => AgentSessionState) => {
+  const shouldSettleTodoToolRows = part.kind !== "tool" || !isTodoToolName(part.tool);
+  return (current: AgentSessionState): AgentSessionState => {
+    if (!shouldSettleTodoToolRows) {
+      return current;
+    }
+    const settledMessages = settleDanglingTodoToolMessages(current.messages, timestamp);
+    if (settledMessages === current.messages) {
+      return current;
+    }
+    return {
+      ...current,
+      messages: settledMessages,
+    };
+  };
+};
+
+const refreshTodosFromSessionRef = (context: SessionEventContext): void => {
+  const session = context.sessionsRef.current[context.sessionId];
+  if (!session) {
+    return;
+  }
+  void context
+    .loadSessionTodos(
+      context.sessionId,
+      session.baseUrl,
+      session.workingDirectory,
+      session.externalSessionId,
+    )
+    .catch(() => undefined);
+};
+
+const handleSessionStarted = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "session_started" }>,
+): void => {
+  context.updateSession(context.sessionId, (current) => ({
+    ...current,
+    status: "running",
+    messages: [
+      ...current.messages,
+      {
+        id: crypto.randomUUID(),
+        role: "system",
+        content: event.message,
+        timestamp: event.timestamp,
+      },
+    ],
+  }));
+};
+
+const handleAssistantDelta = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "assistant_delta" }>,
+): void => {
+  if (context.draftSourceBySessionRef.current[context.sessionId] === "part") {
+    return;
+  }
+  context.draftSourceBySessionRef.current[context.sessionId] = "delta";
+  const nextRaw = `${context.draftRawBySessionRef.current[context.sessionId] ?? ""}${event.delta}`;
+  context.draftRawBySessionRef.current[context.sessionId] = nextRaw;
+  context.updateSession(
+    context.sessionId,
+    (current) => ({
+      ...current,
+      status: "running",
+      draftAssistantText: sanitizeStreamingText(nextRaw),
+    }),
+    { persist: false },
+  );
+};
+
+const handleTextPart = (
+  context: SessionEventContext,
+  part: Extract<SessionPart, { kind: "text" }>,
+  prepareCurrent: (current: AgentSessionState) => AgentSessionState,
+): void => {
+  if (part.synthetic) {
+    return;
+  }
+  context.draftSourceBySessionRef.current[context.sessionId] = "part";
+  context.draftRawBySessionRef.current[context.sessionId] = part.text;
+  context.updateSession(
+    context.sessionId,
+    (current) => {
+      const prepared = prepareCurrent(current);
+      return {
+        ...prepared,
         status: "running",
-        messages: [
-          ...current.messages,
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: event.message,
-            timestamp: event.timestamp,
-          },
-        ],
-      }));
-      return;
-    }
-
-    if (event.type === "assistant_delta") {
-      if (draftSourceBySessionRef.current[sessionId] === "part") {
-        return;
-      }
-      draftSourceBySessionRef.current[sessionId] = "delta";
-      const nextRaw = `${draftRawBySessionRef.current[sessionId] ?? ""}${event.delta}`;
-      draftRawBySessionRef.current[sessionId] = nextRaw;
-      updateSession(
-        sessionId,
-        (current) => ({
-          ...current,
-          status: "running",
-          draftAssistantText: sanitizeStreamingText(nextRaw),
-        }),
-        { persist: false },
-      );
-      return;
-    }
-
-    if (event.type === "assistant_part") {
-      const part = event.part;
-      const streamMessageKey =
-        part.kind === "tool"
-          ? `${part.messageId}:${part.callId || part.partId}`
-          : `${part.messageId}:${part.partId}`;
-      const shouldSettleTodoToolRows = part.kind !== "tool" || !isTodoToolName(part.tool);
-      const applyPrePartTodoSettlement = (current: AgentSessionState): AgentSessionState => {
-        if (!shouldSettleTodoToolRows) {
-          return current;
-        }
-        const settledMessages = settleDanglingTodoToolMessages(current.messages, event.timestamp);
-        if (settledMessages === current.messages) {
-          return current;
-        }
-        return {
-          ...current,
-          messages: settledMessages,
-        };
+        draftAssistantText: sanitizeStreamingText(part.text),
       };
-      if (part.kind === "text") {
-        if (!part.synthetic) {
-          draftSourceBySessionRef.current[sessionId] = "part";
-          draftRawBySessionRef.current[sessionId] = part.text;
-          updateSession(
-            sessionId,
-            (current) => {
-              const prepared = applyPrePartTodoSettlement(current);
-              return {
-                ...prepared,
-                status: "running",
-                draftAssistantText: sanitizeStreamingText(part.text),
-              };
-            },
-            { persist: false },
-          );
-        }
-        return;
-      }
+    },
+    { persist: false },
+  );
+};
 
-      if (part.kind === "reasoning") {
-        updateSession(
-          sessionId,
-          (current) => {
-            const prepared = applyPrePartTodoSettlement(current);
-            const messageId = `thinking:${streamMessageKey}`;
-            const existingMessage = prepared.messages.find((entry) => entry.id === messageId);
-            const nextContent =
-              part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
-            if (nextContent.trim().length === 0) {
-              return {
-                ...prepared,
-                status: "running",
-              };
-            }
-
-            return {
-              ...prepared,
-              status: "running",
-              messages: upsertMessage(prepared.messages, {
-                id: messageId,
-                role: "thinking",
-                content: nextContent,
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "reasoning",
-                  partId: part.partId,
-                  completed: part.completed,
-                },
-              }),
-            };
-          },
-          { persist: false },
-        );
-        return;
-      }
-
-      if (part.kind === "tool") {
-        const input = normalizeToolInput(part.input);
-        const output = normalizeToolText(part.output);
-        const error = normalizeToolText(part.error);
-        const isTodoTool = isTodoToolName(part.tool);
-        const parsedEventTimestamp = Date.parse(event.timestamp);
-        const observedEventTimestampMs = Number.isNaN(parsedEventTimestamp)
-          ? Date.now()
-          : parsedEventTimestamp;
-        const todoUpdateFromTool = isTodoTool
-          ? (parseTodosFromToolOutput(output) ?? parseTodosFromToolInput(input))
-          : null;
-        let shouldRefreshTaskData = false;
-        let shouldRefreshSessionTodos = false;
-        updateSession(
-          sessionId,
-          (current) => {
-            const prepared = applyPrePartTodoSettlement(current);
-            const fallbackMessageId = `tool:${streamMessageKey}`;
-            const messageId = resolveToolMessageId(
-              prepared.messages,
-              {
-                messageId: part.messageId,
-                callId: part.callId,
-                tool: part.tool,
-                status: part.status,
-              },
-              fallbackMessageId,
-            );
-            const existing = prepared.messages.find((entry) => entry.id === messageId);
-            const previousStatus =
-              existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
-            const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
-            const observedStartedAtMs =
-              typeof existingToolMeta?.observedStartedAtMs === "number"
-                ? existingToolMeta.observedStartedAtMs
-                : observedEventTimestampMs;
-            const observedEndedAtMs =
-              part.status === "completed" || part.status === "error"
-                ? observedEventTimestampMs
-                : undefined;
-            if (
-              isOdtWorkflowMutationToolName(part.tool) &&
-              part.status === "completed" &&
-              previousStatus !== "completed"
-            ) {
-              shouldRefreshTaskData = true;
-            }
-            if (isTodoTool && part.status === "completed" && previousStatus !== "completed") {
-              shouldRefreshSessionTodos = true;
-            }
-
-            return {
-              ...prepared,
-              status: "running",
-              ...(todoUpdateFromTool
-                ? { todos: mergeTodoListPreservingOrder(prepared.todos, todoUpdateFromTool) }
-                : {}),
-              messages: upsertMessage(prepared.messages, {
-                id: messageId,
-                role: "tool",
-                content: formatToolContent(part),
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "tool",
-                  partId: part.partId,
-                  callId: part.callId,
-                  tool: part.tool,
-                  status: part.status,
-                  ...(part.title ? { title: part.title } : {}),
-                  ...(input ? { input } : {}),
-                  ...(output ? { output } : {}),
-                  ...(error ? { error } : {}),
-                  ...(part.metadata ? { metadata: part.metadata } : {}),
-                  ...(typeof part.startedAtMs === "number"
-                    ? { startedAtMs: part.startedAtMs }
-                    : {}),
-                  ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-                  ...(typeof observedStartedAtMs === "number" ? { observedStartedAtMs } : {}),
-                  ...(typeof observedEndedAtMs === "number" ? { observedEndedAtMs } : {}),
-                },
-              }),
-            };
-          },
-          { persist: false },
-        );
-        if (shouldRefreshTaskData) {
-          void refreshTaskData(repoPath).catch(() => undefined);
-        }
-        if (shouldRefreshSessionTodos) {
-          const session = sessionsRef.current[sessionId];
-          if (session) {
-            void loadSessionTodos(
-              sessionId,
-              session.baseUrl,
-              session.workingDirectory,
-              session.externalSessionId,
-            ).catch(() => undefined);
-          }
-        }
-        return;
-      }
-
-      if (part.kind === "subtask") {
-        updateSession(
-          sessionId,
-          (current) => {
-            const prepared = applyPrePartTodoSettlement(current);
-            return {
-              ...prepared,
-              status: "running",
-              messages: upsertMessage(prepared.messages, {
-                id: `subtask:${streamMessageKey}`,
-                role: "system",
-                content: `Subtask (${part.agent}): ${part.description}`,
-                timestamp: event.timestamp,
-                meta: {
-                  kind: "subtask",
-                  partId: part.partId,
-                  agent: part.agent,
-                  prompt: part.prompt,
-                  description: part.description,
-                },
-              }),
-            };
-          },
-          { persist: false },
-        );
-      }
-      return;
-    }
-
-    if (event.type === "assistant_message") {
-      delete draftRawBySessionRef.current[sessionId];
-      delete draftSourceBySessionRef.current[sessionId];
-      updateSession(sessionId, (current) => {
-        const settledMessages = settleDanglingTodoToolMessages(current.messages, event.timestamp);
-        const messageAlreadyPresent = isDuplicateAssistantMessage(
-          settledMessages,
-          event.message,
-          event.timestamp,
-        );
-        const durationMs = resolveTurnDurationMs(sessionId, event.timestamp, settledMessages);
+const handleReasoningPart = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "assistant_part" }>,
+  part: Extract<SessionPart, { kind: "reasoning" }>,
+  streamMessageKey: string,
+  prepareCurrent: (current: AgentSessionState) => AgentSessionState,
+): void => {
+  context.updateSession(
+    context.sessionId,
+    (current) => {
+      const prepared = prepareCurrent(current);
+      const messageId = `thinking:${streamMessageKey}`;
+      const existingMessage = prepared.messages.find((entry) => entry.id === messageId);
+      const nextContent =
+        part.text.trim().length > 0 ? part.text : (existingMessage?.content ?? "");
+      if (nextContent.trim().length === 0) {
         return {
-          ...current,
-          draftAssistantText: "",
-          messages: messageAlreadyPresent
-            ? settledMessages
-            : [
-                ...settledMessages,
-                {
-                  id: crypto.randomUUID(),
-                  role: "assistant",
-                  content: event.message,
-                  timestamp: event.timestamp,
-                  meta: toAssistantMessageMeta(current, durationMs, event.totalTokens),
-                },
-              ],
+          ...prepared,
+          status: "running",
         };
-      });
-      clearTurnDuration(sessionId);
-      return;
-    }
+      }
 
-    if (event.type === "session_status") {
-      const status = event.status;
-      if (status.type === "busy") {
-        if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
-          const busyStart = Date.parse(event.timestamp);
-          turnStartedAtBySessionRef.current[sessionId] = Number.isNaN(busyStart)
-            ? Date.now()
-            : busyStart;
-        }
-        updateSession(
-          sessionId,
-          (current) =>
-            current.status === "error"
-              ? current
-              : {
-                  ...current,
-                  status: "running",
-                },
-          { persist: false },
-        );
-        return;
-      }
-      if (status.type === "retry") {
-        const retryMessage = normalizeRetryStatusMessage(status.message);
-        updateSession(
-          sessionId,
-          (current) =>
-            current.status === "error"
-              ? current
-              : {
-                  ...current,
-                  status: "running",
-                  messages: upsertMessage(current.messages, {
-                    id: `retry:${status.attempt}`,
-                    role: "system",
-                    content: `Retry ${status.attempt}: ${retryMessage}`,
-                    timestamp: event.timestamp,
-                  }),
-                },
-          { persist: false },
-        );
-        return;
-      }
-      let shouldClear = false;
-      updateSession(sessionId, (current) => {
-        const finalized = finalizeDraftAssistantMessage(
-          current,
-          event.timestamp,
-          resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
-        );
-        shouldClear =
-          current.draftAssistantText.trim().length > 0 &&
-          current.pendingPermissions.length === 0 &&
-          current.pendingQuestions.length === 0;
-        return {
-          ...finalized,
-          messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
-          ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
-        };
-      });
-      if (shouldClear) {
-        clearTurnDuration(sessionId);
-      }
-      return;
-    }
+      return {
+        ...prepared,
+        status: "running",
+        messages: upsertMessage(prepared.messages, {
+          id: messageId,
+          role: "thinking",
+          content: nextContent,
+          timestamp: event.timestamp,
+          meta: {
+            kind: "reasoning",
+            partId: part.partId,
+            completed: part.completed,
+          },
+        }),
+      };
+    },
+    { persist: false },
+  );
+};
 
-    if (event.type === "permission_required") {
-      const role = sessionsRef.current[sessionId]?.role;
+const handleToolPart = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "assistant_part" }>,
+  part: Extract<SessionPart, { kind: "tool" }>,
+  streamMessageKey: string,
+  prepareCurrent: (current: AgentSessionState) => AgentSessionState,
+): void => {
+  const input = normalizeToolInput(part.input);
+  const output = normalizeToolText(part.output);
+  const error = normalizeToolText(part.error);
+  const isTodoTool = isTodoToolName(part.tool);
+  const observedEventTimestampMs = eventTimestampMs(event.timestamp);
+  const todoUpdateFromTool = isTodoTool
+    ? (parseTodosFromToolOutput(output) ?? parseTodosFromToolInput(input))
+    : null;
+  let shouldRefreshTaskData = false;
+  let shouldRefreshSessionTodos = false;
+
+  context.updateSession(
+    context.sessionId,
+    (current) => {
+      const prepared = prepareCurrent(current);
+      const fallbackMessageId = `tool:${streamMessageKey}`;
+      const messageId = resolveToolMessageId(
+        prepared.messages,
+        {
+          messageId: part.messageId,
+          callId: part.callId,
+          tool: part.tool,
+          status: part.status,
+        },
+        fallbackMessageId,
+      );
+      const existing = prepared.messages.find((entry) => entry.id === messageId);
+      const previousStatus = existing?.meta?.kind === "tool" ? existing.meta.status : undefined;
+      const existingToolMeta = existing?.meta?.kind === "tool" ? existing.meta : null;
+      const observedStartedAtMs =
+        typeof existingToolMeta?.observedStartedAtMs === "number"
+          ? existingToolMeta.observedStartedAtMs
+          : observedEventTimestampMs;
+      const observedEndedAtMs =
+        part.status === "completed" || part.status === "error"
+          ? observedEventTimestampMs
+          : undefined;
       if (
-        role &&
-        READ_ONLY_ROLES.has(role) &&
-        isMutatingPermission(event.permission, event.patterns, event.metadata)
+        isOdtWorkflowMutationToolName(part.tool) &&
+        part.status === "completed" &&
+        previousStatus !== "completed"
       ) {
-        void adapter
-          .replyPermission({
-            sessionId,
-            requestId: event.requestId,
-            reply: "reject",
-            message: `Rejected by OpenDucktor ${role} read-only policy.`,
-          })
-          .catch(() => undefined);
+        shouldRefreshTaskData = true;
+      }
+      if (isTodoTool && part.status === "completed" && previousStatus !== "completed") {
+        shouldRefreshSessionTodos = true;
+      }
 
-        updateSession(sessionId, (current) => ({
+      return {
+        ...prepared,
+        status: "running",
+        ...(todoUpdateFromTool
+          ? { todos: mergeTodoListPreservingOrder(prepared.todos, todoUpdateFromTool) }
+          : {}),
+        messages: upsertMessage(prepared.messages, {
+          id: messageId,
+          role: "tool",
+          content: formatToolContent(part),
+          timestamp: event.timestamp,
+          meta: {
+            kind: "tool",
+            partId: part.partId,
+            callId: part.callId,
+            tool: part.tool,
+            status: part.status,
+            ...(part.title ? { title: part.title } : {}),
+            ...(input ? { input } : {}),
+            ...(output ? { output } : {}),
+            ...(error ? { error } : {}),
+            ...(part.metadata ? { metadata: part.metadata } : {}),
+            ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+            ...(typeof observedStartedAtMs === "number" ? { observedStartedAtMs } : {}),
+            ...(typeof observedEndedAtMs === "number" ? { observedEndedAtMs } : {}),
+          },
+        }),
+      };
+    },
+    { persist: false },
+  );
+
+  if (shouldRefreshTaskData) {
+    void context.refreshTaskData(context.repoPath).catch(() => undefined);
+  }
+  if (shouldRefreshSessionTodos) {
+    refreshTodosFromSessionRef(context);
+  }
+};
+
+const handleSubtaskPart = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "assistant_part" }>,
+  part: Extract<SessionPart, { kind: "subtask" }>,
+  streamMessageKey: string,
+  prepareCurrent: (current: AgentSessionState) => AgentSessionState,
+): void => {
+  context.updateSession(
+    context.sessionId,
+    (current) => {
+      const prepared = prepareCurrent(current);
+      return {
+        ...prepared,
+        status: "running",
+        messages: upsertMessage(prepared.messages, {
+          id: `subtask:${streamMessageKey}`,
+          role: "system",
+          content: `Subtask (${part.agent}): ${part.description}`,
+          timestamp: event.timestamp,
+          meta: {
+            kind: "subtask",
+            partId: part.partId,
+            agent: part.agent,
+            prompt: part.prompt,
+            description: part.description,
+          },
+        }),
+      };
+    },
+    { persist: false },
+  );
+};
+
+const handleAssistantPart = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "assistant_part" }>,
+): void => {
+  const part = event.part;
+  const streamMessageKey = toPartStreamKey(part);
+  const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
+
+  switch (part.kind) {
+    case "text":
+      handleTextPart(context, part, prepareCurrent);
+      return;
+    case "reasoning":
+      handleReasoningPart(context, event, part, streamMessageKey, prepareCurrent);
+      return;
+    case "tool":
+      handleToolPart(context, event, part, streamMessageKey, prepareCurrent);
+      return;
+    case "subtask":
+      handleSubtaskPart(context, event, part, streamMessageKey, prepareCurrent);
+      return;
+    case "step":
+      return;
+  }
+};
+
+const handleAssistantMessage = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "assistant_message" }>,
+): void => {
+  clearDraftBuffers(context);
+  context.updateSession(context.sessionId, (current) => {
+    const settledMessages = settleDanglingTodoToolMessages(current.messages, event.timestamp);
+    const messageAlreadyPresent = isDuplicateAssistantMessage(
+      settledMessages,
+      event.message,
+      event.timestamp,
+    );
+    const durationMs = context.resolveTurnDurationMs(
+      context.sessionId,
+      event.timestamp,
+      settledMessages,
+    );
+    return {
+      ...current,
+      draftAssistantText: "",
+      messages: messageAlreadyPresent
+        ? settledMessages
+        : [
+            ...settledMessages,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: event.message,
+              timestamp: event.timestamp,
+              meta: toAssistantMessageMeta(current, durationMs, event.totalTokens),
+            },
+          ],
+    };
+  });
+  context.clearTurnDuration(context.sessionId);
+};
+
+const handleSessionStatus = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "session_status" }>,
+): void => {
+  const status = event.status;
+
+  if (status.type === "busy") {
+    if (context.turnStartedAtBySessionRef.current[context.sessionId] === undefined) {
+      context.turnStartedAtBySessionRef.current[context.sessionId] = eventTimestampMs(
+        event.timestamp,
+      );
+    }
+    context.updateSession(
+      context.sessionId,
+      (current) =>
+        current.status === "error"
+          ? current
+          : {
+              ...current,
+              status: "running",
+            },
+      { persist: false },
+    );
+    return;
+  }
+
+  if (status.type === "retry") {
+    const retryMessage = normalizeRetryStatusMessage(status.message);
+    context.updateSession(
+      context.sessionId,
+      (current) =>
+        current.status === "error"
+          ? current
+          : {
+              ...current,
+              status: "running",
+              messages: upsertMessage(current.messages, {
+                id: `retry:${status.attempt}`,
+                role: "system",
+                content: `Retry ${status.attempt}: ${retryMessage}`,
+                timestamp: event.timestamp,
+              }),
+            },
+      { persist: false },
+    );
+    return;
+  }
+
+  if (settleDraftToIdle(context, event.timestamp)) {
+    context.clearTurnDuration(context.sessionId);
+  }
+};
+
+const handlePermissionRequired = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "permission_required" }>,
+): void => {
+  const role = context.sessionsRef.current[context.sessionId]?.role;
+  if (
+    role &&
+    READ_ONLY_ROLES.has(role) &&
+    isMutatingPermission(event.permission, event.patterns, event.metadata)
+  ) {
+    const pendingPermission = {
+      requestId: event.requestId,
+      permission: event.permission,
+      patterns: event.patterns,
+      ...(event.metadata ? { metadata: event.metadata } : {}),
+    };
+    void context.adapter
+      .replyPermission({
+        sessionId: context.sessionId,
+        requestId: event.requestId,
+        reply: "reject",
+        message: `Rejected by OpenDucktor ${role} read-only policy.`,
+      })
+      .catch((error) => {
+        context.updateSession(context.sessionId, (current) => ({
           ...current,
+          pendingPermissions: [
+            ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
+            pendingPermission,
+          ],
           messages: [
             ...current.messages,
             {
               id: crypto.randomUUID(),
               role: "system",
-              content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
+              content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
               timestamp: event.timestamp,
             },
           ],
         }));
-        return;
-      }
-
-      updateSession(sessionId, (current) => ({
-        ...current,
-        pendingPermissions: [
-          ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
-          {
-            requestId: event.requestId,
-            permission: event.permission,
-            patterns: event.patterns,
-            ...(event.metadata ? { metadata: event.metadata } : {}),
-          },
-        ],
-      }));
-      return;
-    }
-
-    if (event.type === "question_required") {
-      updateSession(sessionId, (current) => ({
-        ...current,
-        pendingQuestions: [
-          ...current.pendingQuestions.filter((entry) => entry.requestId !== event.requestId),
-          {
-            requestId: event.requestId,
-            questions: event.questions,
-          },
-        ],
-      }));
-      return;
-    }
-
-    if (event.type === "session_todos_updated") {
-      updateSession(
-        sessionId,
-        (current) => ({
-          ...current,
-          todos: mergeTodoListPreservingOrder(current.todos, event.todos),
-          messages: settleDanglingTodoToolMessages(current.messages, event.timestamp),
-        }),
-        { persist: false },
-      );
-      return;
-    }
-
-    if (event.type === "session_error") {
-      delete draftRawBySessionRef.current[sessionId];
-      delete draftSourceBySessionRef.current[sessionId];
-      const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
-      updateSession(sessionId, (current) => {
-        const finalized = finalizeDraftAssistantMessage(
-          current,
-          event.timestamp,
-          resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
-        );
-        const settledMessages = settleDanglingTodoToolMessages(
-          finalized.messages,
-          event.timestamp,
-          {
-            outcome: "error",
-            errorMessage: sessionErrorMessage,
-          },
-        );
-        return {
-          ...finalized,
-          status: "error",
-          pendingPermissions: [],
-          pendingQuestions: [],
-          messages: [
-            ...settledMessages,
-            {
-              id: crypto.randomUUID(),
-              role: "system",
-              content: `Session error: ${sessionErrorMessage}`,
-              timestamp: event.timestamp,
-            },
-          ],
-        };
       });
-      clearTurnDuration(sessionId);
-      return;
-    }
 
-    if (event.type === "session_idle") {
-      delete draftRawBySessionRef.current[sessionId];
-      delete draftSourceBySessionRef.current[sessionId];
-      let shouldClear = false;
-      updateSession(sessionId, (current) => {
-        const finalized = finalizeDraftAssistantMessage(
-          current,
-          event.timestamp,
-          resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
-        );
-        shouldClear =
-          current.draftAssistantText.trim().length > 0 &&
-          current.pendingPermissions.length === 0 &&
-          current.pendingQuestions.length === 0;
-        return {
-          ...finalized,
-          messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
-          ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
-        };
-      });
-      if (shouldClear) {
-        clearTurnDuration(sessionId);
-      }
-      return;
-    }
+    context.updateSession(context.sessionId, (current) => ({
+      ...current,
+      messages: [
+        ...current.messages,
+        {
+          id: crypto.randomUUID(),
+          role: "system",
+          content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
+          timestamp: event.timestamp,
+        },
+      ],
+    }));
+    return;
+  }
 
-    if (event.type === "session_finished") {
-      delete draftRawBySessionRef.current[sessionId];
-      delete draftSourceBySessionRef.current[sessionId];
-      updateSession(sessionId, (current) => {
-        const finalized = finalizeDraftAssistantMessage(
-          current,
-          event.timestamp,
-          resolveTurnDurationMs(sessionId, event.timestamp, current.messages),
-        );
-        return {
-          ...finalized,
-          messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
-          pendingPermissions: [],
-          pendingQuestions: [],
-          status: "stopped",
-        };
-      });
-      clearTurnDuration(sessionId);
-    }
+  context.updateSession(context.sessionId, (current) => ({
+    ...current,
+    pendingPermissions: [
+      ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
+      {
+        requestId: event.requestId,
+        permission: event.permission,
+        patterns: event.patterns,
+        ...(event.metadata ? { metadata: event.metadata } : {}),
+      },
+    ],
+  }));
+};
+
+const handleQuestionRequired = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "question_required" }>,
+): void => {
+  context.updateSession(context.sessionId, (current) => ({
+    ...current,
+    pendingQuestions: [
+      ...current.pendingQuestions.filter((entry) => entry.requestId !== event.requestId),
+      {
+        requestId: event.requestId,
+        questions: event.questions,
+      },
+    ],
+  }));
+};
+
+const handleSessionTodosUpdated = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "session_todos_updated" }>,
+): void => {
+  context.updateSession(
+    context.sessionId,
+    (current) => ({
+      ...current,
+      todos: mergeTodoListPreservingOrder(current.todos, event.todos),
+      messages: settleDanglingTodoToolMessages(current.messages, event.timestamp),
+    }),
+    { persist: false },
+  );
+};
+
+const handleSessionError = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "session_error" }>,
+): void => {
+  clearDraftBuffers(context);
+  const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
+  context.updateSession(context.sessionId, (current) => {
+    const finalized = finalizeDraftAssistantMessage(
+      current,
+      event.timestamp,
+      context.resolveTurnDurationMs(context.sessionId, event.timestamp, current.messages),
+    );
+    const settledMessages = settleDanglingTodoToolMessages(finalized.messages, event.timestamp, {
+      outcome: "error",
+      errorMessage: sessionErrorMessage,
+    });
+    return {
+      ...finalized,
+      status: "error",
+      pendingPermissions: [],
+      pendingQuestions: [],
+      messages: [
+        ...settledMessages,
+        {
+          id: crypto.randomUUID(),
+          role: "system",
+          content: `Session error: ${sessionErrorMessage}`,
+          timestamp: event.timestamp,
+        },
+      ],
+    };
+  });
+  context.clearTurnDuration(context.sessionId);
+};
+
+const handleSessionIdle = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "session_idle" }>,
+): void => {
+  clearDraftBuffers(context);
+  if (settleDraftToIdle(context, event.timestamp)) {
+    context.clearTurnDuration(context.sessionId);
+  }
+};
+
+const handleSessionFinished = (
+  context: SessionEventContext,
+  event: Extract<SessionEvent, { type: "session_finished" }>,
+): void => {
+  clearDraftBuffers(context);
+  context.updateSession(context.sessionId, (current) => {
+    const finalized = finalizeDraftAssistantMessage(
+      current,
+      event.timestamp,
+      context.resolveTurnDurationMs(context.sessionId, event.timestamp, current.messages),
+    );
+    return {
+      ...finalized,
+      messages: settleDanglingTodoToolMessages(finalized.messages, event.timestamp),
+      pendingPermissions: [],
+      pendingQuestions: [],
+      status: "stopped",
+    };
+  });
+  context.clearTurnDuration(context.sessionId);
+};
+
+const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): void => {
+  switch (event.type) {
+    case "session_started":
+      handleSessionStarted(context, event);
+      return;
+    case "assistant_delta":
+      handleAssistantDelta(context, event);
+      return;
+    case "assistant_part":
+      handleAssistantPart(context, event);
+      return;
+    case "assistant_message":
+      handleAssistantMessage(context, event);
+      return;
+    case "session_status":
+      handleSessionStatus(context, event);
+      return;
+    case "permission_required":
+      handlePermissionRequired(context, event);
+      return;
+    case "question_required":
+      handleQuestionRequired(context, event);
+      return;
+    case "session_todos_updated":
+      handleSessionTodosUpdated(context, event);
+      return;
+    case "session_error":
+      handleSessionError(context, event);
+      return;
+    case "session_idle":
+      handleSessionIdle(context, event);
+      return;
+    case "session_finished":
+      handleSessionFinished(context, event);
+      return;
+    case "tool_call":
+    case "tool_result":
+      return;
+  }
+};
+
+export const attachAgentSessionListener = (
+  context: AttachAgentSessionListenerParams,
+): (() => void) => {
+  return context.adapter.subscribeEvents(context.sessionId, (event) => {
+    handleSessionEvent(context, event);
   });
 };

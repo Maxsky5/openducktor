@@ -3,7 +3,11 @@ import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import { shouldReattachListenerForAttachedSession } from "../support/utils";
+import {
+  createRepoStaleGuard,
+  shouldReattachListenerForAttachedSession,
+  throwIfRepoStale,
+} from "../support/utils";
 
 type EnsureSessionReadyDependencies = {
   activeRepo: string | null;
@@ -38,6 +42,8 @@ type EnsureSessionReadyDependencies = {
   ) => Promise<void>;
 };
 
+const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
+
 export const createEnsureSessionReady = ({
   activeRepo,
   adapter,
@@ -59,25 +65,31 @@ export const createEnsureSessionReady = ({
     }
 
     const repoPath = activeRepo;
-    const repoEpochAtStart = repoEpochRef.current;
-    const isStaleRepoOperation = (): boolean =>
-      repoEpochRef.current !== repoEpochAtStart || previousRepoRef.current !== repoPath;
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef,
+      previousRepoRef,
+    });
+    const assertNotStale = (): void => {
+      throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
+    };
 
-    if (isStaleRepoOperation()) {
-      throw new Error("Workspace changed while preparing session.");
+    assertNotStale();
+    const session = sessionsRef.current[sessionId];
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
     }
 
     if (adapter.hasSession(sessionId)) {
-      const attachedSession = sessionsRef.current[sessionId];
       if (
         shouldReattachListenerForAttachedSession(
-          attachedSession?.status,
+          session.status,
           unsubscribersRef.current.has(sessionId),
         )
       ) {
         attachSessionListener(repoPath, sessionId);
       }
-      if (attachedSession?.status !== "error") {
+      if (session.status !== "error") {
         return;
       }
       const existingUnsubscriber = unsubscribersRef.current.get(sessionId);
@@ -86,14 +98,7 @@ export const createEnsureSessionReady = ({
         unsubscribersRef.current.delete(sessionId);
       }
       await adapter.stopSession(sessionId).catch(() => undefined);
-      if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while preparing session.");
-      }
-    }
-
-    const session = sessionsRef.current[sessionId];
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
+      assertNotStale();
     }
 
     const task = taskRef.current.find((entry) => entry.id === session.taskId);
@@ -102,13 +107,9 @@ export const createEnsureSessionReady = ({
     }
 
     const docs = await loadTaskDocuments(repoPath, session.taskId);
-    if (isStaleRepoOperation()) {
-      throw new Error("Workspace changed while preparing session.");
-    }
+    assertNotStale();
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role);
-    if (isStaleRepoOperation()) {
-      throw new Error("Workspace changed while preparing session.");
-    }
+    assertNotStale();
     const systemPrompt = buildAgentSystemPrompt({
       role: session.role,
       scenario: session.scenario,
@@ -139,16 +140,15 @@ export const createEnsureSessionReady = ({
     });
 
     if (isStaleRepoOperation()) {
-      throw new Error("Workspace changed while preparing session.");
+      await adapter.stopSession(sessionId).catch(() => undefined);
+      throw new Error(STALE_PREPARE_ERROR);
     }
 
     if (!unsubscribersRef.current.has(sessionId)) {
       attachSessionListener(repoPath, sessionId);
     }
 
-    if (isStaleRepoOperation()) {
-      throw new Error("Workspace changed while preparing session.");
-    }
+    assertNotStale();
 
     updateSession(sessionId, (current) => ({
       ...current,
@@ -166,18 +166,21 @@ export const createEnsureSessionReady = ({
     }
 
     const activeSession = sessionsRef.current[sessionId];
-    if (activeSession) {
+    const warmSessionData = (targetSession: AgentSessionState): void => {
       void loadSessionTodos(
         sessionId,
         runtime.baseUrl,
         runtime.workingDirectory,
-        activeSession.externalSessionId,
+        targetSession.externalSessionId,
       ).catch(() => undefined);
-    }
-    if (activeSession && !activeSession.modelCatalog && !activeSession.isLoadingModelCatalog) {
-      void loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory).catch(
-        () => undefined,
-      );
+      if (!targetSession.modelCatalog && !targetSession.isLoadingModelCatalog) {
+        void loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory).catch(
+          () => undefined,
+        );
+      }
+    };
+    if (activeSession) {
+      warmSessionData(activeSession);
     }
   };
 };

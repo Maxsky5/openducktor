@@ -5,6 +5,8 @@ import { formatToolContent } from "../../agent-tool-messages";
 import { normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
+type HistoryPart = AgentSessionHistoryMessage["parts"][number];
+
 export const toPersistedSessionRecord = (
   session: AgentSessionState,
   updatedAt: string,
@@ -107,6 +109,91 @@ const isSyntheticHistoryUserMessage = (message: AgentSessionHistoryMessage): boo
   return hasTextPart;
 };
 
+const assistantMessageMeta = (
+  role: AgentRole,
+  selectedModel: AgentModelSelection | null,
+  durationMs: number | undefined,
+  totalTokens: number | undefined,
+) => {
+  return {
+    kind: "assistant",
+    agentRole: role,
+    ...(selectedModel?.providerId ? { providerId: selectedModel.providerId } : {}),
+    ...(selectedModel?.modelId ? { modelId: selectedModel.modelId } : {}),
+    ...(selectedModel?.variant ? { variant: selectedModel.variant } : {}),
+    ...(selectedModel?.opencodeAgent ? { opencodeAgent: selectedModel.opencodeAgent } : {}),
+    ...(typeof durationMs === "number" && durationMs > 0 ? { durationMs } : {}),
+    ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
+  } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;
+};
+
+const historyPartToChatMessage = (
+  message: AgentSessionHistoryMessage,
+  part: HistoryPart,
+): AgentChatMessage | null => {
+  switch (part.kind) {
+    case "reasoning": {
+      if (part.text.trim().length === 0) {
+        return null;
+      }
+      return {
+        id: `history:thinking:${message.messageId}:${part.partId}`,
+        role: "thinking",
+        content: part.text,
+        timestamp: message.timestamp,
+        meta: {
+          kind: "reasoning",
+          partId: part.partId,
+          completed: part.completed,
+        },
+      };
+    }
+    case "tool": {
+      const input = normalizeToolInput(part.input);
+      const output = normalizeToolText(part.output);
+      const error = normalizeToolText(part.error);
+      return {
+        id: `history:tool:${message.messageId}:${part.partId}`,
+        role: "tool",
+        content: formatToolContent(part),
+        timestamp: message.timestamp,
+        meta: {
+          kind: "tool",
+          partId: part.partId,
+          callId: part.callId,
+          tool: part.tool,
+          status: part.status,
+          ...(part.title ? { title: part.title } : {}),
+          ...(input ? { input } : {}),
+          ...(output ? { output } : {}),
+          ...(error ? { error } : {}),
+          ...(part.metadata ? { metadata: part.metadata } : {}),
+          ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
+          ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+        },
+      };
+    }
+    case "subtask": {
+      return {
+        id: `history:subtask:${message.messageId}:${part.partId}`,
+        role: "system",
+        content: `Subtask (${part.agent}): ${part.description}`,
+        timestamp: message.timestamp,
+        meta: {
+          kind: "subtask",
+          partId: part.partId,
+          agent: part.agent,
+          prompt: part.prompt,
+          description: part.description,
+        },
+      };
+    }
+    case "step":
+    case "text":
+      return null;
+  }
+};
+
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
@@ -119,65 +206,9 @@ export const historyToChatMessages = (
 
   for (const message of history) {
     for (const part of message.parts) {
-      if (part.kind === "reasoning") {
-        if (part.text.trim().length === 0) {
-          continue;
-        }
-        next.push({
-          id: `history:thinking:${message.messageId}:${part.partId}`,
-          role: "thinking",
-          content: part.text,
-          timestamp: message.timestamp,
-          meta: {
-            kind: "reasoning",
-            partId: part.partId,
-            completed: part.completed,
-          },
-        });
-        continue;
-      }
-
-      if (part.kind === "tool") {
-        const input = normalizeToolInput(part.input);
-        const output = normalizeToolText(part.output);
-        const error = normalizeToolText(part.error);
-        next.push({
-          id: `history:tool:${message.messageId}:${part.partId}`,
-          role: "tool",
-          content: formatToolContent(part),
-          timestamp: message.timestamp,
-          meta: {
-            kind: "tool",
-            partId: part.partId,
-            callId: part.callId,
-            tool: part.tool,
-            status: part.status,
-            ...(part.title ? { title: part.title } : {}),
-            ...(input ? { input } : {}),
-            ...(output ? { output } : {}),
-            ...(error ? { error } : {}),
-            ...(part.metadata ? { metadata: part.metadata } : {}),
-            ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-          },
-        });
-        continue;
-      }
-
-      if (part.kind === "subtask") {
-        next.push({
-          id: `history:subtask:${message.messageId}:${part.partId}`,
-          role: "system",
-          content: `Subtask (${part.agent}): ${part.description}`,
-          timestamp: message.timestamp,
-          meta: {
-            kind: "subtask",
-            partId: part.partId,
-            agent: part.agent,
-            prompt: part.prompt,
-            description: part.description,
-          },
-        });
+      const partMessage = historyPartToChatMessage(message, part);
+      if (partMessage) {
+        next.push(partMessage);
       }
     }
 
@@ -191,28 +222,12 @@ export const historyToChatMessages = (
         timestamp: message.timestamp,
         ...(message.role === "assistant"
           ? {
-              meta: {
-                kind: "assistant",
-                agentRole: sessionContext.role,
-                ...(sessionContext.selectedModel?.providerId
-                  ? { providerId: sessionContext.selectedModel.providerId }
-                  : {}),
-                ...(sessionContext.selectedModel?.modelId
-                  ? { modelId: sessionContext.selectedModel.modelId }
-                  : {}),
-                ...(sessionContext.selectedModel?.variant
-                  ? { variant: sessionContext.selectedModel.variant }
-                  : {}),
-                ...(sessionContext.selectedModel?.opencodeAgent
-                  ? { opencodeAgent: sessionContext.selectedModel.opencodeAgent }
-                  : {}),
-                ...(typeof assistantDurationMs === "number" && assistantDurationMs > 0
-                  ? { durationMs: assistantDurationMs }
-                  : {}),
-                ...(typeof message.totalTokens === "number" && message.totalTokens > 0
-                  ? { totalTokens: message.totalTokens }
-                  : {}),
-              } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>,
+              meta: assistantMessageMeta(
+                sessionContext.role,
+                sessionContext.selectedModel,
+                assistantDurationMs,
+                message.totalTokens,
+              ),
             }
           : {}),
       });

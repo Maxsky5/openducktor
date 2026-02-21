@@ -22,6 +22,28 @@ export const shouldReattachListenerForAttachedSession = (
   hasActiveUnsubscriber: boolean,
 ): boolean => status !== "error" && !hasActiveUnsubscriber;
 
+type RefValue<T> = { current: T };
+
+export const createRepoStaleGuard = ({
+  repoPath,
+  repoEpochRef,
+  previousRepoRef,
+}: {
+  repoPath: string;
+  repoEpochRef: RefValue<number>;
+  previousRepoRef: RefValue<string | null>;
+}): (() => boolean) => {
+  const repoEpochAtStart = repoEpochRef.current;
+  return (): boolean =>
+    repoEpochRef.current !== repoEpochAtStart || previousRepoRef.current !== repoPath;
+};
+
+export const throwIfRepoStale = (isStaleRepoOperation: () => boolean, message: string): void => {
+  if (isStaleRepoOperation()) {
+    throw new Error(message);
+  }
+};
+
 export const isDuplicateAssistantMessage = (
   messages: AgentChatMessage[],
   incomingContent: string,

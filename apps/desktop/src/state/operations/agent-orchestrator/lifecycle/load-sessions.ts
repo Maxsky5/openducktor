@@ -5,6 +5,7 @@ import { buildAgentSystemPrompt } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { host } from "../../host";
 import {
+  createRepoStaleGuard,
   fromPersistedSessionRecord,
   historyToChatMessages,
   normalizePersistedSelection,
@@ -59,12 +60,92 @@ export const createLoadAgentSessions = ({
     }
 
     const repoPath = activeRepo;
-    const repoEpochAtStart = repoEpochRef.current;
-    const isStaleRepoOperation = (): boolean =>
-      repoEpochRef.current !== repoEpochAtStart || previousRepoRef.current !== repoPath;
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef,
+      previousRepoRef,
+    });
     if (isStaleRepoOperation()) {
       return;
     }
+
+    const warmSessionData = (
+      targetSessionId: string,
+      baseUrl: string,
+      workingDirectory: string,
+      externalSessionId: string,
+    ): void => {
+      void loadSessionTodos(targetSessionId, baseUrl, workingDirectory, externalSessionId).catch(
+        () => undefined,
+      );
+      void loadSessionModelCatalog(targetSessionId, baseUrl, workingDirectory).catch(
+        () => undefined,
+      );
+    };
+
+    const buildPreludeMessages = async (
+      record: Awaited<ReturnType<typeof host.agentSessionsList>>[number],
+    ): Promise<AgentSessionState["messages"]> => {
+      let preludeMessages: AgentSessionState["messages"] = [
+        {
+          id: `history:session-start:${record.sessionId}`,
+          role: "system",
+          content: `Session started (${record.role} - ${record.scenario})`,
+          timestamp: record.startedAt,
+        },
+      ];
+
+      const task = taskRef.current.find((entry) => entry.id === record.taskId);
+      if (!task) {
+        return preludeMessages;
+      }
+
+      const docs = await Promise.all([
+        host
+          .specGet(repoPath, record.taskId)
+          .then((doc) => doc.markdown)
+          .catch(() => ""),
+        host
+          .planGet(repoPath, record.taskId)
+          .then((doc) => doc.markdown)
+          .catch(() => ""),
+        host
+          .qaGetReport(repoPath, record.taskId)
+          .then((doc) => doc.markdown)
+          .catch(() => ""),
+      ]).catch(() => null);
+      if (!docs || isStaleRepoOperation()) {
+        return preludeMessages;
+      }
+
+      const [specMarkdown, planMarkdown, qaMarkdown] = docs;
+      const systemPrompt = buildAgentSystemPrompt({
+        role: record.role,
+        scenario: record.scenario,
+        task: {
+          taskId: task.id,
+          title: task.title,
+          issueType: task.issueType,
+          status: task.status,
+          qaRequired: task.aiReviewEnabled,
+          description: task.description,
+          acceptanceCriteria: task.acceptanceCriteria,
+          specMarkdown,
+          planMarkdown,
+          latestQaReportMarkdown: qaMarkdown,
+        },
+      });
+      preludeMessages = [
+        ...preludeMessages,
+        {
+          id: `history:system-prompt:${record.sessionId}`,
+          role: "system",
+          content: `System prompt:\n\n${systemPrompt}`,
+          timestamp: record.startedAt,
+        },
+      ];
+      return preludeMessages;
+    };
 
     const persisted = await host.agentSessionsList(repoPath, taskId);
     if (isStaleRepoOperation()) {
@@ -99,17 +180,12 @@ export const createLoadAgentSessions = ({
         if (!session.baseUrl || !session.workingDirectory) {
           continue;
         }
-        void loadSessionTodos(
+        warmSessionData(
           session.sessionId,
           session.baseUrl,
           session.workingDirectory,
           session.externalSessionId,
-        ).catch(() => undefined);
-        void loadSessionModelCatalog(
-          session.sessionId,
-          session.baseUrl,
-          session.workingDirectory,
-        ).catch(() => undefined);
+        );
       }
       return;
     }
@@ -151,74 +227,13 @@ export const createLoadAgentSessions = ({
             }),
             { persist: false },
           );
-          void loadSessionTodos(
-            record.sessionId,
-            baseUrl,
-            workingDirectory,
-            record.externalSessionId,
-          ).catch(() => undefined);
-          void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory).catch(
-            () => undefined,
-          );
+          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
           return;
         }
 
-        const task = taskRef.current.find((entry) => entry.id === record.taskId);
-        let preludeMessages: AgentSessionState["messages"] = [
-          {
-            id: `history:session-start:${record.sessionId}`,
-            role: "system",
-            content: `Session started (${record.role} - ${record.scenario})`,
-            timestamp: record.startedAt,
-          },
-        ];
-
-        if (task) {
-          const docs = await Promise.all([
-            host
-              .specGet(repoPath, record.taskId)
-              .then((doc) => doc.markdown)
-              .catch(() => ""),
-            host
-              .planGet(repoPath, record.taskId)
-              .then((doc) => doc.markdown)
-              .catch(() => ""),
-            host
-              .qaGetReport(repoPath, record.taskId)
-              .then((doc) => doc.markdown)
-              .catch(() => ""),
-          ]).catch(() => null);
-          if (docs) {
-            const [specMarkdown, planMarkdown, qaMarkdown] = docs;
-            if (isStaleRepoOperation()) {
-              return;
-            }
-            const systemPrompt = buildAgentSystemPrompt({
-              role: record.role,
-              scenario: record.scenario,
-              task: {
-                taskId: task.id,
-                title: task.title,
-                issueType: task.issueType,
-                status: task.status,
-                qaRequired: task.aiReviewEnabled,
-                description: task.description,
-                acceptanceCriteria: task.acceptanceCriteria,
-                specMarkdown,
-                planMarkdown,
-                latestQaReportMarkdown: qaMarkdown,
-              },
-            });
-            preludeMessages = [
-              ...preludeMessages,
-              {
-                id: `history:system-prompt:${record.sessionId}`,
-                role: "system",
-                content: `System prompt:\n\n${systemPrompt}`,
-                timestamp: record.startedAt,
-              },
-            ];
-          }
+        const preludeMessages = await buildPreludeMessages(record);
+        if (isStaleRepoOperation()) {
+          return;
         }
 
         try {
@@ -247,28 +262,12 @@ export const createLoadAgentSessions = ({
             }),
             { persist: false },
           );
-          void loadSessionTodos(
-            record.sessionId,
-            baseUrl,
-            workingDirectory,
-            record.externalSessionId,
-          ).catch(() => undefined);
-          void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory).catch(
-            () => undefined,
-          );
+          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
         } catch {
           if (isStaleRepoOperation()) {
             return;
           }
-          void loadSessionTodos(
-            record.sessionId,
-            baseUrl,
-            workingDirectory,
-            record.externalSessionId,
-          ).catch(() => undefined);
-          void loadSessionModelCatalog(record.sessionId, baseUrl, workingDirectory).catch(
-            () => undefined,
-          );
+          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
         }
       }),
     );

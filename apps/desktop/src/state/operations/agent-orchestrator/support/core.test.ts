@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   READ_ONLY_ROLES,
+  createRepoStaleGuard,
   isDuplicateAssistantMessage,
   runningStates,
   shouldReattachListenerForAttachedSession,
+  throwIfRepoStale,
   toBaseUrl,
 } from "./core";
 
@@ -37,5 +39,24 @@ describe("agent-orchestrator/support/core", () => {
     expect(shouldReattachListenerForAttachedSession("running", false)).toBe(true);
     expect(shouldReattachListenerForAttachedSession("idle", true)).toBe(false);
     expect(shouldReattachListenerForAttachedSession("error", false)).toBe(false);
+  });
+
+  test("creates a stale-repo guard bound to initial repo epoch", () => {
+    const repoEpochRef = { current: 3 };
+    const previousRepoRef = { current: "/repo/a" as string | null };
+    const isStale = createRepoStaleGuard({
+      repoPath: "/repo/a",
+      repoEpochRef,
+      previousRepoRef,
+    });
+
+    expect(isStale()).toBe(false);
+    repoEpochRef.current = 4;
+    expect(isStale()).toBe(true);
+  });
+
+  test("throws when stale guard reports changed repo", () => {
+    expect(() => throwIfRepoStale(() => false, "stale")).not.toThrow();
+    expect(() => throwIfRepoStale(() => true, "stale")).toThrow("stale");
   });
 });

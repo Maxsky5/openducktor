@@ -50,6 +50,46 @@ type SessionActionsDependencies = {
   persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
 };
 
+const markTurnStartedIfMissing = (
+  turnStartedAtBySessionRef: { current: Record<string, number> },
+  sessionId: string,
+): void => {
+  if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
+    turnStartedAtBySessionRef.current[sessionId] = Date.now();
+  }
+};
+
+const applyQuestionAnswerToSession = (
+  session: AgentSessionState,
+  requestId: string,
+  answers: string[][],
+): Pick<AgentSessionState, "pendingQuestions" | "messages"> => {
+  const answeredRequest = session.pendingQuestions.find((entry) => entry.requestId === requestId);
+  const pendingQuestions = session.pendingQuestions.filter(
+    (entry) => entry.requestId !== requestId,
+  );
+  if (!answeredRequest || answeredRequest.questions.length === 0) {
+    return {
+      pendingQuestions,
+      messages: session.messages,
+    };
+  }
+
+  const answeredQuestionsWithAnswers = answeredRequest.questions.map((question, index) => ({
+    ...question,
+    answers: answers[index] ?? [],
+  }));
+  return {
+    pendingQuestions,
+    messages: annotateQuestionToolMessage(
+      session.messages,
+      requestId,
+      answeredQuestionsWithAnswers,
+      answers,
+    ),
+  };
+};
+
 export const createAgentSessionActions = ({
   activeRepo,
   adapter,
@@ -115,33 +155,33 @@ export const createAgentSessionActions = ({
       ],
     }));
 
-    void adapter
-      .sendUserMessage({
+    try {
+      await adapter.sendUserMessage({
         sessionId,
         content: trimmed,
         ...(selectedModel ? { model: selectedModel } : {}),
-      })
-      .catch((error) => {
-        updateSession(
-          sessionId,
-          (current) => ({
-            ...current,
-            status: "error",
-            draftAssistantText: "",
-            messages: [
-              ...current.messages,
-              {
-                id: crypto.randomUUID(),
-                role: "system",
-                content: `Failed to send message: ${errorMessage(error)}`,
-                timestamp: now(),
-              },
-            ],
-          }),
-          { persist: false },
-        );
-        clearTurnDuration(sessionId);
       });
+    } catch (error) {
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          status: "error",
+          draftAssistantText: "",
+          messages: [
+            ...current.messages,
+            {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: `Failed to send message: ${errorMessage(error)}`,
+              timestamp: now(),
+            },
+          ],
+        }),
+        { persist: false },
+      );
+      clearTurnDuration(sessionId);
+    }
   };
 
   const startAgentSession = createStartAgentSession({
@@ -175,18 +215,22 @@ export const createAgentSessionActions = ({
     unsubscribe?.();
     unsubscribersRef.current.delete(sessionId);
 
-    if (adapter.hasSession(sessionId)) {
-      await adapter.stopSession(sessionId);
-    }
-    clearTurnDuration(sessionId);
+    try {
+      if (adapter.hasSession(sessionId)) {
+        await adapter.stopSession(sessionId);
+      }
+    } catch {
+    } finally {
+      clearTurnDuration(sessionId);
 
-    updateSession(sessionId, (current) => ({
-      ...current,
-      status: "stopped",
-      draftAssistantText: "",
-      pendingPermissions: [],
-      pendingQuestions: [],
-    }));
+      updateSession(sessionId, (current) => ({
+        ...current,
+        status: "stopped",
+        draftAssistantText: "",
+        pendingPermissions: [],
+        pendingQuestions: [],
+      }));
+    }
   };
 
   const updateAgentSessionModel = (
@@ -205,9 +249,7 @@ export const createAgentSessionActions = ({
     reply: "once" | "always" | "reject",
     message?: string,
   ): Promise<void> => {
-    if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
-      turnStartedAtBySessionRef.current[sessionId] = Date.now();
-    }
+    markTurnStartedIfMissing(turnStartedAtBySessionRef, sessionId);
     await adapter.replyPermission({
       sessionId,
       requestId,
@@ -228,33 +270,12 @@ export const createAgentSessionActions = ({
     requestId: string,
     answers: string[][],
   ): Promise<void> => {
-    if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
-      turnStartedAtBySessionRef.current[sessionId] = Date.now();
-    }
+    markTurnStartedIfMissing(turnStartedAtBySessionRef, sessionId);
     await adapter.replyQuestion({ sessionId, requestId, answers });
     updateSession(sessionId, (current) => {
-      const answeredRequest = current.pendingQuestions.find(
-        (entry) => entry.requestId === requestId,
-      );
-      const pendingQuestions = current.pendingQuestions.filter(
-        (entry) => entry.requestId !== requestId,
-      );
-
-      if (!answeredRequest || answeredRequest.questions.length === 0) {
-        return {
-          ...current,
-          pendingQuestions,
-        };
-      }
-
-      const answeredQuestionsWithAnswers = answeredRequest.questions.map((question, index) => ({
-        ...question,
-        answers: answers[index] ?? [],
-      }));
-      const messages = annotateQuestionToolMessage(
-        current.messages,
+      const { pendingQuestions, messages } = applyQuestionAnswerToSession(
+        current,
         requestId,
-        answeredQuestionsWithAnswers,
         answers,
       );
 

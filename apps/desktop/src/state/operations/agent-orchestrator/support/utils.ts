@@ -1,10 +1,12 @@
 export {
   READ_ONLY_ROLES,
+  createRepoStaleGuard,
   isDuplicateAssistantMessage,
   now,
   runningStates,
   sanitizeStreamingText,
   shouldReattachListenerForAttachedSession,
+  throwIfRepoStale,
   toBaseUrl,
 } from "./core";
 export { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assistant-meta";

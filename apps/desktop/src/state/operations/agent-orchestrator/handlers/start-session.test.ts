@@ -321,6 +321,69 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("rolls back started remote session when workspace becomes stale after start", async () => {
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    let stopCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    const originalStopSession = adapter.stopSession;
+    adapter.startSession = async () => {
+      previousRepoRef.current = "/tmp/other";
+      return {
+        sessionId: "session-created",
+        externalSessionId: "external-created",
+        startedAt: "2026-02-22T08:00:10.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSession({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef,
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
+        "Workspace changed while starting session.",
+      );
+      expect(stopCalls).toBe(1);
+    } finally {
+      adapter.startSession = originalStartSession;
+      adapter.stopSession = originalStopSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("creates a fresh session and triggers kickoff flow", async () => {
     let attachCalls = 0;
     let persistCalls = 0;

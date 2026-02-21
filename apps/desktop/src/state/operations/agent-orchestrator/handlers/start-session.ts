@@ -5,7 +5,12 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import { host } from "../../host";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import { inferScenario, kickoffPrompt } from "../support/utils";
+import {
+  createRepoStaleGuard,
+  inferScenario,
+  kickoffPrompt,
+  throwIfRepoStale,
+} from "../support/utils";
 
 export type StartAgentSessionInput = {
   taskId: string;
@@ -48,6 +53,27 @@ type StartSessionDependencies = {
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
 };
 
+const STALE_START_ERROR = "Workspace changed while starting session.";
+
+const compareBySessionRecency = (
+  a: { startedAt: string; sessionId: string },
+  b: { startedAt: string; sessionId: string },
+): number => {
+  if (a.startedAt !== b.startedAt) {
+    return a.startedAt > b.startedAt ? -1 : 1;
+  }
+  if (a.sessionId === b.sessionId) {
+    return 0;
+  }
+  return a.sessionId > b.sessionId ? -1 : 1;
+};
+
+const pickLatestSession = <T extends { startedAt: string; sessionId: string }>(
+  sessions: T[],
+): T | undefined => {
+  return [...sessions].sort(compareBySessionRecency)[0];
+};
+
 export const createStartAgentSession = ({
   activeRepo,
   adapter,
@@ -86,47 +112,27 @@ export const createStartAgentSession = ({
     }
 
     const startPromise = (async (): Promise<string> => {
-      const repoEpochAtStart = repoEpochRef.current;
-      const isStaleRepoOperation = (): boolean =>
-        repoEpochRef.current !== repoEpochAtStart || previousRepoRef.current !== repoPath;
-      if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while starting session.");
-      }
+      const isStaleRepoOperation = createRepoStaleGuard({
+        repoPath,
+        repoEpochRef,
+        previousRepoRef,
+      });
+      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
 
-      const existingSession = Object.values(sessionsRef.current)
-        .filter((entry) => entry.taskId === taskId)
-        .sort((a, b) => {
-          if (a.startedAt !== b.startedAt) {
-            return a.startedAt > b.startedAt ? -1 : 1;
-          }
-          if (a.sessionId === b.sessionId) {
-            return 0;
-          }
-          return a.sessionId > b.sessionId ? -1 : 1;
-        })[0];
+      const existingSession = pickLatestSession(
+        Object.values(sessionsRef.current).filter((entry) => entry.taskId === taskId),
+      );
       if (existingSession) {
         return existingSession.sessionId;
       }
 
       const persistedSessions = await host.agentSessionsList(repoPath, taskId);
-      if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while starting session.");
-      }
-      const latestPersistedSession = [...persistedSessions].sort((a, b) => {
-        if (a.startedAt !== b.startedAt) {
-          return a.startedAt > b.startedAt ? -1 : 1;
-        }
-        if (a.sessionId === b.sessionId) {
-          return 0;
-        }
-        return a.sessionId > b.sessionId ? -1 : 1;
-      })[0];
+      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+      const latestPersistedSession = pickLatestSession(persistedSessions);
       if (latestPersistedSession) {
         if (!sessionsRef.current[latestPersistedSession.sessionId]) {
           await loadAgentSessions(taskId);
-          if (isStaleRepoOperation()) {
-            throw new Error("Workspace changed while starting session.");
-          }
+          throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
         }
         return latestPersistedSession.sessionId;
       }
@@ -137,18 +143,12 @@ export const createStartAgentSession = ({
       }
 
       const docs = await loadTaskDocuments(repoPath, taskId);
-      if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while starting session.");
-      }
+      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       const resolvedScenario = scenario ?? inferScenario(role, task, docs);
       const runtime = await ensureRuntime(repoPath, taskId, role);
-      if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while starting session.");
-      }
+      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       const defaultModelSelection = await loadRepoDefaultModel(repoPath, role);
-      if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while starting session.");
-      }
+      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       const systemPrompt = buildAgentSystemPrompt({
         role,
         scenario: resolvedScenario,
@@ -176,7 +176,8 @@ export const createStartAgentSession = ({
         baseUrl: runtime.baseUrl,
       });
       if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while starting session.");
+        await adapter.stopSession(summary.sessionId).catch(() => undefined);
+        throw new Error(STALE_START_ERROR);
       }
 
       const initialSession: AgentSessionState = {
@@ -214,48 +215,51 @@ export const createStartAgentSession = ({
         isLoadingModelCatalog: true,
       };
 
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [summary.sessionId]: initialSession,
+      };
+
       setSessionsById((current) => {
         if (isStaleRepoOperation()) {
           return current;
         }
-        const next = {
+        return {
           ...current,
           [summary.sessionId]: initialSession,
         };
-        sessionsRef.current = next;
-        return next;
       });
-      if (isStaleRepoOperation()) {
-        throw new Error("Workspace changed while starting session.");
-      }
+      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       void persistSessionSnapshot(initialSession).catch(() => undefined);
 
       attachSessionListener(repoPath, summary.sessionId);
 
-      void loadSessionTodos(
-        summary.sessionId,
-        runtime.baseUrl,
-        runtime.workingDirectory,
-        summary.externalSessionId,
-      ).catch(() => undefined);
-      void loadSessionModelCatalog(
-        summary.sessionId,
-        runtime.baseUrl,
-        runtime.workingDirectory,
-      ).catch(() => undefined);
+      if (isStaleRepoOperation()) {
+        await adapter.stopSession(summary.sessionId).catch(() => undefined);
+        throw new Error(STALE_START_ERROR);
+      }
+
+      const warmSessionData = (): void => {
+        void loadSessionTodos(
+          summary.sessionId,
+          runtime.baseUrl,
+          runtime.workingDirectory,
+          summary.externalSessionId,
+        ).catch(() => undefined);
+        void loadSessionModelCatalog(
+          summary.sessionId,
+          runtime.baseUrl,
+          runtime.workingDirectory,
+        ).catch(() => undefined);
+      };
+      warmSessionData();
 
       if (sendKickoff) {
-        if (isStaleRepoOperation()) {
-          throw new Error("Workspace changed while starting session.");
-        }
+        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
         await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario, task.id));
-        if (isStaleRepoOperation()) {
-          throw new Error("Workspace changed while starting session.");
-        }
+        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
         await refreshTaskData(repoPath);
-        if (isStaleRepoOperation()) {
-          throw new Error("Workspace changed while starting session.");
-        }
+        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       }
 
       return summary.sessionId;

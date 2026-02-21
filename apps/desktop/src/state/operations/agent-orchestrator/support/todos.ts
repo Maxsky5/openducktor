@@ -1,7 +1,17 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
 
-const TODO_STATUSES = new Set(["pending", "in_progress", "completed", "cancelled"]);
-const TODO_PRIORITIES = new Set(["high", "medium", "low"]);
+const TODO_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
+const TODO_PRIORITIES = ["high", "medium", "low"] as const;
+const TODO_STATUS_SET = new Set<string>(TODO_STATUSES);
+const TODO_PRIORITY_SET = new Set<string>(TODO_PRIORITIES);
+
+const isTodoStatus = (value: string): value is AgentSessionTodoItem["status"] => {
+  return TODO_STATUS_SET.has(value);
+};
+
+const isTodoPriority = (value: string): value is AgentSessionTodoItem["priority"] => {
+  return TODO_PRIORITY_SET.has(value);
+};
 
 const normalizeTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -24,14 +34,12 @@ const normalizeTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => 
   if (normalized === "done" || normalized === "complete" || normalized === "finished") {
     return "completed";
   }
-  return TODO_STATUSES.has(normalized) ? (normalized as AgentSessionTodoItem["status"]) : "pending";
+  return isTodoStatus(normalized) ? normalized : "pending";
 };
 
 const normalizeTodoPriority = (value: unknown): AgentSessionTodoItem["priority"] => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return TODO_PRIORITIES.has(normalized)
-    ? (normalized as AgentSessionTodoItem["priority"])
-    : "medium";
+  return isTodoPriority(normalized) ? normalized : "medium";
 };
 
 const normalizeSessionTodo = (
