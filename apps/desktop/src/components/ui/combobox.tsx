@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { cva } from "class-variance-authority";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 
@@ -37,7 +38,61 @@ type ComboboxProps = {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  wrapLabels?: boolean;
+  wrapTriggerLabel?: boolean;
+  wrapOptionLabels?: boolean;
 };
+
+type RenderGroup = {
+  key: string;
+  label?: string;
+  options: ComboboxOption[];
+};
+
+const comboboxTriggerValueVariants = cva("min-w-0 flex-1 pr-2 text-left", {
+  variants: {
+    wrap: {
+      true: "whitespace-normal break-all leading-snug",
+      false: "truncate",
+    },
+  },
+});
+
+const comboboxOptionItemVariants = cva("justify-between", {
+  variants: {
+    wrap: {
+      true: "items-start",
+      false: "",
+    },
+  },
+});
+
+const comboboxOptionLabelRowVariants = cva("inline-flex min-w-0 items-center gap-2", {
+  variants: {
+    wrap: {
+      true: "whitespace-normal break-all",
+      false: "truncate",
+    },
+  },
+});
+
+const comboboxOptionLabelTextVariants = cva("", {
+  variants: {
+    wrap: {
+      true: "whitespace-normal break-all",
+      false: "truncate",
+    },
+  },
+});
+
+const comboboxOptionDescriptionVariants = cva("text-xs text-slate-500", {
+  variants: {
+    wrap: {
+      true: "whitespace-normal break-all",
+      false: "truncate",
+    },
+  },
+});
 
 export function Combobox({
   value,
@@ -50,9 +105,15 @@ export function Combobox({
   disabled = false,
   className,
   triggerClassName,
+  wrapLabels = false,
+  wrapTriggerLabel,
+  wrapOptionLabels,
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+
+  const shouldWrapTriggerLabel = wrapLabels || wrapTriggerLabel === true;
+  const shouldWrapOptionLabels = wrapLabels || wrapOptionLabels === true;
 
   const resolvedOptions = useMemo(() => {
     if (!groups || groups.length === 0) {
@@ -71,6 +132,67 @@ export function Combobox({
   const selected = useMemo(
     () => resolvedOptions.find((option) => option.value === value) ?? null,
     [resolvedOptions, value],
+  );
+
+  const groupsToRender = useMemo<RenderGroup[]>(() => {
+    if (resolvedGroups) {
+      return resolvedGroups.map((group, groupIndex) => ({
+        key: `${group.label}:${groupIndex}`,
+        label: group.label,
+        options: group.options,
+      }));
+    }
+
+    return [{ key: "__ungrouped__", options }];
+  }, [resolvedGroups, options]);
+
+  const renderOptionLabel = (
+    option: Pick<ComboboxOption, "accentColor" | "label">,
+    shouldWrap: boolean,
+    containerClassName?: string,
+  ): ReactElement => (
+    <span className={cn(comboboxOptionLabelRowVariants({ wrap: shouldWrap }), containerClassName)}>
+      {option.accentColor ? (
+        <span
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: option.accentColor }}
+        />
+      ) : null}
+      <span className={comboboxOptionLabelTextVariants({ wrap: shouldWrap })}>{option.label}</span>
+    </span>
+  );
+
+  const renderOptionItem = (option: ComboboxOption): ReactElement => (
+    <CommandItem
+      key={option.value}
+      value={option.value}
+      keywords={[option.label, ...(option.searchKeywords ?? [])]}
+      onSelect={() => {
+        onValueChange(option.value);
+        setOpen(false);
+      }}
+      className={comboboxOptionItemVariants({ wrap: shouldWrapOptionLabels })}
+    >
+      <div className="min-w-0 flex-1">
+        {renderOptionLabel(option, shouldWrapOptionLabels)}
+        {option.description ? (
+          <p className={comboboxOptionDescriptionVariants({ wrap: shouldWrapOptionLabels })}>
+            {option.description}
+          </p>
+        ) : null}
+      </div>
+      {option.secondaryLabel ? (
+        <span className="mr-1 shrink-0 text-xs font-medium text-slate-500">
+          {option.secondaryLabel}
+        </span>
+      ) : null}
+      <Check
+        className={cn(
+          "ml-2 size-4 text-sky-600 transition-opacity",
+          value === option.value ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </CommandItem>
   );
 
   useEffect(() => {
@@ -100,20 +222,8 @@ export function Combobox({
             triggerClassName,
           )}
         >
-          <span className="min-w-0 flex-1 truncate pr-2 text-left">
-            {selected ? (
-              <span className="inline-flex min-w-0 items-center gap-2">
-                {selected.accentColor ? (
-                  <span
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: selected.accentColor }}
-                  />
-                ) : null}
-                <span className="truncate">{selected.label}</span>
-              </span>
-            ) : (
-              placeholder
-            )}
+          <span className={comboboxTriggerValueVariants({ wrap: shouldWrapTriggerLabel })}>
+            {selected ? renderOptionLabel(selected, shouldWrapTriggerLabel) : placeholder}
           </span>
           <ChevronsUpDown className="size-4 shrink-0 text-slate-400" />
         </Button>
@@ -126,91 +236,11 @@ export function Combobox({
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
-            {resolvedGroups ? (
-              resolvedGroups.map((group, groupIndex) => (
-                <CommandGroup key={`${group.label}:${groupIndex}`} heading={group.label}>
-                  {group.options.map((option) => (
-                    <CommandItem
-                      key={option.value}
-                      value={option.value}
-                      keywords={[option.label, ...(option.searchKeywords ?? [])]}
-                      onSelect={() => {
-                        onValueChange(option.value);
-                        setOpen(false);
-                      }}
-                      className="justify-between"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="inline-flex min-w-0 items-center gap-2 truncate">
-                          {option.accentColor ? (
-                            <span
-                              className="size-2 shrink-0 rounded-full"
-                              style={{ backgroundColor: option.accentColor }}
-                            />
-                          ) : null}
-                          <span className="truncate">{option.label}</span>
-                        </p>
-                        {option.description ? (
-                          <p className="truncate text-xs text-slate-500">{option.description}</p>
-                        ) : null}
-                      </div>
-                      {option.secondaryLabel ? (
-                        <span className="mr-1 shrink-0 text-xs font-medium text-slate-500">
-                          {option.secondaryLabel}
-                        </span>
-                      ) : null}
-                      <Check
-                        className={cn(
-                          "ml-2 size-4 text-sky-600 transition-opacity",
-                          value === option.value ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ))
-            ) : (
-              <CommandGroup>
-                {options.map((option) => (
-                  <CommandItem
-                    key={option.value}
-                    value={option.value}
-                    keywords={[option.label, ...(option.searchKeywords ?? [])]}
-                    onSelect={() => {
-                      onValueChange(option.value);
-                      setOpen(false);
-                    }}
-                    className="justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="inline-flex min-w-0 items-center gap-2 truncate">
-                        {option.accentColor ? (
-                          <span
-                            className="size-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: option.accentColor }}
-                          />
-                        ) : null}
-                        <span className="truncate">{option.label}</span>
-                      </p>
-                      {option.description ? (
-                        <p className="truncate text-xs text-slate-500">{option.description}</p>
-                      ) : null}
-                    </div>
-                    {option.secondaryLabel ? (
-                      <span className="mr-1 shrink-0 text-xs font-medium text-slate-500">
-                        {option.secondaryLabel}
-                      </span>
-                    ) : null}
-                    <Check
-                      className={cn(
-                        "ml-2 size-4 text-sky-600 transition-opacity",
-                        value === option.value ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                  </CommandItem>
-                ))}
+            {groupsToRender.map((group) => (
+              <CommandGroup key={group.key} {...(group.label ? { heading: group.label } : {})}>
+                {group.options.map(renderOptionItem)}
               </CommandGroup>
-            )}
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>
