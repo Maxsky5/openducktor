@@ -791,31 +791,75 @@ export function AgentChatMessageCard({
             const summaryText =
               summary.length > 0 ? summary : meta.status === "error" ? "Tool failed" : "";
             const questionDetails = questionToolDetails(meta);
+            const hasExpandableDetails = hasInput || hasOutput || hasError;
+            const summaryRow = (
+              <div
+                className={cn(
+                  "flex min-h-6 items-center gap-2 text-xs",
+                  hasExpandableDetails ? "cursor-pointer" : "",
+                  meta.status === "error" ? "text-rose-700" : "text-slate-700",
+                )}
+              >
+                <span className={cn(meta.status === "error" ? "text-rose-500" : "text-slate-500")}>
+                  {toolIcon(meta.tool)}
+                </span>
+                <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
+                {summaryText.length > 0 ? (
+                  <p className="truncate text-slate-600">{summaryText}</p>
+                ) : null}
+                <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+                  {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
+                  {!isRunning && durationMs !== null ? (
+                    <span>{formatAgentDuration(durationMs)}</span>
+                  ) : null}
+                  {timeLabel ? <span>{timeLabel}</span> : null}
+                </span>
+              </div>
+            );
+
             return (
               <div className="space-y-1 px-1 py-0.5">
-                <div
-                  className={cn(
-                    "flex min-h-6 items-center gap-2 text-xs",
-                    meta.status === "error" ? "text-rose-700" : "text-slate-700",
-                  )}
-                >
-                  <span
-                    className={cn(meta.status === "error" ? "text-rose-500" : "text-slate-500")}
-                  >
-                    {toolIcon(meta.tool)}
-                  </span>
-                  <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
-                  {summaryText.length > 0 ? (
-                    <p className="truncate text-slate-600">{summaryText}</p>
-                  ) : null}
-                  <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
-                    {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
-                    {!isRunning && durationMs !== null ? (
-                      <span>{formatAgentDuration(durationMs)}</span>
-                    ) : null}
-                    {timeLabel ? <span>{timeLabel}</span> : null}
-                  </span>
-                </div>
+                {hasExpandableDetails ? (
+                  <details className="group">
+                    <summary className="list-none [&::-webkit-details-marker]:hidden">
+                      {summaryRow}
+                    </summary>
+                    <div className="ml-5 mt-1 space-y-2">
+                      {hasInput && meta.input ? (
+                        <details className="rounded border border-slate-200 bg-white">
+                          <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-slate-700">
+                            Input
+                          </summary>
+                          <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-slate-700">
+                            {JSON.stringify(meta.input, null, 2)}
+                          </pre>
+                        </details>
+                      ) : null}
+                      {hasOutput && meta.output ? (
+                        <details className="rounded border border-slate-200 bg-white">
+                          <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-slate-700">
+                            Output
+                          </summary>
+                          <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-slate-700">
+                            {formatRawJsonLikeText(meta.output)}
+                          </pre>
+                        </details>
+                      ) : null}
+                      {hasError && meta.error ? (
+                        <details className="rounded border border-rose-200 bg-rose-50/60">
+                          <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-rose-700">
+                            Error
+                          </summary>
+                          <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-rose-700">
+                            {formatRawJsonLikeText(meta.error)}
+                          </pre>
+                        </details>
+                      ) : null}
+                    </div>
+                  </details>
+                ) : (
+                  summaryRow
+                )}
                 {questionDetails.length > 0 ? (
                   <details className="ml-5 rounded border border-slate-200 bg-white/80">
                     <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-slate-700">

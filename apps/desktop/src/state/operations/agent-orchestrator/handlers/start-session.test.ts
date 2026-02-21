@@ -90,7 +90,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("session-in-flight");
   });
 
-  test("reuses most recent in-memory session for same task", () => {
+  test("reuses most recent in-memory session for same task and role", () => {
     let persistedListCalls = 0;
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => {
@@ -156,7 +156,89 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("returns latest persisted session and hydrates when missing from memory", async () => {
+  test("does not reuse in-memory session from a different role", async () => {
+    let startCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => {
+      startCalls += 1;
+      return {
+        sessionId: "planner-created",
+        externalSessionId: "planner-ext",
+        startedAt: "2026-02-22T08:30:00.000Z",
+        role: "planner",
+        scenario: "planner_initial",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        existingSpec: {
+          sessionId: "existing-spec",
+          externalSessionId: "existing-spec-ext",
+          taskId: "task-1",
+          role: "spec",
+          scenario: "spec_initial",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          runtimeId: null,
+          runId: "run-1",
+          baseUrl: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [],
+          draftAssistantText: "",
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+        },
+      },
+    };
+
+    const start = createStartAgentSession({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-2",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const sessionId = await start({ taskId: "task-1", role: "planner" });
+      expect(sessionId).toBe("planner-created");
+      expect(startCalls).toBe(1);
+    } finally {
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("returns latest persisted session for same role and hydrates when missing from memory", async () => {
     let loadAgentSessionsCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
@@ -186,6 +268,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
         updatedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+      {
+        sessionId: "persisted-spec-newer",
+        externalSessionId: "external-spec-newer",
+        taskId: "task-1",
+        role: "spec",
+        scenario: "spec_revision",
+        status: "idle",
+        startedAt: "2026-02-22T08:30:00.000Z",
+        updatedAt: "2026-02-22T08:30:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-3",
         baseUrl: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       },

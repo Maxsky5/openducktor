@@ -108,12 +108,7 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
                         role="img"
                         aria-label={statusLabelByTab(tab.status)}
                         title={statusLabelByTab(tab.status)}
-                        className={cn(
-                          "inline-flex size-5 shrink-0 items-center justify-center rounded-full border",
-                          tab.isActive
-                            ? "border-slate-200 bg-slate-50"
-                            : "border-slate-300 bg-white/80",
-                        )}
+                        className="inline-flex size-5 shrink-0 items-center justify-center"
                       >
                         {statusIconByTab(tab.status)}
                       </span>

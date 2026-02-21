@@ -53,10 +53,15 @@ import {
 } from "./agents-page-constants";
 import {
   buildLatestSessionByTaskMap,
+  buildRoleEnabledMapForTask,
   buildTaskTabs,
+  canPersistTaskTabs,
   closeTaskTab,
   ensureActiveTaskTab,
   getAvailableTabTasks,
+  parsePersistedTaskTabs,
+  resolveFallbackTaskId,
+  toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
@@ -214,6 +219,8 @@ export function AgentsPage(): ReactElement {
   const [draftSelectionByRole, setDraftSelectionByRole] =
     useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
+  const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
+  const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState<string | null>(null);
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
@@ -231,7 +238,8 @@ export function AgentsPage(): ReactElement {
   const taskIdParam = searchParams.get("task") ?? "";
   const sessionParam = searchParams.get("session");
   const roleParam = searchParams.get("agent");
-  const roleFromQuery: AgentRole = isRole(roleParam) ? roleParam : "spec";
+  const hasExplicitRoleParam = isRole(roleParam);
+  const roleFromQuery: AgentRole = hasExplicitRoleParam ? roleParam : "spec";
   const scenarioParam = searchParams.get("scenario");
   const scenarioFromQuery: AgentScenario | undefined = isScenario(scenarioParam)
     ? scenarioParam
@@ -279,8 +287,21 @@ export function AgentsPage(): ReactElement {
     if (selectedSessionById?.taskId === taskId) {
       return selectedSessionById;
     }
+    if (sessionParam) {
+      return null;
+    }
+    if (hasExplicitRoleParam) {
+      return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;
+    }
     return sessionsForTask[0] ?? null;
-  }, [selectedSessionById, sessionsForTask, taskId]);
+  }, [
+    hasExplicitRoleParam,
+    roleFromQuery,
+    selectedSessionById,
+    sessionParam,
+    sessionsForTask,
+    taskId,
+  ]);
 
   const role: AgentRole = activeSession?.role ?? roleFromQuery;
   const scenarios = SCENARIOS_BY_ROLE[role];
@@ -483,30 +504,16 @@ export function AgentsPage(): ReactElement {
   useEffect(() => {
     if (!activeRepo) {
       setOpenTaskTabs([]);
+      setPersistedActiveTaskId(null);
+      setTabsStorageHydratedRepo(null);
       return;
     }
 
     const raw = globalThis.localStorage.getItem(toTabsStorageKey(activeRepo));
-    if (!raw) {
-      setOpenTaskTabs([]);
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as string[];
-      const nextTabs = Array.isArray(parsed)
-        ? Array.from(
-            new Set(
-              parsed.filter(
-                (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-              ),
-            ),
-          )
-        : [];
-      setOpenTaskTabs(nextTabs);
-    } catch {
-      setOpenTaskTabs([]);
-    }
+    const persistedTabs = parsePersistedTaskTabs(raw);
+    setOpenTaskTabs(persistedTabs.tabs);
+    setPersistedActiveTaskId(persistedTabs.activeTaskId);
+    setTabsStorageHydratedRepo(activeRepo);
   }, [activeRepo]);
 
   useEffect(() => {
@@ -539,22 +546,38 @@ export function AgentsPage(): ReactElement {
   }, [selectedTask, taskId]);
 
   useEffect(() => {
+    if (!canPersistTaskTabs(activeRepo, tabsStorageHydratedRepo)) {
+      return;
+    }
     if (!activeRepo) {
       return;
     }
-    globalThis.localStorage.setItem(toTabsStorageKey(activeRepo), JSON.stringify(openTaskTabs));
-  }, [activeRepo, openTaskTabs]);
+    globalThis.localStorage.setItem(
+      toTabsStorageKey(activeRepo),
+      toPersistedTaskTabs({
+        tabs: openTaskTabs,
+        activeTaskId: taskId || null,
+      }),
+    );
+  }, [activeRepo, openTaskTabs, tabsStorageHydratedRepo, taskId]);
 
   useEffect(() => {
     if (taskId || openTaskTabs.length === 0) {
       return;
     }
+    const fallbackTaskId = resolveFallbackTaskId({
+      tabTaskIds: openTaskTabs,
+      persistedActiveTaskId,
+    });
+    if (!fallbackTaskId) {
+      return;
+    }
     void updateQuery({
-      task: openTaskTabs[0],
+      task: fallbackTaskId,
       session: undefined,
       autostart: undefined,
     });
-  }, [openTaskTabs, taskId, updateQuery]);
+  }, [openTaskTabs, persistedActiveTaskId, taskId, updateQuery]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -1228,6 +1251,7 @@ export function AgentsPage(): ReactElement {
         }
         return [...current, nextTaskId];
       });
+      setPersistedActiveTaskId(nextTaskId);
 
       const sessionForTask = sessionByTaskId.get(nextTaskId);
       if (sessionForTask) {
@@ -1270,6 +1294,7 @@ export function AgentsPage(): ReactElement {
       }
 
       setOpenTaskTabs(nextTabTaskIds);
+      setPersistedActiveTaskId(nextActiveTaskId ?? null);
 
       if (taskIdToClose !== taskId) {
         return;
@@ -1317,7 +1342,13 @@ export function AgentsPage(): ReactElement {
 
   const handleRoleChange = useCallback(
     (nextRole: AgentRole) => {
-      if (activeSession) {
+      const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
+      const isRoleEnabled = roleEnabledByTask[nextRole] || activeSession?.role === nextRole;
+      if (!isRoleEnabled) {
+        return;
+      }
+
+      if (activeSession && isSessionWorking) {
         return;
       }
       updateQuery({
@@ -1327,7 +1358,7 @@ export function AgentsPage(): ReactElement {
         autostart: undefined,
       });
     },
-    [activeSession, updateQuery],
+    [activeSession, isSessionWorking, selectedTask, updateQuery],
   );
 
   const handleScenarioChange = useCallback(
@@ -1414,16 +1445,27 @@ export function AgentsPage(): ReactElement {
 
   const activeTabValue = taskId || "__agent_studio_empty__";
 
+  const roleEnabledByTask = useMemo(() => buildRoleEnabledMapForTask(selectedTask), [selectedTask]);
+  const roleSelectionLocked = Boolean(activeSession && isSessionWorking);
+  const roleOptions = useMemo(
+    () =>
+      ROLE_OPTIONS.map((entry) => ({
+        ...entry,
+        disabled: !(roleEnabledByTask[entry.role] || activeSession?.role === entry.role),
+      })),
+    [activeSession?.role, roleEnabledByTask],
+  );
+
   const agentStudioHeaderModel: AgentStudioHeaderModel = {
     taskTitle: selectedTask?.title ?? null,
     sessionStatus: activeSession?.status ?? null,
-    roleOptions: ROLE_OPTIONS,
+    roleOptions,
     role,
-    roleDisabled: Boolean(activeSession),
+    roleDisabled: roleSelectionLocked,
     onRoleChange: handleRoleChange,
     scenario,
     scenarioOptions,
-    scenarioDisabled: Boolean(activeSession),
+    scenarioDisabled: roleSelectionLocked,
     onScenarioChange: handleScenarioChange,
     canKickoffNewSession,
     kickoffLabel,

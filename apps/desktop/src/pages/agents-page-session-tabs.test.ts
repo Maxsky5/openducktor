@@ -3,11 +3,16 @@ import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-te
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildLatestSessionByTaskMap,
+  buildRoleEnabledMapForTask,
   buildTaskTabs,
+  canPersistTaskTabs,
   closeTaskTab,
   ensureActiveTaskTab,
   getAvailableTabTasks,
   getTabStatusFromSession,
+  parsePersistedTaskTabs,
+  resolveFallbackTaskId,
+  toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -73,6 +78,104 @@ describe("agents-page-session-tabs", () => {
     const tabIds = ensureActiveTaskTab(["task-1"], "task-2");
     expect(tabIds).toEqual(["task-1", "task-2"]);
     expect(ensureActiveTaskTab(tabIds, "task-2")).toEqual(["task-1", "task-2"]);
+  });
+
+  test("parses persisted task tabs and deduplicates invalid entries", () => {
+    expect(parsePersistedTaskTabs(null)).toEqual({ tabs: [], activeTaskId: null });
+    expect(parsePersistedTaskTabs("not-json")).toEqual({ tabs: [], activeTaskId: null });
+    expect(parsePersistedTaskTabs(JSON.stringify({ tabs: ["task-1"] }))).toEqual({
+      tabs: ["task-1"],
+      activeTaskId: null,
+    });
+    expect(
+      parsePersistedTaskTabs(
+        JSON.stringify(["task-1", "", "task-2", "task-1", 42, "task-3", "   "]),
+      ),
+    ).toEqual({
+      tabs: ["task-1", "task-2", "task-3"],
+      activeTaskId: null,
+    });
+    expect(
+      parsePersistedTaskTabs(
+        JSON.stringify({
+          tabs: ["task-1", "task-2", "task-1"],
+          activeTaskId: "task-2",
+        }),
+      ),
+    ).toEqual({
+      tabs: ["task-1", "task-2"],
+      activeTaskId: "task-2",
+    });
+  });
+
+  test("serializes persisted tabs with valid active task id", () => {
+    const serialized = toPersistedTaskTabs({
+      tabs: ["task-1", "task-2", "task-1"],
+      activeTaskId: "task-2",
+    });
+
+    expect(parsePersistedTaskTabs(serialized)).toEqual({
+      tabs: ["task-1", "task-2"],
+      activeTaskId: "task-2",
+    });
+
+    const serializedInvalidActive = toPersistedTaskTabs({
+      tabs: ["task-1"],
+      activeTaskId: "task-2",
+    });
+    expect(parsePersistedTaskTabs(serializedInvalidActive)).toEqual({
+      tabs: ["task-1"],
+      activeTaskId: null,
+    });
+  });
+
+  test("prefers persisted active tab for fallback selection", () => {
+    expect(
+      resolveFallbackTaskId({
+        tabTaskIds: ["task-1", "task-2"],
+        persistedActiveTaskId: "task-2",
+      }),
+    ).toBe("task-2");
+
+    expect(
+      resolveFallbackTaskId({
+        tabTaskIds: ["task-1", "task-2"],
+        persistedActiveTaskId: "task-3",
+      }),
+    ).toBe("task-1");
+  });
+
+  test("persists tabs only after hydration for the active repo", () => {
+    expect(canPersistTaskTabs(null, null)).toBe(false);
+    expect(canPersistTaskTabs("/repo-a", null)).toBe(false);
+    expect(canPersistTaskTabs("/repo-a", "/repo-b")).toBe(false);
+    expect(canPersistTaskTabs("/repo-a", "/repo-a")).toBe(true);
+  });
+
+  test("builds role enablement from workflow actions", () => {
+    const task = buildTask({
+      issueType: "epic",
+      status: "spec_ready",
+      availableActions: ["set_spec", "set_plan"],
+    });
+    expect(buildRoleEnabledMapForTask(task)).toEqual({
+      spec: true,
+      planner: true,
+      build: false,
+      qa: false,
+    });
+
+    const aiReviewTask = buildTask({
+      issueType: "feature",
+      status: "ai_review",
+      availableActions: ["open_builder"],
+    });
+    expect(buildRoleEnabledMapForTask(aiReviewTask)).toEqual({
+      spec: false,
+      planner: false,
+      build: true,
+      qa: true,
+    });
   });
 
   test("filters available tasks by opened tab ids", () => {

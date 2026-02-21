@@ -120,7 +120,9 @@ export const createStartAgentSession = ({
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
 
       const existingSession = pickLatestSession(
-        Object.values(sessionsRef.current).filter((entry) => entry.taskId === taskId),
+        Object.values(sessionsRef.current).filter(
+          (entry) => entry.taskId === taskId && entry.role === role,
+        ),
       );
       if (existingSession) {
         return existingSession.sessionId;
@@ -128,7 +130,9 @@ export const createStartAgentSession = ({
 
       const persistedSessions = await host.agentSessionsList(repoPath, taskId);
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      const latestPersistedSession = pickLatestSession(persistedSessions);
+      const latestPersistedSession = pickLatestSession(
+        persistedSessions.filter((entry) => entry.role === role),
+      );
       if (latestPersistedSession) {
         if (!sessionsRef.current[latestPersistedSession.sessionId]) {
           await loadAgentSessions(taskId);

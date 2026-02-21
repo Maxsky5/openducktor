@@ -108,7 +108,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 size="sm"
                 variant={active ? "default" : "ghost"}
                 className={cn("h-8", active ? "" : "hover:bg-white")}
-                disabled={!agentStudioReady || roleDisabled}
+                disabled={!agentStudioReady || roleDisabled || Boolean(entry.disabled)}
                 onClick={() => onRoleChange(entry.role)}
               >
                 <Icon className="size-3.5" />

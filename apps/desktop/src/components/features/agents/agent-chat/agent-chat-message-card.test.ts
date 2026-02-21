@@ -64,4 +64,34 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain("1.5s");
   });
+
+  test("renders expandable details for regular read_task tool rows", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-3",
+          role: "tool",
+          content: "Tool read_task completed",
+          timestamp: "2026-02-22T10:20:30.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-3",
+            callId: "call-3",
+            tool: "read_task",
+            status: "completed",
+            input: { taskId: "fairnest-97f" },
+            output: '{"task":{"id":"fairnest-97f","title":"Add Facebook login"}}',
+          },
+        },
+        sessionRole: "spec",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Input");
+    expect(html).toContain("Output");
+    expect(html).toContain("cursor-pointer");
+    expect(html).toContain("fairnest-97f");
+  });
 });

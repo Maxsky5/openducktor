@@ -8,6 +8,7 @@ export type AgentRoleOption = {
   role: AgentRole;
   label: string;
   icon: LucideIcon;
+  disabled?: boolean;
 };
 
 export type AgentChatThreadModel = {
