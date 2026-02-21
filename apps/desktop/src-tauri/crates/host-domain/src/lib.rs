@@ -61,6 +61,21 @@ pub enum TaskAction {
     HumanApprove,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDocumentPresence {
+    pub has: bool,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDocumentSummary {
+    pub spec: TaskDocumentPresence,
+    pub plan: TaskDocumentPresence,
+    pub qa_report: TaskDocumentPresence,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskCard {
@@ -78,6 +93,7 @@ pub struct TaskCard {
     pub assignee: Option<String>,
     pub parent_id: Option<String>,
     pub subtask_ids: Vec<String>,
+    pub document_summary: TaskDocumentSummary,
     pub updated_at: String,
     pub created_at: String,
 }

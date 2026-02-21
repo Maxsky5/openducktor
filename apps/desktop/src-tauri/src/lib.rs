@@ -396,6 +396,20 @@ async fn set_spec(
 }
 
 #[tauri::command]
+async fn spec_save_document(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    markdown: String,
+) -> Result<host_domain::SpecDocument, String> {
+    as_error(
+        state
+            .service
+            .save_spec_document(&repo_path, &task_id, &markdown),
+    )
+}
+
+#[tauri::command]
 async fn plan_get(
     state: State<'_, AppState>,
     repo_path: String,
@@ -415,6 +429,20 @@ async fn set_plan(
         state
             .service
             .set_plan(&repo_path, &task_id, &input.markdown, input.subtasks),
+    )
+}
+
+#[tauri::command]
+async fn plan_save_document(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    markdown: String,
+) -> Result<host_domain::SpecDocument, String> {
+    as_error(
+        state
+            .service
+            .save_plan_document(&repo_path, &task_id, &markdown),
     )
 }
 
@@ -688,8 +716,10 @@ pub fn run() {
             task_resume_deferred,
             spec_get,
             set_spec,
+            spec_save_document,
             plan_get,
             set_plan,
+            plan_save_document,
             qa_get_report,
             qa_approved,
             qa_rejected,

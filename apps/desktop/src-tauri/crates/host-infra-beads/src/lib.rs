@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument,
-    TaskCard, TaskStatus, TaskStore, UpdateTaskPatch,
+    TaskCard, TaskDocumentPresence, TaskDocumentSummary, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     compute_repo_slug, resolve_central_beads_dir, run_command_allow_failure_with_env,
@@ -260,6 +260,7 @@ impl BeadsTaskStore {
         let ai_review_enabled = namespace
             .and_then(metadata_bool_qa_required)
             .unwrap_or_else(|| default_ai_review_enabled(&issue.issue_type));
+        let document_summary = metadata_document_summary(namespace);
 
         let normalized_issue_type = if issue.issue_type == "event" || issue.issue_type == "gate" {
             issue.issue_type.clone()
@@ -294,6 +295,7 @@ impl BeadsTaskStore {
             assignee: issue.owner,
             parent_id,
             subtask_ids: Vec::new(),
+            document_summary,
             updated_at: issue.updated_at,
             created_at: issue.created_at,
         })
@@ -910,6 +912,56 @@ fn metadata_bool_qa_required(namespace: &Map<String, Value>) -> Option<bool> {
     namespace.get("qaRequired").and_then(Value::as_bool)
 }
 
+fn markdown_document_presence(entries: Option<Vec<MarkdownEntry>>) -> TaskDocumentPresence {
+    let latest = entries.as_ref().and_then(|list| list.last());
+    match latest {
+        Some(entry) if !entry.markdown.trim().is_empty() => TaskDocumentPresence {
+            has: true,
+            updated_at: Some(entry.updated_at.clone()),
+        },
+        _ => TaskDocumentPresence::default(),
+    }
+}
+
+fn qa_document_presence(entries: Option<Vec<QaEntry>>) -> TaskDocumentPresence {
+    let latest = entries.as_ref().and_then(|list| list.last());
+    match latest {
+        Some(entry) if !entry.markdown.trim().is_empty() => TaskDocumentPresence {
+            has: true,
+            updated_at: Some(entry.updated_at.clone()),
+        },
+        _ => TaskDocumentPresence::default(),
+    }
+}
+
+fn metadata_document_summary(namespace: Option<&Map<String, Value>>) -> TaskDocumentSummary {
+    let documents = namespace
+        .and_then(|entry| entry.get("documents"))
+        .and_then(Value::as_object);
+
+    let spec = markdown_document_presence(
+        documents
+            .and_then(|docs| docs.get("spec"))
+            .and_then(parse_markdown_entries),
+    );
+    let plan = markdown_document_presence(
+        documents
+            .and_then(|docs| docs.get("implementationPlan"))
+            .and_then(parse_markdown_entries),
+    );
+    let qa_report = qa_document_presence(
+        documents
+            .and_then(|docs| docs.get("qaReports"))
+            .and_then(parse_qa_entries),
+    );
+
+    TaskDocumentSummary {
+        spec,
+        plan,
+        qa_report,
+    }
+}
+
 fn parse_markdown_entries(value: &Value) -> Option<Vec<MarkdownEntry>> {
     let entries = value
         .as_array()?
@@ -1508,7 +1560,32 @@ mod tests {
                 "epic",
                 None,
                 json!([]),
-                Some(json!({"openducktor": {"qaRequired": true}}))
+                Some(json!({
+                    "openducktor": {
+                        "qaRequired": true,
+                        "documents": {
+                            "spec": [
+                                {
+                                    "markdown": "# Spec",
+                                    "updatedAt": "2026-02-20T09:00:00Z",
+                                    "updatedBy": "planner-agent",
+                                    "sourceTool": "set_spec",
+                                    "revision": 1
+                                }
+                            ],
+                            "qaReports": [
+                                {
+                                    "markdown": "QA approved",
+                                    "verdict": "approved",
+                                    "updatedAt": "2026-02-20T10:00:00Z",
+                                    "updatedBy": "qa-agent",
+                                    "sourceTool": "qa_approved",
+                                    "revision": 1
+                                }
+                            ]
+                        }
+                    }
+                }))
             ),
             issue_value(
                 "task-child",
@@ -1532,12 +1609,26 @@ mod tests {
             .find(|task| task.id == "task-parent")
             .expect("parent task missing");
         assert_eq!(parent.subtask_ids, vec!["task-child".to_string()]);
+        assert!(parent.document_summary.spec.has);
+        assert_eq!(
+            parent.document_summary.spec.updated_at.as_deref(),
+            Some("2026-02-20T09:00:00Z")
+        );
+        assert!(!parent.document_summary.plan.has);
+        assert!(parent.document_summary.qa_report.has);
+        assert_eq!(
+            parent.document_summary.qa_report.updated_at.as_deref(),
+            Some("2026-02-20T10:00:00Z")
+        );
 
         let child = tasks
             .iter()
             .find(|task| task.id == "task-child")
             .expect("child task missing");
         assert_eq!(child.parent_id.as_deref(), Some("task-parent"));
+        assert!(!child.document_summary.spec.has);
+        assert!(!child.document_summary.plan.has);
+        assert!(!child.document_summary.qa_report.has);
         Ok(())
     }
 

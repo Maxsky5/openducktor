@@ -29,6 +29,9 @@ describe("runtime schemas", () => {
     expect(parsed.aiReviewEnabled).toBe(true);
     expect(parsed.availableActions).toEqual([]);
     expect(parsed.notes).toBe("");
+    expect(parsed.documentSummary.spec.has).toBe(false);
+    expect(parsed.documentSummary.plan.has).toBe(false);
+    expect(parsed.documentSummary.qaReport.has).toBe(false);
   });
 
   test("task card coerces unsupported issue types to task", () => {
@@ -45,6 +48,29 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.issueType).toBe("task");
+  });
+
+  test("task card parses document summary flags and updated timestamps", () => {
+    const parsed = taskCardSchema.parse({
+      id: "task-3",
+      title: "Docs",
+      status: "open",
+      priority: 2,
+      issueType: "task",
+      labels: [],
+      documentSummary: {
+        spec: { has: true, updatedAt: "2026-02-20T12:00:00.000Z" },
+        plan: { has: false, updatedAt: null },
+        qaReport: { has: true, updatedAt: "2026-02-20T13:00:00.000Z" },
+      },
+      updatedAt: "2026-02-20T13:00:00.000Z",
+      createdAt: "2026-02-20T12:00:00.000Z",
+    });
+
+    expect(parsed.documentSummary.spec.has).toBe(true);
+    expect(parsed.documentSummary.spec.updatedAt).toBe("2026-02-20T12:00:00.000Z");
+    expect(parsed.documentSummary.plan.updatedAt).toBeUndefined();
+    expect(parsed.documentSummary.qaReport.has).toBe(true);
   });
 
   test("permission_required event accepts null command", () => {

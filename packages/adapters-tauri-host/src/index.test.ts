@@ -20,6 +20,11 @@ const makeTaskCardPayload = () => ({
   assignee: null,
   parentId: null,
   subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false },
+  },
   updatedAt: "2026-02-17T12:00:00Z",
   createdAt: "2026-02-17T12:00:00Z",
 });
@@ -34,6 +39,52 @@ const createClient = (resolver: (command: string, args?: Record<string, unknown>
 };
 
 describe("TauriHostClient", () => {
+  test("saveSpecDocument uses dedicated non-transition IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "spec_save_document") {
+        return { updatedAt: "2026-02-20T09:30:00Z" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const output = await client.saveSpecDocument("/repo", "task-77", "# Updated Spec");
+
+    expect(output.updatedAt).toBe("2026-02-20T09:30:00Z");
+    expect(calls).toEqual([
+      {
+        command: "spec_save_document",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-77",
+          markdown: "# Updated Spec",
+        },
+      },
+    ]);
+  });
+
+  test("savePlanDocument uses dedicated non-transition IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "plan_save_document") {
+        return { updatedAt: "2026-02-20T09:45:00Z" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const output = await client.savePlanDocument("/repo", "task-88", "## Plan");
+
+    expect(output.updatedAt).toBe("2026-02-20T09:45:00Z");
+    expect(calls).toEqual([
+      {
+        command: "plan_save_document",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-88",
+          markdown: "## Plan",
+        },
+      },
+    ]);
+  });
+
   test("setPlan forwards markdown and subtasks payload", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "set_plan") {

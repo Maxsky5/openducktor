@@ -181,6 +181,19 @@ export class TauriHostClient implements PlannerTools {
     return { updatedAt: payload.updatedAt };
   }
 
+  async saveSpecDocument(
+    repoPath: string,
+    taskId: string,
+    markdown: string,
+  ): Promise<SetSpecOutput> {
+    const payload = await this.invokeFn<{ updatedAt: string }>("spec_save_document", {
+      repoPath,
+      taskId,
+      markdown,
+    });
+    return { updatedAt: payload.updatedAt };
+  }
+
   async setPlan(input: {
     taskId: string;
     markdown: string;
@@ -205,6 +218,19 @@ export class TauriHostClient implements PlannerTools {
       },
     });
 
+    return { updatedAt: payload.updatedAt };
+  }
+
+  async savePlanDocument(
+    repoPath: string,
+    taskId: string,
+    markdown: string,
+  ): Promise<SetPlanOutput> {
+    const payload = await this.invokeFn<{ updatedAt: string }>("plan_save_document", {
+      repoPath,
+      taskId,
+      markdown,
+    });
     return { updatedAt: payload.updatedAt };
   }
 

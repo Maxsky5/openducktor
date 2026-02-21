@@ -38,6 +38,29 @@ const issueTypeFallbackSchema = z.preprocess(
 export const taskPrioritySchema = z.number().int().min(0).max(4);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
+const taskDocumentPresenceSchema = z.object({
+  has: z.boolean().default(false),
+  updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type TaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
+
+const EMPTY_TASK_DOCUMENT_PRESENCE: TaskDocumentPresence = {
+  has: false,
+};
+
+const taskDocumentSummarySchema = z.object({
+  spec: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
+  plan: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
+  qaReport: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
+});
+export type TaskDocumentSummary = z.infer<typeof taskDocumentSummarySchema>;
+
+const EMPTY_TASK_DOCUMENT_SUMMARY: TaskDocumentSummary = {
+  spec: EMPTY_TASK_DOCUMENT_PRESENCE,
+  plan: EMPTY_TASK_DOCUMENT_PRESENCE,
+  qaReport: EMPTY_TASK_DOCUMENT_PRESENCE,
+};
+
 export const taskCardSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -53,6 +76,7 @@ export const taskCardSchema = z.object({
   assignee: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   subtaskIds: z.array(z.string()).default([]),
+  documentSummary: taskDocumentSummarySchema.optional().default(EMPTY_TASK_DOCUMENT_SUMMARY),
   updatedAt: z.string(),
   createdAt: z.string(),
 });

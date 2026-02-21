@@ -90,10 +90,17 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     refreshTaskData,
   });
 
-  const { loadSpec, loadSpecDocument, loadPlanDocument, loadQaReportDocument, saveSpec } =
-    useSpecOperations({
-      activeRepo,
-    });
+  const {
+    loadSpec,
+    loadSpecDocument,
+    loadPlanDocument,
+    loadQaReportDocument,
+    saveSpec,
+    saveSpecDocument,
+    savePlanDocument,
+  } = useSpecOperations({
+    activeRepo,
+  });
 
   const {
     sessions,
@@ -230,8 +237,18 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       loadPlanDocument,
       loadQaReportDocument,
       saveSpec,
+      saveSpecDocument,
+      savePlanDocument,
     }),
-    [loadPlanDocument, loadQaReportDocument, loadSpec, loadSpecDocument, saveSpec],
+    [
+      loadPlanDocument,
+      loadQaReportDocument,
+      loadSpec,
+      loadSpecDocument,
+      saveSpec,
+      saveSpecDocument,
+      savePlanDocument,
+    ],
   );
 
   const agentStateValue = useMemo<AgentStateContextValue>(

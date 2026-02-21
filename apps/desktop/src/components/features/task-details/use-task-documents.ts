@@ -50,6 +50,16 @@ export function useTaskDocuments(
   const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
   const documentLoadSequence = useRef(0);
   const previousContext = useRef<{ taskId: string | null; open: boolean } | null>(null);
+  const documentsRef = useRef<TaskDocumentsState>(documents);
+  const inFlightSections = useRef<Record<DocumentSectionKey, boolean>>({
+    spec: false,
+    plan: false,
+    qa: false,
+  });
+
+  useEffect(() => {
+    documentsRef.current = documents;
+  }, [documents]);
 
   useEffect(() => {
     const contextDidChange =
@@ -60,7 +70,14 @@ export function useTaskDocuments(
 
     previousContext.current = { taskId, open };
     documentLoadSequence.current += 1;
-    setDocuments(createInitialDocumentsState());
+    const initialDocuments = createInitialDocumentsState();
+    documentsRef.current = initialDocuments;
+    setDocuments(initialDocuments);
+    inFlightSections.current = {
+      spec: false,
+      plan: false,
+      qa: false,
+    };
   }, [open, taskId]);
 
   const loadDocument = useCallback(
@@ -69,27 +86,22 @@ export function useTaskDocuments(
         return false;
       }
 
-      let shouldLoad = false;
-      setDocuments((previous) => {
-        const current = previous[section];
-        if (current.isLoading || (!force && current.loaded)) {
-          return previous;
-        }
-
-        shouldLoad = true;
-        return {
-          ...previous,
-          [section]: {
-            ...current,
-            isLoading: true,
-            error: null,
-          },
-        };
-      });
-
-      if (!shouldLoad) {
+      const current = documentsRef.current[section];
+      if (inFlightSections.current[section] || (!force && current.loaded)) {
         return false;
       }
+      inFlightSections.current[section] = true;
+
+      const loadingSnapshot: TaskDocumentsState = {
+        ...documentsRef.current,
+        [section]: {
+          ...current,
+          isLoading: true,
+          error: null,
+        },
+      };
+      documentsRef.current = loadingSnapshot;
+      setDocuments(loadingSnapshot);
 
       const sequence = documentLoadSequence.current;
       const loader: (id: string) => Promise<TaskDocumentPayload> =
@@ -102,11 +114,13 @@ export function useTaskDocuments(
       void loader(taskId)
         .then((result) => {
           if (sequence !== documentLoadSequence.current) {
+            inFlightSections.current[section] = false;
             return;
           }
 
-          setDocuments((previous) => ({
-            ...previous,
+          inFlightSections.current[section] = false;
+          const successSnapshot: TaskDocumentsState = {
+            ...documentsRef.current,
             [section]: {
               markdown: result.markdown,
               updatedAt: result.updatedAt,
@@ -114,22 +128,28 @@ export function useTaskDocuments(
               error: null,
               loaded: true,
             },
-          }));
+          };
+          documentsRef.current = successSnapshot;
+          setDocuments(successSnapshot);
         })
         .catch((error: unknown) => {
           if (sequence !== documentLoadSequence.current) {
+            inFlightSections.current[section] = false;
             return;
           }
 
-          setDocuments((previous) => ({
-            ...previous,
+          inFlightSections.current[section] = false;
+          const errorSnapshot: TaskDocumentsState = {
+            ...documentsRef.current,
             [section]: {
-              ...previous[section],
+              ...documentsRef.current[section],
               isLoading: false,
               error: toErrorMessage(error),
               loaded: true,
             },
-          }));
+          };
+          documentsRef.current = errorSnapshot;
+          setDocuments(errorSnapshot);
         });
       return true;
     },
@@ -152,8 +172,8 @@ export function useTaskDocuments(
 
   const applyDocumentUpdate = useCallback(
     (section: DocumentSectionKey, payload: TaskDocumentPayload): void => {
-      setDocuments((previous) => ({
-        ...previous,
+      const snapshot: TaskDocumentsState = {
+        ...documentsRef.current,
         [section]: {
           markdown: payload.markdown,
           updatedAt: payload.updatedAt,
@@ -161,7 +181,9 @@ export function useTaskDocuments(
           error: null,
           loaded: true,
         },
-      }));
+      };
+      documentsRef.current = snapshot;
+      setDocuments(snapshot);
     },
     [],
   );

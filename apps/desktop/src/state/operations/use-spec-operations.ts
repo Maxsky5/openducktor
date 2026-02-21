@@ -12,6 +12,8 @@ type UseSpecOperationsResult = {
   loadPlanDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   loadQaReportDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+  saveSpecDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+  savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
 export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpecOperationsResult {
@@ -82,11 +84,33 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
     [activeRepo],
   );
 
+  const saveSpecDocument = useCallback(
+    async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+      return host.saveSpecDocument(activeRepo, taskId, markdown);
+    },
+    [activeRepo],
+  );
+
+  const savePlanDocument = useCallback(
+    async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
+      if (!activeRepo) {
+        throw new Error("Select a workspace first.");
+      }
+      return host.savePlanDocument(activeRepo, taskId, markdown);
+    },
+    [activeRepo],
+  );
+
   return {
     loadSpec,
     loadSpecDocument,
     loadPlanDocument,
     loadQaReportDocument,
     saveSpec,
+    saveSpecDocument,
+    savePlanDocument,
   };
 }

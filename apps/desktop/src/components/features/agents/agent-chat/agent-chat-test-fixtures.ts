@@ -28,6 +28,11 @@ const baseTask: TaskCard = {
   assignee: undefined,
   parentId: undefined,
   subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false },
+  },
   createdAt: "2026-02-20T10:00:00.000Z",
   updatedAt: "2026-02-20T10:00:00.000Z",
 };

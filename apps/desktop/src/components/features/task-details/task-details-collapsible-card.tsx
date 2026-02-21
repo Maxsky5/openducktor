@@ -8,6 +8,7 @@ type TaskDetailsCollapsibleCardProps = {
   title: string;
   icon: ReactElement;
   updatedAt?: string | null;
+  statusLabel?: string | null;
   defaultExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   children: ReactNode | ((context: { isExpanded: boolean }) => ReactNode);
@@ -17,11 +18,13 @@ export function TaskDetailsCollapsibleCard({
   title,
   icon,
   updatedAt = null,
+  statusLabel = null,
   defaultExpanded = false,
   onExpandedChange,
   children,
 }: TaskDetailsCollapsibleCardProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const summaryLabel = statusLabel ?? (updatedAt ? humanDate(updatedAt) : null);
 
   useEffect(() => {
     setIsExpanded(defaultExpanded);
@@ -48,9 +51,9 @@ export function TaskDetailsCollapsibleCard({
             {title}
           </h4>
           <span className="inline-flex items-center gap-2">
-            {updatedAt && isExpanded ? (
+            {summaryLabel ? (
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600">
-                {humanDate(updatedAt)}
+                {summaryLabel}
               </span>
             ) : null}
             <ChevronDown

@@ -17,6 +17,11 @@ const makeTask = (partial: Partial<TaskCard> & Pick<TaskCard, "id" | "title">): 
   assignee: partial.assignee,
   parentId: partial.parentId,
   subtaskIds: partial.subtaskIds ?? [],
+  documentSummary: partial.documentSummary ?? {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false },
+  },
   updatedAt: partial.updatedAt ?? new Date().toISOString(),
   createdAt: partial.createdAt ?? new Date().toISOString(),
 });

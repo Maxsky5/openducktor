@@ -86,6 +86,8 @@ export type SpecStateContextValue = {
   loadPlanDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   loadQaReportDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+  saveSpecDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+  savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
 export type AgentStateContextValue = {

@@ -5,6 +5,10 @@ export type ComposerMode = "create" | "edit";
 
 export type ComposerStep = "type" | "details";
 
+export type EditTaskSection = "details" | "spec" | "plan";
+
+export type DocumentEditorView = "write" | "split" | "preview";
+
 export type ComposerState = {
   issueType: IssueType;
   aiReviewEnabled: boolean;

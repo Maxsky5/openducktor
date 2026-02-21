@@ -122,6 +122,9 @@ export function TaskDetailsSheet({
     () => (task?.labels ?? []).filter((label) => !label.startsWith("phase:")),
     [task?.labels],
   );
+  const specSummary = task?.documentSummary.spec;
+  const planSummary = task?.documentSummary.plan;
+  const qaSummary = task?.documentSummary.qaReport;
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
@@ -171,16 +174,25 @@ export function TaskDetailsSheet({
   );
 
   const loadSpecDocumentSection = useCallback((): void => {
+    if (!task?.documentSummary.spec.has) {
+      return;
+    }
     ensureDocumentLoaded("spec");
-  }, [ensureDocumentLoaded]);
+  }, [ensureDocumentLoaded, task]);
 
   const loadPlanDocumentSection = useCallback((): void => {
+    if (!task?.documentSummary.plan.has) {
+      return;
+    }
     ensureDocumentLoaded("plan");
-  }, [ensureDocumentLoaded]);
+  }, [ensureDocumentLoaded, task]);
 
   const loadQaDocumentSection = useCallback((): void => {
+    if (!task?.documentSummary.qaReport.has) {
+      return;
+    }
     ensureDocumentLoaded("qa");
-  }, [ensureDocumentLoaded]);
+  }, [ensureDocumentLoaded, task]);
 
   const confirmDelete = useCallback((): void => {
     if (!task || !onDelete || deleteRequestInFlightRef.current) {
@@ -307,6 +319,8 @@ export function TaskDetailsSheet({
               title="Specification"
               empty="No specification yet."
               document={specDoc}
+              hasDocument={Boolean(specSummary?.has)}
+              summaryUpdatedAt={specSummary?.updatedAt ?? null}
               onLoad={loadSpecDocumentSection}
             />
 
@@ -316,6 +330,8 @@ export function TaskDetailsSheet({
               title="Implementation Plan"
               empty="No implementation plan yet."
               document={planDoc}
+              hasDocument={Boolean(planSummary?.has)}
+              summaryUpdatedAt={planSummary?.updatedAt ?? null}
               onLoad={loadPlanDocumentSection}
             />
 
@@ -325,6 +341,8 @@ export function TaskDetailsSheet({
               title="QA Reports"
               empty="No QA report yet."
               document={qaDoc}
+              hasDocument={Boolean(qaSummary?.has)}
+              summaryUpdatedAt={qaSummary?.updatedAt ?? null}
               onLoad={loadQaDocumentSection}
             />
 

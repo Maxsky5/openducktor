@@ -610,6 +610,24 @@ impl AppService {
         Ok(spec)
     }
 
+    pub fn save_spec_document(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        markdown: &str,
+    ) -> Result<SpecDocument> {
+        self.ensure_repo_initialized(repo_path)?;
+        let markdown = normalize_required_markdown(markdown, "spec")?;
+        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        if tasks.iter().all(|entry| entry.id != task_id) {
+            return Err(anyhow!("Task not found: {task_id}"));
+        }
+
+        self.task_store
+            .set_spec(Path::new(repo_path), task_id, &markdown)
+            .with_context(|| format!("Failed to persist spec markdown for {task_id}"))
+    }
+
     pub fn plan_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
         self.ensure_repo_initialized(repo_path)?;
         self.task_store.get_plan(Path::new(repo_path), task_id)
@@ -681,6 +699,24 @@ impl AppService {
         )?;
 
         Ok(plan)
+    }
+
+    pub fn save_plan_document(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        markdown: &str,
+    ) -> Result<SpecDocument> {
+        self.ensure_repo_initialized(repo_path)?;
+        let markdown = normalize_required_markdown(markdown, "implementation plan")?;
+        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        if tasks.iter().all(|entry| entry.id != task_id) {
+            return Err(anyhow!("Task not found: {task_id}"));
+        }
+
+        self.task_store
+            .set_plan(Path::new(repo_path), task_id, &markdown)
+            .with_context(|| format!("Failed to persist implementation plan for {task_id}"))
     }
 
     pub fn qa_get_report(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
@@ -2199,7 +2235,8 @@ mod tests {
     use host_domain::{
         AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort,
         GitPushSummary, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
-        RunSummary, SpecDocument, TaskAction, TaskCard, TaskStatus, TaskStore, UpdateTaskPatch,
+        RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskStatus, TaskStore,
+        UpdateTaskPatch,
     };
     use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
     use serde_json::Value;
@@ -2228,6 +2265,7 @@ mod tests {
             assignee: None,
             parent_id: None,
             subtask_ids: Vec::new(),
+            document_summary: TaskDocumentSummary::default(),
             updated_at: "2026-01-01T00:00:00Z".to_string(),
             created_at: "2026-01-01T00:00:00Z".to_string(),
         }
@@ -2295,6 +2333,7 @@ mod tests {
                 assignee: None,
                 parent_id: input.parent_id,
                 subtask_ids: Vec::new(),
+                document_summary: TaskDocumentSummary::default(),
                 updated_at: "2026-01-01T00:00:00Z".to_string(),
                 created_at: "2026-01-01T00:00:00Z".to_string(),
             };
