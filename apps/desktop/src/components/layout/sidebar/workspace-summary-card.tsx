@@ -1,12 +1,11 @@
 import { workspaceNameFromPath } from "@/lib/workspace-label";
+import { useWorkspaceState } from "@/state";
 import { Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
 
-type WorkspaceSummaryCardProps = {
-  activeRepo: string | null;
-};
+export function WorkspaceSummaryCard(): ReactElement {
+  const { activeRepo } = useWorkspaceState();
 
-export function WorkspaceSummaryCard({ activeRepo }: WorkspaceSummaryCardProps): ReactElement {
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
       <div className="flex items-center gap-2">

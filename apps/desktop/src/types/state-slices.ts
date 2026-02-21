@@ -1,5 +1,7 @@
 import type {
   BeadsCheck,
+  GitBranch,
+  GitCurrentBranch,
   RunEvent,
   RunSummary,
   RuntimeCheck,
@@ -36,11 +38,17 @@ export type RepoSettingsInput = {
 
 export type WorkspaceStateContextValue = {
   isSwitchingWorkspace: boolean;
+  isLoadingBranches: boolean;
+  isSwitchingBranch: boolean;
   workspaces: WorkspaceRecord[];
   activeRepo: string | null;
   activeWorkspace: WorkspaceRecord | null;
+  branches: GitBranch[];
+  activeBranch: GitCurrentBranch | null;
   addWorkspace: (repoPath: string) => Promise<void>;
   selectWorkspace: (repoPath: string) => Promise<void>;
+  refreshBranches: (force?: boolean) => Promise<void>;
+  switchBranch: (branchName: string) => Promise<void>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
 };

@@ -118,13 +118,25 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     refreshTaskData,
   });
 
-  const { workspaces, isSwitchingWorkspace, refreshWorkspaces, addWorkspace, selectWorkspace } =
-    useWorkspaceOperations({
-      activeRepo,
-      setActiveRepo,
-      clearTaskData,
-      clearActiveBeadsCheck,
-    });
+  const {
+    workspaces,
+    branches,
+    activeBranch,
+    isSwitchingWorkspace,
+    isLoadingBranches,
+    isSwitchingBranch,
+    refreshWorkspaces,
+    addWorkspace,
+    selectWorkspace,
+    refreshBranches,
+    switchBranch,
+    clearBranchData,
+  } = useWorkspaceOperations({
+    activeRepo,
+    setActiveRepo,
+    clearTaskData,
+    clearActiveBeadsCheck,
+  });
 
   const { loadRepoSettings, saveRepoSettings } = useRepoSettingsOperations({
     activeRepo,
@@ -135,11 +147,13 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     activeRepo,
     setEvents,
     refreshWorkspaces,
+    refreshBranches,
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
     refreshRepoOpencodeHealthForRepo,
     refreshTaskData,
     clearTaskData,
+    clearBranchData,
     clearActiveBeadsCheck,
     clearActiveRepoOpencodeHealth,
     setIsLoadingChecks,
@@ -157,22 +171,34 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const workspaceStateValue = useMemo<WorkspaceStateContextValue>(
     () => ({
       isSwitchingWorkspace,
+      isLoadingBranches,
+      isSwitchingBranch,
       workspaces,
       activeRepo,
       activeWorkspace,
+      branches,
+      activeBranch,
       addWorkspace,
       selectWorkspace,
+      refreshBranches,
+      switchBranch,
       loadRepoSettings,
       saveRepoSettings,
     }),
     [
       activeRepo,
+      activeBranch,
       activeWorkspace,
       addWorkspace,
+      branches,
+      isLoadingBranches,
+      isSwitchingBranch,
       isSwitchingWorkspace,
       loadRepoSettings,
+      refreshBranches,
       saveRepoSettings,
       selectWorkspace,
+      switchBranch,
       workspaces,
     ],
   );

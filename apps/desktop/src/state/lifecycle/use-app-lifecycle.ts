@@ -10,6 +10,7 @@ type UseAppLifecycleArgs = {
   activeRepo: string | null;
   setEvents: Dispatch<SetStateAction<RunEvent[]>>;
   refreshWorkspaces: () => Promise<void>;
+  refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
   refreshBeadsCheckForRepo: (
     repoPath: string,
@@ -24,6 +25,7 @@ type UseAppLifecycleArgs = {
   ) => Promise<RepoOpencodeHealthCheck>;
   refreshTaskData: (repoPath: string) => Promise<void>;
   clearTaskData: () => void;
+  clearBranchData: () => void;
   clearActiveBeadsCheck: () => void;
   clearActiveRepoOpencodeHealth: () => void;
   setIsLoadingTasks: (value: boolean) => void;
@@ -37,11 +39,13 @@ export function useAppLifecycle({
   activeRepo,
   setEvents,
   refreshWorkspaces,
+  refreshBranches,
   refreshRuntimeCheck,
   refreshBeadsCheckForRepo,
   refreshRepoOpencodeHealthForRepo,
   refreshTaskData,
   clearTaskData,
+  clearBranchData,
   clearActiveBeadsCheck,
   clearActiveRepoOpencodeHealth,
   setIsLoadingTasks,
@@ -95,6 +99,7 @@ export function useAppLifecycle({
   useEffect(() => {
     if (!activeRepo) {
       clearTaskData();
+      clearBranchData();
       clearActiveBeadsCheck();
       clearActiveRepoOpencodeHealth();
       setIsLoadingTasks(false);
@@ -123,8 +128,9 @@ export function useAppLifecycle({
       })(),
       refreshRuntimeCheck(false),
       refreshRepoOpencodeHealthForRepo(activeRepo, false),
+      refreshBranches(false),
     ])
-      .then(([tasksResult, runtimeResult, opencodeHealthResult]) => {
+      .then(([tasksResult, runtimeResult, opencodeHealthResult, branchesResult]) => {
         if (repoLoadVersionRef.current !== loadVersion) {
           return;
         }
@@ -145,14 +151,17 @@ export function useAppLifecycle({
           toast.error("OpenCode + MCP diagnostics unavailable", {
             description: errorMessage(opencodeHealthResult.reason),
           });
-          return;
-        }
-
-        if (!opencodeHealthResult.value.runtimeOk || !opencodeHealthResult.value.mcpOk) {
+        } else if (!opencodeHealthResult.value.runtimeOk || !opencodeHealthResult.value.mcpOk) {
           toast.error("OpenCode + MCP unavailable", {
             description:
               opencodeHealthResult.value.errors.join(" | ") ||
               "OpenCode runtime or OpenDucktor MCP is not ready.",
+          });
+        }
+
+        if (branchesResult.status === "rejected") {
+          toast.error("Repository branches unavailable", {
+            description: errorMessage(branchesResult.reason),
           });
         }
       })
@@ -166,6 +175,7 @@ export function useAppLifecycle({
       });
   }, [
     activeRepo,
+    clearBranchData,
     clearActiveBeadsCheck,
     clearActiveRepoOpencodeHealth,
     clearTaskData,
@@ -173,6 +183,7 @@ export function useAppLifecycle({
     hasCachedRepoOpencodeHealth,
     hasRuntimeCheck,
     refreshBeadsCheckForRepo,
+    refreshBranches,
     refreshRepoOpencodeHealthForRepo,
     refreshRuntimeCheck,
     refreshTaskData,

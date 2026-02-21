@@ -4,6 +4,7 @@ import { RepositorySwitcher } from "@/components/features/repository-switcher";
 import { SettingsModal } from "@/components/features/settings-modal";
 import {
   AppBrand,
+  BranchSwitcher,
   SidebarNavigation,
   WorkspaceSnapshotCard,
   WorkspaceSummaryCard,
@@ -65,10 +66,12 @@ export function AppShell(): ReactElement {
                 </div>
               </div>
 
+              <BranchSwitcher />
+
               <DiagnosticsPanel />
 
               <SidebarNavigation hasActiveRepo={Boolean(activeRepo)} />
-              <WorkspaceSummaryCard activeRepo={activeRepo} />
+              <WorkspaceSummaryCard />
               <WorkspaceSnapshotCard taskCount={tasks.length} runCount={runs.length} />
             </div>
 
