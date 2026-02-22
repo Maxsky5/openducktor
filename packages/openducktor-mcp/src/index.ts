@@ -78,10 +78,25 @@ type RegisteredTool = {
   execute: (store: OdtTaskStore, input: unknown) => Promise<unknown>;
 };
 
-const registerOdtTool = (server: McpServer, store: OdtTaskStore, tool: RegisteredTool): void => {
-  const schema = ODT_TOOL_SCHEMAS[tool.name];
+type ToolInputSchema = {
+  shape: Record<string, unknown>;
+  parse: (input: unknown) => unknown;
+};
 
-  server.registerTool(
+type RegisterToolCall = (
+  name: string,
+  config: {
+    description: string;
+    inputSchema: unknown;
+  },
+  handler: (input: unknown) => Promise<ToolResult>,
+) => void;
+
+const registerOdtTool = (server: McpServer, store: OdtTaskStore, tool: RegisteredTool): void => {
+  const schema = ODT_TOOL_SCHEMAS[tool.name] as unknown as ToolInputSchema;
+  const registerTool = server.registerTool as unknown as RegisterToolCall;
+
+  registerTool(
     tool.name,
     {
       description: tool.description,
