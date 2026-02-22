@@ -20,7 +20,7 @@
     "deps:check": "bun run deps:unused:deps"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.4.4",
     "@types/node": "^24.3.0",
     "knip": "^5.85.0",
     "typescript": "^5.7.3"
