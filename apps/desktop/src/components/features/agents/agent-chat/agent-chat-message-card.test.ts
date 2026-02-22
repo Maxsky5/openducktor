@@ -123,6 +123,34 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("build_completed");
   });
 
+  test("renders workflow MCP validation failures as error styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-5",
+          role: "tool",
+          content: "Tool odt_set_plan completed",
+          timestamp: "2026-02-22T10:21:30.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-5",
+            callId: "call-5",
+            tool: "odt_set_plan",
+            status: "completed",
+            input: { taskId: "fairnest-99z" },
+            output: "MCP error -32602: Input validation error",
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-rose-200");
+    expect(html).not.toContain("border-emerald-200");
+  });
+
   test("renders system prompt as expandable card", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

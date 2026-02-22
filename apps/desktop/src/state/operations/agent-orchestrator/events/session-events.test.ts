@@ -582,6 +582,21 @@ describe("agent-orchestrator-session-events", () => {
     handleEvent({
       type: "assistant_part",
       sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.250Z",
+      part: {
+        kind: "tool",
+        messageId: "m1",
+        partId: "p-tool-fail",
+        callId: "call-fail",
+        tool: "odt_set_plan",
+        status: "completed",
+        output: "MCP error -32602: Input validation error",
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
       timestamp: "2026-02-22T08:00:02.300Z",
       part: {
         kind: "subtask",
@@ -625,6 +640,15 @@ describe("agent-orchestrator-session-events", () => {
     expect(
       sessionsRef.current["session-1"]?.messages.some(
         (message) => message.role === "tool" && message.meta?.kind === "tool",
+      ),
+    ).toBe(true);
+    expect(
+      sessionsRef.current["session-1"]?.messages.some(
+        (message) =>
+          message.role === "tool" &&
+          message.meta?.kind === "tool" &&
+          message.meta.tool === "odt_set_plan" &&
+          message.meta.status === "error",
       ),
     ).toBe(true);
     expect(

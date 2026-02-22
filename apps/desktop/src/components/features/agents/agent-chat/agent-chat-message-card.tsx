@@ -49,6 +49,24 @@ type AgentChatMessageCardProps = {
 
 type ToolMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
 
+const MCP_TOOL_ERROR_PREFIX = /^\s*mcp\s+error\b/i;
+
+const isToolMessageFailure = (meta: ToolMeta): boolean => {
+  if (meta.status === "error") {
+    return true;
+  }
+
+  if (
+    meta.status === "completed" &&
+    isOdtWorkflowMutationToolName(meta.tool) &&
+    hasNonEmptyText(meta.output)
+  ) {
+    return MCP_TOOL_ERROR_PREFIX.test(meta.output);
+  }
+
+  return false;
+};
+
 const assistantRoleIcon = (role: AgentRole): ReactElement => {
   if (role === "spec") {
     return <Sparkles className="size-3" />;
@@ -119,6 +137,8 @@ const WorkflowToolMessage = ({
   const hasOutput = hasNonEmptyText(meta.output);
   const hasError = hasNonEmptyText(meta.error);
   const isRunning = meta.status === "running" || meta.status === "pending";
+  const isFailure = isToolMessageFailure(meta);
+  const isSuccessfulCompletion = meta.status === "completed" && !isFailure;
 
   return (
     <div className="space-y-2">
@@ -127,9 +147,9 @@ const WorkflowToolMessage = ({
         <p
           className={cn(
             "text-xs font-semibold",
-            meta.status === "error"
+            isFailure
               ? "text-rose-900"
-              : meta.status === "completed"
+              : isSuccessfulCompletion
                 ? "text-emerald-900"
                 : "text-amber-900",
           )}
@@ -522,15 +542,21 @@ const toArticleClassName = (
   isSystemPromptMessage: boolean,
 ): string => {
   const meta = message.meta;
+  const workflowToolFailed =
+    isWorkflowToolMessage && meta?.kind === "tool" ? isToolMessageFailure(meta) : false;
+  const workflowToolCompleted =
+    isWorkflowToolMessage && meta?.kind === "tool"
+      ? meta.status === "completed" && !workflowToolFailed
+      : false;
   return cn(
     "text-sm",
     isUserMessage &&
       "ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm border border-sky-100 bg-sky-50 px-4 py-3 text-slate-900 shadow-sm",
     isToolMessage
       ? isWorkflowToolMessage
-        ? meta?.kind === "tool" && meta.status === "completed"
+        ? workflowToolCompleted
           ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900"
-          : meta?.kind === "tool" && meta.status === "error"
+          : workflowToolFailed
             ? "rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-900"
             : "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
         : "border-none bg-transparent px-0 py-0 text-slate-800"

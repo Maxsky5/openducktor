@@ -66,6 +66,23 @@ type AttachAgentSessionListenerParams = {
 
 type SessionEventContext = AttachAgentSessionListenerParams;
 
+const MCP_TOOL_ERROR_PREFIX = /^\s*mcp\s+error\b/i;
+
+const inferToolPartStatus = (
+  part: Extract<SessionPart, { kind: "tool" }>,
+  output: string | undefined,
+): Extract<SessionPart, { kind: "tool" }>["status"] => {
+  if (
+    part.status === "completed" &&
+    isOdtWorkflowMutationToolName(part.tool) &&
+    typeof output === "string" &&
+    MCP_TOOL_ERROR_PREFIX.test(output)
+  ) {
+    return "error";
+  }
+  return part.status;
+};
+
 const clearDraftBuffers = (context: SessionEventContext): void => {
   delete context.draftRawBySessionRef.current[context.sessionId];
   delete context.draftSourceBySessionRef.current[context.sessionId];
@@ -260,6 +277,7 @@ const handleToolPart = (
   const input = normalizeToolInput(part.input);
   const output = normalizeToolText(part.output);
   const error = normalizeToolText(part.error);
+  const resolvedToolStatus = inferToolPartStatus(part, output);
   const isTodoTool = isTodoToolName(part.tool);
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = isTodoTool
@@ -279,7 +297,7 @@ const handleToolPart = (
           messageId: part.messageId,
           callId: part.callId,
           tool: part.tool,
-          status: part.status,
+          status: resolvedToolStatus,
         },
         fallbackMessageId,
       );
@@ -291,17 +309,17 @@ const handleToolPart = (
           ? existingToolMeta.observedStartedAtMs
           : observedEventTimestampMs;
       const observedEndedAtMs =
-        part.status === "completed" || part.status === "error"
+        resolvedToolStatus === "completed" || resolvedToolStatus === "error"
           ? observedEventTimestampMs
           : undefined;
       if (
         isOdtWorkflowMutationToolName(part.tool) &&
-        part.status === "completed" &&
+        resolvedToolStatus === "completed" &&
         previousStatus !== "completed"
       ) {
         shouldRefreshTaskData = true;
       }
-      if (isTodoTool && part.status === "completed" && previousStatus !== "completed") {
+      if (isTodoTool && resolvedToolStatus === "completed" && previousStatus !== "completed") {
         shouldRefreshSessionTodos = true;
       }
 
@@ -314,14 +332,19 @@ const handleToolPart = (
         messages: upsertMessage(prepared.messages, {
           id: messageId,
           role: "tool",
-          content: formatToolContent(part),
+          content: formatToolContent({
+            ...part,
+            status: resolvedToolStatus,
+            ...(typeof error === "string" && error.length > 0 ? { error } : {}),
+            ...(typeof output === "string" && output.length > 0 ? { output } : {}),
+          }),
           timestamp: event.timestamp,
           meta: {
             kind: "tool",
             partId: part.partId,
             callId: part.callId,
             tool: part.tool,
-            status: part.status,
+            status: resolvedToolStatus,
             ...(part.title ? { title: part.title } : {}),
             ...(input ? { input } : {}),
             ...(output ? { output } : {}),
