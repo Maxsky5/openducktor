@@ -1,131 +1,25 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { TaskCard } from "@openducktor/contracts";
-import { type ReactElement, createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import {
+  createAgentSessionFixture,
+  createDeferred,
+  createHookHarness as createSharedHookHarness,
+  createTaskCardFixture,
+  enableReactActEnvironment,
+} from "./agent-studio-test-utils";
 import { kickoffPromptForScenario } from "./agents-page-constants";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 type HookState = ReturnType<typeof useAgentStudioSessionActions>;
 
-const createTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
-  id: "task-1",
-  title: "Task 1",
-  description: "",
-  acceptanceCriteria: "",
-  notes: "",
-  status: "open",
-  priority: 2,
-  issueType: "task",
-  aiReviewEnabled: true,
-  availableActions: [],
-  labels: [],
-  parentId: undefined,
-  subtaskIds: [],
-  assignee: undefined,
-  documentSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false },
-  },
-  updatedAt: "2026-02-22T12:00:00.000Z",
-  createdAt: "2026-02-22T12:00:00.000Z",
-  ...overrides,
-});
+const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  sessionId: "session-1",
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "spec",
-  scenario: "spec_initial",
-  status: "idle",
-  startedAt: "2026-02-22T10:00:00.000Z",
-  runtimeId: null,
-  runId: null,
-  baseUrl: "http://localhost:4000",
-  workingDirectory: "/repo",
-  messages: [],
-  draftAssistantText: "",
-  pendingPermissions: [],
-  pendingQuestions: [],
-  todos: [],
-  modelCatalog: null,
-  selectedModel: null,
-  isLoadingModelCatalog: false,
-  ...overrides,
-});
+const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
-const createDeferred = <T,>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((reason?: unknown) => void) | null = null;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return {
-    promise,
-    resolve: (value: T) => resolve?.(value),
-    reject: (reason?: unknown) => reject?.(reason),
-  };
-};
-
-const createHookHarness = (initialProps: HookArgs) => {
-  let latest: HookState | null = null;
-  const currentProps = initialProps;
-
-  const Harness = (props: HookArgs): ReactElement | null => {
-    latest = useAgentStudioSessionActions(props);
-    return null;
-  };
-
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-
-  const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, currentProps));
-      await flush();
-    });
-  };
-
-  const run = async (fn: (state: HookState) => void | Promise<void>): Promise<void> => {
-    await act(async () => {
-      if (!latest) {
-        throw new Error("Hook state unavailable");
-      }
-      await fn(latest);
-      await flush();
-    });
-  };
-
-  const getLatest = (): HookState => {
-    if (!latest) {
-      throw new Error("Hook state unavailable");
-    }
-    return latest;
-  };
-
-  const unmount = async (): Promise<void> => {
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  };
-
-  return { mount, run, getLatest, unmount };
-};
+const createHookHarness = (initialProps: HookArgs) =>
+  createSharedHookHarness(useAgentStudioSessionActions, initialProps);
 
 const createBaseArgs = (): HookArgs => {
   return {

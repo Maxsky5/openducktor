@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
 import { host } from "../../host";
+import { createDeferred, withTimeout } from "../test-utils";
 import { createEnsureRuntime, loadRepoDefaultModel, loadTaskDocuments } from "./runtime";
 
 const runningRunFixture: RunSummary = {
@@ -13,30 +14,6 @@ const runningRunFixture: RunSummary = {
   state: "running",
   lastMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
-};
-
-const createDeferred = <T>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((reason?: unknown) => void) | null = null;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return {
-    promise,
-    resolve: (value: T) => resolve?.(value),
-    reject: (reason?: unknown) => reject?.(reason),
-  };
-};
-
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | "timeout"> => {
-  return Promise.race([
-    promise,
-    new Promise<"timeout">((resolve) => {
-      setTimeout(() => resolve("timeout"), timeoutMs);
-    }),
-  ]);
 };
 
 describe("agent-orchestrator-runtime", () => {

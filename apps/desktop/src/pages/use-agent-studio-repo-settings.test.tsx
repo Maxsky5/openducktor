@@ -1,13 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { type ReactElement, createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import {
+  createHookHarness as createSharedHookHarness,
+  enableReactActEnvironment,
+} from "./agent-studio-test-utils";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRepoSettings>[0];
 type HookState = ReturnType<typeof useAgentStudioRepoSettings>;
@@ -26,53 +25,8 @@ const createSettings = (): RepoSettingsInput => ({
   },
 });
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
-const createHookHarness = (initialProps: HookArgs) => {
-  let latest: HookState | null = null;
-  let currentProps = initialProps;
-
-  const Harness = (props: HookArgs): ReactElement | null => {
-    latest = useAgentStudioRepoSettings(props);
-    return null;
-  };
-
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-
-  const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, currentProps));
-      await flush();
-    });
-  };
-
-  const update = async (next: HookArgs): Promise<void> => {
-    currentProps = next;
-    await act(async () => {
-      renderer?.update(createElement(Harness, currentProps));
-      await flush();
-    });
-  };
-
-  const getLatest = (): HookState => {
-    if (!latest) {
-      throw new Error("Hook state unavailable");
-    }
-    return latest;
-  };
-
-  const unmount = async (): Promise<void> => {
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  };
-
-  return { mount, update, getLatest, unmount };
-};
+const createHookHarness = (initialProps: HookArgs) =>
+  createSharedHookHarness(useAgentStudioRepoSettings, initialProps);
 
 describe("useAgentStudioRepoSettings", () => {
   test("loads repo settings when repository is active", async () => {
