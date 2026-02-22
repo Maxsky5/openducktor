@@ -1,9 +1,9 @@
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
-import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
-import { Button } from "@/components/ui/button";
 import type { TaskCard } from "@openducktor/contracts";
 import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
+import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
+import { Button } from "@/components/ui/button";
 
 type TaskDetailsSheetFooterProps = {
   task: TaskCard;

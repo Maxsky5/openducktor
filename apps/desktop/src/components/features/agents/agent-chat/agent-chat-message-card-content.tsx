@@ -1,6 +1,3 @@
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { cn } from "@/lib/utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   type AgentModelSelection,
   type AgentRole,
@@ -8,16 +5,19 @@ import {
 } from "@openducktor/core";
 import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
 import type { ReactElement } from "react";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { cn } from "@/lib/utils";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
-  SYSTEM_PROMPT_PREFIX,
   getAssistantFooterData,
   roleLabel,
+  SYSTEM_PROMPT_PREFIX,
   toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
 import {
+  assistantRoleIcon,
   RegularToolMessage,
   WorkflowToolMessage,
-  assistantRoleIcon,
 } from "./agent-chat-message-card-tool-presenters";
 
 export type MessageHeaderProps = {

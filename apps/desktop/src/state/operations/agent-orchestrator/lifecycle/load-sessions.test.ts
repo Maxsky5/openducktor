@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createLoadAgentSessions } from "./load-sessions";
 

@@ -1,3 +1,5 @@
+import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
+import { type ReactElement, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,8 +12,6 @@ import {
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { workspaceLabelFromPath } from "@/lib/workspace-label";
 import { useWorkspaceState } from "@/state";
-import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
 
 type OpenRepositoryModalProps = {
   open: boolean;

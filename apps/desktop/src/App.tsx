@@ -1,9 +1,8 @@
+import { lazy, type ReactElement, Suspense } from "react";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/ui/sonner";
-import { AppStateProvider } from "@/state";
-import { useWorkspaceState } from "@/state";
-import { type ReactElement, Suspense, lazy } from "react";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { AppStateProvider, useWorkspaceState } from "@/state";
 
 const AgentsPage = lazy(async () => {
   const module = await import("@/pages/agents-page");
@@ -43,21 +42,19 @@ function RequireRepository(): ReactElement {
 export function App(): ReactElement {
   return (
     <AppStateProvider>
-      <>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<Navigate to="/kanban" replace />} />
-            <Route path="/kanban" element={withRouteFallback(<KanbanPage />)} />
-            <Route element={<RequireRepository />}>
-              <Route path="/agents" element={withRouteFallback(<AgentsPage />)} />
-              <Route path="/planner" element={<Navigate to="/agents?agent=planner" replace />} />
-              <Route path="/builder" element={<Navigate to="/agents?agent=build" replace />} />
-            </Route>
-            <Route path="*" element={withRouteFallback(<NotFoundPage />)} />
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/" element={<Navigate to="/kanban" replace />} />
+          <Route path="/kanban" element={withRouteFallback(<KanbanPage />)} />
+          <Route element={<RequireRepository />}>
+            <Route path="/agents" element={withRouteFallback(<AgentsPage />)} />
+            <Route path="/planner" element={<Navigate to="/agents?agent=planner" replace />} />
+            <Route path="/builder" element={<Navigate to="/agents?agent=build" replace />} />
           </Route>
-        </Routes>
-        <Toaster />
-      </>
+          <Route path="*" element={withRouteFallback(<NotFoundPage />)} />
+        </Route>
+      </Routes>
+      <Toaster />
     </AppStateProvider>
   );
 }

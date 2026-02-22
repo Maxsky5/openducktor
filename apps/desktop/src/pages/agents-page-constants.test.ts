@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
-  SCENARIOS_BY_ROLE,
   firstScenario,
   isRole,
   isScenario,
   kickoffPromptForScenario,
+  SCENARIOS_BY_ROLE,
 } from "./agents-page-constants";
 
 describe("agents-page-constants", () => {

@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
-import type { EditTaskSection } from "@/types/task-composer";
 import { ClipboardList, FileCode, ScrollText } from "lucide-react";
 import type { ReactElement } from "react";
+import { cn } from "@/lib/utils";
+import type { EditTaskSection } from "@/types/task-composer";
 
 type TaskEditSectionSwitcherProps = {
   section: EditTaskSection;

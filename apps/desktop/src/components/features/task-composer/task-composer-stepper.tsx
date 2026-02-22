@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
-import type { ComposerStep } from "@/types/task-composer";
 import { Check } from "lucide-react";
 import type { ReactElement } from "react";
+import { cn } from "@/lib/utils";
+import type { ComposerStep } from "@/types/task-composer";
 
 type TaskComposerStepperProps = {
   step: ComposerStep;

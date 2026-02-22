@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { type SessionEventAdapter, attachAgentSessionListener } from "./session-events";
+import { attachAgentSessionListener, type SessionEventAdapter } from "./session-events";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   sessionId: "session-1",
@@ -34,10 +34,7 @@ describe("agent-orchestrator-session-events", () => {
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: {
-            type: string;
-            [key: string]: unknown;
-          }) => void,
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
         return () => {};
       },
@@ -114,10 +111,7 @@ describe("agent-orchestrator-session-events", () => {
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: {
-            type: string;
-            [key: string]: unknown;
-          }) => void,
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
         return () => {};
       },
@@ -192,10 +186,7 @@ describe("agent-orchestrator-session-events", () => {
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: {
-            type: string;
-            [key: string]: unknown;
-          }) => void,
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
         return () => {};
       },
@@ -287,10 +278,7 @@ describe("agent-orchestrator-session-events", () => {
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: {
-            type: string;
-            [key: string]: unknown;
-          }) => void,
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
         return () => {};
       },
@@ -374,10 +362,7 @@ describe("agent-orchestrator-session-events", () => {
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: {
-            type: string;
-            [key: string]: unknown;
-          }) => void,
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
         return () => {};
       },
@@ -474,10 +459,7 @@ describe("agent-orchestrator-session-events", () => {
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_sessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: {
-            type: string;
-            [key: string]: unknown;
-          }) => void,
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
         return () => {};
       },

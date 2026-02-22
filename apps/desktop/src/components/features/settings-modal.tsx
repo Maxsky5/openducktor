@@ -1,17 +1,21 @@
+import type { AgentModelCatalog } from "@openducktor/core";
+import { Settings2 } from "lucide-react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents/catalog-select-options";
 import {
-  DEFAULT_BRANCH_PREFIX,
-  ROLE_DEFAULTS,
   clearRoleDefault,
+  DEFAULT_BRANCH_PREFIX,
   emptyRepoSettings,
   ensureAgentDefault,
   findCatalogModel,
   getMissingRequiredRoleLabels,
   parseHookLines,
+  ROLE_DEFAULTS,
   selectedModelKeyForRole,
   toHookText,
   toRoleVariantOptions,
@@ -36,10 +40,6 @@ import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
-import type { AgentModelCatalog } from "@openducktor/core";
-import { Settings2 } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 type SettingsModalProps = {
   triggerClassName?: string;

@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
-import { type ReactElement, type ReactNode, Suspense, lazy, memo } from "react";
-import Markdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
+import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
+import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 

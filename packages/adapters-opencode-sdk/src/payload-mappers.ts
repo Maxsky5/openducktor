@@ -1,4 +1,3 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 
 const toFiniteNumber = (value: unknown): number | null => {

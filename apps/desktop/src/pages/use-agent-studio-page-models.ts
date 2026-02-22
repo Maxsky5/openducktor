@@ -1,19 +1,19 @@
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import { type UIEvent, useCallback, useMemo, useState } from "react";
 import { isNearBottom, useAgentChatLayout } from "@/components/features/agents/agent-chat";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { type UIEvent, useCallback, useMemo, useState } from "react";
 import { ROLE_OPTIONS, SCENARIO_LABELS } from "./agents-page-constants";
 import {
-  type SessionCreateOption,
   buildLatestSessionByRoleMap,
   buildRoleEnabledMapForTask,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
   buildWorkflowStateByRole,
+  type SessionCreateOption,
 } from "./agents-page-session-tabs";
 import {
   buildAgentChatModel,

@@ -1,5 +1,5 @@
-import type { DocumentEditorView } from "@/types/task-composer";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { DocumentEditorView } from "@/types/task-composer";
 
 export type TaskDocumentSection = "spec" | "plan";
 

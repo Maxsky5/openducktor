@@ -1,6 +1,6 @@
+import type { AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
-import type { AgentModelCatalog } from "@openducktor/core";
 
 export type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
 

@@ -1,12 +1,14 @@
+import type { TaskCard } from "@openducktor/contracts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { TaskDocumentSection } from "@/components/features/task-composer";
 import {
-  ISSUE_TYPE_OPTIONS,
   collectKnownLabels,
+  ISSUE_TYPE_OPTIONS,
   toComposerState,
   toParentComboboxOptions,
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
-import type { TaskDocumentSection } from "@/components/features/task-composer";
 import {
   hasUnsavedDocumentChanges,
   isDocumentSection,
@@ -21,8 +23,6 @@ import type {
   ComposerStep,
   EditTaskSection,
 } from "@/types/task-composer";
-import type { TaskCard } from "@openducktor/contracts";
-import { useEffect, useMemo, useRef, useState } from "react";
 
 type DocumentSection = TaskDocumentSection;
 

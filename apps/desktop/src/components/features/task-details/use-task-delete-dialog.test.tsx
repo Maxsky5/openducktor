@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import type { ReactElement } from "react";
-import { type ReactTestRenderer, act, create } from "react-test-renderer";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { useTaskDeleteDialog } from "./use-task-delete-dialog";
 
 type HarnessProps = {
@@ -51,7 +51,7 @@ describe("use-task-delete-dialog", () => {
   let root: ReactTestRenderer | null = null;
   let latest: HookState | null = null;
 
-  const Harness = (props: HarnessProps): ReactElement => {
+  const Harness = (props: HarnessProps): ReactElement | null => {
     latest = useTaskDeleteDialog({
       sheetOpen: props.sheetOpen,
       task: props.task,
@@ -59,7 +59,7 @@ describe("use-task-delete-dialog", () => {
       onOpenChange: props.onOpenChange,
       onDelete: props.onDelete,
     });
-    return <></>;
+    return null;
   };
 
   const mount = async (props: HarnessProps): Promise<void> => {

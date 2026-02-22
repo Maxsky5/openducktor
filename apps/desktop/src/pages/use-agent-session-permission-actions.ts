@@ -1,5 +1,5 @@
-import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
 
 type PermissionReply = "once" | "always" | "reject";
 

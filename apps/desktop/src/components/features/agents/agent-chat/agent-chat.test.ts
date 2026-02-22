@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChat } from "./agent-chat";
-import { TEST_ROLE_OPTIONS, buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
+import { buildModelSelection, buildSession, TEST_ROLE_OPTIONS } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   thread: {

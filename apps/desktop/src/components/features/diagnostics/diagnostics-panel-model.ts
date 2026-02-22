@@ -1,8 +1,8 @@
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import type { BeadsCheck, RuntimeCheck, WorkspaceRecord } from "@openducktor/contracts";
+import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import {
-  type DiagnosticsSummary,
   buildDiagnosticsSummary,
+  type DiagnosticsSummary,
   healthVariant,
 } from "./diagnostics-model";
 

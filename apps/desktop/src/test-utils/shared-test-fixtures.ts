@@ -1,5 +1,5 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const BASE_TASK_CARD_FIXTURE: TaskCard = {
   id: "task-1",

@@ -1,5 +1,5 @@
-import { Badge } from "@/components/ui/badge";
 import type { IssueType, RunSummary } from "@openducktor/contracts";
+import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   Bug,
@@ -9,8 +9,8 @@ import {
   PlayCircle,
   Sparkles,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { ReactElement } from "react";
+import { Badge } from "@/components/ui/badge";
 
 const ISSUE_TYPE_STYLES: Record<
   IssueType,

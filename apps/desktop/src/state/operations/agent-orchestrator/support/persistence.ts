@@ -1,6 +1,6 @@
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../../agent-tool-messages";
 import { normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";

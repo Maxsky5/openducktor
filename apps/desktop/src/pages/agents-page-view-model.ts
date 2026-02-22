@@ -1,3 +1,6 @@
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { RefObject, UIEvent } from "react";
 import type { AgentChatModel, AgentRoleOption } from "@/components/features/agents/agent-chat";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
@@ -6,9 +9,6 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentPermissionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { RefObject, UIEvent } from "react";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 
 const DEFAULT_ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {

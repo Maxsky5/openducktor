@@ -1,3 +1,6 @@
+import { cva } from "class-variance-authority";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -9,9 +12,6 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { cva } from "class-variance-authority";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
 
 export type ComboboxOption = {
   value: string;

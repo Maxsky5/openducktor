@@ -1,8 +1,8 @@
-import { errorMessage } from "@/lib/errors";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import { type McpServerStatus, OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentRuntimeSummary } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { errorMessage } from "@/lib/errors";
+import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
 type ListCatalogInput = {

@@ -1,3 +1,4 @@
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import type {
   AgentStateContextValue,
   ChecksStateContextValue,
@@ -6,7 +7,6 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import type { WorkspaceRecord } from "@openducktor/contracts";
 
 type WorkspaceStateValueArgs = Omit<WorkspaceStateContextValue, "activeWorkspace"> & {
   activeWorkspace?: WorkspaceRecord | null;

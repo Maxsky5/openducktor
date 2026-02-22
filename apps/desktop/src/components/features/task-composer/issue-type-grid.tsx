@@ -1,11 +1,11 @@
+import { Check } from "lucide-react";
+import type { ReactElement } from "react";
 import {
   ISSUE_TYPE_DEFAULTS,
   ISSUE_TYPE_OPTIONS,
 } from "@/components/features/task-composer/constants";
 import { cn } from "@/lib/utils";
 import type { ComposerState } from "@/types/task-composer";
-import { Check } from "lucide-react";
-import type { ReactElement } from "react";
 
 type IssueTypeGridProps = {
   state: ComposerState;

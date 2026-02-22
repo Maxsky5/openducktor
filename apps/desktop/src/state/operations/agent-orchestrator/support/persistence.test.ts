@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,

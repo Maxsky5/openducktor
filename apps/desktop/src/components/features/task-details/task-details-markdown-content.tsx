@@ -1,5 +1,5 @@
+import { memo, type ReactElement, startTransition, useEffect, useMemo, useState } from "react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { type ReactElement, memo, startTransition, useEffect, useMemo, useState } from "react";
 
 type TaskDetailsMarkdownContentProps = {
   markdown: string;

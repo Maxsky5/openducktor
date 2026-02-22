@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
-  READ_ONLY_ROLES,
   createRepoStaleGuard,
   isDuplicateAssistantMessage,
+  READ_ONLY_ROLES,
   runningStates,
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,

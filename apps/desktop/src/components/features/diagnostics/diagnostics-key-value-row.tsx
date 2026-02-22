@@ -1,5 +1,5 @@
-import { cn } from "@/lib/utils";
 import type { ReactElement } from "react";
+import { cn } from "@/lib/utils";
 import type { DiagnosticKeyValueRowModel } from "./diagnostics-panel-model";
 
 export function DiagnosticsKeyValueRow({

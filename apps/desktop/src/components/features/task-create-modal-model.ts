@@ -1,6 +1,6 @@
+import type { TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
 import { normalizeLines } from "@/components/features/task-composer";
 import type { ComposerState, EditTaskSection } from "@/types/task-composer";
-import type { TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
 
 export type DocumentSection = Extract<EditTaskSection, "spec" | "plan">;
 

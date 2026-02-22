@@ -1,10 +1,10 @@
+import type { IssueType, TaskCard } from "@openducktor/contracts";
 import {
   ISSUE_TYPE_DEFAULTS,
   PRIORITY_OPTIONS,
 } from "@/components/features/task-composer/constants";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { ComposerState } from "@/types/task-composer";
-import type { IssueType, TaskCard } from "@openducktor/contracts";
 
 export const normalizeLines = (value: string): string | undefined => {
   const trimmed = value.trim();

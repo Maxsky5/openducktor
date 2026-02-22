@@ -1,3 +1,5 @@
+import type { TaskCard } from "@openducktor/contracts";
+import { useCallback, useMemo } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
   runTaskWorkflowAction,
@@ -12,8 +14,6 @@ import {
   type TaskDocumentState,
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
-import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useMemo } from "react";
 
 type TaskDetailsSheetViewModel = {
   taskId: string | null;

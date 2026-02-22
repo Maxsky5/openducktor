@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import type {
   AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
   TasksStateContextValue,
-  WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import type { WorkspaceRecord } from "@openducktor/contracts";
 import {
   buildAgentStateValue,
   buildChecksStateValue,

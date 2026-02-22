@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "./ensure-ready";
 
 const taskFixture: TaskCard = {
