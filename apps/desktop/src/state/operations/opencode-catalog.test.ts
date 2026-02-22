@@ -140,24 +140,22 @@ describe("opencode-catalog", () => {
 
   test("reports missing openducktor server in MCP status map", async () => {
     const connectMcpServer = mock(async () => {});
+    const getMcpStatus = mock(async () => ({
+      context7: {
+        status: "connected",
+      },
+    }));
     const operations = createOpencodeCatalogOperations(
       createDeps({
-        getMcpStatus: async () => ({
-          context7: {
-            status: "connected",
-          },
-        }),
+        getMcpStatus,
         connectMcpServer,
       }),
     );
 
     const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
 
-    expect(connectMcpServer).toHaveBeenCalledWith({
-      baseUrl: "http://127.0.0.1:4444",
-      workingDirectory: "/tmp/repo/worktree",
-      name: "openducktor",
-    });
+    expect(getMcpStatus).toHaveBeenCalledTimes(1);
+    expect(connectMcpServer).not.toHaveBeenCalled();
     expect(result.mcpOk).toBe(false);
     expect(result.mcpServerStatus).toBeNull();
     expect(result.mcpError).toBe(
