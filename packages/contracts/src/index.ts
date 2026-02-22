@@ -176,7 +176,7 @@ export const globalConfigSchema = z.object({
   version: z.literal(1),
   activeRepo: z.string().optional(),
   taskMetadataNamespace: z.string().min(1).default("openducktor"),
-  repos: z.record(repoConfigSchema).default({}),
+  repos: z.record(z.string(), repoConfigSchema).default({}),
   recentRepos: z.array(z.string()).default([]),
   scheduler: z
     .object({
