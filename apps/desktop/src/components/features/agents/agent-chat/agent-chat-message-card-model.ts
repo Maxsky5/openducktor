@@ -17,7 +17,7 @@ const REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES = new Set(["task", "subtask", 
 
 export const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
 
-export const AGENT_ROLE_LABEL: Record<AgentRole, string> = {
+const AGENT_ROLE_LABEL: Record<AgentRole, string> = {
   spec: "Spec",
   planner: "Planner",
   build: "Builder",

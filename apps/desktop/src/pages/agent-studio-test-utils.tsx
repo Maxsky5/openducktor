@@ -16,7 +16,7 @@ export const enableReactActEnvironment = (): void => {
   (globalThis as ReactActEnvironment).IS_REACT_ACT_ENVIRONMENT = true;
 };
 
-export const flushMicrotasks = async (): Promise<void> => {
+const flushMicrotasks = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
 };

@@ -163,5 +163,3 @@ export const buildTodoItem = (
   priority: "medium",
   ...overrides,
 });
-
-export const buildRole = (role: AgentRole): AgentRole => role;
