@@ -69,11 +69,20 @@ describe("opencode-catalog", () => {
   });
 
   test("returns runtime-unavailable health when runtime bootstrap fails", async () => {
+    const getMcpStatus = mock(async () => ({
+      openducktor: {
+        status: "connected",
+        command: null,
+        args: null,
+        env: null,
+      },
+    }));
     const operations = createOpencodeCatalogOperations(
       createDeps({
         ensureRuntime: async () => {
           throw new Error("runtime unavailable");
         },
+        getMcpStatus,
       }),
     );
 
@@ -83,7 +92,78 @@ describe("opencode-catalog", () => {
     expect(result.availableToolIds).toEqual([]);
     expect(result.runtimeError).toContain("runtime unavailable");
     expect(result.mcpError).toContain("MCP cannot be verified");
-    expect(typeof result.checkedAt).toBe("string");
+    expect(result.mcpServerName).toBe("openducktor");
+    expect(result.errors).toEqual([
+      "runtime unavailable",
+      "OpenCode runtime is unavailable, so MCP cannot be verified.",
+    ]);
+    expect(Date.parse(result.checkedAt)).not.toBeNaN();
+    expect(getMcpStatus).not.toHaveBeenCalled();
+  });
+
+  test("is healthy when openducktor mcp is connected", async () => {
+    const connectMcpServer = mock(async () => {});
+    const operations = createOpencodeCatalogOperations(
+      createDeps({
+        connectMcpServer,
+      }),
+    );
+
+    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+
+    expect(result.runtimeOk).toBe(true);
+    expect(result.mcpOk).toBe(true);
+    expect(result.runtime).toEqual(runtimeFixture);
+    expect(result.mcpError).toBeNull();
+    expect(result.mcpServerStatus).toBe("connected");
+    expect(result.errors).toEqual([]);
+    expect(connectMcpServer).not.toHaveBeenCalled();
+  });
+
+  test("reports MCP status failures when status query throws", async () => {
+    const operations = createOpencodeCatalogOperations(
+      createDeps({
+        getMcpStatus: async () => {
+          throw new Error("status unavailable");
+        },
+      }),
+    );
+
+    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+
+    expect(result.runtimeOk).toBe(true);
+    expect(result.mcpOk).toBe(false);
+    expect(result.runtime).toEqual(runtimeFixture);
+    expect(result.mcpError).toBe("Failed to query OpenCode MCP status: status unavailable");
+    expect(result.errors).toEqual(["Failed to query OpenCode MCP status: status unavailable"]);
+  });
+
+  test("reports missing openducktor server in MCP status map", async () => {
+    const connectMcpServer = mock(async () => {});
+    const getMcpStatus = mock(async () => ({
+      context7: {
+        status: "connected",
+      },
+    }));
+    const operations = createOpencodeCatalogOperations(
+      createDeps({
+        getMcpStatus,
+        connectMcpServer,
+      }),
+    );
+
+    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+
+    expect(getMcpStatus).toHaveBeenCalledTimes(1);
+    expect(connectMcpServer).not.toHaveBeenCalled();
+    expect(result.mcpOk).toBe(false);
+    expect(result.mcpServerStatus).toBeNull();
+    expect(result.mcpError).toBe(
+      "MCP server 'openducktor' is not configured for this OpenCode runtime.",
+    );
+    expect(result.errors).toEqual([
+      "MCP server 'openducktor' is not configured for this OpenCode runtime.",
+    ]);
   });
 
   test("restarts runtime and retries MCP status on config-invalid failures", async () => {
@@ -133,6 +213,8 @@ describe("opencode-catalog", () => {
     });
     expect(result.runtime).toEqual(restartedRuntime);
     expect(result.mcpOk).toBe(true);
+    expect(result.mcpServerStatus).toBe("connected");
+    expect(result.errors).toEqual([]);
     expect(result.availableToolIds).toEqual(["odt_read_task", "odt_set_plan"]);
   });
 
@@ -179,6 +261,8 @@ describe("opencode-catalog", () => {
     });
     expect(getMcpStatus).toHaveBeenCalledTimes(2);
     expect(result.mcpOk).toBe(true);
+    expect(result.mcpServerStatus).toBe("connected");
+    expect(result.errors).toEqual([]);
     expect(result.availableToolIds).toEqual([]);
   });
 });

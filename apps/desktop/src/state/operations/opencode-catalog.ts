@@ -136,7 +136,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
 
     let { status: mcpServerStatus, error: mcpServerError } = resolveMcpStatusError(statusByServer);
 
-    if (mcpServerStatus !== "connected") {
+    if (mcpServerStatus !== null && mcpServerStatus !== "connected") {
       try {
         await deps.connectMcpServer({
           ...runtimeInput,
