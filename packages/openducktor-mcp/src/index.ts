@@ -84,6 +84,7 @@ type ToolInputSchema = {
 };
 
 type RegisterToolCall = (
+  this: McpServer,
   name: string,
   config: {
     description: string;
@@ -92,11 +93,16 @@ type RegisterToolCall = (
   handler: (input: unknown) => Promise<ToolResult>,
 ) => void;
 
-const registerOdtTool = (server: McpServer, store: OdtTaskStore, tool: RegisteredTool): void => {
+export const registerOdtTool = (
+  server: McpServer,
+  store: OdtTaskStore,
+  tool: RegisteredTool,
+): void => {
   const schema = ODT_TOOL_SCHEMAS[tool.name] as unknown as ToolInputSchema;
   const registerTool = server.registerTool as unknown as RegisterToolCall;
 
-  registerTool(
+  registerTool.call(
+    server,
     tool.name,
     {
       description: tool.description,
