@@ -1,9 +1,9 @@
-import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
-import { Badge } from "@/components/ui/badge";
-import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
+import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
+import { Badge } from "@/components/ui/badge";
+import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
 
 type TaskDetailsSheetHeaderProps = {
   task: TaskCard;

@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { CheckCircle2, ChevronDown, ChevronUp, Circle, ListTodo, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
+import { cn } from "@/lib/utils";
 
 type AgentSessionTodoPanelProps = {
   todos: AgentSessionTodoItem[];

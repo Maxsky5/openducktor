@@ -1,5 +1,5 @@
-import { isTauriRuntime } from "@/lib/runtime";
 import { TauriHostClient } from "@openducktor/adapters-tauri-host";
+import { isTauriRuntime } from "@/lib/runtime";
 
 const notAvailable = async <T>(): Promise<T> => {
   throw new Error("Tauri runtime not available. Run inside the desktop shell.");

@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import {
   DEFERRED_BY_USER_REASON,
-  WORKSPACE_REQUIRED_ERROR,
   requireActiveRepo,
   toNormalizedTitle,
   toUpdateSuccessDescription,
   toVisibleTasks,
+  WORKSPACE_REQUIRED_ERROR,
 } from "./task-operations-model";
 
 const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({

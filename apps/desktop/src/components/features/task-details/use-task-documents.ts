@@ -1,5 +1,5 @@
-import { useSpecState } from "@/state";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSpecState } from "@/state";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";
 

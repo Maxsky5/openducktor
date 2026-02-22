@@ -1,5 +1,3 @@
-import { errorMessage } from "@/lib/errors";
-import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type {
   BeadsCheck,
   RunSummary,
@@ -10,6 +8,8 @@ import type {
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
+import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import { host } from "./host";
 import {
   DEFERRED_BY_USER_REASON,

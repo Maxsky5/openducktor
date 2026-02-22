@@ -1,9 +1,9 @@
+import type { TaskCard } from "@openducktor/contracts";
+import { GitBranch } from "lucide-react";
+import { memo, type ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
-import type { TaskCard } from "@openducktor/contracts";
-import { GitBranch } from "lucide-react";
-import { type ReactElement, memo } from "react";
 
 type TaskDetailsSubtasksProps = {
   subtasks: TaskCard[];

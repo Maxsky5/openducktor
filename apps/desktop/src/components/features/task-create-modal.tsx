@@ -1,3 +1,6 @@
+import type { TaskCard } from "@openducktor/contracts";
+import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
+import type { ReactElement } from "react";
 import {
   IssueTypeGrid,
   TaskComposerStepper,
@@ -17,9 +20,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { TaskCard } from "@openducktor/contracts";
-import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
-import type { ReactElement } from "react";
 
 type TaskCreateModalProps = {
   open: boolean;

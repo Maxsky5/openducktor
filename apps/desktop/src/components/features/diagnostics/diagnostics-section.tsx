@@ -1,5 +1,5 @@
-import { Badge } from "@/components/ui/badge";
 import type { ReactElement, ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
 
 type DiagnosticsSectionProps = {
   title: string;

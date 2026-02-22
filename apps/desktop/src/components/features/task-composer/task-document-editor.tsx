@@ -1,11 +1,11 @@
+import { Eye, FilePenLine, LayoutPanelLeft } from "lucide-react";
+import { type ReactElement, type ReactNode, useDeferredValue, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Textarea } from "@/components/ui/textarea";
 import { humanDate } from "@/lib/task-display";
 import { cn } from "@/lib/utils";
 import type { DocumentEditorView } from "@/types/task-composer";
-import { Eye, FilePenLine, LayoutPanelLeft } from "lucide-react";
-import { type ReactElement, type ReactNode, useDeferredValue, useMemo } from "react";
 
 type TaskDocumentEditorProps = {
   title: string;
@@ -54,11 +54,7 @@ function Pane({ label, hiddenOnMobile = false, children }: PaneProps): ReactElem
   );
 }
 
-function LoadingPaneSkeleton({
-  kind,
-}: {
-  kind: "editor" | "preview";
-}): ReactElement {
+function LoadingPaneSkeleton({ kind }: { kind: "editor" | "preview" }): ReactElement {
   const widths = kind === "editor" ? ["w-2/5", "w-full", "w-5/6"] : ["w-1/3", "w-full", "w-4/5"];
 
   return (

@@ -1,8 +1,8 @@
-import { Card, CardContent } from "@/components/ui/card";
 import type { ReactElement, ReactNode } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import type { AgentChatModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { AgentChatThread } from "./agent-chat-thread";
-import type { AgentChatModel } from "./agent-chat.types";
 
 export function AgentChat({
   model,

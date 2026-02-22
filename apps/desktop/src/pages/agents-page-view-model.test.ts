@@ -1,8 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
+import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildAgentChatModel,
   buildAgentStudioHeaderModel,

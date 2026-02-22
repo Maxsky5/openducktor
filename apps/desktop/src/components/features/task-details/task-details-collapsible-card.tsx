@@ -1,8 +1,8 @@
+import { ChevronDown } from "lucide-react";
+import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { humanDate } from "@/lib/task-display";
 import { cn } from "@/lib/utils";
-import { ChevronDown } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 
 type TaskDetailsCollapsibleCardProps = {
   title: string;

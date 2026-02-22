@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
 import { Bot, Columns3 } from "lucide-react";
 import type { ReactElement } from "react";
 import { NavLink } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { to: "/kanban", icon: Columns3, label: "Kanban", requiresRepo: false },

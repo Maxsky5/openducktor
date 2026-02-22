@@ -1,3 +1,5 @@
+import { Check, Plus, Tag, X } from "lucide-react";
+import { type ReactElement, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +12,6 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { Check, Plus, Tag, X } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
 
 type TagSelectorProps = {
   value: string[];

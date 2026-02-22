@@ -1,3 +1,13 @@
+import type { RunEvent } from "@openducktor/contracts";
+import {
+  type Context,
+  createContext,
+  type PropsWithChildren,
+  type ReactElement,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import type {
   AgentStateContextValue,
   ChecksStateContextValue,
@@ -7,16 +17,6 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import type { RunEvent } from "@openducktor/contracts";
-import {
-  type Context,
-  type PropsWithChildren,
-  type ReactElement,
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
 import {
   buildAgentStateValue,
   buildChecksStateValue,

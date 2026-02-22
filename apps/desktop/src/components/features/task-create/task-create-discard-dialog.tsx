@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ReactElement } from "react";
 
 type TaskCreateDiscardDialogProps = {
   open: boolean;

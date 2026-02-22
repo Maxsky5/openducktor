@@ -1,3 +1,5 @@
+import { Loader2, Trash2 } from "lucide-react";
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,8 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Trash2 } from "lucide-react";
-import type { ReactElement } from "react";
 
 type TaskDeleteConfirmDialogProps = {
   open: boolean;

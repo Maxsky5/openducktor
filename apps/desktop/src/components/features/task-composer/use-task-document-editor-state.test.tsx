@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { type ReactElement, createElement } from "react";
+import { createElement, type ReactElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import {
   type TaskDocumentSection,

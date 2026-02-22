@@ -1,6 +1,6 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock3, ShieldAlert } from "lucide-react";
 import type { ReactElement } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type KanbanSummaryCardsProps = {
   taskCount: number;

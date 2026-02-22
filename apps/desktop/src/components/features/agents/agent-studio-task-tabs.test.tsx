@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Tabs } from "@/components/ui/tabs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { Tabs } from "@/components/ui/tabs";
 import { buildTask } from "./agent-chat/agent-chat-test-fixtures";
 import { AgentStudioTaskTabs } from "./agent-studio-task-tabs";
 

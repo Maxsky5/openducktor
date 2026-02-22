@@ -1,5 +1,5 @@
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import type { TaskCard } from "@openducktor/contracts";
+import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 
 type TaskWorkflowCallbacks = {
   onPlan: ((taskId: string, action: "set_spec" | "set_plan") => void) | undefined;

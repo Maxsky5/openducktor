@@ -1,8 +1,3 @@
-import type {
-  AgentChatMessage,
-  AgentQuestionRequest,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
 import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
@@ -11,6 +6,11 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import type {
+  AgentChatMessage,
+  AgentQuestionRequest,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { AgentRoleOption } from "./agent-chat.types";
 
 const baseTask: TaskCard = {

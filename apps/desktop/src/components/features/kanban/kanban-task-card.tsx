@@ -1,3 +1,6 @@
+import type { RunSummary, TaskCard } from "@openducktor/contracts";
+import { ExternalLink } from "lucide-react";
+import type { ReactElement } from "react";
 import {
   IssueTypeBadge,
   PriorityBadge,
@@ -6,9 +9,6 @@ import {
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Badge } from "@/components/ui/badge";
-import type { RunSummary, TaskCard } from "@openducktor/contracts";
-import { ExternalLink } from "lucide-react";
-import type { ReactElement } from "react";
 
 type KanbanTaskCardProps = {
   task: TaskCard;

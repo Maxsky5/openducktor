@@ -1,5 +1,5 @@
-import type { RepoSettingsInput } from "@/types/state-slices";
 import { useEffect, useState } from "react";
+import type { RepoSettingsInput } from "@/types/state-slices";
 
 export function useAgentStudioRepoSettings(args: {
   activeRepo: string | null;

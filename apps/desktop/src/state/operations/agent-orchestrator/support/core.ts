@@ -1,5 +1,5 @@
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentRole } from "@openducktor/core";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 
 export const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 

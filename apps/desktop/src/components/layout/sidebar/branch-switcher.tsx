@@ -1,8 +1,8 @@
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { useWorkspaceState } from "@/state";
 import type { GitBranch } from "@openducktor/contracts";
 import { GitBranch as GitBranchIcon } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { useWorkspaceState } from "@/state";
 
 function branchSourceLabel(branch: GitBranch): string {
   if (!branch.isRemote) {

@@ -1,12 +1,12 @@
+import { mapToKanbanColumns } from "@openducktor/core";
+import { Loader2, Plus, RefreshCcw } from "lucide-react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { KanbanColumn, KanbanSummaryCards } from "@/components/features/kanban";
 import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { Button } from "@/components/ui/button";
 import { useTasksState, useWorkspaceState } from "@/state";
-import { mapToKanbanColumns } from "@openducktor/core";
-import { Loader2, Plus, RefreshCcw } from "lucide-react";
-import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 export function KanbanPage(): ReactElement {
   const { isSwitchingWorkspace } = useWorkspaceState();

@@ -1,5 +1,5 @@
-import { type ReactElement, Suspense, lazy, memo, useDeferredValue } from "react";
-import Markdown, { defaultUrlTransform, type Components, type UrlTransform } from "react-markdown";
+import { lazy, memo, type ReactElement, Suspense, useDeferredValue } from "react";
+import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { MarkdownPremiumRendererProps } from "./markdown-renderer";

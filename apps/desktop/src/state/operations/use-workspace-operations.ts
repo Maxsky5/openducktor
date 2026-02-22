@@ -1,7 +1,7 @@
-import { errorMessage } from "@/lib/errors";
 import type { GitBranch, GitCurrentBranch, WorkspaceRecord } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import { host } from "./host";
 import {
   BRANCH_SYNC_INTERVAL_MS,

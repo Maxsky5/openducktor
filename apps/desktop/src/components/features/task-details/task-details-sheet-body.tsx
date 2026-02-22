@@ -1,3 +1,6 @@
+import type { TaskCard } from "@openducktor/contracts";
+import { CheckSquare, CircleHelp, FileCode, ShieldCheck } from "lucide-react";
+import type { ReactElement } from "react";
 import {
   TaskDetailsAsyncDocumentSection,
   TaskDetailsDocumentSection,
@@ -5,9 +8,6 @@ import {
   TaskDetailsSubtasks,
 } from "@/components/features/task-details";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import type { TaskCard } from "@openducktor/contracts";
-import { CheckSquare, CircleHelp, FileCode, ShieldCheck } from "lucide-react";
-import type { ReactElement } from "react";
 
 const DESCRIPTION_ICON = <CircleHelp className="size-3.5" />;
 const ACCEPTANCE_CRITERIA_ICON = <CheckSquare className="size-3.5" />;

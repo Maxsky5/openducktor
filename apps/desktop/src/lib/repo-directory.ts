@@ -1,5 +1,5 @@
-import { assertTauriRuntime } from "@/lib/runtime";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { assertTauriRuntime } from "@/lib/runtime";
 
 const DIRECTORY_PICKER_TITLE = "Select Repository";
 

@@ -1,12 +1,12 @@
+import type { TaskCard } from "@openducktor/contracts";
+import { createElement, type ReactElement } from "react";
+import TestRenderer, { act } from "react-test-renderer";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { TaskCard } from "@openducktor/contracts";
-import { type ReactElement, createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
 
 type ReactActEnvironment = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;

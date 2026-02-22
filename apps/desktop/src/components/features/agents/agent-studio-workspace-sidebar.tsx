@@ -1,9 +1,9 @@
+import type { ReactElement } from "react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
-import type { ReactElement } from "react";
 
 type PermissionReply = "once" | "always" | "reject";
 

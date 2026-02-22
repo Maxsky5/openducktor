@@ -1,8 +1,8 @@
+import { useMemo } from "react";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import { workspaceNameFromPath } from "@/lib/workspace-label";
 import { useWorkspaceState } from "@/state";
-import { useMemo } from "react";
 
 type RepositorySwitcherProps = {
   className?: string;

@@ -1,5 +1,5 @@
-import type { RepoSettingsInput } from "@/types/state-slices";
 import { useCallback } from "react";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
 
 type UseRepoSettingsOperationsArgs = {

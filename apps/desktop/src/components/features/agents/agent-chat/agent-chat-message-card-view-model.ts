@@ -1,15 +1,15 @@
-import { cn } from "@/lib/utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   type AgentModelSelection,
   type AgentRole,
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
+import { cn } from "@/lib/utils";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { resolveAgentAccentColor } from "../agent-accent-color";
 import {
-  SYSTEM_PROMPT_PREFIX,
   assistantRoleFromMessage,
   formatTime,
+  SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
 import { isToolMessageFailure } from "./agent-chat-message-card-tool-presenters";
 

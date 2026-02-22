@@ -1,3 +1,6 @@
+import type { AgentRole, AgentScenario } from "@openducktor/core";
+import { Check, Circle, CircleDotDashed, LoaderCircle, Plus, Sparkles } from "lucide-react";
+import { type ReactElement, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,9 +15,6 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { Check, Circle, CircleDotDashed, LoaderCircle, Plus, Sparkles } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
 import type { AgentRoleOption } from "./agent-chat/agent-chat.types";
 
 type AgentWorkflowStep = {

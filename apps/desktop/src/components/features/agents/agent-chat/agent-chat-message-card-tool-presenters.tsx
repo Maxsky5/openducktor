@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import { type AgentRole, isOdtWorkflowMutationToolName } from "@openducktor/core";
 import {
   Bot,
@@ -13,6 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
+import { cn } from "@/lib/utils";
 import {
   buildToolSummary,
   formatRawJsonLikeText,

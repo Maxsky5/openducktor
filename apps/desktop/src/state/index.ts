@@ -1,3 +1,4 @@
+export type { RepoSettingsInput } from "@/types/state-slices";
 export {
   AppStateProvider,
   useAgentState,
@@ -7,4 +8,3 @@ export {
   useTasksState,
   useWorkspaceState,
 } from "./app-state-provider";
-export type { RepoSettingsInput } from "@/types/state-slices";

@@ -1,10 +1,10 @@
+import type { TaskCard } from "@openducktor/contracts";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { TaskCard } from "@openducktor/contracts";
 
 const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   title: "Task",

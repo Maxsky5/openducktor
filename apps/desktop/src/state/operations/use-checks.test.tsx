@@ -1,8 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import type { BeadsCheck, RuntimeCheck } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
 const reactActEnvironment = globalThis as typeof globalThis & {

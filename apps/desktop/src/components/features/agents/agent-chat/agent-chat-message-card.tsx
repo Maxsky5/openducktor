@@ -1,6 +1,6 @@
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 

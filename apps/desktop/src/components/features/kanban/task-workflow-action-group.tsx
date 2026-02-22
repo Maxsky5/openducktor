@@ -1,10 +1,10 @@
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import type { TaskCard } from "@openducktor/contracts";
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { type ReactElement, useState } from "react";
-import { type TaskWorkflowAction, resolveTaskCardActions } from "./kanban-task-workflow";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { resolveTaskCardActions, type TaskWorkflowAction } from "./kanban-task-workflow";
 import { TASK_ACTION_ICON, taskActionLabel, taskPrimaryActionVariant } from "./task-action-ui";
 
 type ExtraTaskMenuAction = {

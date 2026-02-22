@@ -1,8 +1,8 @@
-import { errorMessage } from "@/lib/errors";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { MutableRefObject } from "react";
+import { errorMessage } from "@/lib/errors";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   formatToolContent,
   isTodoToolName,
@@ -10,7 +10,6 @@ import {
 } from "../../agent-tool-messages";
 import { isMutatingPermission } from "../../permission-policy";
 import {
-  READ_ONLY_ROLES,
   finalizeDraftAssistantMessage,
   isDuplicateAssistantMessage,
   mergeTodoListPreservingOrder,
@@ -20,6 +19,7 @@ import {
   normalizeToolText,
   parseTodosFromToolInput,
   parseTodosFromToolOutput,
+  READ_ONLY_ROLES,
   resolveToolMessageId,
   sanitizeStreamingText,
   toAssistantMessageMeta,

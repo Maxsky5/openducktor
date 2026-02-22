@@ -1,8 +1,8 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {

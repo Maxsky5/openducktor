@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentModelCatalog } from "@openducktor/core";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,

@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
 import { TaskDetailsSheetBody } from "@/components/features/task-details/task-details-sheet-body";
@@ -12,7 +13,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { ReactElement } from "react";
 
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_spec",

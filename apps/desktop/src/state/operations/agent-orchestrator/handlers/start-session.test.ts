@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import {
   createAgentSessionFixture,

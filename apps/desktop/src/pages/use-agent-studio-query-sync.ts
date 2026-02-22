@@ -1,9 +1,9 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
-import { SCENARIOS_BY_ROLE, isRole, isScenario } from "./agents-page-constants";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { isRole, isScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 import { toContextStorageKey } from "./agents-page-utils";
 
 type QueryUpdate = Record<string, string | undefined>;

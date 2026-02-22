@@ -1,7 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   CheckCircle2,
   CheckSquare,
@@ -14,6 +10,10 @@ import {
   Square,
 } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
   buildAgentQuestionAnswers,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   isDuplicateAssistantMessage,
   mergeTodoListPreservingOrder,

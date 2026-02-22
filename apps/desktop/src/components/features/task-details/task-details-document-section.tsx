@@ -1,4 +1,4 @@
-import { type ReactElement, memo } from "react";
+import { memo, type ReactElement } from "react";
 
 import { TaskDetailsCollapsibleCard } from "./task-details-collapsible-card";
 import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";

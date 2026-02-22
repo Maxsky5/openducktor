@@ -1,3 +1,6 @@
+import { FolderOpen } from "lucide-react";
+import { lazy, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
+import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/open-repository-modal";
 import { RepositorySwitcher } from "@/components/features/repository-switcher";
@@ -10,9 +13,6 @@ import {
 } from "@/components/layout/sidebar";
 import { Button } from "@/components/ui/button";
 import { useTasksState, useWorkspaceState } from "@/state";
-import { FolderOpen } from "lucide-react";
-import { type ReactElement, Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
 
 const SettingsModal = lazy(async () => {
   const module = await import("@/components/features/settings-modal");

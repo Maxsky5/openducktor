@@ -1,3 +1,6 @@
+import type { TaskCard } from "@openducktor/contracts";
+import { Circle, CircleAlert, LoaderCircle, Plus, X } from "lucide-react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,9 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import type { TaskCard } from "@openducktor/contracts";
-import { Circle, CircleAlert, LoaderCircle, Plus, X } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
 
 export type AgentStudioTaskTabStatus = "working" | "idle" | "waiting_input";
 

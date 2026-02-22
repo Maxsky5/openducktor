@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoSettingsInput } from "@/types/state-slices";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 

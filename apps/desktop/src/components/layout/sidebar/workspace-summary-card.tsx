@@ -1,7 +1,7 @@
-import { workspaceNameFromPath } from "@/lib/workspace-label";
-import { useWorkspaceState } from "@/state";
 import { Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
+import { workspaceNameFromPath } from "@/lib/workspace-label";
+import { useWorkspaceState } from "@/state";
 
 export function WorkspaceSummaryCard(): ReactElement {
   const { activeRepo } = useWorkspaceState();

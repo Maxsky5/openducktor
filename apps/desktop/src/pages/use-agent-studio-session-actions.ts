@@ -1,10 +1,10 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStateContextValue } from "@/types/state-slices";
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SCENARIO_LABELS, firstScenario, kickoffPromptForScenario } from "./agents-page-constants";
-import { type SessionCreateOption, buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStateContextValue } from "@/types/state-slices";
+import { firstScenario, kickoffPromptForScenario, SCENARIO_LABELS } from "./agents-page-constants";
+import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-page-session-tabs";
 
 type QueryUpdate = Record<string, string | undefined>;
 

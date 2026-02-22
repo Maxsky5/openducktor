@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  TEST_ROLE_OPTIONS,
   buildMessage,
   buildQuestionRequest,
   buildSession,
   buildTodoItem,
+  TEST_ROLE_OPTIONS,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread } from "./agent-chat-thread";
 
