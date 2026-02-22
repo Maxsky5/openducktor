@@ -1,48 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createLoadAgentSessions } from "./load-sessions";
 
 type SessionHistory = Awaited<
   ReturnType<Parameters<typeof createLoadAgentSessions>[0]["adapter"]["loadSessionHistory"]>
 >;
 
-const taskFixture: TaskCard = {
-  id: "task-1",
-  title: "Task",
-  description: "",
-  acceptanceCriteria: "",
-  notes: "",
-  status: "open",
-  priority: 2,
-  issueType: "task",
-  aiReviewEnabled: true,
-  availableActions: [],
-  labels: [],
-  subtaskIds: [],
-  documentSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false },
-  },
-  updatedAt: "2026-02-22T08:00:00.000Z",
-  createdAt: "2026-02-22T08:00:00.000Z",
-};
-
-const createDeferred = <T>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((reason?: unknown) => void) | null = null;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return {
-    promise,
-    resolve: (value: T) => resolve?.(value),
-    reject: (reason?: unknown) => reject?.(reason),
-  };
-};
+const taskFixture = createTaskCardFixture({ title: "Task" });
 
 describe("agent-orchestrator-load-sessions", () => {
   test("no-ops when active repo is missing", async () => {

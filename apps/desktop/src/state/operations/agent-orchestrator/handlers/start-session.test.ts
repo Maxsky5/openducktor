@@ -1,55 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { TaskCard } from "@openducktor/contracts";
 import { host } from "../../host";
+import {
+  createAgentSessionFixture,
+  createDeferred,
+  createTaskCardFixture,
+  withTimeout,
+} from "../test-utils";
 import { createStartAgentSession } from "./start-session";
 
-const taskFixture: TaskCard = {
-  id: "task-1",
+const taskFixture = createTaskCardFixture({
   title: "Implement feature",
   description: "desc",
   acceptanceCriteria: "ac",
-  notes: "",
   status: "in_progress",
   priority: 1,
-  issueType: "task",
-  aiReviewEnabled: true,
-  availableActions: [],
-  labels: [],
-  subtaskIds: [],
-  documentSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false },
-  },
-  updatedAt: "2026-02-22T08:00:00.000Z",
-  createdAt: "2026-02-22T08:00:00.000Z",
-};
-
-const createDeferred = <T>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((reason?: unknown) => void) | null = null;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return {
-    promise,
-    resolve: (value: T) => resolve?.(value),
-    reject: (reason?: unknown) => reject?.(reason),
-  };
-};
-
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | "timeout"> => {
-  return Promise.race([
-    promise,
-    new Promise<"timeout">((resolve) => {
-      setTimeout(() => resolve("timeout"), timeoutMs);
-    }),
-  ]);
-};
+});
 
 describe("agent-orchestrator/handlers/start-session", () => {
   test("throws when no active repo is selected", () => {

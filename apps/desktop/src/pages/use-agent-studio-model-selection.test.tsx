@@ -1,18 +1,17 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { type ReactElement, createElement } from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import {
+  createAgentSessionFixture,
+  createHookHarness as createSharedHookHarness,
+  enableReactActEnvironment,
+} from "./agent-studio-test-utils";
 import {
   type AgentStudioModelSelectionState,
   useAgentStudioModelSelection,
 } from "./use-agent-studio-model-selection";
 
-const reactActEnvironment = globalThis as typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
 const originalConsoleError = console.error;
@@ -74,101 +73,20 @@ const createRepoSettings = (
   },
 });
 
-const createActiveSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  sessionId: "session-1",
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "spec",
-  scenario: "spec_initial",
-  status: "idle",
-  startedAt: "2026-02-22T10:00:00.000Z",
-  runtimeId: null,
-  runId: null,
-  baseUrl: "http://localhost:4000",
-  workingDirectory: "/repo",
-  messages: [],
-  draftAssistantText: "",
-  pendingPermissions: [],
-  pendingQuestions: [],
-  todos: [],
-  modelCatalog: CATALOG,
-  selectedModel: {
-    providerId: "openai",
-    modelId: "gpt-5",
-    variant: "default",
-    opencodeAgent: "spec-agent",
-  },
-  isLoadingModelCatalog: false,
-  ...overrides,
-});
+const createActiveSession = (overrides = {}) =>
+  createAgentSessionFixture({
+    modelCatalog: CATALOG,
+    selectedModel: {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      opencodeAgent: "spec-agent",
+    },
+    ...overrides,
+  });
 
-const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
-
-const createHookHarness = (initialProps: HookArgs) => {
-  let latest: HookState | null = null;
-
-  const Harness = (props: HookArgs): ReactElement | null => {
-    latest = useAgentStudioModelSelection(props);
-    return null;
-  };
-
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
-
-  const mount = async (): Promise<void> => {
-    await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, initialProps));
-      await flush();
-    });
-  };
-
-  const run = async (fn: () => Promise<void> | void): Promise<void> => {
-    await act(async () => {
-      await fn();
-      await flush();
-    });
-  };
-
-  const getLatest = (): HookState => {
-    if (!latest) {
-      throw new Error("Hook state unavailable");
-    }
-    return latest;
-  };
-
-  const waitFor = async (
-    predicate: (state: HookState) => boolean,
-    timeoutMs = 500,
-  ): Promise<void> => {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeoutMs) {
-      const current = latest;
-      if (current && predicate(current)) {
-        return;
-      }
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        await flush();
-      });
-    }
-
-    throw new Error("Timed out waiting for hook state");
-  };
-
-  const unmount = async (): Promise<void> => {
-    if (!renderer) {
-      return;
-    }
-    await act(async () => {
-      renderer?.unmount();
-      await flush();
-    });
-  };
-
-  return { mount, run, getLatest, waitFor, unmount };
-};
+const createHookHarness = (initialProps: HookArgs) =>
+  createSharedHookHarness(useAgentStudioModelSelection, initialProps);
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo",
