@@ -69,11 +69,12 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
   return async (repoPath: string, taskId: string, role: AgentRole): Promise<RuntimeInfo> => {
     if (role === "build") {
       let run = runsRef.current.find(
-        (entry) => entry.taskId === taskId && runningStates.has(entry.state),
+        (entry) =>
+          entry.repoPath === repoPath && entry.taskId === taskId && runningStates.has(entry.state),
       );
       if (!run) {
         run = await host.buildStart(repoPath, taskId);
-        await refreshTaskData(repoPath);
+        void refreshTaskData(repoPath).catch(() => undefined);
       }
       return {
         runtimeId: null,

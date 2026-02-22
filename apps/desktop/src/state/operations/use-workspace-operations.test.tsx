@@ -15,10 +15,35 @@ const flush = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+const createDeferred = <T,>() => {
+  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
+  let reject: ((reason?: unknown) => void) | null = null;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return {
+    promise,
+    resolve: (value: T) => resolve?.(value),
+    reject: (reason?: unknown) => reject?.(reason),
+  };
+};
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<T | "timeout"> => {
+  return Promise.race([
+    promise,
+    new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), timeoutMs);
+    }),
+  ]);
+};
+
 type HookArgs = Parameters<typeof useWorkspaceOperations>[0];
 
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+  let currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: HookArgs }) => {
     latest = useWorkspaceOperations(args);
@@ -30,7 +55,14 @@ const createHookHarness = (initialArgs: HookArgs) => {
   return {
     mount: async () => {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: initialArgs }));
+        renderer = TestRenderer.create(createElement(Harness, { args: currentArgs }));
+      });
+      await flush();
+    },
+    updateArgs: async (nextArgs: HookArgs) => {
+      currentArgs = nextArgs;
+      await act(async () => {
+        renderer?.update(createElement(Harness, { args: currentArgs }));
       });
       await flush();
     },
@@ -137,7 +169,17 @@ describe("use-workspace-operations", () => {
     const clearTaskData = mock(() => {});
     const clearActiveBeadsCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
-    const runtimeEnsure = mock(async () => ({
+    const runtimeDeferred = createDeferred<{
+      runtimeId: string;
+      repoPath: string;
+      taskId: string;
+      role: "build";
+      workingDirectory: string;
+      port: number;
+      startedAt: string;
+    }>();
+    const runtimeEnsure = mock(async () => runtimeDeferred.promise);
+    const runtimeValue = {
       runtimeId: "runtime-1",
       repoPath: "/repo-a",
       taskId: "task-1",
@@ -145,7 +187,7 @@ describe("use-workspace-operations", () => {
       workingDirectory: "/tmp/repo-a",
       port: 3030,
       startedAt: "2026-02-22T08:00:00.000Z",
-    }));
+    } as const;
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
     );
@@ -168,9 +210,20 @@ describe("use-workspace-operations", () => {
 
     try {
       await harness.mount();
-      await harness.run(async (value) => {
-        await value.selectWorkspace("/repo-a");
+      let selectPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        selectPromise = value.selectWorkspace("/repo-a");
       });
+
+      if (!selectPromise) {
+        throw new Error("selectWorkspace promise was not captured");
+      }
+
+      const selectResult = await withTimeout(selectPromise, 20);
+      expect(selectResult).toBeUndefined();
+      expect(workspaceList).toHaveBeenCalled();
+      runtimeDeferred.resolve(runtimeValue);
+      await selectPromise;
 
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).toHaveBeenCalled();
@@ -178,10 +231,75 @@ describe("use-workspace-operations", () => {
       expect(workspaceSelect).toHaveBeenCalledWith("/repo-a");
       expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a");
     } finally {
+      runtimeDeferred.resolve(runtimeValue);
       await harness.unmount();
       host.workspaceSelect = original.workspaceSelect;
       host.opencodeRepoRuntimeEnsure = original.opencodeRepoRuntimeEnsure;
       host.workspaceList = original.workspaceList;
+    }
+  });
+
+  test("ignores stale refresh branch updates after active repo changes", async () => {
+    const setActiveRepo = mock(() => {});
+    const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
+    const gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
+    const gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+    ]);
+
+    const original = {
+      gitGetCurrentBranch: host.gitGetCurrentBranch,
+      gitGetBranches: host.gitGetBranches,
+    };
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+
+    const baseArgs = {
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+    };
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      ...baseArgs,
+    });
+
+    try {
+      await harness.mount();
+
+      let refreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        refreshPromise = value.refreshBranches();
+      });
+
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+        ...baseArgs,
+      });
+
+      if (!refreshPromise) {
+        throw new Error("refreshBranches promise was not captured");
+      }
+
+      currentBranchDeferred.resolve({
+        name: "main",
+        detached: false,
+      });
+      await refreshPromise;
+      await flush();
+
+      expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
+      expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
+      expect(harness.getLatest().activeBranch).toBeNull();
+    } finally {
+      currentBranchDeferred.resolve({ name: undefined, detached: false });
+      await harness.unmount();
+      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      host.gitGetBranches = original.gitGetBranches;
     }
   });
 });

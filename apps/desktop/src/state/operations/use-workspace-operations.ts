@@ -51,6 +51,11 @@ export function useWorkspaceOperations({
   const branchSyncInFlightRef = useRef(false);
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
+  const activeRepoRef = useRef(activeRepo);
+
+  useEffect(() => {
+    activeRepoRef.current = activeRepo;
+  }, [activeRepo]);
 
   const applyBranchState = useCallback(
     (current: GitCurrentBranch, allBranches: GitBranch[]): void => {
@@ -84,13 +89,19 @@ export function useWorkspaceOperations({
           host.gitGetBranches(repoPath),
         ]);
 
-        if (branchRequestVersionRef.current !== requestVersion) {
+        if (
+          branchRequestVersionRef.current !== requestVersion ||
+          activeRepoRef.current !== repoPath
+        ) {
           return;
         }
 
         applyBranchState(current, allBranches);
       } finally {
-        if (branchRequestVersionRef.current === requestVersion) {
+        if (
+          branchRequestVersionRef.current === requestVersion &&
+          activeRepoRef.current === repoPath
+        ) {
           setIsLoadingBranches(false);
         }
       }
@@ -166,9 +177,10 @@ export function useWorkspaceOperations({
   );
 
   const probeExternalBranchChange = useCallback(async (): Promise<void> => {
+    const repoPath = activeRepoRef.current;
     if (
       !shouldProbeExternalBranchChange({
-        activeRepo,
+        activeRepo: repoPath,
         isSwitchingWorkspace,
         isSwitchingBranch,
         isLoadingBranches,
@@ -178,14 +190,17 @@ export function useWorkspaceOperations({
       return;
     }
 
-    if (!activeRepo) {
+    if (!repoPath) {
       return;
     }
 
     branchSyncInFlightRef.current = true;
 
     try {
-      const current = await host.gitGetCurrentBranch(activeRepo);
+      const current = await host.gitGetCurrentBranch(repoPath);
+      if (activeRepoRef.current !== repoPath) {
+        return;
+      }
       const hasChanged = hasBranchIdentityChanged(
         current,
         lastKnownBranchNameRef.current,
@@ -194,7 +209,7 @@ export function useWorkspaceOperations({
 
       if (hasChanged) {
         try {
-          await refreshBranches(false);
+          await refreshBranchesForRepo(repoPath);
         } catch (error) {
           swallowBranchProbeError(error);
         }
@@ -204,7 +219,7 @@ export function useWorkspaceOperations({
     } finally {
       branchSyncInFlightRef.current = false;
     }
-  }, [activeRepo, isLoadingBranches, isSwitchingBranch, isSwitchingWorkspace, refreshBranches]);
+  }, [isLoadingBranches, isSwitchingBranch, isSwitchingWorkspace, refreshBranchesForRepo]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -279,7 +294,10 @@ export function useWorkspaceOperations({
 
       try {
         await host.workspaceSelect(repoPath);
-        await host.opencodeRepoRuntimeEnsure(repoPath).catch((error) => {
+        void host.opencodeRepoRuntimeEnsure(repoPath).catch((error) => {
+          if (workspaceSwitchVersionRef.current !== switchVersion) {
+            return;
+          }
           toast.error("OpenCode server unavailable", {
             description: errorMessage(error),
           });

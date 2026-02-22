@@ -3,6 +3,10 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { createLoadAgentSessions } from "./load-sessions";
 
+type SessionHistory = Awaited<
+  ReturnType<Parameters<typeof createLoadAgentSessions>[0]["adapter"]["loadSessionHistory"]>
+>;
+
 const taskFixture: TaskCard = {
   id: "task-1",
   title: "Task",
@@ -225,5 +229,102 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(historyLoads).toBe(0);
     expect(todosLoads).toBe(0);
     expect(modelCatalogLoads).toBe(0);
+  });
+
+  test("starts history loading while prelude documents are still loading", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    const specDeferred = createDeferred<{ markdown: string; updatedAt: string | null }>();
+    const historyDeferred = createDeferred<SessionHistory>();
+    let historyStarted = 0;
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      const next = updater(current);
+      state = {
+        ...state,
+        [sessionId]: next,
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          historyStarted += 1;
+          return historyDeferred.promise;
+        },
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalSpecGet = hostModule.host.specGet;
+    const originalPlanGet = hostModule.host.planGet;
+    const originalQaGetReport = hostModule.host.qaGetReport;
+
+    hostModule.host.agentSessionsList = async () => [
+      {
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      },
+    ];
+    hostModule.host.specGet = async () => specDeferred.promise;
+    hostModule.host.planGet = async () => ({ markdown: "plan", updatedAt: null });
+    hostModule.host.qaGetReport = async () => ({ markdown: "qa", updatedAt: null });
+
+    try {
+      const loadPromise = loadAgentSessions("task-1");
+      await Promise.resolve();
+
+      expect(historyStarted).toBe(1);
+
+      specDeferred.resolve({ markdown: "spec", updatedAt: null });
+      historyDeferred.resolve([]);
+      await loadPromise;
+    } finally {
+      specDeferred.resolve({ markdown: "spec", updatedAt: null });
+      historyDeferred.resolve([]);
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.specGet = originalSpecGet;
+      hostModule.host.planGet = originalPlanGet;
+      hostModule.host.qaGetReport = originalQaGetReport;
+    }
+
+    expect(state["session-1"]?.messages.length).toBeGreaterThan(0);
   });
 });

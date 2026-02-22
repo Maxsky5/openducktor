@@ -77,7 +77,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
       };
     }
 
-    const runtimeInput = {
+    let runtimeInput = {
       baseUrl: toBaseUrl(runtime.port),
       workingDirectory: runtime.workingDirectory,
     };
@@ -91,10 +91,11 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
         try {
           await deps.stopRuntime(runtime.runtimeId);
           runtime = await deps.ensureRuntime(repoPath);
-          statusByServer = await deps.getMcpStatus({
+          runtimeInput = {
             baseUrl: toBaseUrl(runtime.port),
             workingDirectory: runtime.workingDirectory,
-          });
+          };
+          statusByServer = await deps.getMcpStatus(runtimeInput);
         } catch (retryError) {
           const mcpError = `Failed to query OpenCode MCP status: ${errorMessage(retryError)}`;
           return {
@@ -129,6 +130,10 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
       }
     }
 
+    const availableToolIdsPromise = deps
+      .listAvailableToolIds(runtimeInput)
+      .catch(() => [] as string[]);
+
     let { status: mcpServerStatus, error: mcpServerError } = resolveMcpStatusError(statusByServer);
 
     if (mcpServerStatus !== "connected") {
@@ -149,12 +154,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
       }
     }
 
-    let availableToolIds: string[] = [];
-    try {
-      availableToolIds = await deps.listAvailableToolIds(runtimeInput);
-    } catch {
-      availableToolIds = [];
-    }
+    const availableToolIds = await availableToolIdsPromise;
 
     const mcpOk = mcpServerStatus === "connected";
     const mcpError = mcpOk ? null : (mcpServerError ?? "OpenDucktor MCP is unavailable.");

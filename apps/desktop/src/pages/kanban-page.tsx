@@ -140,12 +140,13 @@ export function KanbanPage(): ReactElement {
                 }}
                 onHumanApprove={(taskId) => void humanApproveTask(taskId)}
                 onHumanRequestChanges={(taskId) => {
-                  void humanRequestChangesTask(taskId).then(() =>
+                  void (async () => {
+                    await humanRequestChangesTask(taskId);
                     openAgents(taskId, "build", {
                       scenario: "build_after_human_request_changes",
                       autostart: true,
-                    }),
-                  );
+                    });
+                  })();
                 }}
               />
             ))}
@@ -196,12 +197,13 @@ export function KanbanPage(): ReactElement {
         onResumeDeferred={(taskId) => void resumeDeferredTask(taskId)}
         onHumanApprove={(taskId) => void humanApproveTask(taskId)}
         onHumanRequestChanges={(taskId) => {
-          void humanRequestChangesTask(taskId).then(() =>
+          void (async () => {
+            await humanRequestChangesTask(taskId);
             openAgents(taskId, "build", {
               scenario: "build_after_human_request_changes",
               autostart: true,
-            }),
-          );
+            });
+          })();
         }}
         onDelete={(taskId, options) => deleteTask(taskId, options.deleteSubtasks)}
       />

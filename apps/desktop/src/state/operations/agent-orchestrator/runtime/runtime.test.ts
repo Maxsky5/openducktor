@@ -15,6 +15,30 @@ const runningRunFixture: RunSummary = {
   startedAt: "2026-02-22T08:00:00.000Z",
 };
 
+const createDeferred = <T>() => {
+  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
+  let reject: ((reason?: unknown) => void) | null = null;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return {
+    promise,
+    resolve: (value: T) => resolve?.(value),
+    reject: (reason?: unknown) => reject?.(reason),
+  };
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | "timeout"> => {
+  return Promise.race([
+    promise,
+    new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), timeoutMs);
+    }),
+  ]);
+};
+
 describe("agent-orchestrator-runtime", () => {
   test("reuses running build run without starting another", async () => {
     let refreshCalls = 0;
@@ -48,6 +72,39 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
+  test("does not reuse running build run from a different repo", async () => {
+    let refreshCalls = 0;
+    let buildStartCalls = 0;
+
+    const originalBuildStart = host.buildStart;
+    host.buildStart = async () => {
+      buildStartCalls += 1;
+      return runningRunFixture;
+    };
+
+    const foreignRepoRun: RunSummary = {
+      ...runningRunFixture,
+      repoPath: "/tmp/other-repo",
+      runId: "run-foreign",
+    };
+
+    try {
+      const ensureRuntime = createEnsureRuntime({
+        runsRef: { current: [foreignRepoRun] },
+        refreshTaskData: async () => {
+          refreshCalls += 1;
+        },
+      });
+
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build");
+      expect(runtime.runId).toBe("run-1");
+      expect(buildStartCalls).toBe(1);
+      expect(refreshCalls).toBe(1);
+    } finally {
+      host.buildStart = originalBuildStart;
+    }
+  });
+
   test("starts build run and refreshes task data when no run exists", async () => {
     let refreshCalls = 0;
     let buildStartCalls = 0;
@@ -71,6 +128,40 @@ describe("agent-orchestrator-runtime", () => {
       expect(buildStartCalls).toBe(1);
       expect(refreshCalls).toBe(1);
     } finally {
+      host.buildStart = originalBuildStart;
+    }
+  });
+
+  test("returns build runtime without waiting for refresh completion", async () => {
+    const refreshDeferred = createDeferred<void>();
+
+    const originalBuildStart = host.buildStart;
+    host.buildStart = async () => runningRunFixture;
+
+    try {
+      const ensureRuntime = createEnsureRuntime({
+        runsRef: { current: [] },
+        refreshTaskData: async () => refreshDeferred.promise,
+      });
+
+      const runtimePromise = ensureRuntime("/tmp/repo", "task-1", "build");
+      const raceResult = await withTimeout(runtimePromise, 20);
+      refreshDeferred.resolve();
+
+      expect(raceResult).toEqual({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      });
+      await expect(runtimePromise).resolves.toEqual({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      });
+    } finally {
+      refreshDeferred.resolve();
       host.buildStart = originalBuildStart;
     }
   });

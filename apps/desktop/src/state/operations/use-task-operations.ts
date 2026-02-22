@@ -8,7 +8,7 @@ import type {
   TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";
 import {
@@ -49,12 +49,20 @@ export function useTaskOperations({
   const [tasks, setTasks] = useState<TaskCard[]>([]);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const activeRepoRef = useRef(activeRepo);
+
+  useEffect(() => {
+    activeRepoRef.current = activeRepo;
+  }, [activeRepo]);
 
   const refreshTaskData = useCallback(async (repoPath: string): Promise<void> => {
     const [taskList, runList] = await Promise.all([
       host.tasksList(repoPath),
       host.runsList(repoPath),
     ]);
+    if (activeRepoRef.current !== repoPath) {
+      return;
+    }
     setTasks(toVisibleTasks(taskList));
     setRuns(runList);
   }, []);

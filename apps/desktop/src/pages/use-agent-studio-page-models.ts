@@ -328,20 +328,20 @@ export function useAgentStudioPageModels({
     void startScenarioKickoff();
   }, [startScenarioKickoff]);
 
-  const activeTodoPanelCollapsed = activeSession
-    ? (todoPanelCollapsedBySession[activeSession.sessionId] ?? false)
+  const activeSessionId = activeSession?.sessionId ?? null;
+  const activeTodoPanelCollapsed = activeSessionId
+    ? (todoPanelCollapsedBySession[activeSessionId] ?? false)
     : false;
 
   const handleToggleTodoPanel = useCallback((): void => {
-    if (!activeSession) {
+    if (!activeSessionId) {
       return;
     }
-    const collapsed = todoPanelCollapsedBySession[activeSession.sessionId] ?? false;
     setTodoPanelCollapsedBySession((current) => ({
       ...current,
-      [activeSession.sessionId]: !collapsed,
+      [activeSessionId]: !(current[activeSessionId] ?? false),
     }));
-  }, [activeSession, todoPanelCollapsedBySession]);
+  }, [activeSessionId]);
 
   const handleSend = useCallback((): void => {
     void onSend();

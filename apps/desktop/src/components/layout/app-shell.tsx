@@ -1,7 +1,6 @@
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/open-repository-modal";
 import { RepositorySwitcher } from "@/components/features/repository-switcher";
-import { SettingsModal } from "@/components/features/settings-modal";
 import {
   AppBrand,
   BranchSwitcher,
@@ -12,8 +11,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { useTasksState, useWorkspaceState } from "@/state";
 import { FolderOpen } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useState } from "react";
+import { type ReactElement, Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
+
+const SettingsModal = lazy(async () => {
+  const module = await import("@/components/features/settings-modal");
+  return { default: module.SettingsModal };
+});
 
 export function AppShell(): ReactElement {
   const { activeRepo, workspaces } = useWorkspaceState();
@@ -76,7 +80,15 @@ export function AppShell(): ReactElement {
             </div>
 
             <div className="mt-3 border-t border-slate-200 pt-3">
-              <SettingsModal triggerClassName="w-full justify-start" triggerSize="default" />
+              <Suspense
+                fallback={
+                  <Button type="button" variant="outline" className="w-full justify-start" disabled>
+                    Settings
+                  </Button>
+                }
+              >
+                <SettingsModal triggerClassName="w-full justify-start" triggerSize="default" />
+              </Suspense>
             </div>
           </aside>
 

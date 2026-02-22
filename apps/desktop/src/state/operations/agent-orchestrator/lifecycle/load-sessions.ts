@@ -231,44 +231,48 @@ export const createLoadAgentSessions = ({
           return;
         }
 
+        const historyPromise = adapter
+          .loadSessionHistory({
+            baseUrl,
+            workingDirectory,
+            externalSessionId: record.externalSessionId,
+            limit: 2000,
+          })
+          .then((history) => ({ ok: true as const, history }))
+          .catch(() => ({ ok: false as const }));
+
         const preludeMessages = await buildPreludeMessages(record);
         if (isStaleRepoOperation()) {
           return;
         }
 
-        try {
-          const history = await adapter.loadSessionHistory({
+        const historyResult = await historyPromise;
+        if (isStaleRepoOperation()) {
+          return;
+        }
+
+        if (!historyResult.ok) {
+          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
+          return;
+        }
+
+        updateSession(
+          record.sessionId,
+          (current) => ({
+            ...current,
             baseUrl,
             workingDirectory,
-            externalSessionId: record.externalSessionId,
-            limit: 2000,
-          });
-          if (isStaleRepoOperation()) {
-            return;
-          }
-          updateSession(
-            record.sessionId,
-            (current) => ({
-              ...current,
-              baseUrl,
-              workingDirectory,
-              messages: [
-                ...preludeMessages,
-                ...historyToChatMessages(history, {
-                  role: record.role,
-                  selectedModel: normalizePersistedSelection(record.selectedModel),
-                }),
-              ],
-            }),
-            { persist: false },
-          );
-          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
-        } catch {
-          if (isStaleRepoOperation()) {
-            return;
-          }
-          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
-        }
+            messages: [
+              ...preludeMessages,
+              ...historyToChatMessages(historyResult.history, {
+                role: record.role,
+                selectedModel: normalizePersistedSelection(record.selectedModel),
+              }),
+            ],
+          }),
+          { persist: false },
+        );
+        warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
       }),
     );
   };

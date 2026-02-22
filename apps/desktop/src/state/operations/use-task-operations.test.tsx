@@ -15,6 +15,21 @@ const flush = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+const createDeferred = <T,>() => {
+  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
+  let reject: ((reason?: unknown) => void) | null = null;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return {
+    promise,
+    resolve: (value: T) => resolve?.(value),
+    reject: (reason?: unknown) => reject?.(reason),
+  };
+};
+
 const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({
   id,
   title: id,
@@ -134,6 +149,75 @@ describe("use-task-operations", () => {
       expect(tasksList).toHaveBeenCalledWith("/repo");
       expect(runsList).toHaveBeenCalledWith("/repo");
     } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("ignores stale refreshTaskData results after active repo switches", async () => {
+    const deferredTasks = createDeferred<TaskCard[]>();
+    const deferredRuns = createDeferred<RunSummary[]>();
+    const tasksList = mock(async () => deferredTasks.promise);
+    const runsList = mock(async () => deferredRuns.promise);
+
+    const original = {
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const refreshBeadsCheckForRepo = async (): Promise<BeadsCheck> => ({
+      beadsOk: true,
+      beadsPath: "/repo-a/.beads",
+      beadsError: null,
+    });
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      refreshBeadsCheckForRepo,
+    });
+
+    try {
+      await harness.mount();
+
+      let refreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        refreshPromise = value.refreshTaskData("/repo-a");
+      });
+
+      if (!refreshPromise) {
+        throw new Error("refreshTaskData promise was not captured");
+      }
+
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+        refreshBeadsCheckForRepo,
+      });
+
+      deferredTasks.resolve([makeTask("A", "open")]);
+      deferredRuns.resolve([
+        {
+          runId: "run-a",
+          repoPath: "/repo-a",
+          taskId: "A",
+          branch: "feature/a",
+          worktreePath: "/tmp/repo-a",
+          port: 3100,
+          state: "running",
+          lastMessage: null,
+          startedAt: "2026-02-22T08:00:00.000Z",
+        },
+      ]);
+
+      await refreshPromise;
+      await flush();
+
+      expect(harness.getLatest().tasks).toEqual([]);
+      expect(harness.getLatest().runs).toEqual([]);
+    } finally {
+      deferredTasks.resolve([]);
+      deferredRuns.resolve([]);
       await harness.unmount();
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;

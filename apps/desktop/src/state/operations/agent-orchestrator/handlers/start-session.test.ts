@@ -27,6 +27,30 @@ const taskFixture: TaskCard = {
   createdAt: "2026-02-22T08:00:00.000Z",
 };
 
+const createDeferred = <T>() => {
+  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
+  let reject: ((reason?: unknown) => void) | null = null;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return {
+    promise,
+    resolve: (value: T) => resolve?.(value),
+    reject: (reason?: unknown) => reject?.(reason),
+  };
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | "timeout"> => {
+  return Promise.race([
+    promise,
+    new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), timeoutMs);
+    }),
+  ]);
+};
+
 describe("agent-orchestrator/handlers/start-session", () => {
   test("throws when no active repo is selected", () => {
     const start = createStartAgentSession({
@@ -58,9 +82,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow("Select a workspace first.");
   });
 
-  test("reuses an existing in-flight start promise", () => {
+  test("reuses an existing in-flight start promise", async () => {
     const inFlight = Promise.resolve("session-in-flight");
-    const inFlightMap = new Map<string, Promise<string>>([["/tmp/repo::task-1", inFlight]]);
+    const inFlightMap = new Map<string, Promise<string>>([["/tmp/repo::task-1::build", inFlight]]);
     const start = createStartAgentSession({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
@@ -87,10 +111,85 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sendAgentMessage: async () => {},
     });
 
-    expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("session-in-flight");
+    await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("session-in-flight");
   });
 
-  test("reuses most recent in-memory session for same task and role", () => {
+  test("does not dedupe in-flight starts across different roles", async () => {
+    const startBuildDeferred = createDeferred<void>();
+    const startedRoles: string[] = [];
+    const buildStarted = createDeferred<void>();
+    const plannerStarted = createDeferred<void>();
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => {
+      startedRoles.push(input.role);
+      if (input.role === "build") {
+        buildStarted.resolve();
+        await startBuildDeferred.promise;
+      } else {
+        plannerStarted.resolve();
+      }
+      return {
+        sessionId: `${input.role}-session`,
+        externalSessionId: `${input.role}-external`,
+        startedAt: "2026-02-22T08:00:10.000Z",
+        role: input.role,
+        scenario: input.role === "planner" ? "planner_initial" : "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSession({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: "runtime-1",
+        runId: null,
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const buildPromise = start({ taskId: "task-1", role: "build" });
+      await Promise.resolve();
+      const plannerPromise = start({ taskId: "task-1", role: "planner" });
+      await buildStarted.promise;
+      const plannerStartResult = await withTimeout(plannerStarted.promise, 50);
+
+      expect(startedRoles).toEqual(["build", "planner"]);
+      expect(plannerStartResult).toBeUndefined();
+
+      startBuildDeferred.resolve();
+      await expect(buildPromise).resolves.toBe("build-session");
+      await expect(plannerPromise).resolves.toBe("planner-session");
+    } finally {
+      startBuildDeferred.resolve();
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("reuses most recent in-memory session for same task and role", async () => {
     let persistedListCalls = 0;
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => {
@@ -149,7 +248,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("newer");
+      await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("newer");
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -316,7 +415,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
 
     try {
-      expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("persisted-2");
+      await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("persisted-2");
       expect(loadAgentSessionsCalls).toBe(1);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -566,6 +665,139 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(refreshCalls).toBe(1);
       expect(Object.keys(sessionsState)).toContain("session-created");
     } finally {
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("starts runtime and default-model loading before documents resolve", async () => {
+    const docsDeferred = createDeferred<{
+      specMarkdown: string;
+      planMarkdown: string;
+      qaMarkdown: string;
+    }>();
+    let runtimeCalls = 0;
+    let defaultModelCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => ({
+      sessionId: "session-created",
+      externalSessionId: "external-created",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+    });
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSession({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => {
+        runtimeCalls += 1;
+        return {
+          runtimeId: null,
+          runId: "run-1",
+          baseUrl: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadTaskDocuments: async () => docsDeferred.promise,
+      loadRepoDefaultModel: async () => {
+        defaultModelCalls += 1;
+        return null;
+      },
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const startPromise = start({ taskId: "task-1", role: "build" });
+      await Promise.resolve();
+
+      expect(runtimeCalls).toBe(1);
+      expect(defaultModelCalls).toBe(1);
+
+      docsDeferred.resolve({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" });
+      await expect(startPromise).resolves.toBe("session-created");
+    } finally {
+      docsDeferred.resolve({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" });
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("does not block start completion on kickoff refresh", async () => {
+    const refreshDeferred = createDeferred<void>();
+    let refreshCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => ({
+      sessionId: "session-created",
+      externalSessionId: "external-created",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+    });
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSession({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {
+        refreshCalls += 1;
+        return refreshDeferred.promise;
+      },
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const startPromise = start({ taskId: "task-1", role: "build", sendKickoff: true });
+      const raceResult = await withTimeout(startPromise, 20);
+      refreshDeferred.resolve();
+
+      expect(raceResult).toBe("session-created");
+      expect(refreshCalls).toBe(1);
+      await expect(startPromise).resolves.toBe("session-created");
+    } finally {
+      refreshDeferred.resolve();
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }

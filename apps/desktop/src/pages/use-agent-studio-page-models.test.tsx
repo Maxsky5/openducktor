@@ -38,9 +38,12 @@ const createTask = (): TaskCard => ({
   createdAt: "2026-02-22T12:00:00.000Z",
 });
 
-const createSession = (): AgentSessionState => ({
-  sessionId: "session-1",
-  externalSessionId: "external-1",
+const createSession = (
+  sessionId = "session-1",
+  externalSessionId = "external-1",
+): AgentSessionState => ({
+  sessionId,
+  externalSessionId,
   taskId: "task-1",
   role: "spec",
   scenario: "spec_initial",
@@ -75,6 +78,7 @@ const flush = async (): Promise<void> => {
 
 const createHookHarness = (initialProps: HookArgs) => {
   let latest: HookState | null = null;
+  let currentProps = initialProps;
 
   const Harness = (props: HookArgs): ReactElement | null => {
     latest = useAgentStudioPageModels(props);
@@ -85,7 +89,15 @@ const createHookHarness = (initialProps: HookArgs) => {
 
   const mount = async (): Promise<void> => {
     await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, initialProps));
+      renderer = TestRenderer.create(createElement(Harness, currentProps));
+      await flush();
+    });
+  };
+
+  const update = async (nextProps: HookArgs): Promise<void> => {
+    currentProps = nextProps;
+    await act(async () => {
+      renderer?.update(createElement(Harness, currentProps));
       await flush();
     });
   };
@@ -104,7 +116,7 @@ const createHookHarness = (initialProps: HookArgs) => {
     });
   };
 
-  return { mount, getLatest, unmount };
+  return { mount, update, getLatest, unmount };
 };
 
 describe("useAgentStudioPageModels", () => {
@@ -184,6 +196,95 @@ describe("useAgentStudioPageModels", () => {
     expect(onKickoff).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
+
+    await harness.unmount();
+  });
+
+  test("tracks todo panel collapse state per active session", async () => {
+    const sessionA = createSession("session-a", "external-a");
+    const sessionB = createSession("session-b", "external-b");
+    const commonProps: Omit<HookArgs, "sessionsForTask" | "activeSession"> = {
+      taskId: "task-1",
+      selectedTask: createTask(),
+      contextSessionsLength: 2,
+      taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
+      availableTabTasks: [createTask()],
+      isLoadingTasks: false,
+      onCreateTab: () => {},
+      onCloseTab: () => {},
+      handleWorkflowStepSelect: () => {},
+      handleSessionSelectionChange: () => {},
+      handleCreateSession: () => {},
+      specDoc: createDocumentState("spec"),
+      planDoc: createDocumentState(""),
+      qaDoc: createDocumentState(""),
+      agentStudioReady: true,
+      agentStudioBlockedReason: "",
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+      isStarting: false,
+      isSending: false,
+      isSessionWorking: false,
+      canKickoffNewSession: false,
+      kickoffLabel: "Start Spec",
+      canStopSession: true,
+      startScenarioKickoff: async () => {},
+      onSend: async () => {},
+      onSubmitQuestionAnswers: async () => {},
+      isSubmittingQuestionByRequestId: {},
+      selectedModelSelection: null,
+      isSelectionCatalogLoading: false,
+      agentOptions: [{ value: "spec", label: "Spec" }],
+      modelOptions: [],
+      modelGroups: [],
+      variantOptions: [],
+      onSelectAgent: () => {},
+      onSelectModel: () => {},
+      onSelectVariant: () => {},
+      activeSessionAgentColors: {},
+      activeSessionContextUsage: null,
+      isSubmittingPermissionByRequestId: {},
+      permissionReplyErrorByRequestId: {},
+      onReplyPermission: async () => {},
+      input: "",
+      setInput: () => {},
+      stopAgentSession: async () => {},
+    };
+
+    const harness = createHookHarness({
+      ...commonProps,
+      sessionsForTask: [sessionA, sessionB],
+      activeSession: sessionA,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
+
+    await act(async () => {
+      harness.getLatest().agentChatModel.thread.onToggleTodoPanel();
+      await flush();
+    });
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
+
+    await harness.update({
+      ...commonProps,
+      sessionsForTask: [sessionA, sessionB],
+      activeSession: sessionB,
+    });
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
+
+    await act(async () => {
+      harness.getLatest().agentChatModel.thread.onToggleTodoPanel();
+      await flush();
+    });
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
+
+    await harness.update({
+      ...commonProps,
+      sessionsForTask: [sessionA, sessionB],
+      activeSession: sessionA,
+    });
+    expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
     await harness.unmount();
   });

@@ -669,7 +669,7 @@ describe("use-agent-orchestrator-operations", () => {
     });
   });
 
-  test("rejects stale start when repo changes during kickoff refresh", async () => {
+  test("keeps kickoff start successful when repo changes during background refresh", async () => {
     await withSuppressedRendererWarning(async () => {
       let startCalls = 0;
       let refreshCalls = 0;
@@ -752,18 +752,8 @@ describe("use-agent-orchestrator-operations", () => {
         await harness.updateArgs({ activeRepo: "/tmp/repo-b" });
         refreshDeferred.resolve();
 
-        let staleError: unknown = null;
-        try {
-          await startPromise;
-        } catch (error) {
-          staleError = error;
-        }
-
-        if (!(staleError instanceof Error)) {
-          throw new Error("Expected kickoff stale start to reject with Error");
-        }
-
-        expect(staleError.message).toContain("Workspace changed while starting session.");
+        await expect(startPromise).resolves.toBe("session-kickoff");
+        expect(refreshCalls).toBe(1);
         expect(startCalls).toBe(1);
       } finally {
         await harness.unmount();

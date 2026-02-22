@@ -105,7 +105,7 @@ export const createStartAgentSession = ({
     }
 
     const repoPath = activeRepo;
-    const inFlightKey = `${repoPath}::${taskId}`;
+    const inFlightKey = `${repoPath}::${taskId}::${role}`;
     const existingInFlight = inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
@@ -146,12 +146,16 @@ export const createStartAgentSession = ({
         throw new Error(`Task not found: ${taskId}`);
       }
 
-      const docs = await loadTaskDocuments(repoPath, taskId);
+      const docsPromise = loadTaskDocuments(repoPath, taskId);
+      const runtimePromise = ensureRuntime(repoPath, taskId, role);
+      const defaultModelSelectionPromise = loadRepoDefaultModel(repoPath, role);
+
+      const docs = await docsPromise;
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       const resolvedScenario = scenario ?? inferScenario(role, task, docs);
-      const runtime = await ensureRuntime(repoPath, taskId, role);
+      const runtime = await runtimePromise;
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      const defaultModelSelection = await loadRepoDefaultModel(repoPath, role);
+      const defaultModelSelection = await defaultModelSelectionPromise;
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       const systemPrompt = buildAgentSystemPrompt({
         role,
@@ -262,8 +266,7 @@ export const createStartAgentSession = ({
         throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
         await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario, task.id));
         throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-        await refreshTaskData(repoPath);
-        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+        void refreshTaskData(repoPath).catch(() => undefined);
       }
 
       return summary.sessionId;
