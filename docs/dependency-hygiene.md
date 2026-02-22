@@ -26,6 +26,10 @@ Dependabot and `knip` solve different problems:
 
 This check runs on pull requests and must pass.
 
+Implementation notes:
+
+- Workflow: `.github/workflows/dependency-hygiene.yml`
+
 ## 2) Unused Export Detection (Advisory)
 
 - Command: `bun run deps:unused`
@@ -41,9 +45,13 @@ The export section runs with `--no-exit-code` so teams can review and clean prog
 - Backed by: `bun outdated`
 - Output: package versions that can be upgraded
 
+Implementation notes:
+
+- Dedicated report workflow: `.github/workflows/dependency-hygiene-report.yml`
+
 ## Cadence
 
-- Weekly (automated): Dependabot creates update PRs, and CI runs `bun run deps:unused` plus `bun run deps:outdated` reports.
+- Weekly (automated): Dependabot creates update PRs, and report CI publishes `bun run deps:unused:exports` plus `bun run deps:outdated` outputs.
 - Per PR (automated): CI runs `bun run deps:check` to catch new dependency drift.
 - Monthly (manual): open a dependency refresh PR for safe patch/minor updates.
 - Urgent security advisories: process outside cadence and patch immediately.

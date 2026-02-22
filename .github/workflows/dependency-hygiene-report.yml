@@ -1,0 +1,64 @@
+name: Dependency Hygiene Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: 1.3.5
+
+jobs:
+  outdated-report:
+    name: Outdated Dependencies Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate outdated dependency report
+        run: bun run deps:outdated > outdated-report.txt
+
+      - name: Generate unused exports report
+        run: bun run deps:unused:exports > unused-exports-report.txt
+
+      - name: Publish report artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dependency-hygiene-reports
+          path: |
+            outdated-report.txt
+            unused-exports-report.txt
+
+      - name: Add report to workflow summary
+        run: |
+          {
+            echo "## bun outdated"
+            echo
+            echo '```'
+            cat outdated-report.txt
+            echo '```'
+            echo
+            echo "## knip unused exports"
+            echo
+            echo '```'
+            cat unused-exports-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
