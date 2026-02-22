@@ -338,6 +338,22 @@ export function useAgentStudioSessionActions({
         return;
       }
 
+      const previousSelection: QueryUpdate = {
+        task: activeSession?.taskId ?? taskId,
+        session: activeSession?.sessionId,
+        agent: role,
+        scenario,
+        autostart: undefined,
+      };
+
+      updateQuery({
+        task: taskId,
+        session: undefined,
+        agent: nextRole,
+        scenario: nextScenario,
+        autostart: undefined,
+      });
+
       const startPromise = (async (): Promise<string | undefined> => {
         try {
           setIsStarting(true);
@@ -348,6 +364,7 @@ export function useAgentStudioSessionActions({
             sendKickoff: true,
           });
           if (!sessionId) {
+            updateQuery(previousSelection);
             return undefined;
           }
           updateQuery({
@@ -358,6 +375,9 @@ export function useAgentStudioSessionActions({
             autostart: undefined,
           });
           return sessionId;
+        } catch {
+          updateQuery(previousSelection);
+          return undefined;
         } finally {
           setIsStarting(false);
         }
@@ -376,6 +396,8 @@ export function useAgentStudioSessionActions({
       isActiveTaskHydrated,
       isSessionWorking,
       selectedTask,
+      role,
+      scenario,
       startAgentSession,
       taskId,
       updateQuery,

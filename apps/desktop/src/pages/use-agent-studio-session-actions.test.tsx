@@ -66,6 +66,21 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
+const createDeferred = <T,>() => {
+  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
+  let reject: ((reason?: unknown) => void) | null = null;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return {
+    promise,
+    resolve: (value: T) => resolve?.(value),
+    reject: (reason?: unknown) => reject?.(reason),
+  };
+};
+
 const createHookHarness = (initialProps: HookArgs) => {
   let latest: HookState | null = null;
   const currentProps = initialProps;
@@ -220,5 +235,108 @@ describe("useAgentStudioSessionActions", () => {
     expect(answerAgentQuestion).toHaveBeenCalledWith("session-9", "req-1", [["yes"]]);
 
     await harness.unmount();
+  });
+
+  test("handleCreateSession updates query immediately, then targets created session", async () => {
+    const deferredStart = createDeferred<string>();
+    const startAgentSession = mock(async () => deferredStart.promise);
+    const updateCalls: Array<Record<string, string | undefined>> = [];
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      scenario: "spec_initial",
+      activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
+      selectedTask: createTask({ availableActions: ["set_plan"] }),
+      startAgentSession,
+      updateQuery: (updates) => {
+        updateCalls.push(updates);
+      },
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleCreateSession("planner", "planner_initial");
+      });
+
+      expect(updateCalls[0]).toEqual({
+        task: "task-1",
+        session: undefined,
+        agent: "planner",
+        scenario: "planner_initial",
+        autostart: undefined,
+      });
+      expect(startAgentSession).toHaveBeenCalledWith({
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        sendKickoff: true,
+      });
+
+      await harness.run(async () => {
+        deferredStart.resolve("session-plan");
+        await deferredStart.promise;
+      });
+
+      expect(updateCalls).toContainEqual({
+        task: "task-1",
+        session: "session-plan",
+        agent: "planner",
+        scenario: "planner_initial",
+        autostart: undefined,
+      });
+    } finally {
+      deferredStart.resolve("session-plan");
+      await harness.unmount();
+    }
+  });
+
+  test("handleCreateSession restores previous query selection on start failure", async () => {
+    const deferredStart = createDeferred<string>();
+    const startAgentSession = mock(async () => deferredStart.promise);
+    const updateCalls: Array<Record<string, string | undefined>> = [];
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      scenario: "spec_initial",
+      activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
+      selectedTask: createTask({ availableActions: ["set_plan"] }),
+      startAgentSession,
+      updateQuery: (updates) => {
+        updateCalls.push(updates);
+      },
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleCreateSession("planner", "planner_initial");
+      });
+
+      await harness.run(async () => {
+        deferredStart.reject(new Error("start failed"));
+        await Promise.resolve();
+      });
+
+      expect(updateCalls[0]).toEqual({
+        task: "task-1",
+        session: undefined,
+        agent: "planner",
+        scenario: "planner_initial",
+        autostart: undefined,
+      });
+      expect(updateCalls).toContainEqual({
+        task: "task-1",
+        session: "session-spec",
+        agent: "spec",
+        scenario: "spec_initial",
+        autostart: undefined,
+      });
+    } finally {
+      deferredStart.resolve("session-plan");
+      await harness.unmount();
+    }
   });
 });
