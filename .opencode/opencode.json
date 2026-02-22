@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["github-copilot", "google"],
+  "mcp": {
+    "chrome-devtools": {
+      "enabled": false
+    },
+    "vibe_kanban": {
+      "type": "local",
+      "command": ["npx", "-y", "vibe-kanban@latest", "--mcp"],
+      "enabled": true
+    }
+  }
+}
