@@ -94,6 +94,9 @@ bun install
 bun run typecheck
 bun run build
 bun run test
+bun run deps:check
+bun run deps:unused
+bun run deps:outdated
 
 # frontend (browser only)
 bun run --filter @openducktor/desktop dev
@@ -107,6 +110,15 @@ bun run tauri:dev
 # tauri host rust check only
 cd apps/desktop/src-tauri && cargo check
 ```
+
+## Dependency Hygiene
+
+- Blocking unused dependency check: `bun run deps:check`
+- Non-blocking unused export report: `bun run deps:unused`
+- Outdated dependency report: `bun run deps:outdated`
+- Automated update PRs: `.github/dependabot.yml`
+- CI automation: `.github/workflows/dependency-hygiene.yml`
+- Review and upgrade cadence: `docs/dependency-hygiene.md`
 
 ## IPC Commands (Implemented)
 
