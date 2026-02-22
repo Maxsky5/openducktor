@@ -77,7 +77,7 @@ export function OpenRepositoryModal({
     >
       <DialogContent
         className="max-w-3xl"
-        showCloseButton={canClose}
+        {...(canClose ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
           if (!canClose) {
             event.preventDefault();

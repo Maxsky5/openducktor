@@ -1,23 +1,12 @@
 import {
-  ISSUE_TYPE_OPTIONS,
   IssueTypeGrid,
   TaskComposerStepper,
   TaskDetailsForm,
   TaskDocumentEditor,
   TaskEditSectionSwitcher,
-  collectKnownLabels,
-  toComposerState,
-  toParentComboboxOptions,
-  toPriorityComboboxOptions,
-  useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
-import type { TaskDocumentSection } from "@/components/features/task-composer";
-import {
-  hasUnsavedDocumentChanges,
-  isDocumentSection,
-  toTaskCreateInput,
-  toTaskUpdatePatch,
-} from "@/components/features/task-create-modal-model";
+import { TaskCreateDiscardDialog } from "@/components/features/task-create/task-create-discard-dialog";
+import { useTaskCreateModalController } from "@/components/features/task-create/use-task-create-modal-controller";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,16 +17,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
-import type {
-  ComposerMode,
-  ComposerState,
-  ComposerStep,
-  EditTaskSection,
-} from "@/types/task-composer";
 import type { TaskCard } from "@openducktor/contracts";
 import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement } from "react";
 
 type TaskCreateModalProps = {
   open: boolean;
@@ -46,293 +28,69 @@ type TaskCreateModalProps = {
   task?: TaskCard | null;
 };
 
-type DocumentSection = TaskDocumentSection;
-
-type PendingDiscardIntent =
-  | { type: "close-modal" }
-  | { type: "switch-section"; next: EditTaskSection };
-
 export function TaskCreateModal({
   open,
   onOpenChange,
   tasks,
   task = null,
 }: TaskCreateModalProps): ReactElement {
-  const { activeRepo } = useWorkspaceState();
-  const { createTask, updateTask } = useTasksState();
-  const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
-  const mode: ComposerMode = task ? "edit" : "create";
-  const taskId = task?.id ?? null;
-
-  const [step, setStep] = useState<ComposerStep>("type");
-  const [editSection, setEditSection] = useState<EditTaskSection>("details");
-  const [state, setState] = useState<ComposerState>(() => toComposerState(task));
-  const [error, setError] = useState<string | null>(null);
-  const [documentError, setDocumentError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSavingDocument, setIsSavingDocument] = useState<DocumentSection | null>(null);
-  const [pendingDiscardIntent, setPendingDiscardIntent] = useState<PendingDiscardIntent | null>(
-    null,
-  );
-  const previousModalContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
-  const activeDocumentSection =
-    mode === "edit" && isDocumentSection(editSection) ? editSection : null;
-
-  const {
-    documents,
-    views,
-    loadSection: loadDocumentSection,
-    setView: setDocumentView,
-    updateDraft: updateDocumentDraft,
-    discardDraft: discardDocumentDraft,
-    applySaved: applySavedDocument,
-  } = useTaskDocumentEditorState({
+  const controller = useTaskCreateModalController({
     open,
-    taskId,
-    activeSection: activeDocumentSection,
-    loadSpecDocument,
-    loadPlanDocument,
+    onOpenChange,
+    tasks,
+    task,
   });
-
-  useEffect(() => {
-    const contextChanged =
-      previousModalContext.current?.open !== open ||
-      previousModalContext.current?.taskId !== taskId;
-    if (!contextChanged) {
-      return;
-    }
-
-    previousModalContext.current = { open, taskId };
-    if (!open) {
-      return;
-    }
-
-    setState(toComposerState(task));
-    setStep(task ? "details" : "type");
-    setEditSection("details");
-    setError(null);
-    setDocumentError(null);
-    setIsSubmitting(false);
-    setIsSavingDocument(null);
-    setPendingDiscardIntent(null);
-  }, [open, task, taskId]);
-
-  const selectedType = useMemo(
-    () => ISSUE_TYPE_OPTIONS.find((option) => option.value === state.issueType),
-    [state.issueType],
-  );
-  const canSelectParent = selectedType?.supportsParent ?? true;
-
-  useEffect(() => {
-    if (!canSelectParent && state.parentId.length > 0) {
-      setState((current) => ({ ...current, parentId: "" }));
-    }
-  }, [canSelectParent, state.parentId]);
-
-  const parentCandidates = useMemo(
-    () =>
-      tasks
-        .filter((entry) => entry.id !== task?.id)
-        .filter((entry) => entry.issueType === "epic")
-        .sort((left, right) => left.id.localeCompare(right.id)),
-    [task?.id, tasks],
-  );
-  const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
-  const priorityComboboxOptions = useMemo(() => toPriorityComboboxOptions(), []);
-  const parentComboboxOptions = useMemo(
-    () => toParentComboboxOptions(parentCandidates),
-    [parentCandidates],
-  );
-
-  const isSpecDirty =
-    documents.spec.loaded && documents.spec.draftMarkdown !== documents.spec.serverMarkdown;
-  const isPlanDirty =
-    documents.plan.loaded && documents.plan.draftMarkdown !== documents.plan.serverMarkdown;
-  const activeDocument = activeDocumentSection ? documents[activeDocumentSection] : null;
-  const activeDraft = activeDocument?.draftMarkdown ?? "";
-  const hasUnsavedActiveDocument = hasUnsavedDocumentChanges(activeDocumentSection, {
-    isSpecDirty,
-    isPlanDirty,
-  });
-
-  const updateState = (patch: Partial<ComposerState>): void => {
-    setState((current) => ({ ...current, ...patch }));
-  };
-
-  const discardCurrentDocumentDraft = (): void => {
-    if (!activeDocumentSection) {
-      return;
-    }
-
-    discardDocumentDraft(activeDocumentSection);
-    setDocumentError(null);
-  };
-
-  const close = (): void => {
-    if (isSubmitting || isSavingDocument) {
-      return;
-    }
-
-    if (hasUnsavedActiveDocument) {
-      setPendingDiscardIntent({ type: "close-modal" });
-      return;
-    }
-
-    onOpenChange(false);
-  };
-
-  const requestSectionChange = (next: EditTaskSection): void => {
-    if (next === editSection || isSubmitting || isSavingDocument) {
-      return;
-    }
-    if (hasUnsavedActiveDocument) {
-      setPendingDiscardIntent({ type: "switch-section", next });
-      return;
-    }
-
-    setEditSection(next);
-    setDocumentError(null);
-    if (isDocumentSection(next)) {
-      void loadDocumentSection(next);
-    }
-  };
-
-  const submit = async (): Promise<void> => {
-    if (!activeRepo) {
-      setError("Select a repository before creating tasks.");
-      return;
-    }
-    if (!state.title.trim()) {
-      setError("Title is required.");
-      return;
-    }
-
-    setError(null);
-    setDocumentError(null);
-    setIsSubmitting(true);
-    try {
-      if (mode === "create") {
-        const input = toTaskCreateInput(state, canSelectParent);
-        await createTask(input);
-      } else if (task) {
-        const patch = toTaskUpdatePatch(state, canSelectParent);
-        await updateTask(task.id, patch);
-      }
-
-      onOpenChange(false);
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const saveActiveDocument = async (): Promise<void> => {
-    if (!taskId || !activeDocumentSection || !activeDocument) {
-      return;
-    }
-
-    const markdown = activeDocument.draftMarkdown.trim();
-    setError(null);
-    setDocumentError(null);
-    setIsSavingDocument(activeDocumentSection);
-    try {
-      const saved =
-        activeDocumentSection === "spec"
-          ? await saveSpecDocument(taskId, markdown)
-          : await savePlanDocument(taskId, markdown);
-      applySavedDocument(activeDocumentSection, markdown, saved.updatedAt);
-    } catch (reason) {
-      setDocumentError(reason instanceof Error ? reason.message : "Unable to save document.");
-    } finally {
-      setIsSavingDocument(null);
-    }
-  };
-
-  const confirmDiscard = (): void => {
-    if (!pendingDiscardIntent) {
-      return;
-    }
-
-    discardCurrentDocumentDraft();
-    if (pendingDiscardIntent.type === "close-modal") {
-      onOpenChange(false);
-    } else {
-      setEditSection(pendingDiscardIntent.next);
-      setDocumentError(null);
-      if (isDocumentSection(pendingDiscardIntent.next)) {
-        void loadDocumentSection(pendingDiscardIntent.next);
-      }
-    }
-    setPendingDiscardIntent(null);
-  };
-
-  const isBusy = isSubmitting || isSavingDocument !== null;
-  const isTypeStepVisible = mode === "create" && step === "type";
-  const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
-  const footerError = isEditingDocument ? documentError : error;
-  const isActiveDocumentDirty =
-    activeDocumentSection === "spec"
-      ? isSpecDirty
-      : activeDocumentSection === "plan"
-        ? isPlanDirty
-        : false;
+  const activeDocumentSection = controller.activeDocumentSection;
 
   return (
     <>
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            close();
-            return;
-          }
-          onOpenChange(true);
-        }}
-      >
+      <Dialog open={open} onOpenChange={controller.onDialogOpenChange}>
         <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
           <DialogHeader className="border-b border-slate-200 px-5 py-4">
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Sparkles className="size-5 text-sky-600" />
-              {mode === "create" ? "Create Task" : "Edit Task"}
+              {controller.mode === "create" ? "Create Task" : "Edit Task"}
             </DialogTitle>
             <DialogDescription>
-              {mode === "create"
+              {controller.mode === "create"
                 ? "Create a structured Beads issue with the fields Planner and Builder rely on."
                 : `Update ${task?.id ?? "task"} metadata and long-form markdown documents.`}
             </DialogDescription>
           </DialogHeader>
 
-          <fieldset disabled={isBusy} className="flex min-h-0 flex-1 flex-col border-0 p-0">
+          <fieldset
+            disabled={controller.isBusy}
+            className="flex min-h-0 flex-1 flex-col border-0 p-0"
+          >
             <div
               className={cn(
                 "min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4 transition-opacity",
-                isBusy ? "cursor-wait opacity-55" : "opacity-100",
+                controller.isBusy ? "cursor-wait opacity-55" : "opacity-100",
               )}
             >
-              {mode === "create" ? (
+              {controller.mode === "create" ? (
                 <TaskComposerStepper
-                  step={step}
+                  step={controller.step}
                   onStepChange={(nextStep) => {
-                    if (nextStep === "details" && step !== "details") {
+                    if (nextStep === "details" && controller.step !== "details") {
                       return;
                     }
-                    setStep(nextStep);
+                    controller.setStep(nextStep);
                   }}
                 />
               ) : (
                 <TaskEditSectionSwitcher
-                  section={editSection}
-                  hasUnsavedSpec={isSpecDirty}
-                  hasUnsavedPlan={isPlanDirty}
-                  disabled={isBusy}
-                  onSectionChange={requestSectionChange}
+                  section={controller.editSection}
+                  hasUnsavedSpec={controller.isSpecDirty}
+                  hasUnsavedPlan={controller.isPlanDirty}
+                  disabled={controller.isBusy}
+                  onSectionChange={controller.requestSectionChange}
                 />
               )}
 
-              {isTypeStepVisible ? (
-                <IssueTypeGrid state={state} onStateChange={updateState} />
-              ) : mode === "edit" && activeDocumentSection ? (
+              {controller.isTypeStepVisible ? (
+                <IssueTypeGrid state={controller.state} onStateChange={controller.updateState} />
+              ) : controller.mode === "edit" && activeDocumentSection ? (
                 <TaskDocumentEditor
                   key={activeDocumentSection}
                   title={activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"}
@@ -346,52 +104,56 @@ export function TaskCreateModal({
                       ? "# Purpose\n\nDescribe expected outcome..."
                       : "## Milestones\n\n- ..."
                   }
-                  markdown={activeDraft}
-                  view={views[activeDocumentSection]}
-                  onViewChange={(nextView) => setDocumentView(activeDocumentSection, nextView)}
-                  updatedAt={activeDocument?.updatedAt ?? null}
-                  isLoading={activeDocument?.isLoading ?? false}
-                  isSaving={isSavingDocument === activeDocumentSection}
-                  error={activeDocument?.error ?? null}
-                  hasUnsavedChanges={isActiveDocumentDirty}
-                  onMarkdownChange={(value) => updateDocumentDraft(activeDocumentSection, value)}
+                  markdown={controller.activeDraft}
+                  view={controller.views[activeDocumentSection]}
+                  onViewChange={(nextView) =>
+                    controller.setDocumentView(activeDocumentSection, nextView)
+                  }
+                  updatedAt={controller.activeDocument?.updatedAt ?? null}
+                  isLoading={controller.activeDocument?.isLoading ?? false}
+                  isSaving={controller.isSavingDocument === activeDocumentSection}
+                  error={controller.activeDocument?.error ?? null}
+                  hasUnsavedChanges={controller.isActiveDocumentDirty}
+                  onMarkdownChange={(value) =>
+                    controller.updateDocumentDraft(activeDocumentSection, value)
+                  }
                   onRetryLoad={() => {
-                    void loadDocumentSection(activeDocumentSection, true);
+                    void controller.loadDocumentSection(activeDocumentSection, true);
                   }}
                 />
               ) : (
                 <TaskDetailsForm
-                  mode={mode}
-                  state={state}
-                  canSelectParent={canSelectParent}
-                  priorityOptions={priorityComboboxOptions}
-                  parentOptions={parentComboboxOptions}
-                  knownLabels={knownLabels}
-                  onStateChange={updateState}
-                  onRequestTypeChange={() => setStep("type")}
+                  mode={controller.mode}
+                  state={controller.state}
+                  canSelectParent={controller.canSelectParent}
+                  priorityOptions={controller.priorityComboboxOptions}
+                  parentOptions={controller.parentComboboxOptions}
+                  knownLabels={controller.knownLabels}
+                  onStateChange={controller.updateState}
+                  onRequestTypeChange={() => controller.setStep("type")}
                 />
               )}
             </div>
 
             <DialogFooter className="mt-0 justify-between border-t border-slate-200 px-5 py-4">
-              {mode === "create" && step === "details" ? (
+              {controller.mode === "create" && controller.step === "details" ? (
                 <Button
                   type="button"
                   variant="outline"
                   className="cursor-pointer"
-                  onClick={() => setStep("type")}
-                  disabled={isBusy}
+                  onClick={() => controller.setStep("type")}
+                  disabled={controller.isBusy}
                 >
                   <ArrowLeft className="size-4" />
                   Back
                 </Button>
-              ) : mode === "edit" && activeDocumentSection ? (
+              ) : controller.mode === "edit" && controller.activeDocumentSection ? (
                 <Button
                   type="button"
                   variant="outline"
                   className="cursor-pointer"
-                  onClick={discardCurrentDocumentDraft}
-                  disabled={isBusy || !isActiveDocumentDirty}
+                  onClick={controller.discardCurrentDocumentDraft}
+                  disabled={controller.isBusy || !controller.isActiveDocumentDirty}
                 >
                   <RotateCcw className="size-4" />
                   Revert
@@ -401,49 +163,51 @@ export function TaskCreateModal({
               )}
 
               <div className="flex items-center gap-2">
-                {footerError ? <p className="text-sm text-rose-600">{footerError}</p> : null}
+                {controller.footerError ? (
+                  <p className="text-sm text-rose-600">{controller.footerError}</p>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
                   className="cursor-pointer"
-                  onClick={close}
-                  disabled={isBusy}
+                  onClick={controller.close}
+                  disabled={controller.isBusy}
                 >
                   Cancel
                 </Button>
 
-                {mode === "create" && step === "type" ? (
+                {controller.mode === "create" && controller.step === "type" ? (
                   <Button
                     type="button"
                     className="cursor-pointer"
-                    onClick={() => setStep("details")}
-                    disabled={isBusy}
+                    onClick={() => controller.setStep("details")}
+                    disabled={controller.isBusy}
                   >
                     Continue
                   </Button>
-                ) : isEditingDocument ? (
+                ) : controller.isEditingDocument ? (
                   <Button
                     type="button"
                     className="cursor-pointer"
-                    onClick={() => void saveActiveDocument()}
+                    onClick={() => void controller.saveActiveDocument()}
                     disabled={
-                      isBusy ||
-                      !taskId ||
-                      !activeDocument ||
-                      !activeDocument.loaded ||
-                      activeDocument.isLoading ||
-                      activeDraft.trim().length === 0 ||
-                      !isActiveDocumentDirty
+                      controller.isBusy ||
+                      !controller.taskId ||
+                      !controller.activeDocument ||
+                      !controller.activeDocument.loaded ||
+                      controller.activeDocument.isLoading ||
+                      controller.activeDraft.trim().length === 0 ||
+                      !controller.isActiveDocumentDirty
                     }
                   >
-                    {isSavingDocument === activeDocumentSection ? (
+                    {controller.isSavingDocument === controller.activeDocumentSection ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
                       <WandSparkles className="size-4" />
                     )}
-                    {isSavingDocument === activeDocumentSection
+                    {controller.isSavingDocument === controller.activeDocumentSection
                       ? "Saving..."
-                      : activeDocumentSection === "spec"
+                      : controller.activeDocumentSection === "spec"
                         ? "Save Spec"
                         : "Save Plan"}
                   </Button>
@@ -451,21 +215,21 @@ export function TaskCreateModal({
                   <Button
                     type="button"
                     className="cursor-pointer"
-                    onClick={() => void submit()}
-                    disabled={isBusy || !state.title.trim()}
+                    onClick={() => void controller.submit()}
+                    disabled={controller.isBusy || !controller.state.title.trim()}
                   >
-                    {isSubmitting ? (
+                    {controller.isSubmitting ? (
                       <Loader2 className="size-4 animate-spin" />
-                    ) : mode === "create" ? (
+                    ) : controller.mode === "create" ? (
                       <Flag className="size-4" />
                     ) : (
                       <WandSparkles className="size-4" />
                     )}
-                    {isSubmitting
-                      ? mode === "create"
+                    {controller.isSubmitting
+                      ? controller.mode === "create"
                         ? "Creating..."
                         : "Saving..."
-                      : mode === "create"
+                      : controller.mode === "create"
                         ? "Create Task"
                         : "Save Changes"}
                   </Button>
@@ -476,41 +240,16 @@ export function TaskCreateModal({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={pendingDiscardIntent !== null}
+      <TaskCreateDiscardDialog
+        open={controller.pendingDiscardIntent !== null}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
-            setPendingDiscardIntent(null);
+            controller.clearPendingDiscardIntent();
           }
         }}
-      >
-        <DialogContent className="max-w-md" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Discard unsaved markdown changes?</DialogTitle>
-            <DialogDescription>
-              You have unsaved document edits. Discard them before leaving this section?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-6 flex-row justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => setPendingDiscardIntent(null)}
-            >
-              Keep editing
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="cursor-pointer"
-              onClick={confirmDiscard}
-            >
-              Discard changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onKeepEditing={controller.clearPendingDiscardIntent}
+        onDiscardChanges={controller.confirmDiscard}
+      />
     </>
   );
 }
