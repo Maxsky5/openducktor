@@ -158,6 +158,7 @@ export function useAgentStudioQuerySync({
       agent: undefined,
       scenario: undefined,
       autostart: undefined,
+      start: undefined,
     });
   }, [isLoadingTasks, selectedSessionById, taskIdParam, tasks, updateQuery]);
 
@@ -185,6 +186,9 @@ export function useAgentStudioQuerySync({
     }
     if (searchParams.get("autostart")) {
       updates.autostart = undefined;
+    }
+    if (searchParams.get("start")) {
+      updates.start = undefined;
     }
 
     if (Object.keys(updates).length === 0) {

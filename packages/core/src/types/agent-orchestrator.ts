@@ -2,9 +2,7 @@ export type AgentRole = "spec" | "planner" | "build" | "qa";
 
 export type AgentScenario =
   | "spec_initial"
-  | "spec_revision"
   | "planner_initial"
-  | "planner_revision"
   | "build_implementation_start"
   | "build_after_qa_rejected"
   | "build_after_human_request_changes"

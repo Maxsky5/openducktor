@@ -17,7 +17,7 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
     return task.status === "spec_ready" ? "Continue Spec" : "Start Spec";
   }
   if (action === "set_plan") {
-    return "Start Plan";
+    return "Start Planner";
   }
   if (action === "open_builder") {
     return "Open Builder";

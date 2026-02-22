@@ -4,10 +4,11 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { type UIEvent, useCallback, useMemo, useState } from "react";
 import { ROLE_OPTIONS, SCENARIO_LABELS } from "./agents-page-constants";
 import {
+  type SessionCreateOption,
   buildLatestSessionByRoleMap,
   buildRoleEnabledMapForTask,
   buildSessionCreateOptions,
@@ -36,7 +37,7 @@ type UseAgentStudioPageModelsArgs = {
   onCloseTab: (taskId: string) => void;
   handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
-  handleCreateSession: (nextRole: AgentRole, nextScenario: AgentScenario) => void;
+  handleCreateSession: (option: SessionCreateOption) => void;
   specDoc: TaskDocumentState;
   planDoc: TaskDocumentState;
   qaDoc: TaskDocumentState;
@@ -206,8 +207,6 @@ export function useAgentStudioPageModels({
   );
   const sessionSelectorValue = activeSession?.sessionId ?? sessionsForTask[0]?.sessionId ?? "";
   const createSessionDisabled = Boolean(activeSession && isSessionWorking);
-  const hasSpecDoc = specDoc.markdown.trim().length > 0;
-  const hasPlanDoc = planDoc.markdown.trim().length > 0;
   const hasQaFeedback = qaDoc.markdown.trim().length > 0;
   const hasHumanFeedback = Boolean(
     selectedTask &&
@@ -220,8 +219,7 @@ export function useAgentStudioPageModels({
     () =>
       buildSessionCreateOptions({
         roleEnabledByTask,
-        hasSpecDoc,
-        hasPlanDoc,
+        latestSessionByRole,
         hasQaFeedback,
         hasHumanFeedback,
         createSessionDisabled,
@@ -231,9 +229,8 @@ export function useAgentStudioPageModels({
     [
       createSessionDisabled,
       hasHumanFeedback,
-      hasPlanDoc,
       hasQaFeedback,
-      hasSpecDoc,
+      latestSessionByRole,
       roleEnabledByTask,
       roleLabelByRole,
     ],

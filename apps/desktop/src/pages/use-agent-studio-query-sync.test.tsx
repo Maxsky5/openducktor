@@ -156,7 +156,7 @@ describe("useAgentStudioQuerySync", () => {
     const harness = createHookHarness({
       activeRepo: null,
       searchParams: new URLSearchParams(
-        "task=missing&agent=spec&scenario=spec_initial&autostart=1",
+        "task=missing&agent=spec&scenario=spec_initial&autostart=1&start=continue",
       ),
       setSearchParams,
       taskIdParam: "missing",
@@ -184,6 +184,7 @@ describe("useAgentStudioQuerySync", () => {
       expect(next.get("agent")).toBeNull();
       expect(next.get("scenario")).toBeNull();
       expect(next.get("autostart")).toBeNull();
+      expect(next.get("start")).toBeNull();
     }
 
     await harness.unmount();

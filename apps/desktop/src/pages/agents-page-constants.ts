@@ -13,8 +13,8 @@ export const ROLE_OPTIONS: Array<{
 ];
 
 export const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {
-  spec: ["spec_initial", "spec_revision"],
-  planner: ["planner_initial", "planner_revision"],
+  spec: ["spec_initial"],
+  planner: ["planner_initial"],
   build: [
     "build_implementation_start",
     "build_after_qa_rejected",
@@ -24,10 +24,8 @@ export const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {
 };
 
 export const SCENARIO_LABELS: Record<AgentScenario, string> = {
-  spec_initial: "Initial Spec",
-  spec_revision: "Revise Spec",
-  planner_initial: "Initial Plan",
-  planner_revision: "Revise Plan",
+  spec_initial: "Spec",
+  planner_initial: "Planner",
   build_implementation_start: "Start Implementation",
   build_after_qa_rejected: "Fix QA Rejection",
   build_after_human_request_changes: "Apply Human Changes",
@@ -39,9 +37,7 @@ export const isRole = (value: string | null): value is AgentRole =>
 
 export const isScenario = (value: string | null): value is AgentScenario =>
   value === "spec_initial" ||
-  value === "spec_revision" ||
   value === "planner_initial" ||
-  value === "planner_revision" ||
   value === "build_implementation_start" ||
   value === "build_after_qa_rejected" ||
   value === "build_after_human_request_changes" ||
@@ -64,16 +60,11 @@ export const kickoffPromptForScenario = (
   const taskInstruction = `Use taskId "${taskId}" for every odt_* tool call.`;
   if (role === "spec") {
     const base =
-      scenario === "spec_revision"
-        ? "Revise the current specification and call odt_set_spec with complete markdown when ready."
-        : "Write the initial specification and call odt_set_spec with complete markdown when ready.";
+      "Create or update the specification and call odt_set_spec with complete markdown when ready.";
     return `${base}\n${taskInstruction}`;
   }
   if (role === "planner") {
-    const base =
-      scenario === "planner_revision"
-        ? "Revise the current implementation plan and call odt_set_plan when ready."
-        : "Create the initial implementation plan and call odt_set_plan when ready.";
+    const base = "Create or update the implementation plan and call odt_set_plan when ready.";
     return `${base}\n${taskInstruction}`;
   }
   if (role === "qa") {

@@ -354,4 +354,68 @@ describe("TauriHostClient", () => {
       taskId: "task-1",
     });
   });
+
+  test("agentSessionsList normalizes legacy scenarios and skips invalid rows", async () => {
+    const { client } = createClient((command) => {
+      if (command === "agent_sessions_list") {
+        return [
+          {
+            sessionId: "legacy-spec",
+            externalSessionId: "legacy-ext-1",
+            taskId: "task-1",
+            role: "spec",
+            scenario: "spec_revision",
+            status: "idle",
+            startedAt: "2026-02-18T17:20:00Z",
+            updatedAt: "2026-02-18T17:21:00Z",
+            endedAt: null,
+            runtimeId: "runtime-1",
+            runId: null,
+            baseUrl: "http://127.0.0.1:4173",
+            workingDirectory: "/repo",
+            selectedModel: null,
+          },
+          {
+            sessionId: "legacy-planner",
+            externalSessionId: "legacy-ext-2",
+            taskId: "task-1",
+            role: "planner",
+            scenario: "planner_revision",
+            status: "idle",
+            startedAt: "2026-02-18T17:22:00Z",
+            updatedAt: "2026-02-18T17:23:00Z",
+            endedAt: null,
+            runtimeId: "runtime-1",
+            runId: null,
+            baseUrl: "http://127.0.0.1:4173",
+            workingDirectory: "/repo",
+            selectedModel: null,
+          },
+          {
+            sessionId: "bad-entry",
+            externalSessionId: "legacy-ext-3",
+            taskId: "task-1",
+            role: "planner",
+            scenario: "planner_unknown",
+            status: "idle",
+            startedAt: "2026-02-18T17:24:00Z",
+            updatedAt: "2026-02-18T17:25:00Z",
+            endedAt: null,
+            runtimeId: "runtime-1",
+            runId: null,
+            baseUrl: "http://127.0.0.1:4173",
+            workingDirectory: "/repo",
+            selectedModel: null,
+          },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const sessions = await client.agentSessionsList("/repo", "task-1");
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0]?.scenario).toBe("spec_initial");
+    expect(sessions[1]?.scenario).toBe("planner_initial");
+  });
 });

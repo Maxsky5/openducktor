@@ -101,21 +101,13 @@ QA policy:
 
 const SCENARIO_DIRECTIVES: Record<AgentScenario, string> = {
   spec_initial: `
-Scenario: Initial specification authoring.
-Produce the first complete spec revision and call odt_set_spec exactly once when ready.
-`,
-  spec_revision: `
-Scenario: Spec revision.
-Refine the existing spec while preserving structure and improving clarity.
+Scenario: Specification authoring.
+Create or update the task specification with complete, implementation-ready markdown.
 Call odt_set_spec exactly once with the updated markdown.
 `,
   planner_initial: `
-Scenario: Initial planning.
-Author the first implementation plan and call odt_set_plan.
-`,
-  planner_revision: `
-Scenario: Plan revision.
-Update plan scope/order/validation based on new constraints.
+Scenario: Planning.
+Create or update the implementation plan based on the current task context.
 Call odt_set_plan with the revised markdown.
 `,
   build_implementation_start: `

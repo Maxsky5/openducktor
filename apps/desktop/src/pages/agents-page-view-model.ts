@@ -7,7 +7,7 @@ import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentPermissionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { RefObject, UIEvent } from "react";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 
@@ -58,7 +58,7 @@ export const buildAgentStudioHeaderModel = (args: {
   agentStudioReady: boolean;
   sessionsForTaskLength: number;
   sessionCreateOptions: SessionCreateOption[];
-  onCreateSession: (role: AgentRole, scenario: AgentScenario) => void;
+  onCreateSession: (option: SessionCreateOption) => void;
   createSessionDisabled: boolean;
   isStarting: boolean;
   contextSessionsLength: number;

@@ -40,7 +40,7 @@ describe("agent-orchestrator/support/scenario", () => {
         planMarkdown: "existing",
         qaMarkdown: "",
       }),
-    ).toBe("planner_revision");
+    ).toBe("planner_initial");
 
     expect(
       inferScenario("build", taskFixture, {

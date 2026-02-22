@@ -56,6 +56,7 @@ export function KanbanPage(): ReactElement {
       options?: {
         scenario?: string;
         autostart?: boolean;
+        start?: "fresh" | "continue";
       },
     ) => {
       const params = new URLSearchParams({
@@ -68,9 +69,23 @@ export function KanbanPage(): ReactElement {
       if (options?.autostart) {
         params.set("autostart", "1");
       }
+      if (options?.start) {
+        params.set("start", options.start);
+      }
       navigate(`/agents?${params.toString()}`);
     },
     [navigate],
+  );
+
+  const getPlanningStartPreference = useCallback(
+    (taskId: string, action: "set_spec" | "set_plan"): "fresh" | "continue" => {
+      if (action === "set_plan") {
+        return "fresh";
+      }
+      const task = tasks.find((entry) => entry.id === taskId);
+      return task?.status === "spec_ready" ? "continue" : "fresh";
+    },
+    [tasks],
   );
 
   return (
@@ -131,8 +146,10 @@ export function KanbanPage(): ReactElement {
                   })
                 }
                 onPlan={(taskId, action) => {
+                  const startPreference = getPlanningStartPreference(taskId, action);
                   openAgents(taskId, action === "set_spec" ? "spec" : "planner", {
-                    autostart: true,
+                    autostart: startPreference === "fresh",
+                    start: startPreference,
                   });
                 }}
                 onBuild={(taskId) => {
@@ -175,8 +192,10 @@ export function KanbanPage(): ReactElement {
           }
         }}
         onPlan={(taskId, action) => {
+          const startPreference = getPlanningStartPreference(taskId, action);
           openAgents(taskId, action === "set_spec" ? "spec" : "planner", {
-            autostart: true,
+            autostart: startPreference === "fresh",
+            start: startPreference,
           });
         }}
         onBuild={(taskId) => {

@@ -236,9 +236,29 @@ export const buildSessionSelectorGroups = (params: {
     if (roleSessions.length === 0) {
       continue;
     }
-    const roleOptions: ComboboxOption[] = roleSessions.map((session) => ({
+    const roleSessionNumberById = new Map(
+      [...roleSessions]
+        .sort((a, b) => {
+          if (a.startedAt !== b.startedAt) {
+            return a.startedAt < b.startedAt ? -1 : 1;
+          }
+          if (a.sessionId === b.sessionId) {
+            return 0;
+          }
+          return a.sessionId < b.sessionId ? -1 : 1;
+        })
+        .map((session, index) => [session.sessionId, index + 1]),
+    );
+    const roleOptions: ComboboxOption[] = roleSessions.map((session, index) => ({
       value: session.sessionId,
-      label: `${params.scenarioLabels[session.scenario]} · ${params.roleLabelByRole[session.role]}`,
+      label: (() => {
+        const scenarioLabel = params.scenarioLabels[session.scenario];
+        const roleLabel = params.roleLabelByRole[session.role];
+        const baseLabel =
+          scenarioLabel === roleLabel ? roleLabel : `${scenarioLabel} · ${roleLabel}`;
+        const sessionNumber = roleSessionNumberById.get(session.sessionId) ?? index + 1;
+        return `${baseLabel} #${sessionNumber}`;
+      })(),
       description: describeSessionOption(session),
       secondaryLabel: role.toUpperCase(),
       searchKeywords: [role, session.scenario, session.sessionId],
@@ -254,8 +274,7 @@ export const buildSessionSelectorGroups = (params: {
 
 export const buildSessionCreateOptions = (params: {
   roleEnabledByTask: Record<AgentRole, boolean>;
-  hasSpecDoc: boolean;
-  hasPlanDoc: boolean;
+  latestSessionByRole: Record<AgentRole, AgentSessionState | null>;
   hasQaFeedback: boolean;
   hasHumanFeedback: boolean;
   createSessionDisabled: boolean;
@@ -264,41 +283,79 @@ export const buildSessionCreateOptions = (params: {
 }): SessionCreateOption[] => {
   const options: SessionCreateOption[] = [];
 
-  const addOption = (role: AgentRole, scenario: AgentScenario, disabled: boolean) => {
+  const addFreshOption = (
+    role: AgentRole,
+    scenario: AgentScenario,
+    label: string,
+    description: string,
+    disabled: boolean,
+  ) => {
     options.push({
-      id: `${role}:${scenario}`,
+      id: `${role}:${scenario}:fresh`,
       role,
       scenario,
-      label: `${params.roleLabelByRole[role]} · ${params.scenarioLabels[scenario]}`,
-      description: `Create ${params.roleLabelByRole[role].toLowerCase()} session with ${params.scenarioLabels[scenario].toLowerCase()}`,
+      label,
+      description,
       disabled,
     });
   };
 
-  if (params.hasSpecDoc) {
-    addOption("spec", "spec_revision", params.createSessionDisabled);
-  } else if (params.roleEnabledByTask.spec) {
-    addOption("spec", "spec_initial", params.createSessionDisabled);
-  }
+  addFreshOption(
+    "spec",
+    "spec_initial",
+    `${params.roleLabelByRole.spec} · Start Spec`,
+    "Create a new spec session from scratch",
+    params.createSessionDisabled,
+  );
 
-  if (params.hasPlanDoc) {
-    addOption("planner", "planner_revision", params.createSessionDisabled);
-  } else if (params.roleEnabledByTask.planner) {
-    addOption("planner", "planner_initial", params.createSessionDisabled);
+  const canStartPlannerFresh =
+    params.roleEnabledByTask.planner || Boolean(params.latestSessionByRole.planner);
+  if (canStartPlannerFresh) {
+    addFreshOption(
+      "planner",
+      "planner_initial",
+      `${params.roleLabelByRole.planner} · Start Planner`,
+      "Create a new planner session from scratch",
+      params.createSessionDisabled,
+    );
   }
 
   if (params.roleEnabledByTask.build) {
-    addOption("build", "build_implementation_start", params.createSessionDisabled);
+    addFreshOption(
+      "build",
+      "build_implementation_start",
+      `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_implementation_start}`,
+      `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_implementation_start.toLowerCase()}`,
+      params.createSessionDisabled,
+    );
     if (params.hasQaFeedback) {
-      addOption("build", "build_after_qa_rejected", params.createSessionDisabled);
+      addFreshOption(
+        "build",
+        "build_after_qa_rejected",
+        `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_qa_rejected}`,
+        `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_qa_rejected.toLowerCase()}`,
+        params.createSessionDisabled,
+      );
     }
     if (params.hasHumanFeedback) {
-      addOption("build", "build_after_human_request_changes", params.createSessionDisabled);
+      addFreshOption(
+        "build",
+        "build_after_human_request_changes",
+        `${params.roleLabelByRole.build} · ${params.scenarioLabels.build_after_human_request_changes}`,
+        `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_after_human_request_changes.toLowerCase()}`,
+        params.createSessionDisabled,
+      );
     }
   }
 
   if (params.roleEnabledByTask.qa) {
-    addOption("qa", "qa_review", params.createSessionDisabled);
+    addFreshOption(
+      "qa",
+      "qa_review",
+      `${params.roleLabelByRole.qa} · ${params.scenarioLabels.qa_review}`,
+      `Create ${params.roleLabelByRole.qa.toLowerCase()} session with ${params.scenarioLabels.qa_review.toLowerCase()}`,
+      params.createSessionDisabled,
+    );
   }
 
   return options;

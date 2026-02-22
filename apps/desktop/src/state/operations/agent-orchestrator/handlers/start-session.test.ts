@@ -84,7 +84,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
   test("reuses an existing in-flight start promise", async () => {
     const inFlight = Promise.resolve("session-in-flight");
-    const inFlightMap = new Map<string, Promise<string>>([["/tmp/repo::task-1::build", inFlight]]);
+    const inFlightMap = new Map<string, Promise<string>>([
+      ["/tmp/repo::task-1::build::reuse_latest", inFlight],
+    ]);
     const start = createStartAgentSession({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
@@ -255,6 +257,107 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("startMode fresh bypasses same-role reuse and starts a new session", async () => {
+    let startCalls = 0;
+    let persistedListCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => {
+      startCalls += 1;
+      return {
+        sessionId: "fresh-session",
+        externalSessionId: "fresh-ext",
+        startedAt: "2026-02-22T09:00:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => {
+      persistedListCalls += 1;
+      return [
+        {
+          sessionId: "persisted-build",
+          externalSessionId: "persisted-build-ext",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-02-22T08:20:00.000Z",
+          updatedAt: "2026-02-22T08:20:00.000Z",
+          runtimeId: "runtime-1",
+          runId: "run-2",
+          baseUrl: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+      ];
+    };
+
+    const start = createStartAgentSession({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: {
+        current: {
+          existingBuild: {
+            sessionId: "existing-build",
+            externalSessionId: "existing-build-ext",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "idle",
+            startedAt: "2026-02-22T08:10:00.000Z",
+            runtimeId: null,
+            runId: "run-1",
+            baseUrl: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: null,
+            isLoadingModelCatalog: false,
+          },
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-2",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build", startMode: "fresh" })).resolves.toBe(
+        "fresh-session",
+      );
+      expect(startCalls).toBe(1);
+      expect(persistedListCalls).toBe(0);
+    } finally {
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("does not reuse in-memory session from a different role", async () => {
     let startCalls = 0;
 
@@ -375,7 +478,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         externalSessionId: "external-spec-newer",
         taskId: "task-1",
         role: "spec",
-        scenario: "spec_revision",
+        scenario: "spec_initial",
         status: "idle",
         startedAt: "2026-02-22T08:30:00.000Z",
         updatedAt: "2026-02-22T08:30:00.000Z",

@@ -36,11 +36,34 @@ import type { PlannerTools, SetPlanOutput, SetSpecOutput } from "@openducktor/co
 
 type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
+const LEGACY_AGENT_SESSION_SCENARIO_MAP: Record<string, AgentSessionRecord["scenario"]> = {
+  spec_revision: "spec_initial",
+  planner_revision: "planner_initial",
+};
+
 const parseArray = <T>(schema: { parse: (value: unknown) => T }, payload: unknown): T[] => {
   if (!Array.isArray(payload)) {
     throw new Error("Expected array payload from host command");
   }
   return payload.map((entry) => schema.parse(entry));
+};
+
+const normalizeLegacyAgentSessionScenario = (entry: unknown): unknown => {
+  if (!entry || typeof entry !== "object") {
+    return entry;
+  }
+  const candidate = entry as { scenario?: unknown };
+  if (typeof candidate.scenario !== "string") {
+    return entry;
+  }
+  const normalizedScenario = LEGACY_AGENT_SESSION_SCENARIO_MAP[candidate.scenario];
+  if (!normalizedScenario) {
+    return entry;
+  }
+  return {
+    ...entry,
+    scenario: normalizedScenario,
+  };
 };
 
 export class TauriHostClient implements PlannerTools {
@@ -327,7 +350,18 @@ export class TauriHostClient implements PlannerTools {
       repoPath,
       taskId,
     });
-    return parseArray(agentSessionRecordSchema, payload);
+    if (!Array.isArray(payload)) {
+      throw new Error("Expected array payload from host command");
+    }
+
+    const sessions: AgentSessionRecord[] = [];
+    for (const entry of payload) {
+      const parsed = agentSessionRecordSchema.safeParse(normalizeLegacyAgentSessionScenario(entry));
+      if (parsed.success) {
+        sessions.push(parsed.data);
+      }
+    }
+    return sessions;
   }
 
   async agentSessionUpsert(

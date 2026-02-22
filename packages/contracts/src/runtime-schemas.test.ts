@@ -178,7 +178,7 @@ describe("runtime schemas", () => {
       externalSessionId: "session-opencode-1",
       taskId: "task-1",
       role: "spec",
-      scenario: "spec_revision",
+      scenario: "spec_initial",
       status: "idle",
       startedAt: "2026-02-18T17:11:00.000Z",
       updatedAt: "2026-02-18T17:14:00.000Z",
@@ -196,7 +196,7 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.role).toBe("spec");
-    expect(parsed.scenario).toBe("spec_revision");
+    expect(parsed.scenario).toBe("spec_initial");
     expect(parsed.externalSessionId).toBe("session-opencode-1");
     expect(parsed.selectedModel?.modelId).toBe("gpt-5");
   });

@@ -134,6 +134,7 @@ const createBaseArgs = (): HookArgs => {
     role: "spec",
     scenario: "spec_initial",
     autostart: false,
+    sessionStartPreference: null,
     activeSession: null,
     sessionsForTask: [],
     selectedTask: createTask(),
@@ -184,6 +185,7 @@ describe("useAgentStudioSessionActions", () => {
       role: "spec",
       scenario: "spec_initial",
       sendKickoff: false,
+      startMode: "reuse_latest",
     });
     expect(updateAgentSessionModel).toHaveBeenCalledWith("session-new", {
       providerId: "openai",
@@ -194,6 +196,102 @@ describe("useAgentStudioSessionActions", () => {
     expect(setInput).toHaveBeenCalledWith("");
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", "hello world");
     expect(updateCalls.some((entry) => entry.session === "session-new")).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("onSend uses fresh start mode when fresh preference is selected", async () => {
+    const startAgentSession = mock(async () => "session-fresh");
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionStartPreference: "fresh",
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith({
+      taskId: "task-1",
+      role: "spec",
+      scenario: "spec_initial",
+      sendKickoff: false,
+      startMode: "fresh",
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-fresh", "hello world");
+
+    await harness.unmount();
+  });
+
+  test("onSend ignores active session when fresh preference is selected", async () => {
+    const startAgentSession = mock(async () => "session-fresh");
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionStartPreference: "fresh",
+      activeSession: createSession({ sessionId: "session-existing" }),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith({
+      taskId: "task-1",
+      role: "spec",
+      scenario: "spec_initial",
+      sendKickoff: false,
+      startMode: "fresh",
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-fresh", "hello world");
+
+    await harness.unmount();
+  });
+
+  test("onSend with continue preference reuses latest role session from session list", async () => {
+    const startAgentSession = mock(async () => "session-new");
+    const sendAgentMessage = mock(async () => {});
+    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const existingSpecSession = createSession({
+      sessionId: "session-existing",
+      role: "spec",
+      scenario: "spec_initial",
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionStartPreference: "continue",
+      sessionsForTask: [existingSpecSession],
+      startAgentSession,
+      sendAgentMessage,
+      updateQuery: (updates) => {
+        updateCalls.push(updates);
+      },
+    });
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.onSend();
+    });
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(updateCalls).toContainEqual({
+      task: "task-1",
+      session: "session-existing",
+      agent: "spec",
+      scenario: "spec_initial",
+      autostart: undefined,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
 
     await harness.unmount();
   });
@@ -296,7 +394,14 @@ describe("useAgentStudioSessionActions", () => {
     try {
       await harness.mount();
       await harness.run((state) => {
-        state.handleCreateSession("planner", "planner_initial");
+        state.handleCreateSession({
+          id: "planner:planner_initial:fresh",
+          role: "planner",
+          scenario: "planner_initial",
+          label: "Planner · Start Planner",
+          description: "Create a new planner session from scratch",
+          disabled: false,
+        });
       });
 
       expect(updateCalls[0]).toEqual({
@@ -311,6 +416,7 @@ describe("useAgentStudioSessionActions", () => {
         role: "planner",
         scenario: "planner_initial",
         sendKickoff: false,
+        startMode: "fresh",
       });
 
       await harness.run(async () => {
@@ -357,7 +463,14 @@ describe("useAgentStudioSessionActions", () => {
     try {
       await harness.mount();
       await harness.run((state) => {
-        state.handleCreateSession("planner", "planner_initial");
+        state.handleCreateSession({
+          id: "planner:planner_initial:fresh",
+          role: "planner",
+          scenario: "planner_initial",
+          label: "Planner · Start Planner",
+          description: "Create a new planner session from scratch",
+          disabled: false,
+        });
       });
 
       await harness.run(async () => {
@@ -406,7 +519,14 @@ describe("useAgentStudioSessionActions", () => {
     try {
       await harness.mount();
       await harness.run((state) => {
-        state.handleCreateSession("planner", "planner_initial");
+        state.handleCreateSession({
+          id: "planner:planner_initial:fresh",
+          role: "planner",
+          scenario: "planner_initial",
+          label: "Planner · Start Planner",
+          description: "Create a new planner session from scratch",
+          disabled: false,
+        });
       });
 
       expect(harness.getLatest().isStarting).toBe(true);

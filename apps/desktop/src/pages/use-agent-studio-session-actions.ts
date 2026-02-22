@@ -4,7 +4,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SCENARIO_LABELS, firstScenario, kickoffPromptForScenario } from "./agents-page-constants";
-import { buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
+import { type SessionCreateOption, buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
 
 type QueryUpdate = Record<string, string | undefined>;
 
@@ -14,6 +14,7 @@ type UseAgentStudioSessionActionsArgs = {
   role: AgentRole;
   scenario: AgentScenario;
   autostart: boolean;
+  sessionStartPreference: "fresh" | "continue" | null;
   activeSession: AgentSessionState | null;
   sessionsForTask: AgentSessionState[];
   selectedTask: TaskCard | null;
@@ -35,6 +36,7 @@ export function useAgentStudioSessionActions({
   role,
   scenario,
   autostart,
+  sessionStartPreference,
   activeSession,
   sessionsForTask,
   selectedTask,
@@ -61,7 +63,7 @@ export function useAgentStudioSessionActions({
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
-  handleCreateSession: (nextRole: AgentRole, nextScenario: AgentScenario) => void;
+  handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -87,13 +89,29 @@ export function useAgentStudioSessionActions({
       return undefined;
     }
 
-    if (activeSession) {
+    const isFreshStartRequested = sessionStartPreference === "fresh";
+
+    if (activeSession && !isFreshStartRequested) {
       updateQuery({
         task: activeSession.taskId,
         session: activeSession.sessionId,
         autostart: undefined,
       });
       return activeSession.sessionId;
+    }
+
+    if (sessionStartPreference === "continue") {
+      const latestSessionForRole = sessionsForTask.find((entry) => entry.role === role);
+      if (latestSessionForRole) {
+        updateQuery({
+          task: latestSessionForRole.taskId,
+          session: latestSessionForRole.sessionId,
+          agent: latestSessionForRole.role,
+          scenario: latestSessionForRole.scenario,
+          autostart: undefined,
+        });
+        return latestSessionForRole.sessionId;
+      }
     }
 
     const inFlightSessionStart = startingSessionByTaskRef.current.get(taskId);
@@ -104,7 +122,13 @@ export function useAgentStudioSessionActions({
     const startPromise = (async (): Promise<string | undefined> => {
       setIsStarting(true);
       try {
-        const sessionId = await startAgentSession({ taskId, role, scenario, sendKickoff: false });
+        const sessionId = await startAgentSession({
+          taskId,
+          role,
+          scenario,
+          sendKickoff: false,
+          startMode: sessionStartPreference === "fresh" ? "fresh" : "reuse_latest",
+        });
         if (selectionForNewSession) {
           updateAgentSessionModel(sessionId, selectionForNewSession);
         }
@@ -130,6 +154,8 @@ export function useAgentStudioSessionActions({
     isActiveTaskHydrated,
     role,
     scenario,
+    sessionStartPreference,
+    sessionsForTask,
     selectionForNewSession,
     startAgentSession,
     taskId,
@@ -153,8 +179,13 @@ export function useAgentStudioSessionActions({
   const hasAutoStartExecuted = autoStartKey
     ? autoStartExecutedRef.current.has(autoStartKey)
     : false;
+  const isFreshStartRequested = sessionStartPreference === "fresh";
   const isAutoStartPending = Boolean(
-    autostart && autoStartKey && !activeSession && agentStudioReady && !hasAutoStartExecuted,
+    autostart &&
+      autoStartKey &&
+      (isFreshStartRequested || !activeSession) &&
+      agentStudioReady &&
+      !hasAutoStartExecuted,
   );
 
   useEffect(() => {
@@ -162,7 +193,7 @@ export function useAgentStudioSessionActions({
       !autostart ||
       !activeRepo ||
       !taskId ||
-      activeSession ||
+      (!isFreshStartRequested && activeSession) ||
       !agentStudioReady ||
       !isActiveTaskHydrated
     ) {
@@ -182,6 +213,7 @@ export function useAgentStudioSessionActions({
     activeSession,
     agentStudioReady,
     autostart,
+    isFreshStartRequested,
     isActiveTaskHydrated,
     startScenarioKickoff,
     taskId,
@@ -197,7 +229,7 @@ export function useAgentStudioSessionActions({
       return;
     }
 
-    let targetSessionId = activeSession?.sessionId;
+    let targetSessionId = sessionStartPreference === "fresh" ? undefined : activeSession?.sessionId;
     if (!targetSessionId) {
       targetSessionId = await startSession();
     }
@@ -219,6 +251,7 @@ export function useAgentStudioSessionActions({
     input,
     isSending,
     isStarting,
+    sessionStartPreference,
     sendAgentMessage,
     setInput,
     startSession,
@@ -338,7 +371,8 @@ export function useAgentStudioSessionActions({
   );
 
   const handleCreateSession = useCallback(
-    (nextRole: AgentRole, nextScenario: AgentScenario): void => {
+    (option: SessionCreateOption): void => {
+      const { role: nextRole, scenario: nextScenario } = option;
       if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
         return;
       }
@@ -347,7 +381,15 @@ export function useAgentStudioSessionActions({
       }
 
       const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
-      if (!roleEnabledByTask[nextRole]) {
+      const hasPlannerSession = sessionsForTask.some((entry) => entry.role === "planner");
+      const canStartFreshSession =
+        nextRole === "spec"
+          ? true
+          : nextRole === "planner"
+            ? roleEnabledByTask.planner || hasPlannerSession
+            : roleEnabledByTask[nextRole];
+
+      if (!canStartFreshSession) {
         return;
       }
 
@@ -382,6 +424,7 @@ export function useAgentStudioSessionActions({
             role: nextRole,
             scenario: nextScenario,
             sendKickoff: false,
+            startMode: "fresh",
           });
           if (!sessionId) {
             updateQuery(previousSelection);
@@ -423,6 +466,7 @@ export function useAgentStudioSessionActions({
       role,
       scenario,
       sendAgentMessage,
+      sessionsForTask,
       startAgentSession,
       taskId,
       updateQuery,
@@ -431,7 +475,12 @@ export function useAgentStudioSessionActions({
 
   const canKickoffNewSession =
     agentStudioReady && Boolean(taskId) && isActiveTaskHydrated && !activeSession;
-  const kickoffLabel = role === "spec" ? "Start Spec" : `Start ${SCENARIO_LABELS[scenario]}`;
+  const kickoffLabel =
+    role === "spec"
+      ? "Start Spec"
+      : role === "planner"
+        ? "Start Planner"
+        : `Start ${SCENARIO_LABELS[scenario]}`;
   const canStopSession = Boolean(activeSession && isSessionWorking);
 
   return {

@@ -233,8 +233,14 @@ describe("agents-page-session-tabs", () => {
         buildSession({
           sessionId: "spec-1",
           role: "spec",
-          scenario: "spec_revision",
+          scenario: "spec_initial",
           startedAt: "2026-02-22T09:20:00.000Z",
+        }),
+        buildSession({
+          sessionId: "spec-2",
+          role: "spec",
+          scenario: "spec_initial",
+          startedAt: "2026-02-22T08:20:00.000Z",
         }),
         buildSession({
           sessionId: "planner-1",
@@ -244,10 +250,8 @@ describe("agents-page-session-tabs", () => {
         }),
       ],
       scenarioLabels: {
-        spec_initial: "Initial Spec",
-        spec_revision: "Spec Revision",
-        planner_initial: "Initial Plan",
-        planner_revision: "Plan Revision",
+        spec_initial: "Spec",
+        planner_initial: "Planner",
         build_implementation_start: "Implementation Start",
         build_after_human_request_changes: "After Human Request Changes",
         build_after_qa_rejected: "After QA Rejected",
@@ -263,11 +267,13 @@ describe("agents-page-session-tabs", () => {
 
     expect(groups[0]?.label).toBe("Spec");
     expect(groups[0]?.options[0]?.value).toBe("spec-1");
-    expect(groups[0]?.options[0]?.label).toBe("Spec Revision · Spec");
+    expect(groups[0]?.options[0]?.label).toBe("Spec #2");
+    expect(groups[0]?.options[1]?.value).toBe("spec-2");
+    expect(groups[0]?.options[1]?.label).toBe("Spec #1");
     expect(groups[0]?.options[0]?.secondaryLabel).toBe("SPEC");
     expect(groups[1]?.label).toBe("Planner");
     expect(groups[1]?.options[0]?.value).toBe("planner-1");
-    expect(groups[1]?.options[0]?.label).toBe("Initial Plan · Planner");
+    expect(groups[1]?.options[0]?.label).toBe("Planner #1");
   });
 
   test("builds latest session map by role", () => {
@@ -288,7 +294,7 @@ describe("agents-page-session-tabs", () => {
     expect(latestByRole.qa).toBeNull();
   });
 
-  test("builds session create options with feedback-aware build scenarios", () => {
+  test("builds session create options without continue actions", () => {
     const options = buildSessionCreateOptions({
       roleEnabledByTask: {
         spec: false,
@@ -296,8 +302,16 @@ describe("agents-page-session-tabs", () => {
         build: true,
         qa: false,
       },
-      hasSpecDoc: true,
-      hasPlanDoc: true,
+      latestSessionByRole: {
+        spec: buildSession({ sessionId: "spec-latest", role: "spec", scenario: "spec_initial" }),
+        planner: buildSession({
+          sessionId: "planner-latest",
+          role: "planner",
+          scenario: "planner_initial",
+        }),
+        build: null,
+        qa: null,
+      },
       hasQaFeedback: true,
       hasHumanFeedback: false,
       createSessionDisabled: false,
@@ -308,10 +322,8 @@ describe("agents-page-session-tabs", () => {
         qa: "QA",
       },
       scenarioLabels: {
-        spec_initial: "Initial Spec",
-        spec_revision: "Revise Spec",
-        planner_initial: "Initial Plan",
-        planner_revision: "Revise Plan",
+        spec_initial: "Spec",
+        planner_initial: "Planner",
         build_implementation_start: "Start Implementation",
         build_after_human_request_changes: "Apply Human Changes",
         build_after_qa_rejected: "Fix QA Rejection",
@@ -320,21 +332,30 @@ describe("agents-page-session-tabs", () => {
     });
 
     expect(options.map((option) => option.scenario)).toEqual([
-      "spec_revision",
-      "planner_revision",
+      "spec_initial",
+      "planner_initial",
       "build_implementation_start",
       "build_after_qa_rejected",
     ]);
+    expect(options.some((option) => option.label.includes("Continue"))).toBe(false);
 
-    const humanFeedbackOptions = buildSessionCreateOptions({
+    const plannerCompletedOptions = buildSessionCreateOptions({
       roleEnabledByTask: {
         spec: false,
         planner: false,
         build: true,
         qa: false,
       },
-      hasSpecDoc: false,
-      hasPlanDoc: false,
+      latestSessionByRole: {
+        spec: null,
+        planner: buildSession({
+          sessionId: "planner-done",
+          role: "planner",
+          scenario: "planner_initial",
+        }),
+        build: null,
+        qa: null,
+      },
       hasQaFeedback: false,
       hasHumanFeedback: true,
       createSessionDisabled: false,
@@ -345,10 +366,8 @@ describe("agents-page-session-tabs", () => {
         qa: "QA",
       },
       scenarioLabels: {
-        spec_initial: "Initial Spec",
-        spec_revision: "Revise Spec",
-        planner_initial: "Initial Plan",
-        planner_revision: "Revise Plan",
+        spec_initial: "Spec",
+        planner_initial: "Planner",
         build_implementation_start: "Start Implementation",
         build_after_human_request_changes: "Apply Human Changes",
         build_after_qa_rejected: "Fix QA Rejection",
@@ -356,10 +375,13 @@ describe("agents-page-session-tabs", () => {
       },
     });
 
-    expect(humanFeedbackOptions.map((option) => option.scenario)).toEqual([
+    expect(plannerCompletedOptions.map((option) => option.scenario)).toEqual([
+      "spec_initial",
+      "planner_initial",
       "build_implementation_start",
       "build_after_human_request_changes",
     ]);
+    expect(plannerCompletedOptions.some((option) => option.label.includes("Continue"))).toBe(false);
   });
 
   test("filters available tasks by opened tab ids", () => {

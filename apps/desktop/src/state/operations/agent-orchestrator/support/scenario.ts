@@ -5,14 +5,10 @@ const hasMarkdown = (value: string): boolean => value.trim().length > 0;
 
 const buildKickoffBaseMessage = (role: AgentRole, scenario: AgentScenario): string => {
   if (role === "spec") {
-    return scenario === "spec_revision"
-      ? "Revise the current specification and call odt_set_spec with complete markdown when ready."
-      : "Write the initial specification and call odt_set_spec with complete markdown when ready.";
+    return "Create or update the specification and call odt_set_spec with complete markdown when ready.";
   }
   if (role === "planner") {
-    return scenario === "planner_revision"
-      ? "Revise the current implementation plan and call odt_set_plan when ready."
-      : "Create the initial implementation plan and call odt_set_plan when ready.";
+    return "Create or update the implementation plan and call odt_set_plan when ready.";
   }
   if (role === "qa") {
     return "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.";
@@ -36,12 +32,10 @@ export const inferScenario = (
   },
 ): AgentScenario => {
   if (role === "spec") {
-    return hasMarkdown(docs.specMarkdown) || task.status === "spec_ready"
-      ? "spec_revision"
-      : "spec_initial";
+    return "spec_initial";
   }
   if (role === "planner") {
-    return hasMarkdown(docs.planMarkdown) ? "planner_revision" : "planner_initial";
+    return "planner_initial";
   }
   if (role === "qa") {
     return "qa_review";

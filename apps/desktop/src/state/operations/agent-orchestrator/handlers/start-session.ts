@@ -17,6 +17,7 @@ export type StartAgentSessionInput = {
   role: AgentRole;
   scenario?: AgentScenario;
   sendKickoff?: boolean;
+  startMode?: "reuse_latest" | "fresh";
 };
 
 type StartSessionDependencies = {
@@ -99,13 +100,14 @@ export const createStartAgentSession = ({
     role,
     scenario,
     sendKickoff = false,
+    startMode = "reuse_latest",
   }: StartAgentSessionInput): Promise<string> => {
     if (!activeRepo) {
       throw new Error("Select a workspace first.");
     }
 
     const repoPath = activeRepo;
-    const inFlightKey = `${repoPath}::${taskId}::${role}`;
+    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}`;
     const existingInFlight = inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
@@ -119,26 +121,28 @@ export const createStartAgentSession = ({
       });
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
 
-      const existingSession = pickLatestSession(
-        Object.values(sessionsRef.current).filter(
-          (entry) => entry.taskId === taskId && entry.role === role,
-        ),
-      );
-      if (existingSession) {
-        return existingSession.sessionId;
-      }
-
-      const persistedSessions = await host.agentSessionsList(repoPath, taskId);
-      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      const latestPersistedSession = pickLatestSession(
-        persistedSessions.filter((entry) => entry.role === role),
-      );
-      if (latestPersistedSession) {
-        if (!sessionsRef.current[latestPersistedSession.sessionId]) {
-          await loadAgentSessions(taskId);
-          throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+      if (startMode === "reuse_latest") {
+        const existingSession = pickLatestSession(
+          Object.values(sessionsRef.current).filter(
+            (entry) => entry.taskId === taskId && entry.role === role,
+          ),
+        );
+        if (existingSession) {
+          return existingSession.sessionId;
         }
-        return latestPersistedSession.sessionId;
+
+        const persistedSessions = await host.agentSessionsList(repoPath, taskId);
+        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+        const latestPersistedSession = pickLatestSession(
+          persistedSessions.filter((entry) => entry.role === role),
+        );
+        if (latestPersistedSession) {
+          if (!sessionsRef.current[latestPersistedSession.sessionId]) {
+            await loadAgentSessions(taskId);
+            throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+          }
+          return latestPersistedSession.sessionId;
+        }
       }
 
       const task = taskRef.current.find((entry) => entry.id === taskId);

@@ -50,7 +50,7 @@ export type AgentStudioHeaderModel = {
   onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   sessionSelector: AgentStudioSessionSelectorModel;
   sessionCreateOptions: AgentSessionCreateOption[];
-  onCreateSession: (role: AgentRole, scenario: AgentScenario) => void;
+  onCreateSession: (option: AgentSessionCreateOption) => void;
   createSessionDisabled: boolean;
   isCreatingSession: boolean;
   stats: {
@@ -274,7 +274,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                             if (option.disabled) {
                               return;
                             }
-                            onCreateSession(option.role, option.scenario);
+                            onCreateSession(option);
                             setIsCreateSessionMenuOpen(false);
                           }}
                         >

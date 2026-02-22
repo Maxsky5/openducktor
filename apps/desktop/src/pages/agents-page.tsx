@@ -47,6 +47,9 @@ export function AgentsPage(): ReactElement {
     ? scenarioParam
     : undefined;
   const autostart = searchParams.get("autostart") === "1";
+  const startParam = searchParams.get("start");
+  const sessionStartPreference =
+    startParam === "fresh" || startParam === "continue" ? startParam : null;
 
   const selectedSessionById = useMemo(
     () => sessions.find((entry) => entry.sessionId === sessionParam) ?? null,
@@ -80,6 +83,9 @@ export function AgentsPage(): ReactElement {
     if (sessionParam) {
       return null;
     }
+    if (sessionStartPreference === "fresh" && hasExplicitRoleParam) {
+      return null;
+    }
     if (hasExplicitRoleParam) {
       return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;
     }
@@ -88,6 +94,7 @@ export function AgentsPage(): ReactElement {
     hasExplicitRoleParam,
     roleFromQuery,
     selectedSessionById,
+    sessionStartPreference,
     sessionParam,
     sessionsForTask,
     taskId,
@@ -226,6 +233,7 @@ export function AgentsPage(): ReactElement {
     role,
     scenario,
     autostart,
+    sessionStartPreference,
     activeSession,
     sessionsForTask,
     selectedTask,
