@@ -192,9 +192,10 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
         };
       }
 
+      let restartedRuntime: AgentRuntimeSummary | null = null;
       try {
         await deps.stopRuntime(runtimeProbe.runtime.runtimeId);
-        const restartedRuntime = await deps.ensureRuntime(repoPath);
+        restartedRuntime = await deps.ensureRuntime(repoPath);
         const restartedRuntimeInput = toRuntimeInput(restartedRuntime);
         const statusByServer = await deps.getMcpStatus(restartedRuntimeInput);
         return {
@@ -207,7 +208,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
         return {
           ok: false,
           result: toMcpStatusFailedHealthCheck(
-            runtimeProbe.runtime,
+            restartedRuntime ?? runtimeProbe.runtime,
             `Failed to query OpenCode MCP status: ${errorMessage(retryError)}`,
             checkedAt,
           ),

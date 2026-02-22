@@ -218,6 +218,53 @@ describe("opencode-catalog", () => {
     expect(result.availableToolIds).toEqual(["odt_read_task", "odt_set_plan"]);
   });
 
+  test("keeps restarted runtime details when config-invalid retry still fails", async () => {
+    const restartedRuntime: RuntimeSummary = {
+      ...runtimeFixture,
+      runtimeId: "runtime-2",
+      port: 5555,
+    };
+    const ensureRuntime = mock(async (repoPath: string) => {
+      if (repoPath !== "/tmp/repo") {
+        throw new Error("unexpected repo path");
+      }
+      return ensureRuntime.mock.calls.length === 1 ? runtimeFixture : restartedRuntime;
+    });
+    const stopRuntime = mock(async () => ({ ok: true }));
+    const getMcpStatus = mock(async (_input: { baseUrl: string; workingDirectory: string }) => {
+      if (getMcpStatus.mock.calls.length === 1) {
+        throw new Error("ConfigInvalidError: invalid option loglevel");
+      }
+      throw new Error("status still unavailable");
+    });
+
+    const operations = createOpencodeCatalogOperations(
+      createDeps({
+        ensureRuntime,
+        stopRuntime,
+        getMcpStatus,
+      }),
+    );
+
+    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+
+    expect(ensureRuntime).toHaveBeenCalledTimes(2);
+    expect(stopRuntime).toHaveBeenCalledWith("runtime-1");
+    expect(getMcpStatus).toHaveBeenCalledTimes(2);
+    expect(getMcpStatus.mock.calls[1]?.[0]).toEqual({
+      baseUrl: "http://127.0.0.1:5555",
+      workingDirectory: "/tmp/repo/worktree",
+    });
+    expect(result.runtimeOk).toBe(true);
+    expect(result.runtime).toEqual(restartedRuntime);
+    expect(result.mcpOk).toBe(false);
+    expect(result.mcpError).toBe("Failed to query OpenCode MCP status: status still unavailable");
+    expect(result.errors).toEqual([
+      "Failed to query OpenCode MCP status: status still unavailable",
+    ]);
+    expect(result.availableToolIds).toEqual([]);
+  });
+
   test("reconnects MCP when disconnected and falls back on tool-id lookup errors", async () => {
     const getMcpStatus = mock(async (_input: { baseUrl: string; workingDirectory: string }) => {
       if (getMcpStatus.mock.calls.length === 1) {
