@@ -73,7 +73,9 @@ export function AgentChatThread({
           <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
             <p>
               {taskSelected
-                ? "Send a message to start a new session automatically."
+                ? isStarting
+                  ? "Initializing session..."
+                  : "Send a message to start a new session automatically."
                 : "Select a task to begin."}
             </p>
             {canKickoffNewSession ? (

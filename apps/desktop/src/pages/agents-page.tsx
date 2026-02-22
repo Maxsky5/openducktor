@@ -7,13 +7,7 @@ import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from 
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  ROLE_OPTIONS,
-  SCENARIOS_BY_ROLE,
-  firstScenario,
-  isRole,
-  isScenario,
-} from "./agents-page-constants";
+import { SCENARIOS_BY_ROLE, firstScenario, isRole, isScenario } from "./agents-page-constants";
 import { buildLatestSessionByTaskMap } from "./agents-page-session-tabs";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
@@ -263,6 +257,7 @@ export function AgentsPage(): ReactElement {
     agentChatModel,
   } = useAgentStudioPageModels({
     taskId,
+    role,
     selectedTask,
     sessionsForTask,
     contextSessionsLength: contextSessions.length,

@@ -128,6 +128,7 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness({
       taskId: "task-1",
+      role: "spec",
       selectedTask: createTask(),
       sessionsForTask: [createSession()],
       contextSessionsLength: 1,
@@ -205,6 +206,7 @@ describe("useAgentStudioPageModels", () => {
     const sessionB = createSession("session-b", "external-b");
     const commonProps: Omit<HookArgs, "sessionsForTask" | "activeSession"> = {
       taskId: "task-1",
+      role: "spec",
       selectedTask: createTask(),
       contextSessionsLength: 2,
       taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],

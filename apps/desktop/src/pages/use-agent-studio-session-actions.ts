@@ -3,7 +3,7 @@ import type { AgentStateContextValue } from "@/types/state-slices";
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SCENARIO_LABELS, kickoffPromptForScenario } from "./agents-page-constants";
+import { SCENARIO_LABELS, firstScenario, kickoffPromptForScenario } from "./agents-page-constants";
 import { buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
 
 type QueryUpdate = Record<string, string | undefined>;
@@ -143,10 +143,19 @@ export function useAgentStudioSessionActions({
     }
     const sessionId = await startSession();
     if (!sessionId) {
+      updateQuery({ autostart: undefined });
       return;
     }
     await sendAgentMessage(sessionId, kickoffPromptForScenario(role, scenario, taskId));
-  }, [agentStudioReady, role, scenario, sendAgentMessage, startSession, taskId]);
+  }, [agentStudioReady, role, scenario, sendAgentMessage, startSession, taskId, updateQuery]);
+
+  const autoStartKey = activeRepo && taskId ? `${activeRepo}:${taskId}:${role}:${scenario}` : null;
+  const hasAutoStartExecuted = autoStartKey
+    ? autoStartExecutedRef.current.has(autoStartKey)
+    : false;
+  const isAutoStartPending = Boolean(
+    autostart && autoStartKey && !activeSession && agentStudioReady && !hasAutoStartExecuted,
+  );
 
   useEffect(() => {
     if (
@@ -159,20 +168,21 @@ export function useAgentStudioSessionActions({
     ) {
       return;
     }
-    const key = `${activeRepo}:${taskId}:${role}:${scenario}`;
-    if (autoStartExecutedRef.current.has(key)) {
+    if (!autoStartKey) {
       return;
     }
-    autoStartExecutedRef.current.add(key);
+    if (autoStartExecutedRef.current.has(autoStartKey)) {
+      return;
+    }
+    autoStartExecutedRef.current.add(autoStartKey);
     void startScenarioKickoff();
   }, [
+    autoStartKey,
     activeRepo,
     activeSession,
     agentStudioReady,
     autostart,
     isActiveTaskHydrated,
-    role,
-    scenario,
     startScenarioKickoff,
     taskId,
   ]);
@@ -282,8 +292,18 @@ export function useAgentStudioSessionActions({
   }, [activeSession?.pendingQuestions]);
 
   const handleWorkflowStepSelect = useCallback(
-    (_nextRole: AgentRole, sessionId: string | null): void => {
+    (nextRole: AgentRole, sessionId: string | null): void => {
+      if (!taskId) {
+        return;
+      }
       if (!sessionId) {
+        updateQuery({
+          task: taskId,
+          session: undefined,
+          agent: nextRole,
+          scenario: firstScenario(nextRole),
+          autostart: undefined,
+        });
         return;
       }
       const session = sessionsForTask.find((entry) => entry.sessionId === sessionId);
@@ -296,7 +316,7 @@ export function useAgentStudioSessionActions({
         autostart: undefined,
       });
     },
-    [sessionsForTask, updateQuery],
+    [sessionsForTask, taskId, updateQuery],
   );
 
   const handleSessionSelectionChange = useCallback(
@@ -361,7 +381,7 @@ export function useAgentStudioSessionActions({
             taskId,
             role: nextRole,
             scenario: nextScenario,
-            sendKickoff: true,
+            sendKickoff: false,
           });
           if (!sessionId) {
             updateQuery(previousSelection);
@@ -374,6 +394,10 @@ export function useAgentStudioSessionActions({
             scenario: nextScenario,
             autostart: undefined,
           });
+          void sendAgentMessage(
+            sessionId,
+            kickoffPromptForScenario(nextRole, nextScenario, taskId),
+          ).catch(() => undefined);
           return sessionId;
         } catch {
           updateQuery(previousSelection);
@@ -398,6 +422,7 @@ export function useAgentStudioSessionActions({
       selectedTask,
       role,
       scenario,
+      sendAgentMessage,
       startAgentSession,
       taskId,
       updateQuery,
@@ -410,7 +435,7 @@ export function useAgentStudioSessionActions({
   const canStopSession = Boolean(activeSession && isSessionWorking);
 
   return {
-    isStarting,
+    isStarting: isStarting || isAutoStartPending,
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,

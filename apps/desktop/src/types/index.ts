@@ -1,3 +1,4 @@
+export type { AgentWorkflowStepState } from "./agent-workflow";
 export type {
   ChecksStateContextValue,
   DelegationStateContextValue,

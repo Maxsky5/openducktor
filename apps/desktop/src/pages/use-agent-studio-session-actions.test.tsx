@@ -3,6 +3,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskCard } from "@openducktor/contracts";
 import { type ReactElement, createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { kickoffPromptForScenario } from "./agents-page-constants";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
@@ -109,6 +110,13 @@ const createHookHarness = (initialProps: HookArgs) => {
     });
   };
 
+  const getLatest = (): HookState => {
+    if (!latest) {
+      throw new Error("Hook state unavailable");
+    }
+    return latest;
+  };
+
   const unmount = async (): Promise<void> => {
     await act(async () => {
       renderer?.unmount();
@@ -116,7 +124,7 @@ const createHookHarness = (initialProps: HookArgs) => {
     });
   };
 
-  return { mount, run, unmount };
+  return { mount, run, getLatest, unmount };
 };
 
 const createBaseArgs = (): HookArgs => {
@@ -218,6 +226,35 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("workflow selection without existing session switches role context", async () => {
+    const updateCalls: Array<Record<string, string | undefined>> = [];
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      scenario: "spec_initial",
+      sessionsForTask: [],
+      updateQuery: (updates) => {
+        updateCalls.push(updates);
+      },
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleWorkflowStepSelect("planner", null);
+    });
+
+    expect(updateCalls).toContainEqual({
+      task: "task-1",
+      session: undefined,
+      agent: "planner",
+      scenario: "planner_initial",
+      autostart: undefined,
+    });
+
+    await harness.unmount();
+  });
+
   test("submits question answers when session is active", async () => {
     const answerAgentQuestion = mock(async () => {});
 
@@ -240,6 +277,7 @@ describe("useAgentStudioSessionActions", () => {
   test("handleCreateSession updates query immediately, then targets created session", async () => {
     const deferredStart = createDeferred<string>();
     const startAgentSession = mock(async () => deferredStart.promise);
+    const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -249,6 +287,7 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
       selectedTask: createTask({ availableActions: ["set_plan"] }),
       startAgentSession,
+      sendAgentMessage,
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -271,7 +310,7 @@ describe("useAgentStudioSessionActions", () => {
         taskId: "task-1",
         role: "planner",
         scenario: "planner_initial",
-        sendKickoff: true,
+        sendKickoff: false,
       });
 
       await harness.run(async () => {
@@ -286,6 +325,10 @@ describe("useAgentStudioSessionActions", () => {
         scenario: "planner_initial",
         autostart: undefined,
       });
+      expect(sendAgentMessage).toHaveBeenCalledWith(
+        "session-plan",
+        kickoffPromptForScenario("planner", "planner_initial", "task-1"),
+      );
     } finally {
       deferredStart.resolve("session-plan");
       await harness.unmount();
@@ -295,6 +338,7 @@ describe("useAgentStudioSessionActions", () => {
   test("handleCreateSession restores previous query selection on start failure", async () => {
     const deferredStart = createDeferred<string>();
     const startAgentSession = mock(async () => deferredStart.promise);
+    const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
     const harness = createHookHarness({
@@ -304,6 +348,7 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
       selectedTask: createTask({ availableActions: ["set_plan"] }),
       startAgentSession,
+      sendAgentMessage,
       updateQuery: (updates) => {
         updateCalls.push(updates);
       },
@@ -334,9 +379,76 @@ describe("useAgentStudioSessionActions", () => {
         scenario: "spec_initial",
         autostart: undefined,
       });
+      expect(sendAgentMessage).not.toHaveBeenCalled();
     } finally {
       deferredStart.resolve("session-plan");
       await harness.unmount();
     }
+  });
+
+  test("handleCreateSession stops loading once session is created even if kickoff is still running", async () => {
+    const deferredStart = createDeferred<string>();
+    const deferredKickoff = createDeferred<void>();
+    const startAgentSession = mock(async () => deferredStart.promise);
+    const sendAgentMessage = mock(async () => deferredKickoff.promise);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      scenario: "spec_initial",
+      activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
+      selectedTask: createTask({ availableActions: ["set_plan"] }),
+      startAgentSession,
+      sendAgentMessage,
+      updateQuery: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleCreateSession("planner", "planner_initial");
+      });
+
+      expect(harness.getLatest().isStarting).toBe(true);
+
+      await harness.run(async () => {
+        deferredStart.resolve("session-plan");
+        await deferredStart.promise;
+      });
+
+      expect(sendAgentMessage).toHaveBeenCalledWith(
+        "session-plan",
+        kickoffPromptForScenario("planner", "planner_initial", "task-1"),
+      );
+      expect(harness.getLatest().isStarting).toBe(false);
+
+      deferredKickoff.resolve();
+      await Promise.resolve();
+    } finally {
+      deferredStart.resolve("session-plan");
+      deferredKickoff.resolve();
+      await harness.unmount();
+    }
+  });
+
+  test("marks autostart flow as initializing before task hydration completes", async () => {
+    const startAgentSession = mock(async () => "session-plan");
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "planner",
+      scenario: "planner_initial",
+      autostart: true,
+      isActiveTaskHydrated: false,
+      activeSession: null,
+      startAgentSession,
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().isStarting).toBe(true);
+    expect(startAgentSession).not.toHaveBeenCalled();
+
+    await harness.unmount();
   });
 });

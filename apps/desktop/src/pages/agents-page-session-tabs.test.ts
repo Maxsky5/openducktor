@@ -195,11 +195,33 @@ describe("agents-page-session-tabs", () => {
         buildSession({ role: "planner", sessionId: "planner-1" }),
       ],
       activeSessionRole: "planner",
+      activeSessionStatus: "idle",
     });
 
     expect(states).toEqual({
       spec: "done",
-      planner: "current",
+      planner: "done",
+      build: "blocked",
+      qa: "blocked",
+    });
+  });
+
+  test("marks active workflow role as in_progress only when session is running", () => {
+    const states = buildWorkflowStateByRole({
+      roleEnabledByTask: {
+        spec: false,
+        planner: true,
+        build: false,
+        qa: false,
+      },
+      sessionsForTask: [buildSession({ role: "planner", sessionId: "planner-1" })],
+      activeSessionRole: "planner",
+      activeSessionStatus: "running",
+    });
+
+    expect(states).toEqual({
+      spec: "blocked",
+      planner: "in_progress",
       build: "blocked",
       qa: "blocked",
     });

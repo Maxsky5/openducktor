@@ -24,6 +24,7 @@ import {
 
 type UseAgentStudioPageModelsArgs = {
   taskId: string;
+  role: AgentRole;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionState[];
   contextSessionsLength: number;
@@ -78,6 +79,7 @@ type UseAgentStudioPageModelsArgs = {
 
 export function useAgentStudioPageModels({
   taskId,
+  role,
   selectedTask,
   sessionsForTask,
   contextSessionsLength,
@@ -188,8 +190,9 @@ export function useAgentStudioPageModels({
         roleEnabledByTask,
         sessionsForTask,
         activeSessionRole: activeSession?.role ?? null,
+        activeSessionStatus: activeSession?.status ?? null,
       }),
-    [activeSession?.role, roleEnabledByTask, sessionsForTask],
+    [activeSession?.role, activeSession?.status, roleEnabledByTask, sessionsForTask],
   );
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
   const sessionSelectorGroups = useMemo(
@@ -243,6 +246,7 @@ export function useAgentStudioPageModels({
         activeSession,
         roleOptions: ROLE_OPTIONS,
         workflowStateByRole,
+        selectedRole: activeSession?.role ?? role,
         latestSessionByRole,
         onWorkflowStepSelect: handleWorkflowStepSelect,
         onSessionSelectionChange: handleSessionSelectionChange,
@@ -266,6 +270,7 @@ export function useAgentStudioPageModels({
       handleWorkflowStepSelect,
       isStarting,
       latestSessionByRole,
+      role,
       selectedTask,
       sessionCreateOptions,
       sessionSelectorGroups,

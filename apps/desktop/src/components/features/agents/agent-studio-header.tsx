@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { Check, Circle, CircleDotDashed, LoaderCircle, Plus, Sparkles } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
@@ -20,7 +21,7 @@ type AgentWorkflowStep = {
   role: AgentRole;
   label: string;
   icon: AgentRoleOption["icon"];
-  state: "done" | "current" | "available" | "blocked";
+  state: AgentWorkflowStepState;
   sessionId: string | null;
 };
 
@@ -44,6 +45,7 @@ export type AgentStudioHeaderModel = {
   taskTitle: string | null;
   taskId: string | null;
   sessionStatus: "starting" | "running" | "idle" | "error" | "stopped" | null;
+  selectedRole: AgentRole | null;
   workflowSteps: AgentWorkflowStep[];
   onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   sessionSelector: AgentStudioSessionSelectorModel;
@@ -74,21 +76,24 @@ const statusBadgeVariant = (status: string): "default" | "warning" | "danger" | 
 };
 
 const workflowStepClassName = (state: AgentWorkflowStep["state"]): string => {
-  if (state === "current") {
-    return "border-sky-300 bg-sky-50 text-sky-700 shadow-sm";
+  if (state === "in_progress") {
+    return "border-sky-300 bg-sky-50 hover:bg-sky-50 text-sky-700 shadow-sm";
   }
   if (state === "done") {
-    return "border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm";
+    return "border-emerald-300 bg-emerald-50 hover:bg-emerald-50 text-emerald-700 shadow-sm";
   }
   if (state === "available") {
-    return "border-slate-300 bg-white text-slate-700 hover:border-sky-200 hover:text-sky-700";
+    return "border-slate-300 bg-white text-slate-700";
   }
   return "border-slate-200 bg-slate-100 text-slate-400";
 };
 
 const workflowConnectorClassName = (state: AgentWorkflowStep["state"]): string => {
-  if (state === "done" || state === "current") {
+  if (state === "done") {
     return "bg-emerald-300";
+  }
+  if (state === "in_progress") {
+    return "bg-sky-300";
   }
   if (state === "available") {
     return "bg-slate-300";
@@ -96,10 +101,14 @@ const workflowConnectorClassName = (state: AgentWorkflowStep["state"]): string =
   return "bg-slate-200";
 };
 
+const workflowSelectionClassName = (isSelected: boolean): string => {
+  return isSelected ? "ring-3 ring-offset-3 ring-blue-400" : "";
+};
+
 const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (entry.sessionId) {
-    if (entry.state === "current") {
-      return "Current session role";
+    if (entry.state === "in_progress") {
+      return "Step in progress";
     }
     return "Open latest session for this role";
   }
@@ -114,6 +123,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     taskTitle,
     taskId,
     sessionStatus,
+    selectedRole,
     workflowSteps,
     onWorkflowStepSelect,
     sessionSelector,
@@ -166,13 +176,14 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
         ) : null}
       </div>
 
-      <div className="flex items-center justify-center overflow-x-auto py-1">
+      <div className="flex items-center justify-center py-1">
         <div className="flex items-center gap-1">
           {workflowSteps.map((entry, index) => {
             const Icon = entry.icon;
-            const isClickable = Boolean(entry.sessionId);
-            const shouldSpinCurrent =
-              entry.state === "current" &&
+            const isClickable = Boolean(entry.sessionId) || entry.state === "available";
+            const isSelected = selectedRole === entry.role;
+            const shouldSpinInProgress =
+              entry.state === "in_progress" &&
               (sessionStatus === "running" || sessionStatus === "starting");
             return (
               <div key={entry.role} className="flex min-w-0 items-center gap-1">
@@ -183,6 +194,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   className={cn(
                     "h-10 shrink-0 gap-2 rounded-lg border px-4 text-sm transition-colors",
                     workflowStepClassName(entry.state),
+                    workflowSelectionClassName(isSelected),
                     isClickable ? "cursor-pointer" : "cursor-not-allowed",
                   )}
                   disabled={!agentStudioReady || !isClickable}
@@ -192,10 +204,10 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   <Icon className="size-4" />
                   {entry.label}
                   {entry.state === "done" ? <Check className="size-3.5 text-emerald-600" /> : null}
-                  {entry.state === "current" && shouldSpinCurrent ? (
+                  {entry.state === "in_progress" && shouldSpinInProgress ? (
                     <LoaderCircle className="size-3.5 animate-spin" />
                   ) : null}
-                  {entry.state === "current" && !shouldSpinCurrent ? (
+                  {entry.state === "in_progress" && !shouldSpinInProgress ? (
                     <CircleDotDashed className="size-3.5" />
                   ) : null}
                   {entry.state === "available" ? <Circle className="size-3" /> : null}

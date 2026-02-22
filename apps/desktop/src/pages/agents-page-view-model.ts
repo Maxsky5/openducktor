@@ -5,10 +5,11 @@ import type { AgentStudioWorkspaceSidebarModel } from "@/components/features/age
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentPermissionRequest, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import type { RefObject, UIEvent } from "react";
-import type { SessionCreateOption, WorkflowStepState } from "./agents-page-session-tabs";
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 
 const DEFAULT_ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
   spec: "Spec",
@@ -47,7 +48,8 @@ export const buildAgentStudioHeaderModel = (args: {
   selectedTask: TaskCard | null;
   activeSession: AgentSessionState | null;
   roleOptions: AgentRoleOption[];
-  workflowStateByRole: Record<AgentRole, WorkflowStepState>;
+  workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
+  selectedRole: AgentRole | null;
   latestSessionByRole: Record<AgentRole, AgentSessionState | null>;
   onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   onSessionSelectionChange: (value: string) => void;
@@ -64,6 +66,7 @@ export const buildAgentStudioHeaderModel = (args: {
   taskTitle: args.selectedTask?.title ?? null,
   taskId: args.selectedTask?.id ?? null,
   sessionStatus: args.activeSession?.status ?? null,
+  selectedRole: args.selectedRole,
   workflowSteps: args.roleOptions.map((entry) => ({
     role: entry.role,
     label: entry.label,

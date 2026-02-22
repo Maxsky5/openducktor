@@ -66,6 +66,23 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Agent is thinking...");
   });
 
+  test("renders initializing state while autostart session is pending", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: null,
+          taskSelected: true,
+          isStarting: true,
+          canKickoffNewSession: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("Initializing session...");
+    expect(html).not.toContain("Send a message to start a new session automatically.");
+  });
+
   test("renders blocked warning with recheck action when studio is unavailable", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {

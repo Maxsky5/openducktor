@@ -16,12 +16,13 @@ const buildModel = () => ({
   taskTitle: "Rework Agent Studio UI",
   taskId: "fairnest-97f",
   sessionStatus: "running" as const,
+  selectedRole: "spec" as const,
   workflowSteps: [
     {
       role: "spec" as const,
       label: "Spec",
       icon: roleIcon(0),
-      state: "current" as const,
+      state: "in_progress" as const,
       sessionId: "spec-session",
     },
     {
@@ -145,5 +146,59 @@ describe("AgentStudioHeader", () => {
     );
 
     expect(html).toContain("disabled");
+  });
+
+  test("keeps available workflow step clickable without existing session", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          workflowSteps: [
+            {
+              role: "spec" as const,
+              label: "Spec",
+              icon: roleIcon(0),
+              state: "in_progress" as const,
+              sessionId: "spec-session",
+            },
+            {
+              role: "planner" as const,
+              label: "Planner",
+              icon: roleIcon(1),
+              state: "available" as const,
+              sessionId: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('title="No session yet for this role"');
+    expect(html).not.toContain('title="No session yet for this role" disabled');
+  });
+
+  test("highlights selected role with a ring without changing done status color", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          selectedRole: "planner",
+          workflowSteps: [
+            {
+              role: "planner" as const,
+              label: "Planner",
+              icon: roleIcon(1),
+              state: "done" as const,
+              sessionId: "planner-session",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain("ring-3 ring-offset-3 ring-blue-400");
+    expect(html).toContain("border-emerald-300");
+    expect(html).toContain("bg-emerald-50");
+    expect(html).toContain("text-emerald-700");
   });
 });

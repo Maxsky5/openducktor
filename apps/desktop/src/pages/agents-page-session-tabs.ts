@@ -1,6 +1,7 @@
 import type { AgentStudioTaskTab } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { TaskAction, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 
@@ -14,7 +15,7 @@ export type PersistedTaskTabsState = {
   activeTaskId: string | null;
 };
 
-export type WorkflowStepState = "done" | "current" | "available" | "blocked";
+export type WorkflowStepState = AgentWorkflowStepState;
 
 export type SessionCreateOption = {
   id: string;
@@ -172,13 +173,16 @@ export const buildWorkflowStateByRole = (params: {
   roleEnabledByTask: Record<AgentRole, boolean>;
   sessionsForTask: AgentSessionState[];
   activeSessionRole: AgentRole | null;
+  activeSessionStatus: AgentSessionState["status"] | null;
 }): Record<AgentRole, WorkflowStepState> => {
   const hasSessionByRole = new Set(params.sessionsForTask.map((entry) => entry.role));
+  const isActiveSessionWorking =
+    params.activeSessionStatus === "running" || params.activeSessionStatus === "starting";
   const stateByRole = {} as Record<AgentRole, WorkflowStepState>;
 
   for (const role of ALL_AGENT_ROLES) {
-    if (params.activeSessionRole === role) {
-      stateByRole[role] = "current";
+    if (params.activeSessionRole === role && isActiveSessionWorking) {
+      stateByRole[role] = "in_progress";
       continue;
     }
     if (hasSessionByRole.has(role)) {

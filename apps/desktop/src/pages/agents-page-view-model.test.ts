@@ -117,11 +117,12 @@ describe("agents-page-view-model", () => {
         { role: "planner", label: "Planner", icon: Sparkles },
       ],
       workflowStateByRole: {
-        spec: "current",
+        spec: "in_progress",
         planner: "available",
         build: "blocked",
         qa: "blocked",
       },
+      selectedRole: "spec",
       latestSessionByRole: {
         spec: activeSession,
         planner: null,
