@@ -6,7 +6,7 @@ This repository uses recurring checks and automated update PRs to keep dependenc
 
 - Config: `.github/dependabot.yml`
 - Coverage:
-  - npm workspace updates from repository root
+  - Bun workspace updates from repository root
   - Cargo updates for `apps/desktop/src-tauri`
   - GitHub Actions updates
 - Cadence: weekly
