@@ -50,7 +50,7 @@ jobs:
         run: bun run deps:unused:exports > unused-exports-report.txt
 
       - name: Publish report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dependency-hygiene-reports
           path: |
