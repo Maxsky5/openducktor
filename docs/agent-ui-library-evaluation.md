@@ -29,4 +29,3 @@ Use **project-native shadcn + Tailwind composition** for the agent UI layer and 
 
 This keeps the UI fully aligned with OpenDucktor workflow semantics while preserving replaceable
 adapter boundaries (hexagonal architecture).
-

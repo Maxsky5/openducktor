@@ -52,6 +52,8 @@ Goals for agent contributions:
 - Keep feature logic in feature folders and expose public APIs via `index.ts` barrels.
 - Avoid god components/providers and avoid boolean-prop proliferation.
 - Keep side effects and async orchestration in dedicated hooks, not UI leaf components.
+- Keep page/feature files as composition roots; move orchestration into focused `use-*-controller` / `use-*-view-model` hooks.
+- Split dense feature UIs into presentational slices (`*-header`, `*-body`, `*-footer`, dialogs) with narrow props.
 
 ### State management
 
@@ -74,6 +76,7 @@ Goals for agent contributions:
 - Use Tailwind v4 utilities and existing design language in `apps/desktop/src/styles.css`.
 - NEVER use gradient backgrounds in this project UI (no `bg-gradient-*` usage for surfaces/components).
 - Avoid native browser-styled controls when a project UI component exists (combobox/tag selector, dialog/sheet, etc.).
+- Prefer explicit composition APIs over boolean mode props in shared UI wrappers (e.g. `closeButton` slot instead of `showCloseButton`).
 - Avoid visual layout shifts on hover (size, spacing, or typography changes).
 - For async submit actions in forms:
   - disable the full form scope (not only buttons),
@@ -131,7 +134,7 @@ Keep this contract stable. If you change any item below, update all related laye
 - Canonical role-to-tool policy lives in `packages/core/src/types/agent-orchestrator.ts` (`AGENT_ROLE_TOOL_POLICY`).
 - Role allowlist: `spec` => `odt_read_task, odt_set_spec`; `planner` => `odt_read_task, odt_set_plan`; `build` => `odt_read_task, odt_build_blocked, odt_build_resumed, odt_build_completed`; `qa` => `odt_read_task, odt_qa_approved, odt_qa_rejected`.
 - Workflow tool normalization/alias handling lives in `packages/core/src/services/odt-workflow-tools.ts`.
-- Agent Studio orchestration source-of-truth is `apps/desktop/src/pages/agents-page.tsx`.
+- Agent Studio composition root is `apps/desktop/src/pages/agents-page.tsx`; orchestration is split into `apps/desktop/src/pages/use-agent-studio-*.ts` hooks and `apps/desktop/src/pages/agents-page-view-model.ts`.
 - Agent runtime/session orchestration and permission guardrails live in `apps/desktop/src/state/operations/use-agent-orchestrator-operations.ts`.
 - Read-only roles (`spec`, `planner`, `qa`) must keep mutating permission auto-rejection behavior.
 - Do not rename `odt_*` workflow tools or change role allowlists in a single layer; update MCP, core policy, adapter, and frontend together.
