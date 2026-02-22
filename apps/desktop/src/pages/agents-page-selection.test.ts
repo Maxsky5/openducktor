@@ -1,0 +1,102 @@
+import { describe, expect, test } from "bun:test";
+import type { AgentModelCatalog } from "@openducktor/core";
+import {
+  emptyDraftSelections,
+  extractCompletionTimestamp,
+  isSameSelection,
+  normalizeSelectionForCatalog,
+  pickDefaultSelectionForCatalog,
+  toContextStorageKey,
+  toTabsStorageKey,
+} from "./agents-page-selection";
+
+const catalogFixture: AgentModelCatalog = {
+  models: [
+    {
+      id: "openai/gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["default", "fast"],
+    },
+    {
+      id: "anthropic/claude-sonnet-4",
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelId: "claude-sonnet-4",
+      modelName: "Claude Sonnet 4",
+      variants: [],
+    },
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+  agents: [
+    { name: "spec", mode: "primary" },
+    { name: "qa", mode: "all" },
+    { name: "hidden-subagent", mode: "subagent", hidden: true },
+  ],
+};
+
+describe("agents-page-selection", () => {
+  test("builds storage keys and empty role selections", () => {
+    expect(toContextStorageKey("/repo")).toBe("openducktor:agent-studio:context:/repo");
+    expect(toTabsStorageKey("/repo")).toBe("openducktor:agent-studio:tabs:/repo");
+    expect(emptyDraftSelections()).toEqual({ spec: null, planner: null, build: null, qa: null });
+  });
+
+  test("extracts completion timestamp from tool output", () => {
+    const value = "Done at 2026-02-01T12:10:00.000Z";
+    const extracted = extractCompletionTimestamp(value);
+    expect(extracted?.raw).toBe("2026-02-01T12:10:00.000Z");
+    expect(extractCompletionTimestamp("not a timestamp")).toBeNull();
+  });
+
+  test("picks default model + primary agent", () => {
+    expect(pickDefaultSelectionForCatalog(catalogFixture)).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      opencodeAgent: "spec",
+    });
+  });
+
+  test("normalizes variant and removes unsupported agent", () => {
+    expect(
+      normalizeSelectionForCatalog(catalogFixture, {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "not-supported",
+        opencodeAgent: "hidden-subagent",
+      }),
+    ).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+    });
+
+    expect(
+      normalizeSelectionForCatalog(catalogFixture, {
+        providerId: "unknown",
+        modelId: "missing",
+      }),
+    ).toBeNull();
+  });
+
+  test("compares selections by full tuple", () => {
+    expect(isSameSelection(null, null)).toBe(true);
+    expect(
+      isSameSelection(
+        { providerId: "openai", modelId: "gpt-5", variant: "default", opencodeAgent: "spec" },
+        { providerId: "openai", modelId: "gpt-5", variant: "default", opencodeAgent: "spec" },
+      ),
+    ).toBe(true);
+    expect(
+      isSameSelection(
+        { providerId: "openai", modelId: "gpt-5" },
+        { providerId: "openai", modelId: "gpt-5", variant: "fast" },
+      ),
+    ).toBe(false);
+  });
+});

@@ -3,8 +3,14 @@ import type { GitBranch, GitCurrentBranch, WorkspaceRecord } from "@openducktor/
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";
-
-const BRANCH_SYNC_INTERVAL_MS = 30000;
+import {
+  BRANCH_SYNC_INTERVAL_MS,
+  hasBranchIdentityChanged,
+  normalizeRepoPath,
+  shouldProbeExternalBranchChange,
+  shouldSkipBranchSwitch,
+  swallowBranchProbeError,
+} from "./workspace-operations-model";
 
 type UseWorkspaceOperationsArgs = {
   activeRepo: string | null;
@@ -119,7 +125,7 @@ export function useWorkspaceOperations({
         return;
       }
 
-      if (activeBranch?.name === branchName && !activeBranch.detached) {
+      if (shouldSkipBranchSwitch(activeBranch, branchName)) {
         return;
       }
 
@@ -161,12 +167,18 @@ export function useWorkspaceOperations({
 
   const probeExternalBranchChange = useCallback(async (): Promise<void> => {
     if (
-      !activeRepo ||
-      isSwitchingWorkspace ||
-      isSwitchingBranch ||
-      isLoadingBranches ||
-      branchSyncInFlightRef.current
+      !shouldProbeExternalBranchChange({
+        activeRepo,
+        isSwitchingWorkspace,
+        isSwitchingBranch,
+        isLoadingBranches,
+        isSyncInFlight: branchSyncInFlightRef.current,
+      })
     ) {
+      return;
+    }
+
+    if (!activeRepo) {
       return;
     }
 
@@ -174,20 +186,21 @@ export function useWorkspaceOperations({
 
     try {
       const current = await host.gitGetCurrentBranch(activeRepo);
-      const currentName = current.name ?? null;
-      const hasChanged =
-        currentName !== lastKnownBranchNameRef.current ||
-        current.detached !== lastKnownDetachedRef.current;
+      const hasChanged = hasBranchIdentityChanged(
+        current,
+        lastKnownBranchNameRef.current,
+        lastKnownDetachedRef.current,
+      );
 
       if (hasChanged) {
         try {
           await refreshBranches(false);
         } catch (error) {
-          void error;
+          swallowBranchProbeError(error);
         }
       }
     } catch (error) {
-      void error;
+      swallowBranchProbeError(error);
     } finally {
       branchSyncInFlightRef.current = false;
     }
@@ -239,11 +252,12 @@ export function useWorkspaceOperations({
 
   const addWorkspace = useCallback(
     async (repoPath: string): Promise<void> => {
-      if (!repoPath.trim()) {
+      const normalizedRepoPath = normalizeRepoPath(repoPath);
+      if (!normalizedRepoPath) {
         return;
       }
 
-      const workspace = await host.workspaceAdd(repoPath.trim());
+      const workspace = await host.workspaceAdd(normalizedRepoPath);
       await refreshWorkspaces();
       toast.success("Repository added", {
         description: workspace.path,

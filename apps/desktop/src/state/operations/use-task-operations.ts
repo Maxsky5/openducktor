@@ -11,6 +11,13 @@ import type {
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { host } from "./host";
+import {
+  DEFERRED_BY_USER_REASON,
+  requireActiveRepo,
+  toNormalizedTitle,
+  toUpdateSuccessDescription,
+  toVisibleTasks,
+} from "./task-operations-model";
 
 type UseTaskOperationsArgs = {
   activeRepo: string | null;
@@ -48,9 +55,35 @@ export function useTaskOperations({
       host.tasksList(repoPath),
       host.runsList(repoPath),
     ]);
-    setTasks(taskList.filter((task) => task.status !== "deferred"));
+    setTasks(toVisibleTasks(taskList));
     setRuns(runList);
   }, []);
+
+  const runTaskMutation = useCallback(
+    async (options: {
+      run: (repoPath: string) => Promise<void>;
+      successTitle?: string;
+      successDescription: string;
+      failureTitle: string;
+    }): Promise<void> => {
+      const repoPath = requireActiveRepo(activeRepo);
+      try {
+        await options.run(repoPath);
+        await refreshTaskData(repoPath);
+        if (options.successTitle) {
+          toast.success(options.successTitle, {
+            description: options.successDescription,
+          });
+        }
+      } catch (error) {
+        toast.error(options.failureTitle, {
+          description: errorMessage(error),
+        });
+        throw error;
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
 
   const refreshTasks = useCallback(async (): Promise<void> => {
     if (!activeRepo) {
@@ -78,189 +111,123 @@ export function useTaskOperations({
 
   const createTask = useCallback(
     async (input: TaskCreateInput): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-      if (!input.title.trim()) {
+      requireActiveRepo(activeRepo);
+
+      const title = toNormalizedTitle(input.title);
+      if (!title) {
         return;
       }
 
-      try {
-        await host.taskCreate(activeRepo, {
-          ...input,
-          title: input.title.trim(),
-        });
-        await refreshTaskData(activeRepo);
-        toast.success("Task created", {
-          description: input.title.trim(),
-        });
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to create task", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.taskCreate(repoPath, {
+            ...input,
+            title,
+          });
+        },
+        successTitle: "Task created",
+        successDescription: title,
+        failureTitle: "Failed to create task",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [activeRepo, runTaskMutation],
   );
 
   const updateTask = useCallback(
     async (taskId: string, patch: TaskUpdatePatch): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-
-      try {
-        await host.taskUpdate(activeRepo, taskId, patch);
-        await refreshTaskData(activeRepo);
-        toast.success("Task updated", {
-          description: patch.title?.trim() || taskId,
-        });
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to update task", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.taskUpdate(repoPath, taskId, patch);
+        },
+        successTitle: "Task updated",
+        successDescription: toUpdateSuccessDescription(taskId, patch),
+        failureTitle: "Failed to update task",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [runTaskMutation],
   );
 
   const deleteTask = useCallback(
     async (taskId: string, deleteSubtasks = false): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-
-      try {
-        await host.taskDelete(activeRepo, taskId, deleteSubtasks);
-        await refreshTaskData(activeRepo);
-        toast.success("Task deleted", {
-          description: taskId,
-        });
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to delete task", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.taskDelete(repoPath, taskId, deleteSubtasks);
+        },
+        successTitle: "Task deleted",
+        successDescription: taskId,
+        failureTitle: "Failed to delete task",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [runTaskMutation],
   );
 
   const transitionTask = useCallback(
     async (taskId: string, status: TaskStatus, reason?: string): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-
-      try {
-        await host.taskTransition(activeRepo, taskId, status, reason);
-        await refreshTaskData(activeRepo);
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to transition task", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.taskTransition(repoPath, taskId, status, reason);
+        },
+        successDescription: taskId,
+        failureTitle: "Failed to transition task",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [runTaskMutation],
   );
 
   const deferTask = useCallback(
     async (taskId: string): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-
-      try {
-        await host.taskDefer(activeRepo, taskId, "Deferred by user");
-        await refreshTaskData(activeRepo);
-        toast.success("Task deferred", {
-          description: taskId,
-        });
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to defer task", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.taskDefer(repoPath, taskId, DEFERRED_BY_USER_REASON);
+        },
+        successTitle: "Task deferred",
+        successDescription: taskId,
+        failureTitle: "Failed to defer task",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [runTaskMutation],
   );
 
   const resumeDeferredTask = useCallback(
     async (taskId: string): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-
-      try {
-        await host.taskResumeDeferred(activeRepo, taskId);
-        await refreshTaskData(activeRepo);
-        toast.success("Task resumed", {
-          description: taskId,
-        });
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to resume task", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.taskResumeDeferred(repoPath, taskId);
+        },
+        successTitle: "Task resumed",
+        successDescription: taskId,
+        failureTitle: "Failed to resume task",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [runTaskMutation],
   );
 
   const humanApproveTask = useCallback(
     async (taskId: string): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-
-      try {
-        await host.humanApprove(activeRepo, taskId);
-        await refreshTaskData(activeRepo);
-        toast.success("Task approved", {
-          description: taskId,
-        });
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to approve task", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.humanApprove(repoPath, taskId);
+        },
+        successTitle: "Task approved",
+        successDescription: taskId,
+        failureTitle: "Failed to approve task",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [runTaskMutation],
   );
 
   const humanRequestChangesTask = useCallback(
     async (taskId: string, note?: string): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-
-      try {
-        await host.humanRequestChanges(activeRepo, taskId, note);
-        await refreshTaskData(activeRepo);
-        toast.success("Changes requested", {
-          description: taskId,
-        });
-      } catch (error) {
-        const reason = errorMessage(error);
-        toast.error("Failed to request changes", {
-          description: reason,
-        });
-        throw error;
-      }
+      await runTaskMutation({
+        run: async (repoPath) => {
+          await host.humanRequestChanges(repoPath, taskId, note);
+        },
+        successTitle: "Changes requested",
+        successDescription: taskId,
+        failureTitle: "Failed to request changes",
+      });
     },
-    [activeRepo, refreshTaskData],
+    [runTaskMutation],
   );
 
   const clearTaskData = useCallback(() => {

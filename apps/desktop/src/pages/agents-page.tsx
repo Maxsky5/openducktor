@@ -1,4 +1,3 @@
-import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import {
   AgentChat,
   type AgentChatModel,
@@ -14,24 +13,10 @@ import {
   type AgentStudioTaskTabsModel,
 } from "@/components/features/agents/agent-studio-task-tabs";
 import { AgentStudioWorkspaceSidebar } from "@/components/features/agents/agent-studio-workspace-sidebar";
-import {
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents/catalog-select-options";
-import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
-import type { ComboboxOption } from "@/components/ui/combobox";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
-import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import type {
-  AgentModelCatalog,
-  AgentModelSelection,
-  AgentRole,
-  AgentScenario,
-} from "@openducktor/core";
-import { normalizeOdtWorkflowToolName } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import {
   type ReactElement,
   type UIEvent,
@@ -67,137 +52,11 @@ import {
   resolveFallbackTaskId,
   toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
+import { toContextStorageKey, toTabsStorageKey } from "./agents-page-utils";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
+import { useAgentStudioDocuments } from "./use-agent-studio-documents";
+import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
-
-const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
-const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
-const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
-
-const parseTimestamp = (value: string | null | undefined): number | null => {
-  if (!value) {
-    return null;
-  }
-  const date = new Date(value);
-  const time = date.getTime();
-  return Number.isNaN(time) ? null : time;
-};
-
-const extractCompletionTimestamp = (
-  value: string | undefined,
-): { raw: string; timestamp: number } | null => {
-  if (!value) {
-    return null;
-  }
-  const match = value.match(ISO_TIMESTAMP_PATTERN);
-  if (!match?.[0]) {
-    return null;
-  }
-  const timestamp = parseTimestamp(match[0]);
-  if (timestamp === null) {
-    return null;
-  }
-  return {
-    raw: match[0],
-    timestamp,
-  };
-};
-
-const toContextStorageKey = (repoPath: string): string =>
-  `${AGENT_STUDIO_CONTEXT_STORAGE_PREFIX}:${repoPath}`;
-
-const toTabsStorageKey = (repoPath: string): string =>
-  `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${repoPath}`;
-
-const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | null> => ({
-  spec: null,
-  planner: null,
-  build: null,
-  qa: null,
-});
-
-const pickDefaultSelectionForCatalog = (
-  catalog: AgentModelCatalog | null,
-): AgentModelSelection | null => {
-  if (!catalog || catalog.models.length === 0) {
-    return null;
-  }
-  const defaultProvider = Object.entries(catalog.defaultModelsByProvider).find(([, modelId]) =>
-    catalog.models.some((entry) => entry.modelId === modelId),
-  );
-  const selectedModel = defaultProvider
-    ? (catalog.models.find(
-        (entry) => entry.providerId === defaultProvider[0] && entry.modelId === defaultProvider[1],
-      ) ?? catalog.models[0])
-    : catalog.models[0];
-  if (!selectedModel) {
-    return null;
-  }
-
-  const primaryAgent = catalog.agents.find((entry) => !entry.hidden && entry.mode === "primary");
-  const fallbackAgent = catalog.agents.find((entry) => !entry.hidden && entry.mode !== "subagent");
-  const selectedAgent = primaryAgent?.name ?? fallbackAgent?.name ?? undefined;
-
-  return {
-    providerId: selectedModel.providerId,
-    modelId: selectedModel.modelId,
-    ...(selectedModel.variants[0] ? { variant: selectedModel.variants[0] } : {}),
-    ...(selectedAgent ? { opencodeAgent: selectedAgent } : {}),
-  };
-};
-
-const normalizeSelectionForCatalog = (
-  catalog: AgentModelCatalog | null,
-  selection: AgentModelSelection | null,
-): AgentModelSelection | null => {
-  if (!catalog || !selection) {
-    return selection;
-  }
-  const model = catalog.models.find(
-    (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
-  );
-  if (!model) {
-    return null;
-  }
-
-  const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
-  const hasAgent = Boolean(
-    selection.opencodeAgent &&
-      catalog.agents.some(
-        (agent) =>
-          agent.name === selection.opencodeAgent && !agent.hidden && agent.mode !== "subagent",
-      ),
-  );
-
-  return {
-    providerId: model.providerId,
-    modelId: model.modelId,
-    ...(hasVariant
-      ? { variant: selection.variant }
-      : model.variants[0]
-        ? { variant: model.variants[0] }
-        : {}),
-    ...(hasAgent ? { opencodeAgent: selection.opencodeAgent } : {}),
-  };
-};
-
-const isSameSelection = (
-  a: AgentModelSelection | null | undefined,
-  b: AgentModelSelection | null | undefined,
-): boolean => {
-  if (!a && !b) {
-    return true;
-  }
-  if (!a || !b) {
-    return false;
-  }
-  return (
-    a.providerId === b.providerId &&
-    a.modelId === b.modelId &&
-    (a.variant ?? "") === (b.variant ?? "") &&
-    (a.opencodeAgent ?? "") === (b.opencodeAgent ?? "")
-  );
-};
 
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
@@ -218,10 +77,6 @@ export function AgentsPage(): ReactElement {
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
-  const [composerCatalog, setComposerCatalog] = useState<AgentModelCatalog | null>(null);
-  const [isLoadingComposerCatalog, setIsLoadingComposerCatalog] = useState(false);
-  const [draftSelectionByRole, setDraftSelectionByRole] =
-    useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
   const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState<string | null>(null);
@@ -232,9 +87,6 @@ export function AgentsPage(): ReactElement {
     Record<string, boolean>
   >({});
   const autoStartExecutedRef = useRef(new Set<string>());
-  const processedDocumentToolEventsRef = useRef(new Set<string>());
-  const processedDocumentMessageCountBySessionRef = useRef<Record<string, number>>({});
-  const documentReloadAttemptsRef = useRef(new Map<string, number>());
   const restoredContextRepoRef = useRef<string | null>(null);
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
@@ -350,27 +202,11 @@ export function AgentsPage(): ReactElement {
     [sessionByTaskId, tabTaskIds, taskId, tasks],
   );
 
-  const { specDoc, planDoc, qaDoc, ensureDocumentLoaded, reloadDocument, applyDocumentUpdate } =
-    useTaskDocuments(taskId || null, true);
-  const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
-  const refreshedTaskVersionRef = useRef<string | null>(null);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Context key is used as explicit reset trigger.
-  useEffect(() => {
-    processedDocumentToolEventsRef.current.clear();
-    processedDocumentMessageCountBySessionRef.current = {};
-    documentReloadAttemptsRef.current.clear();
-    refreshedTaskVersionRef.current = null;
-  }, [documentContextKey]);
-
-  useEffect(() => {
-    if (!taskId) {
-      return;
-    }
-    ensureDocumentLoaded("spec");
-    ensureDocumentLoaded("plan");
-    ensureDocumentLoaded("qa");
-  }, [ensureDocumentLoaded, taskId]);
+  const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
+    taskId,
+    activeSession,
+    selectedTask,
+  });
 
   const updateQuery = useCallback(
     (updates: Record<string, string | undefined>) => {
@@ -394,38 +230,9 @@ export function AgentsPage(): ReactElement {
     previousRepoForSessionRefs.current = activeRepo;
     autoStartExecutedRef.current.clear();
     startingSessionByTaskRef.current.clear();
-  }, [activeRepo]);
-
-  useEffect(() => {
     if (!activeRepo) {
-      setComposerCatalog(null);
-      setIsLoadingComposerCatalog(false);
       restoredContextRepoRef.current = null;
-      return;
     }
-    let cancelled = false;
-    setComposerCatalog(null);
-    setIsLoadingComposerCatalog(true);
-    void loadRepoOpencodeCatalog(activeRepo)
-      .then((catalog) => {
-        if (!cancelled) {
-          setComposerCatalog(catalog);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setComposerCatalog(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingComposerCatalog(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
   }, [activeRepo]);
 
   useEffect(() => {
@@ -486,9 +293,7 @@ export function AgentsPage(): ReactElement {
       if (next.toString() !== searchParams.toString()) {
         setSearchParams(next, { replace: true });
       }
-    } catch {
-      // Ignore malformed persisted context and continue with query defaults.
-    }
+    } catch {}
   }, [activeRepo, searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -666,99 +471,26 @@ export function AgentsPage(): ReactElement {
     void updateQuery(updates);
   }, [activeSession, searchParams, updateQuery]);
 
-  const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    const roleDefault = repoSettings?.agentDefaults[role];
-    if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
-      return null;
-    }
-    return {
-      providerId: roleDefault.providerId,
-      modelId: roleDefault.modelId,
-      ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-      ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
-    };
-  }, [repoSettings?.agentDefaults, role]);
-
-  useEffect(() => {
-    if (activeSession) {
-      return;
-    }
-    setDraftSelectionByRole((current) => {
-      const existing = current[role];
-      const preferredBase =
-        existing ?? roleDefaultSelection ?? pickDefaultSelectionForCatalog(composerCatalog);
-      const normalized =
-        normalizeSelectionForCatalog(composerCatalog, preferredBase) ??
-        pickDefaultSelectionForCatalog(composerCatalog);
-      if (isSameSelection(existing, normalized)) {
-        return current;
-      }
-      return {
-        ...current,
-        [role]: normalized,
-      };
-    });
-  }, [activeSession, composerCatalog, role, roleDefaultSelection]);
-
-  useEffect(() => {
-    if (!activeSession) {
-      return;
-    }
-    const preferredSelection =
-      normalizeSelectionForCatalog(
-        activeSession.modelCatalog,
-        activeSession.selectedModel ??
-          roleDefaultSelection ??
-          pickDefaultSelectionForCatalog(activeSession.modelCatalog),
-      ) ?? pickDefaultSelectionForCatalog(activeSession.modelCatalog);
-    if (!preferredSelection || isSameSelection(activeSession.selectedModel, preferredSelection)) {
-      return;
-    }
-    updateAgentSessionModel(activeSession.sessionId, preferredSelection);
-  }, [activeSession, roleDefaultSelection, updateAgentSessionModel]);
-
-  const draftSelection = draftSelectionByRole[role];
-  const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
-  const isSelectionCatalogLoading = activeSession
-    ? activeSession.isLoadingModelCatalog
-    : isLoadingComposerCatalog;
-  const fallbackCatalogSelection = useMemo(
-    () => pickDefaultSelectionForCatalog(selectionCatalog),
-    [selectionCatalog],
-  );
-  const selectedModelSelection = useMemo(
-    () =>
-      activeSession?.selectedModel ??
-      draftSelection ??
-      roleDefaultSelection ??
-      fallbackCatalogSelection ??
-      null,
-    [activeSession?.selectedModel, draftSelection, fallbackCatalogSelection, roleDefaultSelection],
-  );
-
-  const applySelection = useCallback(
-    (selection: AgentModelSelection | null): void => {
-      if (activeSession) {
-        updateAgentSessionModel(activeSession.sessionId, selection);
-        return;
-      }
-      setDraftSelectionByRole((current) => ({
-        ...current,
-        [role]: selection,
-      }));
-    },
-    [activeSession, role, updateAgentSessionModel],
-  );
-
-  const selectionForNewSession = useMemo(
-    () =>
-      draftSelection ??
-      roleDefaultSelection ??
-      normalizeSelectionForCatalog(selectionCatalog, fallbackCatalogSelection) ??
-      fallbackCatalogSelection ??
-      null,
-    [draftSelection, fallbackCatalogSelection, roleDefaultSelection, selectionCatalog],
-  );
+  const {
+    selectionForNewSession,
+    selectedModelSelection,
+    isSelectionCatalogLoading,
+    agentOptions,
+    modelOptions,
+    modelGroups,
+    variantOptions,
+    activeSessionAgentColors,
+    activeSessionContextUsage,
+    handleSelectAgent,
+    handleSelectModel,
+    handleSelectVariant,
+  } = useAgentStudioModelSelection({
+    activeRepo,
+    activeSession,
+    role,
+    repoSettings,
+    updateAgentSessionModel,
+  });
 
   const startSession = useCallback(async (): Promise<string | undefined> => {
     if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
@@ -928,134 +660,6 @@ export function AgentsPage(): ReactElement {
       replyAgentPermission,
     });
 
-  const agentOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toPrimaryAgentOptions(selectionCatalog);
-    if (options.length > 0) {
-      return options;
-    }
-    const fallbackAgent = selectedModelSelection?.opencodeAgent;
-    const fallbackAgentColor = resolveAgentAccentColor(fallbackAgent);
-    if (fallbackAgent && fallbackAgent.trim().length > 0) {
-      return [
-        {
-          value: fallbackAgent,
-          label: fallbackAgent,
-          description: "Current session agent",
-          ...(fallbackAgentColor ? { accentColor: fallbackAgentColor } : {}),
-        },
-      ];
-    }
-    return [];
-  }, [selectedModelSelection?.opencodeAgent, selectionCatalog]);
-
-  const modelOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toModelOptions(selectionCatalog);
-    if (options.length > 0) {
-      return options;
-    }
-    const selected = selectedModelSelection;
-    if (selected?.providerId && selected.modelId) {
-      return [
-        {
-          value: `${selected.providerId}/${selected.modelId}`,
-          label: selected.modelId,
-          description: `${selected.providerId} (current session model)`,
-        },
-      ];
-    }
-    return [];
-  }, [selectedModelSelection, selectionCatalog]);
-
-  const modelGroups = useMemo(() => toModelGroupsByProvider(selectionCatalog), [selectionCatalog]);
-
-  const selectedModelEntry = useMemo(() => {
-    if (!selectionCatalog || !selectedModelSelection) {
-      return null;
-    }
-    return (
-      selectionCatalog.models.find(
-        (entry) =>
-          entry.providerId === selectedModelSelection.providerId &&
-          entry.modelId === selectedModelSelection.modelId,
-      ) ?? null
-    );
-  }, [selectedModelSelection, selectionCatalog]);
-
-  const variantOptions = useMemo(() => {
-    if (!selectedModelEntry) {
-      const selectedVariant = selectedModelSelection?.variant;
-      if (selectedVariant && selectedVariant.trim().length > 0) {
-        return [
-          {
-            value: selectedVariant,
-            label: selectedVariant,
-          },
-        ];
-      }
-      return [];
-    }
-    return selectedModelEntry.variants.map((variant) => ({
-      value: variant,
-      label: variant,
-    }));
-  }, [selectedModelEntry, selectedModelSelection?.variant]);
-
-  const activeSessionAgentColors = useMemo<Record<string, string>>(() => {
-    if (!activeSession?.modelCatalog) {
-      return {};
-    }
-    const map: Record<string, string> = {};
-    for (const descriptor of activeSession.modelCatalog.agents) {
-      if (!descriptor.name) {
-        continue;
-      }
-      const color = resolveAgentAccentColor(descriptor.name, descriptor.color);
-      if (color) {
-        map[descriptor.name] = color;
-      }
-    }
-    return map;
-  }, [activeSession?.modelCatalog]);
-
-  const activeSessionContextUsage = useMemo(() => {
-    if (!activeSession) {
-      return null;
-    }
-
-    const messages = activeSession.messages;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (!message || message.role !== "assistant" || message.meta?.kind !== "assistant") {
-        continue;
-      }
-      const totalTokens = message.meta.totalTokens;
-      if (typeof totalTokens !== "number" || totalTokens <= 0) {
-        continue;
-      }
-
-      const metaProviderId = message.meta.providerId;
-      const metaModelId = message.meta.modelId;
-      const modelDescriptor = activeSession.modelCatalog?.models.find(
-        (entry) => entry.providerId === metaProviderId && entry.modelId === metaModelId,
-      );
-      const contextWindow =
-        message.meta.contextWindow ??
-        modelDescriptor?.contextWindow ??
-        selectedModelEntry?.contextWindow;
-      if (typeof contextWindow !== "number" || contextWindow <= 0) {
-        return null;
-      }
-
-      return {
-        totalTokens,
-        contextWindow,
-        outputLimit: message.meta.outputLimit ?? modelDescriptor?.outputLimit,
-      };
-    }
-
-    return null;
-  }, [activeSession, selectedModelEntry?.contextWindow]);
-
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
   const activeSessionStatus = activeSession?.status ?? "stopped";
@@ -1089,7 +693,7 @@ export function AgentsPage(): ReactElement {
     setIsSending(false);
   }, [activeSessionStatus, isSending]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Session change resets pending submit state map.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Session change must reset submit state map.
   useEffect(() => {
     setIsSubmittingQuestionByRequestId({});
   }, [activeSession?.sessionId]);
@@ -1111,114 +715,6 @@ export function AgentsPage(): ReactElement {
       return changed ? next : current;
     });
   }, [activeSession?.pendingQuestions]);
-
-  useEffect(() => {
-    if (!taskId || !selectedTask) {
-      return;
-    }
-
-    const taskVersionKey = `${taskId}:${selectedTask.updatedAt}`;
-    if (refreshedTaskVersionRef.current === taskVersionKey) {
-      return;
-    }
-
-    refreshedTaskVersionRef.current = taskVersionKey;
-    reloadDocument("spec");
-    reloadDocument("plan");
-    reloadDocument("qa");
-  }, [reloadDocument, selectedTask, taskId]);
-
-  useEffect(() => {
-    if (!activeSession || !taskId) {
-      return;
-    }
-
-    const previousMessageCount =
-      processedDocumentMessageCountBySessionRef.current[activeSession.sessionId] ?? 0;
-    const startIndex =
-      previousMessageCount > activeSession.messages.length ? 0 : previousMessageCount;
-
-    for (let index = startIndex; index < activeSession.messages.length; index += 1) {
-      const message = activeSession.messages[index];
-      if (!message) {
-        continue;
-      }
-      const eventKey = `${activeSession.sessionId}:${message.id}`;
-      if (processedDocumentToolEventsRef.current.has(eventKey)) {
-        continue;
-      }
-
-      const meta = message.meta;
-      if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
-        continue;
-      }
-      const normalizedTool = normalizeOdtWorkflowToolName(meta.tool);
-      const target =
-        normalizedTool === "odt_set_spec"
-          ? { section: "spec" as const, state: specDoc, inputKey: "markdown" as const }
-          : normalizedTool === "odt_set_plan"
-            ? { section: "plan" as const, state: planDoc, inputKey: "markdown" as const }
-            : normalizedTool === "odt_qa_approved" || normalizedTool === "odt_qa_rejected"
-              ? { section: "qa" as const, state: qaDoc, inputKey: "reportMarkdown" as const }
-              : null;
-      if (!target) {
-        continue;
-      }
-
-      const completionInfo =
-        extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
-      const toolInput =
-        typeof meta.input === "object" && meta.input !== null
-          ? (meta.input as Record<string, unknown>)
-          : null;
-      const inputMarkdown = toolInput?.[target.inputKey];
-
-      let effectiveUpdatedAtTimestamp = parseTimestamp(target.state.updatedAt);
-      if (typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0) {
-        const shouldApplyOptimisticDocument =
-          target.state.markdown.trim() !== inputMarkdown.trim() ||
-          (completionInfo !== null &&
-            (effectiveUpdatedAtTimestamp === null ||
-              effectiveUpdatedAtTimestamp < completionInfo.timestamp));
-        if (shouldApplyOptimisticDocument) {
-          applyDocumentUpdate(target.section, {
-            markdown: inputMarkdown,
-            updatedAt: completionInfo?.raw ?? target.state.updatedAt ?? new Date().toISOString(),
-          });
-          effectiveUpdatedAtTimestamp = completionInfo?.timestamp ?? effectiveUpdatedAtTimestamp;
-        }
-      }
-
-      if (
-        completionInfo !== null &&
-        effectiveUpdatedAtTimestamp !== null &&
-        effectiveUpdatedAtTimestamp >= completionInfo.timestamp
-      ) {
-        processedDocumentToolEventsRef.current.add(eventKey);
-        documentReloadAttemptsRef.current.delete(eventKey);
-        continue;
-      }
-
-      if (target.state.isLoading) {
-        continue;
-      }
-
-      const attempts = documentReloadAttemptsRef.current.get(eventKey) ?? 0;
-      if (attempts >= 6) {
-        processedDocumentToolEventsRef.current.add(eventKey);
-        documentReloadAttemptsRef.current.delete(eventKey);
-        continue;
-      }
-
-      const triggered = reloadDocument(target.section);
-      if (triggered) {
-        documentReloadAttemptsRef.current.set(eventKey, attempts + 1);
-      }
-    }
-
-    processedDocumentMessageCountBySessionRef.current[activeSession.sessionId] =
-      activeSession.messages.length;
-  }, [activeSession, applyDocumentUpdate, planDoc, qaDoc, reloadDocument, specDoc, taskId]);
 
   const canKickoffNewSession =
     agentStudioReady && Boolean(taskId) && isActiveTaskHydrated && !activeSession;
@@ -1422,66 +918,6 @@ export function AgentsPage(): ReactElement {
       taskId,
       updateQuery,
     ],
-  );
-
-  const handleSelectAgent = useCallback(
-    (opencodeAgent: string) => {
-      const baseSelection =
-        selectedModelSelection ??
-        (() => {
-          const firstModel = selectionCatalog?.models[0];
-          if (!firstModel) {
-            return null;
-          }
-          return {
-            providerId: firstModel.providerId,
-            modelId: firstModel.modelId,
-            ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
-          } satisfies AgentModelSelection;
-        })();
-      if (!baseSelection) {
-        return;
-      }
-      applySelection({
-        ...baseSelection,
-        opencodeAgent,
-      });
-    },
-    [applySelection, selectedModelSelection, selectionCatalog],
-  );
-
-  const handleSelectModel = useCallback(
-    (nextValue: string) => {
-      if (!selectionCatalog) {
-        return;
-      }
-      const model = selectionCatalog.models.find((entry) => entry.id === nextValue);
-      if (!model) {
-        return;
-      }
-      applySelection({
-        providerId: model.providerId,
-        modelId: model.modelId,
-        ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-        ...(selectedModelSelection?.opencodeAgent
-          ? { opencodeAgent: selectedModelSelection.opencodeAgent }
-          : {}),
-      });
-    },
-    [applySelection, selectedModelSelection?.opencodeAgent, selectionCatalog],
-  );
-
-  const handleSelectVariant = useCallback(
-    (variant: string) => {
-      if (!selectedModelSelection) {
-        return;
-      }
-      applySelection({
-        ...selectedModelSelection,
-        variant,
-      });
-    },
-    [applySelection, selectedModelSelection],
   );
 
   const handleMessagesScroll = useCallback(

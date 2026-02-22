@@ -7,6 +7,13 @@ import {
   TaskDetailsMetadata,
   TaskDetailsSubtasks,
 } from "@/components/features/task-details";
+import {
+  runTaskWorkflowAction,
+  shouldLoadDocumentSection,
+  toSubtasks,
+  toTaskLabels,
+} from "@/components/features/task-details/task-details-sheet-model";
+import { useTaskDeleteDialog } from "@/components/features/task-details/use-task-delete-dialog";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +33,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { errorMessage } from "@/lib/errors";
 import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
 import type { TaskCard } from "@openducktor/contracts";
 import {
@@ -39,7 +45,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, useCallback, useMemo } from "react";
 
 type TaskDetailsSheetProps = {
   task: TaskCard | null;
@@ -90,76 +96,45 @@ export function TaskDetailsSheet({
 }: TaskDetailsSheetProps): ReactElement {
   const taskId = task?.id ?? null;
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(taskId, open);
-  const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const deleteRequestInFlightRef = useRef(false);
 
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
-  const subtasks = useMemo(() => {
-    if (!task) {
-      return [];
-    }
-
-    return task.subtaskIds
-      .map((subtaskId) => taskById.get(subtaskId))
-      .filter((entry): entry is TaskCard => Boolean(entry));
-  }, [task, taskById]);
+  const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
 
-  useEffect(() => {
-    if (!open) {
-      setDeleteDialogOpen(false);
-      setIsDeleting(false);
-      setDeleteError(null);
-      deleteRequestInFlightRef.current = false;
-    }
-  }, [open]);
+  const {
+    isDeleteDialogOpen,
+    isDeletePending,
+    deleteError,
+    openDeleteDialog,
+    closeDeleteDialog,
+    handleDeleteDialogOpenChange,
+    confirmDelete,
+  } = useTaskDeleteDialog({
+    sheetOpen: open,
+    task,
+    hasSubtasks,
+    onOpenChange,
+    onDelete,
+  });
 
   const isEpic = task?.issueType === "epic";
   const shouldRenderSubtasks = isEpic;
-  const taskLabels = useMemo(
-    () => (task?.labels ?? []).filter((label) => !label.startsWith("phase:")),
-    [task?.labels],
-  );
+  const taskLabels = useMemo(() => toTaskLabels(task?.labels), [task?.labels]);
   const specSummary = task?.documentSummary.spec;
   const planSummary = task?.documentSummary.plan;
   const qaSummary = task?.documentSummary.qaReport;
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
-      if (!taskId) {
-        return;
-      }
-
-      switch (action) {
-        case "set_spec":
-          onPlan?.(taskId, action);
-          return;
-        case "set_plan":
-          onPlan?.(taskId, action);
-          return;
-        case "open_builder":
-          onBuild?.(taskId);
-          return;
-        case "build_start":
-          onDelegate?.(taskId);
-          return;
-        case "defer_issue":
-          onDefer?.(taskId);
-          return;
-        case "resume_deferred":
-          onResumeDeferred?.(taskId);
-          return;
-        case "human_approve":
-          onHumanApprove?.(taskId);
-          return;
-        case "human_request_changes":
-          onHumanRequestChanges?.(taskId);
-          return;
-        default:
-          return;
-      }
+      runTaskWorkflowAction(action, taskId, {
+        onPlan,
+        onBuild,
+        onDelegate,
+        onDefer,
+        onResumeDeferred,
+        onHumanApprove,
+        onHumanRequestChanges,
+      });
     },
     [
       onBuild,
@@ -174,48 +149,25 @@ export function TaskDetailsSheet({
   );
 
   const loadSpecDocumentSection = useCallback((): void => {
-    if (!task?.documentSummary.spec.has) {
+    if (!shouldLoadDocumentSection(task?.documentSummary.spec.has)) {
       return;
     }
     ensureDocumentLoaded("spec");
   }, [ensureDocumentLoaded, task]);
 
   const loadPlanDocumentSection = useCallback((): void => {
-    if (!task?.documentSummary.plan.has) {
+    if (!shouldLoadDocumentSection(task?.documentSummary.plan.has)) {
       return;
     }
     ensureDocumentLoaded("plan");
   }, [ensureDocumentLoaded, task]);
 
   const loadQaDocumentSection = useCallback((): void => {
-    if (!task?.documentSummary.qaReport.has) {
+    if (!shouldLoadDocumentSection(task?.documentSummary.qaReport.has)) {
       return;
     }
     ensureDocumentLoaded("qa");
   }, [ensureDocumentLoaded, task]);
-
-  const confirmDelete = useCallback((): void => {
-    if (!task || !onDelete || deleteRequestInFlightRef.current) {
-      return;
-    }
-
-    deleteRequestInFlightRef.current = true;
-    setIsDeleting(true);
-    setDeleteError(null);
-    void onDelete(task.id, { deleteSubtasks: hasSubtasks })
-      .then(() => {
-        setDeleteDialogOpen(false);
-        onOpenChange(false);
-      })
-      .catch((error: unknown) => {
-        setDeleteError(errorMessage(error));
-      })
-      .finally(() => {
-        deleteRequestInFlightRef.current = false;
-        setIsDeleting(false);
-      });
-  }, [hasSubtasks, onDelete, onOpenChange, task]);
-  const isDeletePending = isDeleting || deleteRequestInFlightRef.current;
 
   if (!task) {
     return (
@@ -251,7 +203,7 @@ export function TaskDetailsSheet({
         showCloseButton={false}
         className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
       >
-        <SheetHeader className="border-b border-slate-200 bg-gradient-to-r from-white via-white to-slate-50/90 px-5 py-4">
+        <SheetHeader className="border-b border-slate-200 bg-white px-5 py-4">
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
@@ -380,10 +332,7 @@ export function TaskDetailsSheet({
                       label: "Delete task",
                       icon: <Trash2 className="size-3.5" />,
                       destructive: true,
-                      onSelect: () => {
-                        setDeleteError(null);
-                        setDeleteDialogOpen(true);
-                      },
+                      onSelect: openDeleteDialog,
                     },
                   ],
                 }
@@ -392,18 +341,7 @@ export function TaskDetailsSheet({
         </SheetFooter>
       </SheetContent>
 
-      <Dialog
-        open={isDeleteDialogOpen}
-        onOpenChange={(nextOpen) => {
-          if (deleteRequestInFlightRef.current) {
-            return;
-          }
-          setDeleteDialogOpen(nextOpen);
-          if (!nextOpen) {
-            setDeleteError(null);
-          }
-        }}
-      >
+      <Dialog open={isDeleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
         <DialogContent className="max-w-lg" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Delete Task</DialogTitle>
@@ -432,7 +370,7 @@ export function TaskDetailsSheet({
               variant="outline"
               className="w-[132px] justify-center disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100"
               disabled={isDeletePending}
-              onClick={() => setDeleteDialogOpen(false)}
+              onClick={closeDeleteDialog}
             >
               Cancel
             </Button>

@@ -5,9 +5,17 @@ import {
 } from "@/components/features/agents/catalog-select-options";
 import {
   DEFAULT_BRANCH_PREFIX,
+  ROLE_DEFAULTS,
+  clearRoleDefault,
   emptyRepoSettings,
+  ensureAgentDefault,
+  findCatalogModel,
+  getMissingRequiredRoleLabels,
   parseHookLines,
+  selectedModelKeyForRole,
   toHookText,
+  toRoleVariantOptions,
+  updateRoleDefault,
 } from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
 import type { ComboboxOption } from "@/components/ui/combobox";
@@ -28,8 +36,7 @@ import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
-import type { RepoAgentDefaultInput } from "@/types/state-slices";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog } from "@openducktor/core";
 import { Settings2 } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -38,16 +45,6 @@ type SettingsModalProps = {
   triggerClassName?: string;
   triggerSize?: "default" | "sm" | "lg" | "icon";
 };
-
-const ROLE_DEFAULTS: ReadonlyArray<{
-  role: AgentRole;
-  label: string;
-}> = [
-  { role: "spec", label: "Spec" },
-  { role: "planner", label: "Planner" },
-  { role: "build", label: "Build" },
-  { role: "qa", label: "QA" },
-];
 
 export function SettingsModal({
   triggerClassName,
@@ -68,48 +65,16 @@ export function SettingsModal({
   const [postCompleteHooks, setPostCompleteHooks] = useState("");
   const [agentDefaults, setAgentDefaults] = useState(emptyRepoSettings().agentDefaults);
 
-  const ensureAgentDefault = (value: RepoAgentDefaultInput | null): RepoAgentDefaultInput =>
-    value ?? {
-      providerId: "",
-      modelId: "",
-      variant: "",
-      opencodeAgent: "",
-    };
-
   const updateAgentDefault = (
     role: "spec" | "planner" | "build" | "qa",
-    field: keyof RepoAgentDefaultInput,
+    field: "providerId" | "modelId" | "variant" | "opencodeAgent",
     value: string,
   ): void => {
-    setAgentDefaults((current) => {
-      const next = ensureAgentDefault(current[role]);
-      return {
-        ...current,
-        [role]: {
-          ...next,
-          [field]: value,
-        },
-      };
-    });
+    setAgentDefaults((current) => updateRoleDefault(current, role, field, value));
   };
 
   const clearAgentDefault = (role: "spec" | "planner" | "build" | "qa"): void => {
-    setAgentDefaults((current) => ({
-      ...current,
-      [role]: null,
-    }));
-  };
-
-  const selectedModelKeyForRole = (role: AgentRole): string => {
-    const value = agentDefaults[role];
-    if (!value?.providerId || !value.modelId) {
-      return "";
-    }
-    return `${value.providerId}/${value.modelId}`;
-  };
-
-  const findCatalogModel = (modelKey: string) => {
-    return catalog?.models.find((entry) => entry.id === modelKey) ?? null;
+    setAgentDefaults((current) => clearRoleDefault(current, role));
   };
 
   useEffect(() => {
@@ -183,27 +148,8 @@ export function SettingsModal({
 
   const modelGroups = useMemo(() => toModelGroupsByProvider(catalog), [catalog]);
 
-  const variantOptionsForRole = (role: AgentRole): ComboboxOption[] => {
-    const model = findCatalogModel(selectedModelKeyForRole(role));
-    if (!model) {
-      return [];
-    }
-    return model.variants.map((variant) => ({
-      value: variant,
-      label: variant,
-    }));
-  };
-
   const missingRequiredRoleLabels = useMemo(() => {
-    return ROLE_DEFAULTS.filter(({ role }) => {
-      const value = agentDefaults[role];
-      return !(
-        value &&
-        value.providerId.trim().length > 0 &&
-        value.modelId.trim().length > 0 &&
-        value.opencodeAgent.trim().length > 0
-      );
-    }).map(({ label }) => label);
+    return getMissingRequiredRoleLabels(agentDefaults);
   }, [agentDefaults]);
 
   const canSaveRoleDefaults = missingRequiredRoleLabels.length === 0;
@@ -342,8 +288,8 @@ export function SettingsModal({
 
             {ROLE_DEFAULTS.map(({ role, label }) => {
               const value = ensureAgentDefault(agentDefaults[role]);
-              const roleVariantOptions = variantOptionsForRole(role);
-              const modelKey = selectedModelKeyForRole(role);
+              const roleVariantOptions = toRoleVariantOptions(catalog, agentDefaults, role);
+              const modelKey = selectedModelKeyForRole(agentDefaults, role);
               return (
                 <div key={role} className="grid gap-2 rounded border border-slate-200 bg-white p-3">
                   <div className="flex items-center justify-between">
@@ -383,7 +329,7 @@ export function SettingsModal({
                         placeholder={isLoadingCatalog ? "Loading models..." : "Select model"}
                         disabled={isLoadingCatalog || isSaving || modelOptions.length === 0}
                         onValueChange={(selectedModelKey) => {
-                          const model = findCatalogModel(selectedModelKey);
+                          const model = findCatalogModel(catalog, selectedModelKey);
                           if (!model) {
                             return;
                           }

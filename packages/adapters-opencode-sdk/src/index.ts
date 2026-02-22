@@ -3,7 +3,7 @@ import {
   type OpencodeClient,
   type Part,
   createOpencodeClient,
-} from "@opencode-ai/sdk/v2";
+} from "@opencode-ai/sdk/v2/client";
 import {
   type AgentEnginePort,
   type AgentEvent,

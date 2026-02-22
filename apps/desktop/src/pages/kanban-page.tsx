@@ -115,7 +115,7 @@ export function KanbanPage(): ReactElement {
         </div>
       </div>
 
-      <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white/85 to-slate-50/70 p-3 shadow-sm">
+      <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm">
         <div className="hide-scrollbar max-w-full overflow-x-auto pb-2">
           <div className="flex min-w-max items-stretch gap-4 pr-2">
             {columns.map((column) => (

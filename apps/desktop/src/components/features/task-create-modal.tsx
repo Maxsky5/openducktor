@@ -6,13 +6,18 @@ import {
   TaskDocumentEditor,
   TaskEditSectionSwitcher,
   collectKnownLabels,
-  normalizeLines,
   toComposerState,
   toParentComboboxOptions,
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
 import type { TaskDocumentSection } from "@/components/features/task-composer";
+import {
+  hasUnsavedDocumentChanges,
+  isDocumentSection,
+  toTaskCreateInput,
+  toTaskUpdatePatch,
+} from "@/components/features/task-create-modal-model";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,7 +35,7 @@ import type {
   ComposerStep,
   EditTaskSection,
 } from "@/types/task-composer";
-import type { TaskCard, TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 
@@ -46,9 +51,6 @@ type DocumentSection = TaskDocumentSection;
 type PendingDiscardIntent =
   | { type: "close-modal" }
   | { type: "switch-section"; next: EditTaskSection };
-
-const isDocumentSection = (section: EditTaskSection): section is DocumentSection =>
-  section === "spec" || section === "plan";
 
 export function TaskCreateModal({
   open,
@@ -148,12 +150,10 @@ export function TaskCreateModal({
     documents.plan.loaded && documents.plan.draftMarkdown !== documents.plan.serverMarkdown;
   const activeDocument = activeDocumentSection ? documents[activeDocumentSection] : null;
   const activeDraft = activeDocument?.draftMarkdown ?? "";
-  const hasUnsavedActiveDocument =
-    activeDocumentSection === "spec"
-      ? isSpecDirty
-      : activeDocumentSection === "plan"
-        ? isPlanDirty
-        : false;
+  const hasUnsavedActiveDocument = hasUnsavedDocumentChanges(activeDocumentSection, {
+    isSpecDirty,
+    isPlanDirty,
+  });
 
   const updateState = (patch: Partial<ComposerState>): void => {
     setState((current) => ({ ...current, ...patch }));
@@ -212,27 +212,10 @@ export function TaskCreateModal({
     setIsSubmitting(true);
     try {
       if (mode === "create") {
-        const input: TaskCreateInput = {
-          title: state.title.trim(),
-          issueType: state.issueType,
-          aiReviewEnabled: state.aiReviewEnabled,
-          priority: state.priority,
-          description: normalizeLines(state.description),
-          acceptanceCriteria: normalizeLines(state.acceptanceCriteria),
-          labels: state.labels,
-          parentId: !canSelectParent || state.parentId.length === 0 ? undefined : state.parentId,
-        };
+        const input = toTaskCreateInput(state, canSelectParent);
         await createTask(input);
       } else if (task) {
-        const patch: TaskUpdatePatch = {
-          title: state.title.trim(),
-          aiReviewEnabled: state.aiReviewEnabled,
-          priority: state.priority,
-          description: state.description.trim(),
-          acceptanceCriteria: state.acceptanceCriteria.trim(),
-          labels: state.labels,
-          parentId: !canSelectParent ? "" : state.parentId === "__none__" ? "" : state.parentId,
-        };
+        const patch = toTaskUpdatePatch(state, canSelectParent);
         await updateTask(task.id, patch);
       }
 

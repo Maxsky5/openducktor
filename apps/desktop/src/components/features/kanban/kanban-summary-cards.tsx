@@ -17,7 +17,7 @@ export function KanbanSummaryCards({
 }: KanbanSummaryCardsProps): ReactElement {
   return (
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <Card className="animate-rise-in border-sky-200 bg-gradient-to-br from-sky-50 to-white">
+      <Card className="animate-rise-in border-sky-200 bg-sky-50">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-slate-700">Total Tasks</CardTitle>
           <CardDescription>All lanes</CardDescription>
@@ -27,7 +27,7 @@ export function KanbanSummaryCards({
         </CardContent>
       </Card>
 
-      <Card className="animate-rise-in border-amber-200 bg-gradient-to-br from-amber-50 to-white">
+      <Card className="animate-rise-in border-amber-200 bg-amber-50">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
             <Clock3 className="size-4 text-amber-600" />
@@ -40,7 +40,7 @@ export function KanbanSummaryCards({
         </CardContent>
       </Card>
 
-      <Card className="animate-rise-in border-rose-200 bg-gradient-to-br from-rose-50 to-white">
+      <Card className="animate-rise-in border-rose-200 bg-rose-50">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
             <ShieldAlert className="size-4 text-rose-600" />
@@ -53,7 +53,7 @@ export function KanbanSummaryCards({
         </CardContent>
       </Card>
 
-      <Card className="animate-rise-in border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
+      <Card className="animate-rise-in border-emerald-200 bg-emerald-50">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm text-slate-700">Done</CardTitle>
           <CardDescription>Closed successfully</CardDescription>

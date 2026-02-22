@@ -17,6 +17,15 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  buildAgentStateValue,
+  buildChecksStateValue,
+  buildDelegationStateValue,
+  buildSpecStateValue,
+  buildTasksStateValue,
+  buildWorkspaceStateValue,
+  findActiveWorkspace,
+} from "./app-state-context-values";
 import { useAppLifecycle } from "./lifecycle/use-app-lifecycle";
 import { useAgentOrchestratorOperations } from "./operations/use-agent-orchestrator-operations";
 import { useChecks } from "./operations/use-checks";
@@ -164,27 +173,28 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   });
 
   const activeWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.path === activeRepo) ?? null,
+    () => findActiveWorkspace(workspaces, activeRepo),
     [activeRepo, workspaces],
   );
 
   const workspaceStateValue = useMemo<WorkspaceStateContextValue>(
-    () => ({
-      isSwitchingWorkspace,
-      isLoadingBranches,
-      isSwitchingBranch,
-      workspaces,
-      activeRepo,
-      activeWorkspace,
-      branches,
-      activeBranch,
-      addWorkspace,
-      selectWorkspace,
-      refreshBranches,
-      switchBranch,
-      loadRepoSettings,
-      saveRepoSettings,
-    }),
+    () =>
+      buildWorkspaceStateValue({
+        isSwitchingWorkspace,
+        isLoadingBranches,
+        isSwitchingBranch,
+        workspaces,
+        activeRepo,
+        activeWorkspace,
+        branches,
+        activeBranch,
+        addWorkspace,
+        selectWorkspace,
+        refreshBranches,
+        switchBranch,
+        loadRepoSettings,
+        saveRepoSettings,
+      }),
     [
       activeRepo,
       activeBranch,
@@ -204,31 +214,33 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   );
 
   const checksStateValue = useMemo<ChecksStateContextValue>(
-    () => ({
-      runtimeCheck,
-      beadsCheck: activeBeadsCheck,
-      opencodeHealth: activeRepoOpencodeHealth,
-      isLoadingChecks,
-      refreshChecks,
-    }),
+    () =>
+      buildChecksStateValue({
+        runtimeCheck,
+        beadsCheck: activeBeadsCheck,
+        opencodeHealth: activeRepoOpencodeHealth,
+        isLoadingChecks,
+        refreshChecks,
+      }),
     [activeBeadsCheck, activeRepoOpencodeHealth, isLoadingChecks, refreshChecks, runtimeCheck],
   );
 
   const tasksStateValue = useMemo<TasksStateContextValue>(
-    () => ({
-      isLoadingTasks,
-      tasks,
-      runs,
-      refreshTasks,
-      createTask,
-      updateTask,
-      deleteTask,
-      transitionTask,
-      deferTask,
-      resumeDeferredTask,
-      humanApproveTask,
-      humanRequestChangesTask,
-    }),
+    () =>
+      buildTasksStateValue({
+        isLoadingTasks,
+        tasks,
+        runs,
+        refreshTasks,
+        createTask,
+        updateTask,
+        deleteTask,
+        transitionTask,
+        deferTask,
+        resumeDeferredTask,
+        humanApproveTask,
+        humanRequestChangesTask,
+      }),
     [
       createTask,
       deleteTask,
@@ -246,26 +258,28 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   );
 
   const delegationStateValue = useMemo<DelegationStateContextValue>(
-    () => ({
-      events,
-      delegateTask,
-      delegateRespond,
-      delegateStop,
-      delegateCleanup,
-    }),
+    () =>
+      buildDelegationStateValue({
+        events,
+        delegateTask,
+        delegateRespond,
+        delegateStop,
+        delegateCleanup,
+      }),
     [delegateCleanup, delegateRespond, delegateStop, delegateTask, events],
   );
 
   const specStateValue = useMemo<SpecStateContextValue>(
-    () => ({
-      loadSpec,
-      loadSpecDocument,
-      loadPlanDocument,
-      loadQaReportDocument,
-      saveSpec,
-      saveSpecDocument,
-      savePlanDocument,
-    }),
+    () =>
+      buildSpecStateValue({
+        loadSpec,
+        loadSpecDocument,
+        loadPlanDocument,
+        loadQaReportDocument,
+        saveSpec,
+        saveSpecDocument,
+        savePlanDocument,
+      }),
     [
       loadPlanDocument,
       loadQaReportDocument,
@@ -278,16 +292,17 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   );
 
   const agentStateValue = useMemo<AgentStateContextValue>(
-    () => ({
-      sessions,
-      loadAgentSessions,
-      startAgentSession,
-      sendAgentMessage,
-      stopAgentSession,
-      updateAgentSessionModel,
-      replyAgentPermission,
-      answerAgentQuestion,
-    }),
+    () =>
+      buildAgentStateValue({
+        sessions,
+        loadAgentSessions,
+        startAgentSession,
+        sendAgentMessage,
+        stopAgentSession,
+        updateAgentSessionModel,
+        replyAgentPermission,
+        answerAgentQuestion,
+      }),
     [
       answerAgentQuestion,
       loadAgentSessions,

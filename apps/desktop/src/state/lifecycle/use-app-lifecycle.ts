@@ -5,6 +5,7 @@ import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import { type RunEvent, runEventSchema } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
 
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
@@ -80,7 +81,7 @@ export function useAppLifecycle({
         return;
       }
 
-      setEvents((current) => [parsed.data, ...current].slice(0, 500));
+      setEvents((current) => prependRunEvent(current, parsed.data));
     })
       .then((cleanup) => {
         unsubscribe = cleanup;
@@ -110,9 +111,11 @@ export function useAppLifecycle({
     const loadVersion = ++repoLoadVersionRef.current;
     setIsLoadingTasks(true);
     setIsLoadingChecks(
-      !hasRuntimeCheck() ||
-        !hasCachedBeadsCheck(activeRepo) ||
-        !hasCachedRepoOpencodeHealth(activeRepo),
+      shouldLoadChecks({
+        hasRuntimeCheck: hasRuntimeCheck(),
+        hasCachedBeadsCheck: hasCachedBeadsCheck(activeRepo),
+        hasCachedRepoOpencodeHealth: hasCachedRepoOpencodeHealth(activeRepo),
+      }),
     );
 
     Promise.allSettled([
