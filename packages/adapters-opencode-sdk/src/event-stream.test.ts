@@ -193,7 +193,7 @@ describe("event-stream", () => {
     ]);
   });
 
-  test("applies queued part delta to later message.part.updated", async () => {
+  test("applies queued part delta with append semantics", async () => {
     const emitted = await runEventStream([
       {
         type: "message.part.delta",
@@ -202,7 +202,7 @@ describe("event-stream", () => {
           partID: "text-part-1",
           messageID: "assistant-message-2",
           field: "text",
-          delta: "Hello ",
+          delta: " world",
         },
       } as unknown as Event,
       {
@@ -213,7 +213,7 @@ describe("event-stream", () => {
             sessionID: "external-session-1",
             messageID: "assistant-message-2",
             type: "text",
-            text: "world",
+            text: "Hello",
             time: { start: 1, end: 2 },
           },
         },
@@ -232,6 +232,122 @@ describe("event-stream", () => {
       throw new Error("Expected text assistant part");
     }
     expect(parts[0].part.text).toBe("Hello world");
+  });
+
+  test("replays queued deltas in FIFO order", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "external-session-1",
+          partID: "text-part-fifo",
+          messageID: "assistant-message-fifo",
+          field: "text",
+          delta: " world",
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "external-session-1",
+          partID: "text-part-fifo",
+          messageID: "assistant-message-fifo",
+          field: "text",
+          delta: "!",
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-part-fifo",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-fifo",
+            type: "text",
+            text: "Hello",
+            time: { start: 1, end: 2 },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const parts = emitted.filter((event) => event.type === "assistant_part");
+    expect(parts).toHaveLength(1);
+    if (parts[0]?.type !== "assistant_part" || parts[0].part.kind !== "text") {
+      throw new Error("Expected assistant text part");
+    }
+    expect(parts[0].part.text).toBe("Hello world!");
+  });
+
+  test("keeps known-part and queued-part delta application consistent", async () => {
+    const queuedPath = await runEventStream([
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "external-session-1",
+          partID: "text-part-consistency",
+          messageID: "assistant-message-consistency",
+          field: "text",
+          delta: " world",
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-part-consistency",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-consistency",
+            type: "text",
+            text: "Hello",
+            time: { start: 1, end: 2 },
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const knownPath = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-part-consistency",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-consistency",
+            type: "text",
+            text: "Hello",
+            time: { start: 1, end: 2 },
+          },
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "external-session-1",
+          partID: "text-part-consistency",
+          messageID: "assistant-message-consistency",
+          field: "text",
+          delta: " world",
+        },
+      } as unknown as Event,
+    ]);
+
+    const queuedParts = queuedPath.filter((event) => event.type === "assistant_part");
+    const knownParts = knownPath.filter((event) => event.type === "assistant_part");
+    const lastQueued = queuedParts[queuedParts.length - 1];
+    const lastKnown = knownParts[knownParts.length - 1];
+    if (
+      !lastQueued ||
+      lastQueued.type !== "assistant_part" ||
+      lastQueued.part.kind !== "text" ||
+      !lastKnown ||
+      lastKnown.type !== "assistant_part" ||
+      lastKnown.part.kind !== "text"
+    ) {
+      throw new Error("Expected final assistant text parts");
+    }
+    expect(lastQueued.part.text).toBe("Hello world");
+    expect(lastKnown.part.text).toBe("Hello world");
   });
 
   test("suppresses assistant_delta when delta belongs to user message", async () => {

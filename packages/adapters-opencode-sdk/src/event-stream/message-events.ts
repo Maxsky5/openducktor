@@ -35,12 +35,8 @@ const applyPendingDeltas = (runtime: EventStreamRuntime, partId: string, basePar
   }
 
   let nextPart = basePart;
-  for (let index = pendingDeltas.length - 1; index >= 0; index -= 1) {
-    const pending = pendingDeltas[index];
-    if (!pending) {
-      continue;
-    }
-    const updated = applyDeltaToPart(nextPart, pending.field, pending.delta, pending.mode);
+  for (const pending of pendingDeltas) {
+    const updated = applyDeltaToPart(nextPart, pending.field, pending.delta);
     if (updated) {
       nextPart = updated;
     }
@@ -180,7 +176,7 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
 
   if (partId && field.length > 0) {
     const pending = runtime.pendingDeltasByPartId.get(partId) ?? [];
-    pending.push({ field, delta, mode: "prepend" });
+    pending.push({ field, delta });
     runtime.pendingDeltasByPartId.set(partId, pending);
     return true;
   }
