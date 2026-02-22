@@ -27,13 +27,15 @@ import {
   findActiveWorkspace,
 } from "./app-state-context-values";
 import { useAppLifecycle } from "./lifecycle/use-app-lifecycle";
-import { useAgentOrchestratorOperations } from "./operations/use-agent-orchestrator-operations";
-import { useChecks } from "./operations/use-checks";
-import { useDelegationOperations } from "./operations/use-delegation-operations";
-import { useRepoSettingsOperations } from "./operations/use-repo-settings-operations";
-import { useSpecOperations } from "./operations/use-spec-operations";
-import { useTaskOperations } from "./operations/use-task-operations";
-import { useWorkspaceOperations } from "./operations/use-workspace-operations";
+import {
+  useAgentOrchestratorOperations,
+  useChecks,
+  useDelegationOperations,
+  useRepoSettingsOperations,
+  useSpecOperations,
+  useTaskOperations,
+  useWorkspaceOperations,
+} from "./operations";
 
 const WorkspaceStateContext = createContext<WorkspaceStateContextValue | null>(null);
 const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);

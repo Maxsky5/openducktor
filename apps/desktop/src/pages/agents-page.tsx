@@ -1,10 +1,12 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AgentChat } from "@/components/features/agents/agent-chat";
-import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
-import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
-import { AgentStudioWorkspaceSidebar } from "@/components/features/agents/agent-studio-workspace-sidebar";
+import {
+  AgentChat,
+  AgentStudioHeader,
+  AgentStudioTaskTabs,
+  AgentStudioWorkspaceSidebar,
+} from "@/components/features/agents";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import { firstScenario, isRole, isScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";

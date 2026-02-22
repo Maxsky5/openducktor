@@ -6,7 +6,7 @@ import {
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
-} from "@/components/features/agents/catalog-select-options";
+} from "@/components/features/agents";
 import {
   clearRoleDefault,
   DEFAULT_BRANCH_PREFIX,
@@ -39,7 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state";
-import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
+import { loadRepoOpencodeCatalog } from "@/state/operations";
 
 type SettingsModalProps = {
   triggerClassName?: string;

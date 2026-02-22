@@ -1,10 +1,13 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { RefObject, UIEvent } from "react";
-import type { AgentChatModel, AgentRoleOption } from "@/components/features/agents/agent-chat";
-import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
-import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
-import type { AgentStudioWorkspaceSidebarModel } from "@/components/features/agents/agent-studio-workspace-sidebar";
+import type {
+  AgentChatModel,
+  AgentRoleOption,
+  AgentStudioHeaderModel,
+  AgentStudioTaskTabsModel,
+  AgentStudioWorkspaceSidebarModel,
+} from "@/components/features/agents";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentPermissionRequest, AgentSessionState } from "@/types/agent-orchestrator";

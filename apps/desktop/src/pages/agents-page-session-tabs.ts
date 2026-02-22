@@ -1,6 +1,6 @@
 import type { TaskAction, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import type { AgentStudioTaskTab } from "@/components/features/agents/agent-studio-task-tabs";
+import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
