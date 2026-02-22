@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import { act } from "react-test-renderer";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -184,8 +183,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
-    await act(async () => {
-      harness.getLatest().agentChatModel.thread.onToggleTodoPanel();
+    await harness.run((state) => {
+      state.agentChatModel.thread.onToggleTodoPanel();
     });
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
@@ -196,8 +195,8 @@ describe("useAgentStudioPageModels", () => {
     });
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
-    await act(async () => {
-      harness.getLatest().agentChatModel.thread.onToggleTodoPanel();
+    await harness.run((state) => {
+      state.agentChatModel.thread.onToggleTodoPanel();
     });
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
