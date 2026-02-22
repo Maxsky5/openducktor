@@ -1,10 +1,10 @@
-import { describe, expect, test } from "./bun-test";
+import { describe, expect, test } from "bun:test";
 import { toIsoFromEpoch, toSessionInput } from "./session-runtime-utils";
 
 describe("session-runtime-utils", () => {
   test("toIsoFromEpoch returns ISO for valid epoch", () => {
     const value = toIsoFromEpoch(1_706_171_200_000, () => "fallback");
-    expect(value).toBe("2024-01-26T18:00:00.000Z");
+    expect(value).toBe("2024-01-25T08:26:40.000Z");
   });
 
   test("toIsoFromEpoch uses fallback for invalid input", () => {

@@ -87,11 +87,14 @@ jobs:
           workspaces: |
             apps/desktop/src-tauri
 
+      - name: Pre-fetch Rust dependencies
+        run: cargo fetch --locked
+
       - name: Lint Rust
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Build check
-        run: cargo check
+        run: cargo check --locked
 
       - name: Run Rust tests
-        run: cargo test
+        run: cargo test --locked

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "./bun-test";
+import { describe, expect, test } from "bun:test";
 import { normalizeTodoList } from "./todo-normalizers";
 
 describe("todo-normalizers", () => {

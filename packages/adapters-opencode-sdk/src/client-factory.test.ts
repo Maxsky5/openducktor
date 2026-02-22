@@ -1,4 +1,4 @@
-import { describe, expect, test } from "./bun-test";
+import { describe, expect, test } from "bun:test";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 
 describe("client-factory", () => {

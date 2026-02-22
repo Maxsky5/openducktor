@@ -1,6 +1,6 @@
+import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
-import { describe, expect, test } from "./bun-test";
 import { subscribeOpencodeEvents } from "./event-stream";
 import type { SessionInput, SessionRecord } from "./types";
 

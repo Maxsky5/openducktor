@@ -1,4 +1,4 @@
-import { describe, expect, test } from "./bun-test";
+import { describe, expect, test } from "bun:test";
 import { unwrapData } from "./data-utils";
 
 describe("data-utils", () => {

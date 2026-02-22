@@ -1,6 +1,6 @@
+import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { AgentEvent } from "@openducktor/core";
-import { describe, expect, test } from "./bun-test";
 import { OpencodeSdkAdapter } from "./index";
 
 const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));

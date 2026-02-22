@@ -1,5 +1,5 @@
+import { describe, expect, test } from "bun:test";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { describe, expect, test } from "./bun-test";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
 const makeClient = (input: { toolIds?: unknown; throwOnIds?: boolean }): OpencodeClient => {
