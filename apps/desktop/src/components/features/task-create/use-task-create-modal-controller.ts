@@ -13,6 +13,7 @@ import {
   toTaskCreateInput,
   toTaskUpdatePatch,
 } from "@/components/features/task-create-modal-model";
+import { errorMessage } from "@/lib/errors";
 import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
 import type {
   ComposerMode,
@@ -213,7 +214,7 @@ export function useTaskCreateModalController({
       }
       onOpenChange(false);
     } catch (reason) {
-      setError((reason as Error).message);
+      setError(errorMessage(reason));
     } finally {
       setIsSubmitting(false);
     }
@@ -235,7 +236,7 @@ export function useTaskCreateModalController({
           : await savePlanDocument(taskId, markdown);
       applySavedDocument(activeDocumentSection, markdown, saved.updatedAt);
     } catch (reason) {
-      setDocumentError(reason instanceof Error ? reason.message : "Unable to save document.");
+      setDocumentError(errorMessage(reason));
     } finally {
       setIsSavingDocument(null);
     }

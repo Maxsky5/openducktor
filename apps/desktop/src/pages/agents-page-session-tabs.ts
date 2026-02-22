@@ -52,6 +52,9 @@ const normalizeTaskTabs = (entries: unknown): string[] => {
   );
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 export const buildLatestSessionByTaskMap = (
   sessions: AgentSessionState[],
 ): Map<string, AgentSessionState> => {
@@ -86,7 +89,7 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
   }
 
   try {
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed: unknown = JSON.parse(raw);
 
     if (Array.isArray(parsed)) {
       return {
@@ -95,15 +98,14 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
       };
     }
 
-    if (!parsed || typeof parsed !== "object") {
+    if (!isRecord(parsed)) {
       return DEFAULT_PERSISTED_TABS_STATE;
     }
 
-    const payload = parsed as PersistedTaskTabsPayload;
-    const tabs = normalizeTaskTabs(payload.tabs);
+    const tabs = normalizeTaskTabs(parsed.tabs);
     const activeTaskId =
-      typeof payload.activeTaskId === "string" && payload.activeTaskId.trim().length > 0
-        ? payload.activeTaskId
+      typeof parsed.activeTaskId === "string" && parsed.activeTaskId.trim().length > 0
+        ? parsed.activeTaskId
         : null;
     return {
       tabs,
@@ -178,7 +180,12 @@ export const buildWorkflowStateByRole = (params: {
   const hasSessionByRole = new Set(params.sessionsForTask.map((entry) => entry.role));
   const isActiveSessionWorking =
     params.activeSessionStatus === "running" || params.activeSessionStatus === "starting";
-  const stateByRole = {} as Record<AgentRole, WorkflowStepState>;
+  const stateByRole: Record<AgentRole, WorkflowStepState> = {
+    spec: "blocked",
+    planner: "blocked",
+    build: "blocked",
+    qa: "blocked",
+  };
 
   for (const role of ALL_AGENT_ROLES) {
     if (params.activeSessionRole === role && isActiveSessionWorking) {

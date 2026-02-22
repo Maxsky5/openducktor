@@ -8,6 +8,51 @@ import { toContextStorageKey } from "./agents-page-utils";
 
 type QueryUpdate = Record<string, string | undefined>;
 
+type PersistedAgentStudioContext = {
+  taskId?: string;
+  role?: AgentRole;
+  scenario?: AgentScenario;
+  sessionId?: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readOptionalString = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const parsePersistedContext = (raw: string): PersistedAgentStudioContext | null => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(parsed)) {
+    return null;
+  }
+
+  const taskId = readOptionalString(parsed.taskId);
+  const roleValue = readOptionalString(parsed.role) ?? null;
+  const role = isRole(roleValue) ? roleValue : undefined;
+  const scenarioValue = readOptionalString(parsed.scenario) ?? null;
+  const scenario = isScenario(scenarioValue) ? scenarioValue : undefined;
+  const sessionId = readOptionalString(parsed.sessionId);
+
+  return {
+    ...(taskId ? { taskId } : {}),
+    ...(role ? { role } : {}),
+    ...(scenario ? { scenario } : {}),
+    ...(sessionId ? { sessionId } : {}),
+  };
+};
+
 type UseAgentStudioQuerySyncArgs = {
   activeRepo: string | null;
   searchParams: URLSearchParams;
@@ -85,47 +130,38 @@ export function useAgentStudioQuerySync({
       return;
     }
 
-    try {
-      const parsed = JSON.parse(raw) as {
-        taskId?: string;
-        role?: string;
-        scenario?: string;
-        sessionId?: string;
-      };
-      const persistedRole = isRole(parsed.role ?? null) ? (parsed.role as AgentRole) : null;
-      const persistedScenario = isScenario(parsed.scenario ?? null)
-        ? (parsed.scenario as AgentScenario)
-        : null;
-      const explicitRoleParam = searchParams.get("agent");
-      const explicitScenarioParam = searchParams.get("scenario");
-      const roleForScenarioValidation = isRole(explicitRoleParam)
-        ? explicitRoleParam
-        : persistedRole;
-
-      const next = new URLSearchParams(searchParams);
-      if (parsed.taskId && parsed.taskId.trim().length > 0) {
-        next.set("task", parsed.taskId);
-      }
-      if (persistedRole && !explicitRoleParam) {
-        next.set("agent", persistedRole);
-      }
-      if (
-        persistedScenario &&
-        !explicitScenarioParam &&
-        (!roleForScenarioValidation ||
-          SCENARIOS_BY_ROLE[roleForScenarioValidation].includes(persistedScenario))
-      ) {
-        next.set("scenario", persistedScenario);
-      }
-      if (parsed.sessionId && parsed.sessionId.trim().length > 0) {
-        next.set("session", parsed.sessionId);
-      }
-
-      if (next.toString() !== searchParams.toString()) {
-        setSearchParams(next, { replace: true });
-      }
-    } catch (_error) {
+    const persisted = parsePersistedContext(raw);
+    if (!persisted) {
       return;
+    }
+
+    const persistedRole = persisted.role ?? null;
+    const persistedScenario = persisted.scenario ?? null;
+    const explicitRoleParam = searchParams.get("agent");
+    const explicitScenarioParam = searchParams.get("scenario");
+    const roleForScenarioValidation = isRole(explicitRoleParam) ? explicitRoleParam : persistedRole;
+
+    const next = new URLSearchParams(searchParams);
+    if (persisted.taskId) {
+      next.set("task", persisted.taskId);
+    }
+    if (persistedRole && !explicitRoleParam) {
+      next.set("agent", persistedRole);
+    }
+    if (
+      persistedScenario &&
+      !explicitScenarioParam &&
+      (!roleForScenarioValidation ||
+        SCENARIOS_BY_ROLE[roleForScenarioValidation].includes(persistedScenario))
+    ) {
+      next.set("scenario", persistedScenario);
+    }
+    if (persisted.sessionId) {
+      next.set("session", persisted.sessionId);
+    }
+
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
     }
   }, [activeRepo, searchParams, setSearchParams]);
 
