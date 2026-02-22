@@ -5,6 +5,7 @@ import type { SessionInput, SessionRecord } from "../types";
 export type PendingPartDelta = {
   field: string;
   delta: string;
+  mode?: "append" | "prepend";
 };
 
 export type EventStreamContext = {
@@ -49,7 +50,12 @@ const normalizePartDeltaField = (field: string): string => {
   return field;
 };
 
-export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
+export const applyDeltaToPart = (
+  part: Part,
+  field: string,
+  delta: string,
+  mode: "append" | "prepend" = "append",
+): Part | null => {
   const normalizedField = normalizePartDeltaField(field);
   const partRecord = part as Record<string, unknown>;
   const existing = partRecord[normalizedField];
@@ -59,7 +65,10 @@ export const applyDeltaToPart = (part: Part, field: string, delta: string): Part
 
   return {
     ...partRecord,
-    [normalizedField]: `${typeof existing === "string" ? existing : ""}${delta}`,
+    [normalizedField]:
+      mode === "prepend"
+        ? `${delta}${typeof existing === "string" ? existing : ""}`
+        : `${typeof existing === "string" ? existing : ""}${delta}`,
   } as Part;
 };
 

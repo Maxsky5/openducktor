@@ -395,4 +395,68 @@ describe("event-stream", () => {
     }
     expect(errors[0].message).toBe("Unknown session error");
   });
+
+  test("does not replay duplicate delta after suppressed known user-part update", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-dup-1",
+            role: "user",
+            sessionID: "external-session-1",
+          },
+          parts: [
+            {
+              id: "part-dup-1",
+              sessionID: "external-session-1",
+              messageID: "message-dup-1",
+              type: "text",
+              text: "hello",
+              time: { start: 1, end: 2 },
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "external-session-1",
+          messageID: "message-dup-1",
+          partID: "part-dup-1",
+          field: "text",
+          delta: " world",
+        },
+      } as unknown as Event,
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "message-dup-1",
+            role: "assistant",
+            sessionID: "external-session-1",
+            finish: "stop",
+            time: { completed: 3 },
+          },
+          parts: [
+            {
+              id: "part-dup-1",
+              sessionID: "external-session-1",
+              messageID: "message-dup-1",
+              type: "text",
+              text: "hello world",
+              time: { start: 1, end: 3 },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ]);
+
+    const parts = emitted.filter((event) => event.type === "assistant_part");
+    expect(parts).toHaveLength(1);
+    if (parts[0]?.type !== "assistant_part" || parts[0].part.kind !== "text") {
+      throw new Error("Expected assistant text part event");
+    }
+    expect(parts[0].part.text).toBe("hello world");
+  });
 });
