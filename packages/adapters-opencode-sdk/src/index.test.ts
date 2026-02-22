@@ -1,7 +1,9 @@
-import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { AgentEvent } from "@openducktor/core";
+import { describe, expect, test } from "./bun-test";
 import { OpencodeSdkAdapter } from "./index";
+
+const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 type MockSession = {
   createCalls: unknown[];
@@ -509,7 +511,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await startDefaultSession(adapter, "session-1", "spec");
-    await Bun.sleep(0);
+    await flushAsync();
 
     const partEvents = events.filter((entry) => entry.type === "assistant_part");
     const messageEvents = events.filter((entry) => entry.type === "assistant_message");
@@ -573,7 +575,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await startDefaultSession(adapter, "session-1", "spec");
-    await Bun.sleep(0);
+    await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
       if (entry.type !== "assistant_part") {
@@ -648,7 +650,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await startDefaultSession(adapter, "session-1", "spec");
-    await Bun.sleep(0);
+    await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
       if (entry.type !== "assistant_part") {
@@ -709,7 +711,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await startDefaultSession(adapter, "session-1", "spec");
-    await Bun.sleep(0);
+    await flushAsync();
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
     expect(todoEvent).toBeDefined();
@@ -767,7 +769,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await startDefaultSession(adapter, "session-1", "spec");
-    await Bun.sleep(0);
+    await flushAsync();
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
     expect(todoEvent).toBeDefined();
