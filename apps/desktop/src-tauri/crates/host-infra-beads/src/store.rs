@@ -143,7 +143,7 @@ impl TaskStore for BeadsTaskStore {
     }
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
-        let value = self.run_bd_json(repo_path, &["list", "--all", "-n", "500"])?;
+        let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
 
         let mut tasks = value
             .as_array()
@@ -238,7 +238,7 @@ impl TaskStore for BeadsTaskStore {
         task_id: &str,
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
-        let mut args = vec!["update".to_string(), task_id.to_string()];
+        let mut args = vec!["update".to_string()];
 
         if let Some(title) = patch.title {
             args.push("--title".to_string());
@@ -290,7 +290,9 @@ impl TaskStore for BeadsTaskStore {
             args.push(normalize_labels(labels).join(","));
         }
 
-        if args.len() > 2 {
+        if args.len() > 1 {
+            args.push("--".to_string());
+            args.push(task_id.to_string());
             let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
             self.run_bd_json(repo_path, &arg_refs)?;
         }
@@ -305,16 +307,12 @@ impl TaskStore for BeadsTaskStore {
     }
 
     fn delete_task(&self, repo_path: &Path, task_id: &str, delete_subtasks: bool) -> Result<bool> {
-        let mut args = vec![
-            "delete",
-            task_id,
-            "--force",
-            "--reason",
-            "Deleted from OpenDucktor",
-        ];
+        let mut args = vec!["delete", "--force", "--reason", "Deleted from OpenDucktor"];
         if delete_subtasks {
             args.push("--cascade");
         }
+        args.push("--");
+        args.push(task_id);
 
         self.run_bd(repo_path, &args)?;
         Ok(true)

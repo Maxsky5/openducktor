@@ -16,7 +16,7 @@ impl BeadsTaskStore {
         let payload = serde_json::to_string(&Value::Object(metadata.clone()))?;
         self.run_bd_json(
             repo_path,
-            &["update", task_id, "--metadata", payload.as_str()],
+            &["update", "--metadata", payload.as_str(), "--", task_id],
         )?;
         Ok(())
     }

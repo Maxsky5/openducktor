@@ -28,8 +28,15 @@ impl BeadsTaskStore {
         let beads_dir_env = beads_dir.to_string_lossy().to_string();
         let mut final_args = Vec::with_capacity(args.len() + 2);
         final_args.push("--no-daemon");
-        final_args.extend(args);
-        final_args.push("--json");
+        if let Some(delimiter_index) = args.iter().position(|arg| *arg == "--") {
+            final_args.extend(&args[..delimiter_index]);
+            final_args.push("--json");
+            final_args.push("--");
+            final_args.extend(&args[(delimiter_index + 1)..]);
+        } else {
+            final_args.extend(args);
+            final_args.push("--json");
+        }
 
         let output = self.command_runner.run_with_env(
             "bd",
@@ -38,17 +45,13 @@ impl BeadsTaskStore {
             &[("BEADS_DIR", beads_dir_env.as_str())],
         )?;
 
-        serde_json::from_str(&output).with_context(|| {
-            format!(
-                "Failed to parse bd JSON output for command `bd {}`. Output: {}",
-                final_args.join(" "),
-                output
-            )
-        })
+        let command = args.first().copied().unwrap_or("unknown");
+        serde_json::from_str(&output)
+            .with_context(|| format!("Failed to parse bd JSON output from `bd {command}`"))
     }
 
     pub(crate) fn show_raw_issue(&self, repo_path: &Path, task_id: &str) -> Result<RawIssue> {
-        let value = self.run_bd_json(repo_path, &["show", task_id])?;
+        let value = self.run_bd_json(repo_path, &["show", "--id", task_id])?;
         let issue_value = value
             .as_array()
             .and_then(|entries| entries.first())

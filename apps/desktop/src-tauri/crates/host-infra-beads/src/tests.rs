@@ -1,9 +1,8 @@
 use super::{
-    default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace,
-    normalize_issue_type, normalize_labels, normalize_text_option, parse_agent_sessions,
-    parse_markdown_entries, parse_metadata_root, parse_qa_entries, BeadsTaskStore,
-    CommandRunner, CUSTOM_STATUS_VALUES,
-    ProcessCommandRunner,
+    default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace, normalize_issue_type,
+    normalize_labels, normalize_text_option, parse_agent_sessions, parse_markdown_entries,
+    parse_metadata_root, parse_qa_entries, BeadsTaskStore, CommandRunner, ProcessCommandRunner,
+    CUSTOM_STATUS_VALUES,
 };
 use anyhow::{anyhow, Result};
 use host_domain::{
@@ -131,9 +130,7 @@ impl CommandRunner for MockCommandRunner {
     ) -> Result<(bool, String, String)> {
         self.record_call(CallKind::AllowFailureWithEnv, program, args, cwd, env);
         match self.pop_step(CallKind::AllowFailureWithEnv) {
-            MockStep::AllowFailureWithEnv(result) => {
-                result.map_err(|message| anyhow!(message))
-            }
+            MockStep::AllowFailureWithEnv(result) => result.map_err(|message| anyhow!(message)),
             MockStep::WithEnv(_) => unreachable!("call kind already checked"),
         }
     }
@@ -222,7 +219,10 @@ fn assert_beads_env(call: &RecordedCall) {
         .iter()
         .find(|(key, _)| key == "BEADS_DIR")
         .expect("expected BEADS_DIR env entry");
-    assert!(!beads_dir_entry.1.trim().is_empty(), "BEADS_DIR must be set");
+    assert!(
+        !beads_dir_entry.1.trim().is_empty(),
+        "BEADS_DIR must be set"
+    );
 }
 
 fn make_session(session_id: &str, started_at: &str, status: &str) -> AgentSessionDocument {
@@ -313,6 +313,66 @@ fn beads_store_constructors_and_debug_are_stable() {
     assert!(default_debug.contains("BeadsTaskStore"));
     assert!(blank_debug.contains("openducktor"));
     assert!(custom_debug.contains("custom"));
+}
+
+#[test]
+fn run_bd_json_parse_errors_do_not_include_raw_output() {
+    let repo = RepoFixture::new("parse-redaction");
+    let sensitive = "token-abc123";
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(format!("not-json-{sensitive}")))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let error = store
+        .list_tasks(repo.path())
+        .expect_err("invalid JSON should fail");
+    let message = error.to_string();
+    assert!(message.contains("Failed to parse bd JSON output from `bd list`"));
+    assert!(!message.contains(sensitive));
+}
+
+#[test]
+fn verify_repo_initialized_parse_errors_do_not_include_raw_output() -> Result<()> {
+    let repo = RepoFixture::new("where-parse-redaction");
+    let sensitive = "secret-path";
+    let runner = MockCommandRunner::with_steps(vec![MockStep::AllowFailureWithEnv(Ok((
+        true,
+        format!("invalid-json-{sensitive}"),
+        String::new(),
+    )))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+    let beads_dir = resolve_central_beads_dir(repo.path())?;
+
+    let error = store
+        .verify_repo_initialized(repo.path(), &beads_dir)
+        .expect_err("invalid where payload should fail");
+    let message = error.to_string();
+    assert!(message.contains("Failed to parse `bd where --json` output"));
+    assert!(!message.contains(sensitive));
+    Ok(())
+}
+
+#[test]
+fn show_task_uses_id_flag_when_loading_issue() -> Result<()> {
+    let repo = RepoFixture::new("show-with-id-flag");
+    let issue = issue_value("task-1", "open", "task", None, json!([]), None);
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let task = store.show_task(repo.path(), "task-1")?;
+    assert_eq!(task.id, "task-1");
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(
+        calls[0].args,
+        vec!["--no-daemon", "show", "--id", "task-1", "--json"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    );
+    Ok(())
 }
 
 #[test]
@@ -488,11 +548,7 @@ fn ensure_repo_initialized_returns_error_when_init_fails() {
     let repo = RepoFixture::new("init-fails");
     let runner = MockCommandRunner::with_steps(vec![
         MockStep::AllowFailureWithEnv(Ok((false, String::new(), "where failed".to_string()))),
-        MockStep::AllowFailureWithEnv(Ok((
-            false,
-            String::new(),
-            "permission denied".to_string(),
-        ))),
+        MockStep::AllowFailureWithEnv(Ok((false, String::new(), "permission denied".to_string()))),
     ]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
@@ -568,7 +624,7 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
         issue_value("task-gate", "open", "gate", None, json!([]), None)
     ]);
     let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(payload.to_string()))]);
-    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     let tasks = store.list_tasks(repo.path())?;
     assert_eq!(tasks.len(), 2);
@@ -598,6 +654,16 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
     assert!(!child.document_summary.spec.has);
     assert!(!child.document_summary.plan.has);
     assert!(!child.document_summary.qa_report.has);
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(
+        calls[0].args,
+        vec!["--no-daemon", "list", "--all", "--limit", "0", "--json"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    );
     Ok(())
 }
 
@@ -670,7 +736,17 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
         .collect::<Vec<_>>()
     );
     let metadata_root = metadata_from_call(&calls[1]);
-    assert_eq!(metadata_root["openducktor"]["qaRequired"], Value::Bool(false));
+    assert_eq!(
+        metadata_root["openducktor"]["qaRequired"],
+        Value::Bool(false)
+    );
+    assert_eq!(calls[1].args[1], "update");
+    assert!(calls[1].args.iter().any(|arg| arg == "--"));
+    assert!(calls[1].args.windows(2).any(|pair| {
+        pair.first().map(String::as_str) == Some("--json")
+            && pair.get(1).map(String::as_str) == Some("--")
+    }));
+    assert_eq!(calls[1].args.last().map(String::as_str), Some("task-1"));
     Ok(())
 }
 
@@ -733,7 +809,6 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
         vec![
             "--no-daemon",
             "update",
-            "task-1",
             "--title",
             "Renamed",
             "--description",
@@ -755,13 +830,18 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
             "--set-labels",
             "api,backend",
             "--json",
+            "--",
+            "task-1",
         ]
         .into_iter()
         .map(str::to_string)
         .collect::<Vec<_>>()
     );
     let metadata_root = metadata_from_call(&calls[2]);
-    assert_eq!(metadata_root["openducktor"]["qaRequired"], Value::Bool(false));
+    assert_eq!(
+        metadata_root["openducktor"]["qaRequired"],
+        Value::Bool(false)
+    );
     Ok(())
 }
 
@@ -815,7 +895,10 @@ fn update_task_can_update_only_ai_review_metadata() -> Result<()> {
     assert_eq!(calls[0].args[1], "show");
     assert_eq!(calls[1].args[1], "update");
     let metadata_root = metadata_from_call(&calls[1]);
-    assert_eq!(metadata_root["openducktor"]["qaRequired"], Value::Bool(true));
+    assert_eq!(
+        metadata_root["openducktor"]["qaRequired"],
+        Value::Bool(true)
+    );
     Ok(())
 }
 
@@ -829,6 +912,8 @@ fn delete_task_forwards_cascade_flag() -> Result<()> {
     let calls = runner.take_calls();
     assert_eq!(calls.len(), 1);
     assert!(calls[0].args.iter().any(|entry| entry == "--cascade"));
+    assert!(calls[0].args.iter().any(|entry| entry == "--"));
+    assert_eq!(calls[0].args.last().map(String::as_str), Some("task-1"));
     Ok(())
 }
 
@@ -920,7 +1005,10 @@ fn set_spec_trims_markdown_and_increments_revision() -> Result<()> {
     assert_eq!(calls.len(), 2);
     let metadata_root = metadata_from_call(&calls[1]);
     let entry = &metadata_root["openducktor"]["documents"]["spec"][0];
-    assert_eq!(entry["markdown"], Value::String("## Updated Spec".to_string()));
+    assert_eq!(
+        entry["markdown"],
+        Value::String("## Updated Spec".to_string())
+    );
     assert_eq!(entry["revision"], Value::Number(3.into()));
     assert_eq!(entry["sourceTool"], Value::String("set_spec".to_string()));
     assert!(entry["updatedAt"].as_str().is_some());
@@ -1011,8 +1099,12 @@ fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
     let missing = store.get_latest_qa_report(repo.path(), "task-1")?;
     assert!(missing.is_none());
 
-    let appended =
-        store.append_qa_report(repo.path(), "task-1", "  Needs fixes  ", QaVerdict::Rejected)?;
+    let appended = store.append_qa_report(
+        repo.path(),
+        "task-1",
+        "  Needs fixes  ",
+        QaVerdict::Rejected,
+    )?;
     assert_eq!(appended.markdown, "Needs fixes");
     assert_eq!(appended.verdict, QaVerdict::Rejected);
     assert_eq!(appended.revision, 2);
@@ -1025,7 +1117,10 @@ fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
     assert_eq!(reports.len(), 2);
     let newest = reports.last().expect("newest report missing");
     assert_eq!(newest["revision"], Value::Number(2.into()));
-    assert_eq!(newest["sourceTool"], Value::String("qa_rejected".to_string()));
+    assert_eq!(
+        newest["sourceTool"],
+        Value::String("qa_rejected".to_string())
+    );
     Ok(())
 }
 
@@ -1063,8 +1158,9 @@ fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
             }
         })),
     );
-    let runner =
-        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([with_reports]).to_string()))]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(
+        json!([with_reports]).to_string()
+    ))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let latest = store
@@ -1095,7 +1191,8 @@ fn list_agent_sessions_is_sorted_descending_by_started_at() -> Result<()> {
             }
         })),
     );
-    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([payload]).to_string()))]);
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([payload]).to_string()))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let sessions = store.list_agent_sessions(repo.path(), "task-1")?;

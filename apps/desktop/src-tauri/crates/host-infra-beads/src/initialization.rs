@@ -65,8 +65,8 @@ impl BeadsTaskStore {
             return Ok((false, error));
         }
 
-        let payload: Value = serde_json::from_str(&stdout)
-            .with_context(|| format!("Failed to parse `bd where --json` output: {stdout}"))?;
+        let payload: Value =
+            serde_json::from_str(&stdout).context("Failed to parse `bd where --json` output")?;
         if payload.get("path").and_then(Value::as_str).is_some() {
             return Ok((true, String::new()));
         }
