@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import type {} from "./bun-test";
 import { TauriHostClient } from "./index";
 
 type InvokeCall = {
@@ -148,7 +148,7 @@ describe("TauriHostClient", () => {
 
   test("git commands use expected IPC routes and payloads", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "git_get_branches" || command === "git_get_branchs") {
+      if (command === "git_get_branches") {
         return [{ name: "main", isCurrent: true, isRemote: false }];
       }
       if (command === "git_get_current_branch" || command === "git_switch_branch") {
@@ -167,7 +167,6 @@ describe("TauriHostClient", () => {
     });
 
     const branches = await client.gitGetBranches("/repo");
-    const branchs = await client.gitGetBranchs("/repo");
     const current = await client.gitGetCurrentBranch("/repo");
     const switched = await client.gitSwitchBranch("/repo", "feature/task-1", { create: true });
     const worktree = await client.gitCreateWorktree("/repo", "/tmp/wt/task-1", "feature/task-1", {
@@ -181,7 +180,6 @@ describe("TauriHostClient", () => {
     });
 
     expect(branches).toHaveLength(1);
-    expect(branchs).toHaveLength(1);
     expect(current.detached).toBe(false);
     expect(switched.name).toBe("main");
     expect(worktree.worktreePath).toBe("/tmp/wt/task-1");
@@ -190,25 +188,24 @@ describe("TauriHostClient", () => {
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "git_get_branches",
-      "git_get_branchs",
       "git_get_current_branch",
       "git_switch_branch",
       "git_create_worktree",
       "git_remove_worktree",
       "git_push_branch",
     ]);
-    expect(calls[3].args).toEqual({
+    expect(calls[2].args).toEqual({
       repoPath: "/repo",
       branch: "feature/task-1",
       create: true,
     });
-    expect(calls[4].args).toEqual({
+    expect(calls[3].args).toEqual({
       repoPath: "/repo",
       worktreePath: "/tmp/wt/task-1",
       branch: "feature/task-1",
       createBranch: true,
     });
-    expect(calls[6].args).toEqual({
+    expect(calls[5].args).toEqual({
       repoPath: "/repo",
       branch: "feature/task-1",
       remote: "origin",

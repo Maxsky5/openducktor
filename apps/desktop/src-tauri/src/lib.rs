@@ -192,14 +192,6 @@ async fn git_get_branches(
 }
 
 #[tauri::command]
-async fn git_get_branchs(
-    state: State<'_, AppState>,
-    repo_path: String,
-) -> Result<Vec<host_domain::GitBranch>, String> {
-    as_error(state.service.git_get_branches(&repo_path))
-}
-
-#[tauri::command]
 async fn git_get_current_branch(
     state: State<'_, AppState>,
     repo_path: String,
@@ -701,7 +693,6 @@ pub fn run() {
             workspace_get_repo_config,
             workspace_set_trusted_hooks,
             git_get_branches,
-            git_get_branchs,
             git_get_current_branch,
             git_switch_branch,
             git_create_worktree,
