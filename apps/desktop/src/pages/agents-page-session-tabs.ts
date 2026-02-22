@@ -1,7 +1,8 @@
 import type { AgentStudioTaskTab } from "@/components/features/agents/agent-studio-task-tabs";
+import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskAction, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 
 type PersistedTaskTabsPayload = {
   tabs: string[];
@@ -11,6 +12,17 @@ type PersistedTaskTabsPayload = {
 export type PersistedTaskTabsState = {
   tabs: string[];
   activeTaskId: string | null;
+};
+
+export type WorkflowStepState = "done" | "current" | "available" | "blocked";
+
+export type SessionCreateOption = {
+  id: string;
+  role: AgentRole;
+  scenario: AgentScenario;
+  label: string;
+  description: string;
+  disabled: boolean;
 };
 
 const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
@@ -154,6 +166,138 @@ export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentR
   }
 
   return map;
+};
+
+export const buildWorkflowStateByRole = (params: {
+  roleEnabledByTask: Record<AgentRole, boolean>;
+  sessionsForTask: AgentSessionState[];
+  activeSessionRole: AgentRole | null;
+}): Record<AgentRole, WorkflowStepState> => {
+  const hasSessionByRole = new Set(params.sessionsForTask.map((entry) => entry.role));
+  const stateByRole = {} as Record<AgentRole, WorkflowStepState>;
+
+  for (const role of ALL_AGENT_ROLES) {
+    if (params.activeSessionRole === role) {
+      stateByRole[role] = "current";
+      continue;
+    }
+    if (hasSessionByRole.has(role)) {
+      stateByRole[role] = "done";
+      continue;
+    }
+    if (params.roleEnabledByTask[role]) {
+      stateByRole[role] = "available";
+      continue;
+    }
+    stateByRole[role] = "blocked";
+  }
+
+  return stateByRole;
+};
+
+export const buildLatestSessionByRoleMap = (
+  sessionsForTask: AgentSessionState[],
+): Record<AgentRole, AgentSessionState | null> => {
+  const map: Record<AgentRole, AgentSessionState | null> = {
+    spec: null,
+    planner: null,
+    build: null,
+    qa: null,
+  };
+
+  for (const role of ALL_AGENT_ROLES) {
+    map[role] = sessionsForTask.find((entry) => entry.role === role) ?? null;
+  }
+
+  return map;
+};
+
+const describeSessionOption = (session: AgentSessionState): string => {
+  const startedAt = new Date(session.startedAt);
+  const startedAtLabel = Number.isNaN(startedAt.getTime())
+    ? session.startedAt
+    : startedAt.toLocaleString();
+  return `${startedAtLabel} · ${session.status} · ${session.sessionId.slice(0, 8)}`;
+};
+
+export const buildSessionSelectorGroups = (params: {
+  sessionsForTask: AgentSessionState[];
+  scenarioLabels: Record<AgentScenario, string>;
+  roleLabelByRole: Record<AgentRole, string>;
+}): ComboboxGroup[] => {
+  const groups: ComboboxGroup[] = [];
+
+  for (const role of ALL_AGENT_ROLES) {
+    const roleSessions = params.sessionsForTask.filter((entry) => entry.role === role);
+    if (roleSessions.length === 0) {
+      continue;
+    }
+    const roleOptions: ComboboxOption[] = roleSessions.map((session) => ({
+      value: session.sessionId,
+      label: `${params.scenarioLabels[session.scenario]} · ${params.roleLabelByRole[session.role]}`,
+      description: describeSessionOption(session),
+      secondaryLabel: role.toUpperCase(),
+      searchKeywords: [role, session.scenario, session.sessionId],
+    }));
+    groups.push({
+      label: params.roleLabelByRole[role],
+      options: roleOptions,
+    });
+  }
+
+  return groups;
+};
+
+export const buildSessionCreateOptions = (params: {
+  roleEnabledByTask: Record<AgentRole, boolean>;
+  hasSpecDoc: boolean;
+  hasPlanDoc: boolean;
+  hasQaFeedback: boolean;
+  hasHumanFeedback: boolean;
+  createSessionDisabled: boolean;
+  roleLabelByRole: Record<AgentRole, string>;
+  scenarioLabels: Record<AgentScenario, string>;
+}): SessionCreateOption[] => {
+  const options: SessionCreateOption[] = [];
+
+  const addOption = (role: AgentRole, scenario: AgentScenario, disabled: boolean) => {
+    options.push({
+      id: `${role}:${scenario}`,
+      role,
+      scenario,
+      label: `${params.roleLabelByRole[role]} · ${params.scenarioLabels[scenario]}`,
+      description: `Create ${params.roleLabelByRole[role].toLowerCase()} session with ${params.scenarioLabels[scenario].toLowerCase()}`,
+      disabled,
+    });
+  };
+
+  if (params.hasSpecDoc) {
+    addOption("spec", "spec_revision", params.createSessionDisabled);
+  } else if (params.roleEnabledByTask.spec) {
+    addOption("spec", "spec_initial", params.createSessionDisabled);
+  }
+
+  if (params.hasPlanDoc) {
+    addOption("planner", "planner_revision", params.createSessionDisabled);
+  } else if (params.roleEnabledByTask.planner) {
+    addOption("planner", "planner_initial", params.createSessionDisabled);
+  }
+
+  if (params.roleEnabledByTask.build) {
+    addOption("build", "build_implementation_start", params.createSessionDisabled);
+    if (params.hasQaFeedback) {
+      addOption("build", "build_after_qa_rejected", params.createSessionDisabled);
+    }
+    if (params.hasHumanFeedback) {
+      addOption("build", "build_after_human_request_changes", params.createSessionDisabled);
+    }
+  }
+
+  if (params.roleEnabledByTask.qa) {
+    addOption("qa", "qa_review", params.createSessionDisabled);
+  }
+
+  return options;
 };
 
 export const getAvailableTabTasks = (tasks: TaskCard[], tabTaskIds: string[]): TaskCard[] => {

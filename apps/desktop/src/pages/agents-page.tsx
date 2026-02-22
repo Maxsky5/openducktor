@@ -52,9 +52,13 @@ import {
   kickoffPromptForScenario,
 } from "./agents-page-constants";
 import {
+  buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
   buildRoleEnabledMapForTask,
+  buildSessionCreateOptions,
+  buildSessionSelectorGroups,
   buildTaskTabs,
+  buildWorkflowStateByRole,
   canPersistTaskTabs,
   closeTaskTab,
   ensureActiveTaskTab,
@@ -303,13 +307,12 @@ export function AgentsPage(): ReactElement {
     taskId,
   ]);
 
-  const role: AgentRole = activeSession?.role ?? roleFromQuery;
+  const role: AgentRole = roleFromQuery;
   const scenarios = SCENARIOS_BY_ROLE[role];
   const scenario =
-    activeSession?.scenario ??
-    (scenarioFromQuery && scenarios.includes(scenarioFromQuery)
+    scenarioFromQuery && scenarios.includes(scenarioFromQuery)
       ? scenarioFromQuery
-      : firstScenario(role));
+      : firstScenario(role);
 
   const contextSessions = sessionsForTask;
 
@@ -653,12 +656,6 @@ export function AgentsPage(): ReactElement {
     if (searchParams.get("session") !== activeSession.sessionId) {
       updates.session = activeSession.sessionId;
     }
-    if (searchParams.get("agent") !== activeSession.role) {
-      updates.agent = activeSession.role;
-    }
-    if (searchParams.get("scenario") !== activeSession.scenario) {
-      updates.scenario = activeSession.scenario;
-    }
     if (searchParams.get("autostart")) {
       updates.autostart = undefined;
     }
@@ -771,8 +768,6 @@ export function AgentsPage(): ReactElement {
     if (activeSession) {
       updateQuery({
         task: activeSession.taskId,
-        agent: activeSession.role,
-        scenario: activeSession.scenario,
         session: activeSession.sessionId,
         autostart: undefined,
       });
@@ -1004,14 +999,6 @@ export function AgentsPage(): ReactElement {
       label: variant,
     }));
   }, [selectedModelEntry, selectedModelSelection?.variant]);
-
-  const scenarioOptions = useMemo<ComboboxOption[]>(() => {
-    return scenarios.map((entry) => ({
-      value: entry,
-      label: SCENARIO_LABELS[entry],
-      description: entry,
-    }));
-  }, [scenarios]);
 
   const activeSessionAgentColors = useMemo<Record<string, string>>(() => {
     if (!activeSession?.modelCatalog) {
@@ -1257,8 +1244,6 @@ export function AgentsPage(): ReactElement {
       if (sessionForTask) {
         void updateQuery({
           task: sessionForTask.taskId,
-          agent: sessionForTask.role,
-          scenario: sessionForTask.scenario,
           session: sessionForTask.sessionId,
           autostart: undefined,
         });
@@ -1323,8 +1308,6 @@ export function AgentsPage(): ReactElement {
       if (fallbackSession) {
         void updateQuery({
           task: fallbackSession.taskId,
-          agent: fallbackSession.role,
-          scenario: fallbackSession.scenario,
           session: fallbackSession.sessionId,
           autostart: undefined,
         });
@@ -1340,32 +1323,105 @@ export function AgentsPage(): ReactElement {
     [sessionByTaskId, tabTaskIds, taskId, updateQuery],
   );
 
-  const handleRoleChange = useCallback(
-    (nextRole: AgentRole) => {
-      const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
-      const isRoleEnabled = roleEnabledByTask[nextRole] || activeSession?.role === nextRole;
-      if (!isRoleEnabled) {
+  const handleWorkflowStepSelect = useCallback(
+    (_nextRole: AgentRole, sessionId: string | null) => {
+      if (!sessionId) {
         return;
       }
-
-      if (activeSession && isSessionWorking) {
+      const session = sessionsForTask.find((entry) => entry.sessionId === sessionId);
+      if (!session) {
         return;
       }
-      updateQuery({
-        agent: nextRole,
-        scenario: firstScenario(nextRole),
-        session: undefined,
+      void updateQuery({
+        task: session.taskId,
+        session: session.sessionId,
         autostart: undefined,
       });
     },
-    [activeSession, isSessionWorking, selectedTask, updateQuery],
+    [sessionsForTask, updateQuery],
   );
 
-  const handleScenarioChange = useCallback(
-    (nextScenario: string) => {
-      updateQuery({ scenario: nextScenario, autostart: undefined });
+  const handleSessionSelectionChange = useCallback(
+    (nextValue: string) => {
+      if (!taskId) {
+        return;
+      }
+      const selectedSession = sessionsForTask.find((entry) => entry.sessionId === nextValue);
+      if (!selectedSession) {
+        return;
+      }
+      void updateQuery({
+        task: selectedSession.taskId,
+        session: selectedSession.sessionId,
+        autostart: undefined,
+      });
     },
-    [updateQuery],
+    [sessionsForTask, taskId, updateQuery],
+  );
+
+  const handleCreateSession = useCallback(
+    (nextRole: AgentRole, nextScenario: AgentScenario) => {
+      if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
+        return;
+      }
+      if (activeSession && isSessionWorking) {
+        return;
+      }
+
+      const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
+      if (!roleEnabledByTask[nextRole]) {
+        return;
+      }
+
+      const startKey = `${taskId}:${nextRole}:${nextScenario}`;
+      const existing = startingSessionByTaskRef.current.get(startKey);
+      if (existing) {
+        void existing;
+        return;
+      }
+
+      const startPromise = (async (): Promise<string | undefined> => {
+        try {
+          setIsStarting(true);
+          const sessionId = await startAgentSession({
+            taskId,
+            role: nextRole,
+            scenario: nextScenario,
+            sendKickoff: true,
+          });
+          if (!sessionId) {
+            return undefined;
+          }
+          void updateQuery({
+            task: taskId,
+            session: sessionId,
+            agent: nextRole,
+            scenario: nextScenario,
+            autostart: undefined,
+          });
+          return sessionId;
+        } finally {
+          setIsStarting(false);
+        }
+      })();
+
+      startingSessionByTaskRef.current.set(startKey, startPromise);
+      void startPromise.finally(() => {
+        if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
+          startingSessionByTaskRef.current.delete(startKey);
+        }
+      });
+    },
+    [
+      activeSession,
+      agentStudioReady,
+      isActiveTaskHydrated,
+      isSessionWorking,
+      selectedTask,
+      startAgentSession,
+      taskId,
+      updateQuery,
+    ],
   );
 
   const handleSelectAgent = useCallback(
@@ -1438,6 +1494,7 @@ export function AgentsPage(): ReactElement {
   const agentStudioTaskTabsModel: AgentStudioTaskTabsModel = {
     tabs: taskTabs,
     availableTabTasks,
+    isLoadingAvailableTabTasks: isLoadingTasks,
     onCreateTab: handleCreateTab,
     onCloseTab: handleCloseTab,
     agentStudioReady,
@@ -1446,34 +1503,95 @@ export function AgentsPage(): ReactElement {
   const activeTabValue = taskId || "__agent_studio_empty__";
 
   const roleEnabledByTask = useMemo(() => buildRoleEnabledMapForTask(selectedTask), [selectedTask]);
-  const roleSelectionLocked = Boolean(activeSession && isSessionWorking);
-  const roleOptions = useMemo(
+  const latestSessionByRole = useMemo(
+    () => buildLatestSessionByRoleMap(sessionsForTask),
+    [sessionsForTask],
+  );
+  const workflowStateByRole = useMemo(
     () =>
-      ROLE_OPTIONS.map((entry) => ({
-        ...entry,
-        disabled: !(roleEnabledByTask[entry.role] || activeSession?.role === entry.role),
-      })),
-    [activeSession?.role, roleEnabledByTask],
+      buildWorkflowStateByRole({
+        roleEnabledByTask,
+        sessionsForTask,
+        activeSessionRole: activeSession?.role ?? null,
+      }),
+    [activeSession?.role, roleEnabledByTask, sessionsForTask],
+  );
+  const roleLabelByRole = useMemo(
+    () =>
+      ROLE_OPTIONS.reduce(
+        (acc, entry) => {
+          acc[entry.role] = entry.label;
+          return acc;
+        },
+        { spec: "Spec", planner: "Planner", build: "Build", qa: "QA" } as Record<AgentRole, string>,
+      ),
+    [],
+  );
+  const sessionSelectorGroups = useMemo(
+    () =>
+      buildSessionSelectorGroups({
+        sessionsForTask,
+        scenarioLabels: SCENARIO_LABELS,
+        roleLabelByRole,
+      }),
+    [roleLabelByRole, sessionsForTask],
+  );
+  const sessionSelectorValue = activeSession?.sessionId ?? sessionsForTask[0]?.sessionId ?? "";
+  const createSessionDisabled = Boolean(activeSession && isSessionWorking);
+  const hasSpecDoc = specDoc.markdown.trim().length > 0;
+  const hasPlanDoc = planDoc.markdown.trim().length > 0;
+  const hasQaFeedback = qaDoc.markdown.trim().length > 0;
+  const hasHumanFeedback = Boolean(
+    selectedTask &&
+      (selectedTask.status === "human_review" ||
+        selectedTask.availableActions.includes("human_request_changes") ||
+        selectedTask.availableActions.includes("human_approve")),
+  );
+  const sessionCreateOptions = useMemo(
+    () =>
+      buildSessionCreateOptions({
+        roleEnabledByTask,
+        hasSpecDoc,
+        hasPlanDoc,
+        hasQaFeedback,
+        hasHumanFeedback,
+        createSessionDisabled,
+        roleLabelByRole,
+        scenarioLabels: SCENARIO_LABELS,
+      }),
+    [
+      createSessionDisabled,
+      hasHumanFeedback,
+      hasPlanDoc,
+      hasQaFeedback,
+      hasSpecDoc,
+      roleEnabledByTask,
+      roleLabelByRole,
+    ],
   );
 
   const agentStudioHeaderModel: AgentStudioHeaderModel = {
     taskTitle: selectedTask?.title ?? null,
+    taskId: selectedTask?.id ?? null,
     sessionStatus: activeSession?.status ?? null,
-    roleOptions,
-    role,
-    roleDisabled: roleSelectionLocked,
-    onRoleChange: handleRoleChange,
-    scenario,
-    scenarioOptions,
-    scenarioDisabled: roleSelectionLocked,
-    onScenarioChange: handleScenarioChange,
-    canKickoffNewSession,
-    kickoffLabel,
-    onKickoff: () => {
-      void startScenarioKickoff();
+    workflowSteps: ROLE_OPTIONS.map((entry) => ({
+      role: entry.role,
+      label: entry.label,
+      icon: entry.icon,
+      state: workflowStateByRole[entry.role],
+      sessionId: latestSessionByRole[entry.role]?.sessionId ?? null,
+    })),
+    onWorkflowStepSelect: handleWorkflowStepSelect,
+    sessionSelector: {
+      value: sessionSelectorValue,
+      groups: sessionSelectorGroups,
+      disabled: !agentStudioReady || sessionsForTask.length === 0,
+      onValueChange: handleSessionSelectionChange,
     },
-    isStarting,
-    isSending,
+    sessionCreateOptions,
+    onCreateSession: handleCreateSession,
+    createSessionDisabled,
+    isCreatingSession: isStarting,
     stats: {
       sessions: contextSessions.length,
       messages: activeSession?.messages.length ?? 0,

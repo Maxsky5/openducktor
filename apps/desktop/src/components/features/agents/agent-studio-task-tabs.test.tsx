@@ -21,6 +21,7 @@ const buildModel = () => ({
     },
   ],
   availableTabTasks: [buildTask({ id: "task-3", title: "Stabilize desktop startup" })],
+  isLoadingAvailableTabTasks: false,
   onCreateTab: () => {},
   onCloseTab: () => {},
   agentStudioReady: true,
@@ -76,5 +77,25 @@ describe("AgentStudioTaskTabs", () => {
 
     expect(html).toContain("Open a task tab to start working with an agent.");
     expect(html).toContain('aria-label="Open new task tab"');
+  });
+
+  test("keeps new-tab button enabled while tab tasks are loading", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        Tabs,
+        { value: "__empty__" },
+        createElement(AgentStudioTaskTabs, {
+          model: {
+            ...buildModel(),
+            tabs: [],
+            availableTabTasks: [],
+            isLoadingAvailableTabTasks: true,
+          },
+        }),
+      ),
+    );
+
+    expect(html).toMatch(/aria-label="Open new task tab"/);
+    expect(html).not.toMatch(/aria-label="Open new task tab"[^>]*disabled/);
   });
 });

@@ -72,6 +72,7 @@ Goals for agent contributions:
 
 - Use shadcn-based components in `apps/desktop/src/components/ui`.
 - Use Tailwind v4 utilities and existing design language in `apps/desktop/src/styles.css`.
+- NEVER use gradient backgrounds in this project UI (no `bg-gradient-*` usage for surfaces/components).
 - Avoid native browser-styled controls when a project UI component exists (combobox/tag selector, dialog/sheet, etc.).
 - Avoid visual layout shifts on hover (size, spacing, or typography changes).
 - For async submit actions in forms:

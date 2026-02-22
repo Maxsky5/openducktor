@@ -2,9 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
   buildRoleEnabledMapForTask,
+  buildSessionCreateOptions,
+  buildSessionSelectorGroups,
   buildTaskTabs,
+  buildWorkflowStateByRole,
   canPersistTaskTabs,
   closeTaskTab,
   ensureActiveTaskTab,
@@ -176,6 +180,164 @@ describe("agents-page-session-tabs", () => {
       build: true,
       qa: true,
     });
+  });
+
+  test("builds workflow rail states from available roles and session history", () => {
+    const states = buildWorkflowStateByRole({
+      roleEnabledByTask: {
+        spec: false,
+        planner: true,
+        build: false,
+        qa: false,
+      },
+      sessionsForTask: [
+        buildSession({ role: "spec", sessionId: "spec-1" }),
+        buildSession({ role: "planner", sessionId: "planner-1" }),
+      ],
+      activeSessionRole: "planner",
+    });
+
+    expect(states).toEqual({
+      spec: "done",
+      planner: "current",
+      build: "blocked",
+      qa: "blocked",
+    });
+  });
+
+  test("builds grouped session selector options", () => {
+    const groups = buildSessionSelectorGroups({
+      sessionsForTask: [
+        buildSession({
+          sessionId: "spec-1",
+          role: "spec",
+          scenario: "spec_revision",
+          startedAt: "2026-02-22T09:20:00.000Z",
+        }),
+        buildSession({
+          sessionId: "planner-1",
+          role: "planner",
+          scenario: "planner_initial",
+          startedAt: "2026-02-22T10:20:00.000Z",
+        }),
+      ],
+      scenarioLabels: {
+        spec_initial: "Initial Spec",
+        spec_revision: "Spec Revision",
+        planner_initial: "Initial Plan",
+        planner_revision: "Plan Revision",
+        build_implementation_start: "Implementation Start",
+        build_after_human_request_changes: "After Human Request Changes",
+        build_after_qa_rejected: "After QA Rejected",
+        qa_review: "QA Review",
+      },
+      roleLabelByRole: {
+        spec: "Spec",
+        planner: "Planner",
+        build: "Build",
+        qa: "QA",
+      },
+    });
+
+    expect(groups[0]?.label).toBe("Spec");
+    expect(groups[0]?.options[0]?.value).toBe("spec-1");
+    expect(groups[0]?.options[0]?.label).toBe("Spec Revision · Spec");
+    expect(groups[0]?.options[0]?.secondaryLabel).toBe("SPEC");
+    expect(groups[1]?.label).toBe("Planner");
+    expect(groups[1]?.options[0]?.value).toBe("planner-1");
+    expect(groups[1]?.options[0]?.label).toBe("Initial Plan · Planner");
+  });
+
+  test("builds latest session map by role", () => {
+    const sessions = [
+      buildSession({ sessionId: "spec-1", role: "spec", startedAt: "2026-02-20T08:00:00.000Z" }),
+      buildSession({
+        sessionId: "planner-1",
+        role: "planner",
+        startedAt: "2026-02-20T10:00:00.000Z",
+      }),
+      buildSession({ sessionId: "build-1", role: "build", startedAt: "2026-02-20T09:00:00.000Z" }),
+    ];
+
+    const latestByRole = buildLatestSessionByRoleMap(sessions);
+    expect(latestByRole.spec?.sessionId).toBe("spec-1");
+    expect(latestByRole.planner?.sessionId).toBe("planner-1");
+    expect(latestByRole.build?.sessionId).toBe("build-1");
+    expect(latestByRole.qa).toBeNull();
+  });
+
+  test("builds session create options with feedback-aware build scenarios", () => {
+    const options = buildSessionCreateOptions({
+      roleEnabledByTask: {
+        spec: false,
+        planner: true,
+        build: true,
+        qa: false,
+      },
+      hasSpecDoc: true,
+      hasPlanDoc: true,
+      hasQaFeedback: true,
+      hasHumanFeedback: false,
+      createSessionDisabled: false,
+      roleLabelByRole: {
+        spec: "Spec",
+        planner: "Planner",
+        build: "Build",
+        qa: "QA",
+      },
+      scenarioLabels: {
+        spec_initial: "Initial Spec",
+        spec_revision: "Revise Spec",
+        planner_initial: "Initial Plan",
+        planner_revision: "Revise Plan",
+        build_implementation_start: "Start Implementation",
+        build_after_human_request_changes: "Apply Human Changes",
+        build_after_qa_rejected: "Fix QA Rejection",
+        qa_review: "QA Review",
+      },
+    });
+
+    expect(options.map((option) => option.scenario)).toEqual([
+      "spec_revision",
+      "planner_revision",
+      "build_implementation_start",
+      "build_after_qa_rejected",
+    ]);
+
+    const humanFeedbackOptions = buildSessionCreateOptions({
+      roleEnabledByTask: {
+        spec: false,
+        planner: false,
+        build: true,
+        qa: false,
+      },
+      hasSpecDoc: false,
+      hasPlanDoc: false,
+      hasQaFeedback: false,
+      hasHumanFeedback: true,
+      createSessionDisabled: false,
+      roleLabelByRole: {
+        spec: "Spec",
+        planner: "Planner",
+        build: "Build",
+        qa: "QA",
+      },
+      scenarioLabels: {
+        spec_initial: "Initial Spec",
+        spec_revision: "Revise Spec",
+        planner_initial: "Initial Plan",
+        planner_revision: "Revise Plan",
+        build_implementation_start: "Start Implementation",
+        build_after_human_request_changes: "Apply Human Changes",
+        build_after_qa_rejected: "Fix QA Rejection",
+        qa_review: "QA Review",
+      },
+    });
+
+    expect(humanFeedbackOptions.map((option) => option.scenario)).toEqual([
+      "build_implementation_start",
+      "build_after_human_request_changes",
+    ]);
   });
 
   test("filters available tasks by opened tab ids", () => {

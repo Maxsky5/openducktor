@@ -26,6 +26,7 @@ export type AgentStudioTaskTab = {
 export type AgentStudioTaskTabsModel = {
   tabs: AgentStudioTaskTab[];
   availableTabTasks: TaskCard[];
+  isLoadingAvailableTabTasks: boolean;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
   agentStudioReady: boolean;
@@ -52,9 +53,26 @@ const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
 };
 
 export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel }): ReactElement {
-  const { tabs, availableTabTasks, onCreateTab, onCloseTab, agentStudioReady } = model;
+  const {
+    tabs,
+    availableTabTasks,
+    isLoadingAvailableTabTasks,
+    onCreateTab,
+    onCloseTab,
+    agentStudioReady,
+  } = model;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState("");
+  const [isCreateDialogReady, setIsCreateDialogReady] = useState(false);
+
+  useEffect(() => {
+    if (!isCreateDialogOpen) {
+      setIsCreateDialogReady(false);
+      return;
+    }
+    const frame = globalThis.requestAnimationFrame(() => setIsCreateDialogReady(true));
+    return () => globalThis.cancelAnimationFrame(frame);
+  }, [isCreateDialogOpen]);
 
   useEffect(() => {
     if (!isCreateDialogOpen) {
@@ -70,7 +88,8 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
     setPendingTaskId(availableTabTasks[0]?.id ?? "");
   }, [availableTabTasks, isCreateDialogOpen, pendingTaskId]);
 
-  const canCreateTab = agentStudioReady && availableTabTasks.length > 0;
+  const canOpenCreateDialog = agentStudioReady;
+  const hasCreatableTasks = availableTabTasks.length > 0;
   const hasAnyTab = useMemo(() => tabs.length > 0, [tabs]);
 
   return (
@@ -147,7 +166,7 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
               variant="ghost"
               aria-label="Open new task tab"
               className="h-10 w-10 shrink-0 self-center rounded-md border-0 bg-transparent hover:bg-transparent p-0 text-gray-50 shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-600"
-              disabled={!canCreateTab}
+              disabled={!canOpenCreateDialog}
               onClick={() => setIsCreateDialogOpen(true)}
             >
               <Plus className="size-[1.4rem]" />
@@ -166,7 +185,20 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
             </DialogDescription>
           </DialogHeader>
 
-          {availableTabTasks.length > 0 ? (
+          {!isCreateDialogReady || isLoadingAvailableTabTasks ? (
+            <div className="relative">
+              <TaskSelector
+                tasks={[]}
+                value=""
+                includeEmptyOption
+                emptyLabel="Loading tasks..."
+                searchPlaceholder="Loading tasks..."
+                disabled
+                onValueChange={() => undefined}
+              />
+              <LoaderCircle className="pointer-events-none absolute right-9 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-500" />
+            </div>
+          ) : hasCreatableTasks ? (
             <TaskSelector
               tasks={availableTabTasks}
               value={pendingTaskId}
@@ -185,7 +217,7 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
             </Button>
             <Button
               type="button"
-              disabled={!pendingTaskId || !canCreateTab}
+              disabled={isLoadingAvailableTabTasks || !pendingTaskId || !hasCreatableTasks}
               onClick={() => {
                 if (!pendingTaskId) {
                   return;
