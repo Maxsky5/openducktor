@@ -388,7 +388,6 @@ impl AppService {
 
 #[cfg(test)]
 mod tests {
-    use super::AppService;
     use crate::app_service::test_support::build_service_with_state;
 
     #[test]

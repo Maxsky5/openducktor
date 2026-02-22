@@ -359,13 +359,9 @@ mod tests {
     fn module_normalize_subtask_plan_inputs_rejects_empty_title() {
         let inputs = vec![PlanSubtaskInput {
             title: "   ".to_string(),
-            description: None,
-            acceptance_criteria: None,
-            notes: None,
-            assignee: None,
+            issue_type: None,
             priority: None,
-            labels: None,
-            ai_review_enabled: None,
+            description: None,
         }];
 
         let error =

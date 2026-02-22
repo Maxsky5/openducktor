@@ -1,25 +1,11 @@
 use anyhow::{anyhow, Context, Result};
-use host_domain::{
-    now_rfc3339, AgentRuntimeSummary, AgentSessionDocument, BeadsCheck, CreateTaskInput, GitBranch,
-    GitCurrentBranch, GitPort, GitPushSummary, GitWorktreeSummary, PlanSubtaskInput, QaVerdict,
-    RunEvent, RunState, RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard,
-    TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
-};
-use host_infra_system::{
-    build_branch_name, command_exists, command_path, pick_free_port, remove_worktree,
-    resolve_central_beads_dir, run_command, run_command_allow_failure, version_command,
-    AppConfigStore, GitCliPort, RepoConfig,
-};
-use serde_json::json;
+use host_domain::{AgentRuntimeSummary, GitPort, RunEvent, RunSummary, TaskCard, TaskStore};
+use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
-use std::net::{SocketAddr, TcpStream};
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::path::Path;
+use std::process::Child;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use uuid::Uuid;
 
 mod build_orchestrator;
 mod events;
@@ -33,20 +19,23 @@ mod workflow_rules;
 
 pub(crate) use events::{emit_event, spawn_output_forwarder};
 pub(crate) use opencode_runtime::{
-    build_opencode_config_content, default_mcp_workspace_root, parse_mcp_command_json,
-    read_opencode_version, resolve_mcp_command, resolve_opencode_binary_path,
-    spawn_opencode_server, terminate_child_process, wait_for_local_server_with_process,
+    read_opencode_version, resolve_opencode_binary_path, spawn_opencode_server,
+    terminate_child_process, wait_for_local_server_with_process,
 };
 pub(crate) use workflow_rules::{
-    allows_transition, can_set_plan, can_set_spec_from_status,
-    default_qa_required_for_issue_type, derive_available_actions, normalize_issue_type,
-    normalize_required_markdown, normalize_subtask_plan_inputs, normalize_title_key,
-    validate_parent_relationships_for_create, validate_parent_relationships_for_update,
-    validate_plan_subtask_rules, validate_transition,
+    can_set_plan, can_set_spec_from_status, default_qa_required_for_issue_type,
+    derive_available_actions, normalize_issue_type, normalize_required_markdown,
+    normalize_subtask_plan_inputs, normalize_title_key, validate_parent_relationships_for_create,
+    validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
 };
 
 #[cfg(test)]
-pub(crate) use opencode_runtime::wait_for_local_server;
+pub(crate) use opencode_runtime::{
+    build_opencode_config_content, default_mcp_workspace_root, parse_mcp_command_json,
+    resolve_mcp_command, wait_for_local_server,
+};
+#[cfg(test)]
+pub(crate) use workflow_rules::allows_transition;
 
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
 
