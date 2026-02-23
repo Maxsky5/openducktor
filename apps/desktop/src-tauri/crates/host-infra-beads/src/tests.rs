@@ -2,7 +2,7 @@ use super::{
     default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace, normalize_issue_type,
     normalize_labels, normalize_text_option, parse_agent_sessions, parse_markdown_entries,
     parse_metadata_root, parse_qa_entries, BeadsTaskStore, CommandRunner, ProcessCommandRunner,
-    CUSTOM_STATUS_VALUES,
+    CUSTOM_STATUS_VALUES, TASK_LIST_CACHE_TTL_MS,
 };
 use anyhow::{anyhow, Result};
 use host_domain::{
@@ -14,7 +14,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CallKind {
@@ -799,6 +799,147 @@ fn list_tasks_cache_is_invalidated_after_metadata_mutation() -> Result<()> {
         .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
         .count();
     assert_eq!(list_calls, 2);
+    Ok(())
+}
+
+#[test]
+fn list_tasks_cache_expires_after_ttl() -> Result<()> {
+    let repo = RepoFixture::new("list-cache-expiry");
+    let initial_list = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let refreshed_list = json!([issue_value(
+        "task-1",
+        "blocked",
+        "task",
+        None,
+        json!([]),
+        None
+    )]);
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(initial_list.to_string())),
+        MockStep::WithEnv(Ok(refreshed_list.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let initial = store.list_tasks(repo.path())?;
+    assert_eq!(initial[0].status, TaskStatus::Open);
+
+    std::thread::sleep(Duration::from_millis(TASK_LIST_CACHE_TTL_MS + 50));
+
+    let refreshed = store.list_tasks(repo.path())?;
+    assert_eq!(refreshed[0].status, TaskStatus::Blocked);
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 2);
+    Ok(())
+}
+
+#[test]
+fn list_tasks_cache_is_invalidated_after_create_mutation() -> Result<()> {
+    let repo = RepoFixture::new("list-cache-invalidate-create");
+    let initial_list = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let created = issue_value("task-2", "open", "task", None, json!([]), None);
+    let shown = issue_value("task-2", "open", "task", None, json!([]), None);
+    let refreshed_list = json!([
+        issue_value("task-1", "open", "task", None, json!([]), None),
+        issue_value("task-2", "open", "task", None, json!([]), None)
+    ]);
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(initial_list.to_string())),
+        MockStep::WithEnv(Ok(created.to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(json!([shown]).to_string())),
+        MockStep::WithEnv(Ok(refreshed_list.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let initial = store.list_tasks(repo.path())?;
+    assert_eq!(initial.len(), 1);
+
+    let created_task = store.create_task(
+        repo.path(),
+        CreateTaskInput {
+            title: "New task".to_string(),
+            issue_type: "task".to_string(),
+            priority: 2,
+            description: None,
+            acceptance_criteria: None,
+            labels: None,
+            ai_review_enabled: Some(true),
+            parent_id: None,
+        },
+    )?;
+    assert_eq!(created_task.id, "task-2");
+
+    let refreshed = store.list_tasks(repo.path())?;
+    assert_eq!(refreshed.len(), 2);
+    assert!(refreshed.iter().any(|task| task.id == "task-2"));
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 2);
+    Ok(())
+}
+
+#[test]
+fn list_tasks_cache_is_invalidated_after_delete_mutation() -> Result<()> {
+    let repo = RepoFixture::new("list-cache-invalidate-delete");
+    let initial_list = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let refreshed_list = json!([]);
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(initial_list.to_string())),
+        MockStep::WithEnv(Ok("done".to_string())),
+        MockStep::WithEnv(Ok(refreshed_list.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let initial = store.list_tasks(repo.path())?;
+    assert_eq!(initial.len(), 1);
+
+    assert!(store.delete_task(repo.path(), "task-1", false)?);
+
+    let refreshed = store.list_tasks(repo.path())?;
+    assert!(refreshed.is_empty());
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 2);
+    Ok(())
+}
+
+#[test]
+fn stale_generation_cache_writes_are_ignored() -> Result<()> {
+    let repo = RepoFixture::new("list-cache-generation-guard");
+    let payload = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(payload.to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let stale_generation = store.task_list_cache_generation_for_repo(repo.path())?;
+    store.invalidate_task_list_cache(repo.path())?;
+    store.cache_task_list_for_repo_if_generation(
+        repo.path(),
+        "openducktor",
+        stale_generation,
+        &[],
+    )?;
+
+    let tasks = store.list_tasks(repo.path())?;
+    assert_eq!(tasks.len(), 1);
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].args[1], "list");
     Ok(())
 }
 

@@ -26,6 +26,13 @@ type MetadataNamespaceResolver = Arc<dyn Fn() -> Result<String> + Send + Sync>;
 struct TaskListCacheEntry {
     tasks: Vec<TaskCard>,
     cached_at: Instant,
+    metadata_namespace: String,
+}
+
+#[derive(Default)]
+struct TaskListCacheState {
+    generation: u64,
+    entry: Option<TaskListCacheEntry>,
 }
 
 pub struct BeadsTaskStore {
@@ -34,7 +41,7 @@ pub struct BeadsTaskStore {
     pub(crate) metadata_namespace_resolver: Option<MetadataNamespaceResolver>,
     pub(crate) init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub(crate) initialized_repos: Mutex<HashSet<String>>,
-    task_list_cache: Mutex<HashMap<String, TaskListCacheEntry>>,
+    task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
 }
 
 impl fmt::Debug for BeadsTaskStore {
@@ -163,36 +170,51 @@ impl BeadsTaskStore {
         Duration::from_millis(TASK_LIST_CACHE_TTL_MS)
     }
 
-    fn cached_task_list(&self, repo_key: &str) -> Result<Option<Vec<TaskCard>>> {
+    fn cached_task_list_and_generation(
+        &self,
+        repo_key: &str,
+        metadata_namespace: &str,
+    ) -> Result<(Option<Vec<TaskCard>>, u64)> {
         let mut cache = self
             .task_list_cache
             .lock()
             .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
+        let state = cache.entry(repo_key.to_string()).or_default();
+        let generation = state.generation;
 
-        let Some(entry) = cache.get(repo_key) else {
-            return Ok(None);
-        };
-
-        if entry.cached_at.elapsed() <= Self::task_list_cache_ttl() {
-            return Ok(Some(entry.tasks.clone()));
+        if let Some(entry) = state.entry.as_ref() {
+            let is_fresh = entry.cached_at.elapsed() <= Self::task_list_cache_ttl();
+            let namespace_matches = entry.metadata_namespace == metadata_namespace;
+            if is_fresh && namespace_matches {
+                return Ok((Some(entry.tasks.clone()), generation));
+            }
         }
 
-        cache.remove(repo_key);
-        Ok(None)
+        state.entry = None;
+        Ok((None, generation))
     }
 
-    fn cache_task_list(&self, repo_key: &str, tasks: &[TaskCard]) -> Result<()> {
+    fn cache_task_list_if_generation(
+        &self,
+        repo_key: &str,
+        metadata_namespace: &str,
+        generation: u64,
+        tasks: &[TaskCard],
+    ) -> Result<()> {
         let mut cache = self
             .task_list_cache
             .lock()
             .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
-        cache.insert(
-            repo_key.to_string(),
-            TaskListCacheEntry {
-                tasks: tasks.to_vec(),
-                cached_at: Instant::now(),
-            },
-        );
+        let state = cache.entry(repo_key.to_string()).or_default();
+        if state.generation != generation {
+            return Ok(());
+        }
+
+        state.entry = Some(TaskListCacheEntry {
+            tasks: tasks.to_vec(),
+            cached_at: Instant::now(),
+            metadata_namespace: metadata_namespace.to_string(),
+        });
         Ok(())
     }
 
@@ -202,7 +224,33 @@ impl BeadsTaskStore {
             .task_list_cache
             .lock()
             .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
-        cache.remove(&repo_key);
+        let state = cache.entry(repo_key).or_default();
+        state.generation = state.generation.saturating_add(1);
+        state.entry = None;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn task_list_cache_generation_for_repo(&self, repo_path: &Path) -> Result<u64> {
+        let repo_key = Self::repo_key(repo_path);
+        let mut cache = self
+            .task_list_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
+        let state = cache.entry(repo_key).or_default();
+        Ok(state.generation)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn cache_task_list_for_repo_if_generation(
+        &self,
+        repo_path: &Path,
+        metadata_namespace: &str,
+        generation: u64,
+        tasks: &[TaskCard],
+    ) -> Result<()> {
+        let repo_key = Self::repo_key(repo_path);
+        self.cache_task_list_if_generation(&repo_key, metadata_namespace, generation, tasks)?;
         Ok(())
     }
 }
@@ -270,13 +318,15 @@ impl TaskStore for BeadsTaskStore {
     }
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
+        let metadata_namespace = self.current_metadata_namespace();
         let repo_key = Self::repo_key(repo_path);
-        if let Some(tasks) = self.cached_task_list(&repo_key)? {
+        let (cached_tasks, cache_generation) =
+            self.cached_task_list_and_generation(&repo_key, &metadata_namespace)?;
+        if let Some(tasks) = cached_tasks {
             return Ok(tasks);
         }
 
         let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
-        let metadata_namespace = self.current_metadata_namespace();
 
         let mut tasks = value
             .as_array()
@@ -310,7 +360,12 @@ impl TaskStore for BeadsTaskStore {
             task.subtask_ids = subtasks;
         }
 
-        self.cache_task_list(&repo_key, &tasks)?;
+        self.cache_task_list_if_generation(
+            &repo_key,
+            &metadata_namespace,
+            cache_generation,
+            &tasks,
+        )?;
         Ok(tasks)
     }
 
