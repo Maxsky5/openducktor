@@ -1,19 +1,32 @@
 import { EllipsisVertical } from "lucide-react";
+import type { ReactElement } from "react";
 import * as ResizablePrimitive from "react-resizable-panels";
 
 import { cn } from "@/lib/utils";
 
-function ResizablePanelGroup({ className, ...props }: ResizablePrimitive.GroupProps) {
+type PanelGroupDirection = "horizontal" | "vertical";
+
+type ResizablePanelGroupProps = ResizablePrimitive.GroupProps & {
+  direction?: PanelGroupDirection;
+};
+
+function ResizablePanelGroup({
+  direction,
+  orientation,
+  className,
+  ...props
+}: ResizablePanelGroupProps): ReactElement {
   return (
     <ResizablePrimitive.Group
       data-slot="resizable-panel-group"
-      className={cn("flex h-full w-full aria-[orientation=vertical]:flex-col", className)}
+      className={cn("flex h-full w-full data-[panel-group-direction=vertical]:flex-col", className)}
+      orientation={orientation ?? direction}
       {...props}
     />
   );
 }
 
-function ResizablePanel({ ...props }: ResizablePrimitive.PanelProps) {
+function ResizablePanel({ ...props }: ResizablePrimitive.PanelProps): ReactElement {
   return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />;
 }
 
@@ -23,7 +36,7 @@ function ResizableHandle({
   ...props
 }: ResizablePrimitive.SeparatorProps & {
   withHandle?: boolean;
-}) {
+}): ReactElement {
   return (
     <ResizablePrimitive.Separator
       data-slot="resizable-handle"

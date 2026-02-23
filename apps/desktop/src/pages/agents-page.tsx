@@ -327,17 +327,21 @@ export function AgentsPage(): ReactElement {
 
       <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 bg-white p-0">
         {taskId ? (
-          <ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
+          <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
             <ResizablePanel defaultSize={63} minSize={35}>
               <AgentChat
                 header={<AgentStudioHeader model={agentStudioHeaderModel} />}
                 model={agentChatModel}
               />
             </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={37} minSize={30}>
-              <AgentStudioWorkspaceSidebar model={agentStudioWorkspaceSidebarModel} />
-            </ResizablePanel>
+            {agentStudioWorkspaceSidebarModel.activeDocument ? (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={37} minSize={30}>
+                  <AgentStudioWorkspaceSidebar model={agentStudioWorkspaceSidebarModel} />
+                </ResizablePanel>
+              </>
+            ) : null}
           </ResizablePanelGroup>
         ) : (
           <div className="flex h-full min-h-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm text-slate-500">

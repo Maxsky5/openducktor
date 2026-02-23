@@ -313,8 +313,8 @@ export function useAgentStudioPageModels({
   );
 
   const handlePermissionReply = useCallback(
-    async (requestId: string, reply: "once" | "always" | "reject"): Promise<void> => {
-      void onReplyPermission(requestId, reply);
+    (requestId: string, reply: "once" | "always" | "reject"): Promise<void> => {
+      return onReplyPermission(requestId, reply);
     },
     [onReplyPermission],
   );
