@@ -1,3 +1,6 @@
 fn main() {
-    openducktor_desktop_lib::run();
+    if let Err(error) = openducktor_desktop_lib::run() {
+        eprintln!("OpenDucktor failed to start: {error:#}");
+        std::process::exit(1);
+    }
 }

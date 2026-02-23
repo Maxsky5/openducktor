@@ -1,3 +1,4 @@
+use anyhow::Context;
 use host_application::{AppService, RunEmitter};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, RunEvent,
@@ -11,7 +12,10 @@ use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent, State};
 
 struct AppState {
     service: Arc<AppService>,
+    startup_errors: Vec<String>,
 }
+
+const FALLBACK_TASK_METADATA_NAMESPACE: &str = "openducktor";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,7 +93,9 @@ async fn system_check(
 
 #[tauri::command]
 async fn runtime_check(state: State<'_, AppState>) -> Result<host_domain::RuntimeCheck, String> {
-    as_error(state.service.runtime_check())
+    let mut check = as_error(state.service.runtime_check())?;
+    check.errors.extend(state.startup_errors.iter().cloned());
+    Ok(check)
 }
 
 #[tauri::command]
@@ -669,19 +675,39 @@ async fn agent_session_upsert(
     )
 }
 
-pub fn run() {
-    let config_store = AppConfigStore::new().expect("failed to initialize config store");
-    let metadata_namespace = config_store
-        .task_metadata_namespace()
-        .expect("failed to read task metadata namespace from config");
+fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
+    let config_store = AppConfigStore::new().context("failed to initialize config store")?;
+    let mut startup_errors = Vec::new();
+    let metadata_namespace = match config_store.task_metadata_namespace() {
+        Ok(namespace) => namespace,
+        Err(error) => {
+            let message = format!(
+                "Failed to read task metadata namespace from config; using fallback namespace '{}': {error:#}",
+                FALLBACK_TASK_METADATA_NAMESPACE
+            );
+            eprintln!("OpenDucktor startup warning: {message}");
+            startup_errors.push(message);
+            FALLBACK_TASK_METADATA_NAMESPACE.to_string()
+        }
+    };
+
     let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(&metadata_namespace));
     let service = Arc::new(AppService::new(task_store, config_store));
+
+    Ok((service, startup_errors))
+}
+
+pub fn run() -> anyhow::Result<()> {
+    let (service, startup_errors) = bootstrap_service()?;
 
     let app_service = service.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .manage(AppState { service })
+        .manage(AppState {
+            service,
+            startup_errors,
+        })
         .invoke_handler(tauri::generate_handler![
             system_check,
             runtime_check,
@@ -732,7 +758,7 @@ pub fn run() {
             agent_session_upsert
         ])
         .build(tauri::generate_context!())
-        .expect("error while building openducktor")
+        .context("error while building openducktor")?
         .run(move |_handle, event| {
             if matches!(
                 event,
@@ -741,4 +767,6 @@ pub fn run() {
                 let _ = app_service.shutdown();
             }
         });
+
+    Ok(())
 }
