@@ -145,7 +145,7 @@ export function useAgentStudioModelSelection({
   const draftSelection = draftSelectionByRole[role];
   const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
   const isSelectionCatalogLoading = activeSession
-    ? activeSession.isLoadingModelCatalog
+    ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog
     : isLoadingComposerCatalog;
   const fallbackCatalogSelection = useMemo(
     () => pickDefaultSelectionForCatalog(selectionCatalog),
@@ -258,11 +258,15 @@ export function useAgentStudioModelSelection({
   }, [selectedModelEntry, selectedModelSelection?.variant]);
 
   const activeSessionAgentColors = useMemo<Record<string, string>>(() => {
-    if (!activeSession?.modelCatalog) {
+    if (!activeSession) {
+      return {};
+    }
+    const catalog = activeSession.modelCatalog ?? composerCatalog;
+    if (!catalog) {
       return {};
     }
     const map: Record<string, string> = {};
-    for (const descriptor of activeSession.modelCatalog.agents) {
+    for (const descriptor of catalog.agents) {
       if (!descriptor.name) {
         continue;
       }
@@ -272,7 +276,7 @@ export function useAgentStudioModelSelection({
       }
     }
     return map;
-  }, [activeSession?.modelCatalog]);
+  }, [activeSession, composerCatalog]);
 
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
     if (!activeSession) {
