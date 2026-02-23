@@ -11,6 +11,7 @@ import {
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,
 } from "../support/utils";
+import { requireActiveRepo } from "../../task-operations-model";
 
 type EnsureSessionReadyDependencies = {
   activeRepo: string | null;
@@ -63,11 +64,7 @@ export const createEnsureSessionReady = ({
   loadSessionModelCatalog,
 }: EnsureSessionReadyDependencies) => {
   return async (sessionId: string): Promise<void> => {
-    if (!activeRepo) {
-      throw new Error("Select a workspace first.");
-    }
-
-    const repoPath = activeRepo;
+    const repoPath = requireActiveRepo(activeRepo);
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,

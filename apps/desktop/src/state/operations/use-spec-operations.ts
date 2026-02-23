@@ -1,6 +1,7 @@
 import { defaultSpecTemplateMarkdown, validateSpecMarkdown } from "@openducktor/contracts";
 import { useCallback } from "react";
 import { host } from "./host";
+import { requireActiveRepo } from "./task-operations-model";
 
 type UseSpecOperationsArgs = {
   activeRepo: string | null;
@@ -19,10 +20,8 @@ type UseSpecOperationsResult = {
 export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpecOperationsResult {
   const loadSpecDocument = useCallback(
     async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-      const spec = await host.specGet(activeRepo, taskId);
+      const repo = requireActiveRepo(activeRepo);
+      const spec = await host.specGet(repo, taskId);
       return {
         markdown: spec.markdown,
         updatedAt: spec.updatedAt,
@@ -33,10 +32,8 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
 
   const loadPlanDocument = useCallback(
     async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-      const plan = await host.planGet(activeRepo, taskId);
+      const repo = requireActiveRepo(activeRepo);
+      const plan = await host.planGet(repo, taskId);
       return {
         markdown: plan.markdown,
         updatedAt: plan.updatedAt,
@@ -47,10 +44,8 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
 
   const loadQaReportDocument = useCallback(
     async (taskId: string): Promise<{ markdown: string; updatedAt: string | null }> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-      const report = await host.qaGetReport(activeRepo, taskId);
+      const repo = requireActiveRepo(activeRepo);
+      const report = await host.qaGetReport(repo, taskId);
       return {
         markdown: report.markdown,
         updatedAt: report.updatedAt,
@@ -69,16 +64,14 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
 
   const saveSpec = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
+      const repo = requireActiveRepo(activeRepo);
 
       const validation = validateSpecMarkdown(markdown);
       if (!validation.valid) {
         throw new Error(`Missing required sections: ${validation.missing.join(", ")}`);
       }
 
-      const saved = await host.setSpec({ repoPath: activeRepo, taskId, markdown });
+      const saved = await host.setSpec({ repoPath: repo, taskId, markdown });
       return saved;
     },
     [activeRepo],
@@ -86,20 +79,16 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
 
   const saveSpecDocument = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-      return host.saveSpecDocument(activeRepo, taskId, markdown);
+      const repo = requireActiveRepo(activeRepo);
+      return host.saveSpecDocument(repo, taskId, markdown);
     },
     [activeRepo],
   );
 
   const savePlanDocument = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
-      return host.savePlanDocument(activeRepo, taskId, markdown);
+      const repo = requireActiveRepo(activeRepo);
+      return host.savePlanDocument(repo, taskId, markdown);
     },
     [activeRepo],
   );

@@ -19,6 +19,7 @@ import {
   kickoffPrompt,
   throwIfRepoStale,
 } from "../support/utils";
+import { requireActiveRepo } from "../../task-operations-model";
 
 export type StartAgentSessionInput = {
   taskId: string;
@@ -110,11 +111,7 @@ export const createStartAgentSession = ({
     sendKickoff = false,
     startMode = "reuse_latest",
   }: StartAgentSessionInput): Promise<string> => {
-    if (!activeRepo) {
-      throw new Error("Select a workspace first.");
-    }
-
-    const repoPath = activeRepo;
+    const repoPath = requireActiveRepo(activeRepo);
     const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}`;
     const existingInFlight = inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
