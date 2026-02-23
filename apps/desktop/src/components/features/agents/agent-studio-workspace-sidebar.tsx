@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 
 export type AgentStudioWorkspaceDocument = {
@@ -65,24 +64,24 @@ export function AgentStudioWorkspaceSidebar({
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-slate-200 shadow-sm">
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <CardTitle className="text-lg">{model.activeDocument.title}</CardTitle>
-            <p className="shrink-0 text-right text-xs text-slate-500">
-              {formatDocumentUpdatedAt(model.activeDocument.document.updatedAt) ?? "Not set"}
-            </p>
-          </div>
-          <CardDescription>{model.activeDocument.description}</CardDescription>
-        </CardHeader>
-        <CardContent className="min-h-0 flex-1 overflow-y-auto">
-          <DocumentSection
-            emptyState={model.activeDocument.emptyState}
-            document={model.activeDocument.document}
-          />
-        </CardContent>
-      </Card>
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="space-y-1 border-b border-slate-200 px-3 py-2">
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-lg font-semibold leading-none tracking-tight">
+            {model.activeDocument.title}
+          </h2>
+          <p className="shrink-0 text-right text-xs text-slate-500">
+            {formatDocumentUpdatedAt(model.activeDocument.document.updatedAt) ?? "Not set"}
+          </p>
+        </div>
+        <p className="text-sm text-slate-500">{model.activeDocument.description}</p>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <DocumentSection
+          emptyState={model.activeDocument.emptyState}
+          document={model.activeDocument.document}
+        />
+      </div>
     </div>
   );
 }
