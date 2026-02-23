@@ -38,7 +38,9 @@ function ResizableHandle({
         aria-hidden="true"
       />
       {withHandle && (
-        <EllipsisVertical className="relative z-10 size-4 text-slate-400 transition-colors group-hover:text-blue-500 aria-[orientation=horizontal]:-rotate-90" />
+        <div className="relative z-10 flex h-8 w-4 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm transition-all duration-150 group-hover:border-blue-500 group-hover:bg-blue-50 group-hover:text-blue-600 aria-[orientation=horizontal]:-rotate-90">
+          <EllipsisVertical className="size-3.5" />
+        </div>
       )}
     </ResizablePrimitive.Separator>
   );
