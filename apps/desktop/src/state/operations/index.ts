@@ -1,4 +1,9 @@
-export { checkRepoOpencodeHealth, loadRepoOpencodeCatalog } from "./opencode-catalog";
+export {
+  checkRepoOpencodeHealth,
+  configureOpencodeCatalogOperations,
+  createHostOpencodeCatalogOperations,
+  loadRepoOpencodeCatalog,
+} from "./opencode-catalog";
 export { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 export { useChecks } from "./use-checks";
 export { useDelegationOperations } from "./use-delegation-operations";

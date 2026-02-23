@@ -1,6 +1,6 @@
-import { type McpServerStatus, OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { McpServerStatus } from "@openducktor/adapters-opencode-sdk";
 import type { AgentRuntimeSummary } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
@@ -8,6 +8,12 @@ import { host } from "./host";
 type ListCatalogInput = {
   baseUrl: string;
   workingDirectory: string;
+};
+
+export type OpencodeCatalogAdapter = Pick<AgentEnginePort, "listAvailableModels"> & {
+  listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
+  getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, McpServerStatus>>;
+  connectMcpServer: (input: ListCatalogInput & { name: string }) => Promise<void>;
 };
 
 type OpencodeCatalogDependencies = {
@@ -291,16 +297,39 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
   };
 };
 
-const adapter = new OpencodeSdkAdapter();
+export type OpencodeCatalogOperations = ReturnType<typeof createOpencodeCatalogOperations>;
 
-const opencodeCatalogOperations = createOpencodeCatalogOperations({
-  ensureRuntime: (repoPath) => host.opencodeRepoRuntimeEnsure(repoPath),
-  stopRuntime: (runtimeId) => host.opencodeRuntimeStop(runtimeId),
-  listAvailableModels: (input) => adapter.listAvailableModels(input),
-  listAvailableToolIds: (input) => adapter.listAvailableToolIds(input),
-  getMcpStatus: (input) => adapter.getMcpStatus(input),
-  connectMcpServer: (input) => adapter.connectMcpServer(input),
-});
+export const createHostOpencodeCatalogOperations = (
+  adapter: OpencodeCatalogAdapter,
+): OpencodeCatalogOperations =>
+  createOpencodeCatalogOperations({
+    ensureRuntime: (repoPath) => host.opencodeRepoRuntimeEnsure(repoPath),
+    stopRuntime: (runtimeId) => host.opencodeRuntimeStop(runtimeId),
+    listAvailableModels: (input) => adapter.listAvailableModels(input),
+    listAvailableToolIds: (input) => adapter.listAvailableToolIds(input),
+    getMcpStatus: (input) => adapter.getMcpStatus(input),
+    connectMcpServer: (input) => adapter.connectMcpServer(input),
+  });
 
-export const loadRepoOpencodeCatalog = opencodeCatalogOperations.loadRepoOpencodeCatalog;
-export const checkRepoOpencodeHealth = opencodeCatalogOperations.checkRepoOpencodeHealth;
+let configuredOpencodeCatalogOperations: OpencodeCatalogOperations | null = null;
+
+export const configureOpencodeCatalogOperations = (operations: OpencodeCatalogOperations): void => {
+  configuredOpencodeCatalogOperations = operations;
+};
+
+const getConfiguredOpencodeCatalogOperations = (): OpencodeCatalogOperations => {
+  if (!configuredOpencodeCatalogOperations) {
+    throw new Error(
+      "OpenCode catalog operations are not configured. Initialize them from AppStateProvider before use.",
+    );
+  }
+  return configuredOpencodeCatalogOperations;
+};
+
+export const loadRepoOpencodeCatalog = (repoPath: string): Promise<AgentModelCatalog> => {
+  return getConfiguredOpencodeCatalogOperations().loadRepoOpencodeCatalog(repoPath);
+};
+
+export const checkRepoOpencodeHealth = (repoPath: string): Promise<RepoOpencodeHealthCheck> => {
+  return getConfiguredOpencodeCatalogOperations().checkRepoOpencodeHealth(repoPath);
+};

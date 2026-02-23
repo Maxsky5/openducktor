@@ -4,10 +4,10 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
-import { checkRepoOpencodeHealth } from "./opencode-catalog";
 
 type UseChecksArgs = {
   activeRepo: string | null;
+  checkRepoOpencodeHealth: (repoPath: string) => Promise<RepoOpencodeHealthCheck>;
 };
 
 type UseChecksResult = {
@@ -30,7 +30,7 @@ type UseChecksResult = {
   clearActiveRepoOpencodeHealth: () => void;
 };
 
-export function useChecks({ activeRepo }: UseChecksArgs): UseChecksResult {
+export function useChecks({ activeRepo, checkRepoOpencodeHealth }: UseChecksArgs): UseChecksResult {
   const [runtimeCheck, setRuntimeCheck] = useState<RuntimeCheck | null>(null);
   const [activeBeadsCheck, setActiveBeadsCheck] = useState<BeadsCheck | null>(null);
   const [activeRepoOpencodeHealth, setActiveRepoOpencodeHealth] =
@@ -86,7 +86,7 @@ export function useChecks({ activeRepo }: UseChecksArgs): UseChecksResult {
 
       return check;
     },
-    [activeRepo],
+    [activeRepo, checkRepoOpencodeHealth],
   );
 
   const refreshChecks = useCallback(async (): Promise<void> => {

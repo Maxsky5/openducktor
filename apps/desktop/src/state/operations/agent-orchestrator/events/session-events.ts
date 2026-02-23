@@ -1,5 +1,4 @@
-import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { isOdtWorkflowMutationToolName } from "@openducktor/core";
+import { type AgentEnginePort, isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
@@ -39,7 +38,7 @@ type ResolveTurnDuration = (
   messages?: AgentChatMessage[],
 ) => number | undefined;
 
-export type SessionEventAdapter = Pick<OpencodeSdkAdapter, "subscribeEvents" | "replyPermission">;
+export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyPermission">;
 
 type SessionEvent = Parameters<Parameters<SessionEventAdapter["subscribeEvents"]>[1]>[0];
 type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;

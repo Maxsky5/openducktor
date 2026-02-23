@@ -1,6 +1,5 @@
-import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import { buildAgentSystemPrompt } from "@openducktor/core";
+import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {
@@ -15,7 +14,7 @@ import {
 
 type EnsureSessionReadyDependencies = {
   activeRepo: string | null;
-  adapter: OpencodeSdkAdapter;
+  adapter: AgentEnginePort;
   repoEpochRef: { current: number };
   previousRepoRef: { current: string | null };
   sessionsRef: { current: Record<string, AgentSessionState> };

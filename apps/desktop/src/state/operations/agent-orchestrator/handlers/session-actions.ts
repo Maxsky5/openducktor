@@ -1,6 +1,5 @@
-import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
@@ -11,7 +10,7 @@ import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
   activeRepo: string | null;
-  adapter: OpencodeSdkAdapter;
+  adapter: AgentEnginePort;
   setSessionsById: (
     updater:
       | Record<string, AgentSessionState>
