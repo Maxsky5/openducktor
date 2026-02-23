@@ -5,16 +5,23 @@
 interface TaskIndex {
   /** All tasks array (for fallback hints) */
   tasks: TaskCard[];
+  entries: TaskIndexEntry[];
   /** Exact ID lookup (case-sensitive) */
   idExact: Map<string, TaskCard>;
   /** Case-insensitive ID lookup */
   idLower: Map<string, TaskCard[]>;
-  /** Slug-prefixed ID lookup (e.g., "abc" matches "abc-1", "abc-xyz-2") */
-  idSlugPrefix: Map<string, TaskCard[]>;
+  idSuffix: Map<string, TaskCard[]>;
   /** Exact title lookup (lowercase) */
   titleExact: Map<string, TaskCard[]>;
   /** Title slug lookup (sanitized) */
   titleSlug: Map<string, TaskCard[]>;
+}
+
+interface TaskIndexEntry {
+  task: TaskCard;
+  idLower: string;
+  titleLower: string;
+  titleSlug: string;
 }
 
 /**
@@ -24,60 +31,64 @@ interface TaskIndex {
 function buildTaskIndex(tasks: TaskCard[]): TaskIndex {
   const idExact = new Map<string, TaskCard>();
   const idLower = new Map<string, TaskCard[]>();
-  const idSlugPrefix = new Map<string, TaskCard[]>();
+  const idSuffix = new Map<string, TaskCard[]>();
   const titleExact = new Map<string, TaskCard[]>();
   const titleSlug = new Map<string, TaskCard[]>();
+  const entries: TaskIndexEntry[] = [];
+
+  const addTaskToBucket = (map: Map<string, TaskCard[]>, key: string, task: TaskCard): void => {
+    const existing = map.get(key);
+    if (existing) {
+      existing.push(task);
+    } else {
+      map.set(key, [task]);
+    }
+  };
 
   for (const task of tasks) {
+    const normalizedId = normalizeTitleKey(task.id);
+    const normalizedTitle = normalizeTitleKey(task.title);
+    const normalizedTitleSlug = toSearchSlug(task.title);
+
     // Exact ID (case-sensitive)
     idExact.set(task.id, task);
 
     // Case-insensitive ID
-    const idL = normalizeTitleKey(task.id);
-    const existingLower = idLower.get(idL);
-    if (existingLower) {
-      existingLower.push(task);
-    } else {
-      idLower.set(idL, [task]);
-    }
+    addTaskToBucket(idLower, normalizedId, task);
 
-    // Slug-prefixed ID (for suffix matching like "abc" -> "abc-1", "abc-xyz-2")
-    const idSlug = toSearchSlug(task.id);
-    if (idSlug.length > 0) {
-      const existingSlug = idSlugPrefix.get(idSlug);
-      if (existingSlug) {
-        existingSlug.push(task);
-      } else {
-        idSlugPrefix.set(idSlug, [task]);
+    addTaskToBucket(idSuffix, normalizedId, task);
+    for (let i = 0; i < normalizedId.length; i += 1) {
+      if (normalizedId[i] !== "-") {
+        continue;
+      }
+      const suffix = normalizedId.slice(i + 1);
+      if (suffix.length > 0) {
+        addTaskToBucket(idSuffix, suffix, task);
       }
     }
 
     // Exact title (lowercase)
-    const titleL = normalizeTitleKey(task.title);
-    const existingTitle = titleExact.get(titleL);
-    if (existingTitle) {
-      existingTitle.push(task);
-    } else {
-      titleExact.set(titleL, [task]);
-    }
+    addTaskToBucket(titleExact, normalizedTitle, task);
 
     // Title slug
-    const titleS = toSearchSlug(task.title);
-    if (titleS.length > 0) {
-      const existingTitleSlug = titleSlug.get(titleS);
-      if (existingTitleSlug) {
-        existingTitleSlug.push(task);
-      } else {
-        titleSlug.set(titleS, [task]);
-      }
+    if (normalizedTitleSlug.length > 0) {
+      addTaskToBucket(titleSlug, normalizedTitleSlug, task);
     }
+
+    entries.push({
+      task,
+      idLower: normalizedId,
+      titleLower: normalizedTitle,
+      titleSlug: normalizedTitleSlug,
+    });
   }
 
   return {
     tasks,
+    entries,
     idExact,
     idLower,
-    idSlugPrefix,
+    idSuffix,
     titleExact,
     titleSlug,
   };
@@ -118,21 +129,12 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
 
   // 3. ID slug suffix match - scan for IDs ending with requestedSlug
   if (requestedSlug.length > 0) {
-    const byIdSuffix: TaskCard[] = [];
-    for (const task of index.tasks) {
-      const idLower = normalizeTitleKey(task.id);
-      if (idLower === requestedSlug || idLower.endsWith(`-${requestedSlug}`)) {
-        byIdSuffix.push(task);
-        if (byIdSuffix.length > 5) {
-          break;
-        }
-      }
-    }
+    const byIdSuffix = index.idSuffix.get(requestedSlug);
 
-    if (byIdSuffix.length === 1 && byIdSuffix[0]) {
+    if (byIdSuffix?.length === 1 && byIdSuffix[0]) {
       return byIdSuffix[0];
     }
-    if (byIdSuffix.length > 1) {
+    if (byIdSuffix && byIdSuffix.length > 1) {
       const candidates = byIdSuffix.slice(0, 5).map((t) => `${t.id} (${t.title})`);
       throw new Error(
         `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
@@ -173,15 +175,12 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
   // 6. Contains search (title contains) - single pass O(n)
   const byTitleContains: TaskCard[] = [];
   if (requestedLower.length > 0 || requestedSlug.length > 0) {
-    for (const task of index.tasks) {
-      const titleLower = normalizeTitleKey(task.title);
-      const titleSlug = toSearchSlug(task.title);
-
-      const matchesLower = requestedLower.length > 0 && titleLower.includes(requestedLower);
-      const matchesSlug = requestedSlug.length > 0 && titleSlug.includes(requestedSlug);
+    for (const entry of index.entries) {
+      const matchesLower = requestedLower.length > 0 && entry.titleLower.includes(requestedLower);
+      const matchesSlug = requestedSlug.length > 0 && entry.titleSlug.includes(requestedSlug);
 
       if (matchesLower || matchesSlug) {
-        byTitleContains.push(task);
+        byTitleContains.push(entry.task);
         if (byTitleContains.length > 5) {
           break; // Only need 6+ to detect ambiguity
         }
@@ -202,18 +201,15 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
   // 7. Fallback hints (partial ID/title match) - single pass O(n)
   const hints: TaskCard[] = [];
   if (requestedLower.length > 0 || requestedSlug.length > 0) {
-    for (const task of index.tasks) {
-      const idLower = normalizeTitleKey(task.id);
-      const titleLower = normalizeTitleKey(task.title);
-      const titleSlug = toSearchSlug(task.title);
-
-      const matchesIdLower = requestedLower.length > 0 && idLower.includes(requestedLower);
-      const matchesTitleLower = requestedLower.length > 0 && titleLower.includes(requestedLower);
-      const matchesIdSlug = requestedSlug.length > 0 && idLower.includes(requestedSlug);
-      const matchesTitleSlug = requestedSlug.length > 0 && titleSlug.includes(requestedSlug);
+    for (const entry of index.entries) {
+      const matchesIdLower = requestedLower.length > 0 && entry.idLower.includes(requestedLower);
+      const matchesTitleLower =
+        requestedLower.length > 0 && entry.titleLower.includes(requestedLower);
+      const matchesIdSlug = requestedSlug.length > 0 && entry.idLower.includes(requestedSlug);
+      const matchesTitleSlug = requestedSlug.length > 0 && entry.titleSlug.includes(requestedSlug);
 
       if (matchesIdLower || matchesTitleLower || matchesIdSlug || matchesTitleSlug) {
-        hints.push(task);
+        hints.push(entry.task);
         if (hints.length >= 5) {
           break;
         }
@@ -305,6 +301,7 @@ export class OdtTaskStore {
   private initialized: boolean;
   private initializationPromise: Promise<void> | null;
   private taskIndex: TaskIndex | null;
+  private taskIndexBuildPromise: Promise<TaskIndex> | null;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.repoPath = options.repoPath;
@@ -316,6 +313,7 @@ export class OdtTaskStore {
     this.initialized = false;
     this.initializationPromise = null;
     this.taskIndex = null;
+    this.taskIndexBuildPromise = null;
   }
 
   private async ensureBeadsDir(): Promise<string> {
@@ -427,6 +425,13 @@ export class OdtTaskStore {
       .map((entry) => issueToTaskCard(entry as RawIssue, this.metadataNamespace));
   }
 
+  private async refreshTaskIndex(): Promise<TaskIndex> {
+    const tasks = await this.listTasks();
+    const next = buildTaskIndex(tasks);
+    this.taskIndex = next;
+    return next;
+  }
+
   /**
    * Get or build cached task index for O(1) lookups.
    * Rebuilds index when tasks change.
@@ -435,14 +440,23 @@ export class OdtTaskStore {
     if (this.taskIndex) {
       return this.taskIndex;
     }
-    const tasks = await this.listTasks();
-    this.taskIndex = buildTaskIndex(tasks);
-    return this.taskIndex;
+
+    if (this.taskIndexBuildPromise) {
+      return this.taskIndexBuildPromise;
+    }
+
+    this.taskIndexBuildPromise = this.refreshTaskIndex();
+    try {
+      return await this.taskIndexBuildPromise;
+    } finally {
+      this.taskIndexBuildPromise = null;
+    }
   }
 
   /** Invalidate task index after mutations */
   private invalidateTaskIndex(): void {
     this.taskIndex = null;
+    this.taskIndexBuildPromise = null;
   }
 
   private formatTaskRef(task: TaskCard): string {
@@ -595,7 +609,20 @@ export class OdtTaskStore {
     await this.ensureInitialized();
     const input = ReadTaskInputSchema.parse(rawInput);
     const index = await this.getOrBuildTaskIndex();
-    const task = resolveTaskFromIndex(index, input.taskId);
+
+    let task: TaskCard;
+    try {
+      task = resolveTaskFromIndex(index, input.taskId);
+    } catch (error) {
+      const isNotFoundError = error instanceof Error && error.message.startsWith("Task not found:");
+      if (!isNotFoundError) {
+        throw error;
+      }
+
+      const refreshedIndex = await this.refreshTaskIndex();
+      task = resolveTaskFromIndex(refreshedIndex, input.taskId);
+    }
+
     const issue = await this.showRawIssue(task.id);
     const taskCard = issueToTaskCard(issue, this.metadataNamespace);
     const docs = this.parseDocs(issue);
