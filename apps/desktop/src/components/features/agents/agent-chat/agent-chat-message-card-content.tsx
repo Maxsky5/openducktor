@@ -8,6 +8,7 @@ import { lazy, type ReactElement, Suspense } from "react";
 import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
 import {
   getAssistantFooterData,
   roleLabel,
@@ -25,15 +26,10 @@ const LazyMarkdownRenderer = lazy(async () => {
   return { default: module.MarkdownRenderer };
 });
 
-const MARKDOWN_SYNTAX_HINT_PATTERN =
-  /(?:^|\n)\s{0,3}(?:#{1,6}\s+|>\s+|[-*+]\s+|\d+\.\s+|```)|`[^`\n]+`|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|~~[^~]+~~|(?:^|\n)\|.*\|/m;
-
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
   compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600",
   document: "whitespace-pre-wrap leading-6 text-slate-700",
 };
-
-const hasMarkdownSyntaxHint = (value: string): boolean => MARKDOWN_SYNTAX_HINT_PATTERN.test(value);
 
 type PlainTextMarkdownFallbackProps = {
   content: string;
