@@ -41,6 +41,7 @@ import type {
   SessionInput,
   SessionRecord,
 } from "./types";
+import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
 export class OpencodeSdkAdapter implements AgentEnginePort {
@@ -297,17 +298,42 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       name: input.name,
     });
     unwrapData(response, `connect mcp server ${input.name}`);
+
+    // Invalidate workflow tool cache for sessions in this working directory
+    // since MCP connection changes available tools
+    for (const session of this.sessions.values()) {
+      if (session.input.workingDirectory === input.workingDirectory) {
+        delete session.workflowToolSelectionCache;
+        delete session.workflowToolSelectionCachedAt;
+      }
+    }
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = this.requireSession(input.sessionId);
     const model = input.model ?? session.input.model;
     const modelInput = normalizeModelInput(model);
-    const workflowToolSelection = await resolveWorkflowToolSelection({
-      client: session.client,
-      role: session.input.role,
-      workingDirectory: session.input.workingDirectory,
-    });
+
+    // Use cached workflow tool selection if available and not expired
+    const now = Date.now();
+    const cacheAge = session.workflowToolSelectionCachedAt
+      ? now - session.workflowToolSelectionCachedAt
+      : Infinity;
+    const workflowToolSelection =
+      session.workflowToolSelectionCache && cacheAge < WORKFLOW_TOOL_CACHE_TTL_MS
+        ? session.workflowToolSelectionCache
+        : await resolveWorkflowToolSelection({
+            client: session.client,
+            role: session.input.role,
+            workingDirectory: session.input.workingDirectory,
+          });
+
+    // Update cache if expired or missing
+    if (cacheAge >= WORKFLOW_TOOL_CACHE_TTL_MS) {
+      session.workflowToolSelectionCache = workflowToolSelection;
+      session.workflowToolSelectionCachedAt = now;
+    }
+
     const response = await session.client.session.prompt({
       sessionID: session.externalSessionId,
       directory: session.input.workingDirectory,
