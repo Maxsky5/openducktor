@@ -18,6 +18,7 @@ impl BeadsTaskStore {
             repo_path,
             &["update", "--metadata", payload.as_str(), "--", task_id],
         )?;
+        self.invalidate_task_list_cache(repo_path)?;
         Ok(())
     }
 

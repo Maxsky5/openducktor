@@ -14,7 +14,7 @@ pub use store::BeadsTaskStore;
 #[cfg(test)]
 use command_runner::{CommandRunner, ProcessCommandRunner};
 #[cfg(test)]
-use constants::CUSTOM_STATUS_VALUES;
+use constants::{CUSTOM_STATUS_VALUES, TASK_LIST_CACHE_TTL_MS};
 #[cfg(test)]
 use metadata::{
     metadata_bool_qa_required, metadata_namespace, parse_agent_sessions, parse_markdown_entries,
