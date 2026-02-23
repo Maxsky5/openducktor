@@ -780,7 +780,7 @@ describe("openducktor-mcp lib", () => {
     expect(statusUpdateCalls).toBe(0);
   });
 
-  test("buildCompleted revalidates transition from fresh task context", async () => {
+  test("buildCompleted reuses one task snapshot and avoids duplicate list calls", async () => {
     let status = "in_progress";
     let listCalls = 0;
     let statusUpdateCalls = 0;
@@ -815,7 +815,23 @@ describe("openducktor-mcp lib", () => {
       }
       if (command === "update" && args.includes("--status")) {
         statusUpdateCalls += 1;
+        status = args[args.indexOf("--status") + 1] ?? status;
         return { ok: true, stdout: "{}" };
+      }
+      if (command === "show") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Task 1",
+              status,
+              issue_type: "feature",
+              ai_review_enabled: false,
+              metadata: {},
+            },
+          ]),
+        };
       }
       throw new Error(`Unexpected bd command: ${args.join(" ")}`);
     });
@@ -829,13 +845,13 @@ describe("openducktor-mcp lib", () => {
       { runProcess },
     );
 
-    await expect(
-      store.buildCompleted({
-        taskId: "task-1",
-      }),
-    ).rejects.toThrow("Transition not allowed");
+    const result = (await store.buildCompleted({
+      taskId: "task-1",
+    })) as { task: { status: string } };
 
-    expect(statusUpdateCalls).toBe(0);
+    expect(result.task.status).toBe("ai_review");
+    expect(listCalls).toBe(1);
+    expect(statusUpdateCalls).toBe(1);
   });
 
   test("qaApproved revalidates transition after report append and avoids stale status updates", async () => {

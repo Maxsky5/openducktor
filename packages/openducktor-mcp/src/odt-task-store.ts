@@ -60,6 +60,11 @@ const toSearchSlug = (value: string): string => {
   return sanitizeSlug(value);
 };
 
+type TaskContext = {
+  task: TaskCard;
+  tasks: TaskCard[];
+};
+
 export class OdtTaskStore {
   readonly repoPath: string;
   readonly metadataNamespace: string;
@@ -304,7 +309,7 @@ export class OdtTaskStore {
     throw new Error(`Task not found: ${requestedTaskId}.${hintSuffix}`);
   }
 
-  private async resolveTaskContext(taskId: string): Promise<{ task: TaskCard; tasks: TaskCard[] }> {
+  private async resolveTaskContext(taskId: string): Promise<TaskContext> {
     const tasks = await this.listTasks();
     const task = this.resolveTaskFromTasks(tasks, taskId);
     return { task, tasks };
@@ -323,8 +328,12 @@ export class OdtTaskStore {
     return issueToTaskCard(refreshed, this.metadataNamespace);
   }
 
-  private async transitionTask(taskId: string, next: TaskStatus): Promise<TaskCard> {
-    const { task, tasks } = await this.resolveTaskContext(taskId);
+  private async transitionTask(
+    taskId: string,
+    next: TaskStatus,
+    context?: TaskContext,
+  ): Promise<TaskCard> {
+    const { task, tasks } = context ?? (await this.resolveTaskContext(taskId));
     this.assertTransitionAllowed(task, tasks, next);
     return this.applyTransition(task, next);
   }
@@ -522,10 +531,12 @@ export class OdtTaskStore {
     await this.writeNamespace(task.id, root, nextNamespace);
 
     const createdSubtaskIds: string[] = [];
+    let transitionContext: TaskContext | undefined;
     if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
-      const existingTaskSnapshot = await this.listTasks();
+      const existingTaskSnapshot = await this.resolveTaskContext(task.id);
+      transitionContext = existingTaskSnapshot;
       const existingTitleKeys = new Set(
-        existingTaskSnapshot
+        existingTaskSnapshot.tasks
           .filter((entry) => entry.parentId === task.id)
           .map((entry) => normalizeTitleKey(entry.title)),
       );
@@ -540,9 +551,13 @@ export class OdtTaskStore {
         createdSubtaskIds.push(createdId);
         existingTitleKeys.add(key);
       }
+
+      if (createdSubtaskIds.length > 0) {
+        transitionContext = undefined;
+      }
     }
 
-    const nextTask = await this.transitionTask(task.id, "ready_for_dev");
+    const nextTask = await this.transitionTask(task.id, "ready_for_dev", transitionContext);
 
     return {
       task: nextTask,
@@ -576,10 +591,11 @@ export class OdtTaskStore {
     await this.ensureInitialized();
     const input = BuildCompletedInputSchema.parse(rawInput);
 
-    const { task } = await this.resolveTaskContext(input.taskId);
+    const context = await this.resolveTaskContext(input.taskId);
+    const { task } = context;
 
     const nextStatus: TaskStatus = task.aiReviewEnabled ? "ai_review" : "human_review";
-    const updated = await this.transitionTask(task.id, nextStatus);
+    const updated = await this.transitionTask(task.id, nextStatus, context);
     return {
       task: updated,
       ...(input.summary ? { summary: input.summary } : {}),
