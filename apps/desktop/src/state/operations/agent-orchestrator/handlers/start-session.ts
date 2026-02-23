@@ -8,6 +8,7 @@ import type {
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
+import { requireActiveRepo } from "../../task-operations-model";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {
   captureOrchestratorFallback,
@@ -110,11 +111,7 @@ export const createStartAgentSession = ({
     sendKickoff = false,
     startMode = "reuse_latest",
   }: StartAgentSessionInput): Promise<string> => {
-    if (!activeRepo) {
-      throw new Error("Select a workspace first.");
-    }
-
-    const repoPath = activeRepo;
+    const repoPath = requireActiveRepo(activeRepo);
     const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}`;
     const existingInFlight = inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {

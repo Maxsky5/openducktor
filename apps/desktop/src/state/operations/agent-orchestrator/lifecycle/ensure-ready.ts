@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { requireActiveRepo } from "../../task-operations-model";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {
   captureOrchestratorFallback,
@@ -63,11 +64,7 @@ export const createEnsureSessionReady = ({
   loadSessionModelCatalog,
 }: EnsureSessionReadyDependencies) => {
   return async (sessionId: string): Promise<void> => {
-    if (!activeRepo) {
-      throw new Error("Select a workspace first.");
-    }
-
-    const repoPath = activeRepo;
+    const repoPath = requireActiveRepo(activeRepo);
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,

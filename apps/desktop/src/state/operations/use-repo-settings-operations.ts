@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
+import { requireActiveRepo } from "./task-operations-model";
 
 type UseRepoSettingsOperationsArgs = {
   activeRepo: string | null;
@@ -65,11 +66,9 @@ export function useRepoSettingsOperations({
   );
 
   const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
-    if (!activeRepo) {
-      throw new Error("Select a workspace first.");
-    }
+    const repo = requireActiveRepo(activeRepo);
 
-    const config = await host.workspaceGetRepoConfig(activeRepo);
+    const config = await host.workspaceGetRepoConfig(repo);
     return {
       worktreeBasePath: config.worktreeBasePath ?? "",
       branchPrefix: config.branchPrefix,
@@ -87,9 +86,7 @@ export function useRepoSettingsOperations({
 
   const saveRepoSettings = useCallback(
     async (input: RepoSettingsInput) => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
+      const repo = requireActiveRepo(activeRepo);
 
       const specDefault = toConfigDefault(input.agentDefaults.spec);
       const plannerDefault = toConfigDefault(input.agentDefaults.planner);
@@ -98,7 +95,7 @@ export function useRepoSettingsOperations({
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
 
-      await host.workspaceUpdateRepoConfig(activeRepo, {
+      await host.workspaceUpdateRepoConfig(repo, {
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         trustedHooks: input.trustedHooks,

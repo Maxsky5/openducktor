@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { host } from "./host";
+import { requireActiveRepo } from "./task-operations-model";
 
 type UseDelegationOperationsArgs = {
   activeRepo: string | null;
@@ -23,12 +24,10 @@ export function useDelegationOperations({
 }: UseDelegationOperationsArgs): UseDelegationOperationsResult {
   const delegateTask = useCallback(
     async (taskId: string): Promise<void> => {
-      if (!activeRepo) {
-        throw new Error("Select a workspace first.");
-      }
+      const repo = requireActiveRepo(activeRepo);
 
-      await host.buildStart(activeRepo, taskId);
-      await refreshTaskData(activeRepo);
+      await host.buildStart(repo, taskId);
+      await refreshTaskData(repo);
     },
     [activeRepo, refreshTaskData],
   );
