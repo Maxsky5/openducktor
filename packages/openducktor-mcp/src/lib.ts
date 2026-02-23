@@ -313,76 +313,125 @@ const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): TaskCard =
   };
 };
 
+const TASK_STATUS_VALUES: readonly TaskStatus[] = [
+  "open",
+  "spec_ready",
+  "ready_for_dev",
+  "in_progress",
+  "blocked",
+  "ai_review",
+  "human_review",
+  "deferred",
+  "closed",
+];
+
+const TASK_STATUS_SET = new Set<TaskStatus>(TASK_STATUS_VALUES);
+
+const isTaskStatus = (value: string): value is TaskStatus =>
+  TASK_STATUS_SET.has(value as TaskStatus);
+
 const toTaskStatus = (value: unknown): TaskStatus => {
-  const normalized = typeof value === "string" ? value : "open";
-  if (
-    normalized === "open" ||
-    normalized === "spec_ready" ||
-    normalized === "ready_for_dev" ||
-    normalized === "in_progress" ||
-    normalized === "blocked" ||
-    normalized === "ai_review" ||
-    normalized === "human_review" ||
-    normalized === "deferred" ||
-    normalized === "closed"
-  ) {
-    return normalized;
+  if (typeof value !== "string") {
+    return "open";
   }
-  return "open";
+  return isTaskStatus(value) ? value : "open";
 };
 
 const canSkipSpecAndPlanning = (task: TaskCard): boolean => {
   return task.issueType === "task" || task.issueType === "bug";
 };
 
-const allowsTransition = (task: TaskCard, from: TaskStatus, to: TaskStatus): boolean => {
+const BASE_TRANSITION_RULES: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
+  open: ["spec_ready", "deferred"],
+  spec_ready: ["ready_for_dev", "deferred"],
+  ready_for_dev: ["in_progress", "deferred"],
+  in_progress: ["blocked", "ai_review", "human_review", "deferred"],
+  blocked: ["in_progress", "deferred"],
+  ai_review: ["in_progress", "human_review", "deferred"],
+  human_review: ["in_progress", "closed", "deferred"],
+  deferred: ["open"],
+  closed: [],
+};
+
+const SKIP_SPEC_AND_PLAN_TRANSITION_EXTRAS: Readonly<
+  Partial<Record<TaskStatus, readonly TaskStatus[]>>
+> = {
+  open: ["ready_for_dev", "in_progress"],
+  spec_ready: ["in_progress"],
+};
+
+const SET_SPEC_ALLOWED_STATUSES: readonly TaskStatus[] = ["open", "spec_ready"];
+
+const SET_PLAN_ALLOWED_STATUSES: Readonly<Record<IssueType, readonly TaskStatus[]>> = {
+  epic: ["spec_ready"],
+  feature: ["spec_ready"],
+  task: ["open", "spec_ready"],
+  bug: ["open", "spec_ready"],
+};
+
+const isStatusAllowed = (status: TaskStatus, allowed: readonly TaskStatus[]): boolean => {
+  return allowed.includes(status);
+};
+
+const getTransitionError = (
+  task: TaskCard,
+  allTasks: TaskCard[],
+  from: TaskStatus,
+  to: TaskStatus,
+): string | null => {
   if (from === to) {
-    return true;
+    return null;
   }
 
-  switch (from) {
-    case "open": {
-      if (canSkipSpecAndPlanning(task)) {
-        return (
-          to === "spec_ready" || to === "ready_for_dev" || to === "in_progress" || to === "deferred"
-        );
-      }
-      return to === "spec_ready" || to === "deferred";
-    }
-    case "spec_ready": {
-      if (canSkipSpecAndPlanning(task)) {
-        return to === "ready_for_dev" || to === "in_progress" || to === "deferred";
-      }
-      return to === "ready_for_dev" || to === "deferred";
-    }
-    case "ready_for_dev":
-      return to === "in_progress" || to === "deferred";
-    case "in_progress":
-      return to === "blocked" || to === "ai_review" || to === "human_review" || to === "deferred";
-    case "blocked":
-      return to === "in_progress" || to === "deferred";
-    case "ai_review":
-      return to === "in_progress" || to === "human_review" || to === "deferred";
-    case "human_review":
-      return to === "in_progress" || to === "closed" || to === "deferred";
-    case "deferred":
-      return to === "open";
-    case "closed":
-      return false;
-    default:
-      return false;
+  const baseAllowed = BASE_TRANSITION_RULES[from] ?? [];
+  const extraAllowed = canSkipSpecAndPlanning(task)
+    ? (SKIP_SPEC_AND_PLAN_TRANSITION_EXTRAS[from] ?? [])
+    : [];
+
+  if (!isStatusAllowed(to, baseAllowed) && !isStatusAllowed(to, extraAllowed)) {
+    return `Transition not allowed for ${task.id} (${task.issueType}): ${from} -> ${to}`;
   }
+
+  if (to === "closed" && task.issueType === "epic") {
+    const blockingSubtask = allTasks.find(
+      (entry) =>
+        entry.parentId === task.id && entry.status !== "closed" && entry.status !== "deferred",
+    );
+
+    if (blockingSubtask) {
+      return `Epic cannot be completed while direct subtask ${blockingSubtask.id} is still active.`;
+    }
+  }
+
+  return null;
 };
 
 const canSetSpecFromStatus = (status: TaskStatus): boolean => {
-  return status === "open" || status === "spec_ready";
+  return isStatusAllowed(status, SET_SPEC_ALLOWED_STATUSES);
 };
 
 const canSetPlan = (task: TaskCard): boolean => {
-  if (task.issueType === "epic" || task.issueType === "feature") {
-    return task.status === "spec_ready";
+  return isStatusAllowed(task.status, SET_PLAN_ALLOWED_STATUSES[task.issueType]);
+};
+
+const getSetSpecError = (status: TaskStatus): string | null => {
+  if (canSetSpecFromStatus(status)) {
+    return null;
   }
-  return task.status === "open" || task.status === "spec_ready";
+  return `set_spec is only allowed from open/spec_ready (current: ${status})`;
+};
+
+const getSetPlanError = (task: TaskCard): string | null => {
+  if (canSetPlan(task)) {
+    return null;
+  }
+  return `set_plan is not allowed for issue type ${task.issueType} from status ${task.status}`;
+};
+
+const assertNoValidationError = (error: string | null): void => {
+  if (error) {
+    throw new Error(error);
+  }
 };
 
 const normalizeTitleKey = (value: string): string => value.trim().toLowerCase();
@@ -445,22 +494,7 @@ const validateTransition = (
   from: TaskStatus,
   to: TaskStatus,
 ): void => {
-  if (!allowsTransition(task, from, to)) {
-    throw new Error(`Transition not allowed for ${task.id} (${task.issueType}): ${from} -> ${to}`);
-  }
-
-  if (to === "closed" && task.issueType === "epic") {
-    const blockingSubtask = allTasks.find(
-      (entry) =>
-        entry.parentId === task.id && entry.status !== "closed" && entry.status !== "deferred",
-    );
-
-    if (blockingSubtask) {
-      throw new Error(
-        `Epic cannot be completed while direct subtask ${blockingSubtask.id} is still active.`,
-      );
-    }
-  }
+  assertNoValidationError(getTransitionError(task, allTasks, from, to));
 };
 
 type ProcessResult = { ok: boolean; stdout: string; stderr: string };
@@ -793,18 +827,29 @@ export class OdtTaskStore {
     throw new Error(`Task not found: ${requestedTaskId}.${hintSuffix}`);
   }
 
-  private async transitionTask(taskId: string, next: TaskStatus): Promise<TaskCard> {
+  private async resolveTaskContext(taskId: string): Promise<{ task: TaskCard; tasks: TaskCard[] }> {
     const tasks = await this.listTasks();
     const task = this.resolveTaskFromTasks(tasks, taskId);
+    return { task, tasks };
+  }
 
-    validateTransition(task, tasks, task.status, next);
+  private assertTransitionAllowed(task: TaskCard, tasks: TaskCard[], nextStatus: TaskStatus): void {
+    validateTransition(task, tasks, task.status, nextStatus);
+  }
 
-    if (task.status !== next) {
-      await this.runBdJson(["update", task.id, "--status", next]);
+  private async applyTransition(task: TaskCard, nextStatus: TaskStatus): Promise<TaskCard> {
+    if (task.status !== nextStatus) {
+      await this.runBdJson(["update", task.id, "--status", nextStatus]);
     }
 
     const refreshed = await this.showRawIssue(task.id);
     return issueToTaskCard(refreshed, this.metadataNamespace);
+  }
+
+  private async transitionTask(taskId: string, next: TaskStatus): Promise<TaskCard> {
+    const { task, tasks } = await this.resolveTaskContext(taskId);
+    this.assertTransitionAllowed(task, tasks, next);
+    return this.applyTransition(task, next);
   }
 
   private getNamespaceData(issue: RawIssue): {
@@ -919,12 +964,8 @@ export class OdtTaskStore {
     const input = SetSpecInputSchema.parse(rawInput);
     const markdown = input.markdown.trim();
 
-    const tasks = await this.listTasks();
-    const task = this.resolveTaskFromTasks(tasks, input.taskId);
-
-    if (!canSetSpecFromStatus(task.status)) {
-      throw new Error(`set_spec is only allowed from open/spec_ready (current: ${task.status})`);
-    }
+    const { task } = await this.resolveTaskContext(input.taskId);
+    assertNoValidationError(getSetSpecError(task.status));
 
     const issue = await this.showRawIssue(task.id);
     const { root, namespace, documents } = this.getNamespaceData(issue);
@@ -951,8 +992,10 @@ export class OdtTaskStore {
 
     await this.writeNamespace(task.id, root, nextNamespace);
 
-    const nextTask =
-      task.status === "open" ? await this.transitionTask(task.id, "spec_ready") : task;
+    let nextTask: TaskCard = task;
+    if (task.status === "open") {
+      nextTask = await this.transitionTask(task.id, "spec_ready");
+    }
 
     return {
       task: nextTask,
@@ -969,14 +1012,8 @@ export class OdtTaskStore {
     const input = SetPlanInputSchema.parse(rawInput);
     const markdown = input.markdown.trim();
 
-    const tasks = await this.listTasks();
-    const task = this.resolveTaskFromTasks(tasks, input.taskId);
-
-    if (!canSetPlan(task)) {
-      throw new Error(
-        `set_plan is not allowed for issue type ${task.issueType} from status ${task.status}`,
-      );
-    }
+    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    assertNoValidationError(getSetPlanError(task));
 
     const normalizedSubtasks = normalizePlanSubtasks(input.subtasks ?? []);
     validatePlanSubtaskRules(task, tasks, normalizedSubtasks);
@@ -1062,8 +1099,7 @@ export class OdtTaskStore {
     await this.ensureInitialized();
     const input = BuildCompletedInputSchema.parse(rawInput);
 
-    const tasks = await this.listTasks();
-    const task = this.resolveTaskFromTasks(tasks, input.taskId);
+    const { task } = await this.resolveTaskContext(input.taskId);
 
     const nextStatus: TaskStatus = task.aiReviewEnabled ? "ai_review" : "human_review";
     const updated = await this.transitionTask(task.id, nextStatus);
@@ -1105,21 +1141,11 @@ export class OdtTaskStore {
     await this.writeNamespace(taskId, root, nextNamespace);
   }
 
-  private async ensureQaTransitionAllowed(
-    taskId: string,
-    nextStatus: TaskStatus,
-  ): Promise<TaskCard> {
-    const tasks = await this.listTasks();
-    const task = this.resolveTaskFromTasks(tasks, taskId);
-
-    validateTransition(task, tasks, task.status, nextStatus);
-    return task;
-  }
-
   async qaApproved(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaApprovedInputSchema.parse(rawInput);
-    const task = await this.ensureQaTransitionAllowed(input.taskId, "human_review");
+    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    this.assertTransitionAllowed(task, tasks, "human_review");
     await this.appendQaReport(task.id, input.reportMarkdown.trim(), "approved");
     const updated = await this.transitionTask(task.id, "human_review");
     return { task: updated };
@@ -1128,7 +1154,8 @@ export class OdtTaskStore {
   async qaRejected(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaRejectedInputSchema.parse(rawInput);
-    const task = await this.ensureQaTransitionAllowed(input.taskId, "in_progress");
+    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    this.assertTransitionAllowed(task, tasks, "in_progress");
     await this.appendQaReport(task.id, input.reportMarkdown.trim(), "rejected");
     const updated = await this.transitionTask(task.id, "in_progress");
     return { task: updated };
