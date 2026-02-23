@@ -187,6 +187,17 @@ pub struct AgentSessionDocument {
     pub selected_model: Option<AgentSessionModelSelection>,
 }
 
+/// Consolidated task metadata returned in a single CLI call.
+/// Use this when fetching spec, plan, QA report, and sessions for the same task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskMetadata {
+    pub spec: SpecDocument,
+    pub plan: SpecDocument,
+    pub qa_report: Option<QaReportDocument>,
+    pub agent_sessions: Vec<AgentSessionDocument>,
+}
+
 pub trait TaskStore: Send + Sync {
     fn ensure_repo_initialized(&self, repo_path: &Path) -> Result<()>;
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>>;
@@ -222,6 +233,10 @@ pub trait TaskStore: Send + Sync {
         task_id: &str,
         session: AgentSessionDocument,
     ) -> Result<()>;
+    /// Fetch all task metadata (spec, plan, QA report, sessions) in a single CLI call.
+    /// Use this when you need multiple metadata fields for the same task to avoid
+    /// redundant `bd show` invocations.
+    fn get_task_metadata(&self, repo_path: &Path, task_id: &str) -> Result<TaskMetadata>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
