@@ -416,11 +416,6 @@ export class TauriHostClient implements PlannerTools {
     return parseArray(gitBranchSchema, payload);
   }
 
-  async gitGetBranchs(repoPath: string): Promise<GitBranch[]> {
-    const payload = await this.invokeFn<unknown>("git_get_branchs", { repoPath });
-    return parseArray(gitBranchSchema, payload);
-  }
-
   async gitGetCurrentBranch(repoPath: string): Promise<GitCurrentBranch> {
     const payload = await this.invokeFn<unknown>("git_get_current_branch", { repoPath });
     return gitCurrentBranchSchema.parse(payload);
