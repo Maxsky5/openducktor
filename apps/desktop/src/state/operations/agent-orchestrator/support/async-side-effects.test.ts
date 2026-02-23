@@ -11,14 +11,14 @@ describe("agent-orchestrator/support/async-side-effects", () => {
 
     let observedReason = "";
     try {
-      runOrchestratorSideEffect("side-effect-default", Promise.reject(new Error("boom")), {
-        onFailure: (failure) => {
-          observedReason = failure.reason;
-        },
+      await new Promise<void>((resolve) => {
+        runOrchestratorSideEffect("side-effect-default", Promise.reject(new Error("boom")), {
+          onFailure: (failure) => {
+            observedReason = failure.reason;
+            resolve();
+          },
+        });
       });
-
-      await Promise.resolve();
-      await Promise.resolve();
     } finally {
       console.error = originalError;
     }

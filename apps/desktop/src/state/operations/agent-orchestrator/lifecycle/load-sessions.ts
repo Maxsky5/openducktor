@@ -13,6 +13,7 @@ import {
   fromPersistedSessionRecord,
   historyToChatMessages,
   normalizePersistedSelection,
+  now,
   toBaseUrl,
   upsertMessage,
 } from "../support/utils";
@@ -352,7 +353,7 @@ export const createLoadAgentSessions = ({
                 id: `history-unavailable:${record.sessionId}`,
                 role: "system",
                 content: `Session history unavailable: ${historyResult.reason}`,
-                timestamp: new Date().toISOString(),
+                timestamp: now(),
               }),
             }),
             { persist: false },
