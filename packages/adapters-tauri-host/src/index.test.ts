@@ -115,6 +115,35 @@ describe("TauriHostClient", () => {
     });
   });
 
+  test("runtimeCheck forwards force flag to IPC command", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "runtime_check") {
+        return {
+          gitOk: true,
+          gitVersion: "2.45.0",
+          opencodeOk: true,
+          opencodeVersion: "0.12.0",
+          errors: [],
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.runtimeCheck();
+    await client.runtimeCheck(true);
+
+    expect(calls).toEqual([
+      {
+        command: "runtime_check",
+        args: { force: false },
+      },
+      {
+        command: "runtime_check",
+        args: { force: true },
+      },
+    ]);
+  });
+
   test("taskTransition validates status before invoking host", async () => {
     const { client, calls } = createClient(() => makeTaskCardPayload());
 

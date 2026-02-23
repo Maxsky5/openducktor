@@ -139,7 +139,9 @@ beforeEach(() => {
 
 describe("use-checks", () => {
   test("refreshChecks is a no-op when no active repo is selected", async () => {
-    const runtimeCheck = mock(async (): Promise<RuntimeCheck> => makeRuntimeCheck());
+    const runtimeCheck = mock(
+      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    );
     const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
 
     const original = {
@@ -170,7 +172,9 @@ describe("use-checks", () => {
   });
 
   test("refreshRuntimeCheck caches and supports force retries", async () => {
-    const runtimeCheck = mock(async (): Promise<RuntimeCheck> => makeRuntimeCheck());
+    const runtimeCheck = mock(
+      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    );
 
     const original = {
       runtimeCheck: host.runtimeCheck,
@@ -188,6 +192,8 @@ describe("use-checks", () => {
       });
 
       expect(runtimeCheck).toHaveBeenCalledTimes(2);
+      expect(runtimeCheck.mock.calls[0]).toEqual([false]);
+      expect(runtimeCheck.mock.calls[1]).toEqual([true]);
       expect(harness.getLatest().hasRuntimeCheck()).toBe(true);
     } finally {
       await harness.unmount();
@@ -241,7 +247,7 @@ describe("use-checks", () => {
 
   test("refreshChecks reports unhealthy diagnostics details", async () => {
     const runtimeCheck = mock(
-      async (): Promise<RuntimeCheck> =>
+      async (_force?: boolean): Promise<RuntimeCheck> =>
         makeRuntimeCheck({ gitOk: false, errors: ["git unavailable"] }),
     );
     const beadsCheck = mock(
@@ -280,7 +286,7 @@ describe("use-checks", () => {
   test("refreshChecks forces a fresh runtime check and surfaces errors", async () => {
     let callCount = 0;
     const runtimeCheck = mock(
-      async (): Promise<RuntimeCheck> =>
+      async (_force?: boolean): Promise<RuntimeCheck> =>
         new Promise((resolve, reject) => {
           callCount += 1;
           if (callCount === 1) {
@@ -308,6 +314,8 @@ describe("use-checks", () => {
       });
 
       expect(runtimeCheck).toHaveBeenCalledTimes(2);
+      expect(runtimeCheck.mock.calls[0]).toEqual([false]);
+      expect(runtimeCheck.mock.calls[1]).toEqual([true]);
       expect(toastError).toHaveBeenCalledWith("Diagnostics check unavailable", {
         description: "runtime down",
       });
