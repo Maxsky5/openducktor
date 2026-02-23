@@ -740,12 +740,9 @@ export class OdtTaskStore {
     await this.writeNamespace(task.id, root, nextNamespace);
 
     const createdSubtaskIds: string[] = [];
-    let transitionContext: TaskContext = context;
     if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
-      const existingTaskSnapshot = transitionContext;
-      transitionContext = existingTaskSnapshot;
       const existingTitleKeys = new Set(
-        existingTaskSnapshot.tasks
+        tasks
           .filter((entry) => entry.parentId === task.id)
           .map((entry) => normalizeTitleKey(entry.title)),
       );
@@ -762,7 +759,7 @@ export class OdtTaskStore {
       }
     }
 
-    const refreshedTransitionContext = await this.refreshTaskContext(task.id, transitionContext);
+    const refreshedTransitionContext = await this.refreshTaskContext(task.id, context);
     const nextTask = await this.transitionTask(
       task.id,
       "ready_for_dev",
