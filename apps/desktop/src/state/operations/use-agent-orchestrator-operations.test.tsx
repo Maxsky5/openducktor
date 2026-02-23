@@ -103,10 +103,14 @@ const createHookHarness = (args: {
   tasks: TaskCard[];
   runs: RunSummary[];
   refreshTaskData: (repoPath: string) => Promise<void>;
+  agentEngine?: OpencodeSdkAdapter;
 }) => {
   let latest: ReturnType<typeof useAgentOrchestratorOperations> | null = null;
   let renderer: TestRenderer.ReactTestRenderer | null = null;
-  let currentArgs = args;
+  let currentArgs = {
+    ...args,
+    agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
+  };
 
   const Harness = () => {
     latest = useAgentOrchestratorOperations(currentArgs);
@@ -136,6 +140,7 @@ const createHookHarness = (args: {
       tasks: TaskCard[];
       runs: RunSummary[];
       refreshTaskData: (repoPath: string) => Promise<void>;
+      agentEngine: OpencodeSdkAdapter;
     }>,
   ) => {
     currentArgs = {

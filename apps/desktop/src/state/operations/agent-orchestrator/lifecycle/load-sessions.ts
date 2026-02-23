@@ -1,6 +1,5 @@
-import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import { buildAgentSystemPrompt } from "@openducktor/core";
+import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
@@ -24,7 +23,7 @@ type UpdateSession = (
   options?: { persist?: boolean },
 ) => void;
 
-type SessionHistoryAdapter = Pick<OpencodeSdkAdapter, "loadSessionHistory">;
+type SessionHistoryAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 type SessionHistoryLoadResult =
   | {
       ok: true;

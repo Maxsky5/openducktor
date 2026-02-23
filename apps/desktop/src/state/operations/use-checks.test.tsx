@@ -59,19 +59,23 @@ mock.module("sonner", () => ({
   },
 }));
 
-mock.module("./opencode-catalog", () => ({
-  checkRepoOpencodeHealth: (repoPath: string) => checkRepoOpencodeHealthMock(repoPath),
-}));
-
 type UseChecksHook = typeof import("./use-checks")["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
 type HookResult = ReturnType<UseChecksHook>;
+type HookHarnessArgs = Omit<HookArgs, "checkRepoOpencodeHealth"> & {
+  checkRepoOpencodeHealth?: HookArgs["checkRepoOpencodeHealth"];
+};
 
 let useChecks: UseChecksHook;
 
-const createHookHarness = (initialArgs: HookArgs) => {
+const createHookHarness = (initialArgs: HookHarnessArgs) => {
   let latest: HookResult | null = null;
-  let currentArgs = initialArgs;
+  let currentArgs: HookArgs = {
+    ...initialArgs,
+    checkRepoOpencodeHealth:
+      initialArgs.checkRepoOpencodeHealth ??
+      ((repoPath: string) => checkRepoOpencodeHealthMock(repoPath)),
+  };
 
   const Harness = ({ args }: { args: HookArgs }) => {
     latest = useChecks(args);
@@ -87,8 +91,13 @@ const createHookHarness = (initialArgs: HookArgs) => {
       });
       await flush();
     },
-    updateArgs: async (nextArgs: HookArgs) => {
-      currentArgs = nextArgs;
+    updateArgs: async (nextArgs: Partial<HookHarnessArgs>) => {
+      currentArgs = {
+        ...currentArgs,
+        ...nextArgs,
+        checkRepoOpencodeHealth:
+          nextArgs.checkRepoOpencodeHealth ?? currentArgs.checkRepoOpencodeHealth,
+      };
       await act(async () => {
         renderer?.update(createElement(Harness, { args: currentArgs }));
       });

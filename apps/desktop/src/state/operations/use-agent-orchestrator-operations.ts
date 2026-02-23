@@ -1,6 +1,10 @@
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentModelSelection,
+  AgentRole,
+  AgentScenario,
+} from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -27,6 +31,7 @@ type UseAgentOrchestratorOperationsArgs = {
   tasks: TaskCard[];
   runs: RunSummary[];
   refreshTaskData: (repoPath: string) => Promise<void>;
+  agentEngine: AgentEnginePort;
 };
 
 type UseAgentOrchestratorOperationsResult = {
@@ -56,6 +61,7 @@ export function useAgentOrchestratorOperations({
   tasks,
   runs,
   refreshTaskData,
+  agentEngine,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
   const [sessionsById, setSessionsById] = useState<Record<string, AgentSessionState>>({});
   const sessionsRef = useRef<Record<string, AgentSessionState>>({});
@@ -100,8 +106,6 @@ export function useAgentOrchestratorOperations({
     sessionsRef.current = {};
     setSessionsById({});
   }, [activeRepo]);
-
-  const adapter = useMemo(() => new OpencodeSdkAdapter(), []);
 
   const persistSessionSnapshot = useCallback(
     async (session: AgentSessionState): Promise<void> => {
@@ -198,7 +202,7 @@ export function useAgentOrchestratorOperations({
       );
 
       try {
-        const catalog = await adapter.listAvailableModels({
+        const catalog = await agentEngine.listAvailableModels({
           baseUrl,
           workingDirectory,
         });
@@ -231,7 +235,7 @@ export function useAgentOrchestratorOperations({
         );
       }
     },
-    [adapter, updateSession],
+    [agentEngine, updateSession],
   );
 
   const loadSessionTodos = useCallback(
@@ -241,7 +245,7 @@ export function useAgentOrchestratorOperations({
       workingDirectory: string,
       externalSessionId: string,
     ): Promise<void> => {
-      const todos = await adapter.loadSessionTodos({
+      const todos = await agentEngine.loadSessionTodos({
         baseUrl,
         workingDirectory,
         externalSessionId,
@@ -255,14 +259,14 @@ export function useAgentOrchestratorOperations({
         { persist: false },
       );
     },
-    [adapter, updateSession],
+    [agentEngine, updateSession],
   );
 
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
         activeRepo,
-        adapter,
+        adapter: agentEngine,
         repoEpochRef,
         previousRepoRef,
         sessionsRef,
@@ -272,13 +276,13 @@ export function useAgentOrchestratorOperations({
         loadSessionTodos,
         loadSessionModelCatalog,
       }),
-    [activeRepo, adapter, loadSessionModelCatalog, loadSessionTodos, updateSession],
+    [activeRepo, agentEngine, loadSessionModelCatalog, loadSessionTodos, updateSession],
   );
 
   const attachSessionListener = useCallback(
     (repoPath: string, sessionId: string): void => {
       const unsubscribe = attachAgentSessionListener({
-        adapter,
+        adapter: agentEngine,
         repoPath,
         sessionId,
         sessionsRef,
@@ -295,7 +299,7 @@ export function useAgentOrchestratorOperations({
       unsubscribersRef.current.set(sessionId, unsubscribe);
     },
     [
-      adapter,
+      agentEngine,
       clearTurnDuration,
       loadSessionTodos,
       refreshTaskData,
@@ -317,7 +321,7 @@ export function useAgentOrchestratorOperations({
     () =>
       createAgentSessionActions({
         activeRepo,
-        adapter,
+        adapter: agentEngine,
         setSessionsById,
         sessionsRef,
         taskRef,
@@ -340,7 +344,7 @@ export function useAgentOrchestratorOperations({
       }),
     [
       activeRepo,
-      adapter,
+      agentEngine,
       attachSessionListener,
       clearTurnDuration,
       ensureRuntime,

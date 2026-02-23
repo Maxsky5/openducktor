@@ -1,3 +1,4 @@
+import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { RunEvent } from "@openducktor/contracts";
 import {
   type Context,
@@ -28,6 +29,8 @@ import {
 } from "./app-state-context-values";
 import { useAppLifecycle } from "./lifecycle/use-app-lifecycle";
 import {
+  configureOpencodeCatalogOperations,
+  createHostOpencodeCatalogOperations,
   useAgentOrchestratorOperations,
   useChecks,
   useDelegationOperations,
@@ -55,6 +58,12 @@ const useRequiredContext = <T,>(context: Context<T | null>, name: string): T => 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
+  const agentEngine = useMemo(() => new OpencodeSdkAdapter(), []);
+  const opencodeCatalogOperations = useMemo(() => {
+    const ops = createHostOpencodeCatalogOperations(agentEngine);
+    configureOpencodeCatalogOperations(ops);
+    return ops;
+  }, [agentEngine]);
 
   const {
     runtimeCheck,
@@ -73,6 +82,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     clearActiveRepoOpencodeHealth,
   } = useChecks({
     activeRepo,
+    checkRepoOpencodeHealth: opencodeCatalogOperations.checkRepoOpencodeHealth,
   });
 
   const {
@@ -127,6 +137,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     tasks,
     runs,
     refreshTaskData,
+    agentEngine,
   });
 
   const {
