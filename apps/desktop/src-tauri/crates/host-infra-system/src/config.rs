@@ -166,12 +166,23 @@ fn migrate_repos_to_canonical_keys(
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
 
+    // Sort entries lexicographically for deterministic processing
+    let mut entries: Vec<(String, RepoConfig)> = entries;
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
     for (original_key, repo_config) in entries {
         match canonicalize_workspace_key(&original_key) {
             Ok(canonical_key) => {
-                // If this canonical key already exists, keep the first entry
-                // (this handles the case where multiple path variants resolve to the same canonical path)
-                if !canonical_repos.contains_key(&canonical_key) {
+                // Deterministic collision resolution:
+                // 1. If this canonical key doesn't exist, insert it
+                // 2. If it exists, only replace if original_key IS the canonical form
+                //    (i.e., original_key == canonical_key means this is the "true" entry)
+                // 3. Otherwise keep existing entry (first one wins, but now deterministic)
+                let should_insert = match canonical_repos.get(&canonical_key) {
+                    None => true,
+                    Some(_) => original_key == canonical_key,
+                };
+                if should_insert {
                     canonical_repos.insert(canonical_key, repo_config);
                 }
             }
