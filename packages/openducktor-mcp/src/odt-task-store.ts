@@ -24,6 +24,42 @@ interface TaskIndexEntry {
   titleSlug: string;
 }
 
+const MAX_TASK_CANDIDATES = 5;
+
+const formatTaskRef = (task: TaskCard): string => `${task.id} (${task.title})`;
+
+class TaskResolutionAmbiguousError extends Error {
+  readonly requestedTaskId: string;
+  readonly candidates: string[];
+
+  constructor(requestedTaskId: string, candidates: string[]) {
+    super(
+      `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+    );
+    this.name = "TaskResolutionAmbiguousError";
+    this.requestedTaskId = requestedTaskId;
+    this.candidates = candidates;
+  }
+}
+
+class TaskResolutionNotFoundError extends Error {
+  readonly requestedTaskId: string;
+  readonly candidates: string[];
+
+  constructor(requestedTaskId: string, candidates: string[]) {
+    const hintSuffix = candidates.length > 0 ? ` Candidate task ids: ${candidates.join(", ")}` : "";
+    super(`Task not found: ${requestedTaskId}.${hintSuffix}`);
+    this.name = "TaskResolutionNotFoundError";
+    this.requestedTaskId = requestedTaskId;
+    this.candidates = candidates;
+  }
+}
+
+function throwAmbiguousTaskIdentifier(requestedTaskId: string, matches: TaskCard[]): never {
+  const candidates = matches.slice(0, MAX_TASK_CANDIDATES).map(formatTaskRef);
+  throw new TaskResolutionAmbiguousError(requestedTaskId, candidates);
+}
+
 /**
  * Build normalized lookup maps from tasks array.
  * O(n) build time, enables O(1) lookups.
@@ -120,10 +156,7 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
       return byCaseInsensitiveId[0];
     }
     if (byCaseInsensitiveId.length > 1) {
-      const candidates = byCaseInsensitiveId.slice(0, 5).map((t) => `${t.id} (${t.title})`);
-      throw new Error(
-        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-      );
+      throwAmbiguousTaskIdentifier(requestedTaskId, byCaseInsensitiveId);
     }
   }
 
@@ -135,10 +168,7 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
       return byIdSuffix[0];
     }
     if (byIdSuffix && byIdSuffix.length > 1) {
-      const candidates = byIdSuffix.slice(0, 5).map((t) => `${t.id} (${t.title})`);
-      throw new Error(
-        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-      );
+      throwAmbiguousTaskIdentifier(requestedTaskId, byIdSuffix);
     }
   }
 
@@ -149,10 +179,7 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
       return byTitleExact[0];
     }
     if (byTitleExact.length > 1) {
-      const candidates = byTitleExact.slice(0, 5).map((t) => `${t.id} (${t.title})`);
-      throw new Error(
-        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-      );
+      throwAmbiguousTaskIdentifier(requestedTaskId, byTitleExact);
     }
   }
 
@@ -164,10 +191,7 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
         return byTitleSlugExact[0];
       }
       if (byTitleSlugExact.length > 1) {
-        const candidates = byTitleSlugExact.slice(0, 5).map((t) => `${t.id} (${t.title})`);
-        throw new Error(
-          `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-        );
+        throwAmbiguousTaskIdentifier(requestedTaskId, byTitleSlugExact);
       }
     }
   }
@@ -181,7 +205,7 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
 
       if (matchesLower || matchesSlug) {
         byTitleContains.push(entry.task);
-        if (byTitleContains.length > 5) {
+        if (byTitleContains.length > MAX_TASK_CANDIDATES) {
           break; // Only need 6+ to detect ambiguity
         }
       }
@@ -192,10 +216,7 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
     return byTitleContains[0];
   }
   if (byTitleContains.length > 1) {
-    const candidates = byTitleContains.slice(0, 5).map((t) => `${t.id} (${t.title})`);
-    throw new Error(
-      `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-    );
+    throwAmbiguousTaskIdentifier(requestedTaskId, byTitleContains);
   }
 
   // 7. Fallback hints (partial ID/title match) - single pass O(n)
@@ -210,18 +231,17 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
 
       if (matchesIdLower || matchesTitleLower || matchesIdSlug || matchesTitleSlug) {
         hints.push(entry.task);
-        if (hints.length >= 5) {
+        if (hints.length >= MAX_TASK_CANDIDATES) {
           break;
         }
       }
     }
   }
 
-  const fallback = (hints.length > 0 ? hints : index.tasks.slice(0, 5)).map(
-    (t) => `${t.id} (${t.title})`,
+  const fallback = (hints.length > 0 ? hints : index.tasks.slice(0, MAX_TASK_CANDIDATES)).map(
+    formatTaskRef,
   );
-  const hintSuffix = fallback.length > 0 ? ` Candidate task ids: ${fallback.join(", ")}` : "";
-  throw new Error(`Task not found: ${requestedTaskId}.${hintSuffix}`);
+  throw new TaskResolutionNotFoundError(requestedTaskId, fallback);
 }
 
 import { basename } from "node:path";
@@ -459,10 +479,6 @@ export class OdtTaskStore {
     this.taskIndexBuildPromise = null;
   }
 
-  private formatTaskRef(task: TaskCard): string {
-    return `${task.id} (${task.title})`;
-  }
-
   private async resolveTaskContext(taskId: string): Promise<TaskContext> {
     const tasks = await this.listTasks();
     const task = resolveTaskFromIndex(buildTaskIndex(tasks), taskId);
@@ -614,8 +630,10 @@ export class OdtTaskStore {
     try {
       task = resolveTaskFromIndex(index, input.taskId);
     } catch (error) {
-      const isNotFoundError = error instanceof Error && error.message.startsWith("Task not found:");
-      if (!isNotFoundError) {
+      const shouldRefreshIndex =
+        error instanceof TaskResolutionNotFoundError ||
+        error instanceof TaskResolutionAmbiguousError;
+      if (!shouldRefreshIndex) {
         throw error;
       }
 
