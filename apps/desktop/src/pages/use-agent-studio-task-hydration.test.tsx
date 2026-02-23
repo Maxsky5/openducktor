@@ -110,23 +110,33 @@ describe("useAgentStudioTaskHydration", () => {
 
   test("marks a task hydrated even when loading sessions rejects", async () => {
     const deferred = createDeferred<void>();
-    const loadAgentSessions = mock(async () => {
-      try {
-        await deferred.promise;
-      } catch {}
+    const loadError = new Error("load failed");
+    const loadAgentSessions = mock(() => {
+      const promise = deferred.promise;
+      const originalFinally = promise.finally.bind(promise);
+      promise.finally = ((onFinally) => {
+        const finalPromise = originalFinally(onFinally);
+        void finalPromise.catch(() => undefined);
+        return finalPromise;
+      }) as Promise<void>["finally"];
+      return promise;
     });
 
     const harness = createHookHarness(createBaseArgs({ loadAgentSessions }));
 
     try {
       await harness.mount();
+      const rejectionCapture = deferred.promise.then(
+        () => null,
+        (error: unknown) => error,
+      );
 
-      await harness.run(async () => {
-        deferred.reject(new Error("load failed"));
-        try {
-          await deferred.promise;
-        } catch {}
+      await harness.run(() => {
+        deferred.reject(loadError);
       });
+
+      const capturedError = await rejectionCapture;
+      expect(capturedError).toBe(loadError);
 
       await harness.waitFor((state) => state["/repo-a:task-1"] === true);
       expect(loadAgentSessions).toHaveBeenCalledTimes(1);
