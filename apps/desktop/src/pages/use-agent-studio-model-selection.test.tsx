@@ -3,6 +3,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
+  createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
@@ -48,6 +49,7 @@ const CATALOG: AgentModelCatalog = {
       name: "spec-agent",
       mode: "primary",
       hidden: false,
+      color: "#f59e0b",
     },
     {
       name: "build-agent",
@@ -198,6 +200,58 @@ describe("useAgentStudioModelSelection", () => {
       variant: "high",
       opencodeAgent: "spec-agent",
     });
+
+    await harness.unmount();
+  });
+
+  test("falls back to composer catalog colors and loading state when session catalog is unavailable", async () => {
+    const loadCatalog = mock(async () => CATALOG);
+    const activeSession = createActiveSession({
+      modelCatalog: null,
+      isLoadingModelCatalog: true,
+    });
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        loadCatalog,
+      }),
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.agentOptions.length > 0);
+
+    const state = harness.getLatest();
+    expect(state.isSelectionCatalogLoading).toBe(false);
+    expect(state.activeSessionAgentColors).toMatchObject({
+      "spec-agent": "#f59e0b",
+    });
+
+    await harness.unmount();
+  });
+
+  test("keeps loading while no catalog source is available for an active session", async () => {
+    const deferredCatalog = createDeferred<AgentModelCatalog>();
+    const activeSession = createActiveSession({
+      modelCatalog: null,
+      isLoadingModelCatalog: true,
+    });
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        loadCatalog: async () => deferredCatalog.promise,
+      }),
+    );
+
+    await harness.mount();
+    expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
+
+    await harness.run(async () => {
+      deferredCatalog.resolve(CATALOG);
+      await deferredCatalog.promise;
+    });
+    await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
 
     await harness.unmount();
   });
