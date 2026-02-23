@@ -138,12 +138,14 @@ fn normalize_global_config(config: &mut GlobalConfig) {
 }
 
 /// Canonicalizes a workspace path key for use as a HashMap key.
+/// Canonicalizes a workspace path key for use as a HashMap key.
 /// This resolves symlinks and normalizes to absolute path to prevent
 /// duplicate entries for the same logical repository.
 fn canonicalize_workspace_key(repo_path: &str) -> Result<String> {
     let path = Path::new(repo_path);
-    // If the path doesn't exist, we can't canonicalize it
-    // Return the original path as-is for non-existent paths (e.g., stale config entries)
+    // Note: We don't check path.exists() separately here to avoid TOCTOU race condition.
+    // fs::canonicalize() will return an error for non-existent paths, which we handle.
+    // For non-existent paths (e.g., stale config entries), we return the original path.
     if !path.exists() {
         return Ok(repo_path.to_string());
     }
@@ -163,6 +165,8 @@ fn migrate_repos_to_canonical_keys(
     active_repo: Option<&String>,
 ) -> HashMap<String, RepoConfig> {
     let mut canonical_repos: HashMap<String, RepoConfig> = HashMap::new();
+    // Track which canonical keys came from active_repo for collision resolution
+    let mut from_active_repo: HashMap<String, bool> = HashMap::new();
 
     // Collect all entries first to avoid borrowing issues
     let entries: Vec<(String, RepoConfig)> = repos
@@ -179,33 +183,35 @@ fn migrate_repos_to_canonical_keys(
             Ok(canonical_key) => {
                 // Deterministic collision resolution:
                 // 1. If this canonical key doesn't exist, insert it
-                // 2. If it exists, prefer the entry that matches active_repo (user's current choice)
+                // 2. If it exists, prefer the entry that matches active_repo
                 // 3. Otherwise prefer the entry where original_key == canonical_key (the "true" entry)
-                // 4. Finally, lexicographic order decides (first in sorted order wins)
+                let is_from_active = active_repo.as_ref().map_or(false, |active| **active == original_key);
+                
                 let should_insert = match canonical_repos.get(&canonical_key) {
                     None => true,
                     Some(_) => {
-                        // If active_repo matches this original_key, prefer it over existing
-                        if let Some(active) = active_repo {
-                            if original_key == *active {
-                                true
-                            } else {
-                                // Existing entry wins if it matches active, otherwise prefer canonical form
-                                original_key == canonical_key
-                            }
+                        // If this entry is from active_repo, it wins
+                        if is_from_active {
+                            true
+                        } else if from_active_repo.get(&canonical_key) == Some(&true) {
+                            // Existing entry is from active_repo, keep it
+                            false
                         } else {
-                            // No active_repo, prefer canonical form
+                            // Neither is from active_repo, prefer canonical form
                             original_key == canonical_key
                         }
                     },
                 };
+                
                 if should_insert {
-                    canonical_repos.insert(canonical_key, repo_config);
+                    canonical_repos.insert(canonical_key.clone(), repo_config);
+                    from_active_repo.insert(canonical_key, is_from_active);
                 }
             }
             Err(_) => {
                 // If canonicalization fails, keep the original key
-                canonical_repos.insert(original_key, repo_config);
+                canonical_repos.insert(original_key.clone(), repo_config);
+                from_active_repo.insert(original_key.clone(), active_repo.as_ref().map_or(false, |active| **active == original_key));
             }
         }
     }
