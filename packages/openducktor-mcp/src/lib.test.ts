@@ -636,6 +636,7 @@ describe("openducktor-mcp lib", () => {
 
   test("setSpec revalidates transition after metadata write and avoids stale status updates", async () => {
     let status = "open";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -648,6 +649,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -703,12 +705,14 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
 
   test("setPlan revalidates transition after side effects and avoids stale status updates", async () => {
     let status = "spec_ready";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -721,6 +725,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -776,11 +781,95 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
 
-  test("buildCompleted revalidates transition from fresh task context", async () => {
+  test("setPlan epic subtasks reuses initial snapshot and avoids duplicate list calls", async () => {
+    let status = "spec_ready";
+    let listCalls = 0;
+    let createCalls = 0;
+    let statusUpdateCalls = 0;
+
+    const { runProcess } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        listCalls += 1;
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Epic Task",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "show") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Epic Task",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "create") {
+        createCalls += 1;
+        return { ok: true, stdout: JSON.stringify({ id: "task-1-sub-1" }) };
+      }
+      if (command === "update" && args.includes("--metadata")) {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "update" && args.includes("--status")) {
+        statusUpdateCalls += 1;
+        status = args[args.indexOf("--status") + 1] ?? status;
+        return { ok: true, stdout: "{}" };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      { runProcess },
+    );
+
+    const result = (await store.setPlan({
+      taskId: "task-1",
+      markdown: "# Plan",
+      subtasks: [{ title: "Implement child task" }],
+    })) as {
+      task: { status: string };
+      createdSubtaskIds: string[];
+    };
+
+    expect(result.task.status).toBe("ready_for_dev");
+    expect(result.createdSubtaskIds).toEqual(["task-1-sub-1"]);
+    expect(listCalls).toBe(1);
+    expect(createCalls).toBe(1);
+    expect(statusUpdateCalls).toBe(1);
+  });
+
+  test("buildCompleted revalidates using refreshed task and avoids duplicate list calls", async () => {
     let status = "in_progress";
     let listCalls = 0;
     let statusUpdateCalls = 0;
@@ -815,7 +904,23 @@ describe("openducktor-mcp lib", () => {
       }
       if (command === "update" && args.includes("--status")) {
         statusUpdateCalls += 1;
+        status = args[args.indexOf("--status") + 1] ?? status;
         return { ok: true, stdout: "{}" };
+      }
+      if (command === "show") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Task 1",
+              status,
+              issue_type: "feature",
+              ai_review_enabled: false,
+              metadata: {},
+            },
+          ]),
+        };
       }
       throw new Error(`Unexpected bd command: ${args.join(" ")}`);
     });
@@ -835,11 +940,13 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
 
   test("qaApproved revalidates transition after report append and avoids stale status updates", async () => {
     let status = "ai_review";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -852,6 +959,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -907,12 +1015,14 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
 
   test("qaRejected revalidates transition after report append and avoids stale status updates", async () => {
     let status = "human_review";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -925,6 +1035,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -980,6 +1091,7 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });

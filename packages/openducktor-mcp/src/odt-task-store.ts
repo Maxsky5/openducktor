@@ -60,6 +60,11 @@ const toSearchSlug = (value: string): string => {
   return sanitizeSlug(value);
 };
 
+type TaskContext = {
+  task: TaskCard;
+  tasks: TaskCard[];
+};
+
 export class OdtTaskStore {
   readonly repoPath: string;
   readonly metadataNamespace: string;
@@ -304,9 +309,28 @@ export class OdtTaskStore {
     throw new Error(`Task not found: ${requestedTaskId}.${hintSuffix}`);
   }
 
-  private async resolveTaskContext(taskId: string): Promise<{ task: TaskCard; tasks: TaskCard[] }> {
+  private async resolveTaskContext(taskId: string): Promise<TaskContext> {
     const tasks = await this.listTasks();
     const task = this.resolveTaskFromTasks(tasks, taskId);
+    return { task, tasks };
+  }
+
+  private async refreshTaskContext(taskId: string, context?: TaskContext): Promise<TaskContext> {
+    const issue = await this.showRawIssue(taskId);
+    const task = issueToTaskCard(issue, this.metadataNamespace);
+
+    if (!context) {
+      return {
+        task,
+        tasks: [task],
+      };
+    }
+
+    const hasTask = context.tasks.some((entry) => entry.id === task.id);
+    const tasks = hasTask
+      ? context.tasks.map((entry) => (entry.id === task.id ? task : entry))
+      : [...context.tasks, task];
+
     return { task, tasks };
   }
 
@@ -323,8 +347,12 @@ export class OdtTaskStore {
     return issueToTaskCard(refreshed, this.metadataNamespace);
   }
 
-  private async transitionTask(taskId: string, next: TaskStatus): Promise<TaskCard> {
-    const { task, tasks } = await this.resolveTaskContext(taskId);
+  private async transitionTask(
+    taskId: string,
+    next: TaskStatus,
+    context?: TaskContext,
+  ): Promise<TaskCard> {
+    const { task, tasks } = context ?? (await this.resolveTaskContext(taskId));
     this.assertTransitionAllowed(task, tasks, next);
     return this.applyTransition(task, next);
   }
@@ -441,7 +469,8 @@ export class OdtTaskStore {
     const input = SetSpecInputSchema.parse(rawInput);
     const markdown = input.markdown.trim();
 
-    const { task } = await this.resolveTaskContext(input.taskId);
+    const context = await this.resolveTaskContext(input.taskId);
+    const { task } = context;
     assertNoValidationError(getSetSpecError(task.status));
 
     const issue = await this.showRawIssue(task.id);
@@ -471,7 +500,8 @@ export class OdtTaskStore {
 
     let nextTask: TaskCard = task;
     if (task.status === "open") {
-      nextTask = await this.transitionTask(task.id, "spec_ready");
+      const refreshedContext = await this.refreshTaskContext(task.id, context);
+      nextTask = await this.transitionTask(task.id, "spec_ready", refreshedContext);
     }
 
     return {
@@ -489,7 +519,8 @@ export class OdtTaskStore {
     const input = SetPlanInputSchema.parse(rawInput);
     const markdown = input.markdown.trim();
 
-    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    const context = await this.resolveTaskContext(input.taskId);
+    const { task, tasks } = context;
     assertNoValidationError(getSetPlanError(task));
 
     const normalizedSubtasks = normalizePlanSubtasks(input.subtasks ?? []);
@@ -522,10 +553,12 @@ export class OdtTaskStore {
     await this.writeNamespace(task.id, root, nextNamespace);
 
     const createdSubtaskIds: string[] = [];
+    let transitionContext: TaskContext = context;
     if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
-      const existingTaskSnapshot = await this.listTasks();
+      const existingTaskSnapshot = transitionContext;
+      transitionContext = existingTaskSnapshot;
       const existingTitleKeys = new Set(
-        existingTaskSnapshot
+        existingTaskSnapshot.tasks
           .filter((entry) => entry.parentId === task.id)
           .map((entry) => normalizeTitleKey(entry.title)),
       );
@@ -542,7 +575,12 @@ export class OdtTaskStore {
       }
     }
 
-    const nextTask = await this.transitionTask(task.id, "ready_for_dev");
+    const refreshedTransitionContext = await this.refreshTaskContext(task.id, transitionContext);
+    const nextTask = await this.transitionTask(
+      task.id,
+      "ready_for_dev",
+      refreshedTransitionContext,
+    );
 
     return {
       task: nextTask,
@@ -576,10 +614,12 @@ export class OdtTaskStore {
     await this.ensureInitialized();
     const input = BuildCompletedInputSchema.parse(rawInput);
 
-    const { task } = await this.resolveTaskContext(input.taskId);
+    const context = await this.resolveTaskContext(input.taskId);
+    const refreshedContext = await this.refreshTaskContext(context.task.id, context);
+    const { task } = refreshedContext;
 
     const nextStatus: TaskStatus = task.aiReviewEnabled ? "ai_review" : "human_review";
-    const updated = await this.transitionTask(task.id, nextStatus);
+    const updated = await this.transitionTask(task.id, nextStatus, refreshedContext);
     return {
       task: updated,
       ...(input.summary ? { summary: input.summary } : {}),
@@ -621,20 +661,24 @@ export class OdtTaskStore {
   async qaApproved(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaApprovedInputSchema.parse(rawInput);
-    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    const context = await this.resolveTaskContext(input.taskId);
+    const { task, tasks } = context;
     this.assertTransitionAllowed(task, tasks, "human_review");
     await this.appendQaReport(task.id, input.reportMarkdown.trim(), "approved");
-    const updated = await this.transitionTask(task.id, "human_review");
+    const refreshedContext = await this.refreshTaskContext(task.id, context);
+    const updated = await this.transitionTask(task.id, "human_review", refreshedContext);
     return { task: updated };
   }
 
   async qaRejected(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = QaRejectedInputSchema.parse(rawInput);
-    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    const context = await this.resolveTaskContext(input.taskId);
+    const { task, tasks } = context;
     this.assertTransitionAllowed(task, tasks, "in_progress");
     await this.appendQaReport(task.id, input.reportMarkdown.trim(), "rejected");
-    const updated = await this.transitionTask(task.id, "in_progress");
+    const refreshedContext = await this.refreshTaskContext(task.id, context);
+    const updated = await this.transitionTask(task.id, "in_progress", refreshedContext);
     return { task: updated };
   }
 }
