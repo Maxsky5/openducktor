@@ -115,7 +115,14 @@ impl AppService {
                 .agent_runtimes
                 .lock()
                 .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            Self::prune_stale_runtimes(&mut runtimes)?;
+            if let Err(error) = Self::prune_stale_runtimes(&mut runtimes) {
+                terminate_child_process(&mut child);
+                return Err(error).with_context(|| {
+                    format!(
+                        "Failed pruning stale runtimes while finalizing workspace runtime for {repo_path}"
+                    )
+                });
+            }
 
             if let Some(existing) = runtimes.values().find(|runtime| {
                 Self::repo_key(runtime.summary.repo_path.as_str()) == repo_key
