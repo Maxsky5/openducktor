@@ -1,7 +1,9 @@
-import type { ReactElement, ReactNode } from "react";
+import { memo, type ReactElement, type ReactNode } from "react";
 import type { AgentChatModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { AgentChatThread } from "./agent-chat-thread";
+
+const MemoizedAgentChatThread = memo(AgentChatThread);
 
 export function AgentChat({
   model,
@@ -14,9 +16,10 @@ export function AgentChat({
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {header}
       <div className="min-h-0 flex-1 bg-slate-50/50">
-        <AgentChatThread model={model.thread}>
+        <div className="flex h-full min-h-0 flex-col">
+          <MemoizedAgentChatThread model={model.thread} />
           <AgentChatComposer model={model.composer} />
-        </AgentChatThread>
+        </div>
       </div>
     </div>
   );
