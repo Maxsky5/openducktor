@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument,
-    TaskCard, TaskStore, UpdateTaskPatch,
+    TaskCard, TaskMetadata, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{compute_repo_slug, resolve_central_beads_dir, AppConfigStore};
 use serde_json::Value;
@@ -644,5 +644,67 @@ impl TaskStore for BeadsTaskStore {
 
         self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         Ok(())
+    }
+
+    fn get_task_metadata(&self, repo_path: &Path, task_id: &str) -> Result<TaskMetadata> {
+        let issue = self.show_raw_issue(repo_path, task_id)?;
+        let metadata_root = parse_metadata_root(issue.metadata);
+        let namespace_key = self.current_metadata_namespace();
+        let namespace = metadata_namespace(&metadata_root, &namespace_key);
+
+        // Extract spec
+        let spec_entries = namespace
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("spec"))
+            .and_then(parse_markdown_entries);
+        let spec_latest = spec_entries.as_ref().and_then(|list| list.last());
+        let spec = SpecDocument {
+            markdown: spec_latest
+                .map(|entry| entry.markdown.clone())
+                .unwrap_or_default(),
+            updated_at: spec_latest.map(|entry| entry.updated_at.clone()),
+        };
+
+        // Extract plan
+        let plan_entries = namespace
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("implementationPlan"))
+            .and_then(parse_markdown_entries);
+        let plan_latest = plan_entries.as_ref().and_then(|list| list.last());
+        let plan = SpecDocument {
+            markdown: plan_latest
+                .map(|entry| entry.markdown.clone())
+                .unwrap_or_default(),
+            updated_at: plan_latest.map(|entry| entry.updated_at.clone()),
+        };
+
+        // Extract QA report
+        let qa_entries = namespace
+            .and_then(|ns| ns.get("documents"))
+            .and_then(|docs| docs.get("qaReports"))
+            .and_then(parse_qa_entries);
+        let qa_report = qa_entries
+            .as_ref()
+            .and_then(|entries| entries.last())
+            .map(|entry| QaReportDocument {
+                markdown: entry.markdown.clone(),
+                verdict: entry.verdict.clone(),
+                updated_at: entry.updated_at.clone(),
+                revision: entry.revision,
+            });
+
+        // Extract agent sessions
+        let mut agent_sessions = namespace
+            .and_then(|ns| ns.get("agentSessions"))
+            .and_then(parse_agent_sessions)
+            .unwrap_or_default();
+        agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+
+        Ok(TaskMetadata {
+            spec,
+            plan,
+            qa_report,
+            agent_sessions,
+        })
     }
 }
