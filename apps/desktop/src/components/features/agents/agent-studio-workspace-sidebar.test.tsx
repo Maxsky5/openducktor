@@ -33,7 +33,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
     expect(html).toContain("Specification");
     expect(html).toContain("Current specification document for this task.");
     expect(html).toContain("Spec");
-    expect(html).toMatch(/Feb 21 at/u);
+    expect(html).toMatch(/Feb 21(?:, \d{1,2}:\d{2}\s?[AP]M| at)/u);
   });
 
   test("renders active document placeholder when document is empty", () => {
