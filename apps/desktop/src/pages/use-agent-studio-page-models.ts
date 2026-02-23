@@ -146,7 +146,7 @@ export function useAgentStudioPageModels({
   const activeSessionStatus = activeSession?.status ?? "stopped";
   const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
     activeSession?.pendingQuestions.length ?? 0
-  }`;
+  }:${activeSession?.pendingPermissions.length ?? 0}`;
 
   const {
     messagesContainerRef,
@@ -217,6 +217,38 @@ export function useAgentStudioPageModels({
         selectedTask.availableActions.includes("human_request_changes") ||
         selectedTask.availableActions.includes("human_approve")),
   );
+  const activeDocumentRole = activeSession?.role ?? role;
+
+  const activeDocument = useMemo(() => {
+    if (activeDocumentRole === "spec") {
+      return {
+        title: "Specification",
+        description: "Current spec document for this task.",
+        emptyState: "No spec document yet.",
+        document: specDoc,
+      };
+    }
+
+    if (activeDocumentRole === "planner") {
+      return {
+        title: "Implementation Plan",
+        description: "Current implementation plan for this task.",
+        emptyState: "No implementation plan yet.",
+        document: planDoc,
+      };
+    }
+
+    if (activeDocumentRole === "qa") {
+      return {
+        title: "QA Report",
+        description: "Latest QA report for this task.",
+        emptyState: "No QA report yet.",
+        document: qaDoc,
+      };
+    }
+
+    return null;
+  }, [activeDocumentRole, qaDoc, planDoc, specDoc]);
 
   const sessionCreateOptions = useMemo(
     () =>
@@ -281,8 +313,8 @@ export function useAgentStudioPageModels({
   );
 
   const handlePermissionReply = useCallback(
-    (requestId: string, reply: "once" | "always" | "reject"): void => {
-      void onReplyPermission(requestId, reply);
+    (requestId: string, reply: "once" | "always" | "reject"): Promise<void> => {
+      return onReplyPermission(requestId, reply);
     },
     [onReplyPermission],
   );
@@ -290,25 +322,9 @@ export function useAgentStudioPageModels({
   const agentStudioWorkspaceSidebarModel = useMemo(
     () =>
       buildAgentStudioWorkspaceSidebarModel({
-        agentStudioReady,
-        pendingPermissions: activeSession?.pendingPermissions ?? [],
-        isSubmittingPermissionByRequestId,
-        permissionReplyErrorByRequestId,
-        onReplyPermission: handlePermissionReply,
-        specDoc,
-        planDoc,
-        qaDoc,
+        activeDocument,
       }),
-    [
-      activeSession?.pendingPermissions,
-      agentStudioReady,
-      handlePermissionReply,
-      isSubmittingPermissionByRequestId,
-      permissionReplyErrorByRequestId,
-      planDoc,
-      qaDoc,
-      specDoc,
-    ],
+    [activeDocument],
   );
 
   const chatContextUsage = useMemo(
@@ -377,6 +393,9 @@ export function useAgentStudioPageModels({
         activeSessionAgentColors,
         isSubmittingQuestionByRequestId,
         onSubmitQuestionAnswers,
+        isSubmittingPermissionByRequestId,
+        permissionReplyErrorByRequestId,
+        onReplyPermission: handlePermissionReply,
         todoPanelCollapsed: activeTodoPanelCollapsed,
         onToggleTodoPanel: handleToggleTodoPanel,
         todoPanelBottomOffset,
@@ -430,7 +449,10 @@ export function useAgentStudioPageModels({
       isSessionWorking,
       isStarting,
       isSubmittingQuestionByRequestId,
+      isSubmittingPermissionByRequestId,
+      handlePermissionReply,
       kickoffLabel,
+      permissionReplyErrorByRequestId,
       messagesContainerRef,
       modelGroups,
       modelOptions,

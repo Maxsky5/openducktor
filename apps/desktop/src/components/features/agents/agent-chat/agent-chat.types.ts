@@ -27,6 +27,9 @@ export type AgentChatThreadModel = {
   sessionAgentColors: Record<string, string>;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
+  isSubmittingPermissionByRequestId: Record<string, boolean>;
+  permissionReplyErrorByRequestId: Record<string, string>;
+  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;

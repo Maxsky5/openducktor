@@ -7,6 +7,7 @@ import {
   AgentStudioTaskTabs,
   AgentStudioWorkspaceSidebar,
 } from "@/components/features/agents";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import { firstScenario, isRole, isScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
@@ -320,20 +321,28 @@ export function AgentsPage(): ReactElement {
     <Tabs
       value={activeTabValue}
       onValueChange={handleSelectTab}
-      className="h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] gap-0 overflow-hidden"
+      className="h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] shadow-lg rounded-xl gap-0 overflow-hidden"
     >
       <AgentStudioTaskTabs model={agentStudioTaskTabsModel} />
 
-      <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 rounded-b-xl bg-white p-3">
+      <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 bg-white p-0">
         {taskId ? (
-          <div className="grid h-full min-h-0 gap-4 overflow-hidden xl:grid-cols-[minmax(0,2fr)_minmax(420px,1fr)]">
-            <AgentChat
-              header={<AgentStudioHeader model={agentStudioHeaderModel} />}
-              model={agentChatModel}
-            />
-
-            <AgentStudioWorkspaceSidebar model={agentStudioWorkspaceSidebarModel} />
-          </div>
+          <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
+            <ResizablePanel defaultSize={63} minSize={35}>
+              <AgentChat
+                header={<AgentStudioHeader model={agentStudioHeaderModel} />}
+                model={agentChatModel}
+              />
+            </ResizablePanel>
+            {agentStudioWorkspaceSidebarModel.activeDocument ? (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={37} minSize={30}>
+                  <AgentStudioWorkspaceSidebar model={agentStudioWorkspaceSidebarModel} />
+                </ResizablePanel>
+              </>
+            ) : null}
+          </ResizablePanelGroup>
         ) : (
           <div className="flex h-full min-h-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm text-slate-500">
             Open a task tab to start a workspace.

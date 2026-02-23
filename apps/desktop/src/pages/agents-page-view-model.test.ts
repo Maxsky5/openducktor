@@ -152,30 +152,33 @@ describe("agents-page-view-model", () => {
     expect(onSessionSelectionChange).toHaveBeenCalledWith("session-next");
   });
 
-  test("buildAgentStudioWorkspaceSidebarModel forwards permission and docs state", () => {
+  test("buildAgentStudioWorkspaceSidebarModel forwards active document state", () => {
     const onReplyPermission = mock(() => {});
 
     const model = buildAgentStudioWorkspaceSidebarModel({
-      agentStudioReady: true,
-      pendingPermissions: [{ requestId: "req-1", permission: "write", patterns: ["src/**"] }],
-      isSubmittingPermissionByRequestId: { "req-1": true },
-      permissionReplyErrorByRequestId: { "req-1": "denied" },
-      onReplyPermission,
-      specDoc: createDocumentState("spec"),
-      planDoc: createDocumentState("plan"),
-      qaDoc: createDocumentState("qa"),
+      activeDocument: {
+        title: "Specification",
+        description: "Current specification document for this task.",
+        emptyState: "No spec document yet.",
+        document: createDocumentState("spec"),
+      },
     });
 
-    expect(model.pendingPermissions).toHaveLength(1);
-    expect(model.specDoc.markdown).toBe("spec");
-    model.onReplyPermission("req-1", "once");
-    expect(onReplyPermission).toHaveBeenCalledWith("req-1", "once");
+    expect(model.activeDocument).toEqual({
+      title: "Specification",
+      description: "Current specification document for this task.",
+      emptyState: "No spec document yet.",
+      document: createDocumentState("spec"),
+    });
+
+    expect(onReplyPermission).not.toHaveBeenCalled();
   });
 
   test("buildAgentChatModel composes thread and composer behavior", async () => {
     const onRefreshChecks = mock(() => {});
     const onKickoff = mock(() => {});
     const onSubmitQuestionAnswers = mock(async () => {});
+    const onReplyPermission = mock(async () => {});
     const onToggleTodoPanel = mock(() => {});
     const onSend = mock(() => {});
     const onStopSession = mock(() => {});
@@ -195,6 +198,9 @@ describe("agents-page-view-model", () => {
       isSending: false,
       activeSessionAgentColors: {},
       isSubmittingQuestionByRequestId: {},
+      isSubmittingPermissionByRequestId: {},
+      permissionReplyErrorByRequestId: {},
+      onReplyPermission,
       onSubmitQuestionAnswers,
       todoPanelCollapsed: false,
       onToggleTodoPanel,
@@ -228,6 +234,7 @@ describe("agents-page-view-model", () => {
     model.thread.onRefreshChecks();
     model.thread.onKickoff();
     await model.thread.onSubmitQuestionAnswers("req-1", [["yes"]]);
+    await model.thread.onReplyPermission("req-1", "reject");
     model.thread.onToggleTodoPanel();
     model.composer.onSend();
     model.composer.onStopSession();
@@ -235,6 +242,7 @@ describe("agents-page-view-model", () => {
     expect(onRefreshChecks).toHaveBeenCalledTimes(1);
     expect(onKickoff).toHaveBeenCalledTimes(1);
     expect(onSubmitQuestionAnswers).toHaveBeenCalledWith("req-1", [["yes"]]);
+    expect(onReplyPermission).toHaveBeenCalledWith("req-1", "reject");
     expect(onToggleTodoPanel).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);

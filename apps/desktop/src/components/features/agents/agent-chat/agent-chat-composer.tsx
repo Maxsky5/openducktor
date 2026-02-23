@@ -44,7 +44,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   return (
     <form
       ref={composerFormRef}
-      className="border-t border-slate-200 bg-white p-3"
+      className=" bg-white px-3 pb-3"
       onSubmit={(event) => {
         event.preventDefault();
         onSend();

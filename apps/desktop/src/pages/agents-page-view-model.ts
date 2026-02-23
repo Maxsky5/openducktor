@@ -6,11 +6,11 @@ import type {
   AgentRoleOption,
   AgentStudioHeaderModel,
   AgentStudioTaskTabsModel,
+  AgentStudioWorkspaceDocument,
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { AgentPermissionRequest, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 
@@ -98,23 +98,9 @@ export const buildAgentStudioHeaderModel = (args: {
 });
 
 export const buildAgentStudioWorkspaceSidebarModel = (args: {
-  agentStudioReady: boolean;
-  pendingPermissions: AgentPermissionRequest[];
-  isSubmittingPermissionByRequestId: Record<string, boolean>;
-  permissionReplyErrorByRequestId: Record<string, string>;
-  onReplyPermission: AgentStudioWorkspaceSidebarModel["onReplyPermission"];
-  specDoc: TaskDocumentState;
-  planDoc: TaskDocumentState;
-  qaDoc: TaskDocumentState;
+  activeDocument: AgentStudioWorkspaceDocument | null;
 }): AgentStudioWorkspaceSidebarModel => ({
-  agentStudioReady: args.agentStudioReady,
-  pendingPermissions: args.pendingPermissions,
-  isSubmittingPermissionByRequestId: args.isSubmittingPermissionByRequestId,
-  permissionReplyErrorByRequestId: args.permissionReplyErrorByRequestId,
-  onReplyPermission: args.onReplyPermission,
-  specDoc: args.specDoc,
-  planDoc: args.planDoc,
-  qaDoc: args.qaDoc,
+  activeDocument: args.activeDocument,
 });
 
 export const buildAgentChatModel = (args: {
@@ -133,6 +119,9 @@ export const buildAgentChatModel = (args: {
   activeSessionAgentColors: Record<string, string>;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
+  isSubmittingPermissionByRequestId: Record<string, boolean>;
+  permissionReplyErrorByRequestId: Record<string, string>;
+  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;
@@ -174,6 +163,9 @@ export const buildAgentChatModel = (args: {
     sessionAgentColors: args.activeSessionAgentColors,
     isSubmittingQuestionByRequestId: args.isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers: args.onSubmitQuestionAnswers,
+    isSubmittingPermissionByRequestId: args.isSubmittingPermissionByRequestId,
+    permissionReplyErrorByRequestId: args.permissionReplyErrorByRequestId,
+    onReplyPermission: args.onReplyPermission,
     todoPanelCollapsed: args.todoPanelCollapsed,
     onToggleTodoPanel: args.onToggleTodoPanel,
     todoPanelBottomOffset: args.todoPanelBottomOffset,

@@ -3,6 +3,7 @@ import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildMessage,
+  buildPermissionRequest,
   buildQuestionRequest,
   buildSession,
   buildTodoItem,
@@ -24,7 +25,10 @@ const baseModel = {
   isSending: false,
   sessionAgentColors: {},
   isSubmittingQuestionByRequestId: {},
+  isSubmittingPermissionByRequestId: {},
+  permissionReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
+  onReplyPermission: async () => {},
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
   todoPanelBottomOffset: 120,
@@ -127,6 +131,32 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Spec (streaming)");
     expect(html).toContain("Streaming message");
     expect(html).toContain("Input needed");
+  });
+
+  test("renders permission cards for pending permission requests", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: buildSession({
+            pendingPermissions: [
+              buildPermissionRequest({
+                requestId: "perm-1",
+                permission: "bash",
+                patterns: ["**/*.sh", "/tmp/*"],
+              }),
+            ],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Permission request");
+    expect(html).toContain("bash");
+    expect(html).toContain("**/*.sh, /tmp/*");
+    expect(html).toContain("Allow Once");
+    expect(html).toContain("Always Allow");
+    expect(html).toContain("Reject");
   });
 
   test("renders floating todo panel for active todo items", () => {
