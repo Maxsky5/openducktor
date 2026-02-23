@@ -137,6 +137,88 @@ fn normalize_global_config(config: &mut GlobalConfig) {
     }
 }
 
+/// Canonicalizes a workspace path key for use as a HashMap key.
+/// Canonicalizes a workspace path key for use as a HashMap key.
+/// This resolves symlinks and normalizes to absolute path to prevent
+/// duplicate entries for the same logical repository.
+fn canonicalize_workspace_key(repo_path: &str) -> Result<String> {
+    let path = Path::new(repo_path);
+    // Note: We don't check path.exists() separately here to avoid TOCTOU race condition.
+    // fs::canonicalize() will return an error for non-existent paths, which we handle.
+    // For non-existent paths (e.g., stale config entries), we return the original path.
+    if !path.exists() {
+        return Ok(repo_path.to_string());
+    }
+    // Canonicalize resolves symlinks and normalizes the path
+    let canonical = fs::canonicalize(path)
+        .with_context(|| format!("Failed to canonicalize path: {}", repo_path))?;
+    Ok(canonical.to_string_lossy().to_string())
+}
+
+/// Migrates the repos HashMap keys to canonical form.
+/// Migrates the repos HashMap keys to canonical form.
+/// Returns a new HashMap with canonical keys, merging entries that resolve to the same path.
+/// When collisions occur (multiple path variants resolve to the same canonical path),
+/// prefers the entry referenced by active_repo to preserve the user's current configuration.
+fn migrate_repos_to_canonical_keys(
+    repos: &mut HashMap<String, RepoConfig>,
+    active_repo: Option<&String>,
+) -> HashMap<String, RepoConfig> {
+    let mut canonical_repos: HashMap<String, RepoConfig> = HashMap::new();
+    // Track which canonical keys came from active_repo for collision resolution
+    let mut from_active_repo: HashMap<String, bool> = HashMap::new();
+
+    // Collect all entries first to avoid borrowing issues
+    let entries: Vec<(String, RepoConfig)> = repos
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    // Sort entries lexicographically for deterministic processing
+    let mut entries: Vec<(String, RepoConfig)> = entries;
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (original_key, repo_config) in entries {
+        match canonicalize_workspace_key(&original_key) {
+            Ok(canonical_key) => {
+                // Deterministic collision resolution:
+                // 1. If this canonical key doesn't exist, insert it
+                // 2. If it exists, prefer the entry that matches active_repo
+                // 3. Otherwise prefer the entry where original_key == canonical_key (the "true" entry)
+                let is_from_active = active_repo.as_ref().map_or(false, |active| **active == original_key);
+                
+                let should_insert = match canonical_repos.get(&canonical_key) {
+                    None => true,
+                    Some(_) => {
+                        // If this entry is from active_repo, it wins
+                        if is_from_active {
+                            true
+                        } else if from_active_repo.get(&canonical_key) == Some(&true) {
+                            // Existing entry is from active_repo, keep it
+                            false
+                        } else {
+                            // Neither is from active_repo, prefer canonical form
+                            original_key == canonical_key
+                        }
+                    },
+                };
+                
+                if should_insert {
+                    canonical_repos.insert(canonical_key.clone(), repo_config);
+                    from_active_repo.insert(canonical_key, is_from_active);
+                }
+            }
+            Err(_) => {
+                // If canonicalization fails, keep the original key
+                canonical_repos.insert(original_key.clone(), repo_config);
+                from_active_repo.insert(original_key.clone(), active_repo.as_ref().map_or(false, |active| **active == original_key));
+            }
+        }
+    }
+
+    canonical_repos
+}
+
 fn has_configured_worktree(repo: &RepoConfig) -> bool {
     repo.worktree_base_path.is_some()
 }
@@ -256,6 +338,43 @@ impl AppConfigStore {
         let mut parsed: GlobalConfig = serde_json::from_str(&data)
             .with_context(|| format!("Failed parsing config file {}", self.path.display()))?;
         normalize_global_config(&mut parsed);
+
+        // Migrate repo keys to canonical form
+        // Pass active_repo to prefer the user's current configuration on collision
+        let canonical_repos = migrate_repos_to_canonical_keys(&mut parsed.repos, parsed.active_repo.as_ref());
+        parsed.repos = canonical_repos;
+
+        // Also migrate active_repo to canonical key if it exists
+        if let Some(active) = &parsed.active_repo {
+            if let Ok(canonical_active) = canonicalize_workspace_key(active) {
+                // Only update if the canonical key exists in repos
+                if parsed.repos.contains_key(&canonical_active) {
+                    parsed.active_repo = Some(canonical_active);
+                }
+            }
+        }
+
+        // Migrate recent_repos to canonical keys
+        let mut canonical_recent: Vec<String> = Vec::new();
+        for recent in &parsed.recent_repos {
+            match canonicalize_workspace_key(recent) {
+                Ok(canonical_recent_key) => {
+                    if parsed.repos.contains_key(&canonical_recent_key)
+                        && !canonical_recent.contains(&canonical_recent_key)
+                    {
+                        canonical_recent.push(canonical_recent_key);
+                    }
+                }
+                Err(_) => {
+                    // Keep original if canonicalization fails
+                    if !canonical_recent.contains(recent) {
+                        canonical_recent.push(recent.clone());
+                    }
+                }
+            }
+        }
+        parsed.recent_repos = canonical_recent;
+
         Ok(parsed)
     }
 
@@ -309,45 +428,51 @@ impl AppConfigStore {
             return Err(anyhow!("Workspace is not a git repository: {repo_path}"));
         }
 
+        // Canonicalize the path for use as a key
+        let canonical_path = canonicalize_workspace_key(repo_path)?;
+
         let mut config = self.load()?;
         config
             .repos
-            .entry(repo_path.to_string())
+            .entry(canonical_path.clone())
             .or_insert_with(RepoConfig::default);
-        config.active_repo = Some(repo_path.to_string());
-        touch_recent(&mut config.recent_repos, repo_path);
+        config.active_repo = Some(canonical_path.clone());
+        touch_recent(&mut config.recent_repos, &canonical_path);
         self.save(&config)?;
 
         Ok(WorkspaceRecord {
-            path: repo_path.to_string(),
+            path: canonical_path.clone(),
             is_active: true,
             has_config: config
                 .repos
-                .get(repo_path)
+                .get(&canonical_path)
                 .map(has_configured_worktree)
                 .unwrap_or(false),
             configured_worktree_base_path: config
                 .repos
-                .get(repo_path)
+                .get(&canonical_path)
                 .and_then(|repo| repo.worktree_base_path.clone()),
         })
     }
 
     pub fn select_workspace(&self, repo_path: &str) -> Result<WorkspaceRecord> {
+        // Canonicalize the path for consistent key lookup
+        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+        
         let mut config = self.load()?;
-        if !config.repos.contains_key(repo_path) {
+        if !config.repos.contains_key(&canonical_path) {
             return Err(anyhow!("Workspace not found in config: {repo_path}"));
         }
-        config.active_repo = Some(repo_path.to_string());
-        touch_recent(&mut config.recent_repos, repo_path);
+        config.active_repo = Some(canonical_path.clone());
+        touch_recent(&mut config.recent_repos, &canonical_path);
         self.save(&config)?;
 
         let repo = config
             .repos
-            .get(repo_path)
+            .get(&canonical_path)
             .ok_or_else(|| anyhow!("Workspace disappeared from config"))?;
         Ok(WorkspaceRecord {
-            path: repo_path.to_string(),
+            path: canonical_path,
             is_active: true,
             has_config: has_configured_worktree(repo),
             configured_worktree_base_path: repo.worktree_base_path.clone(),
@@ -360,44 +485,57 @@ impl AppConfigStore {
         mut repo_config: RepoConfig,
     ) -> Result<WorkspaceRecord> {
         normalize_repo_config(&mut repo_config);
+
+        // Canonicalize the path for consistent key lookup
+        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+        
         let mut config = self.load()?;
         config
             .repos
-            .insert(repo_path.to_string(), repo_config.clone());
+            .insert(canonical_path.clone(), repo_config.clone());
         if config.active_repo.is_none() {
-            config.active_repo = Some(repo_path.to_string());
+            config.active_repo = Some(canonical_path.clone());
         }
-        touch_recent(&mut config.recent_repos, repo_path);
+        touch_recent(&mut config.recent_repos, &canonical_path);
         self.save(&config)?;
 
         Ok(WorkspaceRecord {
-            path: repo_path.to_string(),
-            is_active: config.active_repo.as_deref() == Some(repo_path),
+            path: canonical_path.clone(),
+            is_active: config.active_repo.as_deref() == Some(&canonical_path),
             has_config: has_configured_worktree(&repo_config),
             configured_worktree_base_path: repo_config.worktree_base_path,
         })
     }
 
     pub fn repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
+        // Canonicalize the path for consistent key lookup
+        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+        
         let config = self.load()?;
         config
             .repos
-            .get(repo_path)
+            .get(&canonical_path)
             .cloned()
             .ok_or_else(|| anyhow!("Repository is not configured in {}", self.path.display()))
     }
 
     pub fn repo_config_optional(&self, repo_path: &str) -> Result<Option<RepoConfig>> {
+        // Canonicalize the path for consistent key lookup
+        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+        
         let config = self.load()?;
-        Ok(config.repos.get(repo_path).cloned())
+        Ok(config.repos.get(&canonical_path).cloned())
     }
 
     pub fn set_repo_trust_hooks(&self, repo_path: &str, trusted: bool) -> Result<WorkspaceRecord> {
+        // Canonicalize the path for consistent key lookup
+        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+        
         let mut config = self.load()?;
         let (has_config, configured_worktree_base_path) = {
             let repo = config
                 .repos
-                .get_mut(repo_path)
+                .get_mut(&canonical_path)
                 .ok_or_else(|| anyhow!("Repository is not configured"))?;
             repo.trusted_hooks = trusted;
             (
@@ -408,8 +546,8 @@ impl AppConfigStore {
         self.save(&config)?;
 
         Ok(WorkspaceRecord {
-            path: repo_path.to_string(),
-            is_active: config.active_repo.as_deref() == Some(repo_path),
+            path: canonical_path.clone(),
+            is_active: config.active_repo.as_deref() == Some(&canonical_path),
             has_config,
             configured_worktree_base_path,
         })
@@ -496,14 +634,18 @@ mod tests {
 
         let repo_a_str = repo_a.to_string_lossy().to_string();
         let repo_b_str = repo_b.to_string_lossy().to_string();
+        // Canonical form (resolved absolute path)
+        let repo_a_canonical = fs::canonicalize(&repo_a).unwrap().to_string_lossy().to_string();
 
         let added = store.add_workspace(&repo_a_str).expect("add workspace");
         assert!(added.is_active);
-        assert_eq!(added.path, repo_a_str);
+        // Path should now be in canonical form
+        assert_eq!(added.path, repo_a_canonical);
 
         store.add_workspace(&repo_b_str).expect("add second");
         let selected = store.select_workspace(&repo_a_str).expect("select");
         assert!(selected.is_active);
+        assert_eq!(selected.path, repo_a_canonical);
 
         let updated = store
             .update_repo_config(
@@ -525,18 +667,19 @@ mod tests {
 
         let workspaces = store.list_workspaces().expect("list workspaces");
         assert_eq!(workspaces.len(), 2);
-        assert_eq!(workspaces[0].path, repo_a_str);
+        // Paths should be in canonical form
+        assert_eq!(workspaces[0].path, repo_a_canonical);
         assert!(workspaces[0].is_active);
 
         let loaded = store.load().expect("load final");
         assert_eq!(
             loaded.recent_repos.first().map(String::as_str),
-            Some(repo_a_str.as_str())
+            Some(repo_a_canonical.as_str())
         );
         assert_eq!(
             loaded
                 .repos
-                .get(&repo_a_str)
+                .get(&repo_a_canonical)
                 .and_then(|entry| entry.worktree_base_path.as_deref()),
             Some("/tmp/worktrees")
         );
