@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -8,45 +8,10 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 
-type UseAgentStudioPageModelsHook = typeof import("./use-agent-studio-page-models")["useAgentStudioPageModels"];
+type UseAgentStudioPageModelsHook =
+  typeof import("./use-agent-studio-page-models")["useAgentStudioPageModels"];
 
 enableReactActEnvironment();
-
-type UseAgentChatLayoutInput = {
-  input: string;
-  scrollTrigger: string;
-  activeSessionId: string | null;
-};
-
-const capturedScrollTriggers: string[] = [];
-
-mock.module("@/components/features/agents/agent-chat/use-agent-chat-layout", () => ({
-  CHAT_AUTOSCROLL_THRESHOLD_PX: 48,
-  COMPOSER_TEXTAREA_MAX_HEIGHT_PX: 220,
-  COMPOSER_TEXTAREA_MIN_HEIGHT_PX: 40,
-  computeComposerTextareaLayout: (): {
-    heightPx: number;
-    overflowY: "auto" | "hidden";
-  } => ({
-    heightPx: 40,
-    overflowY: "hidden",
-  }),
-  computeTodoPanelBottomOffset: () => 0,
-  isNearBottom: () => true,
-  useAgentChatLayout: (input: UseAgentChatLayoutInput) => {
-    capturedScrollTriggers.push(input.scrollTrigger);
-    return {
-      messagesContainerRef: { current: null },
-      composerFormRef: { current: null },
-      composerTextareaRef: { current: null },
-      isPinnedToBottom: true,
-      setIsPinnedToBottom: () => {},
-      todoPanelBottomOffset: 0,
-      resizeComposerTextarea: () => {},
-      isSubmittingPermissionByRequestId: {},
-    };
-  },
-}));
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 
@@ -54,10 +19,6 @@ let useAgentStudioPageModels: UseAgentStudioPageModelsHook;
 
 beforeAll(async () => {
   ({ useAgentStudioPageModels } = await import("./use-agent-studio-page-models"));
-});
-
-beforeEach(() => {
-  capturedScrollTriggers.length = 0;
 });
 
 const createTask = () =>
@@ -284,7 +245,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("includes pending permission count in chat scroll trigger", async () => {
+  test("includes pending permission count in header stats", async () => {
     const permissionSession = createSession("session-1", "external-1", {
       status: "running",
       pendingPermissions: [{ requestId: "p-1", permission: "shell", patterns: ["rm -rf /tmp"] }],
@@ -297,7 +258,7 @@ describe("useAgentStudioPageModels", () => {
     );
 
     await harness.mount();
-    expect(capturedScrollTriggers[0]).toContain(":1");
+    expect(harness.getLatest().agentStudioHeaderModel.stats.permissions).toBe(1);
 
     const permissionSessionWithoutRequests = createSession("session-1", "external-1", {
       status: "running",
@@ -311,7 +272,7 @@ describe("useAgentStudioPageModels", () => {
       }),
     });
 
-    expect(capturedScrollTriggers[capturedScrollTriggers.length - 1]).toContain(":0");
+    expect(harness.getLatest().agentStudioHeaderModel.stats.permissions).toBe(0);
     await harness.unmount();
   });
 
