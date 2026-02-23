@@ -1338,3 +1338,124 @@ fn upsert_agent_session_truncates_to_latest_100_entries() -> Result<()> {
         .any(|entry| entry["sessionId"] == Value::String("session-newest".to_string())));
     Ok(())
 }
+
+#[test]
+fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
+    let repo = RepoFixture::new("get-task-metadata");
+    let issue = issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "spec": [
+                        {
+                            "markdown": "# Spec content",
+                            "updatedAt": "2026-02-20T10:00:00Z",
+                            "updatedBy": "planner-agent",
+                            "sourceTool": "set_spec",
+                            "revision": 1
+                        }
+                    ],
+                    "implementationPlan": [
+                        {
+                            "markdown": "# Plan content",
+                            "updatedAt": "2026-02-20T11:00:00Z",
+                            "updatedBy": "planner-agent",
+                            "sourceTool": "set_plan",
+                            "revision": 1
+                        }
+                    ],
+                    "qaReports": [
+                        {
+                            "markdown": "# QA Report",
+                            "verdict": "approved",
+                            "updatedAt": "2026-02-20T12:00:00Z",
+                            "updatedBy": "qa-agent",
+                            "sourceTool": "qa_approved",
+                            "revision": 1
+                        }
+                    ]
+                },
+                "agentSessions": [
+                    {
+                        "sessionId": "session-1",
+                        "externalSessionId": "ext-1",
+                        "taskId": "task-1",
+                        "role": "build",
+                        "scenario": "default",
+                        "status": "completed",
+                        "startedAt": "2026-02-20T09:00:00Z",
+                        "updatedAt": "2026-02-20T10:00:00Z",
+                        "endedAt": "2026-02-20T10:00:00Z",
+                        "runtimeId": "runtime-1",
+                        "runId": "run-1",
+                        "baseUrl": "http://localhost:8080",
+                        "workingDirectory": "/tmp/work",
+                        "selectedModel": null
+                    }
+                ]
+            }
+        })),
+    );
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([issue]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let metadata = store.get_task_metadata(repo.path(), "task-1")?;
+
+    // Verify spec
+    assert_eq!(metadata.spec.markdown, "# Spec content");
+    assert_eq!(metadata.spec.updated_at.as_deref(), Some("2026-02-20T10:00:00Z"));
+
+    // Verify plan
+    assert_eq!(metadata.plan.markdown, "# Plan content");
+    assert_eq!(metadata.plan.updated_at.as_deref(), Some("2026-02-20T11:00:00Z"));
+
+    // Verify QA report
+    let qa = metadata.qa_report.expect("qa_report should be present");
+    assert_eq!(qa.markdown, "# QA Report");
+    assert_eq!(qa.verdict, QaVerdict::Approved);
+    assert_eq!(qa.revision, 1);
+
+    // Verify agent sessions
+    assert_eq!(metadata.agent_sessions.len(), 1);
+    assert_eq!(metadata.agent_sessions[0].session_id, "session-1");
+    assert_eq!(metadata.agent_sessions[0].role, "build");
+
+    // Verify only one CLI call was made
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].program, "bd");
+    assert!(calls[0].args.contains(&"show".to_string()));
+
+    Ok(())
+}
+
+#[test]
+fn get_task_metadata_handles_empty_metadata() -> Result<()> {
+    let repo = RepoFixture::new("get-task-metadata-empty");
+    let issue = issue_value("task-1", "open", "task", None, json!([]), None);
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([issue]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let metadata = store.get_task_metadata(repo.path(), "task-1")?;
+
+    // All fields should be empty/default
+    assert!(metadata.spec.markdown.is_empty());
+    assert!(metadata.spec.updated_at.is_none());
+    assert!(metadata.plan.markdown.is_empty());
+    assert!(metadata.plan.updated_at.is_none());
+    assert!(metadata.qa_report.is_none());
+    assert!(metadata.agent_sessions.is_empty());
+
+    Ok(())
+}
