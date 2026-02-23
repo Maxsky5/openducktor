@@ -4,10 +4,11 @@ import {
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
 import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
-import type { ReactElement } from "react";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { lazy, type ReactElement, Suspense } from "react";
+import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
 import {
   getAssistantFooterData,
   roleLabel,
@@ -19,6 +20,53 @@ import {
   RegularToolMessage,
   WorkflowToolMessage,
 } from "./agent-chat-message-card-tool-presenters";
+
+const LazyMarkdownRenderer = lazy(async () => {
+  const module = await import("@/components/ui/markdown-renderer");
+  return { default: module.MarkdownRenderer };
+});
+
+const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
+  compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600",
+  document: "whitespace-pre-wrap leading-6 text-slate-700",
+};
+
+type PlainTextMarkdownFallbackProps = {
+  content: string;
+  variant: MarkdownRendererVariant;
+};
+
+const PlainTextMarkdownFallback = ({
+  content,
+  variant,
+}: PlainTextMarkdownFallbackProps): ReactElement => {
+  return <p className={PLAIN_TEXT_CLASSES[variant]}>{content}</p>;
+};
+
+type DeferredMarkdownRendererProps = {
+  markdown: string;
+  variant?: MarkdownRendererVariant;
+};
+
+const DeferredMarkdownRenderer = ({
+  markdown,
+  variant = "document",
+}: DeferredMarkdownRendererProps): ReactElement | null => {
+  const content = markdown.trim();
+  if (!content) {
+    return null;
+  }
+
+  if (!hasMarkdownSyntaxHint(content)) {
+    return <PlainTextMarkdownFallback content={content} variant={variant} />;
+  }
+
+  return (
+    <Suspense fallback={<PlainTextMarkdownFallback content={content} variant={variant} />}>
+      <LazyMarkdownRenderer markdown={content} variant={variant} />
+    </Suspense>
+  );
+};
 
 export type MessageHeaderProps = {
   message: AgentChatMessage;
@@ -85,7 +133,7 @@ const ReasoningMessage = ({
           ) : null}
         </summary>
         <div className="pl-6 pt-2">
-          <MarkdownRenderer markdown={content || "Reasoning complete"} variant="compact" />
+          <DeferredMarkdownRenderer markdown={content || "Reasoning complete"} variant="compact" />
         </div>
       </details>
     );
@@ -100,7 +148,7 @@ const ReasoningMessage = ({
           <span className="ml-auto shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
         ) : null}
       </div>
-      <MarkdownRenderer markdown={content || "Thinking..."} variant="compact" />
+      <DeferredMarkdownRenderer markdown={content || "Thinking..."} variant="compact" />
     </div>
   );
 };
@@ -119,7 +167,7 @@ const AssistantMessage = ({
   const footer = getAssistantFooterData(message, sessionSelectedModel);
   return (
     <div className="space-y-2">
-      <MarkdownRenderer markdown={message.content} variant="document" />
+      <DeferredMarkdownRenderer markdown={message.content} variant="document" />
       {footer.infoParts.length > 0 ? (
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span
@@ -194,7 +242,7 @@ export const MessageBody = ({
           Show system prompt
         </summary>
         <div className="border-t border-slate-200 px-2 py-2">
-          <MarkdownRenderer markdown={systemPromptBody} variant="compact" />
+          <DeferredMarkdownRenderer markdown={systemPromptBody} variant="compact" />
         </div>
       </details>
     );
@@ -225,5 +273,5 @@ export const MessageBody = ({
     );
   }
 
-  return <MarkdownRenderer markdown={message.content} variant="document" />;
+  return <DeferredMarkdownRenderer markdown={message.content} variant="document" />;
 };
