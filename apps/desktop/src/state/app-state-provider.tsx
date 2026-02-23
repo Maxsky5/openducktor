@@ -6,7 +6,6 @@ import {
   type PropsWithChildren,
   type ReactElement,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -60,14 +59,11 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const agentEngine = useMemo(() => new OpencodeSdkAdapter(), []);
-  const opencodeCatalogOperations = useMemo(
-    () => createHostOpencodeCatalogOperations(agentEngine),
-    [agentEngine],
-  );
-
-  useEffect(() => {
-    configureOpencodeCatalogOperations(opencodeCatalogOperations);
-  }, [opencodeCatalogOperations]);
+  const opencodeCatalogOperations = useMemo(() => {
+    const ops = createHostOpencodeCatalogOperations(agentEngine);
+    configureOpencodeCatalogOperations(ops);
+    return ops;
+  }, [agentEngine]);
 
   const {
     runtimeCheck,
