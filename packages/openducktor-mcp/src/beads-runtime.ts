@@ -114,7 +114,7 @@ export const computeRepoId = async (repoPath: string): Promise<string> => {
 
 export const resolveCentralBeadsDir = async (repoPath: string): Promise<string> => {
   const repoId = await computeRepoId(repoPath);
-  const root = `${homedir()}/.openducktor/beads/${repoId}`;
+  const root = resolve(homedir(), ".openducktor", "beads", repoId);
   await mkdir(root, { recursive: true });
-  return `${root}/.beads`;
+  return resolve(root, ".beads");
 };
