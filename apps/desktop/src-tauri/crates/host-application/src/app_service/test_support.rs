@@ -2,8 +2,8 @@ use super::{AppService, RunEmitter};
 use anyhow::{anyhow, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort, GitPushSummary,
-    QaReportDocument, QaVerdict, RunEvent, SpecDocument, TaskCard, TaskDocumentSummary, TaskStatus,
-    TaskStore, UpdateTaskPatch,
+    QaReportDocument, QaVerdict, RunEvent, SpecDocument, TaskCard, TaskDocumentSummary, TaskMetadata,
+    TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::AppConfigStore;
 use std::path::{Path, PathBuf};
@@ -188,6 +188,21 @@ impl TaskStore for FakeTaskStore {
             state.agent_sessions.push(session);
         }
         Ok(())
+    }
+
+    fn get_task_metadata(&self, _repo_path: &Path, _task_id: &str) -> Result<TaskMetadata> {
+        Ok(TaskMetadata {
+            spec: SpecDocument {
+                markdown: String::new(),
+                updated_at: None,
+            },
+            plan: SpecDocument {
+                markdown: String::new(),
+                updated_at: None,
+            },
+            qa_report: None,
+            agent_sessions: Vec::new(),
+        })
     }
 }
 

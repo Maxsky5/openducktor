@@ -169,8 +169,8 @@ mod tests {
     use host_domain::{
         AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
         GitPort, GitPushSummary, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
-        RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskStatus, TaskStore,
-        UpdateTaskPatch,
+        RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus,
+        TaskStore, UpdateTaskPatch,
     };
     use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
     use serde_json::Value;
@@ -437,6 +437,21 @@ mod tests {
                 state.agent_sessions.push(session);
             }
             Ok(())
+        }
+
+        fn get_task_metadata(&self, _repo_path: &Path, _task_id: &str) -> Result<TaskMetadata> {
+            Ok(TaskMetadata {
+                spec: SpecDocument {
+                    markdown: String::new(),
+                    updated_at: None,
+                },
+                plan: SpecDocument {
+                    markdown: String::new(),
+                    updated_at: None,
+                },
+                qa_report: None,
+                agent_sessions: Vec::new(),
+            })
         }
     }
 
