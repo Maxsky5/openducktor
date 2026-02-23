@@ -411,7 +411,7 @@ mod tests {
 
         assert!(error
             .to_string()
-            .contains("Runtime missing-runtime not found"));
+            .contains("Runtime not found: missing-runtime"));
     }
 
     #[test]

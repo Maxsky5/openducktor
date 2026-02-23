@@ -404,7 +404,7 @@ mod tests {
             .build_stop("missing-run", make_emitter(events))
             .expect_err("stopping unknown run should fail");
 
-        assert!(error.to_string().contains("Run missing-run not found"));
+        assert!(error.to_string().contains("Run not found: missing-run"));
     }
 
     #[test]
@@ -416,6 +416,6 @@ mod tests {
             .build_respond("missing-run", "approve", None, make_emitter(events))
             .expect_err("responding to unknown run should fail");
 
-        assert!(error.to_string().contains("Run missing-run not found"));
+        assert!(error.to_string().contains("Run not found: missing-run"));
     }
 }

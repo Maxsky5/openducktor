@@ -517,7 +517,7 @@ mod tests {
 
         assert!(error
             .to_string()
-            .contains("status cannot be patched directly"));
+            .contains("Status cannot be updated directly"));
     }
 
     #[test]
@@ -529,8 +529,6 @@ mod tests {
             .task_resume_deferred("/tmp/odt-repo-module", "task-1")
             .expect_err("resume should fail outside deferred status");
 
-        assert!(error
-            .to_string()
-            .contains("task must be deferred before resume"));
+        assert!(error.to_string().contains("Task is not deferred: task-1"));
     }
 }
