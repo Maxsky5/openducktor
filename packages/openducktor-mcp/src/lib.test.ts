@@ -636,6 +636,7 @@ describe("openducktor-mcp lib", () => {
 
   test("setSpec revalidates transition after metadata write and avoids stale status updates", async () => {
     let status = "open";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -648,6 +649,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -703,12 +705,14 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
 
   test("setPlan revalidates transition after side effects and avoids stale status updates", async () => {
     let status = "spec_ready";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -721,6 +725,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -776,11 +781,12 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
 
-  test("buildCompleted reuses one task snapshot and avoids duplicate list calls", async () => {
+  test("buildCompleted revalidates using refreshed task and avoids duplicate list calls", async () => {
     let status = "in_progress";
     let listCalls = 0;
     let statusUpdateCalls = 0;
@@ -845,17 +851,19 @@ describe("openducktor-mcp lib", () => {
       { runProcess },
     );
 
-    const result = (await store.buildCompleted({
-      taskId: "task-1",
-    })) as { task: { status: string } };
+    await expect(
+      store.buildCompleted({
+        taskId: "task-1",
+      }),
+    ).rejects.toThrow("Transition not allowed");
 
-    expect(result.task.status).toBe("ai_review");
     expect(listCalls).toBe(1);
-    expect(statusUpdateCalls).toBe(1);
+    expect(statusUpdateCalls).toBe(0);
   });
 
   test("qaApproved revalidates transition after report append and avoids stale status updates", async () => {
     let status = "ai_review";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -868,6 +876,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -923,12 +932,14 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
 
   test("qaRejected revalidates transition after report append and avoids stale status updates", async () => {
     let status = "human_review";
+    let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
 
@@ -941,6 +952,7 @@ describe("openducktor-mcp lib", () => {
         return { ok: true, stdout: "{}" };
       }
       if (command === "list") {
+        listCalls += 1;
         return {
           ok: true,
           stdout: JSON.stringify([
@@ -996,6 +1008,7 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
+    expect(listCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
     expect(statusUpdateCalls).toBe(0);
   });
