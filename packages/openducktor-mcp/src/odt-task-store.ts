@@ -1,3 +1,226 @@
+/**
+ * Indexed lookup maps for O(1) task resolution.
+ * Built once per tasks load, enables single-pass matching.
+ */
+interface TaskIndex {
+  /** All tasks array (for fallback hints) */
+  tasks: TaskCard[];
+  /** Exact ID lookup (case-sensitive) */
+  idExact: Map<string, TaskCard>;
+  /** Case-insensitive ID lookup */
+  idLower: Map<string, TaskCard[]>;
+  /** Slug-prefixed ID lookup (e.g., "abc" matches "abc-1", "abc-xyz-2") */
+  idSlugPrefix: Map<string, TaskCard[]>;
+  /** Exact title lookup (lowercase) */
+  titleExact: Map<string, TaskCard[]>;
+  /** Title slug lookup (sanitized) */
+  titleSlug: Map<string, TaskCard[]>;
+}
+
+/**
+ * Build normalized lookup maps from tasks array.
+ * O(n) build time, enables O(1) lookups.
+ */
+function buildTaskIndex(tasks: TaskCard[]): TaskIndex {
+  const idExact = new Map<string, TaskCard>();
+  const idLower = new Map<string, TaskCard[]>();
+  const idSlugPrefix = new Map<string, TaskCard[]>();
+  const titleExact = new Map<string, TaskCard[]>();
+  const titleSlug = new Map<string, TaskCard[]>();
+
+  for (const task of tasks) {
+    // Exact ID (case-sensitive)
+    idExact.set(task.id, task);
+
+    // Case-insensitive ID
+    const idL = normalizeTitleKey(task.id);
+    const existingLower = idLower.get(idL);
+    if (existingLower) {
+      existingLower.push(task);
+    } else {
+      idLower.set(idL, [task]);
+    }
+
+    // Slug-prefixed ID (for suffix matching like "abc" -> "abc-1", "abc-xyz-2")
+    const idSlug = toSearchSlug(task.id);
+    if (idSlug.length > 0) {
+      const existingSlug = idSlugPrefix.get(idSlug);
+      if (existingSlug) {
+        existingSlug.push(task);
+      } else {
+        idSlugPrefix.set(idSlug, [task]);
+      }
+    }
+
+    // Exact title (lowercase)
+    const titleL = normalizeTitleKey(task.title);
+    const existingTitle = titleExact.get(titleL);
+    if (existingTitle) {
+      existingTitle.push(task);
+    } else {
+      titleExact.set(titleL, [task]);
+    }
+
+    // Title slug
+    const titleS = toSearchSlug(task.title);
+    if (titleS.length > 0) {
+      const existingTitleSlug = titleSlug.get(titleS);
+      if (existingTitleSlug) {
+        existingTitleSlug.push(task);
+      } else {
+        titleSlug.set(titleS, [task]);
+      }
+    }
+  }
+
+  return {
+    tasks,
+    idExact,
+    idLower,
+    idSlugPrefix,
+    titleExact,
+    titleSlug,
+  };
+}
+
+/**
+ * Resolve task using indexed lookup.
+ * Single-pass for contains/hints, O(1) for exact matches.
+ */
+function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCard {
+  const requestedLiteral = requestedTaskId.trim();
+  if (requestedLiteral.length === 0) {
+    throw new Error("Missing taskId.");
+  }
+
+  const requestedLower = normalizeTitleKey(requestedLiteral);
+  const requestedSlug = toSearchSlug(requestedLiteral);
+
+  // 1. Exact ID (case-sensitive) - O(1)
+  const exact = index.idExact.get(requestedLiteral);
+  if (exact) {
+    return exact;
+  }
+
+  // 2. Case-insensitive ID - O(1)
+  const byCaseInsensitiveId = index.idLower.get(requestedLower);
+  if (byCaseInsensitiveId) {
+    if (byCaseInsensitiveId.length === 1 && byCaseInsensitiveId[0]) {
+      return byCaseInsensitiveId[0];
+    }
+    if (byCaseInsensitiveId.length > 1) {
+      const candidates = byCaseInsensitiveId.slice(0, 5).map((t) => `${t.id} (${t.title})`);
+      throw new Error(
+        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+      );
+    }
+  }
+
+  // 3. ID slug prefix match - O(1) for map lookup + O(k) for suffix check where k is matches
+  if (requestedSlug.length > 0) {
+    const byIdSuffix = index.idLower.get(requestedSlug);
+    const byIdSuffixEnds = index.idLower.get(`-${requestedSlug}`);
+    const combined = [...(byIdSuffix ?? []), ...(byIdSuffixEnds ?? [])];
+
+    if (combined.length === 1 && combined[0]) {
+      return combined[0];
+    }
+    if (combined.length > 1) {
+      const candidates = combined.slice(0, 5).map((t) => `${t.id} (${t.title})`);
+      throw new Error(
+        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+      );
+    }
+  }
+
+  // 4. Exact title (lowercase) - O(1)
+  const byTitleExact = index.titleExact.get(requestedLower);
+  if (byTitleExact) {
+    if (byTitleExact.length === 1 && byTitleExact[0]) {
+      return byTitleExact[0];
+    }
+    if (byTitleExact.length > 1) {
+      const candidates = byTitleExact.slice(0, 5).map((t) => `${t.id} (${t.title})`);
+      throw new Error(
+        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+      );
+    }
+  }
+
+  // 5. Title slug exact match - O(1)
+  if (requestedSlug.length > 0) {
+    const byTitleSlugExact = index.titleSlug.get(requestedSlug);
+    if (byTitleSlugExact) {
+      if (byTitleSlugExact.length === 1 && byTitleSlugExact[0]) {
+        return byTitleSlugExact[0];
+      }
+      if (byTitleSlugExact.length > 1) {
+        const candidates = byTitleSlugExact.slice(0, 5).map((t) => `${t.id} (${t.title})`);
+        throw new Error(
+          `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+        );
+      }
+    }
+  }
+
+  // 6. Contains search (title contains) - single pass O(n)
+  const byTitleContains: TaskCard[] = [];
+  if (requestedLower.length > 0 || requestedSlug.length > 0) {
+    for (const task of index.tasks) {
+      const titleLower = normalizeTitleKey(task.title);
+      const titleSlug = toSearchSlug(task.title);
+
+      const matchesLower = requestedLower.length > 0 && titleLower.includes(requestedLower);
+      const matchesSlug = requestedSlug.length > 0 && titleSlug.includes(requestedSlug);
+
+      if (matchesLower || matchesSlug) {
+        byTitleContains.push(task);
+        if (byTitleContains.length > 5) {
+          break; // Only need 6+ to detect ambiguity
+        }
+      }
+    }
+  }
+
+  if (byTitleContains.length === 1 && byTitleContains[0]) {
+    return byTitleContains[0];
+  }
+  if (byTitleContains.length > 1) {
+    const candidates = byTitleContains.slice(0, 5).map((t) => `${t.id} (${t.title})`);
+    throw new Error(
+      `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
+    );
+  }
+
+  // 7. Fallback hints (partial ID/title match) - single pass O(n)
+  const hints: TaskCard[] = [];
+  if (requestedLower.length > 0 || requestedSlug.length > 0) {
+    for (const task of index.tasks) {
+      const idLower = normalizeTitleKey(task.id);
+      const titleLower = normalizeTitleKey(task.title);
+      const titleSlug = toSearchSlug(task.title);
+
+      const matchesIdLower = requestedLower.length > 0 && idLower.includes(requestedLower);
+      const matchesTitleLower = requestedLower.length > 0 && titleLower.includes(requestedLower);
+      const matchesIdSlug = requestedSlug.length > 0 && idLower.includes(requestedSlug);
+      const matchesTitleSlug = requestedSlug.length > 0 && titleSlug.includes(requestedSlug);
+
+      if (matchesIdLower || matchesTitleLower || matchesIdSlug || matchesTitleSlug) {
+        hints.push(task);
+        if (hints.length >= 5) {
+          break;
+        }
+      }
+    }
+  }
+
+  const fallback = (hints.length > 0 ? hints : index.tasks.slice(0, 5)).map(
+    (t) => `${t.id} (${t.title})`,
+  );
+  const hintSuffix = fallback.length > 0 ? ` Candidate task ids: ${fallback.join(", ")}` : "";
+  throw new Error(`Task not found: ${requestedTaskId}.${hintSuffix}`);
+}
+
 import { basename } from "node:path";
 import {
   type BeadsDirResolver,
@@ -74,6 +297,7 @@ export class OdtTaskStore {
   private readonly now: TimeProvider;
   private initialized: boolean;
   private initializationPromise: Promise<void> | null;
+  private taskIndex: TaskIndex | null;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.repoPath = options.repoPath;
@@ -84,6 +308,7 @@ export class OdtTaskStore {
     this.now = deps.now ?? nowIso;
     this.initialized = false;
     this.initializationPromise = null;
+    this.taskIndex = null;
   }
 
   private async ensureBeadsDir(): Promise<string> {
@@ -195,123 +420,31 @@ export class OdtTaskStore {
       .map((entry) => issueToTaskCard(entry as RawIssue, this.metadataNamespace));
   }
 
+  /**
+   * Get or build cached task index for O(1) lookups.
+   * Rebuilds index when tasks change.
+   */
+  private async getOrBuildTaskIndex(): Promise<TaskIndex> {
+    if (this.taskIndex) {
+      return this.taskIndex;
+    }
+    const tasks = await this.listTasks();
+    this.taskIndex = buildTaskIndex(tasks);
+    return this.taskIndex;
+  }
+
+  /** Invalidate task index after mutations */
+  private invalidateTaskIndex(): void {
+    this.taskIndex = null;
+  }
+
   private formatTaskRef(task: TaskCard): string {
     return `${task.id} (${task.title})`;
   }
 
-  private resolveTaskFromTasks(tasks: TaskCard[], requestedTaskId: string): TaskCard {
-    const requestedLiteral = requestedTaskId.trim();
-    if (requestedLiteral.length === 0) {
-      throw new Error("Missing taskId.");
-    }
-
-    const requestedLower = normalizeTitleKey(requestedLiteral);
-    const requestedSlug = toSearchSlug(requestedLiteral);
-
-    const exact = tasks.find((entry) => entry.id === requestedLiteral);
-    if (exact) {
-      return exact;
-    }
-
-    const byCaseInsensitiveId = tasks.filter(
-      (entry) => normalizeTitleKey(entry.id) === requestedLower,
-    );
-    const caseInsensitiveMatch = byCaseInsensitiveId.at(0);
-    if (byCaseInsensitiveId.length === 1 && caseInsensitiveMatch) {
-      return caseInsensitiveMatch;
-    }
-    if (byCaseInsensitiveId.length > 1) {
-      const candidates = byCaseInsensitiveId.slice(0, 5).map((entry) => this.formatTaskRef(entry));
-      throw new Error(
-        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-      );
-    }
-
-    if (requestedSlug.length > 0) {
-      const byIdSuffix = tasks.filter((entry) => {
-        const idLower = normalizeTitleKey(entry.id);
-        return idLower === requestedSlug || idLower.endsWith(`-${requestedSlug}`);
-      });
-      const idSuffixMatch = byIdSuffix.at(0);
-      if (byIdSuffix.length === 1 && idSuffixMatch) {
-        return idSuffixMatch;
-      }
-      if (byIdSuffix.length > 1) {
-        const candidates = byIdSuffix.slice(0, 5).map((entry) => this.formatTaskRef(entry));
-        throw new Error(
-          `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-        );
-      }
-    }
-
-    const byTitleExact = tasks.filter((entry) => normalizeTitleKey(entry.title) === requestedLower);
-    const titleExactMatch = byTitleExact.at(0);
-    if (byTitleExact.length === 1 && titleExactMatch) {
-      return titleExactMatch;
-    }
-    if (byTitleExact.length > 1) {
-      const candidates = byTitleExact.slice(0, 5).map((entry) => this.formatTaskRef(entry));
-      throw new Error(
-        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-      );
-    }
-
-    if (requestedSlug.length > 0) {
-      const byTitleSlugExact = tasks.filter((entry) => toSearchSlug(entry.title) === requestedSlug);
-      const titleSlugMatch = byTitleSlugExact.at(0);
-      if (byTitleSlugExact.length === 1 && titleSlugMatch) {
-        return titleSlugMatch;
-      }
-      if (byTitleSlugExact.length > 1) {
-        const candidates = byTitleSlugExact.slice(0, 5).map((entry) => this.formatTaskRef(entry));
-        throw new Error(
-          `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-        );
-      }
-    }
-
-    const byTitleContains = tasks.filter((entry) => {
-      const titleLower = normalizeTitleKey(entry.title);
-      const titleSlug = toSearchSlug(entry.title);
-      return (
-        (requestedLower.length > 0 && titleLower.includes(requestedLower)) ||
-        (requestedSlug.length > 0 && titleSlug.includes(requestedSlug))
-      );
-    });
-    const titleContainsMatch = byTitleContains.at(0);
-    if (byTitleContains.length === 1 && titleContainsMatch) {
-      return titleContainsMatch;
-    }
-    if (byTitleContains.length > 1) {
-      const candidates = byTitleContains.slice(0, 5).map((entry) => this.formatTaskRef(entry));
-      throw new Error(
-        `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-      );
-    }
-
-    const hints = tasks
-      .filter((entry) => {
-        const idLower = normalizeTitleKey(entry.id);
-        const titleLower = normalizeTitleKey(entry.title);
-        const titleSlug = toSearchSlug(entry.title);
-        return (
-          (requestedLower.length > 0 &&
-            (idLower.includes(requestedLower) || titleLower.includes(requestedLower))) ||
-          (requestedSlug.length > 0 &&
-            (idLower.includes(requestedSlug) || titleSlug.includes(requestedSlug)))
-        );
-      })
-      .slice(0, 5);
-    const fallback = (hints.length > 0 ? hints : tasks.slice(0, 5)).map((entry) =>
-      this.formatTaskRef(entry),
-    );
-    const hintSuffix = fallback.length > 0 ? ` Candidate task ids: ${fallback.join(", ")}` : "";
-    throw new Error(`Task not found: ${requestedTaskId}.${hintSuffix}`);
-  }
-
   private async resolveTaskContext(taskId: string): Promise<TaskContext> {
     const tasks = await this.listTasks();
-    const task = this.resolveTaskFromTasks(tasks, taskId);
+    const task = resolveTaskFromIndex(buildTaskIndex(tasks), taskId);
     return { task, tasks };
   }
 
@@ -344,6 +477,7 @@ export class OdtTaskStore {
     }
 
     const refreshed = await this.showRawIssue(task.id);
+    this.invalidateTaskIndex();
     return issueToTaskCard(refreshed, this.metadataNamespace);
   }
 
@@ -446,14 +580,15 @@ export class OdtTaskStore {
       throw new Error("Failed to resolve created subtask id");
     }
 
+    this.invalidateTaskIndex();
     return id;
   }
 
   async readTask(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = ReadTaskInputSchema.parse(rawInput);
-    const tasks = await this.listTasks();
-    const task = this.resolveTaskFromTasks(tasks, input.taskId);
+    const index = await this.getOrBuildTaskIndex();
+    const task = resolveTaskFromIndex(index, input.taskId);
     const issue = await this.showRawIssue(task.id);
     const taskCard = issueToTaskCard(issue, this.metadataNamespace);
     const docs = this.parseDocs(issue);
