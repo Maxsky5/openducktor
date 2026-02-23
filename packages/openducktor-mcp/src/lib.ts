@@ -964,7 +964,7 @@ export class OdtTaskStore {
     const input = SetSpecInputSchema.parse(rawInput);
     const markdown = input.markdown.trim();
 
-    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    const { task } = await this.resolveTaskContext(input.taskId);
     assertNoValidationError(getSetSpecError(task.status));
 
     const issue = await this.showRawIssue(task.id);
@@ -994,8 +994,7 @@ export class OdtTaskStore {
 
     let nextTask: TaskCard = task;
     if (task.status === "open") {
-      this.assertTransitionAllowed(task, tasks, "spec_ready");
-      nextTask = await this.applyTransition(task, "spec_ready");
+      nextTask = await this.transitionTask(task.id, "spec_ready");
     }
 
     return {
@@ -1066,8 +1065,7 @@ export class OdtTaskStore {
       }
     }
 
-    this.assertTransitionAllowed(task, tasks, "ready_for_dev");
-    const nextTask = await this.applyTransition(task, "ready_for_dev");
+    const nextTask = await this.transitionTask(task.id, "ready_for_dev");
 
     return {
       task: nextTask,
@@ -1101,11 +1099,10 @@ export class OdtTaskStore {
     await this.ensureInitialized();
     const input = BuildCompletedInputSchema.parse(rawInput);
 
-    const { task, tasks } = await this.resolveTaskContext(input.taskId);
+    const { task } = await this.resolveTaskContext(input.taskId);
 
     const nextStatus: TaskStatus = task.aiReviewEnabled ? "ai_review" : "human_review";
-    this.assertTransitionAllowed(task, tasks, nextStatus);
-    const updated = await this.applyTransition(task, nextStatus);
+    const updated = await this.transitionTask(task.id, nextStatus);
     return {
       task: updated,
       ...(input.summary ? { summary: input.summary } : {}),
@@ -1150,7 +1147,7 @@ export class OdtTaskStore {
     const { task, tasks } = await this.resolveTaskContext(input.taskId);
     this.assertTransitionAllowed(task, tasks, "human_review");
     await this.appendQaReport(task.id, input.reportMarkdown.trim(), "approved");
-    const updated = await this.applyTransition(task, "human_review");
+    const updated = await this.transitionTask(task.id, "human_review");
     return { task: updated };
   }
 
@@ -1160,7 +1157,7 @@ export class OdtTaskStore {
     const { task, tasks } = await this.resolveTaskContext(input.taskId);
     this.assertTransitionAllowed(task, tasks, "in_progress");
     await this.appendQaReport(task.id, input.reportMarkdown.trim(), "rejected");
-    const updated = await this.applyTransition(task, "in_progress");
+    const updated = await this.transitionTask(task.id, "in_progress");
     return { task: updated };
   }
 }
