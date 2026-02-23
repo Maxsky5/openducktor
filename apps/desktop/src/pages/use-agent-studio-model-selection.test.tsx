@@ -247,9 +247,8 @@ describe("useAgentStudioModelSelection", () => {
     await harness.mount();
     expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
 
-    await harness.run(async () => {
+    await harness.run(() => {
       deferredCatalog.resolve(CATALOG);
-      await deferredCatalog.promise;
     });
     await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
 
