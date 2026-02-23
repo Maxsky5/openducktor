@@ -59,7 +59,7 @@ impl AppService {
         let mut cache = self
             .runtime_check_cache
             .lock()
-            .map_err(|_| anyhow!("Runtime check cache lock poisoned"))?;
+            .map_err(|_| anyhow!("Runtime check cache lock poisoned in `cached_runtime_check`"))?;
         if let Some(entry) = cache.as_ref() {
             if entry.checked_at.elapsed() <= RUNTIME_CHECK_CACHE_TTL {
                 return Ok(Some(entry.value.clone()));
@@ -73,7 +73,9 @@ impl AppService {
         let mut cache = self
             .runtime_check_cache
             .lock()
-            .map_err(|_| anyhow!("Runtime check cache lock poisoned"))?;
+            .map_err(|_| {
+                anyhow!("Runtime check cache lock poisoned in `update_runtime_check_cache`")
+            })?;
         *cache = Some(CachedRuntimeCheck {
             checked_at: Instant::now(),
             value: check,
