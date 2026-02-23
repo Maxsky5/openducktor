@@ -45,7 +45,7 @@ impl AppService {
             .agent_runtimes
             .lock()
             .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-        Self::prune_stale_runtimes(&mut runtimes);
+        Self::prune_stale_runtimes(&mut runtimes)?;
 
         let mut list = runtimes
             .values()
@@ -72,7 +72,7 @@ impl AppService {
                 .agent_runtimes
                 .lock()
                 .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            Self::prune_stale_runtimes(&mut runtimes);
+            Self::prune_stale_runtimes(&mut runtimes)?;
 
             if let Some(existing) = runtimes.values().find(|runtime| {
                 Self::repo_key(runtime.summary.repo_path.as_str()) == repo_key
@@ -115,7 +115,7 @@ impl AppService {
                 .agent_runtimes
                 .lock()
                 .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            Self::prune_stale_runtimes(&mut runtimes);
+            Self::prune_stale_runtimes(&mut runtimes)?;
 
             if let Some(existing) = runtimes.values().find(|runtime| {
                 Self::repo_key(runtime.summary.repo_path.as_str()) == repo_key
@@ -165,7 +165,7 @@ impl AppService {
                 .agent_runtimes
                 .lock()
                 .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            Self::prune_stale_runtimes(&mut runtimes);
+            Self::prune_stale_runtimes(&mut runtimes)?;
 
             if let Some(existing) = runtimes.values().find(|runtime| {
                 Self::repo_key(runtime.summary.repo_path.as_str()) == repo_key
@@ -238,7 +238,13 @@ impl AppService {
                 let (ok, _stdout, stderr) =
                     run_command_allow_failure("sh", &["-lc", hook], Some(qa_worktree.as_path()))?;
                 if !ok {
-                    let _ = remove_worktree(repo_path_ref, qa_worktree.as_path());
+                    if let Err(cleanup_error) =
+                        Self::remove_runtime_worktree(repo_path_ref, qa_worktree.as_path())
+                    {
+                        return Err(anyhow!(
+                            "QA pre-start hook failed: {hook}\n{stderr}\nAlso failed to remove QA worktree: {cleanup_error}"
+                        ));
+                    }
                     return Err(anyhow!("QA pre-start hook failed: {hook}\n{stderr}"));
                 }
             }
@@ -262,14 +268,20 @@ impl AppService {
             wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
         {
             terminate_child_process(&mut child);
+            let startup_context = format!("OpenCode runtime failed to start for task {task_id}");
             if let (Some(repo), Some(worktree)) = (
                 cleanup_repo_path.as_deref(),
                 cleanup_worktree_path.as_deref(),
             ) {
-                let _ = remove_worktree(Path::new(repo), Path::new(worktree));
+                if let Err(cleanup_error) =
+                    Self::remove_runtime_worktree(Path::new(repo), Path::new(worktree))
+                {
+                    return Err(anyhow!(
+                        "{startup_context}\nAlso failed to remove QA worktree: {cleanup_error}"
+                    ));
+                }
             }
-            return Err(error)
-                .with_context(|| format!("OpenCode runtime failed to start for task {task_id}"));
+            return Err(error).with_context(|| startup_context);
         }
 
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
@@ -312,8 +324,7 @@ impl AppService {
             runtime.cleanup_repo_path.as_deref(),
             runtime.cleanup_worktree_path.as_deref(),
         ) {
-            remove_worktree(Path::new(repo_path), Path::new(worktree_path))
-                .with_context(|| format!("Failed removing QA worktree runtime {worktree_path}"))?;
+            Self::remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
         }
         Ok(true)
     }
@@ -341,12 +352,13 @@ impl AppService {
                     runtime.cleanup_repo_path.as_deref(),
                     runtime.cleanup_worktree_path.as_deref(),
                 ) {
-                    if let Err(error) =
-                        remove_worktree(Path::new(repo_path), Path::new(worktree_path))
-                    {
+                    if let Err(error) = Self::remove_runtime_worktree(
+                        Path::new(repo_path),
+                        Path::new(worktree_path),
+                    ) {
                         cleanup_errors.push(format!(
-                            "Failed removing QA worktree runtime {}: {}",
-                            worktree_path, error
+                            "Failed shutting down runtime {}: {}",
+                            runtime.summary.runtime_id, error
                         ));
                     }
                 }
@@ -360,7 +372,18 @@ impl AppService {
         }
     }
 
-    pub(crate) fn prune_stale_runtimes(runtimes: &mut HashMap<String, AgentRuntimeProcess>) {
+    fn remove_runtime_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
+        remove_worktree(repo_path, worktree_path).with_context(|| {
+            format!(
+                "Failed removing QA worktree runtime {}",
+                worktree_path.display()
+            )
+        })
+    }
+
+    pub(crate) fn prune_stale_runtimes(
+        runtimes: &mut HashMap<String, AgentRuntimeProcess>,
+    ) -> Result<()> {
         let stale_runtime_ids = runtimes
             .iter_mut()
             .filter_map(|(runtime_id, runtime)| {
@@ -372,6 +395,7 @@ impl AppService {
                     .map(|_| runtime_id.clone())
             })
             .collect::<Vec<_>>();
+        let mut cleanup_errors = Vec::new();
         for runtime_id in stale_runtime_ids {
             if let Some(mut runtime) = runtimes.remove(&runtime_id) {
                 terminate_child_process(&mut runtime.child);
@@ -379,9 +403,25 @@ impl AppService {
                     runtime.cleanup_repo_path.as_deref(),
                     runtime.cleanup_worktree_path.as_deref(),
                 ) {
-                    let _ = remove_worktree(Path::new(repo_path), Path::new(worktree_path));
+                    if let Err(error) = Self::remove_runtime_worktree(
+                        Path::new(repo_path),
+                        Path::new(worktree_path),
+                    ) {
+                        cleanup_errors.push(format!(
+                            "Failed pruning stale runtime {runtime_id}: {error}"
+                        ));
+                    }
                 }
             }
+        }
+
+        if cleanup_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "Failed pruning stale agent runtimes:\n{}",
+                cleanup_errors.join("\n")
+            ))
         }
     }
 }

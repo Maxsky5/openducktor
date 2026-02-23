@@ -804,6 +804,46 @@ exit 1
         write_executable_script(path, script)
     }
 
+    fn create_failing_opencode_with_worktree_cleanup(path: &Path) -> Result<()> {
+        let script = r#"#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "opencode-fake 0.0.1"
+  exit 0
+fi
+
+if [ "$1" = "serve" ]; then
+  REPO_PATH=$(python3 - <<'PY'
+import json
+import os
+
+raw = os.environ.get("OPENCODE_CONFIG_CONTENT", "{}")
+try:
+    config = json.loads(raw)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+environment = (
+    config.get("mcp", {})
+    .get("openducktor", {})
+    .get("environment", {})
+)
+print(environment.get("ODT_REPO_PATH", ""))
+PY
+)
+  if [ -n "$REPO_PATH" ]; then
+    rm -rf "$REPO_PATH"
+  fi
+  echo "simulated startup failure after deleting repo path" >&2
+  exit 42
+fi
+
+echo "unsupported opencode invocation" >&2
+exit 1
+"#;
+        write_executable_script(path, script)
+    }
+
     fn create_fake_bd(path: &Path) -> Result<()> {
         let script = r#"#!/bin/sh
 echo "bd-fake"
@@ -2553,6 +2593,95 @@ echo "bd-fake"
     }
 
     #[test]
+    fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> {
+        let root = unique_temp_path("runtime-pre-start-cleanup-failure");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("qa-worktrees");
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet {
+                    pre_start: vec![format!("rm -rf \"{repo_path}\"; exit 1")],
+                    post_complete: Vec::new(),
+                },
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = service
+            .opencode_runtime_start(repo_path.as_str(), "task-1", "qa")
+            .expect_err("cleanup failure should be surfaced when pre-start hook fails");
+        let message = error.to_string();
+        assert!(message.contains("QA pre-start hook failed"));
+        assert!(message.contains("Failed removing QA worktree runtime"));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Result<()> {
+        let _env_lock = lock_env();
+        let root = unique_temp_path("runtime-startup-cleanup-failure");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let failing_opencode = root.join("opencode");
+        create_failing_opencode_with_worktree_cleanup(&failing_opencode)?;
+        let _opencode_guard = set_env_var(
+            "OPENDUCKTOR_OPENCODE_BINARY",
+            failing_opencode.to_string_lossy().as_ref(),
+        );
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("qa-worktrees");
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![make_task("task-1", "task", TaskStatus::Open)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+        service.workspace_update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = service
+            .opencode_runtime_start(repo_path.as_str(), "task-1", "qa")
+            .expect_err("startup cleanup failure should be surfaced");
+        let message = error.to_string();
+        assert!(message.contains("OpenCode runtime failed to start for task task-1"));
+        assert!(message.contains("Failed removing QA worktree runtime"));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
     fn opencode_runtime_start_reuses_existing_runtime_for_same_task_and_role() -> Result<()> {
         let _env_lock = lock_env();
         let root = unique_temp_path("runtime-reuse");
@@ -2682,6 +2811,72 @@ echo "bd-fake"
         std::thread::sleep(Duration::from_millis(50));
         let listed = service.opencode_runtime_list(None)?;
         assert!(listed.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn opencode_runtime_list_surfaces_stale_cleanup_failure() -> Result<()> {
+        let root = unique_temp_path("runtime-prune-cleanup-failure");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let (service, _task_state, _git_state) = build_service_with_store(
+            vec![],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+            config_store,
+        );
+
+        let stale_child = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg("exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn stale child");
+        let summary = AgentRuntimeSummary {
+            runtime_id: "runtime-stale-cleanup-error".to_string(),
+            repo_path: repo.to_string_lossy().to_string(),
+            task_id: "task-1".to_string(),
+            role: "qa".to_string(),
+            working_directory: repo.to_string_lossy().to_string(),
+            port: 1,
+            started_at: "2026-02-20T12:00:00Z".to_string(),
+        };
+        service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .insert(
+                summary.runtime_id.clone(),
+                super::AgentRuntimeProcess {
+                    summary,
+                    child: stale_child,
+                    cleanup_repo_path: Some("/tmp/non-existent-repo-for-prune".to_string()),
+                    cleanup_worktree_path: Some(
+                        "/tmp/non-existent-worktree-for-prune".to_string(),
+                    ),
+                },
+            );
+
+        std::thread::sleep(Duration::from_millis(50));
+        let error = service
+            .opencode_runtime_list(None)
+            .expect_err("stale runtime cleanup failure should be surfaced");
+        let message = error.to_string();
+        assert!(message.contains("Failed pruning stale agent runtimes"));
+        assert!(message.contains("Failed removing QA worktree runtime"));
+        assert!(service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .is_empty());
 
         let _ = fs::remove_dir_all(root);
         Ok(())
