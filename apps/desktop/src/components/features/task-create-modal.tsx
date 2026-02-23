@@ -8,8 +8,10 @@ import {
   TaskDocumentEditor,
   TaskEditSectionSwitcher,
 } from "@/components/features/task-composer";
-import { TaskCreateDiscardDialog } from "@/components/features/task-create/task-create-discard-dialog";
-import { useTaskCreateModalController } from "@/components/features/task-create/use-task-create-modal-controller";
+import {
+  TaskCreateDiscardDialog,
+  useTaskCreateModalController,
+} from "@/components/features/task-create";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

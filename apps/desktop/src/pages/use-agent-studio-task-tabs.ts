@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
+import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildTaskTabs,

@@ -2,22 +2,14 @@ import { lazy, type ReactElement, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/ui/sonner";
+import { loadAgentsPage, loadKanbanPage, loadNotFoundPage } from "@/pages";
 import { AppStateProvider, useWorkspaceState } from "@/state";
 
-const AgentsPage = lazy(async () => {
-  const module = await import("@/pages/agents-page");
-  return { default: module.AgentsPage };
-});
+const AgentsPage = lazy(loadAgentsPage);
 
-const KanbanPage = lazy(async () => {
-  const module = await import("@/pages/kanban-page");
-  return { default: module.KanbanPage };
-});
+const KanbanPage = lazy(loadKanbanPage);
 
-const NotFoundPage = lazy(async () => {
-  const module = await import("@/pages/not-found-page");
-  return { default: module.NotFoundPage };
-});
+const NotFoundPage = lazy(loadNotFoundPage);
 
 function RouteFallback(): ReactElement {
   return (

@@ -1,13 +1,13 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import {
+  resolveAgentAccentColor,
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
-} from "@/components/features/agents/catalog-select-options";
+} from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { loadRepoOpencodeCatalog } from "@/state/operations/opencode-catalog";
+import { loadRepoOpencodeCatalog } from "@/state/operations";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
