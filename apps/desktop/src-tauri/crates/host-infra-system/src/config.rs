@@ -154,9 +154,13 @@ fn canonicalize_workspace_key(repo_path: &str) -> Result<String> {
 }
 
 /// Migrates the repos HashMap keys to canonical form.
+/// Migrates the repos HashMap keys to canonical form.
 /// Returns a new HashMap with canonical keys, merging entries that resolve to the same path.
+/// When collisions occur (multiple path variants resolve to the same canonical path),
+/// prefers the entry referenced by active_repo to preserve the user's current configuration.
 fn migrate_repos_to_canonical_keys(
     repos: &mut HashMap<String, RepoConfig>,
+    active_repo: Option<&String>,
 ) -> HashMap<String, RepoConfig> {
     let mut canonical_repos: HashMap<String, RepoConfig> = HashMap::new();
 
@@ -175,12 +179,25 @@ fn migrate_repos_to_canonical_keys(
             Ok(canonical_key) => {
                 // Deterministic collision resolution:
                 // 1. If this canonical key doesn't exist, insert it
-                // 2. If it exists, only replace if original_key IS the canonical form
-                //    (i.e., original_key == canonical_key means this is the "true" entry)
-                // 3. Otherwise keep existing entry (first one wins, but now deterministic)
+                // 2. If it exists, prefer the entry that matches active_repo (user's current choice)
+                // 3. Otherwise prefer the entry where original_key == canonical_key (the "true" entry)
+                // 4. Finally, lexicographic order decides (first in sorted order wins)
                 let should_insert = match canonical_repos.get(&canonical_key) {
                     None => true,
-                    Some(_) => original_key == canonical_key,
+                    Some(_) => {
+                        // If active_repo matches this original_key, prefer it over existing
+                        if let Some(active) = active_repo {
+                            if original_key == *active {
+                                true
+                            } else {
+                                // Existing entry wins if it matches active, otherwise prefer canonical form
+                                original_key == canonical_key
+                            }
+                        } else {
+                            // No active_repo, prefer canonical form
+                            original_key == canonical_key
+                        }
+                    },
                 };
                 if should_insert {
                     canonical_repos.insert(canonical_key, repo_config);
@@ -317,7 +334,8 @@ impl AppConfigStore {
         normalize_global_config(&mut parsed);
 
         // Migrate repo keys to canonical form
-        let canonical_repos = migrate_repos_to_canonical_keys(&mut parsed.repos);
+        // Pass active_repo to prefer the user's current configuration on collision
+        let canonical_repos = migrate_repos_to_canonical_keys(&mut parsed.repos, parsed.active_repo.as_ref());
         parsed.repos = canonical_repos;
 
         // Also migrate active_repo to canonical key if it exists
