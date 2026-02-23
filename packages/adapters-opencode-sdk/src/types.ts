@@ -1,6 +1,12 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentSessionSummary, StartAgentSessionInput } from "@openducktor/core";
 
+/**
+ * Cache TTL for workflow tool selection (5 minutes).
+ * Tool IDs change only when MCP servers connect/disconnect.
+ */
+export const WORKFLOW_TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
+
 export type SessionInput = Omit<StartAgentSessionInput, "sessionId"> & {
   sessionId: string;
 };
@@ -13,6 +19,10 @@ export type SessionRecord = {
   streamAbortController: AbortController;
   streamDone: Promise<void>;
   emittedAssistantMessageIds: Set<string>;
+  /** Cached workflow tool selection (toolId -> enabled). */
+  workflowToolSelectionCache?: Record<string, boolean>;
+  /** Timestamp when cache was last populated. */
+  workflowToolSelectionCachedAt?: number;
 };
 
 export type ClientFactory = (input: {
