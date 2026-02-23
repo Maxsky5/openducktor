@@ -1,5 +1,5 @@
 use anyhow::Context;
-use host_application::{AppService, RunEmitter};
+use host_application::{BuildResponseAction, CleanupMode, AppService, RunEmitter};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, RunEvent,
     RunSummary, TaskCard, TaskStatus, UpdateTaskPatch,
@@ -525,13 +525,13 @@ async fn build_respond(
     state: State<'_, AppState>,
     app: AppHandle,
     run_id: String,
-    action: String,
+    action: BuildResponseAction,
     payload: Option<String>,
 ) -> Result<serde_json::Value, String> {
     as_error(
         state
             .service
-            .build_respond(&run_id, &action, payload.as_deref(), run_emitter(app))
+            .build_respond(&run_id, action, payload.as_deref(), run_emitter(app))
             .map(|ok| serde_json::json!({ "ok": ok })),
     )
 }
@@ -555,12 +555,12 @@ async fn build_cleanup(
     state: State<'_, AppState>,
     app: AppHandle,
     run_id: String,
-    mode: String,
+    mode: CleanupMode,
 ) -> Result<serde_json::Value, String> {
     as_error(
         state
             .service
-            .build_cleanup(&run_id, &mode, run_emitter(app))
+            .build_cleanup(&run_id, mode, run_emitter(app))
             .map(|ok| serde_json::json!({ "ok": ok })),
     )
 }
