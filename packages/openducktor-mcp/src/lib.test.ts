@@ -260,6 +260,93 @@ describe("openducktor-mcp lib", () => {
     expect(statusTargetTaskId).toBe("fairnest-wsp");
   });
 
+  test("setSpec resolves short task id suffix to canonical task id", async () => {
+    let metadataTargetTaskId: string | null = null;
+    let statusTargetTaskId: string | null = null;
+    let status = "open";
+
+    const { runProcess } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "fairnest-wsp",
+              title: "Add Facebook OAuth Login",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+            {
+              id: "fairnest-abc",
+              title: "Improve UI spacing",
+              status: "open",
+              issue_type: "task",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "show") {
+        const id = args[2];
+        if (id !== "fairnest-wsp") {
+          return { ok: true, stdout: JSON.stringify([]) };
+        }
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "fairnest-wsp",
+              title: "Add Facebook OAuth Login",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "update" && args.includes("--metadata")) {
+        metadataTargetTaskId = args[2] ?? null;
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "update" && args.includes("--status")) {
+        statusTargetTaskId = args[2] ?? null;
+        status = args[args.indexOf("--status") + 1] ?? status;
+        return { ok: true, stdout: "{}" };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      {
+        runProcess,
+        now: () => "2026-02-19T12:00:00.000Z",
+      },
+    );
+
+    const result = (await store.setSpec({
+      taskId: "wsp",
+      markdown: "# Spec",
+    })) as { task: { id: string; status: string } };
+
+    expect(result.task.id).toBe("fairnest-wsp");
+    expect(result.task.status).toBe("spec_ready");
+    expect(metadataTargetTaskId).toBe("fairnest-wsp");
+    expect(statusTargetTaskId).toBe("fairnest-wsp");
+  });
+
   test("setSpec fails with explicit candidates when task identifier is ambiguous", async () => {
     const { runProcess } = buildProcessRunner((args) => {
       const command = args[1];
@@ -310,7 +397,7 @@ describe("openducktor-mcp lib", () => {
     ).rejects.toThrow('Task identifier "facebook-oauth" is ambiguous');
   });
 
-  test("OdtTaskStore initialization is cached across concurrent calls", async () => {
+  test("OdtTaskStore initialization and task index build are cached across concurrent calls", async () => {
     const { runProcess, calls } = buildProcessRunner((args) => {
       const command = args[1];
       if (command === "where") {
@@ -370,12 +457,182 @@ describe("openducktor-mcp lib", () => {
 
     expect(calls.filter((entry) => entry.args[1] === "init")).toHaveLength(1);
     expect(calls.filter((entry) => entry.args[1] === "config")).toHaveLength(1);
-    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(3);
+    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(1);
     expect(calls.filter((entry) => entry.args[1] === "show")).toHaveLength(3);
     for (const call of calls) {
       expect(call.command).toBe("bd");
       expect(call.env.BEADS_DIR).toBe("/beads");
     }
+  });
+
+  test("readTask refreshes index on not-found cache miss and resolves newly added task", async () => {
+    let listCalls = 0;
+
+    const { runProcess, calls } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        listCalls += 1;
+        const issues =
+          listCalls === 1
+            ? [
+                {
+                  id: "task-1",
+                  title: "Task 1",
+                  status: "open",
+                  issue_type: "task",
+                  metadata: {},
+                },
+              ]
+            : [
+                {
+                  id: "task-1",
+                  title: "Task 1",
+                  status: "open",
+                  issue_type: "task",
+                  metadata: {},
+                },
+                {
+                  id: "task-2",
+                  title: "Task 2",
+                  status: "in_progress",
+                  issue_type: "task",
+                  metadata: {},
+                },
+              ];
+
+        return {
+          ok: true,
+          stdout: JSON.stringify(issues),
+        };
+      }
+      if (command === "show") {
+        const id = args[2];
+        if (id !== "task-1" && id !== "task-2") {
+          return { ok: true, stdout: JSON.stringify([]) };
+        }
+
+        const issue = {
+          id,
+          title: id === "task-2" ? "Task 2" : "Task 1",
+          status: id === "task-2" ? "in_progress" : "open",
+          issue_type: "task",
+          metadata: {},
+        };
+
+        return {
+          ok: true,
+          stdout: JSON.stringify([issue]),
+        };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      { runProcess },
+    );
+
+    await store.readTask({ taskId: "task-1" });
+    const result = (await store.readTask({ taskId: "task-2" })) as {
+      task: { id: string; status: string };
+    };
+
+    expect(result.task.id).toBe("task-2");
+    expect(result.task.status).toBe("in_progress");
+    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(2);
+  });
+
+  test("readTask refreshes index on ambiguous cache miss and resolves uniquely", async () => {
+    let listCalls = 0;
+
+    const { runProcess, calls } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        listCalls += 1;
+        const issues =
+          listCalls === 1
+            ? [
+                {
+                  id: "fairnest-wsp",
+                  title: "Task A",
+                  status: "open",
+                  issue_type: "task",
+                  metadata: {},
+                },
+                {
+                  id: "delta-wsp",
+                  title: "Task B",
+                  status: "open",
+                  issue_type: "task",
+                  metadata: {},
+                },
+              ]
+            : [
+                {
+                  id: "fairnest-wsp",
+                  title: "Task A",
+                  status: "in_progress",
+                  issue_type: "task",
+                  metadata: {},
+                },
+              ];
+
+        return { ok: true, stdout: JSON.stringify(issues) };
+      }
+      if (command === "show") {
+        const id = args[2];
+        if (id !== "fairnest-wsp") {
+          return { ok: true, stdout: JSON.stringify([]) };
+        }
+
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "fairnest-wsp",
+              title: "Task A",
+              status: "in_progress",
+              issue_type: "task",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      { runProcess },
+    );
+
+    const result = (await store.readTask({ taskId: "wsp" })) as {
+      task: { id: string; status: string };
+    };
+
+    expect(result.task.id).toBe("fairnest-wsp");
+    expect(result.task.status).toBe("in_progress");
+    expect(calls.filter((entry) => entry.args[1] === "list")).toHaveLength(2);
   });
 
   test("buildResumed allows task issues to skip spec/planning from open", async () => {
