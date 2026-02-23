@@ -555,7 +555,7 @@ export class OdtTaskStore {
     const createdSubtaskIds: string[] = [];
     let transitionContext: TaskContext = context;
     if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
-      const existingTaskSnapshot = await this.resolveTaskContext(task.id);
+      const existingTaskSnapshot = transitionContext;
       transitionContext = existingTaskSnapshot;
       const existingTitleKeys = new Set(
         existingTaskSnapshot.tasks
