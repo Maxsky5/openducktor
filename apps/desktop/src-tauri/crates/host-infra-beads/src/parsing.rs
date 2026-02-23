@@ -9,12 +9,16 @@ use crate::normalize::{default_ai_review_enabled, normalize_issue_type, normaliz
 use crate::store::BeadsTaskStore;
 
 impl BeadsTaskStore {
-    pub(crate) fn parse_task_card(&self, issue: RawIssue) -> Result<TaskCard> {
+    pub(crate) fn parse_task_card(
+        &self,
+        issue: RawIssue,
+        metadata_namespace_key: &str,
+    ) -> Result<TaskCard> {
         let status = TaskStatus::from_cli_value(&issue.status)
             .ok_or_else(|| anyhow!("Unknown task status from bd: {}", issue.status))?;
 
         let metadata_root = parse_metadata_root(issue.metadata);
-        let namespace = metadata_namespace(&metadata_root, &self.metadata_namespace);
+        let namespace = metadata_namespace(&metadata_root, metadata_namespace_key);
         let ai_review_enabled = namespace
             .and_then(metadata_bool_qa_required)
             .unwrap_or_else(|| default_ai_review_enabled(&issue.issue_type));

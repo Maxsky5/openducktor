@@ -25,12 +25,13 @@ impl BeadsTaskStore {
         &self,
         repo_path: &Path,
         task_id: &str,
-    ) -> Result<(RawIssue, Map<String, Value>, Map<String, Value>)> {
+    ) -> Result<(RawIssue, Map<String, Value>, String, Map<String, Value>)> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let mut root = parse_metadata_root(issue.metadata.clone());
+        let namespace_key = self.current_metadata_namespace();
 
         let namespace = root
-            .entry(self.metadata_namespace.clone())
+            .entry(namespace_key.clone())
             .or_insert_with(|| Value::Object(Map::new()));
         if !namespace.is_object() {
             *namespace = Value::Object(Map::new());
@@ -41,20 +42,18 @@ impl BeadsTaskStore {
             .cloned()
             .ok_or_else(|| anyhow!("Invalid metadata namespace payload"))?;
 
-        Ok((issue, root, namespace_map))
+        Ok((issue, root, namespace_key, namespace_map))
     }
 
     pub(crate) fn persist_namespace(
         &self,
         repo_path: &Path,
         task_id: &str,
+        namespace_key: &str,
         root: &mut Map<String, Value>,
         namespace_map: Map<String, Value>,
     ) -> Result<()> {
-        root.insert(
-            self.metadata_namespace.clone(),
-            Value::Object(namespace_map),
-        );
+        root.insert(namespace_key.to_string(), Value::Object(namespace_map));
         self.write_metadata(repo_path, task_id, root)
     }
 }

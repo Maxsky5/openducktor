@@ -1,3 +1,4 @@
+use anyhow::Context;
 use host_application::{AppService, RunEmitter};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, RunEvent,
@@ -11,7 +12,10 @@ use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent, State};
 
 struct AppState {
     service: Arc<AppService>,
+    startup_errors: Vec<String>,
 }
+
+const FALLBACK_TASK_METADATA_NAMESPACE: &str = "openducktor";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,6 +77,29 @@ fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
     result.map_err(|error| format!("{error:#}"))
 }
 
+fn extend_runtime_errors_with_startup(
+    mut check: host_domain::RuntimeCheck,
+    startup_errors: &[String],
+) -> host_domain::RuntimeCheck {
+    check.errors.extend(startup_errors.iter().cloned());
+    check
+}
+
+fn namespace_with_startup_warning(
+    namespace_result: anyhow::Result<String>,
+) -> (String, Option<String>) {
+    match namespace_result {
+        Ok(namespace) => (namespace, None),
+        Err(error) => (
+            FALLBACK_TASK_METADATA_NAMESPACE.to_string(),
+            Some(format!(
+                "Failed to read task metadata namespace from config; using fallback namespace '{}': {error:#}",
+                FALLBACK_TASK_METADATA_NAMESPACE
+            )),
+        ),
+    }
+}
+
 fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
@@ -89,7 +116,11 @@ async fn system_check(
 
 #[tauri::command]
 async fn runtime_check(state: State<'_, AppState>) -> Result<host_domain::RuntimeCheck, String> {
-    as_error(state.service.runtime_check())
+    let check = as_error(state.service.runtime_check())?;
+    Ok(extend_runtime_errors_with_startup(
+        check,
+        &state.startup_errors,
+    ))
 }
 
 #[tauri::command]
@@ -669,19 +700,33 @@ async fn agent_session_upsert(
     )
 }
 
-pub fn run() {
-    let config_store = AppConfigStore::new().expect("failed to initialize config store");
-    let metadata_namespace = config_store
-        .task_metadata_namespace()
-        .expect("failed to read task metadata namespace from config");
+fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
+    let config_store = AppConfigStore::new().context("failed to initialize config store")?;
+    let mut startup_errors = Vec::new();
+    let (metadata_namespace, startup_warning) =
+        namespace_with_startup_warning(config_store.task_metadata_namespace());
+    if let Some(message) = startup_warning {
+        eprintln!("OpenDucktor startup warning: {message}");
+        startup_errors.push(message);
+    }
+
     let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(&metadata_namespace));
     let service = Arc::new(AppService::new(task_store, config_store));
+
+    Ok((service, startup_errors))
+}
+
+pub fn run() -> anyhow::Result<()> {
+    let (service, startup_errors) = bootstrap_service()?;
 
     let app_service = service.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .manage(AppState { service })
+        .manage(AppState {
+            service,
+            startup_errors,
+        })
         .invoke_handler(tauri::generate_handler![
             system_check,
             runtime_check,
@@ -732,7 +777,7 @@ pub fn run() {
             agent_session_upsert
         ])
         .build(tauri::generate_context!())
-        .expect("error while building openducktor")
+        .context("error while building openducktor")?
         .run(move |_handle, event| {
             if matches!(
                 event,
@@ -741,4 +786,59 @@ pub fn run() {
                 let _ = app_service.shutdown();
             }
         });
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::anyhow;
+    use host_domain::RuntimeCheck;
+
+    #[test]
+    fn namespace_with_startup_warning_uses_configured_namespace() {
+        let (namespace, warning) =
+            namespace_with_startup_warning(Ok("custom-namespace".to_string()));
+
+        assert_eq!(namespace, "custom-namespace");
+        assert!(warning.is_none());
+    }
+
+    #[test]
+    fn namespace_with_startup_warning_falls_back_and_reports_error_context() {
+        let (namespace, warning) =
+            namespace_with_startup_warning(Err(anyhow!("config parse failure")));
+
+        assert_eq!(namespace, FALLBACK_TASK_METADATA_NAMESPACE);
+
+        let warning = warning.expect("expected startup warning for fallback namespace");
+        assert!(
+            warning.contains("using fallback namespace 'openducktor'"),
+            "warning should mention fallback namespace: {warning}"
+        );
+        assert!(
+            warning.contains("config parse failure"),
+            "warning should include original error context: {warning}"
+        );
+    }
+
+    #[test]
+    fn extend_runtime_errors_with_startup_appends_startup_messages() {
+        let runtime = RuntimeCheck {
+            git_ok: true,
+            git_version: Some("git version 2.0.0".to_string()),
+            opencode_ok: true,
+            opencode_version: Some("1.0.0".to_string()),
+            errors: vec!["runtime issue".to_string()],
+        };
+
+        let startup_errors = vec!["startup warning".to_string()];
+        let updated = extend_runtime_errors_with_startup(runtime, &startup_errors);
+
+        assert_eq!(
+            updated.errors,
+            vec!["runtime issue".to_string(), "startup warning".to_string()]
+        );
+    }
 }

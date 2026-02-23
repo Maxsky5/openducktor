@@ -3,7 +3,7 @@ use host_domain::{
     now_rfc3339, AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument,
     TaskCard, TaskStore, UpdateTaskPatch,
 };
-use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
+use host_infra_system::{compute_repo_slug, resolve_central_beads_dir, AppConfigStore};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -19,9 +19,12 @@ use crate::metadata::{
 use crate::model::{MarkdownEntry, QaEntry, RawIssue};
 use crate::normalize::{normalize_labels, normalize_text_option};
 
+type MetadataNamespaceResolver = Arc<dyn Fn() -> Result<String> + Send + Sync>;
+
 pub struct BeadsTaskStore {
     pub(crate) command_runner: Arc<dyn CommandRunner>,
-    pub(crate) metadata_namespace: String,
+    pub(crate) metadata_namespace: Mutex<String>,
+    pub(crate) metadata_namespace_resolver: Option<MetadataNamespaceResolver>,
     pub(crate) init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub(crate) initialized_repos: Mutex<HashSet<String>>,
 }
@@ -29,7 +32,11 @@ pub struct BeadsTaskStore {
 impl fmt::Debug for BeadsTaskStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BeadsTaskStore")
-            .field("metadata_namespace", &self.metadata_namespace)
+            .field("metadata_namespace", &self.metadata_namespace_snapshot())
+            .field(
+                "has_metadata_namespace_resolver",
+                &self.metadata_namespace_resolver.is_some(),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -45,27 +52,27 @@ impl BeadsTaskStore {
         Self::with_metadata_namespace_and_runner(
             DEFAULT_METADATA_NAMESPACE,
             Arc::new(ProcessCommandRunner),
+            Some(Self::default_metadata_namespace_resolver()),
         )
     }
 
     pub fn with_metadata_namespace(namespace: &str) -> Self {
-        Self::with_metadata_namespace_and_runner(namespace, Arc::new(ProcessCommandRunner))
+        Self::with_metadata_namespace_and_runner(
+            namespace,
+            Arc::new(ProcessCommandRunner),
+            Some(Self::default_metadata_namespace_resolver()),
+        )
     }
 
     fn with_metadata_namespace_and_runner(
         namespace: &str,
         command_runner: Arc<dyn CommandRunner>,
+        metadata_namespace_resolver: Option<MetadataNamespaceResolver>,
     ) -> Self {
-        let trimmed = namespace.trim();
-        let metadata_namespace = if trimmed.is_empty() {
-            DEFAULT_METADATA_NAMESPACE.to_string()
-        } else {
-            trimmed.to_string()
-        };
-
         Self {
             command_runner,
-            metadata_namespace,
+            metadata_namespace: Mutex::new(Self::normalize_metadata_namespace(namespace)),
+            metadata_namespace_resolver,
             init_locks: Mutex::new(HashMap::new()),
             initialized_repos: Mutex::new(HashSet::new()),
         }
@@ -76,7 +83,71 @@ impl BeadsTaskStore {
         namespace: &str,
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
-        Self::with_metadata_namespace_and_runner(namespace, command_runner)
+        Self::with_metadata_namespace_and_runner(namespace, command_runner, None)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_runner_and_namespace_resolver(
+        namespace: &str,
+        command_runner: Arc<dyn CommandRunner>,
+        metadata_namespace_resolver: Arc<dyn Fn() -> Result<String> + Send + Sync>,
+    ) -> Self {
+        Self::with_metadata_namespace_and_runner(
+            namespace,
+            command_runner,
+            Some(metadata_namespace_resolver),
+        )
+    }
+
+    fn default_metadata_namespace_resolver() -> MetadataNamespaceResolver {
+        Arc::new(|| {
+            let config_store = AppConfigStore::new()?;
+            config_store.task_metadata_namespace()
+        })
+    }
+
+    fn normalize_metadata_namespace(namespace: &str) -> String {
+        let trimmed = namespace.trim();
+        if trimmed.is_empty() {
+            DEFAULT_METADATA_NAMESPACE.to_string()
+        } else {
+            trimmed.to_string()
+        }
+    }
+
+    fn metadata_namespace_snapshot(&self) -> String {
+        match self.metadata_namespace.lock() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    fn set_metadata_namespace(&self, namespace: &str) {
+        let normalized = Self::normalize_metadata_namespace(namespace);
+        match self.metadata_namespace.lock() {
+            Ok(mut guard) => *guard = normalized,
+            Err(poisoned) => {
+                let mut guard = poisoned.into_inner();
+                *guard = normalized;
+            }
+        }
+    }
+
+    fn refresh_metadata_namespace(&self) {
+        let Some(resolve_namespace) = &self.metadata_namespace_resolver else {
+            return;
+        };
+
+        let Ok(namespace) = resolve_namespace() else {
+            return;
+        };
+
+        self.set_metadata_namespace(&namespace);
+    }
+
+    pub(crate) fn current_metadata_namespace(&self) -> String {
+        self.refresh_metadata_namespace();
+        self.metadata_namespace_snapshot()
     }
 }
 
@@ -144,6 +215,7 @@ impl TaskStore for BeadsTaskStore {
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
         let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
+        let metadata_namespace = self.current_metadata_namespace();
 
         let mut tasks = value
             .as_array()
@@ -152,7 +224,7 @@ impl TaskStore for BeadsTaskStore {
             .map(|entry| {
                 let issue: RawIssue = serde_json::from_value(entry.clone())
                     .context("Failed to decode task from bd list")?;
-                self.parse_task_card(issue)
+                self.parse_task_card(issue, &metadata_namespace)
             })
             .collect::<Result<Vec<TaskCard>>>()?;
 
@@ -218,7 +290,8 @@ impl TaskStore for BeadsTaskStore {
         let created_id = raw.id.clone();
 
         let mut metadata_root = parse_metadata_root(raw.metadata);
-        let mut namespace_map = metadata_namespace(&metadata_root, &self.metadata_namespace)
+        let namespace_key = self.current_metadata_namespace();
+        let mut namespace_map = metadata_namespace(&metadata_root, &namespace_key)
             .cloned()
             .unwrap_or_default();
 
@@ -227,7 +300,13 @@ impl TaskStore for BeadsTaskStore {
             Value::Bool(input.ai_review_enabled.unwrap_or(true)),
         );
 
-        self.persist_namespace(repo_path, &created_id, &mut metadata_root, namespace_map)?;
+        self.persist_namespace(
+            repo_path,
+            &created_id,
+            &namespace_key,
+            &mut metadata_root,
+            namespace_map,
+        )?;
 
         self.show_task(repo_path, &created_id)
     }
@@ -298,9 +377,10 @@ impl TaskStore for BeadsTaskStore {
         }
 
         if let Some(ai_review_enabled) = patch.ai_review_enabled {
-            let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+            let (_issue, mut root, namespace_key, mut namespace_map) =
+                self.load_namespace(repo_path, task_id)?;
             namespace_map.insert("qaRequired".to_string(), Value::Bool(ai_review_enabled));
-            self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+            self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         }
 
         self.show_task(repo_path, task_id)
@@ -321,7 +401,8 @@ impl TaskStore for BeadsTaskStore {
     fn get_spec(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata.clone());
-        let entries = metadata_namespace(&metadata_root, &self.metadata_namespace)
+        let namespace_key = self.current_metadata_namespace();
+        let entries = metadata_namespace(&metadata_root, &namespace_key)
             .and_then(|ns| ns.get("documents"))
             .and_then(|docs| docs.get("spec"))
             .and_then(parse_markdown_entries);
@@ -336,7 +417,8 @@ impl TaskStore for BeadsTaskStore {
     }
 
     fn set_spec(&self, repo_path: &Path, task_id: &str, markdown: &str) -> Result<SpecDocument> {
-        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let (_issue, mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
         let mut documents_map = namespace_map
             .get("documents")
             .and_then(Value::as_object)
@@ -364,7 +446,7 @@ impl TaskStore for BeadsTaskStore {
         );
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
 
-        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
 
         Ok(SpecDocument {
             markdown: entry.markdown,
@@ -375,7 +457,8 @@ impl TaskStore for BeadsTaskStore {
     fn get_plan(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata.clone());
-        let entries = metadata_namespace(&metadata_root, &self.metadata_namespace)
+        let namespace_key = self.current_metadata_namespace();
+        let entries = metadata_namespace(&metadata_root, &namespace_key)
             .and_then(|ns| ns.get("documents"))
             .and_then(|docs| docs.get("implementationPlan"))
             .and_then(parse_markdown_entries);
@@ -390,7 +473,8 @@ impl TaskStore for BeadsTaskStore {
     }
 
     fn set_plan(&self, repo_path: &Path, task_id: &str, markdown: &str) -> Result<SpecDocument> {
-        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let (_issue, mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
         let mut documents_map = namespace_map
             .get("documents")
             .and_then(Value::as_object)
@@ -418,7 +502,7 @@ impl TaskStore for BeadsTaskStore {
         );
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
 
-        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
 
         Ok(SpecDocument {
             markdown: entry.markdown,
@@ -433,7 +517,8 @@ impl TaskStore for BeadsTaskStore {
     ) -> Result<Option<QaReportDocument>> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
-        let namespace = metadata_namespace(&metadata_root, &self.metadata_namespace);
+        let namespace_key = self.current_metadata_namespace();
+        let namespace = metadata_namespace(&metadata_root, &namespace_key);
         let Some(entries) = namespace
             .and_then(|ns| ns.get("documents"))
             .and_then(|docs| docs.get("qaReports"))
@@ -457,7 +542,8 @@ impl TaskStore for BeadsTaskStore {
         markdown: &str,
         verdict: QaVerdict,
     ) -> Result<QaReportDocument> {
-        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let (_issue, mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
         let mut documents_map = namespace_map
             .get("documents")
             .and_then(Value::as_object)
@@ -495,7 +581,7 @@ impl TaskStore for BeadsTaskStore {
         );
         namespace_map.insert("documents".to_string(), Value::Object(documents_map));
 
-        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         Ok(QaReportDocument {
             markdown: entry.markdown,
             verdict: entry.verdict,
@@ -511,7 +597,8 @@ impl TaskStore for BeadsTaskStore {
     ) -> Result<Vec<AgentSessionDocument>> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
-        let mut entries = metadata_namespace(&metadata_root, &self.metadata_namespace)
+        let namespace_key = self.current_metadata_namespace();
+        let mut entries = metadata_namespace(&metadata_root, &namespace_key)
             .and_then(|ns| ns.get("agentSessions"))
             .and_then(parse_agent_sessions)
             .unwrap_or_default();
@@ -526,7 +613,8 @@ impl TaskStore for BeadsTaskStore {
         task_id: &str,
         session: AgentSessionDocument,
     ) -> Result<()> {
-        let (_issue, mut root, mut namespace_map) = self.load_namespace(repo_path, task_id)?;
+        let (_issue, mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
         let mut sessions = namespace_map
             .get("agentSessions")
             .and_then(parse_agent_sessions)
@@ -554,7 +642,7 @@ impl TaskStore for BeadsTaskStore {
             ),
         );
 
-        self.persist_namespace(repo_path, task_id, &mut root, namespace_map)?;
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
         Ok(())
     }
 }

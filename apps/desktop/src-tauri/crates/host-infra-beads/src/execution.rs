@@ -61,6 +61,7 @@ impl BeadsTaskStore {
 
     pub(crate) fn show_task(&self, repo_path: &Path, task_id: &str) -> Result<TaskCard> {
         let raw = self.show_raw_issue(repo_path, task_id)?;
-        self.parse_task_card(raw)
+        let metadata_namespace = self.current_metadata_namespace();
+        self.parse_task_card(raw, &metadata_namespace)
     }
 }
