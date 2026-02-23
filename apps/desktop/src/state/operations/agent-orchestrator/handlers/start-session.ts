@@ -6,6 +6,10 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {
+  captureOrchestratorFallback,
+  runOrchestratorSideEffect,
+} from "../support/async-side-effects";
+import {
   createRepoStaleGuard,
   inferScenario,
   kickoffPrompt,
@@ -188,7 +192,20 @@ export const createStartAgentSession = ({
         baseUrl: runtime.baseUrl,
       });
       if (isStaleRepoOperation()) {
-        await adapter.stopSession(summary.sessionId).catch(() => undefined);
+        await captureOrchestratorFallback(
+          "start-session-stop-on-stale-after-start",
+          async () => adapter.stopSession(summary.sessionId),
+          {
+            tags: {
+              repoPath,
+              taskId,
+              role,
+              scenario: resolvedScenario,
+              sessionId: summary.sessionId,
+            },
+            fallback: () => undefined,
+          },
+        );
         throw new Error(STALE_START_ERROR);
       }
 
@@ -242,27 +259,73 @@ export const createStartAgentSession = ({
         };
       });
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      void persistSessionSnapshot(initialSession).catch(() => undefined);
+      runOrchestratorSideEffect(
+        "start-session-persist-initial-session",
+        persistSessionSnapshot(initialSession),
+        {
+          tags: {
+            repoPath,
+            taskId,
+            role,
+            scenario: resolvedScenario,
+            sessionId: summary.sessionId,
+          },
+        },
+      );
 
       attachSessionListener(repoPath, summary.sessionId);
 
       if (isStaleRepoOperation()) {
-        await adapter.stopSession(summary.sessionId).catch(() => undefined);
+        await captureOrchestratorFallback(
+          "start-session-stop-on-stale-after-listener-attach",
+          async () => adapter.stopSession(summary.sessionId),
+          {
+            tags: {
+              repoPath,
+              taskId,
+              role,
+              scenario: resolvedScenario,
+              sessionId: summary.sessionId,
+            },
+            fallback: () => undefined,
+          },
+        );
         throw new Error(STALE_START_ERROR);
       }
 
       const warmSessionData = (): void => {
-        void loadSessionTodos(
-          summary.sessionId,
-          runtime.baseUrl,
-          runtime.workingDirectory,
-          summary.externalSessionId,
-        ).catch(() => undefined);
-        void loadSessionModelCatalog(
-          summary.sessionId,
-          runtime.baseUrl,
-          runtime.workingDirectory,
-        ).catch(() => undefined);
+        runOrchestratorSideEffect(
+          "start-session-warm-session-todos",
+          loadSessionTodos(
+            summary.sessionId,
+            runtime.baseUrl,
+            runtime.workingDirectory,
+            summary.externalSessionId,
+          ),
+          {
+            tags: {
+              repoPath,
+              taskId,
+              role,
+              scenario: resolvedScenario,
+              sessionId: summary.sessionId,
+              externalSessionId: summary.externalSessionId,
+            },
+          },
+        );
+        runOrchestratorSideEffect(
+          "start-session-warm-session-model-catalog",
+          loadSessionModelCatalog(summary.sessionId, runtime.baseUrl, runtime.workingDirectory),
+          {
+            tags: {
+              repoPath,
+              taskId,
+              role,
+              scenario: resolvedScenario,
+              sessionId: summary.sessionId,
+            },
+          },
+        );
       };
       warmSessionData();
 
@@ -270,7 +333,19 @@ export const createStartAgentSession = ({
         throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
         await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario, task.id));
         throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-        void refreshTaskData(repoPath).catch(() => undefined);
+        runOrchestratorSideEffect(
+          "start-session-refresh-task-data-after-kickoff",
+          refreshTaskData(repoPath),
+          {
+            tags: {
+              repoPath,
+              taskId,
+              role,
+              scenario: resolvedScenario,
+              sessionId: summary.sessionId,
+            },
+          },
+        );
       }
 
       return summary.sessionId;

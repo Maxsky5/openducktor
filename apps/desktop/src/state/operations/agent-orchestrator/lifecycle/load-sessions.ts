@@ -5,11 +5,16 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import {
+  captureOrchestratorFallback,
+  runOrchestratorSideEffect,
+} from "../support/async-side-effects";
+import {
   createRepoStaleGuard,
   fromPersistedSessionRecord,
   historyToChatMessages,
   normalizePersistedSelection,
   toBaseUrl,
+  upsertMessage,
 } from "../support/utils";
 
 type UpdateSession = (
@@ -19,6 +24,15 @@ type UpdateSession = (
 ) => void;
 
 type SessionHistoryAdapter = Pick<OpencodeSdkAdapter, "loadSessionHistory">;
+type SessionHistoryLoadResult =
+  | {
+      ok: true;
+      history: Awaited<ReturnType<SessionHistoryAdapter["loadSessionHistory"]>>;
+    }
+  | {
+      ok: false;
+      reason: string;
+    };
 
 type CreateLoadAgentSessionsArgs = {
   activeRepo: string | null;
@@ -75,11 +89,26 @@ export const createLoadAgentSessions = ({
       workingDirectory: string,
       externalSessionId: string,
     ): void => {
-      void loadSessionTodos(targetSessionId, baseUrl, workingDirectory, externalSessionId).catch(
-        () => undefined,
+      runOrchestratorSideEffect(
+        "load-sessions-warm-session-todos",
+        loadSessionTodos(targetSessionId, baseUrl, workingDirectory, externalSessionId),
+        {
+          tags: {
+            repoPath,
+            sessionId: targetSessionId,
+            externalSessionId,
+          },
+        },
       );
-      void loadSessionModelCatalog(targetSessionId, baseUrl, workingDirectory).catch(
-        () => undefined,
+      runOrchestratorSideEffect(
+        "load-sessions-warm-session-model-catalog",
+        loadSessionModelCatalog(targetSessionId, baseUrl, workingDirectory),
+        {
+          tags: {
+            repoPath,
+            sessionId: targetSessionId,
+          },
+        },
       );
     };
 
@@ -101,20 +130,56 @@ export const createLoadAgentSessions = ({
       }
 
       const docs = await Promise.all([
-        host
-          .specGet(repoPath, record.taskId)
-          .then((doc) => doc.markdown)
-          .catch(() => ""),
-        host
-          .planGet(repoPath, record.taskId)
-          .then((doc) => doc.markdown)
-          .catch(() => ""),
-        host
-          .qaGetReport(repoPath, record.taskId)
-          .then((doc) => doc.markdown)
-          .catch(() => ""),
-      ]).catch(() => null);
-      if (!docs || isStaleRepoOperation()) {
+        captureOrchestratorFallback(
+          "load-sessions-load-prelude-document",
+          async () => {
+            const spec = await host.specGet(repoPath, record.taskId);
+            return spec.markdown;
+          },
+          {
+            tags: {
+              repoPath,
+              taskId: record.taskId,
+              sessionId: record.sessionId,
+              document: "spec",
+            },
+            fallback: () => "",
+          },
+        ),
+        captureOrchestratorFallback(
+          "load-sessions-load-prelude-document",
+          async () => {
+            const plan = await host.planGet(repoPath, record.taskId);
+            return plan.markdown;
+          },
+          {
+            tags: {
+              repoPath,
+              taskId: record.taskId,
+              sessionId: record.sessionId,
+              document: "plan",
+            },
+            fallback: () => "",
+          },
+        ),
+        captureOrchestratorFallback(
+          "load-sessions-load-prelude-document",
+          async () => {
+            const qa = await host.qaGetReport(repoPath, record.taskId);
+            return qa.markdown;
+          },
+          {
+            tags: {
+              repoPath,
+              taskId: record.taskId,
+              sessionId: record.sessionId,
+              document: "qa",
+            },
+            fallback: () => "",
+          },
+        ),
+      ]);
+      if (isStaleRepoOperation()) {
         return preludeMessages;
       }
 
@@ -194,7 +259,14 @@ export const createLoadAgentSessions = ({
       (record) => record.role === "spec" || record.role === "planner",
     );
     const workspaceRuntime = requiresWorkspaceRuntime
-      ? await host.opencodeRepoRuntimeEnsure(repoPath).catch(() => null)
+      ? await captureOrchestratorFallback(
+          "load-sessions-ensure-workspace-runtime",
+          async () => host.opencodeRepoRuntimeEnsure(repoPath),
+          {
+            tags: { repoPath, taskId },
+            fallback: () => null,
+          },
+        )
       : null;
     if (isStaleRepoOperation()) {
       return;
@@ -231,15 +303,30 @@ export const createLoadAgentSessions = ({
           return;
         }
 
-        const historyPromise = adapter
-          .loadSessionHistory({
-            baseUrl,
-            workingDirectory,
-            externalSessionId: record.externalSessionId,
-            limit: 2000,
-          })
-          .then((history) => ({ ok: true as const, history }))
-          .catch(() => ({ ok: false as const }));
+        const historyPromise = captureOrchestratorFallback<SessionHistoryLoadResult>(
+          "load-sessions-load-history",
+          async () => {
+            const history = await adapter.loadSessionHistory({
+              baseUrl,
+              workingDirectory,
+              externalSessionId: record.externalSessionId,
+              limit: 2000,
+            });
+            return { ok: true as const, history };
+          },
+          {
+            tags: {
+              repoPath,
+              taskId: record.taskId,
+              sessionId: record.sessionId,
+              externalSessionId: record.externalSessionId,
+            },
+            fallback: (failure): SessionHistoryLoadResult => ({
+              ok: false,
+              reason: failure.reason,
+            }),
+          },
+        );
 
         const preludeMessages = await buildPreludeMessages(record);
         if (isStaleRepoOperation()) {
@@ -252,6 +339,19 @@ export const createLoadAgentSessions = ({
         }
 
         if (!historyResult.ok) {
+          updateSession(
+            record.sessionId,
+            (current) => ({
+              ...current,
+              messages: upsertMessage(current.messages, {
+                id: `history-unavailable:${record.sessionId}`,
+                role: "system",
+                content: `Session history unavailable: ${historyResult.reason}`,
+                timestamp: new Date().toISOString(),
+              }),
+            }),
+            { persist: false },
+          );
           warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
           return;
         }

@@ -3,6 +3,10 @@ export { createAgentSessionActions } from "./handlers/session-actions";
 export { createLoadAgentSessions } from "./lifecycle/load-sessions";
 export { createEnsureRuntime, loadRepoDefaultModel, loadTaskDocuments } from "./runtime/runtime";
 export {
+  captureOrchestratorFallback,
+  runOrchestratorSideEffect,
+} from "./support/async-side-effects";
+export {
   mergeTodoListPreservingOrder,
   normalizeSelectionForCatalog,
   now,
