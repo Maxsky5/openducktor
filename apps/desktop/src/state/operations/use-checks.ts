@@ -45,7 +45,7 @@ export function useChecks({ activeRepo, checkRepoOpencodeHealth }: UseChecksArgs
       return runtimeCheckRef.current;
     }
 
-    const check = await host.runtimeCheck();
+    const check = await host.runtimeCheck(force);
     runtimeCheckRef.current = check;
     setRuntimeCheck(check);
     return check;

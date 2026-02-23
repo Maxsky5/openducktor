@@ -1,4 +1,4 @@
-use super::{read_opencode_version, resolve_opencode_binary_path, AppService};
+use super::{read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck};
 use anyhow::{anyhow, Result};
 use host_domain::{
     BeadsCheck, GitBranch, GitCurrentBranch, GitPushSummary, GitWorktreeSummary, RuntimeCheck,
@@ -6,9 +6,28 @@ use host_domain::{
 };
 use host_infra_system::{command_exists, resolve_central_beads_dir, version_command, RepoConfig};
 use std::path::Path;
+use std::time::{Duration, Instant};
+
+const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 
 impl AppService {
     pub fn runtime_check(&self) -> Result<RuntimeCheck> {
+        self.runtime_check_with_refresh(false)
+    }
+
+    pub fn runtime_check_with_refresh(&self, force_refresh: bool) -> Result<RuntimeCheck> {
+        if !force_refresh {
+            if let Some(cached) = self.cached_runtime_check()? {
+                return Ok(cached);
+            }
+        }
+
+        let runtime = Self::probe_runtime_check();
+        self.update_runtime_check_cache(runtime.clone())?;
+        Ok(runtime)
+    }
+
+    fn probe_runtime_check() -> RuntimeCheck {
         let git_ok = command_exists("git");
         let opencode_binary = resolve_opencode_binary_path();
         let opencode_ok = opencode_binary.is_some();
@@ -21,7 +40,7 @@ impl AppService {
             errors.push("opencode not found in PATH".to_string());
         }
 
-        Ok(RuntimeCheck {
+        RuntimeCheck {
             git_ok,
             git_version: version_command("git", &["--version"]),
             opencode_ok,
@@ -33,7 +52,35 @@ impl AppService {
                 }
             }),
             errors,
-        })
+        }
+    }
+
+    fn cached_runtime_check(&self) -> Result<Option<RuntimeCheck>> {
+        let mut cache = self
+            .runtime_check_cache
+            .lock()
+            .map_err(|_| anyhow!("Runtime check cache lock poisoned in `cached_runtime_check`"))?;
+        if let Some(entry) = cache.as_ref() {
+            if entry.checked_at.elapsed() <= RUNTIME_CHECK_CACHE_TTL {
+                return Ok(Some(entry.value.clone()));
+            }
+        }
+        *cache = None;
+        Ok(None)
+    }
+
+    fn update_runtime_check_cache(&self, check: RuntimeCheck) -> Result<()> {
+        let mut cache = self
+            .runtime_check_cache
+            .lock()
+            .map_err(|_| {
+                anyhow!("Runtime check cache lock poisoned in `update_runtime_check_cache`")
+            })?;
+        *cache = Some(CachedRuntimeCheck {
+            checked_at: Instant::now(),
+            value: check,
+        });
+        Ok(())
     }
 
     pub fn beads_check(&self, repo_path: &str) -> Result<BeadsCheck> {
@@ -221,7 +268,11 @@ impl AppService {
 
 #[cfg(test)]
 mod tests {
+    use super::super::CachedRuntimeCheck;
+    use super::RUNTIME_CHECK_CACHE_TTL;
     use crate::app_service::test_support::build_service_with_state;
+    use host_domain::RuntimeCheck;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn module_git_create_worktree_rejects_empty_path() {
@@ -251,5 +302,98 @@ mod tests {
         assert_eq!(summary.remote, "origin");
         let state = git_state.lock().expect("git state lock poisoned");
         assert_eq!(state.last_push_remote.as_deref(), Some("origin"));
+    }
+
+    #[test]
+    fn module_runtime_check_returns_cached_value_when_fresh() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let cached = RuntimeCheck {
+            git_ok: false,
+            git_version: Some("cached-git-sentinel".to_string()),
+            opencode_ok: false,
+            opencode_version: Some("cached-opencode-sentinel".to_string()),
+            errors: vec!["cached-runtime-sentinel".to_string()],
+        };
+        {
+            let mut cache = service
+                .runtime_check_cache
+                .lock()
+                .expect("runtime cache lock poisoned");
+            *cache = Some(CachedRuntimeCheck {
+                checked_at: Instant::now(),
+                value: cached.clone(),
+            });
+        }
+
+        let runtime = service
+            .runtime_check()
+            .expect("runtime check should use cached entry");
+        assert_eq!(runtime.git_version, cached.git_version);
+        assert_eq!(runtime.opencode_version, cached.opencode_version);
+        assert_eq!(runtime.errors, cached.errors);
+    }
+
+    #[test]
+    fn module_runtime_check_force_refresh_bypasses_cache() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let sentinel_error = "cached-runtime-sentinel".to_string();
+        {
+            let mut cache = service
+                .runtime_check_cache
+                .lock()
+                .expect("runtime cache lock poisoned");
+            *cache = Some(CachedRuntimeCheck {
+                checked_at: Instant::now(),
+                value: RuntimeCheck {
+                    git_ok: false,
+                    git_version: Some("cached-git-sentinel".to_string()),
+                    opencode_ok: false,
+                    opencode_version: Some("cached-opencode-sentinel".to_string()),
+                    errors: vec![sentinel_error.clone()],
+                },
+            });
+        }
+
+        let runtime = service
+            .runtime_check_with_refresh(true)
+            .expect("runtime check should bypass cache when forced");
+        assert!(!runtime.errors.contains(&sentinel_error));
+        assert_ne!(runtime.git_version.as_deref(), Some("cached-git-sentinel"));
+        assert_ne!(
+            runtime.opencode_version.as_deref(),
+            Some("cached-opencode-sentinel")
+        );
+    }
+
+    #[test]
+    fn module_runtime_check_refreshes_when_cache_is_stale() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+        let sentinel_error = "cached-runtime-sentinel".to_string();
+        {
+            let mut cache = service
+                .runtime_check_cache
+                .lock()
+                .expect("runtime cache lock poisoned");
+            *cache = Some(CachedRuntimeCheck {
+                checked_at: Instant::now() - (RUNTIME_CHECK_CACHE_TTL + Duration::from_secs(1)),
+                value: RuntimeCheck {
+                    git_ok: false,
+                    git_version: Some("cached-git-sentinel".to_string()),
+                    opencode_ok: false,
+                    opencode_version: Some("cached-opencode-sentinel".to_string()),
+                    errors: vec![sentinel_error.clone()],
+                },
+            });
+        }
+
+        let runtime = service
+            .runtime_check()
+            .expect("runtime check should refresh stale cache entries");
+        assert!(!runtime.errors.contains(&sentinel_error));
+        assert_ne!(runtime.git_version.as_deref(), Some("cached-git-sentinel"));
+        assert_ne!(
+            runtime.opencode_version.as_deref(),
+            Some("cached-opencode-sentinel")
+        );
     }
 }

@@ -89,8 +89,8 @@ export class TauriHostClient implements PlannerTools {
     return systemCheckSchema.parse(payload);
   }
 
-  async runtimeCheck(): Promise<RuntimeCheck> {
-    const payload = await this.invokeFn<unknown>("runtime_check");
+  async runtimeCheck(force = false): Promise<RuntimeCheck> {
+    const payload = await this.invokeFn<unknown>("runtime_check", { force });
     return runtimeCheckSchema.parse(payload);
   }
 

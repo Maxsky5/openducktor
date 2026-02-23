@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Context, Result};
-use host_domain::{AgentRuntimeSummary, GitPort, RunEvent, RunSummary, TaskCard, TaskStore};
+use host_domain::{
+    AgentRuntimeSummary, GitPort, RunEvent, RunSummary, RuntimeCheck, TaskCard, TaskStore,
+};
 use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig};
 
 use std::collections::{HashMap, HashSet};
@@ -7,6 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Child;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 pub mod build_orchestrator;
 
@@ -49,6 +52,7 @@ pub struct AppService {
     runs: Arc<Mutex<HashMap<String, RunProcess>>>,
     agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     initialized_repos: Arc<Mutex<HashSet<String>>>,
+    runtime_check_cache: Arc<Mutex<Option<CachedRuntimeCheck>>>,
 }
 
 pub(crate) struct RunProcess {
@@ -65,6 +69,11 @@ pub(crate) struct AgentRuntimeProcess {
     child: Child,
     cleanup_repo_path: Option<String>,
     cleanup_worktree_path: Option<String>,
+}
+
+pub(crate) struct CachedRuntimeCheck {
+    checked_at: Instant,
+    value: RuntimeCheck,
 }
 
 impl Drop for AppService {
@@ -93,6 +102,7 @@ impl AppService {
             runs: Arc::new(Mutex::new(HashMap::new())),
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
+            runtime_check_cache: Arc::new(Mutex::new(None)),
         }
     }
 
