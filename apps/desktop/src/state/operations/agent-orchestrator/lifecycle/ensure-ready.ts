@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { requireActiveRepo } from "../../task-operations-model";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {
   captureOrchestratorFallback,
@@ -11,7 +12,6 @@ import {
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,
 } from "../support/utils";
-import { requireActiveRepo } from "../../task-operations-model";
 
 type EnsureSessionReadyDependencies = {
   activeRepo: string | null;

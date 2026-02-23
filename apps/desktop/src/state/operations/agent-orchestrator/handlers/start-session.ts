@@ -8,6 +8,7 @@ import type {
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
+import { requireActiveRepo } from "../../task-operations-model";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {
   captureOrchestratorFallback,
@@ -19,7 +20,6 @@ import {
   kickoffPrompt,
   throwIfRepoStale,
 } from "../support/utils";
-import { requireActiveRepo } from "../../task-operations-model";
 
 export type StartAgentSessionInput = {
   taskId: string;
