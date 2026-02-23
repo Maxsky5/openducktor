@@ -363,4 +363,31 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.unmount();
   });
+
+  test("keeps thread model stable for input-only composer updates", async () => {
+    const session = createSession("session-1", "external-1");
+    const baseProps = createHookArgs({
+      activeSession: session,
+      sessionsForTask: [session],
+      input: "",
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialState = harness.getLatest();
+    const initialThreadModel = initialState.agentChatModel.thread;
+    const initialComposerModel = initialState.agentChatModel.composer;
+
+    await harness.update({
+      ...baseProps,
+      input: "draft update",
+    });
+
+    const nextState = harness.getLatest();
+    expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
+    expect(nextState.agentChatModel.composer).not.toBe(initialComposerModel);
+    expect(nextState.agentChatModel.composer.input).toBe("draft update");
+
+    await harness.unmount();
+  });
 });

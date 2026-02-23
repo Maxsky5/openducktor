@@ -2,7 +2,9 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { RefObject, UIEvent } from "react";
 import type {
+  AgentChatComposerModel,
   AgentChatModel,
+  AgentChatThreadModel,
   AgentRoleOption,
   AgentStudioHeaderModel,
   AgentStudioTaskTabsModel,
@@ -103,7 +105,7 @@ export const buildAgentStudioWorkspaceSidebarModel = (args: {
   activeDocument: args.activeDocument,
 });
 
-export const buildAgentChatModel = (args: {
+type AgentChatThreadModelArgs = {
   activeSession: AgentSessionState | null;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
@@ -127,9 +129,16 @@ export const buildAgentChatModel = (args: {
   todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
+};
+
+type AgentChatComposerModelArgs = {
+  taskId: string;
+  agentStudioReady: boolean;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  isSending: boolean;
+  isStarting: boolean;
   isSessionWorking: boolean;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
@@ -146,55 +155,67 @@ export const buildAgentChatModel = (args: {
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
   onComposerTextareaInput: () => void;
-}): AgentChatModel => ({
-  thread: {
-    session: args.activeSession,
-    roleOptions: args.roleOptions,
-    agentStudioReady: args.agentStudioReady,
-    blockedReason: args.agentStudioBlockedReason,
-    isLoadingChecks: args.isLoadingChecks,
-    onRefreshChecks: args.onRefreshChecks,
-    taskSelected: Boolean(args.taskId),
-    canKickoffNewSession: args.canKickoffNewSession,
-    kickoffLabel: args.kickoffLabel,
-    onKickoff: args.onKickoff,
-    isStarting: args.isStarting,
-    isSending: args.isSending,
-    sessionAgentColors: args.activeSessionAgentColors,
-    isSubmittingQuestionByRequestId: args.isSubmittingQuestionByRequestId,
-    onSubmitQuestionAnswers: args.onSubmitQuestionAnswers,
-    isSubmittingPermissionByRequestId: args.isSubmittingPermissionByRequestId,
-    permissionReplyErrorByRequestId: args.permissionReplyErrorByRequestId,
-    onReplyPermission: args.onReplyPermission,
-    todoPanelCollapsed: args.todoPanelCollapsed,
-    onToggleTodoPanel: args.onToggleTodoPanel,
-    todoPanelBottomOffset: args.todoPanelBottomOffset,
-    messagesContainerRef: args.messagesContainerRef,
-    onMessagesScroll: args.onMessagesScroll,
-  },
-  composer: {
-    taskId: args.taskId,
-    agentStudioReady: args.agentStudioReady,
-    input: args.input,
-    onInputChange: args.onInputChange,
-    onSend: args.onSend,
-    isSending: args.isSending,
-    isStarting: args.isStarting,
-    isSessionWorking: args.isSessionWorking,
-    selectedModelSelection: args.selectedModelSelection,
-    isSelectionCatalogLoading: args.isSelectionCatalogLoading,
-    agentOptions: args.agentOptions,
-    modelOptions: args.modelOptions,
-    modelGroups: args.modelGroups,
-    variantOptions: args.variantOptions,
-    onSelectAgent: args.onSelectAgent,
-    onSelectModel: args.onSelectModel,
-    onSelectVariant: args.onSelectVariant,
-    contextUsage: args.contextUsage,
-    canStopSession: args.canStopSession,
-    onStopSession: args.onStopSession,
-    composerFormRef: args.composerFormRef,
-    composerTextareaRef: args.composerTextareaRef,
-    onComposerTextareaInput: args.onComposerTextareaInput,
-  },
+};
+
+export const buildAgentChatThreadModel = (
+  args: AgentChatThreadModelArgs,
+): AgentChatThreadModel => ({
+  session: args.activeSession,
+  roleOptions: args.roleOptions,
+  agentStudioReady: args.agentStudioReady,
+  blockedReason: args.agentStudioBlockedReason,
+  isLoadingChecks: args.isLoadingChecks,
+  onRefreshChecks: args.onRefreshChecks,
+  taskSelected: Boolean(args.taskId),
+  canKickoffNewSession: args.canKickoffNewSession,
+  kickoffLabel: args.kickoffLabel,
+  onKickoff: args.onKickoff,
+  isStarting: args.isStarting,
+  isSending: args.isSending,
+  sessionAgentColors: args.activeSessionAgentColors,
+  isSubmittingQuestionByRequestId: args.isSubmittingQuestionByRequestId,
+  onSubmitQuestionAnswers: args.onSubmitQuestionAnswers,
+  isSubmittingPermissionByRequestId: args.isSubmittingPermissionByRequestId,
+  permissionReplyErrorByRequestId: args.permissionReplyErrorByRequestId,
+  onReplyPermission: args.onReplyPermission,
+  todoPanelCollapsed: args.todoPanelCollapsed,
+  onToggleTodoPanel: args.onToggleTodoPanel,
+  todoPanelBottomOffset: args.todoPanelBottomOffset,
+  messagesContainerRef: args.messagesContainerRef,
+  onMessagesScroll: args.onMessagesScroll,
+});
+
+export const buildAgentChatComposerModel = (
+  args: AgentChatComposerModelArgs,
+): AgentChatComposerModel => ({
+  taskId: args.taskId,
+  agentStudioReady: args.agentStudioReady,
+  input: args.input,
+  onInputChange: args.onInputChange,
+  onSend: args.onSend,
+  isSending: args.isSending,
+  isStarting: args.isStarting,
+  isSessionWorking: args.isSessionWorking,
+  selectedModelSelection: args.selectedModelSelection,
+  isSelectionCatalogLoading: args.isSelectionCatalogLoading,
+  agentOptions: args.agentOptions,
+  modelOptions: args.modelOptions,
+  modelGroups: args.modelGroups,
+  variantOptions: args.variantOptions,
+  onSelectAgent: args.onSelectAgent,
+  onSelectModel: args.onSelectModel,
+  onSelectVariant: args.onSelectVariant,
+  contextUsage: args.contextUsage,
+  canStopSession: args.canStopSession,
+  onStopSession: args.onStopSession,
+  composerFormRef: args.composerFormRef,
+  composerTextareaRef: args.composerTextareaRef,
+  onComposerTextareaInput: args.onComposerTextareaInput,
+});
+
+export const buildAgentChatModel = (
+  args: AgentChatThreadModelArgs & AgentChatComposerModelArgs,
+): AgentChatModel => ({
+  thread: buildAgentChatThreadModel(args),
+  composer: buildAgentChatComposerModel(args),
 });

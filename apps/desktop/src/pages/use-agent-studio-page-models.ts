@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { type UIEvent, useCallback, useMemo, useState } from "react";
 import {
+  type AgentChatModel,
   type AgentStudioTaskTabsModel,
   isNearBottom,
   useAgentChatLayout,
@@ -19,7 +20,8 @@ import {
   type SessionCreateOption,
 } from "./agents-page-session-tabs";
 import {
-  buildAgentChatModel,
+  buildAgentChatComposerModel,
+  buildAgentChatThreadModel,
   buildAgentStudioHeaderModel,
   buildAgentStudioTaskTabsModel,
   buildAgentStudioWorkspaceSidebarModel,
@@ -135,7 +137,7 @@ export function useAgentStudioPageModels({
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof buildAgentStudioHeaderModel>;
   agentStudioWorkspaceSidebarModel: ReturnType<typeof buildAgentStudioWorkspaceSidebarModel>;
-  agentChatModel: ReturnType<typeof buildAgentChatModel>;
+  agentChatModel: AgentChatModel;
 } {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
@@ -375,9 +377,9 @@ export function useAgentStudioPageModels({
     void stopAgentSession(activeSession.sessionId);
   }, [activeSession, stopAgentSession]);
 
-  const agentChatModel = useMemo(
+  const agentChatThreadModel = useMemo(
     () =>
-      buildAgentChatModel({
+      buildAgentChatThreadModel({
         activeSession,
         roleOptions: ROLE_OPTIONS,
         agentStudioReady,
@@ -401,9 +403,43 @@ export function useAgentStudioPageModels({
         todoPanelBottomOffset,
         messagesContainerRef,
         onMessagesScroll: handleMessagesScroll,
+      }),
+    [
+      activeSession,
+      activeSessionAgentColors,
+      activeTodoPanelCollapsed,
+      agentStudioBlockedReason,
+      agentStudioReady,
+      canKickoffNewSession,
+      handleKickoff,
+      handleMessagesScroll,
+      handleRefreshChecks,
+      handleToggleTodoPanel,
+      isLoadingChecks,
+      isSending,
+      isStarting,
+      isSubmittingQuestionByRequestId,
+      isSubmittingPermissionByRequestId,
+      handlePermissionReply,
+      kickoffLabel,
+      permissionReplyErrorByRequestId,
+      messagesContainerRef,
+      onSubmitQuestionAnswers,
+      taskId,
+      todoPanelBottomOffset,
+    ],
+  );
+
+  const agentChatComposerModel = useMemo(
+    () =>
+      buildAgentChatComposerModel({
+        taskId,
+        agentStudioReady,
         input,
         onInputChange: setInput,
         onSend: handleSend,
+        isSending,
+        isStarting,
         isSessionWorking,
         selectedModelSelection,
         isSelectionCatalogLoading,
@@ -422,48 +458,38 @@ export function useAgentStudioPageModels({
         onComposerTextareaInput: resizeComposerTextarea,
       }),
     [
-      activeSession,
-      activeSessionAgentColors,
-      activeTodoPanelCollapsed,
       agentOptions,
-      agentStudioBlockedReason,
       agentStudioReady,
-      canKickoffNewSession,
       canStopSession,
       chatContextUsage,
       composerFormRef,
       composerTextareaRef,
-      handleKickoff,
-      handleMessagesScroll,
-      handleRefreshChecks,
-      onSelectAgent,
-      onSelectModel,
-      onSelectVariant,
       handleSend,
       handleStopSession,
-      handleToggleTodoPanel,
       input,
-      isLoadingChecks,
       isSelectionCatalogLoading,
       isSending,
       isSessionWorking,
       isStarting,
-      isSubmittingQuestionByRequestId,
-      isSubmittingPermissionByRequestId,
-      handlePermissionReply,
-      kickoffLabel,
-      permissionReplyErrorByRequestId,
-      messagesContainerRef,
       modelGroups,
       modelOptions,
-      onSubmitQuestionAnswers,
+      onSelectAgent,
+      onSelectModel,
+      onSelectVariant,
       resizeComposerTextarea,
       selectedModelSelection,
       setInput,
       taskId,
-      todoPanelBottomOffset,
       variantOptions,
     ],
+  );
+
+  const agentChatModel = useMemo(
+    () => ({
+      thread: agentChatThreadModel,
+      composer: agentChatComposerModel,
+    }),
+    [agentChatComposerModel, agentChatThreadModel],
   );
 
   return {

@@ -1,5 +1,5 @@
 import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { Fragment, type ReactElement, type ReactNode } from "react";
+import { Fragment, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -9,13 +9,7 @@ import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 
-export function AgentChatThread({
-  model,
-  children,
-}: {
-  model: AgentChatThreadModel;
-  children?: ReactNode;
-}): ReactElement {
+export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     session,
     roleOptions,
@@ -47,7 +41,7 @@ export function AgentChatThread({
   const StreamingRoleIcon = streamingRoleDisplay?.icon ?? Bot;
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {!agentStudioReady ? (
         <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           <div className="flex min-w-0 items-start gap-2">
@@ -184,7 +178,6 @@ export function AgentChatThread({
           />
         </div>
       ) : null}
-      {children}
     </div>
   );
 }
