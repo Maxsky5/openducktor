@@ -4,6 +4,10 @@ import { buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import {
+  captureOrchestratorFallback,
+  runOrchestratorSideEffect,
+} from "../support/async-side-effects";
+import {
   createRepoStaleGuard,
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,
@@ -97,7 +101,14 @@ export const createEnsureSessionReady = ({
         existingUnsubscriber();
         unsubscribersRef.current.delete(sessionId);
       }
-      await adapter.stopSession(sessionId).catch(() => undefined);
+      await captureOrchestratorFallback(
+        "ensure-ready-stop-attached-error-session",
+        async () => adapter.stopSession(sessionId),
+        {
+          tags: { repoPath, sessionId, taskId: session.taskId, role: session.role },
+          fallback: () => undefined,
+        },
+      );
       assertNotStale();
     }
 
@@ -140,7 +151,14 @@ export const createEnsureSessionReady = ({
     });
 
     if (isStaleRepoOperation()) {
-      await adapter.stopSession(sessionId).catch(() => undefined);
+      await captureOrchestratorFallback(
+        "ensure-ready-stop-session-after-stale-resume",
+        async () => adapter.stopSession(sessionId),
+        {
+          tags: { repoPath, sessionId, taskId: session.taskId, role: session.role },
+          fallback: () => undefined,
+        },
+      );
       throw new Error(STALE_PREPARE_ERROR);
     }
 
@@ -167,15 +185,36 @@ export const createEnsureSessionReady = ({
 
     const activeSession = sessionsRef.current[sessionId];
     const warmSessionData = (targetSession: AgentSessionState): void => {
-      void loadSessionTodos(
-        sessionId,
-        runtime.baseUrl,
-        runtime.workingDirectory,
-        targetSession.externalSessionId,
-      ).catch(() => undefined);
+      runOrchestratorSideEffect(
+        "ensure-ready-warm-session-todos",
+        loadSessionTodos(
+          sessionId,
+          runtime.baseUrl,
+          runtime.workingDirectory,
+          targetSession.externalSessionId,
+        ),
+        {
+          tags: {
+            repoPath,
+            sessionId,
+            taskId: targetSession.taskId,
+            role: targetSession.role,
+            externalSessionId: targetSession.externalSessionId,
+          },
+        },
+      );
       if (!targetSession.modelCatalog && !targetSession.isLoadingModelCatalog) {
-        void loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory).catch(
-          () => undefined,
+        runOrchestratorSideEffect(
+          "ensure-ready-warm-session-model-catalog",
+          loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory),
+          {
+            tags: {
+              repoPath,
+              sessionId,
+              taskId: targetSession.taskId,
+              role: targetSession.role,
+            },
+          },
         );
       }
     };

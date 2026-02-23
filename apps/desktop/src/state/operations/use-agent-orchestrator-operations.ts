@@ -16,6 +16,7 @@ import {
   normalizeSelectionForCatalog,
   now,
   pickDefaultModel,
+  runOrchestratorSideEffect,
   toPersistedSessionRecord,
   upsertMessage,
 } from "./agent-orchestrator";
@@ -137,10 +138,21 @@ export function useAgentOrchestratorOperations({
       setSessionsById(nextSessions);
 
       if (options?.persist !== false) {
-        void persistSessionSnapshot(nextSession).catch(() => undefined);
+        runOrchestratorSideEffect(
+          "operations-persist-session-snapshot",
+          persistSessionSnapshot(nextSession),
+          {
+            tags: {
+              repoPath: activeRepo,
+              sessionId,
+              taskId: nextSession.taskId,
+              role: nextSession.role,
+            },
+          },
+        );
       }
     },
-    [persistSessionSnapshot],
+    [activeRepo, persistSessionSnapshot],
   );
 
   const resolveTurnDurationMs = useCallback(

@@ -1,6 +1,10 @@
 import type { RunSummary } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { host } from "../../host";
+import {
+  captureOrchestratorFallback,
+  runOrchestratorSideEffect,
+} from "../support/async-side-effects";
 import { runningStates, toBaseUrl } from "../support/utils";
 
 export type RuntimeInfo = {
@@ -26,18 +30,42 @@ export const loadTaskDocuments = async (
   taskId: string,
 ): Promise<TaskDocuments> => {
   const [spec, plan, qa] = await Promise.all([
-    host
-      .specGet(repoPath, taskId)
-      .then((doc) => doc.markdown)
-      .catch(() => ""),
-    host
-      .planGet(repoPath, taskId)
-      .then((doc) => doc.markdown)
-      .catch(() => ""),
-    host
-      .qaGetReport(repoPath, taskId)
-      .then((doc) => doc.markdown)
-      .catch(() => ""),
+    captureOrchestratorFallback(
+      "runtime-load-task-document",
+      async () => {
+        const spec = await host.specGet(repoPath, taskId);
+        return spec.markdown;
+      },
+      {
+        tags: { repoPath, taskId, document: "spec" },
+        logLevel: "warn",
+        fallback: () => "",
+      },
+    ),
+    captureOrchestratorFallback(
+      "runtime-load-task-document",
+      async () => {
+        const plan = await host.planGet(repoPath, taskId);
+        return plan.markdown;
+      },
+      {
+        tags: { repoPath, taskId, document: "plan" },
+        logLevel: "warn",
+        fallback: () => "",
+      },
+    ),
+    captureOrchestratorFallback(
+      "runtime-load-task-document",
+      async () => {
+        const qa = await host.qaGetReport(repoPath, taskId);
+        return qa.markdown;
+      },
+      {
+        tags: { repoPath, taskId, document: "qa" },
+        logLevel: "warn",
+        fallback: () => "",
+      },
+    ),
   ]);
 
   return {
@@ -51,7 +79,15 @@ export const loadRepoDefaultModel = async (
   repoPath: string,
   role: AgentRole,
 ): Promise<AgentModelSelection | null> => {
-  const config = await host.workspaceGetRepoConfig(repoPath).catch(() => null);
+  const config = await captureOrchestratorFallback(
+    "runtime-load-repo-config",
+    async () => host.workspaceGetRepoConfig(repoPath),
+    {
+      tags: { repoPath, role },
+      logLevel: "warn",
+      fallback: () => null,
+    },
+  );
   const roleDefault = config?.agentDefaults?.[role];
   if (!roleDefault) {
     return null;
@@ -74,7 +110,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       );
       if (!run) {
         run = await host.buildStart(repoPath, taskId);
-        void refreshTaskData(repoPath).catch(() => undefined);
+        runOrchestratorSideEffect(
+          "runtime-refresh-task-data-after-build-start",
+          refreshTaskData(repoPath),
+          {
+            tags: { repoPath, taskId, role },
+          },
+        );
       }
       return {
         runtimeId: null,

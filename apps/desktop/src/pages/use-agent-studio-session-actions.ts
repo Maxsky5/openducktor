@@ -3,6 +3,10 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
+import {
+  captureOrchestratorFallback,
+  runOrchestratorSideEffect,
+} from "../state/operations/agent-orchestrator/support/async-side-effects";
 import { firstScenario, kickoffPromptForScenario, SCENARIO_LABELS } from "./agents-page-constants";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-page-session-tabs";
 
@@ -419,13 +423,29 @@ export function useAgentStudioSessionActions({
       const startPromise = (async (): Promise<string | undefined> => {
         try {
           setIsStarting(true);
-          const sessionId = await startAgentSession({
-            taskId,
-            role: nextRole,
-            scenario: nextScenario,
-            sendKickoff: false,
-            startMode: "fresh",
-          });
+          const sessionId = await captureOrchestratorFallback<string | undefined>(
+            "agent-studio-start-fresh-session",
+            async () =>
+              startAgentSession({
+                taskId,
+                role: nextRole,
+                scenario: nextScenario,
+                sendKickoff: false,
+                startMode: "fresh",
+              }),
+            {
+              tags: {
+                repoPath: activeRepo,
+                taskId,
+                role: nextRole,
+                scenario: nextScenario,
+              },
+              fallback: () => {
+                updateQuery(previousSelection);
+                return undefined;
+              },
+            },
+          );
           if (!sessionId) {
             updateQuery(previousSelection);
             return undefined;
@@ -437,14 +457,20 @@ export function useAgentStudioSessionActions({
             scenario: nextScenario,
             autostart: undefined,
           });
-          void sendAgentMessage(
-            sessionId,
-            kickoffPromptForScenario(nextRole, nextScenario, taskId),
-          ).catch(() => undefined);
+          runOrchestratorSideEffect(
+            "agent-studio-send-kickoff-message",
+            sendAgentMessage(sessionId, kickoffPromptForScenario(nextRole, nextScenario, taskId)),
+            {
+              tags: {
+                repoPath: activeRepo,
+                taskId,
+                role: nextRole,
+                scenario: nextScenario,
+                sessionId,
+              },
+            },
+          );
           return sessionId;
-        } catch {
-          updateQuery(previousSelection);
-          return undefined;
         } finally {
           setIsStarting(false);
         }
@@ -465,6 +491,7 @@ export function useAgentStudioSessionActions({
       selectedTask,
       role,
       scenario,
+      activeRepo,
       sendAgentMessage,
       sessionsForTask,
       startAgentSession,

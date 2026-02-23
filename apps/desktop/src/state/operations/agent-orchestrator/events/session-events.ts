@@ -9,6 +9,7 @@ import {
   settleDanglingTodoToolMessages,
 } from "../../agent-tool-messages";
 import { isMutatingPermission } from "../../permission-policy";
+import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import {
   finalizeDraftAssistantMessage,
   isDuplicateAssistantMessage,
@@ -151,14 +152,24 @@ const refreshTodosFromSessionRef = (context: SessionEventContext): void => {
   if (!session) {
     return;
   }
-  void context
-    .loadSessionTodos(
+  runOrchestratorSideEffect(
+    "session-events-refresh-todos",
+    context.loadSessionTodos(
       context.sessionId,
       session.baseUrl,
       session.workingDirectory,
       session.externalSessionId,
-    )
-    .catch(() => undefined);
+    ),
+    {
+      tags: {
+        repoPath: context.repoPath,
+        sessionId: context.sessionId,
+        taskId: session.taskId,
+        role: session.role,
+        externalSessionId: session.externalSessionId,
+      },
+    },
+  );
 };
 
 const handleSessionStarted = (
@@ -362,7 +373,17 @@ const handleToolPart = (
   );
 
   if (shouldRefreshTaskData) {
-    void context.refreshTaskData(context.repoPath).catch(() => undefined);
+    runOrchestratorSideEffect(
+      "session-events-refresh-task-data",
+      context.refreshTaskData(context.repoPath),
+      {
+        tags: {
+          repoPath: context.repoPath,
+          sessionId: context.sessionId,
+          tool: part.tool,
+        },
+      },
+    );
   }
   if (shouldRefreshSessionTodos) {
     refreshTodosFromSessionRef(context);
