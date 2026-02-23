@@ -38,6 +38,7 @@ export const loadTaskDocuments = async (
       },
       {
         tags: { repoPath, taskId, document: "spec" },
+        logLevel: "warn",
         fallback: () => "",
       },
     ),
@@ -49,6 +50,7 @@ export const loadTaskDocuments = async (
       },
       {
         tags: { repoPath, taskId, document: "plan" },
+        logLevel: "warn",
         fallback: () => "",
       },
     ),
@@ -60,6 +62,7 @@ export const loadTaskDocuments = async (
       },
       {
         tags: { repoPath, taskId, document: "qa" },
+        logLevel: "warn",
         fallback: () => "",
       },
     ),
@@ -81,6 +84,7 @@ export const loadRepoDefaultModel = async (
     async () => host.workspaceGetRepoConfig(repoPath),
     {
       tags: { repoPath, role },
+      logLevel: "warn",
       fallback: () => null,
     },
   );

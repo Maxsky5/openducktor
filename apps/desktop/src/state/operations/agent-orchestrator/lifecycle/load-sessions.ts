@@ -143,6 +143,7 @@ export const createLoadAgentSessions = ({
               sessionId: record.sessionId,
               document: "spec",
             },
+            logLevel: "warn",
             fallback: () => "",
           },
         ),
@@ -159,6 +160,7 @@ export const createLoadAgentSessions = ({
               sessionId: record.sessionId,
               document: "plan",
             },
+            logLevel: "warn",
             fallback: () => "",
           },
         ),
@@ -175,6 +177,7 @@ export const createLoadAgentSessions = ({
               sessionId: record.sessionId,
               document: "qa",
             },
+            logLevel: "warn",
             fallback: () => "",
           },
         ),
@@ -264,6 +267,7 @@ export const createLoadAgentSessions = ({
           async () => host.opencodeRepoRuntimeEnsure(repoPath),
           {
             tags: { repoPath, taskId },
+            logLevel: "warn",
             fallback: () => null,
           },
         )
@@ -321,6 +325,7 @@ export const createLoadAgentSessions = ({
               sessionId: record.sessionId,
               externalSessionId: record.externalSessionId,
             },
+            logLevel: "warn",
             fallback: (failure): SessionHistoryLoadResult => ({
               ok: false,
               reason: failure.reason,

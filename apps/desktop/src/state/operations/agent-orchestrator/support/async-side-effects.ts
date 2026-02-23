@@ -11,9 +11,12 @@ export type OrchestratorAsyncFailure = {
   error: unknown;
 };
 
+export type OrchestratorAsyncLogLevel = "error" | "warn" | "none";
+
 type AsyncFailureOptions = {
   tags?: OrchestratorAsyncTags;
   onFailure?: (failure: OrchestratorAsyncFailure) => void;
+  logLevel?: OrchestratorAsyncLogLevel;
 };
 
 type AsyncFallbackOptions<T> = AsyncFailureOptions & {
@@ -35,12 +38,26 @@ const createOrchestratorAsyncFailure = (
   };
 };
 
-const logOrchestratorAsyncFailure = (failure: OrchestratorAsyncFailure): void => {
-  console.error(ORCHESTRATOR_ERROR_PREFIX, failure.operation, {
+const logOrchestratorAsyncFailure = (
+  failure: OrchestratorAsyncFailure,
+  logLevel: OrchestratorAsyncLogLevel,
+): void => {
+  if (logLevel === "none") {
+    return;
+  }
+
+  const details = {
     reason: failure.reason,
     tags: failure.tags,
     error: failure.error,
-  });
+  };
+
+  if (logLevel === "warn") {
+    console.warn(ORCHESTRATOR_ERROR_PREFIX, failure.operation, details);
+    return;
+  }
+
+  console.error(ORCHESTRATOR_ERROR_PREFIX, failure.operation, details);
 };
 
 export const runOrchestratorSideEffect = (
@@ -50,7 +67,7 @@ export const runOrchestratorSideEffect = (
 ): void => {
   void effect.catch((error) => {
     const failure = createOrchestratorAsyncFailure(operation, error, options?.tags);
-    logOrchestratorAsyncFailure(failure);
+    logOrchestratorAsyncFailure(failure, options?.logLevel ?? "error");
     options?.onFailure?.(failure);
   });
 };
@@ -64,7 +81,7 @@ export const captureOrchestratorFallback = async <T>(
     return await effect();
   } catch (error) {
     const failure = createOrchestratorAsyncFailure(operation, error, options.tags);
-    logOrchestratorAsyncFailure(failure);
+    logOrchestratorAsyncFailure(failure, options.logLevel ?? "error");
     options.onFailure?.(failure);
     return options.fallback(failure);
   }
