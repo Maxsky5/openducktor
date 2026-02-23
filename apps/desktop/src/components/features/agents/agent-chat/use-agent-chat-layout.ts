@@ -29,8 +29,8 @@ export const computeComposerTextareaLayout = (
   };
 };
 
-export const computeTodoPanelBottomOffset = (composerFormHeight: number): number => {
-  return Math.max(composerFormHeight + 12, 120);
+export const computeTodoPanelBottomOffset = (_composerFormHeight: number): number => {
+  return 12;
 };
 
 type UseAgentChatLayoutInput = {

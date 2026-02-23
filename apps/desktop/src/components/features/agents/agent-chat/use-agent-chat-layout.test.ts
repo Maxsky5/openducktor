@@ -41,8 +41,8 @@ describe("use-agent-chat-layout helpers", () => {
     });
   });
 
-  test("computes todo panel bottom offset from composer height with minimum", () => {
-    expect(computeTodoPanelBottomOffset(40)).toBe(120);
-    expect(computeTodoPanelBottomOffset(180)).toBe(192);
+  test("anchors todo panel with a fixed offset from the thread bottom", () => {
+    expect(computeTodoPanelBottomOffset(40)).toBe(12);
+    expect(computeTodoPanelBottomOffset(180)).toBe(12);
   });
 });
