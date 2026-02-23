@@ -116,17 +116,24 @@ function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCa
     }
   }
 
-  // 3. ID slug prefix match - O(1) for map lookup + O(k) for suffix check where k is matches
+  // 3. ID slug suffix match - scan for IDs ending with requestedSlug
   if (requestedSlug.length > 0) {
-    const byIdSuffix = index.idLower.get(requestedSlug);
-    const byIdSuffixEnds = index.idLower.get(`-${requestedSlug}`);
-    const combined = [...(byIdSuffix ?? []), ...(byIdSuffixEnds ?? [])];
-
-    if (combined.length === 1 && combined[0]) {
-      return combined[0];
+    const byIdSuffix: TaskCard[] = [];
+    for (const task of index.tasks) {
+      const idLower = normalizeTitleKey(task.id);
+      if (idLower === requestedSlug || idLower.endsWith(`-${requestedSlug}`)) {
+        byIdSuffix.push(task);
+        if (byIdSuffix.length > 5) {
+          break;
+        }
+      }
     }
-    if (combined.length > 1) {
-      const candidates = combined.slice(0, 5).map((t) => `${t.id} (${t.title})`);
+
+    if (byIdSuffix.length === 1 && byIdSuffix[0]) {
+      return byIdSuffix[0];
+    }
+    if (byIdSuffix.length > 1) {
+      const candidates = byIdSuffix.slice(0, 5).map((t) => `${t.id} (${t.title})`);
       throw new Error(
         `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
       );
