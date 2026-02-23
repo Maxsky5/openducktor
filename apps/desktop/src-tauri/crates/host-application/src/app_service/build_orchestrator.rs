@@ -7,10 +7,47 @@ use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
 use host_infra_system::{
     build_branch_name, pick_free_port, remove_worktree, run_command_allow_failure,
 };
+use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
 use uuid::Uuid;
+
+/// Action responded by user during build/run (for approve/deny/message flow).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BuildResponseAction {
+    Approve,
+    Deny,
+    Message,
+}
+
+impl BuildResponseAction {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BuildResponseAction::Approve => "approve",
+            BuildResponseAction::Deny => "deny",
+            BuildResponseAction::Message => "message",
+        }
+    }
+}
+
+/// Cleanup mode after build/run completion.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CleanupMode {
+    Success,
+    Failure,
+}
+
+impl CleanupMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CleanupMode::Success => "success",
+            CleanupMode::Failure => "failure",
+        }
+    }
+}
 
 impl AppService {
     pub fn build_start(
@@ -183,7 +220,7 @@ impl AppService {
     pub fn build_respond(
         &self,
         run_id: &str,
-        action: &str,
+        action: BuildResponseAction,
         payload: Option<&str>,
         emitter: RunEmitter,
     ) -> Result<bool> {
@@ -196,7 +233,7 @@ impl AppService {
             .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
 
         match action {
-            "approve" => {
+            BuildResponseAction::Approve => {
                 if payload
                     .map(|entry| entry.contains("git push"))
                     .unwrap_or(false)
@@ -208,7 +245,7 @@ impl AppService {
                 }
                 run.summary.state = RunState::Running;
             }
-            "deny" => {
+            BuildResponseAction::Deny => {
                 run.summary.last_message = Some("Command denied by user".to_string());
                 run.summary.state = RunState::Blocked;
                 let _ = self.task_transition(
@@ -218,10 +255,9 @@ impl AppService {
                     Some("User denied command"),
                 );
             }
-            "message" => {
+            BuildResponseAction::Message => {
                 run.summary.last_message = payload.map(|entry| entry.to_string());
             }
-            other => return Err(anyhow!("Unknown build response action: {other}")),
         }
 
         emit_event(
@@ -266,7 +302,7 @@ impl AppService {
         Ok(true)
     }
 
-    pub fn build_cleanup(&self, run_id: &str, mode: &str, emitter: RunEmitter) -> Result<bool> {
+    pub fn build_cleanup(&self, run_id: &str, mode: CleanupMode, emitter: RunEmitter) -> Result<bool> {
         let mut runs = self
             .runs
             .lock()
@@ -278,7 +314,7 @@ impl AppService {
         terminate_child_process(&mut run.child);
 
         match mode {
-            "failure" => {
+            CleanupMode::Failure => {
                 self.task_transition(
                     &run.repo_path,
                     &run.task_id,
@@ -298,8 +334,7 @@ impl AppService {
                 );
                 return Ok(true);
             }
-            "success" => {}
-            other => return Err(anyhow!("Unknown cleanup mode: {other}")),
+            CleanupMode::Success => {}
         }
 
         for hook in &run.repo_config.hooks.post_complete {
@@ -393,6 +428,7 @@ impl AppService {
 #[cfg(test)]
 mod tests {
     use crate::app_service::test_support::{build_service_with_state, make_emitter};
+    use crate::app_service::build_orchestrator::BuildResponseAction;
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -413,7 +449,7 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
 
         let error = service
-            .build_respond("missing-run", "approve", None, make_emitter(events))
+            .build_respond("missing-run", BuildResponseAction::Approve, None, make_emitter(events))
             .expect_err("responding to unknown run should fail");
 
         assert!(error.to_string().contains("Run not found: missing-run"));

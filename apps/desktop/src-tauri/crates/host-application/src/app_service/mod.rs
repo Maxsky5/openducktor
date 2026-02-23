@@ -1,13 +1,15 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{AgentRuntimeSummary, GitPort, RunEvent, RunSummary, TaskCard, TaskStore};
 use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig};
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::process::Child;
 use std::sync::{Arc, Mutex};
 
-mod build_orchestrator;
+pub mod build_orchestrator;
+
 mod events;
 mod opencode_runtime;
 mod runtime_orchestrator;
@@ -152,6 +154,7 @@ mod tests {
         validate_plan_subtask_rules, validate_transition, wait_for_local_server,
         wait_for_local_server_with_process, AppService,
     };
+    use super::build_orchestrator::{BuildResponseAction, CleanupMode};
     use anyhow::{anyhow, Result};
     use host_domain::{
         AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
@@ -3070,12 +3073,12 @@ echo "bd-fake"
         std::thread::sleep(Duration::from_millis(200));
         assert!(service.build_respond(
             run.run_id.as_str(),
-            "approve",
+            BuildResponseAction::Approve,
             Some("Allow git push"),
             emitter.clone()
         )?);
 
-        assert!(service.build_cleanup(run.run_id.as_str(), "success", emitter.clone())?);
+        assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Success, emitter.clone())?);
         assert!(service.runs_list(Some(repo_path.as_str()))?.is_empty());
 
         let state = task_state.lock().expect("task lock poisoned");
@@ -3159,20 +3162,14 @@ echo "bd-fake"
         let emitter = make_emitter(events.clone());
         assert!(service.build_respond(
             run_id.as_str(),
-            "message",
+            BuildResponseAction::Message,
             Some("note"),
             emitter.clone()
         )?);
-        assert!(service.build_respond(run_id.as_str(), "deny", None, emitter.clone())?);
-        let unknown = service
-            .build_respond(run_id.as_str(), "nope", None, emitter.clone())
-            .expect_err("unknown action should fail");
-        assert!(unknown
-            .to_string()
-            .contains("Unknown build response action"));
+        assert!(service.build_respond(run_id.as_str(), BuildResponseAction::Deny, None, emitter.clone())?);
 
         assert!(service.build_stop(run_id.as_str(), emitter.clone())?);
-        assert!(service.build_cleanup(run_id.as_str(), "failure", emitter.clone())?);
+        assert!(service.build_cleanup(run_id.as_str(), CleanupMode::Failure, emitter.clone())?);
         assert!(service.runs_list(Some(repo_path.as_str()))?.is_empty());
 
         let state = task_state.lock().expect("task lock poisoned");
@@ -3257,11 +3254,11 @@ echo "bd-fake"
         let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
         let emitter = make_emitter(events.clone());
         let run = service.build_start(repo_path.as_str(), "task-2", emitter.clone())?;
-        let cleaned = service.build_cleanup(run.run_id.as_str(), "success", emitter.clone())?;
+        let cleaned = service.build_cleanup(run.run_id.as_str(), CleanupMode::Success, emitter.clone())?;
         assert!(!cleaned, "post-hook failure should report false");
 
         let invalid_mode = service
-            .build_cleanup("run-missing", "unknown", emitter)
+            .build_cleanup("run-missing", CleanupMode::Success, emitter)
             .expect_err("unknown mode should fail");
         assert!(invalid_mode.to_string().contains("Run not found"));
 
