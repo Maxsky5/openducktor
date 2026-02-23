@@ -9,9 +9,10 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use crate::command_runner::{CommandRunner, ProcessCommandRunner};
-use crate::constants::DEFAULT_METADATA_NAMESPACE;
+use crate::constants::{DEFAULT_METADATA_NAMESPACE, TASK_LIST_CACHE_TTL_MS};
 use crate::metadata::{
     metadata_namespace, parse_agent_sessions, parse_markdown_entries, parse_metadata_root,
     parse_qa_entries,
@@ -21,12 +22,19 @@ use crate::normalize::{normalize_labels, normalize_text_option};
 
 type MetadataNamespaceResolver = Arc<dyn Fn() -> Result<String> + Send + Sync>;
 
+#[derive(Clone)]
+struct TaskListCacheEntry {
+    tasks: Vec<TaskCard>,
+    cached_at: Instant,
+}
+
 pub struct BeadsTaskStore {
     pub(crate) command_runner: Arc<dyn CommandRunner>,
     pub(crate) metadata_namespace: Mutex<String>,
     pub(crate) metadata_namespace_resolver: Option<MetadataNamespaceResolver>,
     pub(crate) init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub(crate) initialized_repos: Mutex<HashSet<String>>,
+    task_list_cache: Mutex<HashMap<String, TaskListCacheEntry>>,
 }
 
 impl fmt::Debug for BeadsTaskStore {
@@ -75,6 +83,7 @@ impl BeadsTaskStore {
             metadata_namespace_resolver,
             init_locks: Mutex::new(HashMap::new()),
             initialized_repos: Mutex::new(HashSet::new()),
+            task_list_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -149,6 +158,53 @@ impl BeadsTaskStore {
         self.refresh_metadata_namespace();
         self.metadata_namespace_snapshot()
     }
+
+    fn task_list_cache_ttl() -> Duration {
+        Duration::from_millis(TASK_LIST_CACHE_TTL_MS)
+    }
+
+    fn cached_task_list(&self, repo_key: &str) -> Result<Option<Vec<TaskCard>>> {
+        let mut cache = self
+            .task_list_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
+
+        let Some(entry) = cache.get(repo_key) else {
+            return Ok(None);
+        };
+
+        if entry.cached_at.elapsed() <= Self::task_list_cache_ttl() {
+            return Ok(Some(entry.tasks.clone()));
+        }
+
+        cache.remove(repo_key);
+        Ok(None)
+    }
+
+    fn cache_task_list(&self, repo_key: &str, tasks: &[TaskCard]) -> Result<()> {
+        let mut cache = self
+            .task_list_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
+        cache.insert(
+            repo_key.to_string(),
+            TaskListCacheEntry {
+                tasks: tasks.to_vec(),
+                cached_at: Instant::now(),
+            },
+        );
+        Ok(())
+    }
+
+    pub(crate) fn invalidate_task_list_cache(&self, repo_path: &Path) -> Result<()> {
+        let repo_key = Self::repo_key(repo_path);
+        let mut cache = self
+            .task_list_cache
+            .lock()
+            .map_err(|_| anyhow!("Beads task-list cache lock poisoned"))?;
+        cache.remove(&repo_key);
+        Ok(())
+    }
 }
 
 impl TaskStore for BeadsTaskStore {
@@ -214,6 +270,11 @@ impl TaskStore for BeadsTaskStore {
     }
 
     fn list_tasks(&self, repo_path: &Path) -> Result<Vec<TaskCard>> {
+        let repo_key = Self::repo_key(repo_path);
+        if let Some(tasks) = self.cached_task_list(&repo_key)? {
+            return Ok(tasks);
+        }
+
         let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
         let metadata_namespace = self.current_metadata_namespace();
 
@@ -249,6 +310,7 @@ impl TaskStore for BeadsTaskStore {
             task.subtask_ids = subtasks;
         }
 
+        self.cache_task_list(&repo_key, &tasks)?;
         Ok(tasks)
     }
 
@@ -285,6 +347,7 @@ impl TaskStore for BeadsTaskStore {
 
         let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         let value = self.run_bd_json(repo_path, &arg_refs)?;
+        self.invalidate_task_list_cache(repo_path)?;
         let raw: RawIssue =
             serde_json::from_value(value).context("Failed to decode created issue")?;
         let created_id = raw.id.clone();
@@ -374,6 +437,7 @@ impl TaskStore for BeadsTaskStore {
             args.push(task_id.to_string());
             let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
             self.run_bd_json(repo_path, &arg_refs)?;
+            self.invalidate_task_list_cache(repo_path)?;
         }
 
         if let Some(ai_review_enabled) = patch.ai_review_enabled {
@@ -395,6 +459,7 @@ impl TaskStore for BeadsTaskStore {
         args.push(task_id);
 
         self.run_bd(repo_path, &args)?;
+        self.invalidate_task_list_cache(repo_path)?;
         Ok(true)
     }
 

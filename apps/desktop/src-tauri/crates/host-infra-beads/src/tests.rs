@@ -668,6 +668,141 @@ fn list_tasks_filters_events_and_populates_subtask_ids() -> Result<()> {
 }
 
 #[test]
+fn list_tasks_uses_short_lived_repo_cache() -> Result<()> {
+    let repo = RepoFixture::new("list-cache-hit");
+    let payload = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(payload.to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let first = store.list_tasks(repo.path())?;
+    let second = store.list_tasks(repo.path())?;
+    assert_eq!(first.len(), 1);
+    assert_eq!(second.len(), 1);
+    assert_eq!(second[0].id, "task-1");
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].args[1], "list");
+    Ok(())
+}
+
+#[test]
+fn list_tasks_cache_is_invalidated_after_update_mutation() -> Result<()> {
+    let repo = RepoFixture::new("list-cache-invalidate-update");
+    let initial_list = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let updated_show = json!([issue_value(
+        "task-1",
+        "blocked",
+        "task",
+        None,
+        json!([]),
+        None
+    )]);
+    let refreshed_list = json!([issue_value(
+        "task-1",
+        "blocked",
+        "task",
+        None,
+        json!([]),
+        None
+    )]);
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(initial_list.to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(updated_show.to_string())),
+        MockStep::WithEnv(Ok(refreshed_list.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let initial = store.list_tasks(repo.path())?;
+    assert_eq!(initial[0].status, TaskStatus::Open);
+
+    let updated = store.update_task(
+        repo.path(),
+        "task-1",
+        UpdateTaskPatch {
+            title: None,
+            description: None,
+            acceptance_criteria: None,
+            notes: None,
+            status: Some(TaskStatus::Blocked),
+            priority: None,
+            issue_type: None,
+            ai_review_enabled: None,
+            labels: None,
+            assignee: None,
+            parent_id: None,
+        },
+    )?;
+    assert_eq!(updated.status, TaskStatus::Blocked);
+
+    let refreshed = store.list_tasks(repo.path())?;
+    assert_eq!(refreshed[0].status, TaskStatus::Blocked);
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 2);
+    Ok(())
+}
+
+#[test]
+fn list_tasks_cache_is_invalidated_after_metadata_mutation() -> Result<()> {
+    let repo = RepoFixture::new("list-cache-invalidate-metadata");
+    let initial_list = json!([issue_value("task-1", "open", "task", None, json!([]), None)]);
+    let current_issue = issue_value("task-1", "open", "task", None, json!([]), None);
+    let refreshed_list = json!([issue_value(
+        "task-1",
+        "open",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "spec": [
+                        {
+                            "markdown": "# Spec",
+                            "updatedAt": "2026-02-20T12:00:00Z",
+                            "updatedBy": "planner-agent",
+                            "sourceTool": "set_spec",
+                            "revision": 1
+                        }
+                    ]
+                }
+            }
+        })),
+    )]);
+
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(initial_list.to_string())),
+        MockStep::WithEnv(Ok(json!([current_issue]).to_string())),
+        MockStep::WithEnv(Ok("{}".to_string())),
+        MockStep::WithEnv(Ok(refreshed_list.to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let initial = store.list_tasks(repo.path())?;
+    assert!(!initial[0].document_summary.spec.has);
+
+    store.set_spec(repo.path(), "task-1", "# Spec")?;
+
+    let refreshed = store.list_tasks(repo.path())?;
+    assert!(refreshed[0].document_summary.spec.has);
+
+    let calls = runner.take_calls();
+    let list_calls = calls
+        .iter()
+        .filter(|call| call.args.get(1).map(String::as_str) == Some("list"))
+        .count();
+    assert_eq!(list_calls, 2);
+    Ok(())
+}
+
+#[test]
 fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
     let repo = RepoFixture::new("create-task");
     let created = issue_value("task-1", "open", "feature", None, json!([]), None);
@@ -1402,20 +1537,25 @@ fn get_task_metadata_fetches_all_fields_in_single_call() -> Result<()> {
         })),
     );
 
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::WithEnv(Ok(json!([issue]).to_string())),
-    ]);
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     let metadata = store.get_task_metadata(repo.path(), "task-1")?;
 
     // Verify spec
     assert_eq!(metadata.spec.markdown, "# Spec content");
-    assert_eq!(metadata.spec.updated_at.as_deref(), Some("2026-02-20T10:00:00Z"));
+    assert_eq!(
+        metadata.spec.updated_at.as_deref(),
+        Some("2026-02-20T10:00:00Z")
+    );
 
     // Verify plan
     assert_eq!(metadata.plan.markdown, "# Plan content");
-    assert_eq!(metadata.plan.updated_at.as_deref(), Some("2026-02-20T11:00:00Z"));
+    assert_eq!(
+        metadata.plan.updated_at.as_deref(),
+        Some("2026-02-20T11:00:00Z")
+    );
 
     // Verify QA report
     let qa = metadata.qa_report.expect("qa_report should be present");
@@ -1442,9 +1582,8 @@ fn get_task_metadata_handles_empty_metadata() -> Result<()> {
     let repo = RepoFixture::new("get-task-metadata-empty");
     let issue = issue_value("task-1", "open", "task", None, json!([]), None);
 
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::WithEnv(Ok(json!([issue]).to_string())),
-    ]);
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
     let store = BeadsTaskStore::with_test_runner("openducktor", runner);
 
     let metadata = store.get_task_metadata(repo.path(), "task-1")?;
