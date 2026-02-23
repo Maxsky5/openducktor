@@ -325,7 +325,7 @@ export function AgentsPage(): ReactElement {
     >
       <AgentStudioTaskTabs model={agentStudioTaskTabsModel} />
 
-      <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 rounded-b-xl bg-white p-3">
+      <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 rounded-b-xl bg-white p-0">
         {taskId ? (
           <ResizablePanelGroup orientation="horizontal" className="h-full min-h-0 overflow-hidden">
             <ResizablePanel defaultSize={63} minSize={35}>

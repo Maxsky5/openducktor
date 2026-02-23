@@ -1,3 +1,4 @@
+import { EllipsisVertical } from "lucide-react";
 import * as ResizablePrimitive from "react-resizable-panels";
 
 import { cn } from "@/lib/utils";
@@ -27,18 +28,17 @@ function ResizableHandle({
     <ResizablePrimitive.Separator
       data-slot="resizable-handle"
       className={cn(
-        "group relative flex w-4 items-center justify-center border-x border-slate-200 bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100/80 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-1 focus-visible:outline-none aria-[orientation=horizontal]:h-3 aria-[orientation=horizontal]:w-full aria-[orientation=horizontal]:border-x-0 aria-[orientation=horizontal]:border-y",
+        "group relative flex h-full w-8 shrink-0 items-center justify-center focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-1 focus-visible:outline-none aria-[orientation=horizontal]:h-3 aria-[orientation=horizontal]:w-full aria-[orientation=horizontal]:cursor-row-resize aria-[orientation=vertical]:cursor-col-resize",
         className,
       )}
       {...props}
     >
+      <span
+        className="pointer-events-none absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-slate-300 transition-colors duration-200 group-hover:bg-blue-500 aria-[orientation=horizontal]:left-0 aria-[orientation=horizontal]:top-1/2 aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:w-full aria-[orientation=horizontal]:-translate-y-1/2 aria-[orientation=horizontal]:translate-x-0"
+        aria-hidden="true"
+      />
       {withHandle && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none inline-flex items-center justify-center gap-[2px]"
-        >
-          <span className="h-8 w-1 rounded-full bg-slate-300 transition-colors group-hover:bg-slate-400 aria-[orientation=horizontal]:h-1 aria-[orientation=horizontal]:w-8" />
-        </div>
+        <EllipsisVertical className="relative z-10 size-4 text-slate-400 transition-colors group-hover:text-blue-500 aria-[orientation=horizontal]:-rotate-90" />
       )}
     </ResizablePrimitive.Separator>
   );
