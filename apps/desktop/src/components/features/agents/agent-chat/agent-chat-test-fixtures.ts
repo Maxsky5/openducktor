@@ -2,12 +2,12 @@ import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
-  AgentRole,
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import type {
   AgentChatMessage,
+  AgentPermissionRequest,
   AgentQuestionRequest,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
@@ -151,6 +151,15 @@ export const buildQuestionRequest = (
       custom: true,
     },
   ],
+  ...overrides,
+});
+
+export const buildPermissionRequest = (
+  overrides: Partial<AgentPermissionRequest> = {},
+): AgentPermissionRequest => ({
+  requestId: "permission-1",
+  permission: "shell",
+  patterns: ["*"],
   ...overrides,
 });
 

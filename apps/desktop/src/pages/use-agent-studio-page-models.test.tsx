@@ -1,17 +1,64 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
+
+type UseAgentStudioPageModelsHook = typeof import("./use-agent-studio-page-models")["useAgentStudioPageModels"];
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useAgentStudioPageModels>[0];
-type HookState = ReturnType<typeof useAgentStudioPageModels>;
+type UseAgentChatLayoutInput = {
+  input: string;
+  scrollTrigger: string;
+  activeSessionId: string | null;
+};
+
+const capturedScrollTriggers: string[] = [];
+
+mock.module("@/components/features/agents/agent-chat/use-agent-chat-layout", () => ({
+  CHAT_AUTOSCROLL_THRESHOLD_PX: 48,
+  COMPOSER_TEXTAREA_MAX_HEIGHT_PX: 220,
+  COMPOSER_TEXTAREA_MIN_HEIGHT_PX: 40,
+  computeComposerTextareaLayout: (): {
+    heightPx: number;
+    overflowY: "auto" | "hidden";
+  } => ({
+    heightPx: 40,
+    overflowY: "hidden",
+  }),
+  computeTodoPanelBottomOffset: () => 0,
+  isNearBottom: () => true,
+  useAgentChatLayout: (input: UseAgentChatLayoutInput) => {
+    capturedScrollTriggers.push(input.scrollTrigger);
+    return {
+      messagesContainerRef: { current: null },
+      composerFormRef: { current: null },
+      composerTextareaRef: { current: null },
+      isPinnedToBottom: true,
+      setIsPinnedToBottom: () => {},
+      todoPanelBottomOffset: 0,
+      resizeComposerTextarea: () => {},
+      isSubmittingPermissionByRequestId: {},
+    };
+  },
+}));
+
+type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
+
+let useAgentStudioPageModels: UseAgentStudioPageModelsHook;
+
+beforeAll(async () => {
+  ({ useAgentStudioPageModels } = await import("./use-agent-studio-page-models"));
+});
+
+beforeEach(() => {
+  capturedScrollTriggers.length = 0;
+});
 
 const createTask = () =>
   createTaskCardFixture({
@@ -22,11 +69,16 @@ const createTask = () =>
     },
   });
 
-const createSession = (sessionId = "session-1", externalSessionId = "external-1") =>
+const createSession = (
+  sessionId = "session-1",
+  externalSessionId = "external-1",
+  overrides: Partial<AgentSessionState> = {},
+): AgentSessionState =>
   createAgentSessionFixture({
     sessionId,
     externalSessionId,
     status: "running",
+    ...overrides,
   });
 
 const createDocumentState = (markdown: string): TaskDocumentState => ({
@@ -35,6 +87,58 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
   isLoading: false,
   error: null,
   loaded: true,
+});
+
+const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  taskId: "task-1",
+  role: "spec",
+  selectedTask: createTask(),
+  sessionsForTask: [createSession()],
+  contextSessionsLength: 1,
+  activeSession: createSession(),
+  taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
+  availableTabTasks: [createTask()],
+  isLoadingTasks: false,
+  onCreateTab: () => {},
+  onCloseTab: () => {},
+  handleWorkflowStepSelect: () => {},
+  handleSessionSelectionChange: () => {},
+  handleCreateSession: () => {},
+  specDoc: createDocumentState("spec"),
+  planDoc: createDocumentState(""),
+  qaDoc: createDocumentState(""),
+  agentStudioReady: true,
+  agentStudioBlockedReason: "",
+  isLoadingChecks: false,
+  refreshChecks: async () => {},
+  isStarting: false,
+  isSending: false,
+  isSessionWorking: true,
+  canKickoffNewSession: false,
+  kickoffLabel: "Start Spec",
+  canStopSession: true,
+  startScenarioKickoff: async () => {},
+  onSend: async () => {},
+  onSubmitQuestionAnswers: async () => {},
+  isSubmittingQuestionByRequestId: {},
+  selectedModelSelection: null,
+  isSelectionCatalogLoading: false,
+  agentOptions: [{ value: "spec", label: "Spec" }],
+  modelOptions: [],
+  modelGroups: [],
+  variantOptions: [],
+  onSelectAgent: () => {},
+  onSelectModel: () => {},
+  onSelectVariant: () => {},
+  activeSessionAgentColors: {},
+  activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
+  isSubmittingPermissionByRequestId: {},
+  permissionReplyErrorByRequestId: {},
+  onReplyPermission: async () => {},
+  input: "",
+  setInput: () => {},
+  stopAgentSession: async () => {},
+  ...overrides,
 });
 
 const createHookHarness = (initialProps: HookArgs) =>
@@ -48,54 +152,16 @@ describe("useAgentStudioPageModels", () => {
     const onStopSession = mock(async () => {});
 
     const harness = createHookHarness({
-      taskId: "task-1",
-      role: "spec",
-      selectedTask: createTask(),
-      sessionsForTask: [createSession()],
-      contextSessionsLength: 1,
-      activeSession: createSession(),
-      taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
-      availableTabTasks: [createTask()],
-      isLoadingTasks: false,
-      onCreateTab: () => {},
-      onCloseTab: () => {},
-      handleWorkflowStepSelect: () => {},
-      handleSessionSelectionChange: () => {},
-      handleCreateSession: () => {},
-      specDoc: createDocumentState("spec"),
-      planDoc: createDocumentState(""),
-      qaDoc: createDocumentState(""),
-      agentStudioReady: true,
-      agentStudioBlockedReason: "",
-      isLoadingChecks: false,
+      ...createHookArgs({
+        activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
+        input: "message",
+        onReplyPermission: async () => {},
+        onSend,
+        refreshChecks: onRefreshChecks,
+        startScenarioKickoff: onKickoff,
+        stopAgentSession: onStopSession,
+      }),
       refreshChecks: onRefreshChecks,
-      isStarting: false,
-      isSending: false,
-      isSessionWorking: true,
-      canKickoffNewSession: false,
-      kickoffLabel: "Start Spec",
-      canStopSession: true,
-      startScenarioKickoff: onKickoff,
-      onSend,
-      onSubmitQuestionAnswers: async () => {},
-      isSubmittingQuestionByRequestId: {},
-      selectedModelSelection: null,
-      isSelectionCatalogLoading: false,
-      agentOptions: [{ value: "spec", label: "Spec" }],
-      modelOptions: [],
-      modelGroups: [],
-      variantOptions: [],
-      onSelectAgent: () => {},
-      onSelectModel: () => {},
-      onSelectVariant: () => {},
-      activeSessionAgentColors: {},
-      activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
-      isSubmittingPermissionByRequestId: {},
-      permissionReplyErrorByRequestId: {},
-      onReplyPermission: async () => {},
-      input: "message",
-      setInput: () => {},
-      stopAgentSession: onStopSession,
     });
 
     await harness.mount();
@@ -119,6 +185,133 @@ describe("useAgentStudioPageModels", () => {
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
 
+    await harness.unmount();
+  });
+
+  test("selects role-specific sidebar document", async () => {
+    const specSession = createSession("session-spec", "external-spec", { role: "spec" });
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "spec",
+        activeSession: specSession,
+        sessionsForTask: [specSession],
+        specDoc: createDocumentState("spec"),
+        planDoc: createDocumentState(""),
+        qaDoc: createDocumentState(""),
+      }),
+    );
+    await harness.mount();
+    expect(harness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+      "Specification",
+    );
+    await harness.unmount();
+
+    const plannerSession = createSession("session-planner", "external-planner", {
+      role: "planner",
+    });
+    const plannerHarness = createHookHarness(
+      createHookArgs({
+        role: "planner",
+        activeSession: plannerSession,
+        sessionsForTask: [plannerSession],
+        specDoc: createDocumentState(""),
+        planDoc: createDocumentState("plan"),
+        qaDoc: createDocumentState(""),
+      }),
+    );
+    await plannerHarness.mount();
+    expect(plannerHarness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+      "Implementation Plan",
+    );
+    await plannerHarness.unmount();
+
+    const qaSession = createSession("session-qa", "external-qa", {
+      role: "qa",
+      scenario: "qa_review",
+    });
+    const qaHarness = createHookHarness(
+      createHookArgs({
+        role: "qa",
+        activeSession: qaSession,
+        sessionsForTask: [qaSession],
+        specDoc: createDocumentState(""),
+        planDoc: createDocumentState(""),
+        qaDoc: createDocumentState("qa"),
+      }),
+    );
+    await qaHarness.mount();
+    expect(qaHarness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+      "QA Report",
+    );
+    await qaHarness.unmount();
+
+    const buildSession = createSession("session-build", "external-build", { role: "build" });
+    const buildHarness = createHookHarness(
+      createHookArgs({
+        role: "build",
+        activeSession: buildSession,
+        sessionsForTask: [buildSession],
+        specDoc: createDocumentState(""),
+        planDoc: createDocumentState(""),
+        qaDoc: createDocumentState(""),
+      }),
+    );
+    await buildHarness.mount();
+    expect(buildHarness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument).toBeNull();
+    await buildHarness.unmount();
+  });
+
+  test("uses active session role to select workspace document when URL role is stale", async () => {
+    const plannerSession = createSession("session-1", "external-1", {
+      role: "planner",
+      scenario: "planner_initial",
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "spec",
+        activeSession: plannerSession,
+        sessionsForTask: [plannerSession],
+        specDoc: createDocumentState("spec"),
+        planDoc: createDocumentState("plan"),
+        qaDoc: createDocumentState(""),
+      }),
+    );
+
+    await harness.mount();
+    expect(harness.getLatest().agentStudioWorkspaceSidebarModel.activeDocument?.title).toBe(
+      "Implementation Plan",
+    );
+    await harness.unmount();
+  });
+
+  test("includes pending permission count in chat scroll trigger", async () => {
+    const permissionSession = createSession("session-1", "external-1", {
+      status: "running",
+      pendingPermissions: [{ requestId: "p-1", permission: "shell", patterns: ["rm -rf /tmp"] }],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        activeSession: permissionSession,
+        sessionsForTask: [permissionSession],
+      }),
+    );
+
+    await harness.mount();
+    expect(capturedScrollTriggers[0]).toContain(":1");
+
+    const permissionSessionWithoutRequests = createSession("session-1", "external-1", {
+      status: "running",
+      pendingPermissions: [],
+    });
+
+    await harness.update({
+      ...createHookArgs({
+        activeSession: permissionSessionWithoutRequests,
+        sessionsForTask: [permissionSessionWithoutRequests],
+      }),
+    });
+
+    expect(capturedScrollTriggers[capturedScrollTriggers.length - 1]).toContain(":0");
     await harness.unmount();
   });
 

@@ -23,7 +23,10 @@ export type {
   AgentStudioTaskTabsModel,
 } from "./agent-studio-task-tabs";
 export { AgentStudioTaskTabs } from "./agent-studio-task-tabs";
-export type { AgentStudioWorkspaceSidebarModel } from "./agent-studio-workspace-sidebar";
+export type {
+  AgentStudioWorkspaceDocument,
+  AgentStudioWorkspaceSidebarModel,
+} from "./agent-studio-workspace-sidebar";
 export { AgentStudioWorkspaceSidebar } from "./agent-studio-workspace-sidebar";
 export {
   toModelGroupsByProvider,

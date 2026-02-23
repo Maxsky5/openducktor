@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
+import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
@@ -31,6 +32,9 @@ export function AgentChatThread({
     sessionAgentColors,
     isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
+    isSubmittingPermissionByRequestId,
+    permissionReplyErrorByRequestId,
+    onReplyPermission,
     todoPanelCollapsed,
     onToggleTodoPanel,
     todoPanelBottomOffset,
@@ -152,6 +156,17 @@ export function AgentChatThread({
             disabled={!agentStudioReady}
             isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
             onSubmit={onSubmitQuestionAnswers}
+          />
+        ))}
+
+        {session?.pendingPermissions.map((request) => (
+          <AgentSessionPermissionCard
+            key={`${session.sessionId}:${request.requestId}`}
+            request={request}
+            disabled={!agentStudioReady}
+            isSubmitting={Boolean(isSubmittingPermissionByRequestId[request.requestId])}
+            errorMessage={permissionReplyErrorByRequestId[request.requestId]}
+            onReply={onReplyPermission}
           />
         ))}
       </div>

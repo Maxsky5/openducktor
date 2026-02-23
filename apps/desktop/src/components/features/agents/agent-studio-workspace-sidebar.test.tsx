@@ -12,64 +12,59 @@ const emptyDoc = {
 };
 
 describe("AgentStudioWorkspaceSidebar", () => {
-  test("renders permission requests and document sections", () => {
+  test("renders active document content", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioWorkspaceSidebar, {
         model: {
-          agentStudioReady: true,
-          pendingPermissions: [
-            {
-              requestId: "perm-1",
-              permission: "bash",
-              patterns: ["git status"],
+          activeDocument: {
+            title: "Specification",
+            description: "Current specification document for this task.",
+            emptyState: "No spec document yet.",
+            document: {
+              ...emptyDoc,
+              markdown: "# Spec",
+              updatedAt: "2026-02-21T10:00:00.000Z",
             },
-          ],
-          isSubmittingPermissionByRequestId: {},
-          permissionReplyErrorByRequestId: {},
-          onReplyPermission: () => {},
-          specDoc: {
-            ...emptyDoc,
-            markdown: "# Spec",
-            updatedAt: "2026-02-21T10:00:00.000Z",
-          },
-          planDoc: {
-            ...emptyDoc,
-            markdown: "# Plan",
-          },
-          qaDoc: {
-            ...emptyDoc,
-            markdown: "",
           },
         },
       }),
     );
 
-    expect(html).toContain("Permission Requests");
-    expect(html).toContain("bash");
-    expect(html).toContain("Allow Once");
-    expect(html).toContain("Documents");
+    expect(html).toContain("Specification");
+    expect(html).toContain("Current specification document for this task.");
     expect(html).toContain("Spec");
-    expect(html).toContain("Implementation Plan");
-    expect(html).toContain("QA Report");
-    expect(html).toContain("No QA report yet.");
+    expect(html).toMatch(/Feb 21 at/u);
   });
 
-  test("shows empty permission state", () => {
+  test("renders active document placeholder when document is empty", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioWorkspaceSidebar, {
         model: {
-          agentStudioReady: true,
-          pendingPermissions: [],
-          isSubmittingPermissionByRequestId: {},
-          permissionReplyErrorByRequestId: {},
-          onReplyPermission: () => {},
-          specDoc: emptyDoc,
-          planDoc: emptyDoc,
-          qaDoc: emptyDoc,
+          activeDocument: {
+            title: "QA Report",
+            description: "Latest QA report for this task.",
+            emptyState: "No QA report yet.",
+            document: {
+              ...emptyDoc,
+            },
+          },
         },
       }),
     );
 
-    expect(html).toContain("No pending permission requests.");
+    expect(html).toContain("No QA report yet.");
+    expect(html).toContain("Not set");
+  });
+
+  test("renders empty sidebar for Build role documents", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioWorkspaceSidebar, {
+        model: {
+          activeDocument: null,
+        },
+      }),
+    );
+
+    expect(html).not.toContain("Specification");
   });
 });

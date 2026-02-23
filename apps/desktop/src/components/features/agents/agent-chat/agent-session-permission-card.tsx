@@ -1,0 +1,96 @@
+import { CircleSlash2, ShieldAlert } from "lucide-react";
+import type { ReactElement } from "react";
+import { Button } from "@/components/ui/button";
+import type { AgentPermissionRequest } from "@/types/agent-orchestrator";
+
+type PermissionReply = "once" | "always" | "reject";
+
+type AgentSessionPermissionCardProps = {
+  request: AgentPermissionRequest;
+  disabled?: boolean;
+  isSubmitting?: boolean;
+  errorMessage?: string | undefined;
+  onReply: (requestId: string, reply: PermissionReply) => Promise<void>;
+};
+
+export function AgentSessionPermissionCard({
+  request,
+  disabled = false,
+  isSubmitting = false,
+  errorMessage,
+  onReply,
+}: AgentSessionPermissionCardProps): ReactElement | null {
+  if (request.patterns.length === 0 && !request.permission) {
+    return null;
+  }
+
+  const patternsText =
+    request.patterns.length > 0 ? request.patterns.join(", ") : "No pattern constraints";
+
+  return (
+    <section className="rounded-xl border border-amber-300 bg-amber-50/70 shadow-sm">
+      <header className="flex items-center justify-between gap-2 border-b border-amber-200 px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="size-4 text-amber-700" />
+          <p className="text-[13px] font-semibold text-slate-900">Permission request</p>
+        </div>
+        <p className="text-[11px] font-medium text-slate-600">Action required</p>
+      </header>
+
+      <div className="space-y-2 p-2.5">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-slate-900">{request.permission}</p>
+          <p className="text-xs text-slate-700">Paths: {patternsText}</p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button
+            type="button"
+            size="sm"
+            disabled={disabled || isSubmitting}
+            onClick={() => {
+              void onReply(request.requestId, "once");
+            }}
+          >
+            Allow Once
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={disabled || isSubmitting}
+            onClick={() => {
+              void onReply(request.requestId, "always");
+            }}
+          >
+            Always Allow
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            disabled={disabled || isSubmitting}
+            onClick={() => {
+              void onReply(request.requestId, "reject");
+            }}
+          >
+            Reject
+          </Button>
+        </div>
+
+        {errorMessage ? (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+            {errorMessage}
+          </p>
+        ) : null}
+
+        {isSubmitting ? (
+          <p className="flex items-center gap-1.5 text-xs text-slate-500">
+            <CircleSlash2 className="size-3" />
+            Submitting permission choice...
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
