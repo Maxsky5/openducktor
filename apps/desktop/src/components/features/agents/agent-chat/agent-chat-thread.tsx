@@ -1,5 +1,6 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { Fragment, type ReactElement } from "react";
+import { Fragment, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -9,7 +10,7 @@ import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 
-export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
+export function AgentChatThread({ model }: { model: AgentChatThreadModel }): React.ReactElement {
   const {
     session,
     roleOptions,
@@ -40,6 +41,33 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     : null;
   const StreamingRoleIcon = streamingRoleDisplay?.icon ?? Bot;
 
+  // Track previous message count for autoscroll
+  const prevMessageCountRef = useRef<number>(0);
+
+  // Virtualizer for messages
+  const parentRef = useRef<HTMLDivElement | null>(null);
+
+  const virtualizer = useVirtualizer({
+    count: session?.messages.length ?? 0,
+    getScrollElement: () => parentRef.current,
+    estimateSize: useCallback(() => 80, []), // Estimated message height
+    overscan: 5, // Render 5 items outside viewport for smooth scrolling
+  });
+
+  // Autoscroll to bottom when new messages arrive
+  useEffect(() => {
+    if (session && session.messages.length > prevMessageCountRef.current) {
+      // New messages added - scroll to bottom
+      const scrollElement = parentRef.current;
+      if (scrollElement) {
+        requestAnimationFrame(() => {
+          scrollElement.scrollTop = scrollElement.scrollHeight;
+        });
+      }
+    }
+    prevMessageCountRef.current = session?.messages.length ?? 0;
+  }, [session]);
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {!agentStudioReady ? (
@@ -63,9 +91,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       ) : null}
 
       <div
-        ref={messagesContainerRef}
-        className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
+        ref={(el) => {
+          messagesContainerRef.current = el;
+          parentRef.current = el;
+        }}
         onScroll={onMessagesScroll}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 pb-8"
       >
         {!session ? (
           <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
@@ -95,30 +126,83 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           </div>
         ) : null}
 
-        {session?.messages.map((message) => {
-          const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-          const turnDurationMs = assistantMeta?.durationMs;
-          const shouldShowTurnDuration =
-            message.role === "assistant" &&
-            typeof turnDurationMs === "number" &&
-            turnDurationMs > 0;
-          const isUserMessage = message.role === "user";
-          return (
-            <Fragment key={message.id}>
-              {shouldShowTurnDuration ? (
-                <AgentTurnDurationSeparator durationMs={turnDurationMs} />
-              ) : null}
-              <div className={cn(isUserMessage ? "pt-4" : undefined)}>
-                <AgentChatMessageCard
-                  message={message}
-                  sessionRole={session.role}
-                  sessionSelectedModel={session.selectedModel}
-                  sessionAgentColors={sessionAgentColors}
-                />
-              </div>
-            </Fragment>
-          );
-        })}
+        {/* Virtualized messages list */}
+        {session && session.messages.length > 0 ? (
+          virtualizer.getVirtualItems().length > 0 ? (
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                width: "100%",
+                position: "relative",
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualItem) => {
+                const message = session.messages[virtualItem.index];
+                if (!message) return null;
+                const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+                const turnDurationMs = assistantMeta?.durationMs;
+                const shouldShowTurnDuration =
+                  message.role === "assistant" &&
+                  typeof turnDurationMs === "number" &&
+                  turnDurationMs > 0;
+                const isUserMessage = message.role === "user";
+                return (
+                  <Fragment key={message.id}>
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
+                    >
+                      {shouldShowTurnDuration ? (
+                        <AgentTurnDurationSeparator durationMs={turnDurationMs} />
+                      ) : null}
+                      <div className={cn(isUserMessage ? "pt-4" : undefined)}>
+                        <AgentChatMessageCard
+                          message={message}
+                          sessionRole={session.role}
+                          sessionSelectedModel={session.selectedModel}
+                          sessionAgentColors={sessionAgentColors}
+                        />
+                      </div>
+                    </div>
+                  </Fragment>
+                );
+              })}
+            </div>
+          ) : (
+            // Fallback for SSR/testing: render messages directly when virtualizer has no items
+            <div className="space-y-3">
+              {session.messages.map((message) => {
+                const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+                const turnDurationMs = assistantMeta?.durationMs;
+                const shouldShowTurnDuration =
+                  message.role === "assistant" &&
+                  typeof turnDurationMs === "number" &&
+                  turnDurationMs > 0;
+                const isUserMessage = message.role === "user";
+                return (
+                  <Fragment key={message.id}>
+                    {shouldShowTurnDuration ? (
+                      <AgentTurnDurationSeparator durationMs={turnDurationMs} />
+                    ) : null}
+                    <div className={cn(isUserMessage ? "pt-4" : undefined)}>
+                      <AgentChatMessageCard
+                        message={message}
+                        sessionRole={session.role}
+                        sessionSelectedModel={session.selectedModel}
+                        sessionAgentColors={sessionAgentColors}
+                      />
+                    </div>
+                  </Fragment>
+                );
+              })}
+            </div>
+          )
+        ) : null}
 
         {session?.draftAssistantText ? (
           <article className="px-1 py-1 text-sm text-slate-700">

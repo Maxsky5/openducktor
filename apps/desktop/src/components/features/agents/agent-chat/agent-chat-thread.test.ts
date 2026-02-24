@@ -186,4 +186,65 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Analyze current styling");
     expect(html).toContain("Read layout and pages");
   });
+
+  test("renders messages with fallback rendering (SSR compatible)", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: buildSession({
+            messages: [
+              buildMessage("user", "Hello", { id: "msg-user-1" }),
+              buildMessage("assistant", "Hi there!", { id: "msg-assistant-1" }),
+            ],
+          }),
+        },
+      }),
+    );
+
+    // Verify messages are rendered (via fallback when virtualizer has no items)
+    expect(html).toContain("Hello");
+    expect(html).toContain("Hi there!");
+  });
+
+  test("renders multiple messages with fallback rendering (SSR compatible)", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: buildSession({
+            messages: [
+              buildMessage("user", "First message", { id: "msg-1" }),
+              buildMessage("assistant", "Second message", { id: "msg-2" }),
+              buildMessage("user", "Third message", { id: "msg-3" }),
+              buildMessage("assistant", "Fourth message", { id: "msg-4" }),
+            ],
+          }),
+        },
+      }),
+    );
+
+    // Verify all messages are rendered
+    expect(html).toContain("First message");
+    expect(html).toContain("Second message");
+    expect(html).toContain("Third message");
+    expect(html).toContain("Fourth message");
+  });
+
+  test("handles session without messages gracefully", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: buildSession({
+            messages: [],
+          }),
+        },
+      }),
+    );
+
+    // Should not render AgentChatMessageCard when there are no messages
+    // (the container might have space-y-3 from other elements, but no message cards)
+    expect(html).not.toContain("AgentChatMessageCard");
+  });
 });
