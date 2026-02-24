@@ -114,12 +114,6 @@ impl OpencodeProcessRegistryInstance {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct OpencodeProcessRegistryRecord {
-    parent_pid: u32,
-    child_pid: u32,
-}
-
 pub(crate) struct RunProcess {
     summary: RunSummary,
     child: Child,
@@ -149,8 +143,6 @@ const OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH: &str = "runtime/opencode-processe
 struct OpencodeProcessRegistryFile {
     #[serde(default)]
     instances: Vec<OpencodeProcessRegistryInstance>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    records: Vec<OpencodeProcessRegistryRecord>,
 }
 
 fn normalize_opencode_process_registry_instances(instances: &mut Vec<OpencodeProcessRegistryInstance>) {
@@ -178,25 +170,6 @@ fn normalize_opencode_process_registry_instances(instances: &mut Vec<OpencodePro
     }
     merged.retain(|instance| !instance.child_pids.is_empty());
     *instances = merged;
-}
-
-fn migrate_legacy_opencode_process_registry_records(
-    instances: &mut Vec<OpencodeProcessRegistryInstance>,
-    records: &[OpencodeProcessRegistryRecord],
-) {
-    for record in records {
-        if let Some(instance) = instances
-            .iter_mut()
-            .find(|entry| entry.parent_pid == record.parent_pid)
-        {
-            instance.child_pids.push(record.child_pid);
-        } else {
-            instances.push(OpencodeProcessRegistryInstance::with_child(
-                record.parent_pid,
-                record.child_pid,
-            ));
-        }
-    }
 }
 
 fn with_locked_opencode_process_registry<T>(
@@ -239,13 +212,10 @@ fn with_locked_opencode_process_registry<T>(
             )
         })?
     };
-    migrate_legacy_opencode_process_registry_records(&mut parsed.instances, &parsed.records);
-    parsed.records.clear();
     normalize_opencode_process_registry_instances(&mut parsed.instances);
 
     let output = mutator(&mut parsed.instances)?;
     normalize_opencode_process_registry_instances(&mut parsed.instances);
-    parsed.records.clear();
 
     let payload = serde_json::to_string_pretty(&parsed)
         .context("Failed serializing OpenCode process registry payload")?;
@@ -4258,43 +4228,6 @@ echo "bd-fake"
 
         terminate_child_process(&mut live_parent_process);
         terminate_process_by_pid(live_pid);
-        let _ = fs::remove_dir_all(root);
-        Ok(())
-    }
-
-    #[test]
-    fn opencode_process_registry_migrates_legacy_records_to_instances() -> Result<()> {
-        let root = unique_temp_path("opencode-registry-legacy-migration");
-        let registry_path = root.join(super::OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
-        if let Some(parent) = registry_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(
-            registry_path.as_path(),
-            r#"{
-  "records": [
-    { "parent_pid": 42, "child_pid": 100 },
-    { "parent_pid": 42, "child_pid": 101 },
-    { "parent_pid": 7, "child_pid": 9 }
-  ]
-}"#,
-        )?;
-
-        let migrated_instances =
-            super::with_locked_opencode_process_registry(registry_path.as_path(), |instances| {
-                Ok(instances.clone())
-            })?;
-        assert_eq!(migrated_instances.len(), 2);
-        let parent_42 = migrated_instances
-            .iter()
-            .find(|entry| entry.parent_pid == 42)
-            .ok_or_else(|| anyhow!("missing migrated instance for parent 42"))?;
-        assert_eq!(parent_42.child_pids, vec![100, 101]);
-
-        let payload = fs::read_to_string(registry_path.as_path())?;
-        assert!(payload.contains("\"instances\""));
-        assert!(!payload.contains("\"records\""));
-
         let _ = fs::remove_dir_all(root);
         Ok(())
     }
