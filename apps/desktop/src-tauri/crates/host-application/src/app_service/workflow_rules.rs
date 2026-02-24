@@ -214,8 +214,11 @@ pub(crate) fn can_set_spec_from_status(status: &TaskStatus) -> bool {
 pub(crate) fn can_set_plan(task: &TaskCard) -> bool {
     let issue_type = normalize_issue_type(&task.issue_type);
     match issue_type {
-        "epic" | "feature" => matches!(task.status, TaskStatus::SpecReady),
-        "task" | "bug" => matches!(task.status, TaskStatus::Open | TaskStatus::SpecReady),
+        "epic" | "feature" => matches!(task.status, TaskStatus::SpecReady | TaskStatus::ReadyForDev),
+        "task" | "bug" => matches!(
+            task.status,
+            TaskStatus::Open | TaskStatus::SpecReady | TaskStatus::ReadyForDev
+        ),
         _ => false,
     }
 }

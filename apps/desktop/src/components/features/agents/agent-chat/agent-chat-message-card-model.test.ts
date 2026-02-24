@@ -6,6 +6,7 @@ import {
   formatRawJsonLikeText,
   getAssistantFooterData,
   getToolDuration,
+  getToolLifecyclePhase,
   questionToolDetails,
   roleLabel,
   stripToolPrefix,
@@ -91,9 +92,66 @@ describe("agent-chat-message-card-model", () => {
     expect(details).toEqual([{ prompt: "Choose role", answers: ["planner"] }]);
   });
 
-  test("computes duration using observed timing first then fallback timing", () => {
-    const withObserved = getToolDuration(
+  test("derives lifecycle phases from status, payload and errors", () => {
+    expect(
+      getToolLifecyclePhase(
+        createToolMeta({
+          status: "pending",
+          input: {},
+        }),
+      ),
+    ).toBe("queued");
+
+    expect(
+      getToolLifecyclePhase(
+        createToolMeta({
+          status: "pending",
+          input: { taskId: "fairnest-123" },
+        }),
+      ),
+    ).toBe("executing");
+
+    expect(
+      getToolLifecyclePhase(
+        createToolMeta({
+          status: "running",
+        }),
+      ),
+    ).toBe("executing");
+
+    expect(
+      getToolLifecyclePhase(
+        createToolMeta({
+          status: "completed",
+        }),
+      ),
+    ).toBe("completed");
+
+    expect(
+      getToolLifecyclePhase(
+        createToolMeta({
+          tool: "odt_set_plan",
+          status: "completed",
+          output: "MCP error -32602: Input validation error",
+        }),
+      ),
+    ).toBe("failed");
+
+    expect(
+      getToolLifecyclePhase(
+        createToolMeta({
+          status: "error",
+          error: "Tool call cancelled by user",
+        }),
+      ),
+    ).toBe("cancelled");
+  });
+
+  test("computes duration from input-ready timestamp and ignores queue time", () => {
+    const withInputReady = getToolDuration(
       createToolMeta({
+        status: "completed",
+        inputReadyAtMs: 130,
         observedStartedAtMs: 100,
         observedEndedAtMs: 260,
         startedAtMs: 100,
@@ -101,10 +159,31 @@ describe("agent-chat-message-card-model", () => {
       }),
       "2026-02-22T10:00:00.000Z",
     );
-    expect(withObserved).toBe(160);
+    expect(withInputReady).toBe(130);
+
+    const queued = getToolDuration(
+      createToolMeta({
+        status: "pending",
+        input: {},
+      }),
+      "2026-02-22T10:00:00.000Z",
+    );
+    expect(queued).toBeNull();
+
+    const executing = getToolDuration(
+      createToolMeta({
+        status: "pending",
+        input: { taskId: "fairnest-111" },
+        inputReadyAtMs: 100,
+        observedEndedAtMs: 260,
+      }),
+      "2026-02-22T10:00:00.000Z",
+    );
+    expect(executing).toBeNull();
 
     const withFallback = getToolDuration(
       createToolMeta({
+        status: "completed",
         startedAtMs: 100,
         endedAtMs: 160,
       }),
@@ -139,5 +218,6 @@ describe("agent-chat-message-card-model", () => {
   test("strips tool prefix and status from tool content", () => {
     expect(stripToolPrefix("read_task", "Tool read_task completed: loaded")).toBe("loaded");
     expect(stripToolPrefix("bash", "queued: npm test")).toBe("npm test");
+    expect(stripToolPrefix("bash", "cancelled: interrupted by user")).toBe("interrupted by user");
   });
 });

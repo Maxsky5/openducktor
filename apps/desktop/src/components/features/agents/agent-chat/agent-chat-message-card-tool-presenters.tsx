@@ -1,4 +1,4 @@
-import { type AgentRole, isOdtWorkflowMutationToolName } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import {
   Bot,
   FileText,
@@ -17,6 +17,7 @@ import {
   buildToolSummary,
   formatRawJsonLikeText,
   getToolDuration,
+  getToolLifecyclePhase,
   hasNonEmptyInput,
   hasNonEmptyText,
   questionToolDetails,
@@ -24,24 +25,6 @@ import {
 } from "./agent-chat-message-card-model";
 import type { ToolMeta } from "./agent-chat-message-card-types";
 import { formatAgentDuration } from "./format-agent-duration";
-
-const MCP_TOOL_ERROR_PREFIX = /^\s*mcp\s+error\b/i;
-
-export const isToolMessageFailure = (meta: ToolMeta): boolean => {
-  if (meta.status === "error") {
-    return true;
-  }
-
-  if (
-    meta.status === "completed" &&
-    isOdtWorkflowMutationToolName(meta.tool) &&
-    hasNonEmptyText(meta.output)
-  ) {
-    return MCP_TOOL_ERROR_PREFIX.test(meta.output);
-  }
-
-  return false;
-};
 
 export const assistantRoleIcon = (role: AgentRole): ReactElement => {
   if (role === "spec") {
@@ -112,9 +95,17 @@ export const WorkflowToolMessage = ({
   const hasInput = hasNonEmptyInput(meta.input);
   const hasOutput = hasNonEmptyText(meta.output);
   const hasError = hasNonEmptyText(meta.error);
-  const isRunning = meta.status === "running" || meta.status === "pending";
-  const isFailure = isToolMessageFailure(meta);
-  const isSuccessfulCompletion = meta.status === "completed" && !isFailure;
+  const lifecyclePhase = getToolLifecyclePhase(meta);
+  const isActive = lifecyclePhase === "queued" || lifecyclePhase === "executing";
+  const isFailure = lifecyclePhase === "failed";
+  const isCancelled = lifecyclePhase === "cancelled";
+  const isSuccessfulCompletion = lifecyclePhase === "completed";
+  const isExecuting = lifecyclePhase === "executing";
+  const statusLabel =
+    lifecyclePhase === "queued" ? "QUEUED" : lifecyclePhase === "executing" ? "RUNNING" : null;
+  const statusClassName = isExecuting
+    ? "border-blue-300/70 bg-blue-100/80 text-blue-800"
+    : "border-violet-300/70 bg-violet-100/80 text-violet-800";
 
   return (
     <div className="space-y-2">
@@ -125,15 +116,29 @@ export const WorkflowToolMessage = ({
             "text-xs font-semibold",
             isFailure
               ? "text-rose-900"
-              : isSuccessfulCompletion
-                ? "text-emerald-900"
-                : "text-amber-900",
+              : isCancelled
+                ? "text-orange-900"
+                : isSuccessfulCompletion
+                  ? "text-emerald-900"
+                  : isExecuting
+                    ? "text-blue-900"
+                    : "text-violet-900",
           )}
         >
           {toolDisplayName(meta.tool)}
         </p>
-        {isRunning ? <LoaderCircle className="ml-auto size-3 animate-spin" /> : null}
-        {!isRunning && durationMs !== null ? (
+        {statusLabel ? (
+          <span
+            className={cn(
+              "ml-auto rounded-full border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide",
+              statusClassName,
+            )}
+          >
+            {statusLabel}
+          </span>
+        ) : null}
+        {isExecuting ? <LoaderCircle className="size-3 animate-spin" /> : null}
+        {!isActive && durationMs !== null ? (
           <span className="ml-auto text-[11px] text-current/75">
             {formatAgentDuration(durationMs)}
           </span>
@@ -186,14 +191,22 @@ export const RegularToolMessage = ({
   messageTimestamp,
   timeLabel,
 }: RegularToolMessageProps): ReactElement => {
+  const lifecyclePhase = getToolLifecyclePhase(meta);
   const summary = buildToolSummary(meta, messageContent);
-  const summaryText = summary.length > 0 ? summary : meta.status === "error" ? "Tool failed" : "";
+  const summaryText =
+    summary.length > 0
+      ? summary
+      : lifecyclePhase === "failed"
+        ? "Tool failed"
+        : lifecyclePhase === "cancelled"
+          ? "Tool cancelled"
+          : "";
   const durationMs = getToolDuration(meta, messageTimestamp);
   const hasInput = hasNonEmptyInput(meta.input);
   const hasOutput = hasNonEmptyText(meta.output);
   const hasError = hasNonEmptyText(meta.error);
   const hasExpandableDetails = hasInput || hasOutput || hasError;
-  const isRunning = meta.status === "running" || meta.status === "pending";
+  const isActive = lifecyclePhase === "queued" || lifecyclePhase === "executing";
   const questionDetails = questionToolDetails(meta);
 
   const summaryRow = (
@@ -201,17 +214,29 @@ export const RegularToolMessage = ({
       className={cn(
         "flex min-h-6 items-center gap-2 text-xs",
         hasExpandableDetails ? "cursor-pointer" : "",
-        meta.status === "error" ? "text-rose-700" : "text-slate-700",
+        lifecyclePhase === "failed"
+          ? "text-rose-700"
+          : lifecyclePhase === "cancelled"
+            ? "text-orange-700"
+            : "text-slate-700",
       )}
     >
-      <span className={cn(meta.status === "error" ? "text-rose-500" : "text-slate-500")}>
+      <span
+        className={cn(
+          lifecyclePhase === "failed"
+            ? "text-rose-500"
+            : lifecyclePhase === "cancelled"
+              ? "text-orange-500"
+              : "text-slate-500",
+        )}
+      >
         {toolIcon(meta.tool)}
       </span>
       <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
       {summaryText.length > 0 ? <p className="truncate text-slate-600">{summaryText}</p> : null}
       <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
-        {isRunning ? <LoaderCircle className="size-3 animate-spin" /> : null}
-        {!isRunning && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
+        {isActive ? <LoaderCircle className="size-3 animate-spin" /> : null}
+        {!isActive && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
         {timeLabel ? <span>{timeLabel}</span> : null}
       </span>
     </div>

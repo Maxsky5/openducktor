@@ -50,10 +50,10 @@ const SKIP_SPEC_AND_PLAN_TRANSITION_EXTRAS: Readonly<
 const SET_SPEC_ALLOWED_STATUSES: readonly TaskStatus[] = ["open", "spec_ready"];
 
 const SET_PLAN_ALLOWED_STATUSES: Readonly<Record<IssueType, readonly TaskStatus[]>> = {
-  epic: ["spec_ready"],
-  feature: ["spec_ready"],
-  task: ["open", "spec_ready"],
-  bug: ["open", "spec_ready"],
+  epic: ["spec_ready", "ready_for_dev"],
+  feature: ["spec_ready", "ready_for_dev"],
+  task: ["open", "spec_ready", "ready_for_dev"],
+  bug: ["open", "spec_ready", "ready_for_dev"],
 };
 
 const isStatusAllowed = (status: TaskStatus, allowed: readonly TaskStatus[]): boolean => {

@@ -8,7 +8,7 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, QaVerdict, SpecDocument, TaskCard,
-    TaskStatus, UpdateTaskPatch,
+    TaskMetadata, TaskStatus, UpdateTaskPatch,
 };
 use std::collections::HashSet;
 use std::path::Path;
@@ -252,9 +252,15 @@ impl AppService {
         )
     }
 
-    pub fn spec_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
+    pub fn task_metadata_get(&self, repo_path: &str, task_id: &str) -> Result<TaskMetadata> {
         self.ensure_repo_initialized(repo_path)?;
-        self.task_store.get_spec(Path::new(repo_path), task_id)
+        self.task_store
+            .get_task_metadata(Path::new(repo_path), task_id)
+            .with_context(|| format!("Failed to load task metadata for {task_id}"))
+    }
+
+    pub fn spec_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
+        Ok(self.task_metadata_get(repo_path, task_id)?.spec)
     }
 
     pub fn set_spec(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<SpecDocument> {
@@ -309,8 +315,7 @@ impl AppService {
     }
 
     pub fn plan_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
-        self.task_store.get_plan(Path::new(repo_path), task_id)
+        Ok(self.task_metadata_get(repo_path, task_id)?.plan)
     }
 
     pub fn set_plan(
@@ -350,15 +355,25 @@ impl AppService {
 
         if issue_type == "epic" && !subtask_creates.is_empty() {
             let mut current_tasks = self.task_store.list_tasks(Path::new(repo_path))?;
-            let mut existing_titles = tasks
+            let existing_direct_subtasks = tasks
                 .iter()
                 .filter(|entry| entry.parent_id.as_deref() == Some(task_id))
-                .map(|entry| normalize_title_key(&entry.title))
-                .collect::<HashSet<_>>();
+                .cloned()
+                .collect::<Vec<_>>();
+            let mut proposal_titles = HashSet::new();
+
+            for existing_subtask in existing_direct_subtasks {
+                self.task_store
+                    .delete_task(Path::new(repo_path), &existing_subtask.id, false)
+                    .with_context(|| {
+                        format!("Failed to delete replaced subtask {}", existing_subtask.id)
+                    })?;
+                current_tasks.retain(|entry| entry.id != existing_subtask.id);
+            }
 
             for mut create_input in subtask_creates {
                 let title_key = normalize_title_key(&create_input.title);
-                if existing_titles.contains(&title_key) {
+                if !proposal_titles.insert(title_key) {
                     continue;
                 }
                 create_input.parent_id = Some(task_id.to_string());
@@ -367,7 +382,6 @@ impl AppService {
                     .task_store
                     .create_task(Path::new(repo_path), create_input)?;
                 current_tasks.push(created);
-                existing_titles.insert(title_key);
             }
         }
 
@@ -400,10 +414,9 @@ impl AppService {
     }
 
     pub fn qa_get_report(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
         let report = self
-            .task_store
-            .get_latest_qa_report(Path::new(repo_path), task_id)?
+            .task_metadata_get(repo_path, task_id)?
+            .qa_report
             .map(|entry| SpecDocument {
                 markdown: entry.markdown,
                 updated_at: Some(entry.updated_at),
@@ -464,10 +477,7 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
     ) -> Result<Vec<AgentSessionDocument>> {
-        self.ensure_repo_initialized(repo_path)?;
-        self.task_store
-            .list_agent_sessions(Path::new(repo_path), task_id)
-            .with_context(|| format!("Failed to read persisted agent sessions for {task_id}"))
+        Ok(self.task_metadata_get(repo_path, task_id)?.agent_sessions)
     }
 
     pub fn agent_session_upsert(

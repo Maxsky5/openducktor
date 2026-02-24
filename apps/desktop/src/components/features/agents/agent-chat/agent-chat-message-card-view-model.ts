@@ -9,9 +9,9 @@ import { resolveAgentAccentColor } from "../agent-accent-color";
 import {
   assistantRoleFromMessage,
   formatTime,
+  getToolLifecyclePhase,
   SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
-import { isToolMessageFailure } from "./agent-chat-message-card-tool-presenters";
 
 export type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
@@ -61,12 +61,8 @@ const toArticleClassName = (
   isSystemPromptMessage: boolean,
 ): string => {
   const meta = message.meta;
-  const workflowToolFailed =
-    isWorkflowToolMessage && meta?.kind === "tool" ? isToolMessageFailure(meta) : false;
-  const workflowToolCompleted =
-    isWorkflowToolMessage && meta?.kind === "tool"
-      ? meta.status === "completed" && !workflowToolFailed
-      : false;
+  const workflowToolPhase =
+    isWorkflowToolMessage && meta?.kind === "tool" ? getToolLifecyclePhase(meta) : null;
 
   return cn(
     "text-sm",
@@ -74,11 +70,15 @@ const toArticleClassName = (
       "ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm border border-sky-100 bg-sky-50 px-4 py-3 text-slate-900 shadow-sm",
     isToolMessage
       ? isWorkflowToolMessage
-        ? workflowToolCompleted
+        ? workflowToolPhase === "completed"
           ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900"
-          : workflowToolFailed
+          : workflowToolPhase === "failed"
             ? "rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-900"
-            : "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
+            : workflowToolPhase === "cancelled"
+              ? "rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-orange-900"
+              : workflowToolPhase === "executing"
+                ? "rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900"
+                : "rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-violet-900"
         : "border-none bg-transparent px-0 py-0 text-slate-800"
       : isSubtaskMessage
         ? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"

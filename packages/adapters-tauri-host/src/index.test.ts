@@ -337,25 +337,30 @@ describe("TauriHostClient", () => {
 
   test("agent session history commands use expected IPC routes", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "agent_sessions_list") {
-        return [
-          {
-            sessionId: "obp-session-1",
-            externalSessionId: "session-opencode-1",
-            taskId: "task-1",
-            role: "spec",
-            scenario: "spec_initial",
-            status: "idle",
-            startedAt: "2026-02-18T17:20:00Z",
-            updatedAt: "2026-02-18T17:21:00Z",
-            endedAt: null,
-            runtimeId: "runtime-1",
-            runId: null,
-            baseUrl: "http://127.0.0.1:4173",
-            workingDirectory: "/repo",
-            selectedModel: null,
-          },
-        ];
+      if (command === "task_metadata_get") {
+        return {
+          spec: { markdown: "", updatedAt: null },
+          plan: { markdown: "", updatedAt: null },
+          qaReport: null,
+          agentSessions: [
+            {
+              sessionId: "obp-session-1",
+              externalSessionId: "session-opencode-1",
+              taskId: "task-1",
+              role: "spec",
+              scenario: "spec_initial",
+              status: "idle",
+              startedAt: "2026-02-18T17:20:00Z",
+              updatedAt: "2026-02-18T17:21:00Z",
+              endedAt: null,
+              runtimeId: "runtime-1",
+              runId: null,
+              baseUrl: "http://127.0.0.1:4173",
+              workingDirectory: "/repo",
+              selectedModel: null,
+            },
+          ],
+        };
       }
       if (command === "agent_session_upsert") {
         return { ok: true };
@@ -372,7 +377,7 @@ describe("TauriHostClient", () => {
 
     expect(history).toHaveLength(1);
     expect(calls.map((entry) => entry.command)).toEqual([
-      "agent_sessions_list",
+      "task_metadata_get",
       "agent_session_upsert",
     ]);
     expect(calls[0].args).toEqual({
@@ -383,57 +388,62 @@ describe("TauriHostClient", () => {
 
   test("agentSessionsList normalizes legacy scenarios and skips invalid rows", async () => {
     const { client } = createClient((command) => {
-      if (command === "agent_sessions_list") {
-        return [
-          {
-            sessionId: "legacy-spec",
-            externalSessionId: "legacy-ext-1",
-            taskId: "task-1",
-            role: "spec",
-            scenario: "spec_revision",
-            status: "idle",
-            startedAt: "2026-02-18T17:20:00Z",
-            updatedAt: "2026-02-18T17:21:00Z",
-            endedAt: null,
-            runtimeId: "runtime-1",
-            runId: null,
-            baseUrl: "http://127.0.0.1:4173",
-            workingDirectory: "/repo",
-            selectedModel: null,
-          },
-          {
-            sessionId: "legacy-planner",
-            externalSessionId: "legacy-ext-2",
-            taskId: "task-1",
-            role: "planner",
-            scenario: "planner_revision",
-            status: "idle",
-            startedAt: "2026-02-18T17:22:00Z",
-            updatedAt: "2026-02-18T17:23:00Z",
-            endedAt: null,
-            runtimeId: "runtime-1",
-            runId: null,
-            baseUrl: "http://127.0.0.1:4173",
-            workingDirectory: "/repo",
-            selectedModel: null,
-          },
-          {
-            sessionId: "bad-entry",
-            externalSessionId: "legacy-ext-3",
-            taskId: "task-1",
-            role: "planner",
-            scenario: "planner_unknown",
-            status: "idle",
-            startedAt: "2026-02-18T17:24:00Z",
-            updatedAt: "2026-02-18T17:25:00Z",
-            endedAt: null,
-            runtimeId: "runtime-1",
-            runId: null,
-            baseUrl: "http://127.0.0.1:4173",
-            workingDirectory: "/repo",
-            selectedModel: null,
-          },
-        ];
+      if (command === "task_metadata_get") {
+        return {
+          spec: { markdown: "", updatedAt: null },
+          plan: { markdown: "", updatedAt: null },
+          qaReport: null,
+          agentSessions: [
+            {
+              sessionId: "legacy-spec",
+              externalSessionId: "legacy-ext-1",
+              taskId: "task-1",
+              role: "spec",
+              scenario: "spec_revision",
+              status: "idle",
+              startedAt: "2026-02-18T17:20:00Z",
+              updatedAt: "2026-02-18T17:21:00Z",
+              endedAt: null,
+              runtimeId: "runtime-1",
+              runId: null,
+              baseUrl: "http://127.0.0.1:4173",
+              workingDirectory: "/repo",
+              selectedModel: null,
+            },
+            {
+              sessionId: "legacy-planner",
+              externalSessionId: "legacy-ext-2",
+              taskId: "task-1",
+              role: "planner",
+              scenario: "planner_revision",
+              status: "idle",
+              startedAt: "2026-02-18T17:22:00Z",
+              updatedAt: "2026-02-18T17:23:00Z",
+              endedAt: null,
+              runtimeId: "runtime-1",
+              runId: null,
+              baseUrl: "http://127.0.0.1:4173",
+              workingDirectory: "/repo",
+              selectedModel: null,
+            },
+            {
+              sessionId: "bad-entry",
+              externalSessionId: "legacy-ext-3",
+              taskId: "task-1",
+              role: "planner",
+              scenario: "planner_unknown",
+              status: "idle",
+              startedAt: "2026-02-18T17:24:00Z",
+              updatedAt: "2026-02-18T17:25:00Z",
+              endedAt: null,
+              runtimeId: "runtime-1",
+              runId: null,
+              baseUrl: "http://127.0.0.1:4173",
+              workingDirectory: "/repo",
+              selectedModel: null,
+            },
+          ],
+        };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -443,5 +453,62 @@ describe("TauriHostClient", () => {
     expect(sessions).toHaveLength(2);
     expect(sessions[0]?.scenario).toBe("spec_initial");
     expect(sessions[1]?.scenario).toBe("planner_initial");
+  });
+
+  test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        return {
+          spec: { markdown: "Spec Body", updatedAt: "2026-02-20T09:00:00Z" },
+          plan: { markdown: "Plan Body", updatedAt: "2026-02-20T09:05:00Z" },
+          qaReport: {
+            markdown: "QA Body",
+            verdict: "approved",
+            updatedAt: "2026-02-20T09:10:00Z",
+            revision: 2,
+          },
+          agentSessions: [
+            {
+              sessionId: "session-1",
+              externalSessionId: "external-1",
+              taskId: "task-1",
+              role: "build",
+              scenario: "build_implementation_start",
+              status: "idle",
+              startedAt: "2026-02-18T17:20:00Z",
+              updatedAt: "2026-02-18T17:21:00Z",
+              endedAt: null,
+              runtimeId: "runtime-1",
+              runId: null,
+              baseUrl: "http://127.0.0.1:4173",
+              workingDirectory: "/repo",
+              selectedModel: null,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const [spec, plan, qa, sessions] = await Promise.all([
+      client.specGet("/repo", "task-1"),
+      client.planGet("/repo", "task-1"),
+      client.qaGetReport("/repo", "task-1"),
+      client.agentSessionsList("/repo", "task-1"),
+    ]);
+
+    expect(spec.markdown).toBe("Spec Body");
+    expect(plan.markdown).toBe("Plan Body");
+    expect(qa.markdown).toBe("QA Body");
+    expect(sessions).toHaveLength(1);
+    expect(calls).toEqual([
+      {
+        command: "task_metadata_get",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+    ]);
   });
 });

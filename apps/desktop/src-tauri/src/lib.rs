@@ -416,6 +416,15 @@ async fn spec_get(
 }
 
 #[tauri::command]
+async fn task_metadata_get(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<host_domain::TaskMetadata, String> {
+    as_error(state.service.task_metadata_get(&repo_path, &task_id))
+}
+
+#[tauri::command]
 async fn set_spec(
     state: State<'_, AppState>,
     repo_path: String,
@@ -758,6 +767,7 @@ pub fn run() -> anyhow::Result<()> {
             task_defer,
             task_resume_deferred,
             spec_get,
+            task_metadata_get,
             set_spec,
             spec_save_document,
             plan_get,

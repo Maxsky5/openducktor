@@ -47,10 +47,12 @@ describe("types", () => {
     const options: OpencodeSdkAdapterOptions = {
       now: () => "2026-02-22T12:00:00.000Z",
       createClient,
+      logEvent: () => undefined,
     };
 
     expect(sessionRecord.input.sessionId).toBe("session-1");
     expect(status.status).toBe("connected");
     expect(typeof options.createClient).toBe("function");
+    expect(typeof options.logEvent).toBe("function");
   });
 });

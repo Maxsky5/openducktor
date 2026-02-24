@@ -1,5 +1,5 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
+import { isOdtWorkflowMutationToolName, toOdtWorkflowToolDisplayName } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
@@ -23,6 +23,11 @@ const AGENT_ROLE_LABEL: Record<AgentRole, string> = {
   build: "Builder",
   qa: "QA",
 };
+
+type ToolMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
+
+const MCP_TOOL_ERROR_PREFIX = /^\s*mcp\s+error\b/i;
+const TOOL_CANCELLED_PATTERN = /\b(cancel(?:ed|led)|aborted|stopped|interrupted|terminated)\b/i;
 
 export const formatTime = (timestamp: string): string => {
   const value = new Date(timestamp);
@@ -64,7 +69,7 @@ export const stripToolPrefix = (tool: string, value: string): string => {
   const normalized = value.trim();
   return normalized
     .replace(new RegExp(`^Tool\\s+${escaped}\\s*`, "i"), "")
-    .replace(/^(queued|running|completed|failed)\s*[:.-]?\s*/i, "")
+    .replace(/^(queued|running|executing|completed|failed|cancelled|canceled)\s*[:.-]?\s*/i, "")
     .trim();
 };
 
@@ -110,15 +115,75 @@ export const roleLabel = (
   return "System";
 };
 
+const hasMeaningfulInputValue = (value: unknown): boolean => {
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasMeaningfulInputValue(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  return Object.values(value as Record<string, unknown>).some((entry) =>
+    hasMeaningfulInputValue(entry),
+  );
+};
+
 export const hasNonEmptyInput = (input: Record<string, unknown> | undefined): boolean => {
   if (!input) {
     return false;
   }
-  return Object.keys(input).length > 0;
+  return Object.values(input).some((value) => hasMeaningfulInputValue(value));
 };
 
 export const hasNonEmptyText = (value: unknown): value is string => {
   return typeof value === "string" && value.trim().length > 0;
+};
+
+export const isToolMessageFailure = (meta: ToolMeta): boolean => {
+  if (meta.status === "error") {
+    return true;
+  }
+
+  if (
+    meta.status === "completed" &&
+    isOdtWorkflowMutationToolName(meta.tool) &&
+    hasNonEmptyText(meta.output)
+  ) {
+    return MCP_TOOL_ERROR_PREFIX.test(meta.output);
+  }
+
+  return false;
+};
+
+export const isToolMessageCancelled = (meta: ToolMeta): boolean => {
+  if (meta.status !== "error") {
+    return false;
+  }
+
+  return (
+    (hasNonEmptyText(meta.error) && TOOL_CANCELLED_PATTERN.test(meta.error)) ||
+    (hasNonEmptyText(meta.output) && TOOL_CANCELLED_PATTERN.test(meta.output))
+  );
+};
+
+export type ToolLifecyclePhase = "queued" | "executing" | "completed" | "cancelled" | "failed";
+
+export const getToolLifecyclePhase = (meta: ToolMeta): ToolLifecyclePhase => {
+  if (meta.status === "pending") {
+    return hasNonEmptyInput(meta.input) ? "executing" : "queued";
+  }
+  if (meta.status === "running") {
+    return "executing";
+  }
+  if (meta.status === "completed") {
+    return isToolMessageFailure(meta) ? "failed" : "completed";
+  }
+  return isToolMessageCancelled(meta) ? "cancelled" : "failed";
 };
 
 const readInputString = (
@@ -462,23 +527,24 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
   }
 };
 
-export const buildToolSummary = (
-  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
-  content: string,
-): string => {
+export const buildToolSummary = (meta: ToolMeta, content: string): string => {
   const lowerTool = meta.tool.toLowerCase();
   const isTodoTool = isTodoToolName(lowerTool);
+  const lifecyclePhase = getToolLifecyclePhase(meta);
 
   if (isTodoTool) {
     const todoCount = countTodosFromOutput(meta.output) ?? countTodosFromInput(meta.input);
     if (todoCount !== null) {
       return `${todoCount} todo${todoCount === 1 ? "" : "s"}`;
     }
-    if (meta.status === "running" || meta.status === "pending") {
+    if (lifecyclePhase === "queued" || lifecyclePhase === "executing") {
       return "updating todos";
     }
-    if (meta.status === "completed") {
+    if (lifecyclePhase === "completed") {
       return "todos updated";
+    }
+    if (lifecyclePhase === "cancelled") {
+      return "todos update cancelled";
     }
   }
 
@@ -529,18 +595,43 @@ export const buildToolSummary = (
   return "";
 };
 
-export const getToolDuration = (
-  meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>,
-  messageTimestamp: string,
-): number | null => {
+export const getToolDuration = (meta: ToolMeta, messageTimestamp: string): number | null => {
+  const lifecyclePhase = getToolLifecyclePhase(meta);
+  if (lifecyclePhase === "queued" || lifecyclePhase === "executing") {
+    return null;
+  }
+
+  const parsedMessageTimestamp = Date.parse(messageTimestamp);
+  const completionAtMs =
+    typeof meta.observedEndedAtMs === "number"
+      ? meta.observedEndedAtMs
+      : typeof meta.endedAtMs === "number"
+        ? meta.endedAtMs
+        : Number.isNaN(parsedMessageTimestamp)
+          ? null
+          : parsedMessageTimestamp;
+  const inputReadyAtMs =
+    typeof meta.inputReadyAtMs === "number"
+      ? meta.inputReadyAtMs
+      : hasNonEmptyInput(meta.input)
+        ? typeof meta.observedStartedAtMs === "number"
+          ? meta.observedStartedAtMs
+          : typeof meta.startedAtMs === "number"
+            ? meta.startedAtMs
+            : null
+        : null;
+  if (completionAtMs !== null && inputReadyAtMs !== null && completionAtMs >= inputReadyAtMs) {
+    return completionAtMs - inputReadyAtMs;
+  }
+
   const observedStartedAtMs =
     typeof meta.observedStartedAtMs === "number" ? meta.observedStartedAtMs : null;
   const observedEndedAtMs =
     typeof meta.observedEndedAtMs === "number"
       ? meta.observedEndedAtMs
-      : meta.status === "running" || meta.status === "pending"
+      : Number.isNaN(parsedMessageTimestamp)
         ? null
-        : Date.parse(messageTimestamp);
+        : parsedMessageTimestamp;
   if (
     observedStartedAtMs !== null &&
     observedEndedAtMs !== null &&
@@ -556,9 +647,9 @@ export const getToolDuration = (
   const endedAtMs =
     typeof meta.endedAtMs === "number"
       ? meta.endedAtMs
-      : meta.status === "running" || meta.status === "pending"
+      : Number.isNaN(parsedMessageTimestamp)
         ? null
-        : Date.parse(messageTimestamp);
+        : parsedMessageTimestamp;
   if (endedAtMs === null || Number.isNaN(endedAtMs) || endedAtMs < meta.startedAtMs) {
     return null;
   }

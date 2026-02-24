@@ -218,6 +218,7 @@ mod tests {
         spec_set_calls: Vec<(String, String)>,
         plan_get_calls: Vec<String>,
         plan_set_calls: Vec<(String, String)>,
+        metadata_get_calls: Vec<String>,
         qa_append_calls: Vec<(String, String, QaVerdict)>,
         latest_qa_report: Option<QaReportDocument>,
         agent_sessions: Vec<AgentSessionDocument>,
@@ -440,6 +441,10 @@ mod tests {
         }
 
         fn get_task_metadata(&self, _repo_path: &Path, _task_id: &str) -> Result<TaskMetadata> {
+            let mut state = self.state.lock().expect("task store lock poisoned");
+            state.metadata_get_calls.push(_task_id.to_string());
+            let qa_report = state.latest_qa_report.clone();
+            let agent_sessions = state.agent_sessions.clone();
             Ok(TaskMetadata {
                 spec: SpecDocument {
                     markdown: String::new(),
@@ -449,8 +454,8 @@ mod tests {
                     markdown: String::new(),
                     updated_at: None,
                 },
-                qa_report: None,
-                agent_sessions: Vec::new(),
+                qa_report,
+                agent_sessions,
             })
         }
     }
@@ -609,6 +614,7 @@ mod tests {
             spec_set_calls: Vec::new(),
             plan_get_calls: Vec::new(),
             plan_set_calls: Vec::new(),
+            metadata_get_calls: Vec::new(),
             qa_append_calls: Vec::new(),
             latest_qa_report: None,
             agent_sessions: Vec::new(),
@@ -665,6 +671,7 @@ mod tests {
                 spec_set_calls: Vec::new(),
                 plan_get_calls: Vec::new(),
                 plan_set_calls: Vec::new(),
+                metadata_get_calls: Vec::new(),
                 qa_append_calls: Vec::new(),
                 latest_qa_report: None,
                 agent_sessions: Vec::new(),
@@ -999,6 +1006,7 @@ echo "bd-fake"
             spec_set_calls: Vec::new(),
             plan_get_calls: Vec::new(),
             plan_set_calls: Vec::new(),
+            metadata_get_calls: Vec::new(),
             qa_append_calls: Vec::new(),
             latest_qa_report: None,
             agent_sessions: Vec::new(),
@@ -1218,16 +1226,24 @@ echo "bd-fake"
 
         let epic_open = make_task("epic-open", "epic", TaskStatus::Open);
         let epic_spec_ready = make_task("epic-spec", "epic", TaskStatus::SpecReady);
+        let epic_ready_for_dev = make_task("epic-ready", "epic", TaskStatus::ReadyForDev);
         let feature_open = make_task("feature-open", "feature", TaskStatus::Open);
+        let feature_ready_for_dev = make_task("feature-ready", "feature", TaskStatus::ReadyForDev);
         let task_open = make_task("task-open", "task", TaskStatus::Open);
+        let task_ready_for_dev = make_task("task-ready", "task", TaskStatus::ReadyForDev);
         let bug_open = make_task("bug-open", "bug", TaskStatus::Open);
+        let bug_ready_for_dev = make_task("bug-ready", "bug", TaskStatus::ReadyForDev);
         let feature_in_progress = make_task("feature-progress", "feature", TaskStatus::InProgress);
 
         assert!(!can_set_plan(&epic_open));
         assert!(can_set_plan(&epic_spec_ready));
+        assert!(can_set_plan(&epic_ready_for_dev));
         assert!(!can_set_plan(&feature_open));
+        assert!(can_set_plan(&feature_ready_for_dev));
         assert!(can_set_plan(&task_open));
+        assert!(can_set_plan(&task_ready_for_dev));
         assert!(can_set_plan(&bug_open));
+        assert!(can_set_plan(&bug_ready_for_dev));
         assert!(!can_set_plan(&feature_in_progress));
     }
 
@@ -2076,6 +2092,36 @@ echo "bd-fake"
     }
 
     #[test]
+    fn set_plan_allows_feature_from_ready_for_dev_without_status_transition() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-plan-feature-ready";
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![make_task("task-1", "feature", TaskStatus::ReadyForDev)],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let plan = service.set_plan(repo_path, "task-1", "  # Revised Plan  ", None)?;
+        assert_eq!(plan.markdown, "# Revised Plan");
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(
+            task_state.plan_set_calls,
+            vec![("task-1".to_string(), "# Revised Plan".to_string())]
+        );
+        assert!(
+            !task_state
+                .updated_patches
+                .iter()
+                .any(|(_, patch)| patch.status.is_some()),
+            "status update should be skipped when already ready_for_dev"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn set_plan_rejects_invalid_status_for_feature() {
         let repo_path = "/tmp/odt-repo-plan-invalid";
         let (service, _task_state, _git_state) = build_service_with_state(
@@ -2094,7 +2140,7 @@ echo "bd-fake"
     }
 
     #[test]
-    fn set_plan_for_epic_creates_unique_missing_subtasks() -> Result<()> {
+    fn set_plan_for_epic_replaces_existing_subtasks_with_new_plan_proposals() -> Result<()> {
         let repo_path = "/tmp/odt-repo-plan-epic";
         let epic = make_task("epic-1", "epic", TaskStatus::SpecReady);
         let mut existing_child = make_task("child-1", "task", TaskStatus::Open);
@@ -2138,10 +2184,16 @@ echo "bd-fake"
         assert_eq!(plan.markdown, "# Epic Plan");
 
         let task_state = task_state.lock().expect("task lock poisoned");
-        assert_eq!(task_state.created_inputs.len(), 1);
-        assert_eq!(task_state.created_inputs[0].title, "Build UI");
+        assert_eq!(task_state.delete_calls, vec![("child-1".to_string(), false)]);
+        assert_eq!(task_state.created_inputs.len(), 2);
+        assert_eq!(task_state.created_inputs[0].title, "Build API");
         assert_eq!(
             task_state.created_inputs[0].parent_id.as_deref(),
+            Some("epic-1")
+        );
+        assert_eq!(task_state.created_inputs[1].title, "Build UI");
+        assert_eq!(
+            task_state.created_inputs[1].parent_id.as_deref(),
             Some("epic-1")
         );
         assert!(task_state
@@ -2197,7 +2249,7 @@ echo "bd-fake"
     }
 
     #[test]
-    fn spec_get_and_plan_get_delegate_to_task_store() -> Result<()> {
+    fn spec_get_and_plan_get_use_consolidated_metadata_lookup() -> Result<()> {
         let repo_path = "/tmp/odt-repo-docs-read";
         let (service, task_state, _git_state) = build_service_with_state(
             vec![],
@@ -2212,8 +2264,12 @@ echo "bd-fake"
         let _ = service.plan_get(repo_path, "task-1")?;
 
         let state = task_state.lock().expect("task lock poisoned");
-        assert_eq!(state.spec_get_calls, vec!["task-1".to_string()]);
-        assert_eq!(state.plan_get_calls, vec!["task-1".to_string()]);
+        assert!(state.spec_get_calls.is_empty());
+        assert!(state.plan_get_calls.is_empty());
+        assert_eq!(
+            state.metadata_get_calls,
+            vec!["task-1".to_string(), "task-1".to_string()]
+        );
         Ok(())
     }
 

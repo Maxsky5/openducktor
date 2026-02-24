@@ -193,6 +193,48 @@ describe("event-stream", () => {
     ]);
   });
 
+  test("forwards every raw sdk event to logEvent before relevance filtering", async () => {
+    const client = makeClientWithEvents([
+      {
+        type: "todo.updated",
+        properties: {
+          sessionID: "external-other-session",
+          todos: [{ content: "ignored" }],
+        },
+      } as unknown as Event,
+      {
+        type: "todo.updated",
+        properties: {
+          sessionID: "external-session-1",
+          todos: [{ content: "handled" }],
+        },
+      } as unknown as Event,
+    ]);
+    const sessionRecord = makeSessionRecord(client);
+    const logs: Array<{ type: string; relevant: boolean }> = [];
+
+    await subscribeOpencodeEvents({
+      context: {
+        sessionId: "local-session-1",
+        externalSessionId: "external-session-1",
+        input: makeSessionInput(),
+      },
+      client,
+      controller: new AbortController(),
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: () => undefined,
+      getSession: () => sessionRecord,
+      logEvent: (entry) => {
+        logs.push({ type: entry.event.type, relevant: entry.relevant });
+      },
+    });
+
+    expect(logs).toEqual([
+      { type: "todo.updated", relevant: false },
+      { type: "todo.updated", relevant: true },
+    ]);
+  });
+
   test("applies queued part delta with append semantics", async () => {
     const emitted = await runEventStream([
       {

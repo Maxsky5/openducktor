@@ -27,6 +27,7 @@ export type AgentChatMessageMeta =
       endedAtMs?: number;
       observedStartedAtMs?: number;
       observedEndedAtMs?: number;
+      inputReadyAtMs?: number;
     }
   | {
       kind: "assistant";

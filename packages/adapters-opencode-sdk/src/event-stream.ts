@@ -3,7 +3,7 @@ import type { AgentEvent } from "@openducktor/core";
 import { handleMessageEvent } from "./event-stream/message-events";
 import { handleSessionEvent } from "./event-stream/session-events";
 import { isRelevantEvent } from "./event-stream/shared";
-import type { SessionInput, SessionRecord } from "./types";
+import type { OpencodeEventLogger, SessionInput, SessionRecord } from "./types";
 
 type SubscribeOpencodeEventsInput = {
   context: {
@@ -16,6 +16,7 @@ type SubscribeOpencodeEventsInput = {
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
   getSession: (sessionId: string) => SessionRecord | undefined;
+  logEvent?: OpencodeEventLogger;
 };
 
 export const subscribeOpencodeEvents = async (
@@ -41,7 +42,17 @@ export const subscribeOpencodeEvents = async (
   };
 
   for await (const event of sse.stream) {
-    if (!isRelevantEvent(input.context.externalSessionId, event)) {
+    const relevant = isRelevantEvent(input.context.externalSessionId, event);
+    if (input.logEvent) {
+      input.logEvent({
+        sessionId: input.context.sessionId,
+        externalSessionId: input.context.externalSessionId,
+        relevant,
+        event,
+      });
+    }
+
+    if (!relevant) {
       continue;
     }
 

@@ -40,8 +40,8 @@ Workflow constraints you must obey:
 - Feature/epic flow: open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed.
 - Task/bug may skip planning and go open -> in_progress.
 - odt_set_spec allowed from open/spec_ready only.
-- odt_set_plan for feature/epic allowed from spec_ready only.
-- odt_set_plan for task/bug allowed from open/spec_ready.
+- odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev.
+- odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev.
 - odt_build_completed from in_progress transitions to ai_review when qaRequired=true, else human_review.
 - odt_qa_rejected transitions ai_review -> in_progress.
 - odt_qa_approved transitions ai_review -> human_review.

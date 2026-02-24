@@ -15,6 +15,7 @@ pub(crate) struct TaskStoreState {
     pub ensure_calls: Vec<String>,
     pub tasks: Vec<TaskCard>,
     pub updated_patches: Vec<(String, UpdateTaskPatch)>,
+    pub latest_qa_report: Option<QaReportDocument>,
     pub agent_sessions: Vec<AgentSessionDocument>,
 }
 
@@ -144,7 +145,8 @@ impl TaskStore for FakeTaskStore {
         _repo_path: &Path,
         _task_id: &str,
     ) -> Result<Option<QaReportDocument>> {
-        Ok(None)
+        let state = self.state.lock().expect("task store lock poisoned");
+        Ok(state.latest_qa_report.clone())
     }
 
     fn append_qa_report(
@@ -191,6 +193,7 @@ impl TaskStore for FakeTaskStore {
     }
 
     fn get_task_metadata(&self, _repo_path: &Path, _task_id: &str) -> Result<TaskMetadata> {
+        let state = self.state.lock().expect("task store lock poisoned");
         Ok(TaskMetadata {
             spec: SpecDocument {
                 markdown: String::new(),
@@ -200,8 +203,8 @@ impl TaskStore for FakeTaskStore {
                 markdown: String::new(),
                 updated_at: None,
             },
-            qa_report: None,
-            agent_sessions: Vec::new(),
+            qa_report: state.latest_qa_report.clone(),
+            agent_sessions: state.agent_sessions.clone(),
         })
     }
 }
@@ -287,6 +290,7 @@ pub(crate) fn build_service_with_state(
         ensure_calls: Vec::new(),
         tasks,
         updated_patches: Vec::new(),
+        latest_qa_report: None,
         agent_sessions: Vec::new(),
     }));
     let git_state = Arc::new(Mutex::new(GitState {
