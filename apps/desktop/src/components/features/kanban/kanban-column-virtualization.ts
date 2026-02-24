@@ -81,8 +81,7 @@ export function getVirtualWindowEdgeOffsets({
   }
 
   const topSpacerHeight = itemOffsets[range.startIndex] ?? 0;
-  const visibleWindowEnd =
-    (itemOffsets[range.endIndex] ?? 0) + (itemHeights[range.endIndex] ?? 0);
+  const visibleWindowEnd = (itemOffsets[range.endIndex] ?? 0) + (itemHeights[range.endIndex] ?? 0);
   const bottomSpacerHeight = Math.max(0, totalHeight - visibleWindowEnd);
 
   return { topSpacerHeight, bottomSpacerHeight };

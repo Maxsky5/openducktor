@@ -1,18 +1,12 @@
 import type { RunSummary } from "@openducktor/contracts";
 import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openducktor/core";
 import { Inbox } from "lucide-react";
-import {
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildVirtualColumnLayout,
   findVirtualWindowRange,
   getVirtualWindowEdgeOffsets,
+  type VirtualWindowRange,
 } from "@/components/features/kanban/kanban-column-virtualization";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
@@ -23,6 +17,7 @@ const VIRTUALIZATION_MIN_TASK_COUNT = 30;
 const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
 const VIRTUAL_CARD_GAP_PX = 12;
 const VIRTUAL_OVERSCAN_PX = 360;
+const INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX = 900;
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
@@ -39,15 +34,10 @@ const laneCountLabel = (count: number): string => (count === 1 ? "1 task" : `${c
 
 type TaskCardHandlers = Pick<
   KanbanColumnProps,
-  | "onOpenDetails"
-  | "onDelegate"
-  | "onPlan"
-  | "onBuild"
-  | "onHumanApprove"
-  | "onHumanRequestChanges"
+  "onOpenDetails" | "onDelegate" | "onPlan" | "onBuild" | "onHumanApprove" | "onHumanRequestChanges"
 >;
 
-function MeasuredTaskCard({
+const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   runState,
   onMeasuredHeight,
@@ -107,7 +97,7 @@ function MeasuredTaskCard({
       />
     </div>
   );
-}
+});
 
 function LaneHeader({
   id,
@@ -168,11 +158,9 @@ export function KanbanColumn({
   const theme = laneTheme(column.id);
   const cardsViewportRef = useRef<HTMLDivElement | null>(null);
   const shouldVirtualize = column.tasks.length >= VIRTUALIZATION_MIN_TASK_COUNT;
-  const [measuredCardHeightsById, setMeasuredCardHeightsById] = useState<Record<string, number>>({});
-  const [viewport, setViewport] = useState<{ start: number; end: number }>({
-    start: -VIRTUAL_OVERSCAN_PX,
-    end: VIRTUAL_OVERSCAN_PX,
-  });
+  const [measuredCardHeightsById, setMeasuredCardHeightsById] = useState<Record<string, number>>(
+    {},
+  );
 
   const taskHeights = useMemo(
     () =>
@@ -187,27 +175,16 @@ export function KanbanColumn({
     [taskHeights],
   );
 
-  const visibleRange = useMemo(
-    () =>
-      findVirtualWindowRange({
-        itemOffsets: virtualLayout.itemOffsets,
-        itemHeights: taskHeights,
-        totalHeight: virtualLayout.totalHeight,
-        viewportStart: viewport.start - VIRTUAL_OVERSCAN_PX,
-        viewportEnd: viewport.end + VIRTUAL_OVERSCAN_PX,
-      }),
-    [taskHeights, viewport.end, viewport.start, virtualLayout.itemOffsets, virtualLayout.totalHeight],
-  );
-
-  const { topSpacerHeight, bottomSpacerHeight } = useMemo(
-    () =>
-      getVirtualWindowEdgeOffsets({
-        range: visibleRange,
-        itemOffsets: virtualLayout.itemOffsets,
-        itemHeights: taskHeights,
-        totalHeight: virtualLayout.totalHeight,
-      }),
-    [taskHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight, visibleRange],
+  const [visibleRange, setVisibleRange] = useState<VirtualWindowRange>(() =>
+    findVirtualWindowRange({
+      itemOffsets: virtualLayout.itemOffsets,
+      itemHeights: taskHeights,
+      totalHeight: virtualLayout.totalHeight,
+      viewportStart: -VIRTUAL_OVERSCAN_PX,
+      viewportEnd:
+        (typeof window === "undefined" ? INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX : window.innerHeight) +
+        VIRTUAL_OVERSCAN_PX,
+    }),
   );
 
   const syncViewport = useCallback((): void => {
@@ -222,14 +199,32 @@ export function KanbanColumn({
     const rect = viewportElement.getBoundingClientRect();
     const nextStart = -rect.top;
     const nextEnd = nextStart + window.innerHeight;
+    const nextRange = findVirtualWindowRange({
+      itemOffsets: virtualLayout.itemOffsets,
+      itemHeights: taskHeights,
+      totalHeight: virtualLayout.totalHeight,
+      viewportStart: nextStart - VIRTUAL_OVERSCAN_PX,
+      viewportEnd: nextEnd + VIRTUAL_OVERSCAN_PX,
+    });
 
-    setViewport((current) => {
-      if (current.start === nextStart && current.end === nextEnd) {
+    setVisibleRange((current) => {
+      if (current.startIndex === nextRange.startIndex && current.endIndex === nextRange.endIndex) {
         return current;
       }
-      return { start: nextStart, end: nextEnd };
+      return nextRange;
     });
-  }, []);
+  }, [taskHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight]);
+
+  const { topSpacerHeight, bottomSpacerHeight } = useMemo(
+    () =>
+      getVirtualWindowEdgeOffsets({
+        range: visibleRange,
+        itemOffsets: virtualLayout.itemOffsets,
+        itemHeights: taskHeights,
+        totalHeight: virtualLayout.totalHeight,
+      }),
+    [taskHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight, visibleRange],
+  );
 
   useEffect(() => {
     if (!shouldVirtualize || typeof window === "undefined") {
