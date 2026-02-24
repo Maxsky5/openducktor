@@ -359,44 +359,6 @@ export const createLoadAgentSessions = ({
           return;
         }
 
-        // Documents are loaded lazily when session is selected - not during list load
-        const docs = await loadTaskDocumentsWithCache(repoPath, record.taskId);
-        if (isStaleRepoOperation()) {
-          return;
-        }
-
-        const [specMarkdown, planMarkdown, qaMarkdown] = docs;
-        const task = taskRef.current.find((entry) => entry.id === record.taskId);
-        const systemPrompt = task
-          ? buildAgentSystemPrompt({
-              role: record.role,
-              scenario: record.scenario,
-              task: {
-                taskId: task.id,
-                title: task.title,
-                issueType: task.issueType,
-                status: task.status,
-                qaRequired: task.aiReviewEnabled,
-                description: task.description,
-                acceptanceCriteria: task.acceptanceCriteria,
-                specMarkdown,
-                planMarkdown,
-                latestQaReportMarkdown: qaMarkdown,
-              },
-            })
-          : null;
-
-        const preludeMessages = systemPrompt
-          ? [
-              ...basicPreludeMessages,
-              {
-                id: `history:system-prompt:${record.sessionId}`,
-                role: "system" as const,
-                content: `System prompt:\n\n${systemPrompt}`,
-                timestamp: record.startedAt,
-              },
-            ]
-          : basicPreludeMessages;
 
         updateSession(
           record.sessionId,
@@ -405,7 +367,7 @@ export const createLoadAgentSessions = ({
             baseUrl,
             workingDirectory,
             messages: [
-              ...preludeMessages,
+              ...basicPreludeMessages,
               ...historyToChatMessages(historyResult.history, {
                 role: record.role,
                 selectedModel: normalizePersistedSelection(record.selectedModel),
