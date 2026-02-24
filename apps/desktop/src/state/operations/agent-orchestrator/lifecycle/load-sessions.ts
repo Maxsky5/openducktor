@@ -56,6 +56,18 @@ type CreateLoadAgentSessionsArgs = {
   ) => Promise<void>;
 };
 
+// Module-level cache for task documents (spec, plan, QA) - persists across session loads
+const taskDocumentsCache = new Map<
+  string,
+  {
+    spec: Promise<string> | null;
+    plan: Promise<string> | null;
+    qa: Promise<string> | null;
+  }
+>();
+
+const getCacheKey = (repoPath: string, taskId: string): string => `${repoPath}:${taskId}`;
+
 export const createLoadAgentSessions = ({
   activeRepo,
   adapter,
@@ -112,107 +124,82 @@ export const createLoadAgentSessions = ({
       );
     };
 
-    const buildPreludeMessages = async (
-      record: Awaited<ReturnType<typeof host.agentSessionsList>>[number],
-    ): Promise<AgentSessionState["messages"]> => {
-      let preludeMessages: AgentSessionState["messages"] = [
-        {
-          id: `history:session-start:${record.sessionId}`,
-          role: "system",
-          content: `Session started (${record.role} - ${record.scenario})`,
-          timestamp: record.startedAt,
-        },
-      ];
-
-      const task = taskRef.current.find((entry) => entry.id === record.taskId);
-      if (!task) {
-        return preludeMessages;
+    // Lazy-load task documents with caching - used when session is actually selected
+    const loadTaskDocumentsWithCache = async (
+      repoPath: string,
+      taskId: string,
+    ): Promise<[string, string, string]> => {
+      const cacheKey = getCacheKey(repoPath, taskId);
+      let cacheEntry = taskDocumentsCache.get(cacheKey);
+      if (!cacheEntry) {
+        cacheEntry = {
+          spec: null,
+          plan: null,
+          qa: null,
+        };
+        taskDocumentsCache.set(cacheKey, cacheEntry);
       }
 
-      const docs = await Promise.all([
-        captureOrchestratorFallback(
+      const fetchPromises: Promise<void>[] = [];
+
+      if (!cacheEntry.spec) {
+        const specPromise = captureOrchestratorFallback(
           "load-sessions-load-prelude-document",
           async () => {
-            const spec = await host.specGet(repoPath, record.taskId);
+            const spec = await host.specGet(repoPath, taskId);
             return spec.markdown;
           },
           {
-            tags: {
-              repoPath,
-              taskId: record.taskId,
-              sessionId: record.sessionId,
-              document: "spec",
-            },
+            tags: { repoPath, taskId, document: "spec" },
             logLevel: "warn",
             fallback: () => "",
           },
-        ),
-        captureOrchestratorFallback(
+        );
+        cacheEntry.spec = specPromise;
+        fetchPromises.push(specPromise.then(() => {}));
+      }
+
+      if (!cacheEntry.plan) {
+        const planPromise = captureOrchestratorFallback(
           "load-sessions-load-prelude-document",
           async () => {
-            const plan = await host.planGet(repoPath, record.taskId);
+            const plan = await host.planGet(repoPath, taskId);
             return plan.markdown;
           },
           {
-            tags: {
-              repoPath,
-              taskId: record.taskId,
-              sessionId: record.sessionId,
-              document: "plan",
-            },
+            tags: { repoPath, taskId, document: "plan" },
             logLevel: "warn",
             fallback: () => "",
           },
-        ),
-        captureOrchestratorFallback(
+        );
+        cacheEntry.plan = planPromise;
+        fetchPromises.push(planPromise.then(() => {}));
+      }
+
+      if (!cacheEntry.qa) {
+        const qaPromise = captureOrchestratorFallback(
           "load-sessions-load-prelude-document",
           async () => {
-            const qa = await host.qaGetReport(repoPath, record.taskId);
+            const qa = await host.qaGetReport(repoPath, taskId);
             return qa.markdown;
           },
           {
-            tags: {
-              repoPath,
-              taskId: record.taskId,
-              sessionId: record.sessionId,
-              document: "qa",
-            },
+            tags: { repoPath, taskId, document: "qa" },
             logLevel: "warn",
             fallback: () => "",
           },
-        ),
-      ]);
-      if (isStaleRepoOperation()) {
-        return preludeMessages;
+        );
+        cacheEntry.qa = qaPromise;
+        fetchPromises.push(qaPromise.then(() => {}));
       }
 
-      const [specMarkdown, planMarkdown, qaMarkdown] = docs;
-      const systemPrompt = buildAgentSystemPrompt({
-        role: record.role,
-        scenario: record.scenario,
-        task: {
-          taskId: task.id,
-          title: task.title,
-          issueType: task.issueType,
-          status: task.status,
-          qaRequired: task.aiReviewEnabled,
-          description: task.description,
-          acceptanceCriteria: task.acceptanceCriteria,
-          specMarkdown,
-          planMarkdown,
-          latestQaReportMarkdown: qaMarkdown,
-        },
-      });
-      preludeMessages = [
-        ...preludeMessages,
-        {
-          id: `history:system-prompt:${record.sessionId}`,
-          role: "system",
-          content: `System prompt:\n\n${systemPrompt}`,
-          timestamp: record.startedAt,
-        },
-      ];
-      return preludeMessages;
+      await Promise.all(fetchPromises);
+
+      const specResult = await cacheEntry.spec!;
+      const planResult = await cacheEntry.plan!;
+      const qaResult = await cacheEntry.qa!;
+
+      return [specResult, planResult, qaResult];
     };
 
     const persisted = await host.agentSessionsList(repoPath, taskId);
@@ -333,7 +320,16 @@ export const createLoadAgentSessions = ({
           },
         );
 
-        const preludeMessages = await buildPreludeMessages(record);
+        // Build basic prelude - documents loaded lazily when session is selected
+        const basicPreludeMessages: AgentSessionState["messages"] = [
+          {
+            id: `history:session-start:${record.sessionId}`,
+            role: "system",
+            content: `Session started (${record.role} - ${record.scenario})`,
+            timestamp: record.startedAt,
+          },
+        ];
+
         if (isStaleRepoOperation()) {
           return;
         }
@@ -348,6 +344,8 @@ export const createLoadAgentSessions = ({
             record.sessionId,
             (current) => ({
               ...current,
+              baseUrl,
+              workingDirectory,
               messages: upsertMessage(current.messages, {
                 id: `history-unavailable:${record.sessionId}`,
                 role: "system",
@@ -360,6 +358,45 @@ export const createLoadAgentSessions = ({
           warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
           return;
         }
+
+        // Documents are loaded lazily when session is selected - not during list load
+        const docs = await loadTaskDocumentsWithCache(repoPath, record.taskId);
+        if (isStaleRepoOperation()) {
+          return;
+        }
+
+        const [specMarkdown, planMarkdown, qaMarkdown] = docs;
+        const task = taskRef.current.find((entry) => entry.id === record.taskId);
+        const systemPrompt = task
+          ? buildAgentSystemPrompt({
+              role: record.role,
+              scenario: record.scenario,
+              task: {
+                taskId: task.id,
+                title: task.title,
+                issueType: task.issueType,
+                status: task.status,
+                qaRequired: task.aiReviewEnabled,
+                description: task.description,
+                acceptanceCriteria: task.acceptanceCriteria,
+                specMarkdown,
+                planMarkdown,
+                latestQaReportMarkdown: qaMarkdown,
+              },
+            })
+          : null;
+
+        const preludeMessages = systemPrompt
+          ? [
+              ...basicPreludeMessages,
+              {
+                id: `history:system-prompt:${record.sessionId}`,
+                role: "system" as const,
+                content: `System prompt:\n\n${systemPrompt}`,
+                timestamp: record.startedAt,
+              },
+            ]
+          : basicPreludeMessages;
 
         updateSession(
           record.sessionId,
