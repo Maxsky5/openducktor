@@ -88,7 +88,7 @@ const buildModel = () => ({
 });
 
 describe("AgentStudioHeader", () => {
-  test("renders workflow rail, session picker, create button, and stats", () => {
+  test("renders workflow rail with compact top-row session controls", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         model: buildModel(),
@@ -97,12 +97,12 @@ describe("AgentStudioHeader", () => {
 
     expect(html).toContain("Rework Agent Studio UI");
     expect(html).toContain("fairnest-97f");
-    expect(html).toContain("Viewing Session");
     expect(html).toContain("Create session");
-    expect(html).toContain("Sessions:");
-    expect(html).toContain("Messages:");
-    expect(html).toContain("Permissions:");
-    expect(html).toContain("Questions:");
+    expect(html).not.toContain("Viewing Session");
+    expect(html).not.toContain("Sessions:");
+    expect(html).not.toContain("Messages:");
+    expect(html).not.toContain("Permissions:");
+    expect(html).not.toContain("Questions:");
     expect(html).not.toContain("Chat-first workspace for this task session.");
     expect(html).not.toContain("AGENT STUDIO");
   });
