@@ -1,5 +1,6 @@
 use super::{
-    can_set_plan, can_set_spec_from_status, default_qa_required_for_issue_type,
+    can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
+    default_qa_required_for_issue_type,
     normalize_issue_type, normalize_required_markdown, normalize_subtask_plan_inputs,
     normalize_title_key, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
@@ -8,7 +9,7 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, QaVerdict, SpecDocument, TaskCard,
-    TaskStatus, UpdateTaskPatch,
+    TaskMetadata, TaskStatus, UpdateTaskPatch,
 };
 use std::collections::HashSet;
 use std::path::Path;
@@ -252,9 +253,15 @@ impl AppService {
         )
     }
 
-    pub fn spec_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
+    pub fn task_metadata_get(&self, repo_path: &str, task_id: &str) -> Result<TaskMetadata> {
         self.ensure_repo_initialized(repo_path)?;
-        self.task_store.get_spec(Path::new(repo_path), task_id)
+        self.task_store
+            .get_task_metadata(Path::new(repo_path), task_id)
+            .with_context(|| format!("Failed to load task metadata for {task_id}"))
+    }
+
+    pub fn spec_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
+        Ok(self.task_metadata_get(repo_path, task_id)?.spec)
     }
 
     pub fn set_spec(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<SpecDocument> {
@@ -309,8 +316,7 @@ impl AppService {
     }
 
     pub fn plan_get(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
-        self.task_store.get_plan(Path::new(repo_path), task_id)
+        Ok(self.task_metadata_get(repo_path, task_id)?.plan)
     }
 
     pub fn set_plan(
@@ -348,17 +354,63 @@ impl AppService {
             .set_plan(Path::new(repo_path), task_id, &markdown)
             .with_context(|| format!("Failed to persist implementation plan for {task_id}"))?;
 
-        if issue_type == "epic" && !subtask_creates.is_empty() {
+        if issue_type == "epic" {
             let mut current_tasks = self.task_store.list_tasks(Path::new(repo_path))?;
-            let mut existing_titles = tasks
+            let refreshed_task = current_tasks
+                .iter()
+                .find(|entry| entry.id == task_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
+            if !can_set_plan(&refreshed_task) {
+                return Err(anyhow!(
+                    "set_plan is not allowed for issue type {} from status {}",
+                    normalize_issue_type(&refreshed_task.issue_type),
+                    refreshed_task.status.as_cli_value()
+                ));
+            }
+
+            let existing_direct_subtasks = current_tasks
                 .iter()
                 .filter(|entry| entry.parent_id.as_deref() == Some(task_id))
-                .map(|entry| normalize_title_key(&entry.title))
-                .collect::<HashSet<_>>();
+                .cloned()
+                .collect::<Vec<_>>();
+            let blocked_subtasks = existing_direct_subtasks
+                .iter()
+                .filter(|entry| !can_replace_epic_subtask_status(&entry.status))
+                .map(|entry| format!("{} ({})", entry.id, entry.status.as_cli_value()))
+                .collect::<Vec<_>>();
+            if !blocked_subtasks.is_empty() {
+                return Err(anyhow!(
+                    "Cannot replace epic subtasks while active work exists. \
+Move subtasks to open/spec_ready/ready_for_dev first: {}",
+                    blocked_subtasks.join(", ")
+                ));
+            }
+            let existing_direct_subtask_ids = existing_direct_subtasks
+                .iter()
+                .map(|entry| entry.id.clone())
+                .collect::<Vec<_>>();
+            let mut proposal_titles = HashSet::new();
+
+            for existing_subtask_id in &existing_direct_subtask_ids {
+                self.task_store
+                    .delete_task(Path::new(repo_path), existing_subtask_id, false)
+                    .with_context(|| {
+                        format!("Failed to delete replaced subtask {}", existing_subtask_id)
+                    })?;
+            }
+
+            if !existing_direct_subtask_ids.is_empty() {
+                let removed_ids = existing_direct_subtask_ids
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<HashSet<_>>();
+                current_tasks.retain(|entry| !removed_ids.contains(entry.id.as_str()));
+            }
 
             for mut create_input in subtask_creates {
                 let title_key = normalize_title_key(&create_input.title);
-                if existing_titles.contains(&title_key) {
+                if !proposal_titles.insert(title_key) {
                     continue;
                 }
                 create_input.parent_id = Some(task_id.to_string());
@@ -367,7 +419,6 @@ impl AppService {
                     .task_store
                     .create_task(Path::new(repo_path), create_input)?;
                 current_tasks.push(created);
-                existing_titles.insert(title_key);
             }
         }
 
@@ -400,10 +451,9 @@ impl AppService {
     }
 
     pub fn qa_get_report(&self, repo_path: &str, task_id: &str) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
         let report = self
-            .task_store
-            .get_latest_qa_report(Path::new(repo_path), task_id)?
+            .task_metadata_get(repo_path, task_id)?
+            .qa_report
             .map(|entry| SpecDocument {
                 markdown: entry.markdown,
                 updated_at: Some(entry.updated_at),
@@ -464,10 +514,7 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
     ) -> Result<Vec<AgentSessionDocument>> {
-        self.ensure_repo_initialized(repo_path)?;
-        self.task_store
-            .list_agent_sessions(Path::new(repo_path), task_id)
-            .with_context(|| format!("Failed to read persisted agent sessions for {task_id}"))
+        Ok(self.task_metadata_get(repo_path, task_id)?.agent_sessions)
     }
 
     pub fn agent_session_upsert(

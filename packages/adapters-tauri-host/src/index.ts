@@ -23,10 +23,12 @@ import {
   systemCheckSchema,
   type TaskCard,
   type TaskCreateInput,
+  type TaskMetadataPayload,
   type TaskStatus,
   type TaskUpdatePatch,
   taskCardSchema,
   taskCreateInputSchema,
+  taskMetadataPayloadSchema,
   taskStatusSchema,
   taskUpdatePatchSchema,
   type WorkspaceRecord,
@@ -66,8 +68,51 @@ const normalizeLegacyAgentSessionScenario = (entry: unknown): unknown => {
   };
 };
 
+type ParsedTaskMetadata = Omit<TaskMetadataPayload, "agentSessions"> & {
+  agentSessions: AgentSessionRecord[];
+};
+
+const parseAgentSessions = (entries: unknown[]): AgentSessionRecord[] => {
+  const sessions: AgentSessionRecord[] = [];
+  for (const entry of entries) {
+    const parsed = agentSessionRecordSchema.safeParse(normalizeLegacyAgentSessionScenario(entry));
+    if (parsed.success) {
+      sessions.push(parsed.data);
+    }
+  }
+  return sessions;
+};
+
 export class TauriHostClient implements PlannerTools {
+  private readonly taskMetadataInFlight = new Map<string, Promise<ParsedTaskMetadata>>();
+
   constructor(private readonly invokeFn: InvokeFn) {}
+
+  private taskMetadataKey(repoPath: string, taskId: string): string {
+    return `${repoPath}::${taskId}`;
+  }
+
+  private async getTaskMetadata(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
+    const cacheKey = this.taskMetadataKey(repoPath, taskId);
+    const inFlight = this.taskMetadataInFlight.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const next = this.invokeFn<unknown>("task_metadata_get", { repoPath, taskId })
+      .then((payload) => {
+        const parsed = taskMetadataPayloadSchema.parse(payload);
+        return {
+          ...parsed,
+          agentSessions: parseAgentSessions(parsed.agentSessions),
+        };
+      })
+      .finally(() => {
+        this.taskMetadataInFlight.delete(cacheKey);
+      });
+    this.taskMetadataInFlight.set(cacheKey, next);
+    return next;
+  }
 
   async workspaceList(): Promise<WorkspaceRecord[]> {
     const payload = await this.invokeFn<unknown>("workspace_list");
@@ -172,17 +217,10 @@ export class TauriHostClient implements PlannerTools {
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.invokeFn<{ markdown: string; updatedAt?: string | null }>(
-      "spec_get",
-      {
-        repoPath,
-        taskId,
-      },
-    );
-
+    const payload = await this.getTaskMetadata(repoPath, taskId);
     return {
-      markdown: payload.markdown,
-      updatedAt: payload.updatedAt ?? null,
+      markdown: payload.spec.markdown,
+      updatedAt: payload.spec.updatedAt ?? null,
     };
   }
 
@@ -261,16 +299,10 @@ export class TauriHostClient implements PlannerTools {
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.invokeFn<{ markdown: string; updatedAt?: string | null }>(
-      "plan_get",
-      {
-        repoPath,
-        taskId,
-      },
-    );
+    const payload = await this.getTaskMetadata(repoPath, taskId);
     return {
-      markdown: payload.markdown,
-      updatedAt: payload.updatedAt ?? null,
+      markdown: payload.plan.markdown,
+      updatedAt: payload.plan.updatedAt ?? null,
     };
   }
 
@@ -278,16 +310,10 @@ export class TauriHostClient implements PlannerTools {
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.invokeFn<{ markdown: string; updatedAt?: string | null }>(
-      "qa_get_report",
-      {
-        repoPath,
-        taskId,
-      },
-    );
+    const payload = await this.getTaskMetadata(repoPath, taskId);
     return {
-      markdown: payload.markdown,
-      updatedAt: payload.updatedAt ?? null,
+      markdown: payload.qaReport?.markdown ?? "",
+      updatedAt: payload.qaReport?.updatedAt ?? null,
     };
   }
 
@@ -346,22 +372,8 @@ export class TauriHostClient implements PlannerTools {
   }
 
   async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
-    const payload = await this.invokeFn<unknown>("agent_sessions_list", {
-      repoPath,
-      taskId,
-    });
-    if (!Array.isArray(payload)) {
-      throw new Error("Expected array payload from host command");
-    }
-
-    const sessions: AgentSessionRecord[] = [];
-    for (const entry of payload) {
-      const parsed = agentSessionRecordSchema.safeParse(normalizeLegacyAgentSessionScenario(entry));
-      if (parsed.success) {
-        sessions.push(parsed.data);
-      }
-    }
-    return sessions;
+    const payload = await this.getTaskMetadata(repoPath, taskId);
+    return payload.agentSessions;
   }
 
   async agentSessionUpsert(

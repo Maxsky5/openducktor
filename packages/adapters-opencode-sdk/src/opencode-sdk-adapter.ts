@@ -37,6 +37,7 @@ import { normalizeTodoList } from "./todo-normalizers";
 import type {
   ClientFactory,
   McpServerStatus,
+  OpencodeEventLogger,
   OpencodeSdkAdapterOptions,
   SessionInput,
   SessionRecord,
@@ -49,10 +50,12 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   private readonly listeners = new Map<string, Set<(event: AgentEvent) => void>>();
   private readonly now: () => string;
   private readonly createClient: ClientFactory;
+  private readonly logEvent: OpencodeEventLogger | undefined;
 
   constructor(options: OpencodeSdkAdapterOptions = {}) {
     this.now = options.now ?? nowIso;
     this.createClient = options.createClient ?? buildDefaultFactory();
+    this.logEvent = options.logEvent;
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
@@ -477,6 +480,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       now: this.now,
       emit: this.emit.bind(this),
       getSession: (sessionId) => this.sessions.get(sessionId),
+      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : "Event stream failed";
       this.emit(input.sessionId, {

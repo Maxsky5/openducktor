@@ -285,6 +285,7 @@ import {
 } from "./tool-schemas";
 import {
   assertNoValidationError,
+  canReplaceEpicSubtaskStatus,
   getSetPlanError,
   getSetSpecError,
   validatePlanSubtaskRules,
@@ -621,6 +622,16 @@ export class OdtTaskStore {
     return id;
   }
 
+  private async deleteTask(taskId: string, deleteSubtasks = false): Promise<void> {
+    const args = ["delete", "--force", "--reason", "Deleted from OpenDucktor"];
+    if (deleteSubtasks) {
+      args.push("--cascade");
+    }
+    args.push("--", taskId);
+    await this.runBdJson(args);
+    this.invalidateTaskIndex();
+  }
+
   async readTask(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = ReadTaskInputSchema.parse(rawInput);
@@ -740,22 +751,44 @@ export class OdtTaskStore {
     await this.writeNamespace(task.id, root, nextNamespace);
 
     const createdSubtaskIds: string[] = [];
-    if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
-      const existingTitleKeys = new Set(
-        tasks
-          .filter((entry) => entry.parentId === task.id)
-          .map((entry) => normalizeTitleKey(entry.title)),
-      );
+    if (task.issueType === "epic") {
+      const latestTasks = await this.listTasks();
+      const latestTask = latestTasks.find((entry) => entry.id === task.id);
+      if (!latestTask) {
+        throw new Error(`Task not found: ${task.id}`);
+      }
 
+      assertNoValidationError(getSetPlanError(latestTask));
+      validatePlanSubtaskRules(latestTask, latestTasks, normalizedSubtasks);
+
+      const existingDirectSubtasks = latestTasks.filter((entry) => entry.parentId === task.id);
+      const blockedSubtasks = existingDirectSubtasks.filter(
+        (entry) => !canReplaceEpicSubtaskStatus(entry.status),
+      );
+      if (blockedSubtasks.length > 0) {
+        const blockedSummary = blockedSubtasks
+          .map((entry) => `${entry.id} (${entry.status})`)
+          .join(", ");
+        throw new Error(
+          "Cannot replace epic subtasks while active work exists. " +
+            `Move subtasks to open/spec_ready/ready_for_dev first: ${blockedSummary}`,
+        );
+      }
+
+      for (const existingSubtask of existingDirectSubtasks) {
+        await this.deleteTask(existingSubtask.id);
+      }
+
+      const createdTitleKeys = new Set<string>();
       for (const subtask of normalizedSubtasks) {
         const key = normalizeTitleKey(subtask.title);
-        if (existingTitleKeys.has(key)) {
+        if (createdTitleKeys.has(key)) {
           continue;
         }
 
         const createdId = await this.createSubtask(task.id, subtask);
         createdSubtaskIds.push(createdId);
-        existingTitleKeys.add(key);
+        createdTitleKeys.add(key);
       }
     }
 

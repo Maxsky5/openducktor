@@ -1,4 +1,4 @@
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentSessionSummary, StartAgentSessionInput } from "@openducktor/core";
 
 /**
@@ -30,9 +30,19 @@ export type ClientFactory = (input: {
   workingDirectory: string;
 }) => OpencodeClient;
 
+export type OpencodeStreamEventLog = {
+  sessionId: string;
+  externalSessionId: string;
+  relevant: boolean;
+  event: Event;
+};
+
+export type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
+
 export type OpencodeSdkAdapterOptions = {
   now?: () => string;
   createClient?: ClientFactory;
+  logEvent?: OpencodeEventLogger;
 };
 
 export type McpServerStatus = {

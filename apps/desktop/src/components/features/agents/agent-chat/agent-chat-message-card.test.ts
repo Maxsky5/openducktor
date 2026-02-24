@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 
 describe("AgentChatMessageCard tool duration", () => {
-  test("prefers observed wall-clock timing over part timing", () => {
+  test("uses completedAt - inputReadyAt for workflow duration display", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -22,6 +22,7 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "ok",
             startedAtMs: 1_000,
             endedAtMs: 2_500,
+            inputReadyAtMs: Date.parse("2026-02-20T19:00:30.000Z"),
             observedStartedAtMs: Date.parse("2026-02-20T19:00:00.000Z"),
             observedEndedAtMs: Date.parse("2026-02-20T19:01:00.000Z"),
           },
@@ -32,7 +33,7 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("1m");
+    expect(html).toContain("30s");
     expect(html).not.toContain("1.5s");
   });
 
@@ -95,7 +96,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("fairnest-97f");
   });
 
-  test("renders workflow tool pending state with spinner", () => {
+  test("renders workflow tool executing state with blue styling and running label", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -120,7 +121,41 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("animate-spin");
+    expect(html).toContain("border-blue-200");
+    expect(html).not.toContain("border-violet-200");
+    expect(html).toContain("RUNNING");
     expect(html).toContain("build_completed");
+  });
+
+  test("renders queued workflow tools with purple styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-queued",
+          role: "tool",
+          content: "Tool openducktor_odt_set_plan pending",
+          timestamp: "2026-02-22T10:21:10.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-queued",
+            callId: "call-queued",
+            tool: "openducktor_odt_set_plan",
+            status: "pending",
+            input: {},
+            output: "",
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).not.toContain("animate-spin");
+    expect(html).toContain("border-violet-200");
+    expect(html).not.toContain("border-blue-200");
+    expect(html).toContain("QUEUED");
+    expect(html).not.toContain("RUNNING");
   });
 
   test("renders workflow MCP validation failures as error styling", () => {
@@ -149,6 +184,35 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain("border-rose-200");
     expect(html).not.toContain("border-emerald-200");
+  });
+
+  test("renders cancelled workflow tools with orange styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-cancelled",
+          role: "tool",
+          content: "Tool odt_set_plan failed",
+          timestamp: "2026-02-22T10:21:40.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-cancelled",
+            callId: "call-cancelled",
+            tool: "odt_set_plan",
+            status: "error",
+            input: { taskId: "fairnest-cancelled" },
+            error: "Request cancelled by user",
+            output: "",
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-orange-200");
+    expect(html).not.toContain("border-rose-200");
   });
 
   test("renders system prompt as expandable card", () => {

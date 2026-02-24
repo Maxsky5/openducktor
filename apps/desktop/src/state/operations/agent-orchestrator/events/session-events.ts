@@ -93,6 +93,31 @@ const eventTimestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
+const hasMeaningfulToolInputValue = (value: unknown): boolean => {
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasMeaningfulToolInputValue(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  return Object.values(value as Record<string, unknown>).some((entry) =>
+    hasMeaningfulToolInputValue(entry),
+  );
+};
+
+const hasMeaningfulToolInput = (input: Record<string, unknown> | undefined): boolean => {
+  if (!input) {
+    return false;
+  }
+  return Object.values(input).some((value) => hasMeaningfulToolInputValue(value));
+};
+
 const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean => {
   return (
     current.draftAssistantText.trim().length > 0 &&
@@ -322,6 +347,12 @@ const handleToolPart = (
         resolvedToolStatus === "completed" || resolvedToolStatus === "error"
           ? observedEventTimestampMs
           : undefined;
+      const inputReadyAtMs =
+        typeof existingToolMeta?.inputReadyAtMs === "number"
+          ? existingToolMeta.inputReadyAtMs
+          : hasMeaningfulToolInput(input)
+            ? observedEventTimestampMs
+            : undefined;
       if (
         isOdtWorkflowMutationToolName(part.tool) &&
         resolvedToolStatus === "completed" &&
@@ -364,6 +395,7 @@ const handleToolPart = (
             ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
             ...(typeof observedStartedAtMs === "number" ? { observedStartedAtMs } : {}),
             ...(typeof observedEndedAtMs === "number" ? { observedEndedAtMs } : {}),
+            ...(typeof inputReadyAtMs === "number" ? { inputReadyAtMs } : {}),
           },
         }),
       };
