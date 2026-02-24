@@ -186,7 +186,12 @@ fn configure_process_group(_command: &mut Command) {}
 
 #[cfg(unix)]
 fn terminate_process_group_if_owned(child: &Child) {
-    let pid = child.id() as i32;
+    terminate_process_group_if_owned_pid(child.id());
+}
+
+#[cfg(unix)]
+fn terminate_process_group_if_owned_pid(pid: u32) {
+    let pid = pid as i32;
     if pid <= 0 {
         return;
     }
@@ -201,10 +206,100 @@ fn terminate_process_group_if_owned(child: &Child) {
 #[cfg(not(unix))]
 fn terminate_process_group_if_owned(_child: &Child) {}
 
+#[cfg(not(unix))]
+fn terminate_process_group_if_owned_pid(_pid: u32) {}
+
 pub(crate) fn terminate_child_process(child: &mut Child) {
     terminate_process_group_if_owned(child);
     let _ = child.kill();
     let _ = child.wait();
+}
+
+pub(crate) fn terminate_process_by_pid(pid: u32) {
+    terminate_process_group_if_owned_pid(pid);
+    #[cfg(unix)]
+    {
+        let pid = pid as i32;
+        if pid > 0 {
+            unsafe {
+                libc::kill(pid, libc::SIGKILL);
+            }
+        }
+    }
+}
+
+fn read_process_snapshot(pid: u32) -> Option<(u32, String)> {
+    let output = Command::new("ps")
+        .arg("-o")
+        .arg("ppid=")
+        .arg("-o")
+        .arg("command=")
+        .arg("-p")
+        .arg(pid.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let line = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find(|entry| !entry.trim().is_empty())?
+        .trim()
+        .to_string();
+    let split_index = line.find(char::is_whitespace)?;
+    let ppid = line[..split_index].trim().parse::<u32>().ok()?;
+    let command = line[split_index..].trim_start().to_string();
+    Some((ppid, command))
+}
+
+pub(crate) fn process_exists(pid: u32) -> bool {
+    read_process_snapshot(pid).is_some()
+}
+
+fn is_opencode_server_command(command: &str) -> bool {
+    let normalized = command.to_ascii_lowercase();
+    normalized.contains("opencode")
+        && normalized.contains(" serve")
+        && normalized.contains("--hostname")
+        && normalized.contains("127.0.0.1")
+}
+
+pub(crate) fn opencode_server_parent_pid(pid: u32) -> Option<u32> {
+    let (ppid, command) = read_process_snapshot(pid)?;
+    if is_opencode_server_command(command.as_str()) {
+        Some(ppid)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn is_orphaned_opencode_server_process(pid: u32) -> bool {
+    matches!(opencode_server_parent_pid(pid), Some(1))
+}
+
+#[cfg(unix)]
+fn spawn_parent_death_watcher(parent_pid: u32, child_pid: u32) -> Result<()> {
+    let watcher_script = format!(
+        r#"P={parent_pid}; C={child_pid}; while kill -0 "$P" 2>/dev/null && kill -0 "$C" 2>/dev/null; do sleep 1; done; if ! kill -0 "$P" 2>/dev/null && kill -0 "$C" 2>/dev/null; then kill -TERM -"$C" 2>/dev/null || true; sleep 1; kill -KILL -"$C" 2>/dev/null || true; kill -KILL "$C" 2>/dev/null || true; fi"#
+    );
+    Command::new("/bin/sh")
+        .arg("-lc")
+        .arg(watcher_script)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Failed to spawn OpenCode parent-death watcher")?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn spawn_parent_death_watcher(_parent_pid: u32, _child_pid: u32) -> Result<()> {
+    Ok(())
 }
 
 pub(crate) fn spawn_opencode_server(
@@ -228,12 +323,19 @@ pub(crate) fn spawn_opencode_server(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     configure_process_group(&mut command);
-    command.spawn().with_context(|| {
+    let child = command.spawn().with_context(|| {
         format!(
             "Failed to spawn opencode serve with binary {}",
             opencode_binary
         )
-    })
+    })?;
+    if let Err(error) = spawn_parent_death_watcher(std::process::id(), child.id()) {
+        eprintln!(
+            "OpenDucktor warning: failed to attach OpenCode parent-death watcher for pid {}: {error:#}",
+            child.id()
+        );
+    }
+    Ok(child)
 }
 
 #[cfg(test)]

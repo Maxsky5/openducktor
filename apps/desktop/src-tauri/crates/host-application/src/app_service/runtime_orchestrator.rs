@@ -90,6 +90,13 @@ impl AppService {
             metadata_namespace.as_str(),
             port,
         )?;
+        let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {
+            Ok(guard) => guard,
+            Err(error) => {
+                terminate_child_process(&mut child);
+                return Err(error).context("Failed tracking spawned OpenCode workspace runtime");
+            }
+        };
         if let Err(error) =
             wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
         {
@@ -137,6 +144,7 @@ impl AppService {
                 AgentRuntimeProcess {
                     summary: summary.clone(),
                     child,
+                    _opencode_process_guard: Some(opencode_process_guard),
                     cleanup_repo_path: None,
                     cleanup_worktree_path: None,
                 },
@@ -271,6 +279,13 @@ impl AppService {
             metadata_namespace.as_str(),
             port,
         )?;
+        let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {
+            Ok(guard) => guard,
+            Err(error) => {
+                terminate_child_process(&mut child);
+                return Err(error).context("Failed tracking spawned OpenCode agent runtime");
+            }
+        };
         if let Err(error) =
             wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
         {
@@ -310,6 +325,7 @@ impl AppService {
                 AgentRuntimeProcess {
                     summary: summary.clone(),
                     child,
+                    _opencode_process_guard: Some(opencode_process_guard),
                     cleanup_repo_path,
                     cleanup_worktree_path,
                 },
@@ -337,6 +353,8 @@ impl AppService {
     }
 
     pub fn shutdown(&self) -> Result<()> {
+        self.terminate_pending_opencode_processes()?;
+
         {
             let mut runs = self
                 .runs

@@ -8,6 +8,7 @@ use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
 use serde::Deserialize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent, State};
 
 struct AppState {
@@ -732,8 +733,26 @@ fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
     Ok((service, startup_errors))
 }
 
+fn install_shutdown_signal_handler(service: Arc<AppService>) {
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    let shutdown_service = service.clone();
+    let shutdown_requested_signal = shutdown_requested.clone();
+    if let Err(error) = ctrlc::set_handler(move || {
+        if shutdown_requested_signal.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let _ = shutdown_service.shutdown();
+        std::process::exit(0);
+    }) {
+        eprintln!(
+            "OpenDucktor warning: failed to install process signal handler; cleanup on SIGTERM/SIGINT may be incomplete: {error:#}"
+        );
+    }
+}
+
 pub fn run() -> anyhow::Result<()> {
     let (service, startup_errors) = bootstrap_service()?;
+    install_shutdown_signal_handler(service.clone());
 
     let app_service = service.clone();
     tauri::Builder::default()

@@ -23,6 +23,7 @@ tauri-plugin-shell = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "process", "sync", "macros", "time"] }
 thiserror = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
+ctrlc = "3"
 
 host-domain = { path = "crates/host-domain" }
 host-application = { path = "crates/host-application" }
