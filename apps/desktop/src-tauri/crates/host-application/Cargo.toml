@@ -10,6 +10,7 @@ host-domain = { path = "../host-domain" }
 host-infra-system = { path = "../host-infra-system" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+fs2 = "0.4"
 tokio = { version = "1", features = ["sync"] }
 uuid = { version = "1", features = ["v4"] }
 

@@ -90,6 +90,13 @@ impl AppService {
             metadata_namespace.as_str(),
             port,
         )?;
+        let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {
+            Ok(guard) => guard,
+            Err(error) => {
+                terminate_child_process(&mut child);
+                return Err(error).context("Failed tracking spawned OpenCode workspace runtime");
+            }
+        };
         if let Err(error) =
             wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
         {
@@ -137,6 +144,7 @@ impl AppService {
                 AgentRuntimeProcess {
                     summary: summary.clone(),
                     child,
+                    _opencode_process_guard: Some(opencode_process_guard),
                     cleanup_repo_path: None,
                     cleanup_worktree_path: None,
                 },
@@ -271,6 +279,13 @@ impl AppService {
             metadata_namespace.as_str(),
             port,
         )?;
+        let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {
+            Ok(guard) => guard,
+            Err(error) => {
+                terminate_child_process(&mut child);
+                return Err(error).context("Failed tracking spawned OpenCode agent runtime");
+            }
+        };
         if let Err(error) =
             wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
         {
@@ -310,6 +325,7 @@ impl AppService {
                 AgentRuntimeProcess {
                     summary: summary.clone(),
                     child,
+                    _opencode_process_guard: Some(opencode_process_guard),
                     cleanup_repo_path,
                     cleanup_worktree_path,
                 },
@@ -337,39 +353,43 @@ impl AppService {
     }
 
     pub fn shutdown(&self) -> Result<()> {
-        {
-            let mut runs = self
-                .runs
-                .lock()
-                .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            for (_, mut run) in runs.drain() {
-                terminate_child_process(&mut run.child);
-            }
+        let mut cleanup_errors = Vec::new();
+        if let Err(error) = self.terminate_pending_opencode_processes() {
+            cleanup_errors.push(format!(
+                "Failed terminating pending OpenCode processes: {error:#}"
+            ));
         }
 
-        let mut cleanup_errors = Vec::new();
-        {
-            let mut runtimes = self
-                .agent_runtimes
-                .lock()
-                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            for (_, mut runtime) in runtimes.drain() {
-                terminate_child_process(&mut runtime.child);
-                if let (Some(repo_path), Some(worktree_path)) = (
-                    runtime.cleanup_repo_path.as_deref(),
-                    runtime.cleanup_worktree_path.as_deref(),
-                ) {
-                    if let Err(error) = Self::remove_runtime_worktree(
-                        Path::new(repo_path),
-                        Path::new(worktree_path),
+        match self.runs.lock() {
+            Ok(mut runs) => {
+                for (_, mut run) in runs.drain() {
+                    terminate_child_process(&mut run.child);
+                }
+            }
+            Err(_) => cleanup_errors.push("Run state lock poisoned".to_string()),
+        }
+
+        match self.agent_runtimes.lock() {
+            Ok(mut runtimes) => {
+                for (_, mut runtime) in runtimes.drain() {
+                    terminate_child_process(&mut runtime.child);
+                    if let (Some(repo_path), Some(worktree_path)) = (
+                        runtime.cleanup_repo_path.as_deref(),
+                        runtime.cleanup_worktree_path.as_deref(),
                     ) {
-                        cleanup_errors.push(format!(
-                            "Failed shutting down runtime {}: {}",
-                            runtime.summary.runtime_id, error
-                        ));
+                        if let Err(error) = Self::remove_runtime_worktree(
+                            Path::new(repo_path),
+                            Path::new(worktree_path),
+                        ) {
+                            cleanup_errors.push(format!(
+                                "Failed shutting down runtime {}: {}",
+                                runtime.summary.runtime_id, error
+                            ));
+                        }
                     }
                 }
             }
+            Err(_) => cleanup_errors.push("Agent runtime state lock poisoned".to_string()),
         }
 
         if cleanup_errors.is_empty() {
