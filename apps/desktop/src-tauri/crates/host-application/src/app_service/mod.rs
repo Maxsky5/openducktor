@@ -28,7 +28,8 @@ pub(crate) use opencode_runtime::{
     terminate_child_process, wait_for_local_server_with_process,
 };
 pub(crate) use workflow_rules::{
-    can_set_plan, can_set_spec_from_status, default_qa_required_for_issue_type,
+    can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
+    default_qa_required_for_issue_type,
     derive_available_actions, normalize_issue_type, normalize_required_markdown,
     normalize_subtask_plan_inputs, normalize_title_key, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
@@ -2201,6 +2202,47 @@ echo "bd-fake"
             .iter()
             .any(|(_, patch)| patch.status == Some(TaskStatus::ReadyForDev)));
         Ok(())
+    }
+
+    #[test]
+    fn set_plan_for_epic_rejects_subtask_replacement_when_existing_subtask_is_active() {
+        let repo_path = "/tmp/odt-repo-plan-epic-active-subtask";
+        let epic = make_task("epic-1", "epic", TaskStatus::SpecReady);
+        let mut active_child = make_task("child-1", "task", TaskStatus::InProgress);
+        active_child.parent_id = Some("epic-1".to_string());
+
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![epic, active_child],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let error = service
+            .set_plan(
+                repo_path,
+                "epic-1",
+                "# Epic Plan",
+                Some(vec![PlanSubtaskInput {
+                    title: "Build API".to_string(),
+                    issue_type: Some("task".to_string()),
+                    priority: Some(2),
+                    description: None,
+                }]),
+            )
+            .expect_err("active direct subtasks must block replacement");
+        assert!(
+            error
+                .to_string()
+                .contains("Cannot replace epic subtasks while active work exists"),
+            "unexpected error: {error}"
+        );
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert!(task_state.delete_calls.is_empty());
+        assert!(task_state.created_inputs.is_empty());
     }
 
     #[test]

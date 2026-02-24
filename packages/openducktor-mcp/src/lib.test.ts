@@ -1043,7 +1043,7 @@ describe("openducktor-mcp lib", () => {
     expect(statusUpdateCalls).toBe(0);
   });
 
-  test("setPlan epic subtasks reuses initial snapshot and avoids duplicate list calls", async () => {
+  test("setPlan epic subtasks revalidates against a fresh snapshot before replacement", async () => {
     let status = "spec_ready";
     let listCalls = 0;
     let createCalls = 0;
@@ -1121,7 +1121,7 @@ describe("openducktor-mcp lib", () => {
 
     expect(result.task.status).toBe("ready_for_dev");
     expect(result.createdSubtaskIds).toEqual(["task-1-sub-1"]);
-    expect(listCalls).toBe(1);
+    expect(listCalls).toBe(2);
     expect(createCalls).toBe(1);
     expect(statusUpdateCalls).toBe(1);
   });
@@ -1289,6 +1289,102 @@ describe("openducktor-mcp lib", () => {
     expect(createCalls).toBe(1);
     expect(result.createdSubtaskIds).toEqual(["new-subtask-1"]);
     expect(result.task.status).toBe("ready_for_dev");
+  });
+
+  test("setPlan epic subtasks blocks replacement when refreshed subtasks are active", async () => {
+    let status = "spec_ready";
+    let listCalls = 0;
+    let createCalls = 0;
+    let statusUpdateCalls = 0;
+    const deletedTaskIds: string[] = [];
+
+    const { runProcess } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        listCalls += 1;
+        const refreshedSubtaskStatus = listCalls >= 2 ? "in_progress" : "open";
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "epic-1",
+              title: "Epic task",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+            {
+              id: "legacy-subtask",
+              title: "Legacy child",
+              status: refreshedSubtaskStatus,
+              issue_type: "task",
+              parent: "epic-1",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "show") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "epic-1",
+              title: "Epic task",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "update" && args.includes("--metadata")) {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "delete") {
+        const taskIdArg = args[args.indexOf("--") + 1] ?? "";
+        deletedTaskIds.push(taskIdArg);
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "create") {
+        createCalls += 1;
+        return { ok: true, stdout: JSON.stringify({ id: `new-subtask-${createCalls}` }) };
+      }
+      if (command === "update" && args.includes("--status")) {
+        statusUpdateCalls += 1;
+        status = args[args.indexOf("--status") + 1] ?? status;
+        return { ok: true, stdout: "{}" };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      { runProcess },
+    );
+
+    await expect(
+      store.setPlan({
+        taskId: "epic-1",
+        markdown: "# New epic plan",
+        subtasks: [{ title: "New child task" }],
+      }),
+    ).rejects.toThrow("Cannot replace epic subtasks while active work exists");
+
+    expect(listCalls).toBe(2);
+    expect(deletedTaskIds).toEqual([]);
+    expect(createCalls).toBe(0);
+    expect(statusUpdateCalls).toBe(0);
   });
 
   test("buildCompleted revalidates using refreshed task and avoids duplicate list calls", async () => {

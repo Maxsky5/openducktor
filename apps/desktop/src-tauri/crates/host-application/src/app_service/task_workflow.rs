@@ -1,5 +1,6 @@
 use super::{
-    can_set_plan, can_set_spec_from_status, default_qa_required_for_issue_type,
+    can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
+    default_qa_required_for_issue_type,
     normalize_issue_type, normalize_required_markdown, normalize_subtask_plan_inputs,
     normalize_title_key, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
@@ -355,20 +356,56 @@ impl AppService {
 
         if issue_type == "epic" && !subtask_creates.is_empty() {
             let mut current_tasks = self.task_store.list_tasks(Path::new(repo_path))?;
-            let existing_direct_subtasks = tasks
+            let refreshed_task = current_tasks
+                .iter()
+                .find(|entry| entry.id == task_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
+            if !can_set_plan(&refreshed_task) {
+                return Err(anyhow!(
+                    "set_plan is not allowed for issue type {} from status {}",
+                    normalize_issue_type(&refreshed_task.issue_type),
+                    refreshed_task.status.as_cli_value()
+                ));
+            }
+
+            let existing_direct_subtasks = current_tasks
                 .iter()
                 .filter(|entry| entry.parent_id.as_deref() == Some(task_id))
                 .cloned()
                 .collect::<Vec<_>>();
+            let blocked_subtasks = existing_direct_subtasks
+                .iter()
+                .filter(|entry| !can_replace_epic_subtask_status(&entry.status))
+                .map(|entry| format!("{} ({})", entry.id, entry.status.as_cli_value()))
+                .collect::<Vec<_>>();
+            if !blocked_subtasks.is_empty() {
+                return Err(anyhow!(
+                    "Cannot replace epic subtasks while active work exists. \
+Move subtasks to open/spec_ready/ready_for_dev first: {}",
+                    blocked_subtasks.join(", ")
+                ));
+            }
+            let existing_direct_subtask_ids = existing_direct_subtasks
+                .iter()
+                .map(|entry| entry.id.clone())
+                .collect::<Vec<_>>();
             let mut proposal_titles = HashSet::new();
 
-            for existing_subtask in existing_direct_subtasks {
+            for existing_subtask_id in &existing_direct_subtask_ids {
                 self.task_store
-                    .delete_task(Path::new(repo_path), &existing_subtask.id, false)
+                    .delete_task(Path::new(repo_path), existing_subtask_id, false)
                     .with_context(|| {
-                        format!("Failed to delete replaced subtask {}", existing_subtask.id)
+                        format!("Failed to delete replaced subtask {}", existing_subtask_id)
                     })?;
-                current_tasks.retain(|entry| entry.id != existing_subtask.id);
+            }
+
+            if !existing_direct_subtask_ids.is_empty() {
+                let removed_ids = existing_direct_subtask_ids
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<HashSet<_>>();
+                current_tasks.retain(|entry| !removed_ids.contains(entry.id.as_str()));
             }
 
             for mut create_input in subtask_creates {

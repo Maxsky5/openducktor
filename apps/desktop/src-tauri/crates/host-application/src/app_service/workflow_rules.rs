@@ -223,6 +223,13 @@ pub(crate) fn can_set_plan(task: &TaskCard) -> bool {
     }
 }
 
+pub(crate) fn can_replace_epic_subtask_status(status: &TaskStatus) -> bool {
+    matches!(
+        status,
+        TaskStatus::Open | TaskStatus::SpecReady | TaskStatus::ReadyForDev
+    )
+}
+
 pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) -> Vec<TaskAction> {
     let mut actions = vec![TaskAction::ViewDetails];
 

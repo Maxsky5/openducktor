@@ -285,6 +285,7 @@ import {
 } from "./tool-schemas";
 import {
   assertNoValidationError,
+  canReplaceEpicSubtaskStatus,
   getSetPlanError,
   getSetSpecError,
   validatePlanSubtaskRules,
@@ -751,7 +752,29 @@ export class OdtTaskStore {
 
     const createdSubtaskIds: string[] = [];
     if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
-      const existingDirectSubtasks = tasks.filter((entry) => entry.parentId === task.id);
+      const latestTasks = await this.listTasks();
+      const latestTask = latestTasks.find((entry) => entry.id === task.id);
+      if (!latestTask) {
+        throw new Error(`Task not found: ${task.id}`);
+      }
+
+      assertNoValidationError(getSetPlanError(latestTask));
+      validatePlanSubtaskRules(latestTask, latestTasks, normalizedSubtasks);
+
+      const existingDirectSubtasks = latestTasks.filter((entry) => entry.parentId === task.id);
+      const blockedSubtasks = existingDirectSubtasks.filter(
+        (entry) => !canReplaceEpicSubtaskStatus(entry.status),
+      );
+      if (blockedSubtasks.length > 0) {
+        const blockedSummary = blockedSubtasks
+          .map((entry) => `${entry.id} (${entry.status})`)
+          .join(", ");
+        throw new Error(
+          "Cannot replace epic subtasks while active work exists. " +
+            `Move subtasks to open/spec_ready/ready_for_dev first: ${blockedSummary}`,
+        );
+      }
+
       for (const existingSubtask of existingDirectSubtasks) {
         await this.deleteTask(existingSubtask.id);
       }
