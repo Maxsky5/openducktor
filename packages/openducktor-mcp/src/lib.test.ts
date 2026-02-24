@@ -1291,6 +1291,100 @@ describe("openducktor-mcp lib", () => {
     expect(result.task.status).toBe("ready_for_dev");
   });
 
+  test("setPlan epic omitting subtasks clears existing direct subtasks", async () => {
+    let status = "spec_ready";
+    const deletedTaskIds: string[] = [];
+    let createCalls = 0;
+    let statusUpdateCalls = 0;
+
+    const { runProcess } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "epic-1",
+              title: "Epic task",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+            {
+              id: "legacy-subtask",
+              title: "Legacy child",
+              status: "open",
+              issue_type: "task",
+              parent: "epic-1",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "show") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "epic-1",
+              title: "Epic task",
+              status,
+              issue_type: "epic",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "update" && args.includes("--metadata")) {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "delete") {
+        const taskIdArg = args[args.indexOf("--") + 1] ?? "";
+        deletedTaskIds.push(taskIdArg);
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "create") {
+        createCalls += 1;
+        return { ok: true, stdout: JSON.stringify({ id: `new-subtask-${createCalls}` }) };
+      }
+      if (command === "update" && args.includes("--status")) {
+        statusUpdateCalls += 1;
+        status = args[args.indexOf("--status") + 1] ?? status;
+        return { ok: true, stdout: "{}" };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      { runProcess },
+    );
+
+    const result = (await store.setPlan({
+      taskId: "epic-1",
+      markdown: "# New epic plan",
+    })) as {
+      createdSubtaskIds: string[];
+      task: { status: string };
+    };
+
+    expect(deletedTaskIds).toEqual(["legacy-subtask"]);
+    expect(createCalls).toBe(0);
+    expect(result.createdSubtaskIds).toEqual([]);
+    expect(statusUpdateCalls).toBe(1);
+    expect(result.task.status).toBe("ready_for_dev");
+  });
+
   test("setPlan epic subtasks blocks replacement when refreshed subtasks are active", async () => {
     let status = "spec_ready";
     let listCalls = 0;

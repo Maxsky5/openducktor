@@ -354,7 +354,7 @@ impl AppService {
             .set_plan(Path::new(repo_path), task_id, &markdown)
             .with_context(|| format!("Failed to persist implementation plan for {task_id}"))?;
 
-        if issue_type == "epic" && !subtask_creates.is_empty() {
+        if issue_type == "epic" {
             let mut current_tasks = self.task_store.list_tasks(Path::new(repo_path))?;
             let refreshed_task = current_tasks
                 .iter()

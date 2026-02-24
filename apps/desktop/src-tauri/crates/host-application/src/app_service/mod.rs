@@ -2205,6 +2205,35 @@ echo "bd-fake"
     }
 
     #[test]
+    fn set_plan_for_epic_without_subtasks_clears_existing_direct_subtasks() -> Result<()> {
+        let repo_path = "/tmp/odt-repo-plan-epic-clear";
+        let epic = make_task("epic-1", "epic", TaskStatus::SpecReady);
+        let mut existing_child = make_task("child-1", "task", TaskStatus::Open);
+        existing_child.parent_id = Some("epic-1".to_string());
+
+        let (service, task_state, _git_state) = build_service_with_state(
+            vec![epic, existing_child],
+            vec![],
+            GitCurrentBranch {
+                name: Some("main".to_string()),
+                detached: false,
+            },
+        );
+
+        let plan = service.set_plan(repo_path, "epic-1", "# Epic Plan", None)?;
+        assert_eq!(plan.markdown, "# Epic Plan");
+
+        let task_state = task_state.lock().expect("task lock poisoned");
+        assert_eq!(task_state.delete_calls, vec![("child-1".to_string(), false)]);
+        assert!(task_state.created_inputs.is_empty());
+        assert!(task_state
+            .updated_patches
+            .iter()
+            .any(|(_, patch)| patch.status == Some(TaskStatus::ReadyForDev)));
+        Ok(())
+    }
+
+    #[test]
     fn set_plan_for_epic_rejects_subtask_replacement_when_existing_subtask_is_active() {
         let repo_path = "/tmp/odt-repo-plan-epic-active-subtask";
         let epic = make_task("epic-1", "epic", TaskStatus::SpecReady);

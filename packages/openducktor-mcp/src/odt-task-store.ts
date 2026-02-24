@@ -751,7 +751,7 @@ export class OdtTaskStore {
     await this.writeNamespace(task.id, root, nextNamespace);
 
     const createdSubtaskIds: string[] = [];
-    if (task.issueType === "epic" && normalizedSubtasks.length > 0) {
+    if (task.issueType === "epic") {
       const latestTasks = await this.listTasks();
       const latestTask = latestTasks.find((entry) => entry.id === task.id);
       if (!latestTask) {
