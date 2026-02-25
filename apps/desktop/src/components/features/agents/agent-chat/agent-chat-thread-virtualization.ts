@@ -74,7 +74,8 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
     if (shouldShowTurnDuration) {
       rows.push({
         kind: "turn_duration",
-        key: `${message.id}:duration`,
+        // Scope virtual row identity to the active session to avoid cross-session cache reuse.
+        key: `${session.sessionId}:${message.id}:duration`,
         durationMs: turnDurationMs,
         estimatedHeightPx: ESTIMATED_TURN_DURATION_HEIGHT_PX,
       });
@@ -82,7 +83,8 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
 
     rows.push({
       kind: "message",
-      key: message.id,
+      // Message IDs can repeat across sessions; include session ID for stable virtualization keys.
+      key: `${session.sessionId}:${message.id}`,
       message,
       estimatedHeightPx: ESTIMATED_MESSAGE_HEIGHT_PX,
     });

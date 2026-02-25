@@ -94,25 +94,25 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
       return;
     }
-
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const syncVirtualizerOffset = (): void => {
-      virtualizer.scrollToOffset(container.scrollTop, { behavior: "auto" });
+    const lastRowIndex = virtualRows.length - 1;
+    const scrollToBottom = (): void => {
       virtualizer.measure();
+      virtualizer.scrollToIndex(lastRowIndex, { align: "end" });
+
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
     };
 
-    syncVirtualizerOffset();
+    scrollToBottom();
 
     if (typeof window === "undefined") {
       return;
     }
-
     const rafId = window.requestAnimationFrame(() => {
-      syncVirtualizerOffset();
+      scrollToBottom();
     });
     return () => {
       window.cancelAnimationFrame(rafId);
@@ -252,6 +252,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       ) : null}
 
       <div
+        key={activeSessionId ?? "__no-session__"}
         ref={messagesContainerRef}
         className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
         onScroll={handleMessagesContainerScroll}

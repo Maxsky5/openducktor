@@ -30,12 +30,32 @@ describe("agent-chat-thread virtualization helpers", () => {
     const rows = buildAgentChatVirtualRows(session);
 
     expect(rows.map((row) => row.key)).toEqual([
-      "assistant-1:duration",
-      "assistant-1",
-      "user-1",
+      "session-1:assistant-1:duration",
+      "session-1:assistant-1",
+      "session-1:user-1",
       "session-1:draft",
     ]);
     expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message", "draft"]);
+  });
+
+  test("buildAgentChatVirtualRows keeps row keys distinct across sessions with repeated message ids", () => {
+    const firstSession = buildSession({
+      sessionId: "session-a",
+      messages: [buildMessage("assistant", "A", { id: "message-1" })],
+      pendingQuestions: [],
+    });
+    const secondSession = buildSession({
+      sessionId: "session-b",
+      messages: [buildMessage("assistant", "B", { id: "message-1" })],
+      pendingQuestions: [],
+    });
+
+    const firstKeys = buildAgentChatVirtualRows(firstSession).map((row) => row.key);
+    const secondKeys = buildAgentChatVirtualRows(secondSession).map((row) => row.key);
+
+    expect(firstKeys).toContain("session-a:message-1");
+    expect(secondKeys).toContain("session-b:message-1");
+    expect(firstKeys).not.toContain("session-b:message-1");
   });
 
   test("buildAgentChatVirtualRows appends thinking row when session is running without draft", () => {
