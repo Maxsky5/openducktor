@@ -112,109 +112,6 @@ export const createLoadAgentSessions = ({
       );
     };
 
-    const buildPreludeMessages = async (
-      record: Awaited<ReturnType<typeof host.agentSessionsList>>[number],
-    ): Promise<AgentSessionState["messages"]> => {
-      let preludeMessages: AgentSessionState["messages"] = [
-        {
-          id: `history:session-start:${record.sessionId}`,
-          role: "system",
-          content: `Session started (${record.role} - ${record.scenario})`,
-          timestamp: record.startedAt,
-        },
-      ];
-
-      const task = taskRef.current.find((entry) => entry.id === record.taskId);
-      if (!task) {
-        return preludeMessages;
-      }
-
-      const docs = await Promise.all([
-        captureOrchestratorFallback(
-          "load-sessions-load-prelude-document",
-          async () => {
-            const spec = await host.specGet(repoPath, record.taskId);
-            return spec.markdown;
-          },
-          {
-            tags: {
-              repoPath,
-              taskId: record.taskId,
-              sessionId: record.sessionId,
-              document: "spec",
-            },
-            logLevel: "warn",
-            fallback: () => "",
-          },
-        ),
-        captureOrchestratorFallback(
-          "load-sessions-load-prelude-document",
-          async () => {
-            const plan = await host.planGet(repoPath, record.taskId);
-            return plan.markdown;
-          },
-          {
-            tags: {
-              repoPath,
-              taskId: record.taskId,
-              sessionId: record.sessionId,
-              document: "plan",
-            },
-            logLevel: "warn",
-            fallback: () => "",
-          },
-        ),
-        captureOrchestratorFallback(
-          "load-sessions-load-prelude-document",
-          async () => {
-            const qa = await host.qaGetReport(repoPath, record.taskId);
-            return qa.markdown;
-          },
-          {
-            tags: {
-              repoPath,
-              taskId: record.taskId,
-              sessionId: record.sessionId,
-              document: "qa",
-            },
-            logLevel: "warn",
-            fallback: () => "",
-          },
-        ),
-      ]);
-      if (isStaleRepoOperation()) {
-        return preludeMessages;
-      }
-
-      const [specMarkdown, planMarkdown, qaMarkdown] = docs;
-      const systemPrompt = buildAgentSystemPrompt({
-        role: record.role,
-        scenario: record.scenario,
-        task: {
-          taskId: task.id,
-          title: task.title,
-          issueType: task.issueType,
-          status: task.status,
-          qaRequired: task.aiReviewEnabled,
-          description: task.description,
-          acceptanceCriteria: task.acceptanceCriteria,
-          specMarkdown,
-          planMarkdown,
-          latestQaReportMarkdown: qaMarkdown,
-        },
-      });
-      preludeMessages = [
-        ...preludeMessages,
-        {
-          id: `history:system-prompt:${record.sessionId}`,
-          role: "system",
-          content: `System prompt:\n\n${systemPrompt}`,
-          timestamp: record.startedAt,
-        },
-      ];
-      return preludeMessages;
-    };
-
     const persisted = await host.agentSessionsList(repoPath, taskId);
     if (isStaleRepoOperation()) {
       return;
@@ -333,7 +230,44 @@ export const createLoadAgentSessions = ({
           },
         );
 
-        const preludeMessages = await buildPreludeMessages(record);
+        // Build basic prelude - documents loaded lazily when session is selected
+        const basicPreludeMessages: AgentSessionState["messages"] = [
+          {
+            id: `history:session-start:${record.sessionId}`,
+            role: "system",
+            content: `Session started (${record.role} - ${record.scenario})`,
+            timestamp: record.startedAt,
+          },
+        ];
+
+        const task = taskRef.current.find((entry) => entry.id === record.taskId);
+        const preludeMessages = task
+          ? [
+              ...basicPreludeMessages,
+              {
+                id: `history:system-prompt:${record.sessionId}`,
+                role: "system" as const,
+                content: `System prompt:\n\n${buildAgentSystemPrompt({
+                  role: record.role,
+                  scenario: record.scenario,
+                  task: {
+                    taskId: task.id,
+                    title: task.title,
+                    issueType: task.issueType,
+                    status: task.status,
+                    qaRequired: task.aiReviewEnabled,
+                    description: task.description,
+                    acceptanceCriteria: task.acceptanceCriteria,
+                    specMarkdown: "",
+                    planMarkdown: "",
+                    latestQaReportMarkdown: "",
+                  },
+                })}`,
+                timestamp: record.startedAt,
+              },
+            ]
+          : basicPreludeMessages;
+
         if (isStaleRepoOperation()) {
           return;
         }
@@ -348,6 +282,8 @@ export const createLoadAgentSessions = ({
             record.sessionId,
             (current) => ({
               ...current,
+              baseUrl,
+              workingDirectory,
               messages: upsertMessage(current.messages, {
                 id: `history-unavailable:${record.sessionId}`,
                 role: "system",

@@ -4,10 +4,6 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createLoadAgentSessions } from "./load-sessions";
 
-type SessionHistory = Awaited<
-  ReturnType<Parameters<typeof createLoadAgentSessions>[0]["adapter"]["loadSessionHistory"]>
->;
-
 const taskFixture = createTaskCardFixture({ title: "Task" });
 
 describe("agent-orchestrator-load-sessions", () => {
@@ -197,12 +193,12 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(modelCatalogLoads).toBe(0);
   });
 
-  test("starts history loading while prelude documents are still loading", async () => {
+  test("rehydrates system prompt without eager document host calls", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};
-    const specDeferred = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const historyDeferred = createDeferred<SessionHistory>();
-    let historyStarted = 0;
+    let specCalls = 0;
+    let planCalls = 0;
+    let qaCalls = 0;
 
     const setSessionsById = (
       updater:
@@ -232,10 +228,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: {
-        loadSessionHistory: async () => {
-          historyStarted += 1;
-          return historyDeferred.promise;
-        },
+        loadSessionHistory: async () => [],
       },
       repoEpochRef: { current: 2 },
       previousRepoRef: { current: "/tmp/repo" },
@@ -269,28 +262,34 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
-    hostModule.host.specGet = async () => specDeferred.promise;
-    hostModule.host.planGet = async () => ({ markdown: "plan", updatedAt: null });
-    hostModule.host.qaGetReport = async () => ({ markdown: "qa", updatedAt: null });
+    hostModule.host.specGet = async () => {
+      specCalls += 1;
+      return { markdown: "spec", updatedAt: null };
+    };
+    hostModule.host.planGet = async () => {
+      planCalls += 1;
+      return { markdown: "plan", updatedAt: null };
+    };
+    hostModule.host.qaGetReport = async () => {
+      qaCalls += 1;
+      return { markdown: "qa", updatedAt: null };
+    };
 
     try {
-      const loadPromise = loadAgentSessions("task-1");
-      await Promise.resolve();
-
-      expect(historyStarted).toBe(1);
-
-      specDeferred.resolve({ markdown: "spec", updatedAt: null });
-      historyDeferred.resolve([]);
-      await loadPromise;
+      await loadAgentSessions("task-1");
     } finally {
-      specDeferred.resolve({ markdown: "spec", updatedAt: null });
-      historyDeferred.resolve([]);
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.specGet = originalSpecGet;
       hostModule.host.planGet = originalPlanGet;
       hostModule.host.qaGetReport = originalQaGetReport;
     }
 
-    expect(state["session-1"]?.messages.length).toBeGreaterThan(0);
+    const messages = state["session-1"]?.messages ?? [];
+    expect(messages.length).toBeGreaterThan(1);
+    expect(messages[1]?.id).toBe("history:system-prompt:session-1");
+    expect(messages[1]?.content.startsWith("System prompt:\n\n")).toBe(true);
+    expect(specCalls).toBe(0);
+    expect(planCalls).toBe(0);
+    expect(qaCalls).toBe(0);
   });
 });
