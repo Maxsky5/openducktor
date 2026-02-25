@@ -146,7 +146,7 @@ export function useAgentStudioPageModels({
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
   const activeSessionStatus = activeSession?.status ?? "stopped";
-  const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
+  const scrollTrigger = `${activeSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
     activeSession?.pendingQuestions.length ?? 0
   }:${activeSession?.pendingPermissions.length ?? 0}`;
 

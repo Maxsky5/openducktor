@@ -128,6 +128,16 @@ export const useAgentChatLayout = ({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Session identity reset should repin to bottom.
   useEffect(() => {
     setIsPinnedToBottom(true);
+
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "auto",
+    });
   }, [activeSessionId]);
 
   return {

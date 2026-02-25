@@ -53,6 +53,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
   const virtualRows = session ? buildAgentChatVirtualRows(session) : [];
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
+  const activeSessionId = session?.sessionId ?? null;
 
   const estimateRowSize = useCallback(
     (index: number): number => {
@@ -83,24 +84,50 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   });
 
   useEffect(() => {
-    if (!shouldVirtualize || virtualRows.length === 0) {
+    if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
       return;
     }
     virtualizer.measure();
-  }, [shouldVirtualize, virtualRows.length, virtualizer]);
+  }, [activeSessionId, shouldVirtualize, virtualRows.length, virtualizer]);
 
   useEffect(() => {
-    if (!shouldVirtualize || !isPinnedToBottom || virtualRows.length === 0) {
+    if (!activeSessionId || !shouldVirtualize || !isPinnedToBottom || virtualRows.length === 0) {
       return;
     }
 
-    const container = messagesContainerRef.current;
-    if (!container) {
+    const lastRowIndex = virtualRows.length - 1;
+
+    const scrollToBottom = (): void => {
+      virtualizer.scrollToIndex(lastRowIndex, { align: "end" });
+
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+    };
+
+    scrollToBottom();
+
+    if (typeof window === "undefined") {
       return;
     }
 
-    container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
-  }, [isPinnedToBottom, messagesContainerRef, shouldVirtualize, virtualRows.length]);
+    const rafId = window.requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [
+    activeSessionId,
+    isPinnedToBottom,
+    messagesContainerRef,
+    shouldVirtualize,
+    virtualRows.length,
+    virtualizer,
+  ]);
 
   const handleMessagesContainerScroll = useCallback(
     (event: UIEvent<HTMLDivElement>): void => {
