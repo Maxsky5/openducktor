@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
 import TestRenderer, { act } from "react-test-renderer";
+import { toast } from "sonner";
 import { host } from "./host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
@@ -30,7 +31,13 @@ const taskFixture: TaskCard = {
   documentSummary: {
     spec: { has: false },
     plan: { has: false },
-    qaReport: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-02-22T08:00:00.000Z",
   createdAt: "2026-02-22T08:00:00.000Z",
@@ -264,6 +271,100 @@ describe("use-agent-orchestrator-operations", () => {
       } finally {
         await harness.unmount();
 
+        host.agentSessionsList = originalAgentSessionsList;
+        host.agentSessionUpsert = originalAgentSessionUpsert;
+        host.specGet = originalSpecGet;
+        host.planGet = originalPlanGet;
+        host.qaGetReport = originalQaGetReport;
+
+        OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
+        OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
+        OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
+        OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+        OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+        OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    });
+  });
+
+  test("shows error toast when send is rejected for an unavailable role", async () => {
+    await withSuppressedRendererWarning(async () => {
+      let sendCalls = 0;
+
+      const originalToastError = toast.error;
+      const toastError = mock(() => "");
+      toast.error = toastError;
+
+      const originalAgentSessionsList = host.agentSessionsList;
+      const originalAgentSessionUpsert = host.agentSessionUpsert;
+      const originalSpecGet = host.specGet;
+      const originalPlanGet = host.planGet;
+      const originalQaGetReport = host.qaGetReport;
+
+      const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
+      const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
+      const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
+      const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+      const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+      const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+
+      host.agentSessionsList = async () => [persistedSessionFixture];
+      host.agentSessionUpsert = async () => {};
+      host.specGet = async () => ({ markdown: "", updatedAt: null });
+      host.planGet = async () => ({ markdown: "", updatedAt: null });
+      host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+
+      OpencodeSdkAdapter.prototype.hasSession = () => true;
+      OpencodeSdkAdapter.prototype.subscribeEvents = () => () => {};
+      OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
+        sendCalls += 1;
+      };
+      OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
+        models: [],
+        defaultModelsByProvider: {},
+        agents: [],
+      });
+      OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+      OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+
+      const unavailableTask: TaskCard = {
+        ...taskFixture,
+        status: "open",
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: false },
+          planner: { required: true, canSkip: false, available: false, completed: false },
+          builder: { required: true, canSkip: false, available: false, completed: false },
+          qa: { required: true, canSkip: false, available: false, completed: false },
+        },
+      };
+
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo",
+        tasks: [unavailableTask],
+        runs: [runningRunFixture],
+        refreshTaskData: async () => {},
+      });
+
+      try {
+        await harness.mount();
+        await harness.run(async () => {
+          await harness.getLatest().loadAgentSessions("task-1");
+        });
+
+        await harness.run(async () => {
+          await expect(harness.getLatest().sendAgentMessage("session-1", "hello")).rejects.toThrow(
+            "Role 'build' is unavailable for task 'task-1' in status 'open'.",
+          );
+        });
+
+        expect(sendCalls).toBe(0);
+        expect(toastError).toHaveBeenCalledWith("Failed to send message", {
+          description: "Role 'build' is unavailable for task 'task-1' in status 'open'.",
+        });
+      } finally {
+        await harness.unmount();
+
+        toast.error = originalToastError;
         host.agentSessionsList = originalAgentSessionsList;
         host.agentSessionUpsert = originalAgentSessionUpsert;
         host.specGet = originalSpecGet;

@@ -35,10 +35,10 @@ pub(crate) use opencode_runtime::{
 };
 pub(crate) use workflow_rules::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
-    default_qa_required_for_issue_type, derive_available_actions, normalize_issue_type,
-    normalize_required_markdown, normalize_subtask_plan_inputs, normalize_title_key,
-    validate_parent_relationships_for_create, validate_parent_relationships_for_update,
-    validate_plan_subtask_rules, validate_transition,
+    default_qa_required_for_issue_type, derive_agent_workflows, derive_available_actions,
+    normalize_issue_type, normalize_required_markdown,
+    normalize_subtask_plan_inputs, normalize_title_key, validate_parent_relationships_for_create,
+    validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
 };
 
 #[cfg(test)]
@@ -721,6 +721,7 @@ impl AppService {
     fn enrich_task(&self, task: TaskCard, all_tasks: &[TaskCard]) -> TaskCard {
         let mut enriched = task;
         enriched.available_actions = derive_available_actions(&enriched, all_tasks);
+        enriched.agent_workflows = derive_agent_workflows(&enriched);
         enriched
     }
 
@@ -905,10 +906,10 @@ mod tests {
     };
     use anyhow::{anyhow, Context, Result};
     use host_domain::{
-        AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-        GitPort, GitPushSummary, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
-        RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata,
-        TaskStatus, TaskStore, UpdateTaskPatch,
+        AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitBranch,
+        GitCurrentBranch, GitPort, GitPushSummary, PlanSubtaskInput, QaReportDocument, QaVerdict,
+        RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
+        TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
     };
     use host_infra_system::{
         AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -941,6 +942,7 @@ mod tests {
             parent_id: None,
             subtask_ids: Vec::new(),
             document_summary: TaskDocumentSummary::default(),
+            agent_workflows: AgentWorkflows::default(),
             updated_at: "2026-01-01T00:00:00Z".to_string(),
             created_at: "2026-01-01T00:00:00Z".to_string(),
         }
@@ -1010,6 +1012,7 @@ mod tests {
                 parent_id: input.parent_id,
                 subtask_ids: Vec::new(),
                 document_summary: TaskDocumentSummary::default(),
+                agent_workflows: AgentWorkflows::default(),
                 updated_at: "2026-01-01T00:00:00Z".to_string(),
                 created_at: "2026-01-01T00:00:00Z".to_string(),
             };

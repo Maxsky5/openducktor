@@ -156,11 +156,16 @@ describe("agents-page-session-tabs", () => {
     expect(canPersistTaskTabs("/repo-a", "/repo-a")).toBe(true);
   });
 
-  test("builds role enablement from workflow actions", () => {
+  test("builds role enablement from backend workflow payload", () => {
     const task = buildTask({
       issueType: "epic",
       status: "spec_ready",
-      availableActions: ["set_spec", "set_plan"],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: false },
+        builder: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
     });
     expect(buildRoleEnabledMapForTask(task)).toEqual({
       spec: true,
@@ -172,58 +177,90 @@ describe("agents-page-session-tabs", () => {
     const aiReviewTask = buildTask({
       issueType: "feature",
       status: "ai_review",
-      availableActions: ["open_builder"],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: true, completed: false },
+      },
     });
     expect(buildRoleEnabledMapForTask(aiReviewTask)).toEqual({
-      spec: false,
-      planner: false,
+      spec: true,
+      planner: true,
       build: true,
       qa: true,
     });
   });
 
-  test("builds workflow rail states from available roles and session history", () => {
+  test("builds workflow rail states from backend-provided workflow fields", () => {
     const states = buildWorkflowStateByRole({
-      roleEnabledByTask: {
-        spec: false,
-        planner: true,
-        build: false,
-        qa: false,
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      sessionsForTask: [
-        buildSession({ role: "spec", sessionId: "spec-1" }),
-        buildSession({ role: "planner", sessionId: "planner-1" }),
-      ],
-      activeSessionRole: "planner",
-      activeSessionStatus: "idle",
+      latestSessionByRole: {
+        spec: null,
+        planner: null,
+        build: null,
+        qa: null,
+      },
     });
 
     expect(states).toEqual({
       spec: "done",
       planner: "done",
       build: "blocked",
-      qa: "blocked",
+      qa: "optional",
     });
   });
 
-  test("marks active workflow role as in_progress only when session is running", () => {
+  test("marks workflow role as in_progress when latest role session is started but not completed", () => {
     const states = buildWorkflowStateByRole({
-      roleEnabledByTask: {
-        spec: false,
-        planner: true,
-        build: false,
-        qa: false,
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: false, completed: false },
+        planner: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
       },
-      sessionsForTask: [buildSession({ role: "planner", sessionId: "planner-1" })],
-      activeSessionRole: "planner",
-      activeSessionStatus: "running",
+      latestSessionByRole: {
+        spec: null,
+        planner: buildSession({ role: "planner", status: "idle" }),
+        build: null,
+        qa: null,
+      },
     });
 
     expect(states).toEqual({
       spec: "blocked",
       planner: "in_progress",
       build: "blocked",
-      qa: "blocked",
+      qa: "optional",
+    });
+  });
+
+  test("does not mark unavailable roles as in_progress when a session exists", () => {
+    const states = buildWorkflowStateByRole({
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: false, completed: false },
+        planner: { required: true, canSkip: false, available: false, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      latestSessionByRole: {
+        spec: null,
+        planner: null,
+        build: null,
+        qa: buildSession({ role: "qa", status: "idle", scenario: "qa_review" }),
+      },
+    });
+
+    expect(states).toEqual({
+      spec: "blocked",
+      planner: "blocked",
+      build: "blocked",
+      qa: "optional",
     });
   });
 
@@ -302,16 +339,6 @@ describe("agents-page-session-tabs", () => {
         build: true,
         qa: false,
       },
-      latestSessionByRole: {
-        spec: buildSession({ sessionId: "spec-latest", role: "spec", scenario: "spec_initial" }),
-        planner: buildSession({
-          sessionId: "planner-latest",
-          role: "planner",
-          scenario: "planner_initial",
-        }),
-        build: null,
-        qa: null,
-      },
       hasQaFeedback: true,
       hasHumanFeedback: false,
       createSessionDisabled: false,
@@ -332,7 +359,6 @@ describe("agents-page-session-tabs", () => {
     });
 
     expect(options.map((option) => option.scenario)).toEqual([
-      "spec_initial",
       "planner_initial",
       "build_implementation_start",
       "build_after_qa_rejected",
@@ -345,16 +371,6 @@ describe("agents-page-session-tabs", () => {
         planner: false,
         build: true,
         qa: false,
-      },
-      latestSessionByRole: {
-        spec: null,
-        planner: buildSession({
-          sessionId: "planner-done",
-          role: "planner",
-          scenario: "planner_initial",
-        }),
-        build: null,
-        qa: null,
       },
       hasQaFeedback: false,
       hasHumanFeedback: true,
@@ -376,8 +392,6 @@ describe("agents-page-session-tabs", () => {
     });
 
     expect(plannerCompletedOptions.map((option) => option.scenario)).toEqual([
-      "spec_initial",
-      "planner_initial",
       "build_implementation_start",
       "build_after_human_request_changes",
     ]);

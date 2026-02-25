@@ -1,69 +1,46 @@
 import { describe, expect, test } from "bun:test";
 import type { SetURLSearchParams } from "react-router-dom";
 import {
-  createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
-  createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { toContextStorageKey } from "./agents-page-utils";
 import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
 
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioQuerySync>[0];
-type HookState = ReturnType<typeof useAgentStudioQuerySync>;
-
 type SearchParamsCall = Parameters<SetURLSearchParams>;
 
-const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear" | "key"> & {
+  readonly length: number;
+};
 
-const createTask = (id: string) => createTaskCardFixture({ id, title: id });
+const createMemoryStorage = (): StorageLike => {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioQuerySync, initialProps);
 
 describe("useAgentStudioQuerySync", () => {
-  test("updateQuery writes search params when values change", async () => {
-    const calls: SearchParamsCall[] = [];
-    const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
-      calls.push([nextInit, navigateOptions]);
-    };
-
-    const harness = createHookHarness({
-      activeRepo: null,
-      searchParams: new URLSearchParams("task=task-1"),
-      setSearchParams,
-      taskIdParam: "task-1",
-      taskId: "task-1",
-      role: "spec",
-      scenario: "spec_initial",
-      selectedSessionById: null,
-      activeSession: null,
-      isLoadingTasks: true,
-      tasks: [createTask("task-1")],
-    });
-
-    await harness.mount();
-    await harness.run((state) => {
-      state.updateQuery({ session: "session-1" });
-    });
-
-    expect(calls).toHaveLength(1);
-    const firstCall = calls[0];
-    if (!firstCall) {
-      throw new Error("Expected setSearchParams to be called");
-    }
-    const [next] = firstCall;
-    expect(next instanceof URLSearchParams).toBe(true);
-    if (next instanceof URLSearchParams) {
-      expect(next.get("task")).toBe("task-1");
-      expect(next.get("session")).toBe("session-1");
-    }
-
-    await harness.unmount();
-  });
-
-  test("clears invalid task query when task is missing", async () => {
+  test("parses initial search params and syncs updates through a root-owned URL effect", async () => {
     const calls: SearchParamsCall[] = [];
     const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
       calls.push([nextInit, navigateOptions]);
@@ -72,41 +49,43 @@ describe("useAgentStudioQuerySync", () => {
     const harness = createHookHarness({
       activeRepo: null,
       searchParams: new URLSearchParams(
-        "task=missing&agent=spec&scenario=spec_initial&autostart=1&start=continue",
+        "task=task-1&agent=build&scenario=build_implementation_start&autostart=1&start=fresh",
       ),
       setSearchParams,
-      taskIdParam: "missing",
-      taskId: "missing",
-      role: "spec",
-      scenario: "spec_initial",
-      selectedSessionById: null,
-      activeSession: null,
-      isLoadingTasks: false,
-      tasks: [],
     });
 
     await harness.mount();
+    const state = harness.getLatest();
+    expect(state.taskIdParam).toBe("task-1");
+    expect(state.roleFromQuery).toBe("build");
+    expect(state.scenarioFromQuery).toBe("build_implementation_start");
+    expect(state.autostart).toBe(true);
+    expect(state.sessionStartPreference).toBe("fresh");
 
-    expect(calls.length).toBeGreaterThan(0);
-    const firstCall = calls[0];
-    if (!firstCall) {
+    await harness.run((latest) => {
+      latest.updateQuery({ session: "session-1" });
+    });
+
+    const lastCall = calls[calls.length - 1];
+    if (!lastCall) {
       throw new Error("Expected setSearchParams to be called");
     }
-    const [next] = firstCall;
-    expect(next instanceof URLSearchParams).toBe(true);
-    if (next instanceof URLSearchParams) {
-      expect(next.get("task")).toBeNull();
-      expect(next.get("session")).toBeNull();
-      expect(next.get("agent")).toBeNull();
-      expect(next.get("scenario")).toBeNull();
-      expect(next.get("autostart")).toBeNull();
-      expect(next.get("start")).toBeNull();
+    const [next, options] = lastCall;
+    if (!(next instanceof URLSearchParams)) {
+      throw new Error("Expected URLSearchParams");
     }
+    expect(next.get("task")).toBe("task-1");
+    expect(next.get("session")).toBe("session-1");
+    expect(next.get("agent")).toBe("build");
+    expect(next.get("scenario")).toBe("build_implementation_start");
+    expect(next.get("autostart")).toBe("1");
+    expect(next.get("start")).toBe("fresh");
+    expect(options).toEqual({ replace: true });
 
     await harness.unmount();
   });
 
-  test("syncs task param from selected session when mismatched", async () => {
+  test("syncs navigation state when URL search params change externally", async () => {
     const calls: SearchParamsCall[] = [];
     const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
       calls.push([nextInit, navigateOptions]);
@@ -114,31 +93,120 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
-      searchParams: new URLSearchParams("task=task-old"),
+      searchParams: new URLSearchParams("task=task-1&agent=spec&scenario=spec_initial"),
       setSearchParams,
-      taskIdParam: "task-old",
-      taskId: "task-new",
-      role: "spec",
-      scenario: "spec_initial",
-      selectedSessionById: createSession({ taskId: "task-new" }),
-      activeSession: null,
-      isLoadingTasks: true,
-      tasks: [createTask("task-new")],
     });
 
     await harness.mount();
+    expect(harness.getLatest().taskIdParam).toBe("task-1");
+    expect(harness.getLatest().roleFromQuery).toBe("spec");
+    expect(calls).toHaveLength(0);
 
-    expect(calls.length).toBeGreaterThan(0);
-    const lastCall = calls[calls.length - 1];
-    if (!lastCall) {
-      throw new Error("Expected setSearchParams to be called");
-    }
-    const [next] = lastCall;
-    expect(next instanceof URLSearchParams).toBe(true);
-    if (next instanceof URLSearchParams) {
-      expect(next.get("task")).toBe("task-new");
-    }
+    await harness.update({
+      activeRepo: null,
+      searchParams: new URLSearchParams(
+        "task=task-2&session=session-2&agent=planner&scenario=planner_initial&autostart=1&start=continue",
+      ),
+      setSearchParams,
+    });
+
+    const latest = harness.getLatest();
+    expect(latest.taskIdParam).toBe("task-2");
+    expect(latest.sessionParam).toBe("session-2");
+    expect(latest.roleFromQuery).toBe("planner");
+    expect(latest.scenarioFromQuery).toBe("planner_initial");
+    expect(latest.autostart).toBe(true);
+    expect(latest.sessionStartPreference).toBe("continue");
+    expect(calls).toHaveLength(0);
 
     await harness.unmount();
+  });
+
+  test("restores persisted repo context when no explicit task context exists", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    const calls: SearchParamsCall[] = [];
+    const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
+      calls.push([nextInit, navigateOptions]);
+    };
+
+    try {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo"),
+        JSON.stringify({
+          taskId: "task-from-context",
+          role: "planner",
+          scenario: "planner_initial",
+          sessionId: "session-from-context",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        searchParams: new URLSearchParams(""),
+        setSearchParams,
+      });
+
+      await harness.mount();
+      await harness.waitFor((state) => state.taskIdParam === "task-from-context");
+
+      const latest = harness.getLatest();
+      expect(latest.taskIdParam).toBe("task-from-context");
+      expect(latest.sessionParam).toBe("session-from-context");
+      expect(latest.roleFromQuery).toBe("planner");
+      expect(latest.scenarioFromQuery).toBe("planner_initial");
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("does not override explicit task/session from URL with persisted context", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toContextStorageKey("/repo"),
+        JSON.stringify({
+          taskId: "task-from-context",
+          role: "build",
+          scenario: "build_implementation_start",
+          sessionId: "session-from-context",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        searchParams: new URLSearchParams("task=task-from-url&session=session-from-url&agent=spec"),
+        setSearchParams: () => {},
+      });
+
+      await harness.mount();
+      const latest = harness.getLatest();
+      expect(latest.taskIdParam).toBe("task-from-url");
+      expect(latest.sessionParam).toBe("session-from-url");
+      expect(latest.roleFromQuery).toBe("spec");
+      expect(latest.hasExplicitRoleParam).toBe(true);
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
   });
 });

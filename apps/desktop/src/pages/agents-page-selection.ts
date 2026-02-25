@@ -1,4 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
@@ -127,4 +128,39 @@ export const isSameSelection = (
     (a.variant ?? "") === (b.variant ?? "") &&
     (a.opencodeAgent ?? "") === (b.opencodeAgent ?? "")
   );
+};
+
+export const resolveAgentStudioTaskId = ({
+  taskIdParam,
+  selectedSessionById,
+}: {
+  taskIdParam: string;
+  selectedSessionById: AgentSessionState | null;
+}): string => {
+  return taskIdParam || selectedSessionById?.taskId || "";
+};
+
+export const resolveAgentStudioActiveSession = ({
+  sessionsForTask,
+  sessionParam,
+  hasExplicitRoleParam,
+  roleFromQuery,
+  sessionStartPreference,
+}: {
+  sessionsForTask: AgentSessionState[];
+  sessionParam: string | null;
+  hasExplicitRoleParam: boolean;
+  roleFromQuery: AgentRole;
+  sessionStartPreference: "fresh" | "continue" | null;
+}): AgentSessionState | null => {
+  if (sessionParam) {
+    return sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
+  }
+  if (sessionStartPreference === "fresh" && hasExplicitRoleParam) {
+    return null;
+  }
+  if (hasExplicitRoleParam) {
+    return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;
+  }
+  return sessionsForTask[0] ?? null;
 };

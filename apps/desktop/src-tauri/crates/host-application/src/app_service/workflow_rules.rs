@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use host_domain::{
-    CreateTaskInput, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
+    AgentWorkflowState, AgentWorkflows, CreateTaskInput, PlanSubtaskInput, QaWorkflowVerdict,
+    TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
 };
 
 pub(crate) fn normalize_issue_type(issue_type: &str) -> &'static str {
@@ -25,6 +26,89 @@ pub(crate) fn is_open_state(status: &TaskStatus) -> bool {
 
 fn can_skip_spec_and_planning(task: &TaskCard) -> bool {
     matches!(normalize_issue_type(&task.issue_type), "task" | "bug")
+}
+
+pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
+    let issue_type = normalize_issue_type(&task.issue_type);
+    let is_feature_epic = matches!(issue_type, "feature" | "epic");
+    let is_task_bug = matches!(issue_type, "task" | "bug");
+    let qa_required = task.ai_review_enabled;
+    let is_closed = task.status == TaskStatus::Closed;
+    let is_ready_for_dev_or_later = matches!(
+        task.status,
+        TaskStatus::ReadyForDev
+            | TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
+    );
+    let is_planner_feature_epic_status = task.status == TaskStatus::SpecReady || is_ready_for_dev_or_later;
+
+    let spec_required = is_feature_epic;
+    let spec_can_skip = !spec_required;
+    let spec_available = !is_closed;
+    let spec_completed = task.document_summary.spec.has;
+
+    let planner_required = is_feature_epic;
+    let planner_can_skip = !planner_required;
+    let planner_available = if is_closed {
+        false
+    } else if is_task_bug {
+        true
+    } else if is_feature_epic {
+        is_planner_feature_epic_status
+    } else {
+        false
+    };
+    let planner_completed = task.document_summary.plan.has;
+
+    let builder_available = if is_closed {
+        false
+    } else if is_task_bug {
+        true
+    } else if is_feature_epic {
+        is_ready_for_dev_or_later
+    } else {
+        false
+    };
+    let builder_completed = matches!(
+        task.status,
+        TaskStatus::AiReview | TaskStatus::HumanReview | TaskStatus::Closed
+    );
+
+    let qa_available = if is_closed {
+        false
+    } else {
+        task.status == TaskStatus::AiReview
+    };
+    let qa_completed = task.document_summary.qa_report.verdict == QaWorkflowVerdict::Approved;
+
+    AgentWorkflows {
+        spec: AgentWorkflowState {
+            required: spec_required,
+            can_skip: spec_can_skip,
+            available: spec_available,
+            completed: spec_completed,
+        },
+        planner: AgentWorkflowState {
+            required: planner_required,
+            can_skip: planner_can_skip,
+            available: planner_available,
+            completed: planner_completed,
+        },
+        builder: AgentWorkflowState {
+            required: true,
+            can_skip: false,
+            available: builder_available,
+            completed: builder_completed,
+        },
+        qa: AgentWorkflowState {
+            required: qa_required,
+            can_skip: !qa_required,
+            available: qa_available,
+            completed: qa_completed,
+        },
+    }
 }
 
 pub(crate) fn allows_transition(task: &TaskCard, from: &TaskStatus, to: &TaskStatus) -> bool {
@@ -346,9 +430,12 @@ pub(crate) fn normalize_subtask_plan_inputs(
 
 #[cfg(test)]
 mod tests {
-    use super::{derive_available_actions, normalize_subtask_plan_inputs, normalize_title_key};
+    use super::{
+        derive_agent_workflows, derive_available_actions, normalize_subtask_plan_inputs,
+        normalize_title_key,
+    };
     use crate::app_service::test_support::make_task;
-    use host_domain::{PlanSubtaskInput, TaskAction, TaskStatus};
+    use host_domain::{PlanSubtaskInput, QaWorkflowVerdict, TaskAction, TaskStatus};
 
     #[test]
     fn module_normalize_title_key_is_case_insensitive_and_trimmed() {
@@ -378,5 +465,130 @@ mod tests {
             normalize_subtask_plan_inputs(inputs).expect_err("empty title should be rejected");
 
         assert!(error.to_string().contains("title"));
+    }
+
+    #[test]
+    fn module_derive_agent_workflows_spec_availability_is_false_only_when_closed() {
+        let mut task = make_task("task-1", "feature", TaskStatus::Open);
+        for status in [
+            TaskStatus::Open,
+            TaskStatus::SpecReady,
+            TaskStatus::ReadyForDev,
+            TaskStatus::InProgress,
+            TaskStatus::Blocked,
+            TaskStatus::AiReview,
+            TaskStatus::HumanReview,
+            TaskStatus::Deferred,
+        ] {
+            task.status = status;
+            let workflows = derive_agent_workflows(&task);
+            assert!(workflows.spec.available);
+        }
+
+        task.status = TaskStatus::Closed;
+        let workflows = derive_agent_workflows(&task);
+        assert!(!workflows.spec.available);
+    }
+
+    #[test]
+    fn module_derive_agent_workflows_planner_and_builder_availability_matrix() {
+        let mut task = make_task("task-1", "task", TaskStatus::Open);
+        for status in [
+            TaskStatus::Open,
+            TaskStatus::SpecReady,
+            TaskStatus::ReadyForDev,
+            TaskStatus::InProgress,
+            TaskStatus::Blocked,
+            TaskStatus::AiReview,
+            TaskStatus::HumanReview,
+            TaskStatus::Deferred,
+        ] {
+            task.status = status;
+            let workflows = derive_agent_workflows(&task);
+            assert!(workflows.planner.available);
+            assert!(workflows.builder.available);
+        }
+        task.status = TaskStatus::Closed;
+        let workflows = derive_agent_workflows(&task);
+        assert!(!workflows.planner.available);
+        assert!(!workflows.builder.available);
+
+        let mut feature = make_task("task-2", "feature", TaskStatus::Open);
+        let feature_open = derive_agent_workflows(&feature);
+        assert!(!feature_open.planner.available);
+        assert!(!feature_open.builder.available);
+
+        feature.status = TaskStatus::SpecReady;
+        let feature_spec_ready = derive_agent_workflows(&feature);
+        assert!(feature_spec_ready.planner.available);
+        assert!(!feature_spec_ready.builder.available);
+
+        feature.status = TaskStatus::ReadyForDev;
+        let feature_ready_for_dev = derive_agent_workflows(&feature);
+        assert!(feature_ready_for_dev.planner.available);
+        assert!(feature_ready_for_dev.builder.available);
+
+        feature.status = TaskStatus::HumanReview;
+        let feature_human_review = derive_agent_workflows(&feature);
+        assert!(feature_human_review.planner.available);
+        assert!(feature_human_review.builder.available);
+
+        feature.status = TaskStatus::Closed;
+        let feature_closed = derive_agent_workflows(&feature);
+        assert!(!feature_closed.planner.available);
+        assert!(!feature_closed.builder.available);
+    }
+
+    #[test]
+    fn module_derive_agent_workflows_qa_flags_and_completion_follow_payload() {
+        let mut task = make_task("task-1", "task", TaskStatus::AiReview);
+        task.ai_review_enabled = true;
+        let required = derive_agent_workflows(&task);
+        assert!(required.qa.required);
+        assert!(!required.qa.can_skip);
+        assert!(required.qa.available);
+        assert!(!required.qa.completed);
+
+        task.ai_review_enabled = false;
+        let optional = derive_agent_workflows(&task);
+        assert!(!optional.qa.required);
+        assert!(optional.qa.can_skip);
+        assert!(optional.qa.available);
+
+        task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+        let rejected = derive_agent_workflows(&task);
+        assert!(!rejected.qa.completed);
+
+        task.document_summary.qa_report.verdict = QaWorkflowVerdict::NotReviewed;
+        let not_reviewed = derive_agent_workflows(&task);
+        assert!(!not_reviewed.qa.completed);
+
+        task.document_summary.qa_report.verdict = QaWorkflowVerdict::Approved;
+        let approved = derive_agent_workflows(&task);
+        assert!(approved.qa.completed);
+    }
+
+    #[test]
+    fn module_derive_agent_workflows_closed_precedence_and_reopen_recompute() {
+        let mut task = make_task("task-1", "feature", TaskStatus::InProgress);
+        let open_state = derive_agent_workflows(&task);
+        assert!(open_state.spec.available);
+        assert!(open_state.planner.available);
+        assert!(open_state.builder.available);
+        assert!(!open_state.qa.available);
+
+        task.status = TaskStatus::Closed;
+        let closed_state = derive_agent_workflows(&task);
+        assert!(!closed_state.spec.available);
+        assert!(!closed_state.planner.available);
+        assert!(!closed_state.builder.available);
+        assert!(!closed_state.qa.available);
+
+        task.status = TaskStatus::AiReview;
+        let reopened = derive_agent_workflows(&task);
+        assert!(reopened.spec.available);
+        assert!(reopened.planner.available);
+        assert!(reopened.builder.available);
+        assert!(reopened.qa.available);
     }
 }

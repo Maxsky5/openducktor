@@ -31,7 +31,13 @@ const baseTask: TaskCard = {
   documentSummary: {
     spec: { has: false },
     plan: { has: false },
-    qaReport: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: true, canSkip: false, available: true, completed: false },
+    planner: { required: true, canSkip: false, available: false, completed: false },
+    builder: { required: true, canSkip: false, available: false, completed: false },
+    qa: { required: true, canSkip: false, available: false, completed: false },
   },
   createdAt: "2026-02-20T10:00:00.000Z",
   updatedAt: "2026-02-20T10:00:00.000Z",

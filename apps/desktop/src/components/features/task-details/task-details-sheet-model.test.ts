@@ -27,7 +27,13 @@ const makeTask = (id: string, overrides: Partial<TaskCard> = {}): TaskCard => ({
   documentSummary: {
     spec: { has: false, updatedAt: undefined },
     plan: { has: false, updatedAt: undefined },
-    qaReport: { has: false, updatedAt: undefined },
+    qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
   },
   ...overrides,
 });

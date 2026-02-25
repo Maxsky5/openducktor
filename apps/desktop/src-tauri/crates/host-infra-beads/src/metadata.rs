@@ -1,4 +1,7 @@
-use host_domain::{AgentSessionDocument, TaskDocumentPresence, TaskDocumentSummary};
+use host_domain::{
+    AgentSessionDocument, QaVerdict, QaWorkflowVerdict, TaskDocumentPresence, TaskDocumentSummary,
+    TaskQaDocumentPresence,
+};
 use serde_json::{Map, Value};
 
 use crate::model::{MarkdownEntry, QaEntry};
@@ -34,14 +37,22 @@ pub(crate) fn markdown_document_presence(
     }
 }
 
-pub(crate) fn qa_document_presence(entries: Option<Vec<QaEntry>>) -> TaskDocumentPresence {
-    let latest = entries.as_ref().and_then(|list| list.last());
-    match latest {
-        Some(entry) if !entry.markdown.trim().is_empty() => TaskDocumentPresence {
-            has: true,
-            updated_at: Some(entry.updated_at.clone()),
-        },
-        _ => TaskDocumentPresence::default(),
+fn qa_workflow_verdict_from_entry(verdict: &QaVerdict) -> QaWorkflowVerdict {
+    match verdict {
+        QaVerdict::Approved => QaWorkflowVerdict::Approved,
+        QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
+    }
+}
+
+pub(crate) fn qa_document_presence(entries: Option<Vec<QaEntry>>) -> TaskQaDocumentPresence {
+    let Some(latest) = entries.as_ref().and_then(|list| list.last()) else {
+        return TaskQaDocumentPresence::default();
+    };
+
+    TaskQaDocumentPresence {
+        has: !latest.markdown.trim().is_empty(),
+        updated_at: Some(latest.updated_at.clone()),
+        verdict: qa_workflow_verdict_from_entry(&latest.verdict),
     }
 }
 

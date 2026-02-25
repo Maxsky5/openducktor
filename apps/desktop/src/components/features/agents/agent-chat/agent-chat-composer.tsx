@@ -11,6 +11,8 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
   const {
     taskId,
     agentStudioReady,
+    isReadOnly,
+    readOnlyReason,
     input,
     onInputChange,
     onSend,
@@ -39,9 +41,13 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isSending ||
     isStarting ||
     isSessionWorking ||
+    isReadOnly ||
     !taskId ||
     input.trim().length === 0 ||
     !agentStudioReady;
+
+  const selectorDisabled =
+    !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady || isReadOnly;
 
   const composerAccentColor = useMemo(() => {
     const agentName = selectedModelSelection?.opencodeAgent;
@@ -67,9 +73,14 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
         <Textarea
           ref={composerTextareaRef}
           rows={1}
-          placeholder="@ for files/agents; / for commands; ! for shell"
+          placeholder={
+            isReadOnly && readOnlyReason
+              ? readOnlyReason
+              : "@ for files/agents; / for commands; ! for shell"
+          }
           value={input}
           className="!min-h-0 h-10 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
+          disabled={!agentStudioReady || isReadOnly}
           onChange={(event) => onInputChange(event.currentTarget.value)}
           onInput={onComposerTextareaInput}
           onKeyDown={(event) => {
@@ -91,7 +102,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
                 searchPlaceholder="Search agent..."
                 triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
-                disabled={!taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady}
+                disabled={selectorDisabled}
                 onValueChange={onSelectAgent}
               />
             </div>
@@ -110,7 +121,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
                 searchPlaceholder="Search model..."
                 triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
-                disabled={!taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady}
+                disabled={selectorDisabled}
                 onValueChange={onSelectModel}
               />
             </div>
@@ -124,7 +135,13 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
                 searchPlaceholder="Search variant..."
                 triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
-                disabled={!taskId || variantOptions.length === 0 || isStarting || !agentStudioReady}
+                disabled={
+                  !taskId ||
+                  variantOptions.length === 0 ||
+                  isStarting ||
+                  !agentStudioReady ||
+                  isReadOnly
+                }
                 onValueChange={onSelectVariant}
               />
             </div>

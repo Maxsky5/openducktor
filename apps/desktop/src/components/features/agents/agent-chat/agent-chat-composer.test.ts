@@ -7,6 +7,8 @@ import { buildModelSelection } from "./agent-chat-test-fixtures";
 const buildModel = () => ({
   taskId: "task-1",
   agentStudioReady: true,
+  isReadOnly: false,
+  readOnlyReason: null,
   input: "hello",
   onInputChange: () => {},
   onSend: () => {},
@@ -96,5 +98,20 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("bg-white shadow-md");
     expect(html).toContain("focus-within:shadow-xl");
     expect(html).toContain("border-left-color:#d97706");
+  });
+
+  test("renders read-only mode when selected role is unavailable", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isReadOnly: true,
+          readOnlyReason: "Planner is unavailable for this task right now.",
+        },
+      }),
+    );
+
+    expect(html).toContain("Planner is unavailable for this task right now.");
+    expect(html).toContain('aria-label="Send message" disabled');
   });
 });

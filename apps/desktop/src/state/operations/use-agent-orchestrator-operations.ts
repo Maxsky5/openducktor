@@ -397,7 +397,16 @@ export function useAgentOrchestratorOperations({
         throw error;
       }
     },
-    sendAgentMessage: sessionActions.sendAgentMessage,
+    sendAgentMessage: async (sessionId, content) => {
+      try {
+        await sessionActions.sendAgentMessage(sessionId, content);
+      } catch (error) {
+        toast.error("Failed to send message", {
+          description: errorMessage(error),
+        });
+        throw error;
+      }
+    },
     stopAgentSession: sessionActions.stopAgentSession,
     updateAgentSessionModel: sessionActions.updateAgentSessionModel,
     replyAgentPermission: sessionActions.replyAgentPermission,

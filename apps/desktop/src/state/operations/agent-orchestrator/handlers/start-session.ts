@@ -6,6 +6,7 @@ import type {
   AgentScenario,
 } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
+import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import { requireActiveRepo } from "../../task-operations-model";
@@ -153,6 +154,9 @@ export const createStartAgentSession = ({
       const task = taskRef.current.find((entry) => entry.id === taskId);
       if (!task) {
         throw new Error(`Task not found: ${taskId}`);
+      }
+      if (!isRoleAvailableForTask(task, role)) {
+        throw new Error(unavailableRoleErrorMessage(task, role));
       }
 
       const docsPromise = loadTaskDocuments(repoPath, taskId);

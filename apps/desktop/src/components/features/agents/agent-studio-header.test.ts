@@ -43,7 +43,7 @@ const buildModel = () => ({
       role: "qa" as const,
       label: "QA",
       icon: roleIcon(3),
-      state: "blocked" as const,
+      state: "optional" as const,
       sessionId: null,
     },
   ],
@@ -148,7 +148,7 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("disabled");
   });
 
-  test("keeps available workflow step clickable without existing session", () => {
+  test("keeps unavailable workflow step clickable without existing session", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
         model: {
@@ -165,7 +165,7 @@ describe("AgentStudioHeader", () => {
               role: "planner" as const,
               label: "Planner",
               icon: roleIcon(1),
-              state: "available" as const,
+              state: "blocked" as const,
               sessionId: null,
             },
           ],
@@ -173,8 +173,8 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain('title="No session yet for this role"');
-    expect(html).not.toContain('title="No session yet for this role" disabled');
+    expect(html).toContain('title="Blocked by workflow state"');
+    expect(html).not.toContain('title="Blocked by workflow state" disabled');
   });
 
   test("highlights selected role with a ring without changing done status color", () => {

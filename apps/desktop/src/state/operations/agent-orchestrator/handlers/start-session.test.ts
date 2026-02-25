@@ -2,12 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
-import {
-  createAgentSessionFixture,
-  createDeferred,
-  createTaskCardFixture,
-  withTimeout,
-} from "../test-utils";
+import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
 import { createStartAgentSession } from "./start-session";
 
 const taskFixture = createTaskCardFixture({
@@ -538,6 +533,64 @@ describe("agent-orchestrator/handlers/start-session", () => {
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
       adapter.startSession = originalStartSession;
+    }
+  });
+
+  test("rejects start when selected role is unavailable for the task", async () => {
+    let runtimeCalls = 0;
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSession({
+      activeRepo: "/tmp/repo",
+      adapter: new OpencodeSdkAdapter(),
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: {
+        current: [
+          createTaskCardFixture({
+            id: "task-1",
+            status: "open",
+            agentWorkflows: {
+              spec: { required: true, canSkip: false, available: true, completed: false },
+              planner: { required: true, canSkip: false, available: false, completed: false },
+              builder: { required: true, canSkip: false, available: false, completed: false },
+              qa: { required: true, canSkip: false, available: false, completed: false },
+            },
+          }),
+        ],
+      },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => {
+        runtimeCalls += 1;
+        return {
+          runtimeId: null,
+          runId: null,
+          baseUrl: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo",
+        };
+      },
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
+        "Role 'build' is unavailable for task 'task-1' in status 'open'.",
+      );
+      expect(runtimeCalls).toBe(0);
+    } finally {
+      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 

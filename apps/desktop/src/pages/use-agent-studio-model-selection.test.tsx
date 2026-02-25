@@ -7,10 +7,7 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import {
-  type AgentStudioModelSelectionState,
-  useAgentStudioModelSelection,
-} from "./use-agent-studio-model-selection";
+import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection";
 
 enableReactActEnvironment();
 
@@ -18,7 +15,6 @@ const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
 const originalConsoleError = console.error;
 
 type HookArgs = Parameters<typeof useAgentStudioModelSelection>[0];
-type HookState = AgentStudioModelSelectionState;
 
 const CATALOG: AgentModelCatalog = {
   models: [

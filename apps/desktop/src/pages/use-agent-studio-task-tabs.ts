@@ -1,8 +1,11 @@
 import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { firstScenario } from "./agents-page-constants";
 import {
+  buildRoleEnabledMapForTask,
   buildTaskTabs,
   canPersistTaskTabs,
   closeTaskTab,
@@ -15,6 +18,23 @@ import {
 import { toTabsStorageKey } from "./agents-page-utils";
 
 type QueryUpdate = Record<string, string | undefined>;
+
+const resolveDefaultRoleForTask = (task: TaskCard | null): AgentRole => {
+  const roleEnabledByTask = buildRoleEnabledMapForTask(task);
+  if (roleEnabledByTask.spec) {
+    return "spec";
+  }
+  if (roleEnabledByTask.planner) {
+    return "planner";
+  }
+  if (roleEnabledByTask.build) {
+    return "build";
+  }
+  if (roleEnabledByTask.qa) {
+    return "qa";
+  }
+  return "spec";
+};
 
 export function useAgentStudioTaskTabs(args: {
   activeRepo: string | null;
@@ -140,12 +160,29 @@ export function useAgentStudioTaskTabs(args: {
     if (!fallbackTaskId) {
       return;
     }
+    const fallbackSession = latestSessionByTaskId.get(fallbackTaskId);
+    if (fallbackSession) {
+      updateQuery({
+        task: fallbackSession.taskId,
+        session: fallbackSession.sessionId,
+        agent: fallbackSession.role,
+        scenario: fallbackSession.scenario,
+        autostart: undefined,
+        start: undefined,
+      });
+      return;
+    }
+    const fallbackTask = tasks.find((entry) => entry.id === fallbackTaskId) ?? null;
+    const fallbackRole = resolveDefaultRoleForTask(fallbackTask);
     updateQuery({
       task: fallbackTaskId,
       session: undefined,
+      agent: fallbackRole,
+      scenario: firstScenario(fallbackRole),
       autostart: undefined,
+      start: undefined,
     });
-  }, [openTaskTabs, persistedActiveTaskId, taskId, updateQuery]);
+  }, [latestSessionByTaskId, openTaskTabs, persistedActiveTaskId, taskId, tasks, updateQuery]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {
@@ -167,18 +204,26 @@ export function useAgentStudioTaskTabs(args: {
         updateQuery({
           task: sessionForTask.taskId,
           session: sessionForTask.sessionId,
+          agent: sessionForTask.role,
+          scenario: sessionForTask.scenario,
           autostart: undefined,
+          start: undefined,
         });
         return;
       }
 
+      const nextTask = tasks.find((entry) => entry.id === nextTaskId) ?? null;
+      const nextRole = resolveDefaultRoleForTask(nextTask);
       updateQuery({
         task: nextTaskId,
         session: undefined,
+        agent: nextRole,
+        scenario: firstScenario(nextRole),
         autostart: undefined,
+        start: undefined,
       });
     },
-    [clearComposerInput, latestSessionByTaskId, updateQuery],
+    [clearComposerInput, latestSessionByTaskId, tasks, updateQuery],
   );
 
   const handleCreateTab = useCallback(
@@ -212,7 +257,10 @@ export function useAgentStudioTaskTabs(args: {
         updateQuery({
           task: undefined,
           session: undefined,
+          agent: undefined,
+          scenario: undefined,
           autostart: undefined,
+          start: undefined,
         });
         return;
       }
@@ -231,18 +279,26 @@ export function useAgentStudioTaskTabs(args: {
         updateQuery({
           task: fallbackSession.taskId,
           session: fallbackSession.sessionId,
+          agent: fallbackSession.role,
+          scenario: fallbackSession.scenario,
           autostart: undefined,
+          start: undefined,
         });
         return;
       }
 
+      const fallbackTask = tasks.find((entry) => entry.id === nextActiveTaskId) ?? null;
+      const fallbackRole = resolveDefaultRoleForTask(fallbackTask);
       updateQuery({
         task: nextActiveTaskId,
         session: undefined,
+        agent: fallbackRole,
+        scenario: firstScenario(fallbackRole),
         autostart: undefined,
+        start: undefined,
       });
     },
-    [clearComposerInput, latestSessionByTaskId, tabTaskIds, taskId, updateQuery],
+    [clearComposerInput, latestSessionByTaskId, tabTaskIds, taskId, tasks, updateQuery],
   );
 
   return {

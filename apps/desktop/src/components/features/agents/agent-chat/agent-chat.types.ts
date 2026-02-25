@@ -33,6 +33,7 @@ export type AgentChatThreadModel = {
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;
+  isPinnedToBottom: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
 };
@@ -40,6 +41,8 @@ export type AgentChatThreadModel = {
 export type AgentChatComposerModel = {
   taskId: string;
   agentStudioReady: boolean;
+  isReadOnly: boolean;
+  readOnlyReason: string | null;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;

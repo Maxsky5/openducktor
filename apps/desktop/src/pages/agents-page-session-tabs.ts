@@ -1,7 +1,8 @@
-import type { TaskAction, TaskCard } from "@openducktor/contracts";
+import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 
@@ -31,12 +32,6 @@ const ALL_AGENT_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
 const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
   tabs: [],
   activeTaskId: null,
-};
-
-const WORKFLOW_ACTIONS_BY_ROLE: Record<Exclude<AgentRole, "qa">, ReadonlySet<TaskAction>> = {
-  spec: new Set<TaskAction>(["set_spec"]),
-  planner: new Set<TaskAction>(["set_plan"]),
-  build: new Set<TaskAction>(["build_start", "open_builder"]),
 };
 
 const normalizeTaskTabs = (entries: unknown): string[] => {
@@ -143,43 +138,19 @@ export const canPersistTaskTabs = (
 };
 
 export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> => {
-  if (!task) {
-    return {
-      spec: true,
-      planner: true,
-      build: true,
-      qa: true,
-    };
-  }
-
-  const availableActions = new Set(task.availableActions);
-  const map: Record<AgentRole, boolean> = {
-    spec: false,
-    planner: false,
-    build: false,
-    qa: task.status === "ai_review",
+  const workflowsByRole = resolveRoleWorkflowMapForTask(task);
+  return {
+    spec: workflowsByRole.spec.available,
+    planner: workflowsByRole.planner.available,
+    build: workflowsByRole.build.available,
+    qa: workflowsByRole.qa.available,
   };
-
-  for (const role of ALL_AGENT_ROLES) {
-    if (role === "qa") {
-      continue;
-    }
-    const requiredActions = WORKFLOW_ACTIONS_BY_ROLE[role];
-    map[role] = Array.from(requiredActions).some((action) => availableActions.has(action));
-  }
-
-  return map;
 };
 
 export const buildWorkflowStateByRole = (params: {
-  roleEnabledByTask: Record<AgentRole, boolean>;
-  sessionsForTask: AgentSessionState[];
-  activeSessionRole: AgentRole | null;
-  activeSessionStatus: AgentSessionState["status"] | null;
+  roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
+  latestSessionByRole: Record<AgentRole, AgentSessionState | null>;
 }): Record<AgentRole, WorkflowStepState> => {
-  const hasSessionByRole = new Set(params.sessionsForTask.map((entry) => entry.role));
-  const isActiveSessionWorking =
-    params.activeSessionStatus === "running" || params.activeSessionStatus === "starting";
   const stateByRole: Record<AgentRole, WorkflowStepState> = {
     spec: "blocked",
     planner: "blocked",
@@ -188,16 +159,25 @@ export const buildWorkflowStateByRole = (params: {
   };
 
   for (const role of ALL_AGENT_ROLES) {
-    if (params.activeSessionRole === role && isActiveSessionWorking) {
-      stateByRole[role] = "in_progress";
-      continue;
-    }
-    if (hasSessionByRole.has(role)) {
+    if (params.roleWorkflowsByTask[role].completed) {
       stateByRole[role] = "done";
       continue;
     }
-    if (params.roleEnabledByTask[role]) {
+    const latestRoleSession = params.latestSessionByRole[role];
+    const hasStartedRoleSession =
+      latestRoleSession?.status === "starting" ||
+      latestRoleSession?.status === "running" ||
+      latestRoleSession?.status === "idle";
+    if (params.roleWorkflowsByTask[role].available && hasStartedRoleSession) {
+      stateByRole[role] = "in_progress";
+      continue;
+    }
+    if (params.roleWorkflowsByTask[role].available) {
       stateByRole[role] = "available";
+      continue;
+    }
+    if (params.roleWorkflowsByTask[role].canSkip) {
+      stateByRole[role] = "optional";
       continue;
     }
     stateByRole[role] = "blocked";
@@ -281,7 +261,6 @@ export const buildSessionSelectorGroups = (params: {
 
 export const buildSessionCreateOptions = (params: {
   roleEnabledByTask: Record<AgentRole, boolean>;
-  latestSessionByRole: Record<AgentRole, AgentSessionState | null>;
   hasQaFeedback: boolean;
   hasHumanFeedback: boolean;
   createSessionDisabled: boolean;
@@ -307,16 +286,17 @@ export const buildSessionCreateOptions = (params: {
     });
   };
 
-  addFreshOption(
-    "spec",
-    "spec_initial",
-    `${params.roleLabelByRole.spec} · Start Spec`,
-    "Create a new spec session from scratch",
-    params.createSessionDisabled,
-  );
+  if (params.roleEnabledByTask.spec) {
+    addFreshOption(
+      "spec",
+      "spec_initial",
+      `${params.roleLabelByRole.spec} · Start Spec`,
+      "Create a new spec session from scratch",
+      params.createSessionDisabled,
+    );
+  }
 
-  const canStartPlannerFresh =
-    params.roleEnabledByTask.planner || Boolean(params.latestSessionByRole.planner);
+  const canStartPlannerFresh = params.roleEnabledByTask.planner;
   if (canStartPlannerFresh) {
     addFreshOption(
       "planner",

@@ -9,6 +9,7 @@ import {
 } from "@/components/features/agents";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS, SCENARIO_LABELS } from "./agents-page-constants";
 import {
@@ -146,7 +147,7 @@ export function useAgentStudioPageModels({
   const activeMessageCount = activeSession?.messages.length ?? 0;
   const activeDraftText = activeSession?.draftAssistantText ?? "";
   const activeSessionStatus = activeSession?.status ?? "stopped";
-  const scrollTrigger = `${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
+  const scrollTrigger = `${activeSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
     activeSession?.pendingQuestions.length ?? 0
   }:${activeSession?.pendingPermissions.length ?? 0}`;
 
@@ -154,6 +155,7 @@ export function useAgentStudioPageModels({
     messagesContainerRef,
     composerFormRef,
     composerTextareaRef,
+    isPinnedToBottom,
     setIsPinnedToBottom,
     todoPanelBottomOffset,
     resizeComposerTextarea,
@@ -186,6 +188,10 @@ export function useAgentStudioPageModels({
   const activeTabValue = taskId || "__agent_studio_empty__";
 
   const roleEnabledByTask = useMemo(() => buildRoleEnabledMapForTask(selectedTask), [selectedTask]);
+  const roleWorkflowsByTask = useMemo(
+    () => buildRoleWorkflowMapForTask(selectedTask),
+    [selectedTask],
+  );
   const latestSessionByRole = useMemo(
     () => buildLatestSessionByRoleMap(sessionsForTask),
     [sessionsForTask],
@@ -193,14 +199,18 @@ export function useAgentStudioPageModels({
   const workflowStateByRole = useMemo(
     () =>
       buildWorkflowStateByRole({
-        roleEnabledByTask,
-        sessionsForTask,
-        activeSessionRole: activeSession?.role ?? null,
-        activeSessionStatus: activeSession?.status ?? null,
+        roleWorkflowsByTask,
+        latestSessionByRole,
       }),
-    [activeSession?.role, activeSession?.status, roleEnabledByTask, sessionsForTask],
+    [latestSessionByRole, roleWorkflowsByTask],
   );
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
+  const selectedInteractionRole = activeSession?.role ?? role;
+  const selectedRoleWorkflow = roleWorkflowsByTask[selectedInteractionRole];
+  const selectedRoleAvailable = selectedRoleWorkflow.available;
+  const selectedRoleReadOnlyReason = selectedRoleAvailable
+    ? null
+    : `${roleLabelByRole[selectedInteractionRole]} is unavailable for this task right now.`;
   const sessionSelectorGroups = useMemo(
     () =>
       buildSessionSelectorGroups({
@@ -256,21 +266,13 @@ export function useAgentStudioPageModels({
     () =>
       buildSessionCreateOptions({
         roleEnabledByTask,
-        latestSessionByRole,
         hasQaFeedback,
         hasHumanFeedback,
         createSessionDisabled,
         roleLabelByRole,
         scenarioLabels: SCENARIO_LABELS,
       }),
-    [
-      createSessionDisabled,
-      hasHumanFeedback,
-      hasQaFeedback,
-      latestSessionByRole,
-      roleEnabledByTask,
-      roleLabelByRole,
-    ],
+    [createSessionDisabled, hasHumanFeedback, hasQaFeedback, roleEnabledByTask, roleLabelByRole],
   );
 
   const agentStudioHeaderModel = useMemo(
@@ -387,7 +389,7 @@ export function useAgentStudioPageModels({
         isLoadingChecks,
         onRefreshChecks: handleRefreshChecks,
         taskId,
-        canKickoffNewSession,
+        canKickoffNewSession: canKickoffNewSession && selectedRoleAvailable,
         kickoffLabel,
         onKickoff: handleKickoff,
         isStarting,
@@ -401,6 +403,7 @@ export function useAgentStudioPageModels({
         todoPanelCollapsed: activeTodoPanelCollapsed,
         onToggleTodoPanel: handleToggleTodoPanel,
         todoPanelBottomOffset,
+        isPinnedToBottom,
         messagesContainerRef,
         onMessagesScroll: handleMessagesScroll,
       }),
@@ -411,6 +414,7 @@ export function useAgentStudioPageModels({
       agentStudioBlockedReason,
       agentStudioReady,
       canKickoffNewSession,
+      selectedRoleAvailable,
       handleKickoff,
       handleMessagesScroll,
       handleRefreshChecks,
@@ -423,6 +427,7 @@ export function useAgentStudioPageModels({
       handlePermissionReply,
       kickoffLabel,
       permissionReplyErrorByRequestId,
+      isPinnedToBottom,
       messagesContainerRef,
       onSubmitQuestionAnswers,
       taskId,
@@ -435,6 +440,8 @@ export function useAgentStudioPageModels({
       buildAgentChatComposerModel({
         taskId,
         agentStudioReady,
+        isReadOnly: !selectedRoleAvailable,
+        readOnlyReason: selectedRoleReadOnlyReason,
         input,
         onInputChange: setInput,
         onSend: handleSend,
@@ -479,6 +486,8 @@ export function useAgentStudioPageModels({
       onSelectVariant,
       activeSessionAgentColors,
       resizeComposerTextarea,
+      selectedRoleAvailable,
+      selectedRoleReadOnlyReason,
       selectedModelSelection,
       setInput,
       taskId,

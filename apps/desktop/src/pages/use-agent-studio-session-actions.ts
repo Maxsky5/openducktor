@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
@@ -92,6 +93,9 @@ export function useAgentStudioSessionActions({
     if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
       return undefined;
     }
+    if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
+      return undefined;
+    }
 
     const isFreshStartRequested = sessionStartPreference === "fresh";
 
@@ -99,7 +103,10 @@ export function useAgentStudioSessionActions({
       updateQuery({
         task: activeSession.taskId,
         session: activeSession.sessionId,
+        agent: activeSession.role,
+        scenario: activeSession.scenario,
         autostart: undefined,
+        start: undefined,
       });
       return activeSession.sessionId;
     }
@@ -160,6 +167,7 @@ export function useAgentStudioSessionActions({
     scenario,
     sessionStartPreference,
     sessionsForTask,
+    selectedTask,
     selectionForNewSession,
     startAgentSession,
     taskId,
@@ -171,13 +179,25 @@ export function useAgentStudioSessionActions({
     if (!taskId || !agentStudioReady) {
       return;
     }
+    if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
+      return;
+    }
     const sessionId = await startSession();
     if (!sessionId) {
       updateQuery({ autostart: undefined });
       return;
     }
     await sendAgentMessage(sessionId, kickoffPromptForScenario(role, scenario, taskId));
-  }, [agentStudioReady, role, scenario, sendAgentMessage, startSession, taskId, updateQuery]);
+  }, [
+    agentStudioReady,
+    role,
+    scenario,
+    selectedTask,
+    sendAgentMessage,
+    startSession,
+    taskId,
+    updateQuery,
+  ]);
 
   const autoStartKey = activeRepo && taskId ? `${activeRepo}:${taskId}:${role}:${scenario}` : null;
   const hasAutoStartExecuted = autoStartKey
@@ -227,6 +247,9 @@ export function useAgentStudioSessionActions({
     if (isSending || isStarting || !agentStudioReady) {
       return;
     }
+    if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
+      return;
+    }
 
     const message = input.trim();
     if (!message || !taskId) {
@@ -255,6 +278,8 @@ export function useAgentStudioSessionActions({
     input,
     isSending,
     isStarting,
+    selectedTask,
+    role,
     sessionStartPreference,
     sendAgentMessage,
     setInput,
@@ -350,6 +375,8 @@ export function useAgentStudioSessionActions({
       updateQuery({
         task: session.taskId,
         session: session.sessionId,
+        agent: session.role,
+        scenario: session.scenario,
         autostart: undefined,
       });
     },
@@ -368,6 +395,8 @@ export function useAgentStudioSessionActions({
       updateQuery({
         task: selectedSession.taskId,
         session: selectedSession.sessionId,
+        agent: selectedSession.role,
+        scenario: selectedSession.scenario,
         autostart: undefined,
       });
     },
@@ -385,12 +414,11 @@ export function useAgentStudioSessionActions({
       }
 
       const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
-      const hasPlannerSession = sessionsForTask.some((entry) => entry.role === "planner");
       const canStartFreshSession =
         nextRole === "spec"
-          ? true
+          ? roleEnabledByTask.spec
           : nextRole === "planner"
-            ? roleEnabledByTask.planner || hasPlannerSession
+            ? roleEnabledByTask.planner
             : roleEnabledByTask[nextRole];
 
       if (!canStartFreshSession) {
@@ -493,15 +521,19 @@ export function useAgentStudioSessionActions({
       scenario,
       activeRepo,
       sendAgentMessage,
-      sessionsForTask,
       startAgentSession,
       taskId,
       updateQuery,
     ],
   );
 
+  const selectedRoleAvailable = selectedTask ? isRoleAvailableForTask(selectedTask, role) : false;
   const canKickoffNewSession =
-    agentStudioReady && Boolean(taskId) && isActiveTaskHydrated && !activeSession;
+    agentStudioReady &&
+    Boolean(taskId) &&
+    isActiveTaskHydrated &&
+    !activeSession &&
+    selectedRoleAvailable;
   const kickoffLabel =
     role === "spec"
       ? "Start Spec"

@@ -12,7 +12,6 @@ import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
-type HookState = ReturnType<typeof useAgentStudioSessionActions>;
 
 const createTask = (overrides = {}) => createTaskCardFixture(overrides);
 
@@ -212,6 +211,8 @@ describe("useAgentStudioSessionActions", () => {
     expect(updateCalls).toContainEqual({
       task: "task-2",
       session: "session-2",
+      agent: "spec",
+      scenario: "spec_initial",
       autostart: undefined,
     });
 
@@ -277,7 +278,14 @@ describe("useAgentStudioSessionActions", () => {
       role: "spec",
       scenario: "spec_initial",
       activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
-      selectedTask: createTask({ availableActions: ["set_plan"] }),
+      selectedTask: createTask({
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: { required: true, canSkip: false, available: true, completed: false },
+          builder: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: true, canSkip: false, available: false, completed: false },
+        },
+      }),
       startAgentSession,
       sendAgentMessage,
       updateQuery: (updates) => {
@@ -346,7 +354,14 @@ describe("useAgentStudioSessionActions", () => {
       role: "spec",
       scenario: "spec_initial",
       activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
-      selectedTask: createTask({ availableActions: ["set_plan"] }),
+      selectedTask: createTask({
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: { required: true, canSkip: false, available: true, completed: false },
+          builder: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: true, canSkip: false, available: false, completed: false },
+        },
+      }),
       startAgentSession,
       sendAgentMessage,
       updateQuery: (updates) => {
@@ -404,7 +419,14 @@ describe("useAgentStudioSessionActions", () => {
       role: "spec",
       scenario: "spec_initial",
       activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
-      selectedTask: createTask({ availableActions: ["set_plan"] }),
+      selectedTask: createTask({
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: { required: true, canSkip: false, available: true, completed: false },
+          builder: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: true, canSkip: false, available: false, completed: false },
+        },
+      }),
       startAgentSession,
       sendAgentMessage,
       updateQuery: () => {},

@@ -110,6 +110,107 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-1"]?.status).toBe("stopped");
   });
 
+  test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
+    const existingSession: AgentSessionState = {
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "stopped",
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeId: "runtime-1",
+      runId: "run-1",
+      baseUrl: "http://127.0.0.1:4444",
+      workingDirectory: "/tmp/repo",
+      messages: [],
+      draftAssistantText: "",
+      pendingPermissions: [],
+      pendingQuestions: [],
+      todos: [],
+      modelCatalog: null,
+      selectedModel: null,
+      isLoadingModelCatalog: true,
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: { "session-1": existingSession },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      const next = updater(current);
+      state = {
+        ...state,
+        [sessionId]: next,
+      };
+      sessionsRef.current = state;
+    };
+
+    let historyLoads = 0;
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          historyLoads += 1;
+          return [];
+        },
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      },
+    ];
+
+    try {
+      await loadAgentSessions("task-1");
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+    }
+
+    expect(historyLoads).toBe(1);
+    expect(state["session-1"]?.messages.length).toBeGreaterThan(0);
+    expect(state["session-1"]?.messages[0]?.id).toBe("history:session-start:session-1");
+  });
+
   test("skips hydration when repo epoch changes while loading persisted sessions", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     const repoEpochRef = { current: 2 };

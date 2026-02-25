@@ -1,9 +1,17 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { Fragment, type ReactElement } from "react";
+import { Fragment, type ReactElement, type UIEvent, useCallback, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
+import {
+  AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
+  AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
+  AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT,
+  type AgentChatVirtualRow,
+  buildAgentChatVirtualRows,
+} from "./agent-chat-thread-virtualization";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
@@ -32,13 +40,195 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     todoPanelCollapsed,
     onToggleTodoPanel,
     todoPanelBottomOffset,
+    isPinnedToBottom,
     messagesContainerRef,
     onMessagesScroll,
   } = model;
+
   const streamingRoleDisplay = session?.draftAssistantText
     ? (roleOptions.find((entry) => entry.role === session.role) ?? null)
     : null;
   const StreamingRoleIcon = streamingRoleDisplay?.icon ?? Bot;
+  const streamingRoleLabel = streamingRoleDisplay?.label ?? "Assistant";
+
+  const virtualRows = session ? buildAgentChatVirtualRows(session) : [];
+  const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
+  const activeSessionId = session?.sessionId ?? null;
+
+  const estimateRowSize = useCallback(
+    (index: number): number => {
+      const row = virtualRows[index];
+      if (!row) {
+        return 0;
+      }
+      return (
+        row.estimatedHeightPx + (index < virtualRows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0)
+      );
+    },
+    [virtualRows],
+  );
+
+  const resolveRowKey = useCallback(
+    (index: number): string | number => {
+      return virtualRows[index]?.key ?? index;
+    },
+    [virtualRows],
+  );
+
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? virtualRows.length : 0,
+    getScrollElement: () => messagesContainerRef.current,
+    estimateSize: estimateRowSize,
+    getItemKey: resolveRowKey,
+    overscan: AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
+  });
+
+  useEffect(() => {
+    if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
+      return;
+    }
+    virtualizer.measure();
+  }, [activeSessionId, shouldVirtualize, virtualRows.length, virtualizer]);
+
+  useEffect(() => {
+    if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
+      return;
+    }
+    const lastRowIndex = virtualRows.length - 1;
+    const scrollToBottom = (): void => {
+      virtualizer.measure();
+      virtualizer.scrollToIndex(lastRowIndex, { align: "end" });
+
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+    };
+
+    scrollToBottom();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+    const rafId = window.requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [activeSessionId, messagesContainerRef, shouldVirtualize, virtualRows.length, virtualizer]);
+
+  useEffect(() => {
+    if (!activeSessionId || !shouldVirtualize || !isPinnedToBottom || virtualRows.length === 0) {
+      return;
+    }
+
+    const lastRowIndex = virtualRows.length - 1;
+
+    const scrollToBottom = (): void => {
+      virtualizer.scrollToIndex(lastRowIndex, { align: "end" });
+
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+    };
+
+    scrollToBottom();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [
+    activeSessionId,
+    isPinnedToBottom,
+    messagesContainerRef,
+    shouldVirtualize,
+    virtualRows.length,
+    virtualizer,
+  ]);
+
+  const handleMessagesContainerScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>): void => {
+      onMessagesScroll(event);
+    },
+    [onMessagesScroll],
+  );
+  const virtualItems = virtualizer.getVirtualItems();
+  const virtualRowsToRender = useMemo(
+    () =>
+      virtualItems
+        .map((virtualItem) => {
+          const row = virtualRows[virtualItem.index];
+          if (!row) {
+            return null;
+          }
+          return { row, virtualItem };
+        })
+        .filter(
+          (
+            entry,
+          ): entry is { row: AgentChatVirtualRow; virtualItem: (typeof virtualItems)[number] } =>
+            entry !== null,
+        ),
+    [virtualItems, virtualRows],
+  );
+  const canRenderVirtualRows = shouldVirtualize && virtualRowsToRender.length > 0;
+  const hasRenderableSessionRows = virtualRows.length > 0;
+
+  const renderVirtualRow = useCallback(
+    (row: AgentChatVirtualRow): ReactElement => {
+      if (row.kind === "turn_duration") {
+        return <AgentTurnDurationSeparator durationMs={row.durationMs} />;
+      }
+
+      if (row.kind === "message") {
+        const isUserMessage = row.message.role === "user";
+        return (
+          <div className={cn(isUserMessage ? "pt-4" : undefined)}>
+            <AgentChatMessageCard
+              message={row.message}
+              sessionRole={session?.role ?? null}
+              sessionSelectedModel={session?.selectedModel ?? null}
+              sessionAgentColors={sessionAgentColors}
+            />
+          </div>
+        );
+      }
+
+      if (row.kind === "draft") {
+        return (
+          <article className="px-1 py-1 text-sm text-slate-700">
+            <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <StreamingRoleIcon className="size-3" />
+              {streamingRoleLabel} (streaming)
+              <LoaderCircle className="size-3 animate-spin" />
+            </header>
+            <p className="whitespace-pre-wrap leading-6 text-slate-700">{row.draftText}</p>
+          </article>
+        );
+      }
+
+      return (
+        <div className="flex items-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
+          <LoaderCircle className="size-3.5 animate-spin text-slate-500" />
+          <Brain className="size-3.5 text-violet-600" />
+          Agent is thinking...
+        </div>
+      );
+    },
+    [session, sessionAgentColors, StreamingRoleIcon, streamingRoleLabel],
+  );
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -65,7 +255,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       <div
         ref={messagesContainerRef}
         className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
-        onScroll={onMessagesScroll}
+        onScroll={handleMessagesContainerScroll}
       >
         {!session ? (
           <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
@@ -95,52 +285,46 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           </div>
         ) : null}
 
-        {session?.messages.map((message) => {
-          const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-          const turnDurationMs = assistantMeta?.durationMs;
-          const shouldShowTurnDuration =
-            message.role === "assistant" &&
-            typeof turnDurationMs === "number" &&
-            turnDurationMs > 0;
-          const isUserMessage = message.role === "user";
-          return (
-            <Fragment key={message.id}>
-              {shouldShowTurnDuration ? (
-                <AgentTurnDurationSeparator durationMs={turnDurationMs} />
-              ) : null}
-              <div className={cn(isUserMessage ? "pt-4" : undefined)}>
-                <AgentChatMessageCard
-                  message={message}
-                  sessionRole={session.role}
-                  sessionSelectedModel={session.selectedModel}
-                  sessionAgentColors={sessionAgentColors}
-                />
-              </div>
-            </Fragment>
-          );
-        })}
+        {session && canRenderVirtualRows ? (
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualRowsToRender.map(({ row, virtualItem }) => {
+              const isLastRow = virtualItem.index === virtualRows.length - 1;
 
-        {session?.draftAssistantText ? (
-          <article className="px-1 py-1 text-sm text-slate-700">
-            <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <StreamingRoleIcon className="size-3" />
-              {streamingRoleDisplay?.label ?? "Assistant"} (streaming)
-              <LoaderCircle className="size-3 animate-spin" />
-            </header>
-            <p className="whitespace-pre-wrap leading-6 text-slate-700">
-              {session.draftAssistantText}
-            </p>
-          </article>
+              return (
+                <div
+                  key={virtualItem.key}
+                  data-index={virtualItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    left: 0,
+                    paddingBottom: isLastRow ? 0 : AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
+                    position: "absolute",
+                    top: 0,
+                    transform: `translateY(${virtualItem.start}px)`,
+                    width: "100%",
+                  }}
+                >
+                  {renderVirtualRow(row)}
+                </div>
+              );
+            })}
+          </div>
         ) : null}
 
-        {session?.status === "running" &&
-        !session.draftAssistantText &&
-        session.pendingQuestions.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
-            <LoaderCircle className="size-3.5 animate-spin text-slate-500" />
-            <Brain className="size-3.5 text-violet-600" />
-            Agent is thinking...
-          </div>
+        {session && !canRenderVirtualRows ? (
+          hasRenderableSessionRows ? (
+            virtualRows.map((row) => <Fragment key={row.key}>{renderVirtualRow(row)}</Fragment>)
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+              Loading session history...
+            </div>
+          )
         ) : null}
 
         {session?.pendingQuestions.map((request) => (
@@ -154,14 +338,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         ))}
 
         {session?.pendingPermissions.map((request) => (
-          <AgentSessionPermissionCard
-            key={`${session.sessionId}:${request.requestId}`}
-            request={request}
-            disabled={!agentStudioReady}
-            isSubmitting={Boolean(isSubmittingPermissionByRequestId[request.requestId])}
-            errorMessage={permissionReplyErrorByRequestId[request.requestId]}
-            onReply={onReplyPermission}
-          />
+          <div key={`${session.sessionId}:${request.requestId}`} className="relative z-30">
+            <AgentSessionPermissionCard
+              request={request}
+              disabled={!agentStudioReady}
+              isSubmitting={Boolean(isSubmittingPermissionByRequestId[request.requestId])}
+              errorMessage={permissionReplyErrorByRequestId[request.requestId]}
+              onReply={onReplyPermission}
+            />
+          </div>
         ))}
       </div>
 

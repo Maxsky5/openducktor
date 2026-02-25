@@ -1,9 +1,7 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { isRole, isScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
+import { firstScenario, isRole, isScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 import { toContextStorageKey } from "./agents-page-utils";
 
 type QueryUpdate = Record<string, string | undefined>;
@@ -24,6 +22,140 @@ const readOptionalString = (value: unknown): string | undefined => {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+type AgentStudioNavigationState = {
+  taskId: string;
+  sessionId: string | null;
+  role: AgentRole | null;
+  scenario: AgentScenario | null;
+  autostart: boolean;
+  startPreference: "fresh" | "continue" | null;
+};
+
+const parseNavigationStateFromSearchParams = (
+  searchParams: URLSearchParams,
+): AgentStudioNavigationState => {
+  const roleValue = readOptionalString(searchParams.get("agent")) ?? null;
+  const scenarioValue = readOptionalString(searchParams.get("scenario")) ?? null;
+  const startValue = readOptionalString(searchParams.get("start")) ?? null;
+
+  return {
+    taskId: readOptionalString(searchParams.get("task")) ?? "",
+    sessionId: readOptionalString(searchParams.get("session")) ?? null,
+    role: isRole(roleValue) ? roleValue : null,
+    scenario: isScenario(scenarioValue) ? scenarioValue : null,
+    autostart: searchParams.get("autostart") === "1",
+    startPreference: startValue === "fresh" || startValue === "continue" ? startValue : null,
+  };
+};
+
+const buildSearchParamsFromNavigationState = (
+  searchParams: URLSearchParams,
+  navigation: AgentStudioNavigationState,
+): URLSearchParams => {
+  const next = new URLSearchParams(searchParams);
+  const managedKeys = ["task", "session", "agent", "scenario", "autostart", "start"];
+  for (const key of managedKeys) {
+    next.delete(key);
+  }
+
+  if (navigation.taskId) {
+    next.set("task", navigation.taskId);
+  }
+  if (navigation.sessionId) {
+    next.set("session", navigation.sessionId);
+  }
+  if (navigation.role) {
+    next.set("agent", navigation.role);
+  }
+  if (navigation.scenario) {
+    next.set("scenario", navigation.scenario);
+  }
+  if (navigation.autostart) {
+    next.set("autostart", "1");
+  }
+  if (navigation.startPreference) {
+    next.set("start", navigation.startPreference);
+  }
+
+  return next;
+};
+
+const toNavigationStateFromQueryUpdates = (
+  current: AgentStudioNavigationState,
+  updates: QueryUpdate,
+): AgentStudioNavigationState => {
+  let next = current;
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (key === "task") {
+      const taskId = readOptionalString(value) ?? "";
+      if (taskId !== next.taskId) {
+        next = { ...next, taskId };
+      }
+      continue;
+    }
+
+    if (key === "session") {
+      const sessionId = readOptionalString(value) ?? null;
+      if (sessionId !== next.sessionId) {
+        next = { ...next, sessionId };
+      }
+      continue;
+    }
+
+    if (key === "agent") {
+      const roleValue = readOptionalString(value) ?? null;
+      const role = isRole(roleValue) ? roleValue : null;
+      if (role !== next.role) {
+        next = { ...next, role };
+      }
+      continue;
+    }
+
+    if (key === "scenario") {
+      const scenarioValue = readOptionalString(value) ?? null;
+      const scenario = isScenario(scenarioValue) ? scenarioValue : null;
+      if (scenario !== next.scenario) {
+        next = { ...next, scenario };
+      }
+      continue;
+    }
+
+    if (key === "autostart") {
+      const autostart = value === "1";
+      if (autostart !== next.autostart) {
+        next = { ...next, autostart };
+      }
+      continue;
+    }
+
+    if (key === "start") {
+      const startValue = readOptionalString(value) ?? null;
+      const startPreference =
+        startValue === "fresh" || startValue === "continue" ? startValue : null;
+      if (startPreference !== next.startPreference) {
+        next = { ...next, startPreference };
+      }
+    }
+  }
+
+  return next;
+};
+
+const isSameNavigationState = (
+  left: AgentStudioNavigationState,
+  right: AgentStudioNavigationState,
+): boolean => {
+  return (
+    left.taskId === right.taskId &&
+    left.sessionId === right.sessionId &&
+    left.role === right.role &&
+    left.scenario === right.scenario &&
+    left.autostart === right.autostart &&
+    left.startPreference === right.startPreference
+  );
 };
 
 const parsePersistedContext = (raw: string): PersistedAgentStudioContext | null => {
@@ -57,51 +189,42 @@ type UseAgentStudioQuerySyncArgs = {
   activeRepo: string | null;
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
-  taskIdParam: string;
-  taskId: string;
-  role: AgentRole;
-  scenario: AgentScenario;
-  selectedSessionById: AgentSessionState | null;
-  activeSession: AgentSessionState | null;
-  isLoadingTasks: boolean;
-  tasks: TaskCard[];
 };
 
 export function useAgentStudioQuerySync({
   activeRepo,
   searchParams,
   setSearchParams,
-  taskIdParam,
-  taskId,
-  role,
-  scenario,
-  selectedSessionById,
-  activeSession,
-  isLoadingTasks,
-  tasks,
 }: UseAgentStudioQuerySyncArgs): {
+  taskIdParam: string;
+  sessionParam: string | null;
+  hasExplicitRoleParam: boolean;
+  roleFromQuery: AgentRole;
+  scenarioFromQuery: AgentScenario | undefined;
+  autostart: boolean;
+  sessionStartPreference: "fresh" | "continue" | null;
   updateQuery: (updates: QueryUpdate) => void;
 } {
   const restoredContextRepoRef = useRef<string | null>(null);
-
-  const updateQuery = useCallback(
-    (updates: QueryUpdate): void => {
-      const next = new URLSearchParams(searchParams);
-      for (const [key, value] of Object.entries(updates)) {
-        if (!value) {
-          next.delete(key);
-        } else {
-          next.set(key, value);
-        }
-      }
-
-      if (next.toString() === searchParams.toString()) {
-        return;
-      }
-      setSearchParams(next);
-    },
-    [searchParams, setSearchParams],
+  const syncingFromSearchParamsRef = useRef(false);
+  const [navigation, setNavigation] = useState<AgentStudioNavigationState>(() =>
+    parseNavigationStateFromSearchParams(searchParams),
   );
+
+  const updateQuery = useCallback((updates: QueryUpdate): void => {
+    setNavigation((current) => toNavigationStateFromQueryUpdates(current, updates));
+  }, []);
+
+  useEffect(() => {
+    const parsed = parseNavigationStateFromSearchParams(searchParams);
+    setNavigation((current) => {
+      if (isSameNavigationState(current, parsed)) {
+        return current;
+      }
+      syncingFromSearchParamsRef.current = true;
+      return parsed;
+    });
+  }, [searchParams]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -117,123 +240,84 @@ export function useAgentStudioQuerySync({
       return;
     }
 
-    const hasExplicitTaskContext =
-      Boolean(searchParams.get("task")) || Boolean(searchParams.get("session"));
-    if (hasExplicitTaskContext) {
-      restoredContextRepoRef.current = activeRepo;
-      return;
-    }
-
     restoredContextRepoRef.current = activeRepo;
-    const raw = globalThis.localStorage.getItem(toContextStorageKey(activeRepo));
-    if (!raw) {
-      return;
-    }
+    setNavigation((current) => {
+      if (current.taskId || current.sessionId) {
+        return current;
+      }
 
-    const persisted = parsePersistedContext(raw);
-    if (!persisted) {
-      return;
-    }
+      const raw = globalThis.localStorage.getItem(toContextStorageKey(activeRepo));
+      if (!raw) {
+        return current;
+      }
 
-    const persistedRole = persisted.role ?? null;
-    const persistedScenario = persisted.scenario ?? null;
-    const explicitRoleParam = searchParams.get("agent");
-    const explicitScenarioParam = searchParams.get("scenario");
-    const roleForScenarioValidation = isRole(explicitRoleParam) ? explicitRoleParam : persistedRole;
+      const persisted = parsePersistedContext(raw);
+      if (!persisted) {
+        return current;
+      }
 
-    const next = new URLSearchParams(searchParams);
-    if (persisted.taskId) {
-      next.set("task", persisted.taskId);
-    }
-    if (persistedRole && !explicitRoleParam) {
-      next.set("agent", persistedRole);
-    }
-    if (
-      persistedScenario &&
-      !explicitScenarioParam &&
-      (!roleForScenarioValidation ||
-        SCENARIOS_BY_ROLE[roleForScenarioValidation].includes(persistedScenario))
-    ) {
-      next.set("scenario", persistedScenario);
-    }
-    if (persisted.sessionId) {
-      next.set("session", persisted.sessionId);
-    }
+      const role = current.role ?? persisted.role ?? null;
+      const scenario = (() => {
+        if (current.scenario) {
+          return current.scenario;
+        }
+        if (!persisted.scenario) {
+          return null;
+        }
+        if (!role) {
+          return persisted.scenario;
+        }
+        return SCENARIOS_BY_ROLE[role].includes(persisted.scenario) ? persisted.scenario : null;
+      })();
 
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
-  }, [activeRepo, searchParams, setSearchParams]);
+      return {
+        ...current,
+        taskId: current.taskId || persisted.taskId || "",
+        sessionId: current.sessionId ?? persisted.sessionId ?? null,
+        role,
+        scenario,
+      };
+    });
+  }, [activeRepo]);
 
   useEffect(() => {
     if (!activeRepo || restoredContextRepoRef.current !== activeRepo) {
       return;
     }
+    const roleForContext = navigation.role ?? "spec";
+    const scenarioForContext = navigation.scenario ?? firstScenario(roleForContext);
     const payload = {
-      taskId: taskId || undefined,
-      role,
-      scenario,
-      sessionId: activeSession?.sessionId,
+      taskId: navigation.taskId || undefined,
+      role: roleForContext,
+      scenario: scenarioForContext,
+      sessionId: navigation.sessionId || undefined,
     };
     globalThis.localStorage.setItem(toContextStorageKey(activeRepo), JSON.stringify(payload));
-  }, [activeRepo, activeSession?.sessionId, role, scenario, taskId]);
+  }, [activeRepo, navigation.role, navigation.scenario, navigation.sessionId, navigation.taskId]);
 
   useEffect(() => {
-    if (isLoadingTasks) {
+    if (syncingFromSearchParamsRef.current) {
+      syncingFromSearchParamsRef.current = false;
       return;
     }
-    if (!taskIdParam || selectedSessionById) {
+    const next = buildSearchParamsFromNavigationState(searchParams, navigation);
+    if (next.toString() === searchParams.toString()) {
       return;
     }
-    if (tasks.some((entry) => entry.id === taskIdParam)) {
-      return;
-    }
-    updateQuery({
-      task: undefined,
-      session: undefined,
-      agent: undefined,
-      scenario: undefined,
-      autostart: undefined,
-      start: undefined,
-    });
-  }, [isLoadingTasks, selectedSessionById, taskIdParam, tasks, updateQuery]);
+    setSearchParams(next, { replace: true });
+  }, [navigation, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (!selectedSessionById) {
-      return;
-    }
-    if (selectedSessionById.taskId === taskIdParam) {
-      return;
-    }
-    updateQuery({ task: selectedSessionById.taskId });
-  }, [selectedSessionById, taskIdParam, updateQuery]);
-
-  useEffect(() => {
-    if (!activeSession) {
-      return;
-    }
-
-    const updates: QueryUpdate = {};
-    if (searchParams.get("task") !== activeSession.taskId) {
-      updates.task = activeSession.taskId;
-    }
-    if (searchParams.get("session") !== activeSession.sessionId) {
-      updates.session = activeSession.sessionId;
-    }
-    if (searchParams.get("autostart")) {
-      updates.autostart = undefined;
-    }
-    if (searchParams.get("start")) {
-      updates.start = undefined;
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return;
-    }
-    updateQuery(updates);
-  }, [activeSession, searchParams, updateQuery]);
+  const hasExplicitRoleParam = navigation.role !== null;
+  const roleFromQuery: AgentRole = navigation.role ?? "spec";
 
   return {
+    taskIdParam: navigation.taskId,
+    sessionParam: navigation.sessionId,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    scenarioFromQuery: navigation.scenario ?? undefined,
+    autostart: navigation.autostart,
+    sessionStartPreference: navigation.startPreference,
     updateQuery,
   };
 }

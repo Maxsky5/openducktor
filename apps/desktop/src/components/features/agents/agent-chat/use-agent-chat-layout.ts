@@ -121,13 +121,37 @@ export const useAgentChatLayout = ({
     }
     container.scrollTo({
       top: container.scrollHeight,
-      behavior: "smooth",
+      behavior: "auto",
     });
   }, [isPinnedToBottom, scrollTrigger]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Session identity reset should repin to bottom.
   useEffect(() => {
     setIsPinnedToBottom(true);
+
+    const scrollToBottom = (): void => {
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "auto",
+      });
+    };
+
+    scrollToBottom();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
   }, [activeSessionId]);
 
   return {

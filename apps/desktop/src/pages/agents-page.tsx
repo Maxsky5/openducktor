@@ -1,4 +1,4 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -10,7 +10,8 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
-import { firstScenario, isRole, isScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
+import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
+import { resolveAgentStudioActiveSession, resolveAgentStudioTaskId } from "./agents-page-selection";
 import { buildLatestSessionByTaskMap } from "./agents-page-session-tabs";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
@@ -40,26 +41,30 @@ export function AgentsPage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
 
-  const taskIdParam = searchParams.get("task") ?? "";
-  const sessionParam = searchParams.get("session");
-  const roleParam = searchParams.get("agent");
-  const hasExplicitRoleParam = isRole(roleParam);
-  const roleFromQuery: AgentRole = hasExplicitRoleParam ? roleParam : "spec";
-  const scenarioParam = searchParams.get("scenario");
-  const scenarioFromQuery: AgentScenario | undefined = isScenario(scenarioParam)
-    ? scenarioParam
-    : undefined;
-  const autostart = searchParams.get("autostart") === "1";
-  const startParam = searchParams.get("start");
-  const sessionStartPreference =
-    startParam === "fresh" || startParam === "continue" ? startParam : null;
+  const {
+    taskIdParam,
+    sessionParam,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    scenarioFromQuery,
+    autostart,
+    sessionStartPreference,
+    updateQuery,
+  } = useAgentStudioQuerySync({
+    activeRepo,
+    searchParams,
+    setSearchParams,
+  });
 
   const selectedSessionById = useMemo(
     () => sessions.find((entry) => entry.sessionId === sessionParam) ?? null,
     [sessionParam, sessions],
   );
 
-  const taskId = selectedSessionById?.taskId ?? taskIdParam;
+  const taskId = resolveAgentStudioTaskId({
+    taskIdParam,
+    selectedSessionById,
+  });
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === taskId) ?? null,
     [taskId, tasks],
@@ -80,28 +85,14 @@ export function AgentsPage(): ReactElement {
   }, [sessions, taskId]);
 
   const activeSession = useMemo(() => {
-    if (selectedSessionById?.taskId === taskId) {
-      return selectedSessionById;
-    }
-    if (sessionParam) {
-      return null;
-    }
-    if (sessionStartPreference === "fresh" && hasExplicitRoleParam) {
-      return null;
-    }
-    if (hasExplicitRoleParam) {
-      return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;
-    }
-    return sessionsForTask[0] ?? null;
-  }, [
-    hasExplicitRoleParam,
-    roleFromQuery,
-    selectedSessionById,
-    sessionStartPreference,
-    sessionParam,
-    sessionsForTask,
-    taskId,
-  ]);
+    return resolveAgentStudioActiveSession({
+      sessionsForTask,
+      sessionParam,
+      hasExplicitRoleParam,
+      roleFromQuery,
+      sessionStartPreference,
+    });
+  }, [hasExplicitRoleParam, roleFromQuery, sessionStartPreference, sessionParam, sessionsForTask]);
 
   const role: AgentRole = roleFromQuery;
   const scenarios = SCENARIOS_BY_ROLE[role];
@@ -125,20 +116,6 @@ export function AgentsPage(): ReactElement {
 
   const contextSessions = sessionsForTask;
   const sessionByTaskId = useMemo(() => buildLatestSessionByTaskMap(sessions), [sessions]);
-
-  const { updateQuery } = useAgentStudioQuerySync({
-    activeRepo,
-    searchParams,
-    setSearchParams,
-    taskIdParam,
-    taskId,
-    role,
-    scenario,
-    selectedSessionById,
-    activeSession,
-    isLoadingTasks,
-    tasks,
-  });
 
   const clearComposerInput = useCallback((): void => {
     setInput("");
@@ -175,14 +152,88 @@ export function AgentsPage(): ReactElement {
     : false;
 
   useEffect(() => {
-    if (!sessionParam || selectedSessionById) {
+    if (isLoadingTasks) {
+      return;
+    }
+    if (!taskIdParam || selectedSessionById) {
+      return;
+    }
+    if (tasks.some((entry) => entry.id === taskIdParam)) {
+      return;
+    }
+    updateQuery({
+      task: undefined,
+      session: undefined,
+      agent: undefined,
+      scenario: undefined,
+      autostart: undefined,
+      start: undefined,
+    });
+  }, [isLoadingTasks, selectedSessionById, taskIdParam, tasks, updateQuery]);
+
+  useEffect(() => {
+    if (!selectedSessionById || taskIdParam) {
+      return;
+    }
+    updateQuery({ task: selectedSessionById.taskId });
+  }, [selectedSessionById, taskIdParam, updateQuery]);
+
+  useEffect(() => {
+    if (!sessionParam) {
+      return;
+    }
+    if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
+      updateQuery({ session: undefined });
       return;
     }
     if (!taskId || !isActiveTaskHydrated) {
       return;
     }
+    if (selectedSessionById && selectedSessionById.taskId === taskId) {
+      return;
+    }
     updateQuery({ session: undefined });
   }, [isActiveTaskHydrated, selectedSessionById, sessionParam, taskId, updateQuery]);
+
+  useEffect(() => {
+    if (!activeSession) {
+      return;
+    }
+
+    const updates: Record<string, string | undefined> = {};
+    if (taskIdParam !== activeSession.taskId) {
+      updates.task = activeSession.taskId;
+    }
+    if (sessionParam !== activeSession.sessionId) {
+      updates.session = activeSession.sessionId;
+    }
+    if (roleFromQuery !== activeSession.role) {
+      updates.agent = activeSession.role;
+    }
+    if (scenarioFromQuery !== activeSession.scenario) {
+      updates.scenario = activeSession.scenario;
+    }
+    if (autostart) {
+      updates.autostart = undefined;
+    }
+    if (sessionStartPreference) {
+      updates.start = undefined;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return;
+    }
+    updateQuery(updates);
+  }, [
+    activeSession,
+    autostart,
+    roleFromQuery,
+    scenarioFromQuery,
+    sessionParam,
+    sessionStartPreference,
+    taskIdParam,
+    updateQuery,
+  ]);
 
   const { repoSettings } = useAgentStudioRepoSettings({
     activeRepo,

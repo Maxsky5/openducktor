@@ -12,7 +12,6 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioTaskTabs>[0];
-type HookState = ReturnType<typeof useAgentStudioTaskTabs>;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "clear" | "key"> & {
   readonly length: number;
@@ -133,7 +132,10 @@ describe("useAgentStudioTaskTabs", () => {
       expect(lastUpdate).toEqual({
         task: "task-2",
         session: "session-2",
+        agent: "spec",
+        scenario: "spec_initial",
         autostart: undefined,
+        start: undefined,
       });
 
       await harness.unmount();

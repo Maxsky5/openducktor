@@ -32,6 +32,13 @@ describe("runtime schemas", () => {
     expect(parsed.documentSummary.spec.has).toBe(false);
     expect(parsed.documentSummary.plan.has).toBe(false);
     expect(parsed.documentSummary.qaReport.has).toBe(false);
+    expect(parsed.documentSummary.qaReport.verdict).toBe("not_reviewed");
+    expect(parsed.agentWorkflows).toEqual({
+      spec: { required: false, canSkip: true, available: false, completed: false },
+      planner: { required: false, canSkip: true, available: false, completed: false },
+      builder: { required: true, canSkip: false, available: false, completed: false },
+      qa: { required: false, canSkip: true, available: false, completed: false },
+    });
   });
 
   test("task card coerces unsupported issue types to task", () => {
@@ -61,7 +68,17 @@ describe("runtime schemas", () => {
       documentSummary: {
         spec: { has: true, updatedAt: "2026-02-20T12:00:00.000Z" },
         plan: { has: false, updatedAt: null },
-        qaReport: { has: true, updatedAt: "2026-02-20T13:00:00.000Z" },
+        qaReport: {
+          has: true,
+          updatedAt: "2026-02-20T13:00:00.000Z",
+          verdict: "approved",
+        },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: false },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
       },
       updatedAt: "2026-02-20T13:00:00.000Z",
       createdAt: "2026-02-20T12:00:00.000Z",
@@ -71,6 +88,8 @@ describe("runtime schemas", () => {
     expect(parsed.documentSummary.spec.updatedAt).toBe("2026-02-20T12:00:00.000Z");
     expect(parsed.documentSummary.plan.updatedAt).toBeUndefined();
     expect(parsed.documentSummary.qaReport.has).toBe(true);
+    expect(parsed.documentSummary.qaReport.verdict).toBe("approved");
+    expect(parsed.agentWorkflows.spec.completed).toBe(true);
   });
 
   test("permission_required event accepts null command", () => {
