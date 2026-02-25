@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
@@ -56,18 +56,6 @@ type CreateLoadAgentSessionsArgs = {
   ) => Promise<void>;
 };
 
-// Module-level cache for task documents (spec, plan, QA) - persists across session loads
-const taskDocumentsCache = new Map<
-  string,
-  {
-    spec: Promise<string> | null;
-    plan: Promise<string> | null;
-    qa: Promise<string> | null;
-  }
->();
-
-const getCacheKey = (repoPath: string, taskId: string): string => `${repoPath}:${taskId}`;
-
 export const createLoadAgentSessions = ({
   activeRepo,
   adapter,
@@ -122,84 +110,6 @@ export const createLoadAgentSessions = ({
           },
         },
       );
-    };
-
-    // Lazy-load task documents with caching - used when session is actually selected
-    const _loadTaskDocumentsWithCache = async (
-      repoPath: string,
-      taskId: string,
-    ): Promise<[string, string, string]> => {
-      const cacheKey = getCacheKey(repoPath, taskId);
-      let cacheEntry = taskDocumentsCache.get(cacheKey);
-      if (!cacheEntry) {
-        cacheEntry = {
-          spec: null,
-          plan: null,
-          qa: null,
-        };
-        taskDocumentsCache.set(cacheKey, cacheEntry);
-      }
-
-      const fetchPromises: Promise<void>[] = [];
-
-      if (!cacheEntry.spec) {
-        const specPromise = captureOrchestratorFallback(
-          "load-sessions-load-prelude-document",
-          async () => {
-            const spec = await host.specGet(repoPath, taskId);
-            return spec.markdown;
-          },
-          {
-            tags: { repoPath, taskId, document: "spec" },
-            logLevel: "warn",
-            fallback: () => "",
-          },
-        );
-        cacheEntry.spec = specPromise;
-        fetchPromises.push(specPromise.then(() => {}));
-      }
-
-      if (!cacheEntry.plan) {
-        const planPromise = captureOrchestratorFallback(
-          "load-sessions-load-prelude-document",
-          async () => {
-            const plan = await host.planGet(repoPath, taskId);
-            return plan.markdown;
-          },
-          {
-            tags: { repoPath, taskId, document: "plan" },
-            logLevel: "warn",
-            fallback: () => "",
-          },
-        );
-        cacheEntry.plan = planPromise;
-        fetchPromises.push(planPromise.then(() => {}));
-      }
-
-      if (!cacheEntry.qa) {
-        const qaPromise = captureOrchestratorFallback(
-          "load-sessions-load-prelude-document",
-          async () => {
-            const qa = await host.qaGetReport(repoPath, taskId);
-            return qa.markdown;
-          },
-          {
-            tags: { repoPath, taskId, document: "qa" },
-            logLevel: "warn",
-            fallback: () => "",
-          },
-        );
-        cacheEntry.qa = qaPromise;
-        fetchPromises.push(qaPromise.then(() => {}));
-      }
-
-      await Promise.all(fetchPromises);
-
-      const specResult = await cacheEntry.spec!;
-      const planResult = await cacheEntry.plan!;
-      const qaResult = await cacheEntry.qa!;
-
-      return [specResult, planResult, qaResult];
     };
 
     const persisted = await host.agentSessionsList(repoPath, taskId);
@@ -330,6 +240,34 @@ export const createLoadAgentSessions = ({
           },
         ];
 
+        const task = taskRef.current.find((entry) => entry.id === record.taskId);
+        const preludeMessages = task
+          ? [
+              ...basicPreludeMessages,
+              {
+                id: `history:system-prompt:${record.sessionId}`,
+                role: "system" as const,
+                content: `System prompt:\n\n${buildAgentSystemPrompt({
+                  role: record.role,
+                  scenario: record.scenario,
+                  task: {
+                    taskId: task.id,
+                    title: task.title,
+                    issueType: task.issueType,
+                    status: task.status,
+                    qaRequired: task.aiReviewEnabled,
+                    description: task.description,
+                    acceptanceCriteria: task.acceptanceCriteria,
+                    specMarkdown: "",
+                    planMarkdown: "",
+                    latestQaReportMarkdown: "",
+                  },
+                })}`,
+                timestamp: record.startedAt,
+              },
+            ]
+          : basicPreludeMessages;
+
         if (isStaleRepoOperation()) {
           return;
         }
@@ -359,7 +297,6 @@ export const createLoadAgentSessions = ({
           return;
         }
 
-
         updateSession(
           record.sessionId,
           (current) => ({
@@ -367,7 +304,7 @@ export const createLoadAgentSessions = ({
             baseUrl,
             workingDirectory,
             messages: [
-              ...basicPreludeMessages,
+              ...preludeMessages,
               ...historyToChatMessages(historyResult.history, {
                 role: record.role,
                 selectedModel: normalizePersistedSelection(record.selectedModel),
