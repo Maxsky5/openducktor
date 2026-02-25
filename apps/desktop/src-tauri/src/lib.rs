@@ -78,6 +78,16 @@ fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
     result.map_err(|error| format!("{error:#}"))
 }
 
+async fn run_service_blocking<T, F>(operation_name: &'static str, operation: F) -> anyhow::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> anyhow::Result<T> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(operation)
+        .await
+        .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
+}
+
 fn extend_runtime_errors_with_startup(
     mut check: host_domain::RuntimeCheck,
     startup_errors: &[String],
@@ -532,12 +542,10 @@ async fn build_start(
 ) -> Result<RunSummary, String> {
     let service = state.service.clone();
     let emitter = run_emitter(app);
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    let result = run_service_blocking("build_start", move || {
         service.build_start(&repo_path, &task_id, emitter)
     })
-    .await
-    .map_err(|error| anyhow!("build_start worker join failure: {error}"))
-    .and_then(|output| output);
+    .await;
     as_error(result)
 }
 
@@ -670,12 +678,10 @@ async fn opencode_runtime_start(
     role: String,
 ) -> Result<AgentRuntimeSummary, String> {
     let service = state.service.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    let result = run_service_blocking("opencode_runtime_start", move || {
         service.opencode_runtime_start(&repo_path, &task_id, &role)
     })
-    .await
-    .map_err(|error| anyhow!("opencode_runtime_start worker join failure: {error}"))
-    .and_then(|output| output);
+    .await;
     as_error(result)
 }
 
@@ -698,12 +704,10 @@ async fn opencode_repo_runtime_ensure(
     repo_path: String,
 ) -> Result<AgentRuntimeSummary, String> {
     let service = state.service.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    let result = run_service_blocking("opencode_repo_runtime_ensure", move || {
         service.opencode_repo_runtime_ensure(&repo_path)
     })
-    .await
-    .map_err(|error| anyhow!("opencode_repo_runtime_ensure worker join failure: {error}"))
-    .and_then(|output| output);
+    .await;
     as_error(result)
 }
 
@@ -890,5 +894,25 @@ mod tests {
             updated.errors,
             vec!["runtime issue".to_string(), "startup warning".to_string()]
         );
+    }
+
+    #[test]
+    fn run_service_blocking_propagates_operation_error() {
+        let result = tauri::async_runtime::block_on(run_service_blocking(
+            "test-op",
+            || -> anyhow::Result<()> { Err(anyhow!("service failure")) },
+        ));
+        let error = result.expect_err("service error should propagate");
+        assert!(error.to_string().contains("service failure"));
+    }
+
+    #[test]
+    fn run_service_blocking_maps_join_failures() {
+        let result = tauri::async_runtime::block_on(run_service_blocking(
+            "test-join",
+            || -> anyhow::Result<()> { panic!("simulated join panic") },
+        ));
+        let error = result.expect_err("panic in worker should map to join failure");
+        assert!(error.to_string().contains("test-join worker join failure"));
     }
 }

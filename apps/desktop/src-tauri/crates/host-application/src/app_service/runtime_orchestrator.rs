@@ -10,7 +10,6 @@ use host_infra_system::{
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
 use uuid::Uuid;
 
 impl AppService {
@@ -97,14 +96,57 @@ impl AppService {
                 return Err(error).context("Failed tracking spawned OpenCode workspace runtime");
             }
         };
-        if let Err(error) =
-            wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
-        {
-            terminate_child_process(&mut child);
-            return Err(error).with_context(|| {
-                format!("OpenCode workspace runtime failed to start for {repo_path}")
-            });
-        }
+        let startup_policy = self.opencode_startup_readiness_policy();
+        let startup_cancel_epoch = self.startup_cancel_epoch();
+        let startup_cancel_snapshot = self.startup_cancel_snapshot();
+        self.emit_opencode_startup_event(
+            "startup_wait_begin",
+            "workspace_runtime",
+            repo_path,
+            Some(Self::WORKSPACE_RUNTIME_TASK_ID),
+            Self::WORKSPACE_RUNTIME_ROLE,
+            port,
+            Some(startup_policy),
+            None,
+            None,
+        );
+        let startup_report = match wait_for_local_server_with_process(
+            &mut child,
+            port,
+            startup_policy,
+            &startup_cancel_epoch,
+            startup_cancel_snapshot,
+        ) {
+            Ok(report) => report,
+            Err(error) => {
+                self.emit_opencode_startup_event(
+                    "startup_failed",
+                    "workspace_runtime",
+                    repo_path,
+                    Some(Self::WORKSPACE_RUNTIME_TASK_ID),
+                    Self::WORKSPACE_RUNTIME_ROLE,
+                    port,
+                    Some(startup_policy),
+                    Some(error.report),
+                    Some(error.reason),
+                );
+                terminate_child_process(&mut child);
+                return Err(anyhow!(error)).with_context(|| {
+                    format!("OpenCode workspace runtime failed to start for {repo_path}")
+                });
+            }
+        };
+        self.emit_opencode_startup_event(
+            "startup_ready",
+            "workspace_runtime",
+            repo_path,
+            Some(Self::WORKSPACE_RUNTIME_TASK_ID),
+            Self::WORKSPACE_RUNTIME_ROLE,
+            port,
+            Some(startup_policy),
+            Some(startup_report),
+            None,
+        );
 
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let summary = AgentRuntimeSummary {
@@ -286,25 +328,69 @@ impl AppService {
                 return Err(error).context("Failed tracking spawned OpenCode agent runtime");
             }
         };
-        if let Err(error) =
-            wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
-        {
-            terminate_child_process(&mut child);
-            let startup_context = format!("OpenCode runtime failed to start for task {task_id}");
-            if let (Some(repo), Some(worktree)) = (
-                cleanup_repo_path.as_deref(),
-                cleanup_worktree_path.as_deref(),
-            ) {
-                if let Err(cleanup_error) =
-                    Self::remove_runtime_worktree(Path::new(repo), Path::new(worktree))
-                {
-                    return Err(anyhow!(
-                        "{startup_context}\nAlso failed to remove QA worktree: {cleanup_error}"
-                    ));
+        let startup_policy = self.opencode_startup_readiness_policy();
+        let startup_cancel_epoch = self.startup_cancel_epoch();
+        let startup_cancel_snapshot = self.startup_cancel_snapshot();
+        self.emit_opencode_startup_event(
+            "startup_wait_begin",
+            "agent_runtime",
+            repo_path,
+            Some(task_id),
+            role,
+            port,
+            Some(startup_policy),
+            None,
+            None,
+        );
+        let startup_report = match wait_for_local_server_with_process(
+            &mut child,
+            port,
+            startup_policy,
+            &startup_cancel_epoch,
+            startup_cancel_snapshot,
+        ) {
+            Ok(report) => report,
+            Err(error) => {
+                self.emit_opencode_startup_event(
+                    "startup_failed",
+                    "agent_runtime",
+                    repo_path,
+                    Some(task_id),
+                    role,
+                    port,
+                    Some(startup_policy),
+                    Some(error.report),
+                    Some(error.reason),
+                );
+                terminate_child_process(&mut child);
+                let startup_context =
+                    format!("OpenCode runtime failed to start for task {task_id}");
+                if let (Some(repo), Some(worktree)) = (
+                    cleanup_repo_path.as_deref(),
+                    cleanup_worktree_path.as_deref(),
+                ) {
+                    if let Err(cleanup_error) =
+                        Self::remove_runtime_worktree(Path::new(repo), Path::new(worktree))
+                    {
+                        return Err(anyhow!(
+                            "{startup_context}\nAlso failed to remove QA worktree: {cleanup_error}"
+                        ));
+                    }
                 }
+                return Err(anyhow!(error)).with_context(|| startup_context);
             }
-            return Err(error).with_context(|| startup_context);
-        }
+        };
+        self.emit_opencode_startup_event(
+            "startup_ready",
+            "agent_runtime",
+            repo_path,
+            Some(task_id),
+            role,
+            port,
+            Some(startup_policy),
+            Some(startup_report),
+            None,
+        );
 
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let summary = AgentRuntimeSummary {
@@ -353,6 +439,8 @@ impl AppService {
     }
 
     pub fn shutdown(&self) -> Result<()> {
+        self.startup_cancel_epoch
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut cleanup_errors = Vec::new();
         if let Err(error) = self.terminate_pending_opencode_processes() {
             cleanup_errors.push(format!(

@@ -10,7 +10,6 @@ use host_infra_system::{
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
 use uuid::Uuid;
 
 /// Action responded by user during build/run (for approve/deny/message flow).
@@ -152,14 +151,57 @@ impl AppService {
                 return Err(error).context("Failed tracking spawned OpenCode build process");
             }
         };
-        if let Err(error) =
-            wait_for_local_server_with_process(&mut child, port, Duration::from_secs(8))
-        {
-            terminate_child_process(&mut child);
-            return Err(error).with_context(|| {
-                format!("OpenCode build runtime failed to start for task {task_id}")
-            });
-        }
+        let startup_policy = self.opencode_startup_readiness_policy();
+        let startup_cancel_epoch = self.startup_cancel_epoch();
+        let startup_cancel_snapshot = self.startup_cancel_snapshot();
+        self.emit_opencode_startup_event(
+            "startup_wait_begin",
+            "build_runtime",
+            repo_path,
+            Some(task_id),
+            "build",
+            port,
+            Some(startup_policy),
+            None,
+            None,
+        );
+        let startup_report = match wait_for_local_server_with_process(
+            &mut child,
+            port,
+            startup_policy,
+            &startup_cancel_epoch,
+            startup_cancel_snapshot,
+        ) {
+            Ok(report) => report,
+            Err(error) => {
+                self.emit_opencode_startup_event(
+                    "startup_failed",
+                    "build_runtime",
+                    repo_path,
+                    Some(task_id),
+                    "build",
+                    port,
+                    Some(startup_policy),
+                    Some(error.report),
+                    Some(error.reason),
+                );
+                terminate_child_process(&mut child);
+                return Err(anyhow!(error)).with_context(|| {
+                    format!("OpenCode build runtime failed to start for task {task_id}")
+                });
+            }
+        };
+        self.emit_opencode_startup_event(
+            "startup_ready",
+            "build_runtime",
+            repo_path,
+            Some(task_id),
+            "build",
+            port,
+            Some(startup_policy),
+            Some(startup_report),
+            None,
+        );
 
         self.task_transition(
             repo_path,
@@ -310,7 +352,12 @@ impl AppService {
         Ok(true)
     }
 
-    pub fn build_cleanup(&self, run_id: &str, mode: CleanupMode, emitter: RunEmitter) -> Result<bool> {
+    pub fn build_cleanup(
+        &self,
+        run_id: &str,
+        mode: CleanupMode,
+        emitter: RunEmitter,
+    ) -> Result<bool> {
         let mut runs = self
             .runs
             .lock()
@@ -435,8 +482,8 @@ impl AppService {
 
 #[cfg(test)]
 mod tests {
-    use crate::app_service::test_support::{build_service_with_state, make_emitter};
     use crate::app_service::build_orchestrator::BuildResponseAction;
+    use crate::app_service::test_support::{build_service_with_state, make_emitter};
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -457,7 +504,12 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
 
         let error = service
-            .build_respond("missing-run", BuildResponseAction::Approve, None, make_emitter(events))
+            .build_respond(
+                "missing-run",
+                BuildResponseAction::Approve,
+                None,
+                make_emitter(events),
+            )
             .expect_err("responding to unknown run should fail");
 
         assert!(error.to_string().contains("Run not found: missing-run"));

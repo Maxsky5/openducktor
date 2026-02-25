@@ -6,8 +6,8 @@ mod worktree;
 
 pub use beads::{compute_repo_id, compute_repo_slug, resolve_central_beads_dir};
 pub use config::{
-    AgentDefaults, AgentModelDefault, AppConfigStore, GlobalConfig, HookSet, RepoConfig,
-    SchedulerConfig, SoftGuardrails,
+    AgentDefaults, AgentModelDefault, AppConfigStore, GlobalConfig, HookSet,
+    OpencodeStartupReadinessConfig, RepoConfig, SchedulerConfig, SoftGuardrails,
 };
 pub use git::GitCliPort;
 pub use process::{

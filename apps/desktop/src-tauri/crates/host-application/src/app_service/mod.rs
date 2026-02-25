@@ -11,6 +11,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::Child;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -29,21 +30,21 @@ pub(crate) use events::{emit_event, spawn_output_forwarder};
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, spawn_opencode_server, terminate_child_process,
-    terminate_process_by_pid, wait_for_local_server_with_process,
+    terminate_process_by_pid, wait_for_local_server_with_process, OpencodeStartupReadinessPolicy,
+    OpencodeStartupWaitReport, StartupCancelEpoch,
 };
 pub(crate) use workflow_rules::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
-    default_qa_required_for_issue_type,
-    derive_available_actions, normalize_issue_type, normalize_required_markdown,
-    normalize_subtask_plan_inputs, normalize_title_key, validate_parent_relationships_for_create,
-    validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
+    default_qa_required_for_issue_type, derive_available_actions, normalize_issue_type,
+    normalize_required_markdown, normalize_subtask_plan_inputs, normalize_title_key,
+    validate_parent_relationships_for_create, validate_parent_relationships_for_update,
+    validate_plan_subtask_rules, validate_transition,
 };
 
 #[cfg(test)]
 pub(crate) use opencode_runtime::{
-    build_opencode_config_content, default_mcp_workspace_root,
-    is_orphaned_opencode_server_process, parse_mcp_command_json, resolve_mcp_command,
-    wait_for_local_server,
+    build_opencode_config_content, default_mcp_workspace_root, is_orphaned_opencode_server_process,
+    parse_mcp_command_json, resolve_mcp_command, wait_for_local_server,
 };
 #[cfg(test)]
 pub(crate) use workflow_rules::allows_transition;
@@ -62,6 +63,7 @@ pub struct AppService {
     instance_pid: u32,
     initialized_repos: Arc<Mutex<HashSet<String>>>,
     runtime_check_cache: Arc<Mutex<Option<CachedRuntimeCheck>>>,
+    startup_cancel_epoch: StartupCancelEpoch,
 }
 
 pub(crate) struct TrackedOpencodeProcessGuard {
@@ -156,7 +158,9 @@ struct OpencodeProcessRegistryFile {
     instances: Vec<OpencodeProcessRegistryInstance>,
 }
 
-fn normalize_opencode_process_registry_instances(instances: &mut Vec<OpencodeProcessRegistryInstance>) {
+fn normalize_opencode_process_registry_instances(
+    instances: &mut Vec<OpencodeProcessRegistryInstance>,
+) {
     for instance in instances.iter_mut() {
         instance.child_pids.sort_unstable();
         instance.child_pids.dedup();
@@ -201,7 +205,12 @@ fn with_locked_opencode_process_registry<T>(
         .read(true)
         .write(true)
         .open(path)
-        .with_context(|| format!("Failed opening OpenCode process registry {}", path.display()))?;
+        .with_context(|| {
+            format!(
+                "Failed opening OpenCode process registry {}",
+                path.display()
+            )
+        })?;
     file.lock_exclusive().with_context(|| {
         format!(
             "Failed acquiring lock for OpenCode process registry {}",
@@ -210,8 +219,12 @@ fn with_locked_opencode_process_registry<T>(
     })?;
 
     let mut data = String::new();
-    file.read_to_string(&mut data)
-        .with_context(|| format!("Failed reading OpenCode process registry {}", path.display()))?;
+    file.read_to_string(&mut data).with_context(|| {
+        format!(
+            "Failed reading OpenCode process registry {}",
+            path.display()
+        )
+    })?;
 
     let mut parsed = if data.trim().is_empty() {
         OpencodeProcessRegistryFile::default()
@@ -230,14 +243,30 @@ fn with_locked_opencode_process_registry<T>(
 
     let payload = serde_json::to_string_pretty(&parsed)
         .context("Failed serializing OpenCode process registry payload")?;
-    file.set_len(0)
-        .with_context(|| format!("Failed truncating OpenCode process registry {}", path.display()))?;
-    file.seek(SeekFrom::Start(0))
-        .with_context(|| format!("Failed seeking OpenCode process registry {}", path.display()))?;
-    file.write_all(payload.as_bytes())
-        .with_context(|| format!("Failed writing OpenCode process registry {}", path.display()))?;
-    file.flush()
-        .with_context(|| format!("Failed flushing OpenCode process registry {}", path.display()))?;
+    file.set_len(0).with_context(|| {
+        format!(
+            "Failed truncating OpenCode process registry {}",
+            path.display()
+        )
+    })?;
+    file.seek(SeekFrom::Start(0)).with_context(|| {
+        format!(
+            "Failed seeking OpenCode process registry {}",
+            path.display()
+        )
+    })?;
+    file.write_all(payload.as_bytes()).with_context(|| {
+        format!(
+            "Failed writing OpenCode process registry {}",
+            path.display()
+        )
+    })?;
+    file.flush().with_context(|| {
+        format!(
+            "Failed flushing OpenCode process registry {}",
+            path.display()
+        )
+    })?;
 
     Ok(output)
 }
@@ -266,8 +295,7 @@ impl AppService {
         config_store: AppConfigStore,
         git_port: Arc<dyn GitPort>,
     ) -> Self {
-        let opencode_process_registry_path =
-            Self::opencode_process_registry_path(&config_store);
+        let opencode_process_registry_path = Self::opencode_process_registry_path(&config_store);
         let instance_pid = std::process::id();
         let service = Self {
             task_store,
@@ -280,6 +308,7 @@ impl AppService {
             instance_pid,
             initialized_repos: Arc::new(Mutex::new(HashSet::new())),
             runtime_check_cache: Arc::new(Mutex::new(None)),
+            startup_cancel_epoch: Arc::new(AtomicU64::new(0)),
         };
         if let Err(error) = service.reconcile_opencode_process_registry_on_startup() {
             eprintln!(
@@ -319,6 +348,67 @@ impl AppService {
         cache.insert(repo_key);
 
         Ok(())
+    }
+
+    pub(crate) fn opencode_startup_readiness_policy(&self) -> OpencodeStartupReadinessPolicy {
+        match self.config_store.opencode_startup_readiness() {
+            Ok(config) => OpencodeStartupReadinessPolicy::from_config(config),
+            Err(error) => {
+                eprintln!(
+                    "OpenDucktor warning: failed loading OpenCode startup readiness config; using defaults: {error:#}"
+                );
+                OpencodeStartupReadinessPolicy::default()
+            }
+        }
+    }
+
+    pub(crate) fn startup_cancel_epoch(&self) -> StartupCancelEpoch {
+        Arc::clone(&self.startup_cancel_epoch)
+    }
+
+    pub(crate) fn startup_cancel_snapshot(&self) -> u64 {
+        self.startup_cancel_epoch.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn emit_opencode_startup_event(
+        &self,
+        event: &str,
+        scope: &str,
+        repo_path: &str,
+        task_id: Option<&str>,
+        role: &str,
+        port: u16,
+        policy: Option<OpencodeStartupReadinessPolicy>,
+        report: Option<OpencodeStartupWaitReport>,
+        reason: Option<&str>,
+    ) {
+        let policy_payload = policy.map(|entry| {
+            serde_json::json!({
+                "timeoutMs": entry.timeout_ms(),
+                "connectTimeoutMs": entry.connect_timeout_ms(),
+                "initialRetryDelayMs": entry.initial_retry_delay_ms(),
+                "maxRetryDelayMs": entry.max_retry_delay_ms(),
+                "childCheckIntervalMs": entry.child_state_check_interval_ms(),
+            })
+        });
+        let report_payload = report.map(|entry| {
+            serde_json::json!({
+                "startupMs": entry.startup_ms(),
+                "attempts": entry.attempts(),
+            })
+        });
+        let payload = serde_json::json!({
+            "event": event,
+            "scope": scope,
+            "repoPath": repo_path,
+            "taskId": task_id,
+            "role": role,
+            "port": port,
+            "policy": policy_payload,
+            "report": report_payload,
+            "reason": reason,
+        });
+        eprintln!("OpenDucktor opencode-startup {payload}");
     }
 
     fn enrich_task(&self, task: TaskCard, all_tasks: &[TaskCard]) -> TaskCard {
@@ -494,23 +584,23 @@ impl AppService {
 
 #[cfg(test)]
 mod tests {
+    use super::build_orchestrator::{BuildResponseAction, CleanupMode};
     use super::{
         allows_transition, build_opencode_config_content, can_set_plan, can_set_spec_from_status,
-        default_mcp_workspace_root, derive_available_actions, normalize_required_markdown,
-        is_orphaned_opencode_server_process, normalize_subtask_plan_inputs,
-        parse_mcp_command_json, read_opencode_version, resolve_mcp_command,
-        resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
+        default_mcp_workspace_root, derive_available_actions, is_orphaned_opencode_server_process,
+        normalize_required_markdown, normalize_subtask_plan_inputs, parse_mcp_command_json,
+        read_opencode_version, resolve_mcp_command, resolve_opencode_binary_path,
+        terminate_child_process, terminate_process_by_pid, OpencodeStartupReadinessPolicy,
         validate_parent_relationships_for_create, validate_parent_relationships_for_update,
         validate_plan_subtask_rules, validate_transition, wait_for_local_server,
         wait_for_local_server_with_process, AppService,
     };
-    use super::build_orchestrator::{BuildResponseAction, CleanupMode};
     use anyhow::{anyhow, Context, Result};
     use host_domain::{
         AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
         GitPort, GitPushSummary, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
-        RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus,
-        TaskStore, UpdateTaskPatch,
+        RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata,
+        TaskStatus, TaskStore, UpdateTaskPatch,
     };
     use host_infra_system::{AppConfigStore, HookSet, RepoConfig};
     use serde_json::Value;
@@ -520,6 +610,7 @@ mod tests {
     use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, LazyLock, Mutex};
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -1723,6 +1814,16 @@ echo "bd-fake"
         assert!(result.is_err());
     }
 
+    fn test_startup_policy(timeout: Duration) -> OpencodeStartupReadinessPolicy {
+        OpencodeStartupReadinessPolicy {
+            timeout,
+            connect_timeout: Duration::from_millis(50),
+            initial_retry_delay: Duration::from_millis(10),
+            max_retry_delay: Duration::from_millis(50),
+            child_state_check_interval: Duration::from_millis(25),
+        }
+    }
+
     #[test]
     fn terminate_child_process_stops_background_process() {
         let mut child = Command::new("/bin/sh")
@@ -1748,9 +1849,71 @@ echo "bd-fake"
             .stderr(std::process::Stdio::piped())
             .spawn()
             .expect("spawn failing process");
-        let error = wait_for_local_server_with_process(&mut child, port, Duration::from_secs(2))
-            .expect_err("should report early process exit");
+        let cancel_epoch = Arc::new(AtomicU64::new(0));
+        let error = wait_for_local_server_with_process(
+            &mut child,
+            port,
+            test_startup_policy(Duration::from_secs(2)),
+            &cancel_epoch,
+            0,
+        )
+        .expect_err("should report early process exit");
         assert!(error.to_string().contains("startup failed"));
+        assert_eq!(error.reason, "child_exited");
+    }
+
+    #[test]
+    fn wait_for_local_server_with_process_times_out_when_child_stays_alive() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+        let port = listener.local_addr().expect("addr").port();
+        drop(listener);
+
+        let mut child = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg("sleep 5")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn sleeping process");
+        let cancel_epoch = Arc::new(AtomicU64::new(0));
+        let error = wait_for_local_server_with_process(
+            &mut child,
+            port,
+            test_startup_policy(Duration::from_millis(250)),
+            &cancel_epoch,
+            0,
+        )
+        .expect_err("should time out when child remains alive and port stays closed");
+        terminate_child_process(&mut child);
+        assert_eq!(error.reason, "timeout");
+    }
+
+    #[test]
+    fn wait_for_local_server_with_process_honors_cancellation_epoch() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+        let port = listener.local_addr().expect("addr").port();
+        drop(listener);
+
+        let mut child = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg("sleep 5")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn sleeping process");
+        let cancel_epoch = Arc::new(AtomicU64::new(1));
+        let snapshot = cancel_epoch.load(Ordering::SeqCst);
+        cancel_epoch.fetch_add(1, Ordering::SeqCst);
+        let error = wait_for_local_server_with_process(
+            &mut child,
+            port,
+            test_startup_policy(Duration::from_secs(2)),
+            &cancel_epoch,
+            snapshot,
+        )
+        .expect_err("should stop waiting when cancellation epoch changes");
+        terminate_child_process(&mut child);
+        assert_eq!(error.reason, "cancelled");
     }
 
     #[test]
@@ -2554,7 +2717,10 @@ echo "bd-fake"
         assert_eq!(plan.markdown, "# Epic Plan");
 
         let task_state = task_state.lock().expect("task lock poisoned");
-        assert_eq!(task_state.delete_calls, vec![("child-1".to_string(), false)]);
+        assert_eq!(
+            task_state.delete_calls,
+            vec![("child-1".to_string(), false)]
+        );
         assert_eq!(task_state.created_inputs.len(), 2);
         assert_eq!(task_state.created_inputs[0].title, "Build API");
         assert_eq!(
@@ -2593,7 +2759,10 @@ echo "bd-fake"
         assert_eq!(plan.markdown, "# Epic Plan");
 
         let task_state = task_state.lock().expect("task lock poisoned");
-        assert_eq!(task_state.delete_calls, vec![("child-1".to_string(), false)]);
+        assert_eq!(
+            task_state.delete_calls,
+            vec![("child-1".to_string(), false)]
+        );
         assert!(task_state.created_inputs.is_empty());
         assert!(task_state
             .updated_patches
@@ -3080,10 +3249,13 @@ echo "bd-fake"
             .opencode_repo_runtime_ensure(repo_path.as_str())
             .expect_err("post-start prune failure should bubble up");
         let message = error.to_string();
-        assert!(message.contains(
-            "Failed pruning stale runtimes while finalizing workspace runtime"
+        assert!(
+            message.contains("Failed pruning stale runtimes while finalizing workspace runtime")
+        );
+        assert!(wait_for_path_exists(
+            pid_file.as_path(),
+            Duration::from_secs(2)
         ));
-        assert!(wait_for_path_exists(pid_file.as_path(), Duration::from_secs(2)));
         let spawned_pid = fs::read_to_string(pid_file.as_path())?
             .trim()
             .parse::<i32>()
@@ -3530,9 +3702,7 @@ echo "bd-fake"
                     child: stale_child,
                     _opencode_process_guard: None,
                     cleanup_repo_path: Some("/tmp/non-existent-repo-for-prune".to_string()),
-                    cleanup_worktree_path: Some(
-                        "/tmp/non-existent-worktree-for-prune".to_string(),
-                    ),
+                    cleanup_worktree_path: Some("/tmp/non-existent-worktree-for-prune".to_string()),
                 },
             );
 
@@ -3603,7 +3773,11 @@ echo "bd-fake"
             emitter.clone()
         )?);
 
-        assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Success, emitter.clone())?);
+        assert!(service.build_cleanup(
+            run.run_id.as_str(),
+            CleanupMode::Success,
+            emitter.clone()
+        )?);
         assert!(service.runs_list(Some(repo_path.as_str()))?.is_empty());
 
         let state = task_state.lock().expect("task lock poisoned");
@@ -3692,7 +3866,12 @@ echo "bd-fake"
             Some("note"),
             emitter.clone()
         )?);
-        assert!(service.build_respond(run_id.as_str(), BuildResponseAction::Deny, None, emitter.clone())?);
+        assert!(service.build_respond(
+            run_id.as_str(),
+            BuildResponseAction::Deny,
+            None,
+            emitter.clone()
+        )?);
 
         assert!(service.build_stop(run_id.as_str(), emitter.clone())?);
         assert!(service.build_cleanup(run_id.as_str(), CleanupMode::Failure, emitter.clone())?);
@@ -3780,7 +3959,8 @@ echo "bd-fake"
         let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
         let emitter = make_emitter(events.clone());
         let run = service.build_start(repo_path.as_str(), "task-2", emitter.clone())?;
-        let cleaned = service.build_cleanup(run.run_id.as_str(), CleanupMode::Success, emitter.clone())?;
+        let cleaned =
+            service.build_cleanup(run.run_id.as_str(), CleanupMode::Success, emitter.clone())?;
         assert!(!cleaned, "post-hook failure should report false");
 
         let invalid_mode = service
@@ -4332,7 +4512,10 @@ echo "bd-fake"
             config_store,
         );
 
-        assert!(wait_for_process_exit(orphan_pid as i32, Duration::from_secs(2)));
+        assert!(wait_for_process_exit(
+            orphan_pid as i32,
+            Duration::from_secs(2)
+        ));
         assert!(super::read_opencode_process_registry(registry_path.as_path())?.is_empty());
 
         let _ = fs::remove_dir_all(root);
@@ -4357,7 +4540,10 @@ echo "bd-fake"
             .stderr(Stdio::null())
             .spawn()?;
 
-        assert!(wait_for_path_exists(pid_file.as_path(), Duration::from_secs(2)));
+        assert!(wait_for_path_exists(
+            pid_file.as_path(),
+            Duration::from_secs(2)
+        ));
         let pids = fs::read_to_string(pid_file.as_path())?;
         let mut parts = pids.split_whitespace();
         let live_parent_pid = parts
