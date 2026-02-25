@@ -51,26 +51,35 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
   });
 
   test("returns false for unsupported languages and failed lazy loaders", async () => {
+    const originalConsoleError = console.error;
+    const consoleError = mock((_message: string, _error?: unknown) => {});
     const registerLanguage = mock((_language: string, _grammar: unknown) => {});
     const loadYamlLanguage = mock(async () => {
       throw new Error("bad grammar module");
     });
 
-    const registry = createMarkdownSyntaxLanguageRegistry({
-      languageAliases: {},
-      defaultLanguages: {},
-      lazyLanguageLoaders: {
-        yaml: loadYamlLanguage,
-      },
-      registerLanguage,
-    });
+    console.error = consoleError as typeof console.error;
+    try {
+      const registry = createMarkdownSyntaxLanguageRegistry({
+        languageAliases: {},
+        defaultLanguages: {},
+        lazyLanguageLoaders: {
+          yaml: loadYamlLanguage,
+        },
+        registerLanguage,
+      });
 
-    const unsupportedResult = await registry.ensureLanguageRegistered("rust");
-    const failedResult = await registry.ensureLanguageRegistered("yaml");
+      const unsupportedResult = await registry.ensureLanguageRegistered("rust");
+      const failedResult = await registry.ensureLanguageRegistered("yaml");
 
-    expect(unsupportedResult).toBe(false);
-    expect(failedResult).toBe(false);
-    expect(loadYamlLanguage).toHaveBeenCalledTimes(1);
-    expect(registerLanguage).not.toHaveBeenCalled();
+      expect(unsupportedResult).toBe(false);
+      expect(failedResult).toBe(false);
+      expect(loadYamlLanguage).toHaveBeenCalledTimes(1);
+      expect(registerLanguage).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError.mock.calls[0]?.[0]).toContain("yaml");
+    } finally {
+      console.error = originalConsoleError;
+    }
   });
 });

@@ -74,7 +74,10 @@ export function createMarkdownSyntaxLanguageRegistry({
         registerNormalizedLanguage(normalizedLanguage, module.default);
         return true;
       })
-      .catch(() => false)
+      .catch((error) => {
+        console.error(`Failed to lazy-load language grammar for '${normalizedLanguage}':`, error);
+        return false;
+      })
       .finally(() => {
         pendingLanguageRegistrations.delete(normalizedLanguage);
       });

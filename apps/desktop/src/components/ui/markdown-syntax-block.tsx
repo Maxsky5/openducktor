@@ -70,7 +70,11 @@ export default function MarkdownSyntaxBlock({
     markdownSyntaxLanguageRegistry.isLanguageRegistered(normalizedLanguage);
 
   useEffect(() => {
-    if (!isSupportedLanguage || isLanguageRegistered) {
+    const shouldRegisterLanguage =
+      markdownSyntaxLanguageRegistry.isLanguageSupported(normalizedLanguage) &&
+      !markdownSyntaxLanguageRegistry.isLanguageRegistered(normalizedLanguage);
+
+    if (!shouldRegisterLanguage) {
       return;
     }
 
@@ -84,15 +88,12 @@ export default function MarkdownSyntaxBlock({
         }
 
         setLanguageRegistrationVersion((version) => version + 1);
-      })
-      .catch(() => {
-        // Keep rendering fallback <pre> when dynamic language registration fails.
       });
 
     return () => {
       isActive = false;
     };
-  }, [isLanguageRegistered, isSupportedLanguage, normalizedLanguage]);
+  }, [normalizedLanguage]);
 
   if (!isSupportedLanguage || !isLanguageRegistered) {
     return (
