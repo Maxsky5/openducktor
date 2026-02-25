@@ -15,7 +15,7 @@ export function AgentChat({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {header}
-      <div className="min-h-0 flex-1 bg-slate-50/50">
+      <div className="min-h-0 flex-1 bg-slate-100">
         <div className="flex h-full min-h-0 flex-col">
           <MemoizedAgentChatThread model={model.thread} />
           <AgentChatComposer model={model.composer} />

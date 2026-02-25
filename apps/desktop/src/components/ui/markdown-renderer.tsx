@@ -32,7 +32,7 @@ const SHARED_COMPONENTS: Components = {
       target="_blank"
       rel="noreferrer noopener"
       className={cn(
-        "text-sky-700 underline underline-offset-2 transition hover:text-sky-600",
+        "text-black underline decoration-slate-500 underline-offset-2 transition hover:decoration-slate-700",
         className,
       )}
     />
@@ -72,24 +72,27 @@ const MARKDOWN_COMPONENTS: Record<MarkdownRendererVariant, Components> = {
 
 const MARKDOWN_CLASSES: Record<MarkdownRendererVariant, string> = {
   compact: cn(
-    "markdown-body prose prose-slate prose-sm max-w-none text-[13px] leading-relaxed text-slate-600",
-    "prose-headings:my-1 prose-headings:text-sm prose-headings:font-semibold prose-headings:text-slate-800",
+    "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-black",
+    "prose-headings:my-1 prose-headings:text-sm prose-headings:font-semibold prose-headings:text-black",
     "prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0",
-    "prose-code:text-[11px] prose-code:text-slate-700",
+    "prose-strong:text-black prose-em:text-black prose-li:text-black",
+    "prose-hr:border-slate-300 prose-th:border-slate-300 prose-td:border-slate-300",
+    "prose-code:rounded-md prose-code:border prose-code:border-slate-300 prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[11px] prose-code:font-medium prose-code:text-black",
     "prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:my-2 prose-pre:text-[11px] prose-pre:text-slate-800",
-    "prose-blockquote:my-2 prose-blockquote:border-slate-300 prose-blockquote:text-slate-600",
+    "prose-pre:my-2 prose-pre:text-[11px] prose-pre:text-black",
+    "prose-blockquote:my-2 prose-blockquote:border-slate-300 prose-blockquote:bg-slate-50 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-black",
   ),
   document: cn(
-    "markdown-body prose prose-slate max-w-none text-sm leading-relaxed text-slate-700",
-    "prose-headings:text-slate-900 prose-headings:font-semibold",
+    "markdown-body prose max-w-none text-sm leading-relaxed text-black",
+    "prose-headings:text-black prose-headings:font-semibold",
     "prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5",
-    "prose-hr:my-4 prose-hr:border-slate-200",
-    "prose-table:my-3 prose-th:border-slate-200 prose-td:border-slate-200",
-    "prose-code:rounded prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:text-[12px] prose-code:font-medium prose-code:text-slate-800",
+    "prose-strong:text-black prose-em:text-black prose-li:text-black",
+    "prose-hr:my-4 prose-hr:border-slate-300",
+    "prose-table:my-3 prose-th:border-slate-300 prose-td:border-slate-300",
+    "prose-code:rounded-md prose-code:border prose-code:border-slate-300 prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-code:font-medium prose-code:text-black",
     "prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-slate-800",
-    "prose-blockquote:border-sky-200 prose-blockquote:bg-sky-50/40 prose-blockquote:px-3 prose-blockquote:py-1",
+    "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-black",
+    "prose-blockquote:border-slate-300 prose-blockquote:bg-slate-50 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-black",
   ),
 };
 

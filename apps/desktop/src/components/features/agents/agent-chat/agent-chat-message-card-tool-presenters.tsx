@@ -147,7 +147,7 @@ export const WorkflowToolMessage = ({
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
           {hasInput && meta.input ? (
-            <details className="rounded border border-current/20 bg-white/55">
+            <details className="rounded border border-current/20 bg-white">
               <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
                 Input
               </summary>
@@ -160,7 +160,7 @@ export const WorkflowToolMessage = ({
             <ToolJsonDetails
               label="Output"
               value={meta.output}
-              className="rounded border border-current/20 bg-white/55"
+              className="rounded border border-current/20 bg-white"
               titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
             />
           ) : null}
@@ -168,7 +168,7 @@ export const WorkflowToolMessage = ({
             <ToolJsonDetails
               label="Error"
               value={meta.error}
-              className="rounded border border-current/20 bg-white/55"
+              className="rounded border border-current/20 bg-slate-100/90"
               titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
             />
           ) : null}
@@ -285,7 +285,7 @@ export const RegularToolMessage = ({
       )}
 
       {questionDetails.length > 0 ? (
-        <details className="ml-5 rounded border border-slate-200 bg-white/80">
+        <details className="ml-5 rounded border border-slate-200 bg-slate-100/90">
           <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-slate-700">
             Questions and answers
           </summary>

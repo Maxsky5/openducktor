@@ -27,8 +27,8 @@ const LazyMarkdownRenderer = lazy(async () => {
 });
 
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
-  compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-slate-600",
-  document: "whitespace-pre-wrap leading-6 text-slate-700",
+  compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-black",
+  document: "whitespace-pre-wrap leading-6 text-black",
 };
 
 type PlainTextMarkdownFallbackProps = {

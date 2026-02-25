@@ -149,6 +149,7 @@ type AgentChatComposerModelArgs = {
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
+  activeSessionAgentColors?: Record<string, string>;
   contextUsage: AgentChatModel["composer"]["contextUsage"];
   canStopSession: boolean;
   onStopSession: () => void;
@@ -205,6 +206,7 @@ export const buildAgentChatComposerModel = (
   onSelectAgent: args.onSelectAgent,
   onSelectModel: args.onSelectModel,
   onSelectVariant: args.onSelectVariant,
+  ...(args.activeSessionAgentColors ? { sessionAgentColors: args.activeSessionAgentColors } : {}),
   contextUsage: args.contextUsage,
   canStopSession: args.canStopSession,
   onStopSession: args.onStopSession,

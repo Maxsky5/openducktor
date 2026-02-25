@@ -25,12 +25,17 @@ export function AgentChatMessageCard({
   });
 
   return (
-    <article className={vm.articleClassName}>
+    <article className={vm.articleClassName} style={vm.articleStyle}>
       <MessageHeader
         message={message}
         sessionRole={sessionRole}
         timeLabel={vm.timeLabel}
-        showHeader={!vm.isUserMessage && !vm.isRegularToolMessage && !vm.isReasoningMessage}
+        showHeader={
+          !vm.isUserMessage &&
+          !vm.isRegularToolMessage &&
+          !vm.isReasoningMessage &&
+          !vm.isAssistantMessage
+        }
         assistantRole={vm.assistantRole}
         compactPadding={vm.isRichCardMessage && !vm.isRegularToolMessage}
       />

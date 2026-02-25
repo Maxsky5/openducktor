@@ -55,6 +55,7 @@ export type AgentChatComposerModel = {
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
+  sessionAgentColors?: Record<string, string>;
   contextUsage: {
     totalTokens: number;
     contextWindow: number;

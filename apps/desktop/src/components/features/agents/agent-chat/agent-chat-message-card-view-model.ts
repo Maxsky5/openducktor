@@ -3,6 +3,7 @@ import {
   type AgentRole,
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { resolveAgentAccentColor } from "../agent-accent-color";
@@ -26,6 +27,7 @@ export type AgentChatMessageCardViewModel = {
   assistantAccentColor: string | undefined;
   systemPromptBody: string;
   isReasoningMessage: boolean;
+  isAssistantMessage: boolean;
   isUserMessage: boolean;
   isToolMessage: boolean;
   isWorkflowToolMessage: boolean;
@@ -34,6 +36,7 @@ export type AgentChatMessageCardViewModel = {
   isSystemPromptMessage: boolean;
   isRichCardMessage: boolean;
   articleClassName: string;
+  articleStyle: CSSProperties | undefined;
 };
 
 const resolveAssistantAgentColor = (
@@ -46,6 +49,17 @@ const resolveAssistantAgentColor = (
   }
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   const agentName = assistantMeta?.opencodeAgent ?? sessionSelectedModel?.opencodeAgent;
+  if (!agentName) {
+    return undefined;
+  }
+  return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
+};
+
+const resolveUserAgentColor = (
+  sessionSelectedModel: AgentModelSelection | null,
+  sessionAgentColors: Record<string, string> | undefined,
+): string | undefined => {
+  const agentName = sessionSelectedModel?.opencodeAgent;
   if (!agentName) {
     return undefined;
   }
@@ -66,8 +80,7 @@ const toArticleClassName = (
 
   return cn(
     "text-sm",
-    isUserMessage &&
-      "ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm border border-sky-100 bg-sky-50 px-4 py-3 text-slate-900 shadow-sm",
+    isUserMessage && "w-full rounded-none border-l-4 bg-white px-4 py-3 text-slate-900 shadow-md",
     isToolMessage
       ? isWorkflowToolMessage
         ? workflowToolPhase === "completed"
@@ -83,9 +96,9 @@ const toArticleClassName = (
       : isSubtaskMessage
         ? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
         : isSystemPromptMessage
-          ? "rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-800"
+          ? "rounded-md border border-slate-200 bg-slate-100 px-3 py-2 text-slate-800"
           : message.role === "assistant"
-            ? "border-l-2 border-slate-200 pl-3 pr-1 py-1 text-slate-800"
+            ? "px-1 py-1 text-slate-800"
             : isUserMessage
               ? ""
               : "border-none bg-transparent px-0 py-0 text-slate-800",
@@ -101,6 +114,7 @@ export const buildAgentChatMessageCardViewModel = ({
   const timeLabel = formatTime(message.timestamp);
   const meta = message.meta;
   const isReasoningMessage = meta?.kind === "reasoning";
+  const isAssistantMessage = message.role === "assistant";
   const isUserMessage = message.role === "user";
   const isToolMessage = meta?.kind === "tool";
   const isWorkflowToolMessage = meta?.kind === "tool" && isOdtWorkflowMutationToolName(meta.tool);
@@ -115,6 +129,7 @@ export const buildAgentChatMessageCardViewModel = ({
     sessionSelectedModel,
     sessionAgentColors,
   );
+  const userAccentColor = resolveUserAgentColor(sessionSelectedModel, sessionAgentColors);
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
@@ -125,6 +140,7 @@ export const buildAgentChatMessageCardViewModel = ({
     assistantAccentColor,
     systemPromptBody,
     isReasoningMessage,
+    isAssistantMessage,
     isUserMessage,
     isToolMessage,
     isWorkflowToolMessage,
@@ -140,5 +156,7 @@ export const buildAgentChatMessageCardViewModel = ({
       isSubtaskMessage,
       isSystemPromptMessage,
     ),
+    articleStyle:
+      isUserMessage && userAccentColor ? { borderLeftColor: userAccentColor } : undefined,
   };
 };

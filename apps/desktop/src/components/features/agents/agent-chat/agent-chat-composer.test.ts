@@ -27,6 +27,9 @@ const buildModel = () => ({
   onSelectAgent: () => {},
   onSelectModel: () => {},
   onSelectVariant: () => {},
+  sessionAgentColors: {
+    "Hephaestus (Deep Agent)": "#d97706",
+  },
   contextUsage: {
     totalTokens: 45_000,
     contextWindow: 200_000,
@@ -79,5 +82,19 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain('aria-label="Send message" disabled');
+  });
+
+  test("styles composer shell with agent accent border and padded container", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: buildModel(),
+      }),
+    );
+
+    expect(html).toContain("bg-slate-100 px-4 pb-4");
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("bg-white shadow-md");
+    expect(html).toContain("focus-within:shadow-xl");
+    expect(html).toContain("border-left-color:#d97706");
   });
 });

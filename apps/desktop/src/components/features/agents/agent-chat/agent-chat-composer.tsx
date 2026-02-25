@@ -1,8 +1,9 @@
 import { Bot, Brain, BrainCog, LoaderCircle, SendHorizontal, Square } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveAgentAccentColor } from "../agent-accent-color";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 
@@ -25,6 +26,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     onSelectAgent,
     onSelectModel,
     onSelectVariant,
+    sessionAgentColors,
     contextUsage,
     canStopSession,
     onStopSession,
@@ -41,16 +43,27 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     input.trim().length === 0 ||
     !agentStudioReady;
 
+  const composerAccentColor = useMemo(() => {
+    const agentName = selectedModelSelection?.opencodeAgent;
+    if (!agentName) {
+      return undefined;
+    }
+    return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
+  }, [selectedModelSelection?.opencodeAgent, sessionAgentColors]);
+
   return (
     <form
       ref={composerFormRef}
-      className=" bg-white px-3 pb-3"
+      className="bg-slate-100 px-4 pb-4"
       onSubmit={(event) => {
         event.preventDefault();
         onSend();
       }}
     >
-      <div className="rounded-2xl border border-slate-300 bg-slate-50/80 shadow-sm transition-[border-color,box-shadow,background-color] focus-within:border-sky-400 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(14,165,233,0.14)]">
+      <div
+        className="rounded-none border-l-4 bg-white shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+        style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
+      >
         <Textarea
           ref={composerTextareaRef}
           rows={1}

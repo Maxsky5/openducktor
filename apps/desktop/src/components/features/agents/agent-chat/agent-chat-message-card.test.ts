@@ -258,4 +258,55 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("planner-main");
     expect(html).toContain("gpt-5.3-codex");
   });
+
+  test("hides assistant header and left border in final assistant messages", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-2",
+          role: "assistant",
+          content: "Ready for implementation.",
+          timestamp: "2026-02-22T10:24:00.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            opencodeAgent: "planner-main",
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).not.toContain("tracking-wide");
+    expect(html).not.toContain("border-l-2");
+  });
+
+  test("renders user messages as square cards with selected-agent accent border", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-1",
+          role: "user",
+          content: "Draft the final UI pass.",
+          timestamp: "2026-02-22T10:25:00.000Z",
+        },
+        sessionRole: "build",
+        sessionSelectedModel: {
+          providerId: "openai",
+          modelId: "gpt-5.3-codex",
+          opencodeAgent: "Hephaestus (Deep Agent)",
+        },
+        sessionAgentColors: {
+          "Hephaestus (Deep Agent)": "#2f6fed",
+        },
+      }),
+    );
+
+    expect(html).toContain("rounded-none");
+    expect(html).toContain("w-full");
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("border-left-color:#2f6fed");
+  });
 });
