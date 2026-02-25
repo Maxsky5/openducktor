@@ -1,5 +1,5 @@
-use anyhow::Context;
-use host_application::{BuildResponseAction, CleanupMode, AppService, RunEmitter};
+use anyhow::{anyhow, Context};
+use host_application::{AppService, BuildResponseAction, CleanupMode, RunEmitter};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, RunEvent,
     RunSummary, TaskCard, TaskStatus, UpdateTaskPatch,
@@ -7,8 +7,8 @@ use host_domain::{
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
 use serde::Deserialize;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent, State};
 
 struct AppState {
@@ -530,11 +530,15 @@ async fn build_start(
     repo_path: String,
     task_id: String,
 ) -> Result<RunSummary, String> {
-    as_error(
-        state
-            .service
-            .build_start(&repo_path, &task_id, run_emitter(app)),
-    )
+    let service = state.service.clone();
+    let emitter = run_emitter(app);
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        service.build_start(&repo_path, &task_id, emitter)
+    })
+    .await
+    .map_err(|error| anyhow!("build_start worker join failure: {error}"))
+    .and_then(|output| output);
+    as_error(result)
 }
 
 #[tauri::command]
@@ -665,11 +669,14 @@ async fn opencode_runtime_start(
     task_id: String,
     role: String,
 ) -> Result<AgentRuntimeSummary, String> {
-    as_error(
-        state
-            .service
-            .opencode_runtime_start(&repo_path, &task_id, &role),
-    )
+    let service = state.service.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        service.opencode_runtime_start(&repo_path, &task_id, &role)
+    })
+    .await
+    .map_err(|error| anyhow!("opencode_runtime_start worker join failure: {error}"))
+    .and_then(|output| output);
+    as_error(result)
 }
 
 #[tauri::command]
@@ -690,7 +697,14 @@ async fn opencode_repo_runtime_ensure(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<AgentRuntimeSummary, String> {
-    as_error(state.service.opencode_repo_runtime_ensure(&repo_path))
+    let service = state.service.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        service.opencode_repo_runtime_ensure(&repo_path)
+    })
+    .await
+    .map_err(|error| anyhow!("opencode_repo_runtime_ensure worker join failure: {error}"))
+    .and_then(|output| output);
+    as_error(result)
 }
 
 #[tauri::command]

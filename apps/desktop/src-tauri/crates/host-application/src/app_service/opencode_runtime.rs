@@ -5,6 +5,8 @@ use std::io::Read;
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 pub(crate) fn parse_mcp_command_json(raw: &str) -> Result<Vec<String>> {
@@ -338,24 +340,90 @@ pub(crate) fn spawn_opencode_server(
     Ok(child)
 }
 
+const LOCAL_SERVER_CONNECT_TIMEOUT: Duration = Duration::from_millis(250);
+const LOCAL_SERVER_INITIAL_RETRY_DELAY: Duration = Duration::from_millis(25);
+const LOCAL_SERVER_MAX_RETRY_DELAY: Duration = Duration::from_millis(250);
+const CHILD_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(75);
+
+enum LocalServerProbeEvent {
+    Ready,
+    TimedOut,
+}
+
+struct LocalServerProbe {
+    receiver: mpsc::Receiver<LocalServerProbeEvent>,
+    cancel: Arc<AtomicBool>,
+}
+
+impl LocalServerProbe {
+    fn spawn(address: SocketAddr, timeout: Duration) -> Self {
+        let (sender, receiver) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_signal = Arc::clone(&cancel);
+
+        std::thread::spawn(move || {
+            let deadline = Instant::now() + timeout;
+            let mut retry_delay = LOCAL_SERVER_INITIAL_RETRY_DELAY;
+            loop {
+                if cancel_signal.load(Ordering::Relaxed) {
+                    return;
+                }
+
+                if TcpStream::connect_timeout(&address, LOCAL_SERVER_CONNECT_TIMEOUT).is_ok() {
+                    let _ = sender.send(LocalServerProbeEvent::Ready);
+                    return;
+                }
+
+                let now = Instant::now();
+                if now >= deadline {
+                    let _ = sender.send(LocalServerProbeEvent::TimedOut);
+                    return;
+                }
+
+                let sleep_for = deadline.saturating_duration_since(now).min(retry_delay);
+                std::thread::sleep(sleep_for);
+                retry_delay = retry_delay
+                    .saturating_mul(2)
+                    .min(LOCAL_SERVER_MAX_RETRY_DELAY);
+            }
+        });
+
+        Self { receiver, cancel }
+    }
+
+    fn recv_timeout(
+        &self,
+        timeout: Duration,
+    ) -> std::result::Result<LocalServerProbeEvent, mpsc::RecvTimeoutError> {
+        self.receiver.recv_timeout(timeout)
+    }
+}
+
+impl Drop for LocalServerProbe {
+    fn drop(&mut self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn wait_for_local_server(port: u16, timeout: Duration) -> Result<()> {
-    let deadline = Instant::now() + timeout;
     let address: SocketAddr = format!("127.0.0.1:{port}")
         .parse()
         .context("Invalid localhost address")?;
+    let probe = LocalServerProbe::spawn(address, timeout);
+    let wait_budget = timeout
+        .saturating_add(LOCAL_SERVER_CONNECT_TIMEOUT)
+        .saturating_add(LOCAL_SERVER_MAX_RETRY_DELAY);
 
-    while Instant::now() < deadline {
-        if TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok() {
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(150));
+    match probe.recv_timeout(wait_budget) {
+        Ok(LocalServerProbeEvent::Ready) => Ok(()),
+        Ok(LocalServerProbeEvent::TimedOut)
+        | Err(mpsc::RecvTimeoutError::Timeout)
+        | Err(mpsc::RecvTimeoutError::Disconnected) => Err(anyhow!(
+            "Timed out waiting for OpenCode runtime on 127.0.0.1:{}",
+            port
+        )),
     }
-
-    Err(anyhow!(
-        "Timed out waiting for OpenCode runtime on 127.0.0.1:{}",
-        port
-    ))
 }
 
 fn read_child_pipe(pipe: &mut Option<impl Read>) -> String {
@@ -376,10 +444,21 @@ pub(crate) fn wait_for_local_server_with_process(
     let address: SocketAddr = format!("127.0.0.1:{port}")
         .parse()
         .context("Invalid localhost address")?;
+    let probe = LocalServerProbe::spawn(address, timeout);
 
     while Instant::now() < deadline {
-        if TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok() {
-            return Ok(());
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let wait_for = remaining.min(CHILD_STATE_CHECK_INTERVAL);
+        if wait_for.is_zero() {
+            break;
+        }
+
+        match probe.recv_timeout(wait_for) {
+            Ok(LocalServerProbeEvent::Ready) => return Ok(()),
+            Ok(LocalServerProbeEvent::TimedOut) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                break;
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
 
         if let Some(status) = child
@@ -399,8 +478,24 @@ pub(crate) fn wait_for_local_server_with_process(
                 "OpenCode process exited before runtime became reachable: {details}"
             ));
         }
+    }
 
-        std::thread::sleep(Duration::from_millis(150));
+    if let Some(status) = child
+        .try_wait()
+        .context("Failed checking OpenCode process state")?
+    {
+        let stderr = read_child_pipe(&mut child.stderr);
+        let stdout = read_child_pipe(&mut child.stdout);
+        let details = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("process exited with status {status}")
+        };
+        return Err(anyhow!(
+            "OpenCode process exited before runtime became reachable: {details}"
+        ));
     }
 
     Err(anyhow!(
