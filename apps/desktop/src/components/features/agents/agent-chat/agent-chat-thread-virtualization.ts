@@ -30,7 +30,6 @@ export const AGENT_CHAT_VIRTUAL_OVERSCAN_PX = 480;
 export const AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS = 8;
 export const AGENT_CHAT_VIRTUAL_ROW_GAP_PX = 4;
 
-const ESTIMATED_MESSAGE_HEIGHT_PX = 92;
 const ESTIMATED_TURN_DURATION_HEIGHT_PX = 36;
 const ESTIMATED_STREAMING_DRAFT_HEIGHT_PX = 88;
 const ESTIMATED_THINKING_HEIGHT_PX = 44;
@@ -62,6 +61,60 @@ export type AgentChatVirtualRow =
       estimatedHeightPx: number;
     };
 
+const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
+
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.min(max, Math.max(min, value));
+};
+
+const estimateTextHeightPx = (
+  content: string,
+  charsPerLine: number,
+  lineHeightPx: number,
+  maxLines: number,
+): number => {
+  const trimmed = content.trim();
+  if (trimmed.length === 0) {
+    return 0;
+  }
+  const explicitLines = trimmed.split(/\r?\n/).length;
+  const wrappedLines = Math.ceil(trimmed.length / charsPerLine);
+  const lines = clamp(Math.max(explicitLines, wrappedLines), 1, maxLines);
+  return lines * lineHeightPx;
+};
+
+const estimateMessageHeightPx = (message: AgentChatMessage): number => {
+  const meta = message.meta;
+  if (meta?.kind === "tool") {
+    return meta.tool.startsWith("odt_") || meta.tool.startsWith("openducktor_odt_") ? 96 : 34;
+  }
+  if (meta?.kind === "subtask") {
+    return 44;
+  }
+
+  if (message.role === "user") {
+    return 54 + estimateTextHeightPx(message.content, 88, 20, 24);
+  }
+
+  if (message.role === "assistant") {
+    return 56 + estimateTextHeightPx(message.content, 96, 18, 28);
+  }
+
+  if (message.role === "thinking") {
+    return 48 + estimateTextHeightPx(message.content, 96, 16, 20);
+  }
+
+  if (message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX)) {
+    return 44;
+  }
+
+  if (message.role === "system") {
+    return 34 + estimateTextHeightPx(message.content, 100, 16, 16);
+  }
+
+  return 72;
+};
+
 export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChatVirtualRow[] {
   const rows: AgentChatVirtualRow[] = [];
 
@@ -86,7 +139,7 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
       // Message IDs can repeat across sessions; include session ID for stable virtualization keys.
       key: `${session.sessionId}:${message.id}`,
       message,
-      estimatedHeightPx: ESTIMATED_MESSAGE_HEIGHT_PX,
+      estimatedHeightPx: estimateMessageHeightPx(message),
     });
   }
 
