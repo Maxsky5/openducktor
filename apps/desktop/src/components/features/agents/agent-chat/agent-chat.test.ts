@@ -32,6 +32,7 @@ const buildModel = () => ({
     todoPanelBottomOffset: 120,
     messagesContainerRef: createRef<HTMLDivElement>(),
     onMessagesScroll: () => {},
+    isPinnedToBottom: true,
   },
   composer: {
     taskId: "task-1",

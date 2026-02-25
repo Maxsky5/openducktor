@@ -35,6 +35,7 @@ export type AgentChatThreadModel = {
   todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
+  isPinnedToBottom: boolean;
 };
 
 export type AgentChatComposerModel = {

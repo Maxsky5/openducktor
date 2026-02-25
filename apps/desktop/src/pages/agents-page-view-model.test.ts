@@ -207,6 +207,7 @@ describe("agents-page-view-model", () => {
       todoPanelBottomOffset: 12,
       messagesContainerRef: { current: null },
       onMessagesScroll: () => {},
+      isPinnedToBottom: true,
       input: "message",
       onInputChange: () => {},
       onSend,

@@ -34,6 +34,7 @@ const baseModel = {
   todoPanelBottomOffset: 120,
   messagesContainerRef: createRef<HTMLDivElement>(),
   onMessagesScroll: () => {},
+  isPinnedToBottom: true,
 } as const;
 
 describe("AgentChatThread", () => {

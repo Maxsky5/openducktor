@@ -35,6 +35,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     todoPanelBottomOffset,
     messagesContainerRef,
     onMessagesScroll,
+    isPinnedToBottom,
   } = model;
   const streamingRoleDisplay = session?.draftAssistantText
     ? (roleOptions.find((entry) => entry.role === session.role) ?? null)
@@ -54,19 +55,59 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     overscan: 5, // Render 5 items outside viewport for smooth scrolling
   });
 
-  // Autoscroll to bottom when new messages arrive
-  useEffect(() => {
-    if (session && session.messages.length > prevMessageCountRef.current) {
-      // New messages added - scroll to bottom
-      const scrollElement = parentRef.current;
-      if (scrollElement) {
-        requestAnimationFrame(() => {
-          scrollElement.scrollTop = scrollElement.scrollHeight;
-        });
-      }
+  const renderMessageItem = (
+    message: NonNullable<AgentChatThreadModel["session"]>["messages"][number],
+    options?: {
+      key?: string;
+      style?: React.CSSProperties;
+      measure?: boolean;
+    },
+  ): React.ReactElement => {
+    const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+    const turnDurationMs = assistantMeta?.durationMs;
+    const shouldShowTurnDuration =
+      message.role === "assistant" && typeof turnDurationMs === "number" && turnDurationMs > 0;
+    const isUserMessage = message.role === "user";
+
+    const messageContent = (
+      <>
+        {shouldShowTurnDuration ? <AgentTurnDurationSeparator durationMs={turnDurationMs} /> : null}
+        <div className={cn(isUserMessage ? "pt-4" : undefined)}>
+          <AgentChatMessageCard
+            message={message}
+            sessionRole={session?.role ?? "build"}
+            sessionSelectedModel={session?.selectedModel ?? null}
+            sessionAgentColors={sessionAgentColors}
+          />
+        </div>
+      </>
+    );
+
+    if (options?.style || options?.measure) {
+      return (
+        <div
+          key={options.key}
+          style={options.style}
+          ref={options.measure ? virtualizer.measureElement : undefined}
+        >
+          {messageContent}
+        </div>
+      );
     }
-    prevMessageCountRef.current = session?.messages.length ?? 0;
-  }, [session]);
+
+    return <Fragment key={options?.key}>{messageContent}</Fragment>;
+  };
+
+  useEffect(() => {
+    const messageCount = session?.messages.length ?? 0;
+    const hasNewMessages = messageCount > prevMessageCountRef.current;
+    if (hasNewMessages && isPinnedToBottom && messageCount > 0) {
+      requestAnimationFrame(() => {
+        virtualizer.scrollToIndex(messageCount - 1, { align: "end" });
+      });
+    }
+    prevMessageCountRef.current = messageCount;
+  }, [isPinnedToBottom, session?.messages.length, virtualizer]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -139,67 +180,23 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
               {virtualizer.getVirtualItems().map((virtualItem) => {
                 const message = session.messages[virtualItem.index];
                 if (!message) return null;
-                const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-                const turnDurationMs = assistantMeta?.durationMs;
-                const shouldShowTurnDuration =
-                  message.role === "assistant" &&
-                  typeof turnDurationMs === "number" &&
-                  turnDurationMs > 0;
-                const isUserMessage = message.role === "user";
-                return (
-                  <Fragment key={message.id}>
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      {shouldShowTurnDuration ? (
-                        <AgentTurnDurationSeparator durationMs={turnDurationMs} />
-                      ) : null}
-                      <div className={cn(isUserMessage ? "pt-4" : undefined)}>
-                        <AgentChatMessageCard
-                          message={message}
-                          sessionRole={session.role}
-                          sessionSelectedModel={session.selectedModel}
-                          sessionAgentColors={sessionAgentColors}
-                        />
-                      </div>
-                    </div>
-                  </Fragment>
-                );
+                return renderMessageItem(message, {
+                  key: message.id,
+                  measure: true,
+                  style: {
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualItem.start}px)`,
+                  },
+                });
               })}
             </div>
           ) : (
             // Fallback for SSR/testing: render messages directly when virtualizer has no items
             <div className="space-y-3">
-              {session.messages.map((message) => {
-                const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-                const turnDurationMs = assistantMeta?.durationMs;
-                const shouldShowTurnDuration =
-                  message.role === "assistant" &&
-                  typeof turnDurationMs === "number" &&
-                  turnDurationMs > 0;
-                const isUserMessage = message.role === "user";
-                return (
-                  <Fragment key={message.id}>
-                    {shouldShowTurnDuration ? (
-                      <AgentTurnDurationSeparator durationMs={turnDurationMs} />
-                    ) : null}
-                    <div className={cn(isUserMessage ? "pt-4" : undefined)}>
-                      <AgentChatMessageCard
-                        message={message}
-                        sessionRole={session.role}
-                        sessionSelectedModel={session.selectedModel}
-                        sessionAgentColors={sessionAgentColors}
-                      />
-                    </div>
-                  </Fragment>
-                );
-              })}
+              {session.messages.map((message) => renderMessageItem(message, { key: message.id }))}
             </div>
           )
         ) : null}

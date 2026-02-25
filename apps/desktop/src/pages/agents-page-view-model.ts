@@ -129,6 +129,7 @@ type AgentChatThreadModelArgs = {
   todoPanelBottomOffset: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
+  isPinnedToBottom: boolean;
 };
 
 type AgentChatComposerModelArgs = {
@@ -184,6 +185,7 @@ export const buildAgentChatThreadModel = (
   todoPanelBottomOffset: args.todoPanelBottomOffset,
   messagesContainerRef: args.messagesContainerRef,
   onMessagesScroll: args.onMessagesScroll,
+  isPinnedToBottom: args.isPinnedToBottom,
 });
 
 export const buildAgentChatComposerModel = (

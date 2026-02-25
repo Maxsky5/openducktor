@@ -155,6 +155,7 @@ export function useAgentStudioPageModels({
     composerFormRef,
     composerTextareaRef,
     setIsPinnedToBottom,
+    isPinnedToBottom,
     todoPanelBottomOffset,
     resizeComposerTextarea,
   } = useAgentChatLayout({
@@ -403,6 +404,7 @@ export function useAgentStudioPageModels({
         todoPanelBottomOffset,
         messagesContainerRef,
         onMessagesScroll: handleMessagesScroll,
+        isPinnedToBottom,
       }),
     [
       activeSession,
@@ -427,6 +429,7 @@ export function useAgentStudioPageModels({
       onSubmitQuestionAnswers,
       taskId,
       todoPanelBottomOffset,
+      isPinnedToBottom,
     ],
   );
 
