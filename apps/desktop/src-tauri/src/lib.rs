@@ -1,5 +1,5 @@
-use anyhow::Context;
-use host_application::{BuildResponseAction, CleanupMode, AppService, RunEmitter};
+use anyhow::{anyhow, Context};
+use host_application::{AppService, BuildResponseAction, CleanupMode, RunEmitter};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, RunEvent,
     RunSummary, TaskCard, TaskStatus, UpdateTaskPatch,
@@ -7,8 +7,8 @@ use host_domain::{
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
 use serde::Deserialize;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent, State};
 
 struct AppState {
@@ -17,6 +17,26 @@ struct AppState {
 }
 
 const FALLBACK_TASK_METADATA_NAMESPACE: &str = "openducktor";
+static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
+
+fn init_tracing_subscriber() {
+    TRACING_INITIALIZED.get_or_init(|| {
+        let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(true)
+            .with_ansi(false)
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .finish();
+        if let Err(error) = tracing::subscriber::set_global_default(subscriber) {
+            eprintln!("OpenDucktor warning: failed to initialize tracing subscriber: {error:#}");
+        }
+    });
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,6 +96,16 @@ struct RepoConfigPayload {
 
 fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
     result.map_err(|error| format!("{error:#}"))
+}
+
+async fn run_service_blocking<T, F>(operation_name: &'static str, operation: F) -> anyhow::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> anyhow::Result<T> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(operation)
+        .await
+        .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
 
 fn extend_runtime_errors_with_startup(
@@ -530,11 +560,13 @@ async fn build_start(
     repo_path: String,
     task_id: String,
 ) -> Result<RunSummary, String> {
-    as_error(
-        state
-            .service
-            .build_start(&repo_path, &task_id, run_emitter(app)),
-    )
+    let service = state.service.clone();
+    let emitter = run_emitter(app);
+    let result = run_service_blocking("build_start", move || {
+        service.build_start(&repo_path, &task_id, emitter)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -665,11 +697,12 @@ async fn opencode_runtime_start(
     task_id: String,
     role: String,
 ) -> Result<AgentRuntimeSummary, String> {
-    as_error(
-        state
-            .service
-            .opencode_runtime_start(&repo_path, &task_id, &role),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("opencode_runtime_start", move || {
+        service.opencode_runtime_start(&repo_path, &task_id, &role)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -690,7 +723,12 @@ async fn opencode_repo_runtime_ensure(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<AgentRuntimeSummary, String> {
-    as_error(state.service.opencode_repo_runtime_ensure(&repo_path))
+    let service = state.service.clone();
+    let result = run_service_blocking("opencode_repo_runtime_ensure", move || {
+        service.opencode_repo_runtime_ensure(&repo_path)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -723,7 +761,11 @@ fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
     let (metadata_namespace, startup_warning) =
         namespace_with_startup_warning(config_store.task_metadata_namespace());
     if let Some(message) = startup_warning {
-        eprintln!("OpenDucktor startup warning: {message}");
+        tracing::warn!(
+            target: "openducktor.startup",
+            warning = %message,
+            "OpenDucktor startup warning"
+        );
         startup_errors.push(message);
     }
 
@@ -744,13 +786,16 @@ fn install_shutdown_signal_handler(service: Arc<AppService>) {
         let _ = shutdown_service.shutdown();
         std::process::exit(0);
     }) {
-        eprintln!(
-            "OpenDucktor warning: failed to install process signal handler; cleanup on SIGTERM/SIGINT may be incomplete: {error:#}"
+        tracing::warn!(
+            target: "openducktor.startup",
+            error = %format!("{error:#}"),
+            "Failed to install process signal handler; cleanup on SIGTERM/SIGINT may be incomplete"
         );
     }
 }
 
 pub fn run() -> anyhow::Result<()> {
+    init_tracing_subscriber();
     let (service, startup_errors) = bootstrap_service()?;
     install_shutdown_signal_handler(service.clone());
 
@@ -876,5 +921,25 @@ mod tests {
             updated.errors,
             vec!["runtime issue".to_string(), "startup warning".to_string()]
         );
+    }
+
+    #[test]
+    fn run_service_blocking_propagates_operation_error() {
+        let result = tauri::async_runtime::block_on(run_service_blocking(
+            "test-op",
+            || -> anyhow::Result<()> { Err(anyhow!("service failure")) },
+        ));
+        let error = result.expect_err("service error should propagate");
+        assert!(error.to_string().contains("service failure"));
+    }
+
+    #[test]
+    fn run_service_blocking_maps_join_failures() {
+        let result = tauri::async_runtime::block_on(run_service_blocking(
+            "test-join",
+            || -> anyhow::Result<()> { panic!("simulated join panic") },
+        ));
+        let error = result.expect_err("panic in worker should map to join failure");
+        assert!(error.to_string().contains("test-join worker join failure"));
     }
 }

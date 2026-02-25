@@ -132,6 +132,7 @@ fn normalize_global_config(config: &mut GlobalConfig) {
     } else {
         namespace.to_string()
     };
+    normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
     for repo in config.repos.values_mut() {
         normalize_repo_config(repo);
     }
@@ -169,10 +170,8 @@ fn migrate_repos_to_canonical_keys(
     let mut from_active_repo: HashMap<String, bool> = HashMap::new();
 
     // Collect all entries first to avoid borrowing issues
-    let entries: Vec<(String, RepoConfig)> = repos
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
+    let entries: Vec<(String, RepoConfig)> =
+        repos.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
     // Sort entries lexicographically for deterministic processing
     let mut entries: Vec<(String, RepoConfig)> = entries;
@@ -185,8 +184,10 @@ fn migrate_repos_to_canonical_keys(
                 // 1. If this canonical key doesn't exist, insert it
                 // 2. If it exists, prefer the entry that matches active_repo
                 // 3. Otherwise prefer the entry where original_key == canonical_key (the "true" entry)
-                let is_from_active = active_repo.as_ref().map_or(false, |active| **active == original_key);
-                
+                let is_from_active = active_repo
+                    .as_ref()
+                    .map_or(false, |active| **active == original_key);
+
                 let should_insert = match canonical_repos.get(&canonical_key) {
                     None => true,
                     Some(_) => {
@@ -200,9 +201,9 @@ fn migrate_repos_to_canonical_keys(
                             // Neither is from active_repo, prefer canonical form
                             original_key == canonical_key
                         }
-                    },
+                    }
                 };
-                
+
                 if should_insert {
                     canonical_repos.insert(canonical_key.clone(), repo_config);
                     from_active_repo.insert(canonical_key, is_from_active);
@@ -211,7 +212,12 @@ fn migrate_repos_to_canonical_keys(
             Err(_) => {
                 // If canonicalization fails, keep the original key
                 canonical_repos.insert(original_key.clone(), repo_config);
-                from_active_repo.insert(original_key.clone(), active_repo.as_ref().map_or(false, |active| **active == original_key));
+                from_active_repo.insert(
+                    original_key.clone(),
+                    active_repo
+                        .as_ref()
+                        .map_or(false, |active| **active == original_key),
+                );
             }
         }
     }
@@ -275,11 +281,67 @@ pub struct SchedulerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OpencodeStartupReadinessConfig {
+    #[serde(default = "default_opencode_startup_timeout_ms")]
+    pub timeout_ms: u64,
+    #[serde(default = "default_opencode_startup_connect_timeout_ms")]
+    pub connect_timeout_ms: u64,
+    #[serde(default = "default_opencode_startup_initial_retry_delay_ms")]
+    pub initial_retry_delay_ms: u64,
+    #[serde(default = "default_opencode_startup_max_retry_delay_ms")]
+    pub max_retry_delay_ms: u64,
+    #[serde(default = "default_opencode_startup_child_check_interval_ms")]
+    pub child_check_interval_ms: u64,
+}
+
+const fn default_opencode_startup_timeout_ms() -> u64 {
+    8_000
+}
+const fn default_opencode_startup_connect_timeout_ms() -> u64 {
+    250
+}
+const fn default_opencode_startup_initial_retry_delay_ms() -> u64 {
+    25
+}
+const fn default_opencode_startup_max_retry_delay_ms() -> u64 {
+    250
+}
+const fn default_opencode_startup_child_check_interval_ms() -> u64 {
+    75
+}
+
+fn normalize_opencode_startup_readiness_config(config: &mut OpencodeStartupReadinessConfig) {
+    config.timeout_ms = config.timeout_ms.clamp(250, 120_000);
+    config.connect_timeout_ms = config.connect_timeout_ms.clamp(25, 10_000);
+    config.initial_retry_delay_ms = config.initial_retry_delay_ms.clamp(5, 5_000);
+    config.max_retry_delay_ms = config.max_retry_delay_ms.clamp(10, 10_000);
+    config.child_check_interval_ms = config.child_check_interval_ms.clamp(10, 2_000);
+    if config.max_retry_delay_ms < config.initial_retry_delay_ms {
+        config.max_retry_delay_ms = config.initial_retry_delay_ms;
+    }
+}
+
+impl Default for OpencodeStartupReadinessConfig {
+    fn default() -> Self {
+        Self {
+            timeout_ms: default_opencode_startup_timeout_ms(),
+            connect_timeout_ms: default_opencode_startup_connect_timeout_ms(),
+            initial_retry_delay_ms: default_opencode_startup_initial_retry_delay_ms(),
+            max_retry_delay_ms: default_opencode_startup_max_retry_delay_ms(),
+            child_check_interval_ms: default_opencode_startup_child_check_interval_ms(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GlobalConfig {
     pub version: u8,
     pub active_repo: Option<String>,
     #[serde(default = "default_task_metadata_namespace")]
     pub task_metadata_namespace: String,
+    #[serde(default)]
+    pub opencode_startup: OpencodeStartupReadinessConfig,
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
     #[serde(default)]
@@ -294,6 +356,7 @@ impl Default for GlobalConfig {
             version: 1,
             active_repo: None,
             task_metadata_namespace: default_task_metadata_namespace(),
+            opencode_startup: OpencodeStartupReadinessConfig::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),
             scheduler: SchedulerConfig::default(),
@@ -341,7 +404,8 @@ impl AppConfigStore {
 
         // Migrate repo keys to canonical form
         // Pass active_repo to prefer the user's current configuration on collision
-        let canonical_repos = migrate_repos_to_canonical_keys(&mut parsed.repos, parsed.active_repo.as_ref());
+        let canonical_repos =
+            migrate_repos_to_canonical_keys(&mut parsed.repos, parsed.active_repo.as_ref());
         parsed.repos = canonical_repos;
 
         // Also migrate active_repo to canonical key if it exists
@@ -386,6 +450,10 @@ impl AppConfigStore {
         } else {
             Ok(trimmed.to_string())
         }
+    }
+
+    pub fn opencode_startup_readiness(&self) -> Result<OpencodeStartupReadinessConfig> {
+        Ok(self.load()?.opencode_startup)
     }
 
     pub fn save(&self, config: &GlobalConfig) -> Result<()> {
@@ -457,8 +525,9 @@ impl AppConfigStore {
 
     pub fn select_workspace(&self, repo_path: &str) -> Result<WorkspaceRecord> {
         // Canonicalize the path for consistent key lookup
-        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
-        
+        let canonical_path =
+            canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+
         let mut config = self.load()?;
         if !config.repos.contains_key(&canonical_path) {
             return Err(anyhow!("Workspace not found in config: {repo_path}"));
@@ -487,8 +556,9 @@ impl AppConfigStore {
         normalize_repo_config(&mut repo_config);
 
         // Canonicalize the path for consistent key lookup
-        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
-        
+        let canonical_path =
+            canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+
         let mut config = self.load()?;
         config
             .repos
@@ -509,8 +579,9 @@ impl AppConfigStore {
 
     pub fn repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
         // Canonicalize the path for consistent key lookup
-        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
-        
+        let canonical_path =
+            canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+
         let config = self.load()?;
         config
             .repos
@@ -521,16 +592,18 @@ impl AppConfigStore {
 
     pub fn repo_config_optional(&self, repo_path: &str) -> Result<Option<RepoConfig>> {
         // Canonicalize the path for consistent key lookup
-        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
-        
+        let canonical_path =
+            canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+
         let config = self.load()?;
         Ok(config.repos.get(&canonical_path).cloned())
     }
 
     pub fn set_repo_trust_hooks(&self, repo_path: &str, trusted: bool) -> Result<WorkspaceRecord> {
         // Canonicalize the path for consistent key lookup
-        let canonical_path = canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
-        
+        let canonical_path =
+            canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+
         let mut config = self.load()?;
         let (has_config, configured_worktree_base_path) = {
             let repo = config
@@ -562,7 +635,9 @@ fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{touch_recent, AppConfigStore, GlobalConfig, RepoConfig};
+    use super::{
+        touch_recent, AppConfigStore, GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig,
+    };
     use serde_json::json;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -592,6 +667,8 @@ mod tests {
         let config = store.load().expect("load default");
         assert_eq!(config.version, 1);
         assert_eq!(config.task_metadata_namespace, "openducktor");
+        assert_eq!(config.opencode_startup.timeout_ms, 8_000);
+        assert_eq!(config.opencode_startup.connect_timeout_ms, 250);
         assert!(config.repos.is_empty());
         let _ = fs::remove_dir_all(root);
     }
@@ -625,6 +702,33 @@ mod tests {
     }
 
     #[test]
+    fn opencode_startup_readiness_defaults_and_normalizes() {
+        let (store, root) = test_store("opencode-startup-readiness");
+        let config = GlobalConfig {
+            opencode_startup: OpencodeStartupReadinessConfig {
+                timeout_ms: 10,
+                connect_timeout_ms: 0,
+                initial_retry_delay_ms: 3_000,
+                max_retry_delay_ms: 20,
+                child_check_interval_ms: 1,
+            },
+            ..GlobalConfig::default()
+        };
+        store.save(&config).expect("save config");
+
+        let readiness = store
+            .opencode_startup_readiness()
+            .expect("readiness policy should load");
+        assert_eq!(readiness.timeout_ms, 250);
+        assert_eq!(readiness.connect_timeout_ms, 25);
+        assert_eq!(readiness.initial_retry_delay_ms, 3_000);
+        assert_eq!(readiness.max_retry_delay_ms, 3_000);
+        assert_eq!(readiness.child_check_interval_ms, 10);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn workspace_add_select_and_update_persist_state() {
         let (store, root) = test_store("workspace-flow");
         let repo_a = root.join("repo-a");
@@ -635,7 +739,10 @@ mod tests {
         let repo_a_str = repo_a.to_string_lossy().to_string();
         let repo_b_str = repo_b.to_string_lossy().to_string();
         // Canonical form (resolved absolute path)
-        let repo_a_canonical = fs::canonicalize(&repo_a).unwrap().to_string_lossy().to_string();
+        let repo_a_canonical = fs::canonicalize(&repo_a)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
 
         let added = store.add_workspace(&repo_a_str).expect("add workspace");
         assert!(added.is_active);
