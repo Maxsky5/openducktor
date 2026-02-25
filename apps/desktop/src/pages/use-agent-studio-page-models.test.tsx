@@ -26,7 +26,7 @@ const createTask = () =>
     documentSummary: {
       spec: { has: true },
       plan: { has: false },
-      qaReport: { has: false },
+      qaReport: { has: false, verdict: "not_reviewed" },
     },
   });
 
@@ -387,6 +387,74 @@ describe("useAgentStudioPageModels", () => {
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).not.toBe(initialComposerModel);
     expect(nextState.agentChatModel.composer.input).toBe("draft update");
+
+    await harness.unmount();
+  });
+
+  test("treats unavailable selected role as read-only and hides kickoff action", async () => {
+    const unavailablePlannerTask = createTaskCardFixture({
+      status: "open",
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: false, completed: false },
+        builder: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "planner",
+        selectedTask: unavailablePlannerTask,
+        activeSession: null,
+        sessionsForTask: [],
+        canKickoffNewSession: true,
+        isSessionWorking: false,
+      }),
+    );
+
+    await harness.mount();
+
+    const state = harness.getLatest();
+    expect(state.agentChatModel.thread.canKickoffNewSession).toBe(false);
+    expect(state.agentChatModel.composer.isReadOnly).toBe(true);
+    expect(state.agentChatModel.composer.readOnlyReason).toContain("Planner is unavailable");
+
+    await harness.unmount();
+  });
+
+  test("keeps stop control enabled for running session even when role is unavailable", async () => {
+    const unavailablePlannerTask = createTaskCardFixture({
+      status: "open",
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: false, completed: false },
+        builder: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: false },
+      },
+    });
+    const runningPlannerSession = createSession("session-plan", "external-plan", {
+      role: "planner",
+      scenario: "planner_initial",
+      status: "running",
+    });
+
+    const harness = createHookHarness(
+      createHookArgs({
+        role: "planner",
+        selectedTask: unavailablePlannerTask,
+        activeSession: runningPlannerSession,
+        sessionsForTask: [runningPlannerSession],
+        canStopSession: true,
+        isSessionWorking: true,
+      }),
+    );
+
+    await harness.mount();
+
+    const state = harness.getLatest();
+    expect(state.agentChatModel.composer.isReadOnly).toBe(true);
+    expect(state.agentChatModel.composer.canStopSession).toBe(true);
 
     await harness.unmount();
   });

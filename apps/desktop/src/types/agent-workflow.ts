@@ -1,1 +1,1 @@
-export type AgentWorkflowStepState = "done" | "in_progress" | "available" | "blocked";
+export type AgentWorkflowStepState = "done" | "in_progress" | "available" | "optional" | "blocked";

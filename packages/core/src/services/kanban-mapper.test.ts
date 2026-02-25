@@ -20,7 +20,13 @@ const makeTask = (partial: Partial<TaskCard> & Pick<TaskCard, "id" | "title">): 
   documentSummary: partial.documentSummary ?? {
     spec: { has: false },
     plan: { has: false },
-    qaReport: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: partial.agentWorkflows ?? {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: partial.updatedAt ?? new Date().toISOString(),
   createdAt: partial.createdAt ?? new Date().toISOString(),

@@ -9,7 +9,6 @@ import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRepoSettings>[0];
-type HookState = ReturnType<typeof useAgentStudioRepoSettings>;
 
 const createSettings = (): RepoSettingsInput => ({
   worktreeBasePath: "/worktrees",

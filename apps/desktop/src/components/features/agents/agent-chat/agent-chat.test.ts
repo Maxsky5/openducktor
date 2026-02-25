@@ -37,6 +37,8 @@ const buildModel = () => ({
   composer: {
     taskId: "task-1",
     agentStudioReady: true,
+    isReadOnly: false,
+    readOnlyReason: null,
     input: "Hi",
     onInputChange: () => {},
     onSend: () => {},

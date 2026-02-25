@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use host_domain::{TaskCard, TaskStatus};
+use host_domain::{AgentWorkflows, TaskCard, TaskStatus};
 
 use crate::metadata::{
     metadata_bool_qa_required, metadata_document_summary, metadata_namespace, parse_metadata_root,
@@ -58,6 +58,7 @@ impl BeadsTaskStore {
             parent_id,
             subtask_ids: Vec::new(),
             document_summary,
+            agent_workflows: AgentWorkflows::default(),
             updated_at: issue.updated_at,
             created_at: issue.created_at,
         })

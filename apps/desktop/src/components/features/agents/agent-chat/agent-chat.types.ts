@@ -41,6 +41,8 @@ export type AgentChatThreadModel = {
 export type AgentChatComposerModel = {
   taskId: string;
   agentStudioReady: boolean;
+  isReadOnly: boolean;
+  readOnlyReason: string | null;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;

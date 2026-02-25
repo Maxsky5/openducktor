@@ -29,7 +29,13 @@ const createTaskCard = (id: string): TaskCard => ({
   documentSummary: {
     spec: { has: false },
     plan: { has: false },
-    qaReport: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
   },
   updatedAt: "2026-02-22T12:00:00.000Z",
   createdAt: "2026-02-22T12:00:00.000Z",
@@ -209,6 +215,8 @@ describe("agents-page-view-model", () => {
       messagesContainerRef: { current: null },
       onMessagesScroll: () => {},
       input: "message",
+      isReadOnly: false,
+      readOnlyReason: null,
       onInputChange: () => {},
       onSend,
       isSessionWorking: true,

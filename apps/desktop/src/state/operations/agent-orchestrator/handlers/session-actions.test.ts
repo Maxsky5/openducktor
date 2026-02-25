@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createTaskCardFixture } from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -439,6 +440,157 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("rejects send when role is unavailable for the current task", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalSendUserMessage = adapter.sendUserMessage;
+    let sendCalls = 0;
+
+    adapter.hasSession = () => true;
+    adapter.sendUserMessage = async () => {
+      sendCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "idle", role: "build", taskId: "task-1" }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: {
+        current: [
+          createTaskCardFixture({
+            id: "task-1",
+            status: "open",
+            agentWorkflows: {
+              spec: { required: true, canSkip: false, available: true, completed: false },
+              planner: { required: true, canSkip: false, available: false, completed: false },
+              builder: { required: true, canSkip: false, available: false, completed: false },
+              qa: { required: true, canSkip: false, available: false, completed: false },
+            },
+          }),
+        ],
+      },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: null,
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+    });
+
+    try {
+      await expect(actions.sendAgentMessage("session-1", "hello")).rejects.toThrow(
+        "Role 'build' is unavailable for task 'task-1' in status 'open'.",
+      );
+      expect(sendCalls).toBe(0);
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
+  test("allows stopping a running session even when role is unavailable", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalStopSession = adapter.stopSession;
+    let stopCalls = 0;
+
+    adapter.hasSession = () => true;
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ status: "running", role: "build", taskId: "task-1" }),
+      },
+    };
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef,
+      taskRef: {
+        current: [
+          createTaskCardFixture({
+            id: "task-1",
+            status: "open",
+            agentWorkflows: {
+              spec: { required: true, canSkip: false, available: true, completed: false },
+              planner: { required: true, canSkip: false, available: false, completed: false },
+              builder: { required: true, canSkip: false, available: false, completed: false },
+              qa: { required: true, canSkip: false, available: false, completed: false },
+            },
+          }),
+        ],
+      },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: (sessionId, updater) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current[sessionId] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: null,
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+    });
+
+    try {
+      await actions.stopAgentSession("session-1");
+      expect(stopCalls).toBe(1);
+      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+    } finally {
+      adapter.hasSession = originalHasSession;
+      adapter.stopSession = originalStopSession;
     }
   });
 

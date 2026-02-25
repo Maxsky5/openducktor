@@ -44,6 +44,14 @@ const taskDocumentPresenceSchema = z.object({
 });
 export type TaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
 
+export const qaWorkflowVerdictSchema = z.enum(["approved", "rejected", "not_reviewed"]);
+export type QaWorkflowVerdict = z.infer<typeof qaWorkflowVerdictSchema>;
+
+const taskQaDocumentPresenceSchema = taskDocumentPresenceSchema.extend({
+  verdict: qaWorkflowVerdictSchema.default("not_reviewed"),
+});
+export type TaskQaDocumentPresence = z.infer<typeof taskQaDocumentPresenceSchema>;
+
 const EMPTY_TASK_DOCUMENT_PRESENCE: TaskDocumentPresence = {
   has: false,
 };
@@ -51,14 +59,83 @@ const EMPTY_TASK_DOCUMENT_PRESENCE: TaskDocumentPresence = {
 const taskDocumentSummarySchema = z.object({
   spec: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
   plan: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
-  qaReport: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
+  qaReport: taskQaDocumentPresenceSchema.default({
+    ...EMPTY_TASK_DOCUMENT_PRESENCE,
+    verdict: "not_reviewed",
+  }),
 });
 export type TaskDocumentSummary = z.infer<typeof taskDocumentSummarySchema>;
 
 const EMPTY_TASK_DOCUMENT_SUMMARY: TaskDocumentSummary = {
   spec: EMPTY_TASK_DOCUMENT_PRESENCE,
   plan: EMPTY_TASK_DOCUMENT_PRESENCE,
-  qaReport: EMPTY_TASK_DOCUMENT_PRESENCE,
+  qaReport: {
+    ...EMPTY_TASK_DOCUMENT_PRESENCE,
+    verdict: "not_reviewed",
+  },
+};
+
+const agentWorkflowStateSchema = z.object({
+  required: z.boolean().default(false),
+  canSkip: z.boolean().default(true),
+  available: z.boolean().default(false),
+  completed: z.boolean().default(false),
+});
+export type AgentWorkflowState = z.infer<typeof agentWorkflowStateSchema>;
+
+const agentWorkflowsSchema = z.object({
+  spec: agentWorkflowStateSchema.default({
+    required: false,
+    canSkip: true,
+    available: false,
+    completed: false,
+  }),
+  planner: agentWorkflowStateSchema.default({
+    required: false,
+    canSkip: true,
+    available: false,
+    completed: false,
+  }),
+  builder: agentWorkflowStateSchema.default({
+    required: true,
+    canSkip: false,
+    available: false,
+    completed: false,
+  }),
+  qa: agentWorkflowStateSchema.default({
+    required: false,
+    canSkip: true,
+    available: false,
+    completed: false,
+  }),
+});
+export type AgentWorkflows = z.infer<typeof agentWorkflowsSchema>;
+
+const EMPTY_AGENT_WORKFLOWS: AgentWorkflows = {
+  spec: {
+    required: false,
+    canSkip: true,
+    available: false,
+    completed: false,
+  },
+  planner: {
+    required: false,
+    canSkip: true,
+    available: false,
+    completed: false,
+  },
+  builder: {
+    required: true,
+    canSkip: false,
+    available: false,
+    completed: false,
+  },
+  qa: {
+    required: false,
+    canSkip: true,
+    available: false,
+    completed: false,
+  },
 };
 
 export const taskCardSchema = z.object({
@@ -77,6 +154,7 @@ export const taskCardSchema = z.object({
   parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   subtaskIds: z.array(z.string()).default([]),
   documentSummary: taskDocumentSummarySchema.optional().default(EMPTY_TASK_DOCUMENT_SUMMARY),
+  agentWorkflows: agentWorkflowsSchema.optional().default(EMPTY_AGENT_WORKFLOWS),
   updatedAt: z.string(),
   createdAt: z.string(),
 });

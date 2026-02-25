@@ -1,5 +1,13 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { Check, Circle, CircleDotDashed, LoaderCircle, Plus, Sparkles } from "lucide-react";
+import {
+  Check,
+  Circle,
+  CircleDashed,
+  CircleDotDashed,
+  LoaderCircle,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,6 +79,9 @@ const workflowStepClassName = (state: AgentWorkflowStep["state"]): string => {
   if (state === "available") {
     return "border-slate-300 bg-white text-slate-700";
   }
+  if (state === "optional") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
   return "border-slate-200 bg-slate-100 text-slate-400";
 };
 
@@ -83,6 +94,9 @@ const workflowConnectorClassName = (state: AgentWorkflowStep["state"]): string =
   }
   if (state === "available") {
     return "bg-slate-300";
+  }
+  if (state === "optional") {
+    return "bg-amber-300";
   }
   return "bg-slate-200";
 };
@@ -100,6 +114,9 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   }
   if (entry.state === "available") {
     return "No session yet for this role";
+  }
+  if (entry.state === "optional") {
+    return "Optional step for this task";
   }
   return "Blocked by workflow state";
 };
@@ -225,7 +242,6 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
         <div className="flex items-center gap-1">
           {workflowSteps.map((entry, index) => {
             const Icon = entry.icon;
-            const isClickable = Boolean(entry.sessionId) || entry.state === "available";
             const isSelected = selectedRole === entry.role;
             const shouldSpinInProgress =
               entry.state === "in_progress" &&
@@ -240,9 +256,9 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                     "h-10 shrink-0 gap-2 rounded-lg border px-4 text-sm transition-colors",
                     workflowStepClassName(entry.state),
                     workflowSelectionClassName(isSelected),
-                    isClickable ? "cursor-pointer" : "cursor-not-allowed",
+                    "cursor-pointer",
                   )}
-                  disabled={!agentStudioReady || !isClickable}
+                  disabled={!agentStudioReady}
                   title={workflowStepHint(entry)}
                   onClick={() => onWorkflowStepSelect(entry.role, entry.sessionId)}
                 >
@@ -256,6 +272,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                     <CircleDotDashed className="size-3.5" />
                   ) : null}
                   {entry.state === "available" ? <Circle className="size-3" /> : null}
+                  {entry.state === "optional" ? <CircleDashed className="size-3" /> : null}
                 </Button>
                 {index < workflowSteps.length - 1 ? (
                   <span

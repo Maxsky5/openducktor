@@ -1,9 +1,9 @@
 use super::{AppService, RunEmitter};
 use anyhow::{anyhow, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort, GitPushSummary,
-    QaReportDocument, QaVerdict, RunEvent, SpecDocument, TaskCard, TaskDocumentSummary, TaskMetadata,
-    TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort,
+    GitPushSummary, QaReportDocument, QaVerdict, RunEvent, SpecDocument, TaskCard,
+    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::AppConfigStore;
 use std::path::{Path, PathBuf};
@@ -56,6 +56,7 @@ impl TaskStore for FakeTaskStore {
             parent_id: input.parent_id,
             subtask_ids: Vec::new(),
             document_summary: TaskDocumentSummary::default(),
+            agent_workflows: AgentWorkflows::default(),
             updated_at: "2026-01-01T00:00:00Z".to_string(),
             created_at: "2026-01-01T00:00:00Z".to_string(),
         };
@@ -330,6 +331,7 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         parent_id: None,
         subtask_ids: Vec::new(),
         document_summary: TaskDocumentSummary::default(),
+        agent_workflows: AgentWorkflows::default(),
         updated_at: "2026-01-01T00:00:00Z".to_string(),
         created_at: "2026-01-01T00:00:00Z".to_string(),
     }

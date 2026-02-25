@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
+import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
@@ -132,6 +133,14 @@ export const createAgentSessionActions = ({
     const trimmed = content.trim();
     if (!trimmed) {
       return;
+    }
+
+    const currentSession = sessionsRef.current[sessionId];
+    if (currentSession) {
+      const task = taskRef.current.find((entry) => entry.id === currentSession.taskId);
+      if (task && !isRoleAvailableForTask(task, currentSession.role)) {
+        throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
+      }
     }
 
     await ensureSessionReady(sessionId);
