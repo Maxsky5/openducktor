@@ -7,7 +7,7 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -354,6 +354,10 @@ pub(crate) struct OpencodeStartupReadinessPolicy {
 }
 
 impl OpencodeStartupReadinessPolicy {
+    fn duration_ms(duration: Duration) -> u64 {
+        duration.as_millis().min(u64::MAX as u128) as u64
+    }
+
     pub(crate) fn from_config(config: OpencodeStartupReadinessConfig) -> Self {
         Self {
             timeout: Duration::from_millis(config.timeout_ms),
@@ -364,24 +368,24 @@ impl OpencodeStartupReadinessPolicy {
         }
     }
 
-    pub(crate) fn timeout_ms(self) -> u128 {
-        self.timeout.as_millis()
+    pub(crate) fn timeout_ms(self) -> u64 {
+        Self::duration_ms(self.timeout)
     }
 
-    pub(crate) fn connect_timeout_ms(self) -> u128 {
-        self.connect_timeout.as_millis()
+    pub(crate) fn connect_timeout_ms(self) -> u64 {
+        Self::duration_ms(self.connect_timeout)
     }
 
-    pub(crate) fn initial_retry_delay_ms(self) -> u128 {
-        self.initial_retry_delay.as_millis()
+    pub(crate) fn initial_retry_delay_ms(self) -> u64 {
+        Self::duration_ms(self.initial_retry_delay)
     }
 
-    pub(crate) fn max_retry_delay_ms(self) -> u128 {
-        self.max_retry_delay.as_millis()
+    pub(crate) fn max_retry_delay_ms(self) -> u64 {
+        Self::duration_ms(self.max_retry_delay)
     }
 
-    pub(crate) fn child_state_check_interval_ms(self) -> u128 {
-        self.child_state_check_interval.as_millis()
+    pub(crate) fn child_state_check_interval_ms(self) -> u64 {
+        Self::duration_ms(self.child_state_check_interval)
     }
 }
 
@@ -402,8 +406,13 @@ impl OpencodeStartupWaitReport {
         self.attempts
     }
 
-    pub(crate) fn startup_ms(self) -> u128 {
-        self.elapsed.as_millis()
+    pub(crate) fn startup_ms(self) -> u64 {
+        self.elapsed.as_millis().min(u64::MAX as u128) as u64
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_parts(attempts: u32, elapsed: Duration) -> Self {
+        Self { attempts, elapsed }
     }
 }
 
@@ -447,6 +456,8 @@ struct LocalServerProbeEvent {
 struct LocalServerProbe {
     receiver: mpsc::Receiver<LocalServerProbeEvent>,
     attempts: Arc<AtomicU32>,
+    cancelled: Arc<AtomicBool>,
+    task: tokio::task::JoinHandle<()>,
 }
 
 impl LocalServerProbe {
@@ -459,18 +470,26 @@ impl LocalServerProbe {
         let (sender, receiver) = mpsc::channel();
         let attempts = Arc::new(AtomicU32::new(0));
         let attempts_for_probe = Arc::clone(&attempts);
-        startup_probe_runtime().spawn(async move {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let cancelled_for_probe = Arc::clone(&cancelled);
+        let task = startup_probe_runtime().spawn(async move {
             let event = probe_local_server_async(
                 address,
                 policy,
                 cancel_epoch,
                 cancel_snapshot,
                 attempts_for_probe,
+                cancelled_for_probe,
             )
             .await;
             let _ = sender.send(event);
         });
-        Self { receiver, attempts }
+        Self {
+            receiver,
+            attempts,
+            cancelled,
+            task,
+        }
     }
 
     fn recv_timeout(
@@ -482,6 +501,13 @@ impl LocalServerProbe {
 
     fn attempts(&self) -> u32 {
         self.attempts.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for LocalServerProbe {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Release);
+        self.task.abort();
     }
 }
 
@@ -530,12 +556,20 @@ async fn probe_local_server_async(
     cancel_epoch: StartupCancelEpoch,
     cancel_snapshot: u64,
     attempts: Arc<AtomicU32>,
+    cancelled: Arc<AtomicBool>,
 ) -> LocalServerProbeEvent {
     let started_at = Instant::now();
     let deadline = started_at + policy.timeout;
     let mut retry_delay = policy.initial_retry_delay;
 
     loop {
+        if cancelled.load(Ordering::Acquire) {
+            return LocalServerProbeEvent {
+                state: LocalServerProbeState::Cancelled,
+                report: startup_wait_report(started_at, current_attempts(&attempts)),
+            };
+        }
+
         if cancel_epoch.load(Ordering::SeqCst) != cancel_snapshot {
             return LocalServerProbeEvent {
                 state: LocalServerProbeState::Cancelled,

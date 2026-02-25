@@ -8,7 +8,7 @@ use host_infra_beads::BeadsTaskStore;
 use host_infra_system::{AppConfigStore, RepoConfig};
 use serde::Deserialize;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent, State};
 
 struct AppState {
@@ -17,6 +17,26 @@ struct AppState {
 }
 
 const FALLBACK_TASK_METADATA_NAMESPACE: &str = "openducktor";
+static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
+
+fn init_tracing_subscriber() {
+    TRACING_INITIALIZED.get_or_init(|| {
+        let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+        let subscriber = tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(true)
+            .with_ansi(false)
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .finish();
+        if let Err(error) = tracing::subscriber::set_global_default(subscriber) {
+            eprintln!("OpenDucktor warning: failed to initialize tracing subscriber: {error:#}");
+        }
+    });
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -741,7 +761,11 @@ fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
     let (metadata_namespace, startup_warning) =
         namespace_with_startup_warning(config_store.task_metadata_namespace());
     if let Some(message) = startup_warning {
-        eprintln!("OpenDucktor startup warning: {message}");
+        tracing::warn!(
+            target: "openducktor.startup",
+            warning = %message,
+            "OpenDucktor startup warning"
+        );
         startup_errors.push(message);
     }
 
@@ -762,13 +786,16 @@ fn install_shutdown_signal_handler(service: Arc<AppService>) {
         let _ = shutdown_service.shutdown();
         std::process::exit(0);
     }) {
-        eprintln!(
-            "OpenDucktor warning: failed to install process signal handler; cleanup on SIGTERM/SIGINT may be incomplete: {error:#}"
+        tracing::warn!(
+            target: "openducktor.startup",
+            error = %format!("{error:#}"),
+            "Failed to install process signal handler; cleanup on SIGTERM/SIGINT may be incomplete"
         );
     }
 }
 
 pub fn run() -> anyhow::Result<()> {
+    init_tracing_subscriber();
     let (service, startup_errors) = bootstrap_service()?;
     install_shutdown_signal_handler(service.clone());
 

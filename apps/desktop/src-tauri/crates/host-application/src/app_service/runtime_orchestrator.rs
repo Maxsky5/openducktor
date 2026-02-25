@@ -82,6 +82,7 @@ impl AppService {
         }
 
         let port = pick_free_port()?;
+        let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let metadata_namespace = self.config_store.task_metadata_namespace()?;
         let mut child = spawn_opencode_server(
             Path::new(repo_path),
@@ -106,6 +107,8 @@ impl AppService {
             Some(Self::WORKSPACE_RUNTIME_TASK_ID),
             Self::WORKSPACE_RUNTIME_ROLE,
             port,
+            Some("runtime_id"),
+            Some(runtime_id.as_str()),
             Some(startup_policy),
             None,
             None,
@@ -126,6 +129,8 @@ impl AppService {
                     Some(Self::WORKSPACE_RUNTIME_TASK_ID),
                     Self::WORKSPACE_RUNTIME_ROLE,
                     port,
+                    Some("runtime_id"),
+                    Some(runtime_id.as_str()),
                     Some(startup_policy),
                     Some(error.report),
                     Some(error.reason),
@@ -143,12 +148,13 @@ impl AppService {
             Some(Self::WORKSPACE_RUNTIME_TASK_ID),
             Self::WORKSPACE_RUNTIME_ROLE,
             port,
+            Some("runtime_id"),
+            Some(runtime_id.as_str()),
             Some(startup_policy),
             Some(startup_report),
             None,
         );
 
-        let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let summary = AgentRuntimeSummary {
             runtime_id: runtime_id.clone(),
             repo_path: repo_key.clone(),
@@ -314,6 +320,7 @@ impl AppService {
         };
 
         let port = pick_free_port()?;
+        let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let metadata_namespace = self.config_store.task_metadata_namespace()?;
         let mut child = spawn_opencode_server(
             Path::new(&runtime_working_directory),
@@ -338,6 +345,8 @@ impl AppService {
             Some(task_id),
             role,
             port,
+            Some("runtime_id"),
+            Some(runtime_id.as_str()),
             Some(startup_policy),
             None,
             None,
@@ -358,6 +367,8 @@ impl AppService {
                     Some(task_id),
                     role,
                     port,
+                    Some("runtime_id"),
+                    Some(runtime_id.as_str()),
                     Some(startup_policy),
                     Some(error.report),
                     Some(error.reason),
@@ -387,12 +398,13 @@ impl AppService {
             Some(task_id),
             role,
             port,
+            Some("runtime_id"),
+            Some(runtime_id.as_str()),
             Some(startup_policy),
             Some(startup_report),
             None,
         );
 
-        let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
         let summary = AgentRuntimeSummary {
             runtime_id: runtime_id.clone(),
             repo_path: repo_key,

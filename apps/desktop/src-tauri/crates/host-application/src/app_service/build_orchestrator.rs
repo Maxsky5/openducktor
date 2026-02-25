@@ -135,6 +135,7 @@ impl AppService {
             }
         }
 
+        let run_id = format!("run-{}", Uuid::new_v4().simple());
         let port = pick_free_port()?;
         let metadata_namespace = self.config_store.task_metadata_namespace()?;
 
@@ -161,6 +162,8 @@ impl AppService {
             Some(task_id),
             "build",
             port,
+            Some("run_id"),
+            Some(run_id.as_str()),
             Some(startup_policy),
             None,
             None,
@@ -181,6 +184,8 @@ impl AppService {
                     Some(task_id),
                     "build",
                     port,
+                    Some("run_id"),
+                    Some(run_id.as_str()),
                     Some(startup_policy),
                     Some(error.report),
                     Some(error.reason),
@@ -198,6 +203,8 @@ impl AppService {
             Some(task_id),
             "build",
             port,
+            Some("run_id"),
+            Some(run_id.as_str()),
             Some(startup_policy),
             Some(startup_report),
             None,
@@ -209,8 +216,6 @@ impl AppService {
             TaskStatus::InProgress,
             Some("Builder delegated"),
         )?;
-
-        let run_id = format!("run-{}", Uuid::new_v4().simple());
 
         let summary = RunSummary {
             run_id: run_id.clone(),
