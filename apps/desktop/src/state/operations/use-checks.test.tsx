@@ -49,6 +49,7 @@ const makeRepoHealth = (
 });
 
 const toastError = mock((_message: string, _options?: { description?: string }) => {});
+const toastSuccess = mock((_message: string, _options?: { description?: string }) => {});
 let repoHealthHandler = async (_repoPath: string): Promise<RepoOpencodeHealthCheck> =>
   makeRepoHealth();
 const checkRepoOpencodeHealthMock = mock((repoPath: string) => repoHealthHandler(repoPath));
@@ -56,6 +57,8 @@ const checkRepoOpencodeHealthMock = mock((repoPath: string) => repoHealthHandler
 mock.module("sonner", () => ({
   toast: {
     error: (message: string, options?: { description?: string }) => toastError(message, options),
+    success: (message: string, options?: { description?: string }) =>
+      toastSuccess(message, options),
   },
 }));
 
@@ -133,6 +136,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   toastError.mockClear();
+  toastSuccess.mockClear();
   checkRepoOpencodeHealthMock.mockClear();
   repoHealthHandler = async () => makeRepoHealth();
 });
