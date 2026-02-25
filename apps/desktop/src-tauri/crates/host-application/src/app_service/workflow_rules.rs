@@ -34,6 +34,15 @@ pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
     let is_task_bug = matches!(issue_type, "task" | "bug");
     let qa_required = task.ai_review_enabled;
     let is_closed = task.status == TaskStatus::Closed;
+    let is_ready_for_dev_or_later = matches!(
+        task.status,
+        TaskStatus::ReadyForDev
+            | TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
+    );
+    let is_planner_feature_epic_status = task.status == TaskStatus::SpecReady || is_ready_for_dev_or_later;
 
     let spec_required = is_feature_epic;
     let spec_can_skip = !spec_required;
@@ -47,15 +56,7 @@ pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
     } else if is_task_bug {
         true
     } else if is_feature_epic {
-        matches!(
-            task.status,
-            TaskStatus::SpecReady
-                | TaskStatus::ReadyForDev
-                | TaskStatus::InProgress
-                | TaskStatus::Blocked
-                | TaskStatus::AiReview
-                | TaskStatus::HumanReview
-        )
+        is_planner_feature_epic_status
     } else {
         false
     };
@@ -66,14 +67,7 @@ pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
     } else if is_task_bug {
         true
     } else if is_feature_epic {
-        matches!(
-            task.status,
-            TaskStatus::ReadyForDev
-                | TaskStatus::InProgress
-                | TaskStatus::Blocked
-                | TaskStatus::AiReview
-                | TaskStatus::HumanReview
-        )
+        is_ready_for_dev_or_later
     } else {
         false
     };

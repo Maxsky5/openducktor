@@ -144,6 +144,20 @@ const toNavigationStateFromQueryUpdates = (
   return next;
 };
 
+const isSameNavigationState = (
+  left: AgentStudioNavigationState,
+  right: AgentStudioNavigationState,
+): boolean => {
+  return (
+    left.taskId === right.taskId &&
+    left.sessionId === right.sessionId &&
+    left.role === right.role &&
+    left.scenario === right.scenario &&
+    left.autostart === right.autostart &&
+    left.startPreference === right.startPreference
+  );
+};
+
 const parsePersistedContext = (raw: string): PersistedAgentStudioContext | null => {
   let parsed: unknown;
   try {
@@ -192,6 +206,7 @@ export function useAgentStudioQuerySync({
   updateQuery: (updates: QueryUpdate) => void;
 } {
   const restoredContextRepoRef = useRef<string | null>(null);
+  const syncingFromSearchParamsRef = useRef(false);
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(() =>
     parseNavigationStateFromSearchParams(searchParams),
   );
@@ -199,6 +214,17 @@ export function useAgentStudioQuerySync({
   const updateQuery = useCallback((updates: QueryUpdate): void => {
     setNavigation((current) => toNavigationStateFromQueryUpdates(current, updates));
   }, []);
+
+  useEffect(() => {
+    const parsed = parseNavigationStateFromSearchParams(searchParams);
+    setNavigation((current) => {
+      if (isSameNavigationState(current, parsed)) {
+        return current;
+      }
+      syncingFromSearchParamsRef.current = true;
+      return parsed;
+    });
+  }, [searchParams]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -270,6 +296,10 @@ export function useAgentStudioQuerySync({
   }, [activeRepo, navigation.role, navigation.scenario, navigation.sessionId, navigation.taskId]);
 
   useEffect(() => {
+    if (syncingFromSearchParamsRef.current) {
+      syncingFromSearchParamsRef.current = false;
+      return;
+    }
     const next = buildSearchParamsFromNavigationState(searchParams, navigation);
     if (next.toString() === searchParams.toString()) {
       return;

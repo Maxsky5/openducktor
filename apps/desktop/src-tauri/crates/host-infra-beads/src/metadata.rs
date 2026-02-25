@@ -45,19 +45,14 @@ fn qa_workflow_verdict_from_entry(verdict: &QaVerdict) -> QaWorkflowVerdict {
 }
 
 pub(crate) fn qa_document_presence(entries: Option<Vec<QaEntry>>) -> TaskQaDocumentPresence {
-    let latest = entries.as_ref().and_then(|list| list.last());
-    match latest {
-        Some(entry) if !entry.markdown.trim().is_empty() => TaskQaDocumentPresence {
-            has: true,
-            updated_at: Some(entry.updated_at.clone()),
-            verdict: qa_workflow_verdict_from_entry(&entry.verdict),
-        },
-        Some(entry) => TaskQaDocumentPresence {
-            has: false,
-            updated_at: Some(entry.updated_at.clone()),
-            verdict: qa_workflow_verdict_from_entry(&entry.verdict),
-        },
-        _ => TaskQaDocumentPresence::default(),
+    let Some(latest) = entries.as_ref().and_then(|list| list.last()) else {
+        return TaskQaDocumentPresence::default();
+    };
+
+    TaskQaDocumentPresence {
+        has: !latest.markdown.trim().is_empty(),
+        updated_at: Some(latest.updated_at.clone()),
+        verdict: qa_workflow_verdict_from_entry(&latest.verdict),
     }
 }
 

@@ -85,6 +85,43 @@ describe("useAgentStudioQuerySync", () => {
     await harness.unmount();
   });
 
+  test("syncs navigation state when URL search params change externally", async () => {
+    const calls: SearchParamsCall[] = [];
+    const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
+      calls.push([nextInit, navigateOptions]);
+    };
+
+    const harness = createHookHarness({
+      activeRepo: null,
+      searchParams: new URLSearchParams("task=task-1&agent=spec&scenario=spec_initial"),
+      setSearchParams,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().taskIdParam).toBe("task-1");
+    expect(harness.getLatest().roleFromQuery).toBe("spec");
+    expect(calls).toHaveLength(0);
+
+    await harness.update({
+      activeRepo: null,
+      searchParams: new URLSearchParams(
+        "task=task-2&session=session-2&agent=planner&scenario=planner_initial&autostart=1&start=continue",
+      ),
+      setSearchParams,
+    });
+
+    const latest = harness.getLatest();
+    expect(latest.taskIdParam).toBe("task-2");
+    expect(latest.sessionParam).toBe("session-2");
+    expect(latest.roleFromQuery).toBe("planner");
+    expect(latest.scenarioFromQuery).toBe("planner_initial");
+    expect(latest.autostart).toBe(true);
+    expect(latest.sessionStartPreference).toBe("continue");
+    expect(calls).toHaveLength(0);
+
+    await harness.unmount();
+  });
+
   test("restores persisted repo context when no explicit task context exists", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
