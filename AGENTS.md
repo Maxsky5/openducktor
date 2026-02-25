@@ -36,14 +36,6 @@ Goals for agent contributions:
 - TS port: `AgentEnginePort` in `packages/core/src/ports/agent-engine.ts`
 - Rust trait: `TaskStore` in `apps/desktop/src-tauri/crates/host-domain/src/lib.rs`
 
-### Configuration and storage policies (V1)
-
-- Global config path is fixed: `~/.openducktor/config.json`
-- Beads store path is fixed per repo: `~/.openducktor/beads/<repo-id>/.beads`
-- `BEADS_DIR` must be used for Beads CLI execution.
-- No user-facing Beads storage path configuration in V1.
-- No migration from repo-local `.beads` in V1.
-
 ## Frontend Engineering Standards
 
 ### Composition and module boundaries
@@ -82,17 +74,6 @@ Goals for agent contributions:
   - disable the full form scope (not only buttons),
   - show in-button loading indicator,
   - preserve clear pending/error/success feedback.
-
-### UX behavior to preserve
-
-- Default page is Kanban.
-- Repository selection is modal-driven (not a standalone page).
-- First launch with no repo: repository modal opens and is non-dismissible.
-- Diagnostics open in a panel/modal and should auto-open only for critical failures.
-- Runtime checks (`git`, `opencode`) are global.
-- Repo-specific diagnostics (Beads + OpenCode/MCP health) are per repo and cached.
-- Agent Studio is blocked unless `activeRepo` is set and repo OpenCode+MCP health is ready.
-- Agent Studio role/scenario URL state (`task`, `session`, `agent`, `scenario`, `autostart`) is part of UX contract; preserve deep-link behavior.
 
 ## Backend / Tauri Standards
 
