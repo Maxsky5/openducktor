@@ -1,6 +1,14 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { Fragment, type ReactElement, type UIEvent, useCallback, useEffect, useMemo } from "react";
+import {
+  Fragment,
+  type ReactElement,
+  type UIEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -54,6 +62,13 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const virtualRows = session ? buildAgentChatVirtualRows(session) : [];
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
   const activeSessionId = session?.sessionId ?? null;
+  const measuredSessionIdRef = useRef<string | null>(null);
+  const measuredMessageHeightByKeyRef = useRef<Record<string, number>>({});
+
+  if (measuredSessionIdRef.current !== activeSessionId) {
+    measuredSessionIdRef.current = activeSessionId;
+    measuredMessageHeightByKeyRef.current = {};
+  }
 
   const estimateRowSize = useCallback(
     (index: number): number => {
@@ -61,9 +76,36 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       if (!row) {
         return 0;
       }
-      return (
-        row.estimatedHeightPx + (index < virtualRows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0)
-      );
+      const trailingGap = index < virtualRows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
+      if (row.kind !== "message") {
+        return row.estimatedHeightPx + trailingGap;
+      }
+
+      const measuredHeight = measuredMessageHeightByKeyRef.current[row.key];
+      if (typeof measuredHeight === "number" && measuredHeight > 0) {
+        return measuredHeight + trailingGap;
+      }
+
+      return 1 + trailingGap;
+    },
+    [virtualRows],
+  );
+
+  const measureVirtualRowElement = useCallback(
+    (element: Element): number => {
+      const measuredHeight = element.getBoundingClientRect().height;
+      const indexValue = Number.parseInt(element.getAttribute("data-index") ?? "", 10);
+      const row =
+        Number.isFinite(indexValue) && indexValue >= 0 ? virtualRows[indexValue] : undefined;
+      if (row?.kind === "message" && measuredHeight > 0) {
+        const previousHeight = measuredMessageHeightByKeyRef.current[row.key];
+        if (typeof previousHeight !== "number") {
+          measuredMessageHeightByKeyRef.current[row.key] = measuredHeight;
+        } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
+          measuredMessageHeightByKeyRef.current[row.key] = measuredHeight;
+        }
+      }
+      return measuredHeight;
     },
     [virtualRows],
   );
@@ -79,6 +121,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     count: shouldVirtualize ? virtualRows.length : 0,
     getScrollElement: () => messagesContainerRef.current,
     estimateSize: estimateRowSize,
+    measureElement: measureVirtualRowElement,
     getItemKey: resolveRowKey,
     overscan: AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
   });

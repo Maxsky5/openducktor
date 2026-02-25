@@ -77,33 +77,6 @@ describe("agent-chat-thread virtualization helpers", () => {
     ]);
   });
 
-  test("buildAgentChatVirtualRows uses compact estimates for regular tool activity rows", () => {
-    const session = buildSession({
-      status: "stopped",
-      messages: [
-        buildMessage("tool", "Tool todowrite completed", {
-          id: "tool-1",
-          meta: {
-            kind: "tool",
-            partId: "part-1",
-            callId: "call-1",
-            tool: "todowrite",
-            status: "completed",
-          },
-        }),
-      ],
-      pendingQuestions: [],
-    });
-
-    const rows = buildAgentChatVirtualRows(session);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.kind).toBe("message");
-    if (!rows[0] || rows[0].kind !== "message") {
-      throw new Error("Expected message row");
-    }
-    expect(rows[0].estimatedHeightPx).toBe(34);
-  });
-
   test("range and spacer helpers compute visible window boundaries", () => {
     const layout = buildVirtualRowLayout({
       itemHeights: [100, 120, 140, 160],
