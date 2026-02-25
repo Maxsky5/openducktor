@@ -64,7 +64,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
       <div
         ref={messagesContainerRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 pb-6"
+        className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
         onScroll={onMessagesScroll}
       >
         {!session ? (

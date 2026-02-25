@@ -80,18 +80,18 @@ const toArticleClassName = (
 
   return cn(
     "text-sm",
-    isUserMessage && "w-full rounded-none border-l-4 bg-white px-4 py-3 text-slate-900 shadow-md",
+    isUserMessage && "w-full rounded-none border-l-4 bg-white px-4 py-3 mb-4 text-black shadow-md",
     isToolMessage
       ? isWorkflowToolMessage
         ? workflowToolPhase === "completed"
-          ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900"
+          ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 my-2 text-emerald-900"
           : workflowToolPhase === "failed"
-            ? "rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-900"
+            ? "rounded-md border border-rose-200 bg-rose-50 px-3 py-2 my-2 text-rose-900"
             : workflowToolPhase === "cancelled"
-              ? "rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-orange-900"
+              ? "rounded-md border border-orange-200 bg-orange-50 px-3 py-2 my-2 text-orange-900"
               : workflowToolPhase === "executing"
-                ? "rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900"
-                : "rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-violet-900"
+                ? "rounded-md border border-blue-200 bg-blue-50 px-3 py-2 my-2 text-blue-900"
+                : "rounded-md border border-violet-200 bg-violet-50 px-3 py-2 my-2 text-violet-900"
         : "border-none bg-transparent px-0 py-0 text-slate-800"
       : isSubtaskMessage
         ? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
