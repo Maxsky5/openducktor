@@ -72,7 +72,6 @@ describe("agent-chat-thread virtualization helpers", () => {
       {
         kind: "thinking",
         key: "session-1:thinking",
-        estimatedHeightPx: 44,
       },
     ]);
   });

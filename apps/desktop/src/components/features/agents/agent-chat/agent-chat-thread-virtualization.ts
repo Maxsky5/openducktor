@@ -30,11 +30,6 @@ export const AGENT_CHAT_VIRTUAL_OVERSCAN_PX = 480;
 export const AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS = 8;
 export const AGENT_CHAT_VIRTUAL_ROW_GAP_PX = 4;
 
-const UNMEASURED_MESSAGE_HEIGHT_PX = 0;
-const ESTIMATED_TURN_DURATION_HEIGHT_PX = 36;
-const ESTIMATED_STREAMING_DRAFT_HEIGHT_PX = 88;
-const ESTIMATED_THINKING_HEIGHT_PX = 44;
-
 const EMPTY_RANGE: VirtualWindowRange = { startIndex: 0, endIndex: -1 };
 
 export type AgentChatVirtualRow =
@@ -42,24 +37,20 @@ export type AgentChatVirtualRow =
       kind: "turn_duration";
       key: string;
       durationMs: number;
-      estimatedHeightPx: number;
     }
   | {
       kind: "message";
       key: string;
       message: AgentChatMessage;
-      estimatedHeightPx: number;
     }
   | {
       kind: "draft";
       key: string;
       draftText: string;
-      estimatedHeightPx: number;
     }
   | {
       kind: "thinking";
       key: string;
-      estimatedHeightPx: number;
     };
 
 export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChatVirtualRow[] {
@@ -77,7 +68,6 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
         // Scope virtual row identity to the active session to avoid cross-session cache reuse.
         key: `${session.sessionId}:${message.id}:duration`,
         durationMs: turnDurationMs,
-        estimatedHeightPx: ESTIMATED_TURN_DURATION_HEIGHT_PX,
       });
     }
 
@@ -86,7 +76,6 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
       // Message IDs can repeat across sessions; include session ID for stable virtualization keys.
       key: `${session.sessionId}:${message.id}`,
       message,
-      estimatedHeightPx: UNMEASURED_MESSAGE_HEIGHT_PX,
     });
   }
 
@@ -95,7 +84,6 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
       kind: "draft",
       key: `${session.sessionId}:draft`,
       draftText: session.draftAssistantText,
-      estimatedHeightPx: ESTIMATED_STREAMING_DRAFT_HEIGHT_PX,
     });
   }
 
@@ -107,7 +95,6 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
     rows.push({
       kind: "thinking",
       key: `${session.sessionId}:thinking`,
-      estimatedHeightPx: ESTIMATED_THINKING_HEIGHT_PX,
     });
   }
 

@@ -63,11 +63,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
   const activeSessionId = session?.sessionId ?? null;
   const measuredSessionIdRef = useRef<string | null>(null);
-  const measuredMessageHeightByKeyRef = useRef<Record<string, number>>({});
+  const measuredRowHeightByKeyRef = useRef<Record<string, number>>({});
 
   if (measuredSessionIdRef.current !== activeSessionId) {
     measuredSessionIdRef.current = activeSessionId;
-    measuredMessageHeightByKeyRef.current = {};
+    measuredRowHeightByKeyRef.current = {};
   }
 
   const estimateRowSize = useCallback(
@@ -77,11 +77,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         return 0;
       }
       const trailingGap = index < virtualRows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
-      if (row.kind !== "message") {
-        return row.estimatedHeightPx + trailingGap;
-      }
-
-      const measuredHeight = measuredMessageHeightByKeyRef.current[row.key];
+      const measuredHeight = measuredRowHeightByKeyRef.current[row.key];
       if (typeof measuredHeight === "number" && measuredHeight > 0) {
         return measuredHeight + trailingGap;
       }
@@ -97,12 +93,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       const indexValue = Number.parseInt(element.getAttribute("data-index") ?? "", 10);
       const row =
         Number.isFinite(indexValue) && indexValue >= 0 ? virtualRows[indexValue] : undefined;
-      if (row?.kind === "message" && measuredHeight > 0) {
-        const previousHeight = measuredMessageHeightByKeyRef.current[row.key];
+      if (row && measuredHeight > 0) {
+        const previousHeight = measuredRowHeightByKeyRef.current[row.key];
         if (typeof previousHeight !== "number") {
-          measuredMessageHeightByKeyRef.current[row.key] = measuredHeight;
+          measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
         } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
-          measuredMessageHeightByKeyRef.current[row.key] = measuredHeight;
+          measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
         }
       }
       return measuredHeight;
