@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
+import type { AgentEnginePort } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
@@ -125,7 +125,7 @@ export const createLoadAgentSessions = ({
     };
 
     // Lazy-load task documents with caching - used when session is actually selected
-    const loadTaskDocumentsWithCache = async (
+    const _loadTaskDocumentsWithCache = async (
       repoPath: string,
       taskId: string,
     ): Promise<[string, string, string]> => {
