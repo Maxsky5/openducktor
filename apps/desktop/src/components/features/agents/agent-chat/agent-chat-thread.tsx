@@ -1,82 +1,21 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import {
-  Fragment,
-  memo,
-  type ReactElement,
-  type ReactNode,
-  type UIEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, type ReactElement, type UIEvent, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import {
-  AGENT_CHAT_VIRTUAL_OVERSCAN_PX,
+  AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
   AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
   AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT,
   type AgentChatVirtualRow,
   buildAgentChatVirtualRows,
-  buildVirtualRowLayout,
-  findVirtualWindowRange,
-  getVirtualWindowEdgeOffsets,
-  normalizeVirtualWindowRange,
-  type VirtualWindowRange,
 } from "./agent-chat-thread-virtualization";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
-
-const EMPTY_RANGE: VirtualWindowRange = { startIndex: 0, endIndex: -1 };
-
-type MeasuredThreadRowProps = {
-  rowKey: string;
-  children: ReactNode;
-  onMeasuredHeight: (rowKey: string, height: number) => void;
-};
-
-const MeasuredThreadRow = memo(function MeasuredThreadRow({
-  rowKey,
-  children,
-  onMeasuredHeight,
-}: MeasuredThreadRowProps): ReactElement {
-  const rowRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const element = rowRef.current;
-    if (!element) {
-      return;
-    }
-
-    const reportHeight = (): void => {
-      const nextHeight = Math.ceil(element.getBoundingClientRect().height);
-      if (nextHeight > 0) {
-        onMeasuredHeight(rowKey, nextHeight);
-      }
-    };
-
-    reportHeight();
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      reportHeight();
-    });
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-    };
-  }, [onMeasuredHeight, rowKey]);
-
-  return <div ref={rowRef}>{children}</div>;
-});
 
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
@@ -114,144 +53,44 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
   const virtualRows = session ? buildAgentChatVirtualRows(session) : [];
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
-  const [measuredHeightsByKey, setMeasuredHeightsByKey] = useState<Record<string, number>>({});
-  const [visibleRange, setVisibleRange] = useState<VirtualWindowRange>(() =>
-    virtualRows.length > 0 ? { startIndex: 0, endIndex: virtualRows.length - 1 } : EMPTY_RANGE,
-  );
 
-  const virtualRowHeights = useMemo(
-    () =>
-      virtualRows.map((row) => {
-        return measuredHeightsByKey[row.key] ?? row.estimatedHeightPx;
-      }),
-    [measuredHeightsByKey, virtualRows],
-  );
-
-  const virtualLayout = useMemo(
-    () =>
-      buildVirtualRowLayout({
-        itemHeights: virtualRowHeights,
-        gapPx: AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
-      }),
-    [virtualRowHeights],
-  );
-
-  const syncViewport = useCallback((): void => {
-    if (!shouldVirtualize) {
-      const nextRange =
-        virtualRows.length > 0 ? { startIndex: 0, endIndex: virtualRows.length - 1 } : EMPTY_RANGE;
-      setVisibleRange((current) => {
-        if (
-          current.startIndex === nextRange.startIndex &&
-          current.endIndex === nextRange.endIndex
-        ) {
-          return current;
-        }
-        return nextRange;
-      });
-      return;
-    }
-
-    const container = messagesContainerRef.current;
-    if (!container) {
-      const fallbackRange =
-        virtualRows.length > 0 ? { startIndex: 0, endIndex: virtualRows.length - 1 } : EMPTY_RANGE;
-      setVisibleRange((current) => {
-        if (
-          current.startIndex === fallbackRange.startIndex &&
-          current.endIndex === fallbackRange.endIndex
-        ) {
-          return current;
-        }
-        return fallbackRange;
-      });
-      return;
-    }
-
-    const maxScrollTop = Math.max(0, virtualLayout.totalHeight - container.clientHeight);
-    const clampedScrollTop = Math.min(Math.max(container.scrollTop, 0), maxScrollTop);
-    const nextRange = findVirtualWindowRange({
-      itemOffsets: virtualLayout.itemOffsets,
-      itemHeights: virtualRowHeights,
-      totalHeight: virtualLayout.totalHeight,
-      viewportStart: clampedScrollTop - AGENT_CHAT_VIRTUAL_OVERSCAN_PX,
-      viewportEnd: clampedScrollTop + container.clientHeight + AGENT_CHAT_VIRTUAL_OVERSCAN_PX,
-    });
-
-    setVisibleRange((current) => {
-      if (current.startIndex === nextRange.startIndex && current.endIndex === nextRange.endIndex) {
-        return current;
+  const estimateRowSize = useCallback(
+    (index: number): number => {
+      const row = virtualRows[index];
+      if (!row) {
+        return 0;
       }
-      return nextRange;
-    });
-  }, [
-    messagesContainerRef,
-    shouldVirtualize,
-    virtualLayout,
-    virtualRowHeights,
-    virtualRows.length,
-  ]);
+      return (
+        row.estimatedHeightPx + (index < virtualRows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0)
+      );
+    },
+    [virtualRows],
+  );
 
-  const scheduledSyncRafIdRef = useRef<number | null>(null);
-  const scheduleViewportSync = useCallback((): void => {
-    if (typeof window === "undefined") {
-      syncViewport();
-      return;
-    }
+  const resolveRowKey = useCallback(
+    (index: number): string | number => {
+      return virtualRows[index]?.key ?? index;
+    },
+    [virtualRows],
+  );
 
-    if (scheduledSyncRafIdRef.current !== null) {
-      return;
-    }
-
-    scheduledSyncRafIdRef.current = window.requestAnimationFrame(() => {
-      scheduledSyncRafIdRef.current = null;
-      syncViewport();
-    });
-  }, [syncViewport]);
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? virtualRows.length : 0,
+    getScrollElement: () => messagesContainerRef.current,
+    estimateSize: estimateRowSize,
+    getItemKey: resolveRowKey,
+    overscan: AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
+  });
 
   useEffect(() => {
-    syncViewport();
-  }, [syncViewport]);
-
-  useEffect(() => {
-    if (!shouldVirtualize) {
+    if (!shouldVirtualize || virtualRows.length === 0) {
       return;
     }
-
-    const rowKeySet = new Set(virtualRows.map((row) => row.key));
-    setMeasuredHeightsByKey((current) => {
-      let changed = false;
-      const next: Record<string, number> = {};
-
-      for (const [rowKey, measuredHeight] of Object.entries(current)) {
-        if (rowKeySet.has(rowKey)) {
-          next[rowKey] = measuredHeight;
-          continue;
-        }
-        changed = true;
-      }
-
-      return changed ? next : current;
-    });
-  }, [shouldVirtualize, virtualRows]);
+    virtualizer.measure();
+  }, [shouldVirtualize, virtualRows.length, virtualizer]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const handleResize = (): void => {
-      scheduleViewportSync();
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [scheduleViewportSync]);
-
-  useEffect(() => {
-    if (!shouldVirtualize || !isPinnedToBottom) {
+    if (!shouldVirtualize || !isPinnedToBottom || virtualRows.length === 0) {
       return;
     }
 
@@ -261,81 +100,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     }
 
     container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
-  }, [isPinnedToBottom, messagesContainerRef, shouldVirtualize]);
-
-  useEffect(() => {
-    if (!shouldVirtualize || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      scheduleViewportSync();
-    });
-    observer.observe(container);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [messagesContainerRef, scheduleViewportSync, shouldVirtualize]);
-
-  useEffect(() => {
-    return () => {
-      if (scheduledSyncRafIdRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(scheduledSyncRafIdRef.current);
-      }
-    };
-  }, []);
-
-  const handleMeasuredRowHeight = useCallback((rowKey: string, height: number): void => {
-    setMeasuredHeightsByKey((current) => {
-      if (current[rowKey] === height) {
-        return current;
-      }
-      return { ...current, [rowKey]: height };
-    });
-  }, []);
+  }, [isPinnedToBottom, messagesContainerRef, shouldVirtualize, virtualRows.length]);
 
   const handleMessagesContainerScroll = useCallback(
     (event: UIEvent<HTMLDivElement>): void => {
       onMessagesScroll(event);
-      if (shouldVirtualize) {
-        scheduleViewportSync();
-      }
     },
-    [onMessagesScroll, scheduleViewportSync, shouldVirtualize],
+    [onMessagesScroll],
   );
-
-  const visibleVirtualRows = useMemo(() => {
-    if (!shouldVirtualize) {
-      return virtualRows;
-    }
-
-    const safeRange = normalizeVirtualWindowRange(visibleRange, virtualRows.length);
-    if (safeRange.endIndex < safeRange.startIndex) {
-      return [];
-    }
-
-    return virtualRows.slice(safeRange.startIndex, safeRange.endIndex + 1);
-  }, [shouldVirtualize, virtualRows, visibleRange]);
-
-  const { topSpacerHeight, bottomSpacerHeight } = useMemo(() => {
-    if (!shouldVirtualize) {
-      return { topSpacerHeight: 0, bottomSpacerHeight: 0 };
-    }
-
-    const safeRange = normalizeVirtualWindowRange(visibleRange, virtualRows.length);
-    return getVirtualWindowEdgeOffsets({
-      range: safeRange,
-      itemOffsets: virtualLayout.itemOffsets,
-      itemHeights: virtualRowHeights,
-      totalHeight: virtualLayout.totalHeight,
-    });
-  }, [shouldVirtualize, visibleRange, virtualLayout, virtualRowHeights, virtualRows.length]);
+  const virtualItems = virtualizer.getVirtualItems();
+  const canRenderVirtualRows = shouldVirtualize && virtualItems.length > 0;
 
   const renderVirtualRow = useCallback(
     (row: AgentChatVirtualRow): ReactElement => {
@@ -436,25 +210,43 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           </div>
         ) : null}
 
-        {session && shouldVirtualize ? (
-          <div>
-            {topSpacerHeight > 0 ? <div style={{ height: topSpacerHeight }} /> : null}
-            <div className="space-y-1">
-              {visibleVirtualRows.map((row) => (
-                <MeasuredThreadRow
-                  key={row.key}
-                  rowKey={row.key}
-                  onMeasuredHeight={handleMeasuredRowHeight}
+        {session && canRenderVirtualRows ? (
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              position: "relative",
+              width: "100%",
+            }}
+          >
+            {virtualItems.map((virtualRow) => {
+              const row = virtualRows[virtualRow.index] ?? null;
+              if (!row) {
+                return null;
+              }
+              const isLastRow = virtualRow.index === virtualRows.length - 1;
+
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    left: 0,
+                    paddingBottom: isLastRow ? 0 : AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
+                    position: "absolute",
+                    top: 0,
+                    transform: `translateY(${virtualRow.start}px)`,
+                    width: "100%",
+                  }}
                 >
                   {renderVirtualRow(row)}
-                </MeasuredThreadRow>
-              ))}
-            </div>
-            {bottomSpacerHeight > 0 ? <div style={{ height: bottomSpacerHeight }} /> : null}
+                </div>
+              );
+            })}
           </div>
         ) : null}
 
-        {session && !shouldVirtualize
+        {session && !canRenderVirtualRows
           ? virtualRows.map((row) => <Fragment key={row.key}>{renderVirtualRow(row)}</Fragment>)
           : null}
 
