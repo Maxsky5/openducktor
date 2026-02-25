@@ -17,7 +17,10 @@ export function AgentChat({
       {header}
       <div className="min-h-0 flex-1 bg-slate-50">
         <div className="flex h-full min-h-0 flex-col">
-          <MemoizedAgentChatThread model={model.thread} />
+          <MemoizedAgentChatThread
+            key={`${model.composer.taskId}:${model.thread.session?.sessionId ?? "__no-session__"}`}
+            model={model.thread}
+          />
           <AgentChatComposer model={model.composer} />
         </div>
       </div>

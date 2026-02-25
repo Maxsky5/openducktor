@@ -184,6 +184,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     [virtualItems, virtualRows],
   );
   const canRenderVirtualRows = shouldVirtualize && virtualRowsToRender.length > 0;
+  const hasRenderableSessionRows = virtualRows.length > 0;
 
   const renderVirtualRow = useCallback(
     (row: AgentChatVirtualRow): ReactElement => {
@@ -252,7 +253,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       ) : null}
 
       <div
-        key={activeSessionId ?? "__no-session__"}
         ref={messagesContainerRef}
         className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
         onScroll={handleMessagesContainerScroll}
@@ -317,9 +317,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           </div>
         ) : null}
 
-        {session && !canRenderVirtualRows
-          ? virtualRows.map((row) => <Fragment key={row.key}>{renderVirtualRow(row)}</Fragment>)
-          : null}
+        {session && !canRenderVirtualRows ? (
+          hasRenderableSessionRows ? (
+            virtualRows.map((row) => <Fragment key={row.key}>{renderVirtualRow(row)}</Fragment>)
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+              Loading session history...
+            </div>
+          )
+        ) : null}
 
         {session?.pendingQuestions.map((request) => (
           <AgentSessionQuestionCard

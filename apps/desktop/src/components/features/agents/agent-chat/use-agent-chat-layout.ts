@@ -121,7 +121,7 @@ export const useAgentChatLayout = ({
     }
     container.scrollTo({
       top: container.scrollHeight,
-      behavior: "smooth",
+      behavior: "auto",
     });
   }, [isPinnedToBottom, scrollTrigger]);
 
@@ -129,15 +129,29 @@ export const useAgentChatLayout = ({
   useEffect(() => {
     setIsPinnedToBottom(true);
 
-    const container = messagesContainerRef.current;
-    if (!container) {
+    const scrollToBottom = (): void => {
+      const container = messagesContainerRef.current;
+      if (!container) {
+        return;
+      }
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "auto",
+      });
+    };
+
+    scrollToBottom();
+
+    if (typeof window === "undefined") {
       return;
     }
 
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "auto",
+    const rafId = window.requestAnimationFrame(() => {
+      scrollToBottom();
     });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
   }, [activeSessionId]);
 
   return {

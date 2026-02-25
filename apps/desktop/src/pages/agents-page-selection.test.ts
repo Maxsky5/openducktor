@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { createAgentSessionFixture } from "./agent-studio-test-utils";
 import {
   emptyDraftSelections,
   extractCompletionTimestamp,
   isSameSelection,
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
+  resolveAgentStudioActiveSession,
+  resolveAgentStudioTaskId,
   toContextStorageKey,
   toTabsStorageKey,
 } from "./agents-page-selection";
@@ -98,5 +101,71 @@ describe("agents-page-selection", () => {
         { providerId: "openai", modelId: "gpt-5", variant: "fast" },
       ),
     ).toBe(false);
+  });
+
+  test("prefers explicit task id over session-derived task id", () => {
+    const session = createAgentSessionFixture({
+      sessionId: "session-1",
+      taskId: "task-from-session",
+    });
+
+    expect(
+      resolveAgentStudioTaskId({
+        taskIdParam: "task-from-url",
+        selectedSessionById: session,
+      }),
+    ).toBe("task-from-url");
+    expect(
+      resolveAgentStudioTaskId({
+        taskIdParam: "",
+        selectedSessionById: session,
+      }),
+    ).toBe("task-from-session");
+  });
+
+  test("keeps active session unresolved when explicit session param does not belong to active task", () => {
+    const plannerSession = createAgentSessionFixture({
+      sessionId: "planner-1",
+      taskId: "task-1",
+      role: "planner",
+    });
+    const buildSession = createAgentSessionFixture({
+      sessionId: "build-1",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [plannerSession, buildSession],
+      sessionParam: "session-from-other-task",
+      hasExplicitRoleParam: true,
+      roleFromQuery: "planner",
+      sessionStartPreference: null,
+    });
+
+    expect(resolved).toBeNull();
+  });
+
+  test("falls back by role when no explicit session param is present", () => {
+    const plannerSession = createAgentSessionFixture({
+      sessionId: "planner-1",
+      taskId: "task-1",
+      role: "planner",
+    });
+    const buildSession = createAgentSessionFixture({
+      sessionId: "build-1",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [plannerSession, buildSession],
+      sessionParam: null,
+      hasExplicitRoleParam: true,
+      roleFromQuery: "planner",
+      sessionStartPreference: null,
+    });
+
+    expect(resolved?.sessionId).toBe("planner-1");
   });
 });

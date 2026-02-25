@@ -116,8 +116,6 @@ export const createLoadAgentSessions = ({
     if (isStaleRepoOperation()) {
       return;
     }
-    const existingIds = new Set(Object.keys(sessionsRef.current));
-    const recordsToHydrate = persisted.filter((record) => !existingIds.has(record.sessionId));
     setSessionsById((current) => {
       if (isStaleRepoOperation()) {
         return current;
@@ -136,6 +134,11 @@ export const createLoadAgentSessions = ({
     if (isStaleRepoOperation()) {
       return;
     }
+
+    const recordsToHydrate = persisted.filter((record) => {
+      const existingSession = sessionsRef.current[record.sessionId];
+      return !existingSession || existingSession.messages.length === 0;
+    });
 
     if (recordsToHydrate.length === 0) {
       const existingSessions = Object.values(sessionsRef.current).filter(

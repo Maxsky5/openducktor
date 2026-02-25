@@ -99,7 +99,10 @@ export function useAgentStudioSessionActions({
       updateQuery({
         task: activeSession.taskId,
         session: activeSession.sessionId,
+        agent: activeSession.role,
+        scenario: activeSession.scenario,
         autostart: undefined,
+        start: undefined,
       });
       return activeSession.sessionId;
     }
@@ -350,6 +353,8 @@ export function useAgentStudioSessionActions({
       updateQuery({
         task: session.taskId,
         session: session.sessionId,
+        agent: session.role,
+        scenario: session.scenario,
         autostart: undefined,
       });
     },
@@ -368,6 +373,8 @@ export function useAgentStudioSessionActions({
       updateQuery({
         task: selectedSession.taskId,
         session: selectedSession.sessionId,
+        agent: selectedSession.role,
+        scenario: selectedSession.scenario,
         autostart: undefined,
       });
     },

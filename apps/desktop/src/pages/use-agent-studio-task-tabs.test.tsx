@@ -133,7 +133,10 @@ describe("useAgentStudioTaskTabs", () => {
       expect(lastUpdate).toEqual({
         task: "task-2",
         session: "session-2",
+        agent: "spec",
+        scenario: "spec_initial",
         autostart: undefined,
+        start: undefined,
       });
 
       await harness.unmount();

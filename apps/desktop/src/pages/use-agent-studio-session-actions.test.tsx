@@ -212,6 +212,8 @@ describe("useAgentStudioSessionActions", () => {
     expect(updateCalls).toContainEqual({
       task: "task-2",
       session: "session-2",
+      agent: "spec",
+      scenario: "spec_initial",
       autostart: undefined,
     });
 

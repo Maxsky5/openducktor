@@ -78,6 +78,25 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Agent is thinking...");
   });
 
+  test("renders loading state when active session has no renderable rows yet", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: buildSession({
+            status: "stopped",
+            messages: [],
+            draftAssistantText: "",
+            pendingQuestions: [],
+            pendingPermissions: [],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Loading session history...");
+  });
+
   test("renders initializing state while autostart session is pending", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
