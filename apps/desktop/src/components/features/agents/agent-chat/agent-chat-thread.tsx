@@ -333,8 +333,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             }}
           >
             {virtualRowsToRender.map(({ row, virtualItem }) => {
-              const isLastRow = virtualItem.index === virtualRows.length - 1;
-
               return (
                 <div
                   key={virtualItem.key}
@@ -342,7 +340,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
                   ref={virtualizer.measureElement}
                   style={{
                     left: 0,
-                    paddingBottom: isLastRow ? 0 : AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
                     position: "absolute",
                     top: 0,
                     transform: `translateY(${virtualItem.start}px)`,

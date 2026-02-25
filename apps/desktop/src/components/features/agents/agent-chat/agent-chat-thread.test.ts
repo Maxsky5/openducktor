@@ -210,6 +210,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Input needed");
     expect(html).toContain("Permission request");
     expect(html).toContain("flow-root");
+    expect(html).not.toContain("padding-bottom");
   });
 
   test("renders floating todo panel for active todo items", () => {

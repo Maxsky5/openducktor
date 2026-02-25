@@ -167,7 +167,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 aria-label="Stop session"
                 onClick={onStopSession}
               >
-                <Square className="size-3.5" />
+                <Square className="size-3.5 text-red-500" />
               </Button>
             ) : null}
             <Button
