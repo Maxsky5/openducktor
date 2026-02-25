@@ -309,12 +309,12 @@ impl OpencodeStartupMetrics {
             *self.failed_by_reason.entry(reason_key).or_insert(0) += 1;
         }
 
-        let startup_bucket = Self::startup_ms_bucket(report.startup_ms()).to_string();
-        if let Some(entry) = self.startup_ms_histogram.get_mut(&startup_bucket) {
+        let startup_bucket = Self::startup_ms_bucket(report.startup_ms());
+        if let Some(entry) = self.startup_ms_histogram.get_mut(startup_bucket) {
             *entry += 1;
         }
-        let attempts_bucket = Self::attempts_bucket(report.attempts()).to_string();
-        if let Some(entry) = self.attempts_histogram.get_mut(&attempts_bucket) {
+        let attempts_bucket = Self::attempts_bucket(report.attempts());
+        if let Some(entry) = self.attempts_histogram.get_mut(attempts_bucket) {
             *entry += 1;
         }
 
@@ -2277,6 +2277,45 @@ echo "bd-fake"
         .expect_err("should time out when child remains alive and port stays closed");
         terminate_child_process(&mut child);
         assert_eq!(error.reason, "timeout");
+    }
+
+    #[test]
+    fn wait_for_local_server_with_process_honors_total_timeout_budget_when_connect_timeout_is_large()
+    {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+        let port = listener.local_addr().expect("addr").port();
+        drop(listener);
+
+        let mut child = Command::new("/bin/sh")
+            .arg("-lc")
+            .arg("sleep 5")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn sleeping process");
+        let cancel_epoch = Arc::new(AtomicU64::new(0));
+        let started_at = Instant::now();
+        let error = wait_for_local_server_with_process(
+            &mut child,
+            port,
+            OpencodeStartupReadinessPolicy {
+                timeout: Duration::from_millis(250),
+                connect_timeout: Duration::from_secs(10),
+                initial_retry_delay: Duration::from_millis(10),
+                max_retry_delay: Duration::from_millis(50),
+                child_state_check_interval: Duration::from_millis(25),
+            },
+            &cancel_epoch,
+            0,
+        )
+        .expect_err("total timeout budget should cap each connect attempt");
+        let elapsed = started_at.elapsed();
+        terminate_child_process(&mut child);
+        assert_eq!(error.reason, "timeout");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "startup wait should not exceed total budget window, elapsed={elapsed:?}"
+        );
     }
 
     #[test]

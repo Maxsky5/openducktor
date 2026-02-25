@@ -577,9 +577,26 @@ async fn probe_local_server_async(
             };
         }
 
+        let now = Instant::now();
+        if now >= deadline {
+            return LocalServerProbeEvent {
+                state: LocalServerProbeState::TimedOut,
+                report: startup_wait_report(started_at, current_attempts(&attempts)),
+            };
+        }
+
+        let remaining_budget = deadline.saturating_duration_since(now);
+        let connect_timeout = policy.connect_timeout.min(remaining_budget);
+        if connect_timeout.is_zero() {
+            return LocalServerProbeEvent {
+                state: LocalServerProbeState::TimedOut,
+                report: startup_wait_report(started_at, current_attempts(&attempts)),
+            };
+        }
+
         attempts.fetch_add(1, Ordering::Relaxed);
         let connected = tokio::time::timeout(
-            policy.connect_timeout,
+            connect_timeout,
             tokio::net::TcpStream::connect(address),
         )
         .await
@@ -593,15 +610,17 @@ async fn probe_local_server_async(
             };
         }
 
-        let now = Instant::now();
-        if now >= deadline {
+        let now_after_connect = Instant::now();
+        if now_after_connect >= deadline {
             return LocalServerProbeEvent {
                 state: LocalServerProbeState::TimedOut,
                 report: startup_wait_report(started_at, current_attempts(&attempts)),
             };
         }
 
-        let sleep_for = deadline.saturating_duration_since(now).min(retry_delay);
+        let sleep_for = deadline
+            .saturating_duration_since(now_after_connect)
+            .min(retry_delay);
         tokio::time::sleep(sleep_for).await;
         retry_delay = retry_delay
             .checked_mul(2)
