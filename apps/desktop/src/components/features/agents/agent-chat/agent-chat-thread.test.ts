@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { act, create } from "react-test-renderer";
 import {
   buildMessage,
   buildPermissionRequest,
@@ -10,6 +11,12 @@ import {
   TEST_ROLE_OPTIONS,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread } from "./agent-chat-thread";
+
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const baseModel = {
   roleOptions: TEST_ROLE_OPTIONS,
@@ -32,6 +39,7 @@ const baseModel = {
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
   todoPanelBottomOffset: 120,
+  isPinnedToBottom: true,
   messagesContainerRef: createRef<HTMLDivElement>(),
   onMessagesScroll: () => {},
 } as const;
@@ -159,6 +167,31 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Reject");
   });
 
+  test("keeps pending question and permission cards mounted for long virtualized sessions", () => {
+    const longMessages = Array.from({ length: 45 }, (_, index) =>
+      buildMessage("assistant", `Message ${index + 1}`, {
+        id: `message-${index + 1}`,
+      }),
+    );
+
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          session: buildSession({
+            messages: longMessages,
+            pendingQuestions: [buildQuestionRequest()],
+            pendingPermissions: [buildPermissionRequest()],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Message 45");
+    expect(html).toContain("Input needed");
+    expect(html).toContain("Permission request");
+  });
+
   test("renders floating todo panel for active todo items", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
@@ -185,5 +218,48 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Todo");
     expect(html).toContain("Analyze current styling");
     expect(html).toContain("Read layout and pages");
+  });
+
+  test("refreshes virtualized rows when message array mutates without changing session identity", () => {
+    const messages = Array.from({ length: 45 }, (_, index) =>
+      buildMessage("assistant", `Message ${index + 1}`, {
+        id: `message-${index + 1}`,
+      }),
+    );
+    const session = buildSession({ messages });
+    const model = {
+      ...baseModel,
+      session,
+    };
+
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        createElement(AgentChatThread, {
+          model,
+        }),
+      );
+    });
+
+    expect(JSON.stringify(renderer.toJSON())).toContain("Message 45");
+
+    session.messages.push(
+      buildMessage("assistant", "Message 46", {
+        id: "message-46",
+      }),
+    );
+
+    act(() => {
+      renderer.update(
+        createElement(AgentChatThread, {
+          model,
+        }),
+      );
+    });
+
+    expect(JSON.stringify(renderer.toJSON())).toContain("Message 46");
+    act(() => {
+      renderer.unmount();
+    });
   });
 });

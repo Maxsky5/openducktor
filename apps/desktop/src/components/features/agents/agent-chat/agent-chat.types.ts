@@ -33,6 +33,7 @@ export type AgentChatThreadModel = {
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
   todoPanelBottomOffset: number;
+  isPinnedToBottom: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
 };

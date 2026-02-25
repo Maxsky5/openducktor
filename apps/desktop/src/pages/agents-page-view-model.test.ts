@@ -205,6 +205,7 @@ describe("agents-page-view-model", () => {
       todoPanelCollapsed: false,
       onToggleTodoPanel,
       todoPanelBottomOffset: 12,
+      isPinnedToBottom: true,
       messagesContainerRef: { current: null },
       onMessagesScroll: () => {},
       input: "message",
@@ -229,6 +230,7 @@ describe("agents-page-view-model", () => {
     });
 
     expect(model.thread.taskSelected).toBe(false);
+    expect(model.thread.isPinnedToBottom).toBe(true);
     expect(model.composer.contextUsage).toEqual({ totalTokens: 10, contextWindow: 100 });
 
     model.thread.onRefreshChecks();
