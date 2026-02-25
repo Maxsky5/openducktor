@@ -238,6 +238,8 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Todo");
     expect(html).toContain("Analyze current styling");
     expect(html).toContain("Read layout and pages");
+    expect(html).toContain("max-h-[40vh]");
+    expect(html).toContain("overflow-y-auto");
   });
 
   test("refreshes virtualized rows when message array mutates without changing session identity", () => {

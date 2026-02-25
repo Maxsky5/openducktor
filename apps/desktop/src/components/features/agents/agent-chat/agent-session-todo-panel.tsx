@@ -81,27 +81,29 @@ export function AgentSessionTodoPanel({
           <p className="line-clamp-2">{activeTodo.content}</p>
         </div>
       ) : (
-        <ul className="mt-2 space-y-1">
-          {visibleTodos.map((todo) => (
-            <li
-              key={todo.id}
-              className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 rounded px-1 py-1 text-sm"
-            >
-              <span className="mt-[3px] inline-flex size-4 items-center justify-center">
-                {statusIcon(todo.status)}
-              </span>
-              <span
-                className={cn(
-                  "leading-5 text-slate-700",
-                  todo.status === "in_progress" && "font-medium text-slate-900",
-                  todo.status === "completed" && "text-slate-500 line-through",
-                )}
+        <div className="mt-2 max-h-[40vh] overflow-y-auto overscroll-contain pr-1">
+          <ul className="space-y-1">
+            {visibleTodos.map((todo) => (
+              <li
+                key={todo.id}
+                className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 rounded px-1 py-1 text-sm"
               >
-                {todo.content}
-              </span>
-            </li>
-          ))}
-        </ul>
+                <span className="mt-[3px] inline-flex size-4 items-center justify-center">
+                  {statusIcon(todo.status)}
+                </span>
+                <span
+                  className={cn(
+                    "leading-5 text-slate-700",
+                    todo.status === "in_progress" && "font-medium text-slate-900",
+                    todo.status === "completed" && "text-slate-500 line-through",
+                  )}
+                >
+                  {todo.content}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
