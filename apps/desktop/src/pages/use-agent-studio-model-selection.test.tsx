@@ -136,6 +136,20 @@ describe("useAgentStudioModelSelection", () => {
     await harness.unmount();
   });
 
+  test("publishes agent colors from composer catalog before a session is started", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+    await harness.waitFor((state) => state.agentOptions.length > 0);
+
+    const state = harness.getLatest();
+    expect(state.activeSessionAgentColors).toMatchObject({
+      "spec-agent": "#f59e0b",
+    });
+
+    await harness.unmount();
+  });
+
   test("updates draft selections through model and variant handlers", async () => {
     const harness = createHookHarness(createBaseProps());
 

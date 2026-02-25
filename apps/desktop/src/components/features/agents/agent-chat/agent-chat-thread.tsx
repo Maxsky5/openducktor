@@ -195,7 +195,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       if (row.kind === "message") {
         const isUserMessage = row.message.role === "user";
         return (
-          <div className={cn(isUserMessage ? "pt-4" : undefined)}>
+          <div className={cn("flow-root", isUserMessage ? "pt-4" : undefined)}>
             <AgentChatMessageCard
               message={row.message}
               sessionRole={session?.role ?? null}

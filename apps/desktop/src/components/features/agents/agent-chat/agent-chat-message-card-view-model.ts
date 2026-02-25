@@ -56,10 +56,12 @@ const resolveAssistantAgentColor = (
 };
 
 const resolveUserAgentColor = (
+  message: AgentChatMessage,
   sessionSelectedModel: AgentModelSelection | null,
   sessionAgentColors: Record<string, string> | undefined,
 ): string | undefined => {
-  const agentName = sessionSelectedModel?.opencodeAgent;
+  const messageMeta = message.meta?.kind === "user" ? message.meta : null;
+  const agentName = messageMeta?.opencodeAgent ?? sessionSelectedModel?.opencodeAgent;
   if (!agentName) {
     return undefined;
   }
@@ -129,7 +131,7 @@ export const buildAgentChatMessageCardViewModel = ({
     sessionSelectedModel,
     sessionAgentColors,
   );
-  const userAccentColor = resolveUserAgentColor(sessionSelectedModel, sessionAgentColors);
+  const userAccentColor = resolveUserAgentColor(message, sessionSelectedModel, sessionAgentColors);
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";

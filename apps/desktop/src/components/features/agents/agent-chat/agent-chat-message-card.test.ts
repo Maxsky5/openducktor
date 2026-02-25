@@ -283,7 +283,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("border-l-2");
   });
 
-  test("renders user messages as square cards with selected-agent accent border", () => {
+  test("renders user messages with border color from send-time user agent metadata", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -291,15 +291,22 @@ describe("AgentChatMessageCard tool duration", () => {
           role: "user",
           content: "Draft the final UI pass.",
           timestamp: "2026-02-22T10:25:00.000Z",
+          meta: {
+            kind: "user",
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+            opencodeAgent: "Hephaestus (Deep Agent)",
+          },
         },
         sessionRole: "build",
         sessionSelectedModel: {
           providerId: "openai",
           modelId: "gpt-5.3-codex",
-          opencodeAgent: "Hephaestus (Deep Agent)",
+          opencodeAgent: "Ares (Legacy Agent)",
         },
         sessionAgentColors: {
           "Hephaestus (Deep Agent)": "#2f6fed",
+          "Ares (Legacy Agent)": "#f97316",
         },
       }),
     );
@@ -308,5 +315,29 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("w-full");
     expect(html).toContain("border-l-4");
     expect(html).toContain("border-left-color:#2f6fed");
+  });
+
+  test("falls back to session-selected model agent color for legacy user messages without metadata", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-2",
+          role: "user",
+          content: "Use the fallback color.",
+          timestamp: "2026-02-22T10:26:00.000Z",
+        },
+        sessionRole: "build",
+        sessionSelectedModel: {
+          providerId: "openai",
+          modelId: "gpt-5.3-codex",
+          opencodeAgent: "Ares (Legacy Agent)",
+        },
+        sessionAgentColors: {
+          "Ares (Legacy Agent)": "#f97316",
+        },
+      }),
+    );
+
+    expect(html).toContain("border-left-color:#f97316");
   });
 });

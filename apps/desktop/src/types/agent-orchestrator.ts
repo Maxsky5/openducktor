@@ -42,6 +42,13 @@ export type AgentChatMessageMeta =
       outputLimit?: number;
     }
   | {
+      kind: "user";
+      providerId?: string;
+      modelId?: string;
+      variant?: string;
+      opencodeAgent?: string;
+    }
+  | {
       kind: "step";
       partId: string;
       phase: "start" | "finish";

@@ -146,6 +146,15 @@ export const createAgentSessionActions = ({
     await ensureSessionReady(sessionId);
 
     const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
+    const userMessageMeta = selectedModel?.opencodeAgent
+      ? {
+          kind: "user" as const,
+          ...(selectedModel.providerId ? { providerId: selectedModel.providerId } : {}),
+          ...(selectedModel.modelId ? { modelId: selectedModel.modelId } : {}),
+          ...(selectedModel.variant ? { variant: selectedModel.variant } : {}),
+          ...(selectedModel.opencodeAgent ? { opencodeAgent: selectedModel.opencodeAgent } : {}),
+        }
+      : undefined;
     turnStartedAtBySessionRef.current[sessionId] = Date.now();
 
     updateSession(sessionId, (current) => ({
@@ -159,6 +168,7 @@ export const createAgentSessionActions = ({
           role: "user",
           content: trimmed,
           timestamp: now(),
+          ...(userMessageMeta ? { meta: userMessageMeta } : {}),
         },
       ],
     }));

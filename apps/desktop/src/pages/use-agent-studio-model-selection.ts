@@ -258,15 +258,11 @@ export function useAgentStudioModelSelection({
   }, [selectedModelEntry, selectedModelSelection?.variant]);
 
   const activeSessionAgentColors = useMemo<Record<string, string>>(() => {
-    if (!activeSession) {
-      return {};
-    }
-    const catalog = activeSession.modelCatalog ?? composerCatalog;
-    if (!catalog) {
+    if (!selectionCatalog) {
       return {};
     }
     const map: Record<string, string> = {};
-    for (const descriptor of catalog.agents) {
+    for (const descriptor of selectionCatalog.agents) {
       if (!descriptor.name) {
         continue;
       }
@@ -276,7 +272,7 @@ export function useAgentStudioModelSelection({
       }
     }
     return map;
-  }, [activeSession, composerCatalog]);
+  }, [selectionCatalog]);
 
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
     if (!activeSession) {

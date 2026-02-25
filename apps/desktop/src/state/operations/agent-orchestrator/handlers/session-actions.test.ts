@@ -392,7 +392,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": buildSession({ status: "idle" }),
+        "session-1": buildSession({
+          status: "idle",
+          selectedModel: {
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+            variant: "high",
+            opencodeAgent: "Hephaestus (Deep Agent)",
+          },
+        }),
       },
     };
 
@@ -435,8 +443,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", " hello ");
       expect(sendCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
-      expect(sessionsRef.current["session-1"]?.messages.at(-1)?.role).toBe("user");
-      expect(sessionsRef.current["session-1"]?.messages.at(-1)?.content).toBe("hello");
+      const latest = sessionsRef.current["session-1"]?.messages.at(-1);
+      expect(latest?.role).toBe("user");
+      expect(latest?.content).toBe("hello");
+      if (!latest?.meta || latest.meta.kind !== "user") {
+        throw new Error("Expected user message metadata");
+      }
+      expect(latest.meta.providerId).toBe("openai");
+      expect(latest.meta.modelId).toBe("gpt-5.3-codex");
+      expect(latest.meta.variant).toBe("high");
+      expect(latest.meta.opencodeAgent).toBe("Hephaestus (Deep Agent)");
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;
