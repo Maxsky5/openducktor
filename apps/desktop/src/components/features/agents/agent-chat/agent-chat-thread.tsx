@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { Fragment, type ReactElement, type UIEvent, useCallback, useEffect } from "react";
+import { Fragment, type ReactElement, type UIEvent, useCallback, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -91,6 +91,35 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   }, [activeSessionId, shouldVirtualize, virtualRows.length, virtualizer]);
 
   useEffect(() => {
+    if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const syncVirtualizerOffset = (): void => {
+      virtualizer.scrollToOffset(container.scrollTop, { behavior: "auto" });
+      virtualizer.measure();
+    };
+
+    syncVirtualizerOffset();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      syncVirtualizerOffset();
+    });
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [activeSessionId, messagesContainerRef, shouldVirtualize, virtualRows.length, virtualizer]);
+
+  useEffect(() => {
     if (!activeSessionId || !shouldVirtualize || !isPinnedToBottom || virtualRows.length === 0) {
       return;
     }
@@ -136,7 +165,25 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     [onMessagesScroll],
   );
   const virtualItems = virtualizer.getVirtualItems();
-  const canRenderVirtualRows = shouldVirtualize && virtualItems.length > 0;
+  const virtualRowsToRender = useMemo(
+    () =>
+      virtualItems
+        .map((virtualItem) => {
+          const row = virtualRows[virtualItem.index];
+          if (!row) {
+            return null;
+          }
+          return { row, virtualItem };
+        })
+        .filter(
+          (
+            entry,
+          ): entry is { row: AgentChatVirtualRow; virtualItem: (typeof virtualItems)[number] } =>
+            entry !== null,
+        ),
+    [virtualItems, virtualRows],
+  );
+  const canRenderVirtualRows = shouldVirtualize && virtualRowsToRender.length > 0;
 
   const renderVirtualRow = useCallback(
     (row: AgentChatVirtualRow): ReactElement => {
@@ -245,24 +292,20 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
               width: "100%",
             }}
           >
-            {virtualItems.map((virtualRow) => {
-              const row = virtualRows[virtualRow.index] ?? null;
-              if (!row) {
-                return null;
-              }
-              const isLastRow = virtualRow.index === virtualRows.length - 1;
+            {virtualRowsToRender.map(({ row, virtualItem }) => {
+              const isLastRow = virtualItem.index === virtualRows.length - 1;
 
               return (
                 <div
-                  key={virtualRow.key}
-                  data-index={virtualRow.index}
+                  key={virtualItem.key}
+                  data-index={virtualItem.index}
                   ref={virtualizer.measureElement}
                   style={{
                     left: 0,
                     paddingBottom: isLastRow ? 0 : AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
                     position: "absolute",
                     top: 0,
-                    transform: `translateY(${virtualRow.start}px)`,
+                    transform: `translateY(${virtualItem.start}px)`,
                     width: "100%",
                   }}
                 >
