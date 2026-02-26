@@ -6,6 +6,7 @@ import {
   buildVirtualColumnLayout,
   findVirtualWindowRange,
   getVirtualWindowEdgeOffsets,
+  resolveVirtualViewportWindow,
   type VirtualWindowRange,
 } from "@/components/features/kanban/kanban-column-virtualization";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
@@ -197,14 +198,22 @@ export function KanbanColumn({
     }
 
     const rect = viewportElement.getBoundingClientRect();
-    const nextStart = -rect.top;
-    const nextEnd = nextStart + window.innerHeight;
+    const scrollContainer = viewportElement.closest(
+      "[data-main-scroll-container='true']",
+    ) as HTMLElement | null;
+    const containerRect = scrollContainer?.getBoundingClientRect();
+    const viewportHeight = scrollContainer?.clientHeight ?? window.innerHeight;
+    const { viewportStart, viewportEnd } = resolveVirtualViewportWindow({
+      laneTop: rect.top,
+      viewportTop: containerRect?.top ?? 0,
+      viewportHeight,
+    });
     const nextRange = findVirtualWindowRange({
       itemOffsets: virtualLayout.itemOffsets,
       itemHeights: taskHeights,
       totalHeight: virtualLayout.totalHeight,
-      viewportStart: nextStart - VIRTUAL_OVERSCAN_PX,
-      viewportEnd: nextEnd + VIRTUAL_OVERSCAN_PX,
+      viewportStart: viewportStart - VIRTUAL_OVERSCAN_PX,
+      viewportEnd: viewportEnd + VIRTUAL_OVERSCAN_PX,
     });
 
     setVisibleRange((current) => {
@@ -243,9 +252,14 @@ export function KanbanColumn({
       });
     };
 
+    const scrollContainer = cardsViewportRef.current?.closest(
+      "[data-main-scroll-container='true']",
+    ) as HTMLElement | null;
+
     scheduleViewportSync();
     window.addEventListener("scroll", scheduleViewportSync, { passive: true });
     window.addEventListener("resize", scheduleViewportSync);
+    scrollContainer?.addEventListener("scroll", scheduleViewportSync, { passive: true });
 
     const viewportElement = cardsViewportRef.current;
     const resizeObserver =
@@ -262,6 +276,7 @@ export function KanbanColumn({
     return () => {
       window.removeEventListener("scroll", scheduleViewportSync);
       window.removeEventListener("resize", scheduleViewportSync);
+      scrollContainer?.removeEventListener("scroll", scheduleViewportSync);
       if (rafRef.current !== null) {
         window.cancelAnimationFrame(rafRef.current);
       }

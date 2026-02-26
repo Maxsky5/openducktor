@@ -18,7 +18,26 @@ type VirtualWindowEdgeOffsetsArgs = {
   totalHeight: number;
 };
 
+type ResolveVirtualViewportWindowArgs = {
+  laneTop: number;
+  viewportTop: number;
+  viewportHeight: number;
+};
+
 const EMPTY_RANGE: VirtualWindowRange = { startIndex: 0, endIndex: -1 };
+
+export function resolveVirtualViewportWindow({
+  laneTop,
+  viewportTop,
+  viewportHeight,
+}: ResolveVirtualViewportWindowArgs): { viewportStart: number; viewportEnd: number } {
+  const safeViewportHeight = Math.max(0, viewportHeight);
+  const viewportStart = viewportTop - laneTop;
+  return {
+    viewportStart,
+    viewportEnd: viewportStart + safeViewportHeight,
+  };
+}
 
 export function buildVirtualColumnLayout(
   itemHeights: number[],

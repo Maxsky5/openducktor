@@ -146,7 +146,10 @@ export function AppShell(): ReactElement {
           </aside>
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
-            <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            <main
+              data-main-scroll-container="true"
+              className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+            >
               <Outlet />
             </main>
           </section>
