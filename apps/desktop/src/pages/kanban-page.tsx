@@ -89,7 +89,7 @@ export function KanbanPage(): ReactElement {
   );
 
   return (
-    <div className="grid h-full min-w-0 gap-4 overflow-x-hidden p-4">
+    <div className="grid min-h-full min-w-0 gap-4 overflow-x-hidden p-4">
       <KanbanSummaryCards
         taskCount={tasks.length}
         runningCount={runningCount}
@@ -130,9 +130,9 @@ export function KanbanPage(): ReactElement {
         </div>
       </div>
 
-      <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm">
-        <div className="hide-scrollbar max-w-full overflow-x-auto pb-2">
-          <div className="flex min-w-max items-stretch gap-4 pr-2">
+      <section className="min-h-0 min-w-0">
+        <div className="hide-scrollbar max-w-full overflow-x-auto">
+          <div className="flex min-w-max items-stretch gap-4">
             {columns.map((column) => (
               <KanbanColumn
                 key={column.id}
