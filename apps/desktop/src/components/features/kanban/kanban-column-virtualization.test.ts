@@ -3,6 +3,7 @@ import {
   buildVirtualColumnLayout,
   findVirtualWindowRange,
   getVirtualWindowEdgeOffsets,
+  resolveVirtualViewportWindow,
 } from "@/components/features/kanban/kanban-column-virtualization";
 
 describe("kanban-column virtualization helpers", () => {
@@ -57,6 +58,32 @@ describe("kanban-column virtualization helpers", () => {
     expect(offsets).toEqual({
       topSpacerHeight: 112,
       bottomSpacerHeight: 142,
+    });
+  });
+
+  test("resolveVirtualViewportWindow computes window-relative viewport bounds", () => {
+    const result = resolveVirtualViewportWindow({
+      laneTop: 220,
+      viewportTop: 0,
+      viewportHeight: 900,
+    });
+
+    expect(result).toEqual({
+      viewportStart: -220,
+      viewportEnd: 680,
+    });
+  });
+
+  test("resolveVirtualViewportWindow computes nested scroll-container viewport bounds", () => {
+    const result = resolveVirtualViewportWindow({
+      laneTop: 260,
+      viewportTop: 100,
+      viewportHeight: 640,
+    });
+
+    expect(result).toEqual({
+      viewportStart: -160,
+      viewportEnd: 480,
     });
   });
 });

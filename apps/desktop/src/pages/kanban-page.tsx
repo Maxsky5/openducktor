@@ -2,7 +2,7 @@ import { mapToKanbanColumns } from "@openducktor/core";
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { KanbanColumn, KanbanSummaryCards } from "@/components/features/kanban";
+import { KanbanColumn } from "@/components/features/kanban";
 import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { Button } from "@/components/ui/button";
@@ -31,15 +31,6 @@ export function KanbanPage(): ReactElement {
     () => new Map(runs.map((run) => [run.taskId, run.state])),
     [runs],
   );
-  const runningCount = useMemo(
-    () => runs.filter((run) => run.state === "running" || run.state === "starting").length,
-    [runs],
-  );
-  const blockedCount = useMemo(
-    () => tasks.filter((task) => task.status === "blocked").length,
-    [tasks],
-  );
-  const doneCount = useMemo(() => tasks.filter((task) => task.status === "closed").length, [tasks]);
   const detailsTask = useMemo(
     () => tasks.find((task) => task.id === detailsTaskId) ?? null,
     [detailsTaskId, tasks],
@@ -89,16 +80,9 @@ export function KanbanPage(): ReactElement {
   );
 
   return (
-    <div className="grid h-full min-w-0 gap-4 overflow-x-hidden">
-      <KanbanSummaryCards
-        taskCount={tasks.length}
-        runningCount={runningCount}
-        blockedCount={blockedCount}
-        doneCount={doneCount}
-      />
-
+    <div className="grid min-h-full min-w-0 gap-4 overflow-x-hidden p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold tracking-tight text-slate-800">Kanban Board</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-slate-800">Kanban Board</h2>
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -130,9 +114,9 @@ export function KanbanPage(): ReactElement {
         </div>
       </div>
 
-      <section className="min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 p-3 shadow-sm">
-        <div className="hide-scrollbar max-w-full overflow-x-auto pb-2">
-          <div className="flex min-w-max items-stretch gap-4 pr-2">
+      <section className="min-h-0 min-w-0">
+        <div className="hide-scrollbar max-w-full overflow-x-auto">
+          <div className="flex min-w-max items-stretch gap-4">
             {columns.map((column) => (
               <KanbanColumn
                 key={column.id}

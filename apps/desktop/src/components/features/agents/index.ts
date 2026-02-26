@@ -18,6 +18,15 @@ export {
 export type { AgentStudioHeaderModel } from "./agent-studio-header";
 export { AgentStudioHeader } from "./agent-studio-header";
 export type {
+  AgentStudioRightPanelKind,
+  AgentStudioRightPanelModel,
+  AgentStudioRightPanelToggleModel,
+} from "./agent-studio-right-panel";
+export {
+  AgentStudioRightPanel,
+  AgentStudioRightPanelToggleButton,
+} from "./agent-studio-right-panel";
+export type {
   AgentStudioTaskTab,
   AgentStudioTaskTabStatus,
   AgentStudioTaskTabsModel,

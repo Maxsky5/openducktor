@@ -4,8 +4,8 @@ import { useSearchParams } from "react-router-dom";
 import {
   AgentChat,
   AgentStudioHeader,
+  AgentStudioRightPanel,
   AgentStudioTaskTabs,
-  AgentStudioWorkspaceSidebar,
 } from "@/components/features/agents";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -19,6 +19,7 @@ import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
+import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
@@ -368,13 +369,23 @@ export function AgentsPage(): ReactElement {
     stopAgentSession,
   });
 
+  const rightPanel = useAgentStudioRightPanel({
+    role,
+    hasTaskContext: Boolean(taskId),
+    hasDocumentPanel: Boolean(agentStudioWorkspaceSidebarModel.activeDocument),
+    hasDiffPanel: false,
+  });
+
   return (
     <Tabs
       value={activeTabValue}
       onValueChange={handleSelectTab}
-      className="h-[calc(100vh-2rem)] min-h-0 max-h-[calc(100vh-2rem)] shadow-lg rounded-xl gap-0 overflow-hidden"
+      className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-white"
     >
-      <AgentStudioTaskTabs model={agentStudioTaskTabsModel} />
+      <AgentStudioTaskTabs
+        model={agentStudioTaskTabsModel}
+        rightPanelToggleModel={rightPanel.rightPanelToggleModel}
+      />
 
       <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 bg-white p-0">
         {taskId ? (
@@ -385,17 +396,22 @@ export function AgentsPage(): ReactElement {
                 model={agentChatModel}
               />
             </ResizablePanel>
-            {agentStudioWorkspaceSidebarModel.activeDocument ? (
+            {rightPanel.panelKind && rightPanel.isPanelOpen ? (
               <>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize={37} minSize={30}>
-                  <AgentStudioWorkspaceSidebar model={agentStudioWorkspaceSidebarModel} />
+                  <AgentStudioRightPanel
+                    model={{
+                      kind: rightPanel.panelKind,
+                      documentsModel: agentStudioWorkspaceSidebarModel,
+                    }}
+                  />
                 </ResizablePanel>
               </>
             ) : null}
           </ResizablePanelGroup>
         ) : (
-          <div className="flex h-full min-h-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm text-slate-500">
+          <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-slate-300 bg-white text-sm text-slate-500">
             Open a task tab to start a workspace.
           </div>
         )}
