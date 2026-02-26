@@ -224,8 +224,12 @@ export const buildAgentChatComposerModel = (
 });
 
 export const buildAgentChatModel = (
-  args: AgentChatThreadModelArgs & AgentChatComposerModelArgs,
+  args: AgentChatThreadModelArgs &
+    AgentChatComposerModelArgs & {
+      isContextSwitching?: boolean;
+    },
 ): AgentChatModel => ({
   thread: buildAgentChatThreadModel(args),
   composer: buildAgentChatComposerModel(args),
+  isContextSwitching: args.isContextSwitching ?? false,
 });

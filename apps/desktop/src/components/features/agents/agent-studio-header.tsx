@@ -8,7 +8,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { type ReactElement, startTransition, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
@@ -269,9 +269,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   title={workflowStepHint(entry)}
                   onClick={() => {
                     setOptimisticSelectedRole(entry.role);
-                    startTransition(() => {
-                      onWorkflowStepSelect(entry.role, entry.sessionId);
-                    });
+                    onWorkflowStepSelect(entry.role, entry.sessionId);
                   }}
                 >
                   <Icon className="size-4" />

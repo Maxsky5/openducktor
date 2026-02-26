@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
 import type { AgentChatModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer";
@@ -16,9 +17,17 @@ export function AgentChat({
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {header}
       <div className="min-h-0 flex-1 bg-slate-50">
-        <div className="flex h-full min-h-0 flex-col">
+        <div className="relative flex h-full min-h-0 flex-col">
           <MemoizedAgentChatThread model={model.thread} />
           <AgentChatComposer model={model.composer} />
+          {model.isContextSwitching ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-100/70 backdrop-blur-[1px]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+                <LoaderCircle className="size-3.5 animate-spin" />
+                Switching context...
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

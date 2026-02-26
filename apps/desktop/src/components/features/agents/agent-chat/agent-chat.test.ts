@@ -67,6 +67,7 @@ const buildModel = () => ({
     composerTextareaRef: createRef<HTMLTextAreaElement>(),
     onComposerTextareaInput: () => {},
   },
+  isContextSwitching: false,
 });
 
 describe("AgentChat", () => {

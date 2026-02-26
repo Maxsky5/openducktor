@@ -33,6 +33,7 @@ type UseAgentStudioSessionActionsArgs = {
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
+  onContextSwitchIntent?: () => void;
 };
 
 export function useAgentStudioSessionActions({
@@ -55,6 +56,7 @@ export function useAgentStudioSessionActions({
   updateAgentSessionModel,
   answerAgentQuestion,
   updateQuery,
+  onContextSwitchIntent,
 }: UseAgentStudioSessionActionsArgs): {
   isStarting: boolean;
   isSending: boolean;
@@ -372,7 +374,14 @@ export function useAgentStudioSessionActions({
       if (!taskId) {
         return;
       }
+      const currentSessionId = activeSession?.sessionId ?? null;
+      const currentRole = activeSession?.role ?? role;
+
       if (!sessionId) {
+        if (currentSessionId !== null || currentRole !== nextRole) {
+          onContextSwitchIntent?.();
+        }
+
         updateQuery({
           task: taskId,
           session: undefined,
@@ -386,6 +395,11 @@ export function useAgentStudioSessionActions({
       if (!session) {
         return;
       }
+
+      if (session.sessionId !== currentSessionId || session.role !== currentRole) {
+        onContextSwitchIntent?.();
+      }
+
       updateQuery({
         task: session.taskId,
         session: session.sessionId,
@@ -394,7 +408,7 @@ export function useAgentStudioSessionActions({
         autostart: undefined,
       });
     },
-    [sessionsForTask, taskId, updateQuery],
+    [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
   );
 
   const handleSessionSelectionChange = useCallback(
@@ -406,6 +420,11 @@ export function useAgentStudioSessionActions({
       if (!selectedSession) {
         return;
       }
+
+      if (activeSession?.sessionId !== selectedSession.sessionId) {
+        onContextSwitchIntent?.();
+      }
+
       updateQuery({
         task: selectedSession.taskId,
         session: selectedSession.sessionId,
@@ -414,7 +433,7 @@ export function useAgentStudioSessionActions({
         autostart: undefined,
       });
     },
-    [sessionsForTask, taskId, updateQuery],
+    [activeSession?.sessionId, onContextSwitchIntent, sessionsForTask, taskId, updateQuery],
   );
 
   const handleCreateSession = useCallback(
@@ -453,6 +472,13 @@ export function useAgentStudioSessionActions({
         scenario,
         autostart: undefined,
       };
+
+      if (
+        (activeSession?.sessionId ?? null) !== null ||
+        (activeSession?.role ?? role) !== nextRole
+      ) {
+        onContextSwitchIntent?.();
+      }
 
       updateQuery({
         task: taskId,
@@ -536,6 +562,7 @@ export function useAgentStudioSessionActions({
       scenario,
       activeRepo,
       sendAgentMessage,
+      onContextSwitchIntent,
       startAgentSession,
       taskId,
       updateQuery,

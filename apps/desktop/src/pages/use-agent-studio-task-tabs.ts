@@ -45,6 +45,7 @@ export function useAgentStudioTaskTabs(args: {
   latestSessionByTaskId: Map<string, AgentSessionState>;
   updateQuery: (updates: QueryUpdate) => void;
   clearComposerInput: () => void;
+  onContextSwitchIntent?: () => void;
 }): {
   tabTaskIds: string[];
   activeTaskTabId: string;
@@ -63,6 +64,7 @@ export function useAgentStudioTaskTabs(args: {
     latestSessionByTaskId,
     updateQuery,
     clearComposerInput,
+    onContextSwitchIntent,
   } = args;
 
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
@@ -209,6 +211,11 @@ export function useAgentStudioTaskTabs(args: {
       if (!nextTaskId) {
         return;
       }
+      if (nextTaskId === activeTaskTabId) {
+        return;
+      }
+
+      onContextSwitchIntent?.();
 
       clearComposerInput();
       setOpenTaskTabs((current) => {
@@ -243,7 +250,14 @@ export function useAgentStudioTaskTabs(args: {
         start: undefined,
       });
     },
-    [clearComposerInput, deferQueryUpdate, latestSessionByTaskId, tasks],
+    [
+      activeTaskTabId,
+      clearComposerInput,
+      deferQueryUpdate,
+      latestSessionByTaskId,
+      onContextSwitchIntent,
+      tasks,
+    ],
   );
 
   const handleCreateTab = useCallback(
@@ -273,6 +287,8 @@ export function useAgentStudioTaskTabs(args: {
       }
 
       clearComposerInput();
+      onContextSwitchIntent?.();
+
       if (!nextActiveTaskId) {
         deferQueryUpdate({
           task: undefined,
@@ -318,7 +334,15 @@ export function useAgentStudioTaskTabs(args: {
         start: undefined,
       });
     },
-    [clearComposerInput, deferQueryUpdate, latestSessionByTaskId, tabTaskIds, taskId, tasks],
+    [
+      clearComposerInput,
+      deferQueryUpdate,
+      latestSessionByTaskId,
+      onContextSwitchIntent,
+      tabTaskIds,
+      taskId,
+      tasks,
+    ],
   );
 
   return {

@@ -58,6 +58,7 @@ export function AgentsPage(): ReactElement {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
+  const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
 
   const {
     taskIdParam,
@@ -166,6 +167,10 @@ export function AgentsPage(): ReactElement {
     setInput("");
   }, []);
 
+  const signalContextSwitchIntent = useCallback((): void => {
+    setContextSwitchVersion((current) => current + 1);
+  }, []);
+
   const {
     tabTaskIds,
     activeTaskTabId,
@@ -183,6 +188,7 @@ export function AgentsPage(): ReactElement {
     latestSessionByTaskId: sessionByTaskId,
     updateQuery,
     clearComposerInput,
+    onContextSwitchIntent: signalContextSwitchIntent,
   });
 
   const viewTaskId = activeTaskTabId || taskId;
@@ -210,14 +216,7 @@ export function AgentsPage(): ReactElement {
 
   const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
 
-  const viewRoleFromQuery = useMemo(() => {
-    if (!hasExplicitRoleParam || isViewTaskDetachedFromQuery) {
-      return null;
-    }
-
-    const matchesViewTask = viewSessionsForTask.some((session) => session.role === roleFromQuery);
-    return matchesViewTask ? roleFromQuery : null;
-  }, [hasExplicitRoleParam, isViewTaskDetachedFromQuery, roleFromQuery, viewSessionsForTask]);
+  const hasViewRoleSelection = hasExplicitRoleParam && !isViewTaskDetachedFromQuery;
 
   const normalizedSessionStartPreference = sessionStartPreference ?? null;
   const viewSessionStartPreference = isViewTaskDetachedFromQuery
@@ -228,27 +227,30 @@ export function AgentsPage(): ReactElement {
     return resolveAgentStudioActiveSession({
       sessionsForTask: viewSessionsForTask,
       sessionParam: viewSessionParam,
-      hasExplicitRoleParam: viewRoleFromQuery !== null,
-      roleFromQuery: viewRoleFromQuery ?? roleFromQuery,
+      hasExplicitRoleParam: hasViewRoleSelection,
+      roleFromQuery,
       sessionStartPreference: viewSessionStartPreference,
     });
   }, [
+    hasViewRoleSelection,
     roleFromQuery,
-    viewRoleFromQuery,
     viewSessionStartPreference,
     viewSessionParam,
     viewSessionsForTask,
   ]);
 
-  const viewRole: AgentRole =
-    viewActiveSession?.role ??
-    viewRoleFromQuery ??
-    viewSessionsForTask[0]?.role ??
-    (isViewTaskDetachedFromQuery ? "spec" : roleFromQuery);
+  const viewRole: AgentRole = hasViewRoleSelection
+    ? roleFromQuery
+    : (viewActiveSession?.role ??
+      viewSessionsForTask[0]?.role ??
+      (isViewTaskDetachedFromQuery ? "spec" : roleFromQuery));
   const viewScenarios = SCENARIOS_BY_ROLE[viewRole];
-  const viewScenario =
-    scenarioFromQuery && viewScenarios.includes(scenarioFromQuery)
+  const viewScenario = hasViewRoleSelection
+    ? scenarioFromQuery && viewScenarios.includes(scenarioFromQuery)
       ? scenarioFromQuery
+      : firstScenario(viewRole)
+    : viewActiveSession?.scenario && viewScenarios.includes(viewActiveSession.scenario)
+      ? viewActiveSession.scenario
       : firstScenario(viewRole);
 
   const hydratedTasksByRepoAndTask = useAgentStudioTaskHydration({
@@ -413,6 +415,7 @@ export function AgentsPage(): ReactElement {
     updateAgentSessionModel,
     answerAgentQuestion,
     updateQuery,
+    onContextSwitchIntent: signalContextSwitchIntent,
   });
 
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
@@ -439,6 +442,8 @@ export function AgentsPage(): ReactElement {
     activeSession: viewActiveSession,
     taskTabs,
     availableTabTasks,
+    isTaskHydrating: Boolean(viewTaskId && !isActiveTaskHydrated),
+    contextSwitchVersion,
     isLoadingTasks,
     onCreateTab: handleCreateTab,
     onCloseTab: handleCloseTab,

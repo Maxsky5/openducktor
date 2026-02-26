@@ -75,4 +75,5 @@ export type AgentChatComposerModel = {
 export type AgentChatModel = {
   thread: AgentChatThreadModel;
   composer: AgentChatComposerModel;
+  isContextSwitching: boolean;
 };

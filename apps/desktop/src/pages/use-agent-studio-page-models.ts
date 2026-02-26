@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { type UIEvent, useCallback, useMemo, useState } from "react";
+import { type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type AgentChatModel,
   type AgentStudioTaskTabsModel,
@@ -39,6 +39,8 @@ type UseAgentStudioPageModelsArgs = {
   activeSession: AgentSessionState | null;
   taskTabs: AgentStudioTaskTabsModel["tabs"];
   availableTabTasks: TaskCard[];
+  isTaskHydrating: boolean;
+  contextSwitchVersion: number;
   isLoadingTasks: boolean;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
@@ -95,6 +97,8 @@ export function useAgentStudioPageModels({
   activeSession,
   taskTabs,
   availableTabTasks,
+  isTaskHydrating,
+  contextSwitchVersion,
   isLoadingTasks,
   onCreateTab,
   onCloseTab,
@@ -145,11 +149,105 @@ export function useAgentStudioPageModels({
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
+  const [threadSession, setThreadSession] = useState<AgentSessionState | null>(activeSession);
+  const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
+  const contextSwitchVersionRef = useRef(contextSwitchVersion);
+  const hasObservedContextSwitchRef = useRef(false);
+  const contextSwitchIntentRafRef = useRef<number | null>(null);
 
-  const activeMessageCount = activeSession?.messages.length ?? 0;
-  const activeDraftScrollBucket = Math.floor((activeSession?.draftAssistantText.length ?? 0) / 48);
-  const activeSessionStatus = activeSession?.status ?? "stopped";
-  const scrollTrigger = `${activeSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${activeSession?.pendingQuestions.length ?? 0}:${activeSession?.pendingPermissions.length ?? 0}:${activeDraftScrollBucket}`;
+  useEffect(() => {
+    if (contextSwitchVersionRef.current === contextSwitchVersion) {
+      return;
+    }
+
+    contextSwitchVersionRef.current = contextSwitchVersion;
+    hasObservedContextSwitchRef.current = false;
+    setIsContextSwitchIntentActive(true);
+
+    if (contextSwitchIntentRafRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(contextSwitchIntentRafRef.current);
+      contextSwitchIntentRafRef.current = null;
+    }
+
+    if (typeof window === "undefined") {
+      setIsContextSwitchIntentActive(false);
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      const nestedRafId = window.requestAnimationFrame(() => {
+        contextSwitchIntentRafRef.current = null;
+        if (!hasObservedContextSwitchRef.current) {
+          setIsContextSwitchIntentActive(false);
+        }
+      });
+      contextSwitchIntentRafRef.current = nestedRafId;
+    });
+    contextSwitchIntentRafRef.current = rafId;
+  }, [contextSwitchVersion]);
+
+  useEffect(() => {
+    const nextSessionId = activeSession?.sessionId ?? null;
+    const currentThreadSessionId = threadSession?.sessionId ?? null;
+    if (nextSessionId === currentThreadSessionId) {
+      if (activeSession !== threadSession) {
+        setThreadSession(activeSession);
+      }
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      setThreadSession(activeSession);
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      setThreadSession(activeSession);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [activeSession, threadSession]);
+
+  useEffect(() => {
+    return () => {
+      if (contextSwitchIntentRafRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(contextSwitchIntentRafRef.current);
+      }
+    };
+  }, []);
+
+  const activeSessionId = activeSession?.sessionId ?? null;
+  const threadSessionId = threadSession?.sessionId ?? null;
+
+  const isThreadContextSwitching = activeSessionId !== threadSessionId;
+
+  useEffect(() => {
+    if (!isContextSwitchIntentActive) {
+      return;
+    }
+
+    if (isTaskHydrating || isThreadContextSwitching) {
+      hasObservedContextSwitchRef.current = true;
+      return;
+    }
+
+    if (!hasObservedContextSwitchRef.current) {
+      return;
+    }
+
+    hasObservedContextSwitchRef.current = false;
+    setIsContextSwitchIntentActive(false);
+  }, [isContextSwitchIntentActive, isTaskHydrating, isThreadContextSwitching]);
+
+  const isContextSwitching =
+    isTaskHydrating || isThreadContextSwitching || isContextSwitchIntentActive;
+
+  const activeMessageCount = threadSession?.messages.length ?? 0;
+  const activeDraftScrollBucket = Math.floor((threadSession?.draftAssistantText.length ?? 0) / 48);
+  const activeSessionStatus = threadSession?.status ?? "stopped";
+  const scrollTrigger = `${threadSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${threadSession?.pendingQuestions.length ?? 0}:${threadSession?.pendingPermissions.length ?? 0}:${activeDraftScrollBucket}`;
 
   const {
     messagesContainerRef,
@@ -162,7 +260,7 @@ export function useAgentStudioPageModels({
   } = useAgentChatLayout({
     input,
     scrollTrigger,
-    activeSessionId: activeSession?.sessionId ?? null,
+    activeSessionId: threadSession?.sessionId ?? null,
   });
 
   const handleMessagesScroll = useCallback(
@@ -218,7 +316,12 @@ export function useAgentStudioPageModels({
       }),
     [sessionsForTask, roleLabelByRole],
   );
-  const sessionSelectorValue = activeSession?.sessionId ?? sessionsForTask[0]?.sessionId ?? "";
+  const fallbackSessionForSelectedRole = useMemo(
+    () => sessionsForTask.find((session) => session.role === selectedInteractionRole) ?? null,
+    [selectedInteractionRole, sessionsForTask],
+  );
+  const sessionSelectorValue =
+    activeSession?.sessionId ?? fallbackSessionForSelectedRole?.sessionId ?? "";
   const createSessionDisabled = Boolean(activeSession && isSessionWorking);
   const hasQaFeedback = qaDoc.markdown.trim().length > 0;
   const hasHumanFeedback = Boolean(
@@ -351,7 +454,6 @@ export function useAgentStudioPageModels({
     void startScenarioKickoff();
   }, [startScenarioKickoff]);
 
-  const activeSessionId = activeSession?.sessionId ?? null;
   const isModelSelectionPending = Boolean(
     activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
   );
@@ -383,7 +485,7 @@ export function useAgentStudioPageModels({
   const agentChatThreadModel = useMemo(
     () =>
       buildAgentChatThreadModel({
-        activeSession: activeSession,
+        activeSession: threadSession,
         roleOptions: ROLE_OPTIONS,
         agentStudioReady,
         agentStudioBlockedReason,
@@ -409,7 +511,7 @@ export function useAgentStudioPageModels({
         onMessagesScroll: handleMessagesScroll,
       }),
     [
-      activeSession,
+      threadSession,
       activeSessionAgentColors,
       activeTodoPanelCollapsed,
       agentStudioBlockedReason,
@@ -502,8 +604,9 @@ export function useAgentStudioPageModels({
     () => ({
       thread: agentChatThreadModel,
       composer: agentChatComposerModel,
+      isContextSwitching,
     }),
-    [agentChatComposerModel, agentChatThreadModel],
+    [agentChatComposerModel, agentChatThreadModel, isContextSwitching],
   );
 
   return {
