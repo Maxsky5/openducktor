@@ -51,6 +51,7 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
 });
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  activeTabValue: "task-1",
   taskId: "task-1",
   role: "spec",
   selectedTask: createTask(),
@@ -59,6 +60,8 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: createSession(),
   taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
   availableTabTasks: [createTask()],
+  isTaskHydrating: false,
+  contextSwitchVersion: 0,
   isLoadingTasks: false,
   onCreateTab: () => {},
   onCloseTab: () => {},
@@ -280,12 +283,15 @@ describe("useAgentStudioPageModels", () => {
     const sessionA = createSession("session-a", "external-a");
     const sessionB = createSession("session-b", "external-b");
     const commonProps: Omit<HookArgs, "sessionsForTask" | "activeSession"> = {
+      activeTabValue: "task-1",
       taskId: "task-1",
       role: "spec",
       selectedTask: createTask(),
       contextSessionsLength: 2,
       taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
       availableTabTasks: [createTask()],
+      isTaskHydrating: false,
+      contextSwitchVersion: 0,
       isLoadingTasks: false,
       onCreateTab: () => {},
       onCloseTab: () => {},

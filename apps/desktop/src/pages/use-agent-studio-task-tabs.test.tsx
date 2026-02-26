@@ -146,4 +146,112 @@ describe("useAgentStudioTaskTabs", () => {
       });
     }
   });
+
+  test("explicit URL task takes precedence over persisted tab when there is no local switch intent", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo"),
+        toPersistedTaskTabs({
+          tabs: ["task-1", "task-2"],
+          activeTaskId: "task-2",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        taskId: "task-1",
+        selectedTask: createTask("task-1"),
+        tasks: [createTask("task-1"), createTask("task-2")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map(),
+        updateQuery: () => {},
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+      expect(harness.getLatest().activeTaskTabId).toBe("task-1");
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("closing the UI-active tab uses activeTaskTabId even when URL task differs", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo"),
+        toPersistedTaskTabs({
+          tabs: ["task-1", "task-2"],
+          activeTaskId: "task-2",
+        }),
+      );
+
+      const taskOne = createTask("task-1");
+      const taskTwo = createTask("task-2");
+      const fallbackSession = createSession("task-1", "session-1");
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const clearComposerInput = mock(() => {});
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        taskId: "task-1",
+        selectedTask: taskOne,
+        tasks: [taskOne, taskTwo],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-1", fallbackSession]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput,
+      });
+
+      await harness.mount();
+      expect(harness.getLatest().activeTaskTabId).toBe("task-1");
+
+      await harness.run((state) => {
+        state.handleSelectTab("task-2");
+      });
+      expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+
+      await harness.run((state) => {
+        state.handleCloseTab("task-2");
+      });
+
+      expect(clearComposerInput).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
+      const lastUpdate = updateCalls[updateCalls.length - 1];
+      expect(lastUpdate).toEqual({
+        task: "task-1",
+        session: "session-1",
+        agent: "spec",
+        scenario: "spec_initial",
+        autostart: undefined,
+        start: undefined,
+      });
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
 });

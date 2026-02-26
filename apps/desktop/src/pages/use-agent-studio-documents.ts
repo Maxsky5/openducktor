@@ -6,12 +6,14 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-utils";
 
 type UseAgentStudioDocumentsArgs = {
+  activeRepo?: string | null;
   taskId: string;
   activeSession: AgentSessionState | null;
   selectedTask: TaskCard | null;
 };
 
 export function useAgentStudioDocuments({
+  activeRepo = null,
   taskId,
   activeSession,
   selectedTask,
@@ -21,20 +23,19 @@ export function useAgentStudioDocuments({
   qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
 } {
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded, reloadDocument, applyDocumentUpdate } =
-    useTaskDocuments(taskId || null, true);
+    useTaskDocuments(taskId || null, true, activeRepo ?? "");
 
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const processedDocumentMessageCountBySessionRef = useRef<Record<string, number>>({});
   const documentReloadAttemptsRef = useRef(new Map<string, number>());
-  const refreshedTaskVersionRef = useRef<string | null>(null);
+  const refreshedTaskVersionsRef = useRef(new Set<string>());
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Context key intentionally controls reset boundary.
   useEffect(() => {
     processedDocumentToolEventsRef.current.clear();
     processedDocumentMessageCountBySessionRef.current = {};
     documentReloadAttemptsRef.current.clear();
-    refreshedTaskVersionRef.current = null;
   }, [documentContextKey]);
 
   useEffect(() => {
@@ -51,16 +52,16 @@ export function useAgentStudioDocuments({
       return;
     }
 
-    const taskVersionKey = `${taskId}:${selectedTask.updatedAt}`;
-    if (refreshedTaskVersionRef.current === taskVersionKey) {
+    const taskVersionKey = `${activeRepo ?? ""}:${taskId}:${selectedTask.updatedAt}`;
+    if (refreshedTaskVersionsRef.current.has(taskVersionKey)) {
       return;
     }
 
-    refreshedTaskVersionRef.current = taskVersionKey;
+    refreshedTaskVersionsRef.current.add(taskVersionKey);
     reloadDocument("spec");
     reloadDocument("plan");
     reloadDocument("qa");
-  }, [reloadDocument, selectedTask, taskId]);
+  }, [activeRepo, reloadDocument, selectedTask, taskId]);
 
   useEffect(() => {
     if (!activeSession || !taskId) {

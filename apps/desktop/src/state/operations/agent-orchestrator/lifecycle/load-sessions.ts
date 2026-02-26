@@ -34,6 +34,9 @@ type SessionHistoryLoadResult =
       reason: string;
     };
 
+const INITIAL_SESSION_HISTORY_LIMIT = 600;
+const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
+
 type CreateLoadAgentSessionsArgs = {
   activeRepo: string | null;
   adapter: SessionHistoryAdapter;
@@ -176,148 +179,159 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    await Promise.all(
-      recordsToHydrate.map(async (record) => {
+    const hydrateRecord = async (record: (typeof recordsToHydrate)[number]): Promise<void> => {
+      if (isStaleRepoOperation()) {
+        return;
+      }
+
+      const baseUrl =
+        (record.role === "spec" || record.role === "planner") && workspaceRuntime
+          ? toBaseUrl(workspaceRuntime.port)
+          : record.baseUrl;
+      const workingDirectory =
+        (record.role === "spec" || record.role === "planner") && workspaceRuntime
+          ? workspaceRuntime.workingDirectory
+          : record.workingDirectory;
+      const existingSession = sessionsRef.current[record.sessionId];
+      if (existingSession && existingSession.messages.length > 0) {
         if (isStaleRepoOperation()) {
           return;
         }
-        const baseUrl =
-          (record.role === "spec" || record.role === "planner") && workspaceRuntime
-            ? toBaseUrl(workspaceRuntime.port)
-            : record.baseUrl;
-        const workingDirectory =
-          (record.role === "spec" || record.role === "planner") && workspaceRuntime
-            ? workspaceRuntime.workingDirectory
-            : record.workingDirectory;
-        const existingSession = sessionsRef.current[record.sessionId];
-        if (existingSession && existingSession.messages.length > 0) {
-          if (isStaleRepoOperation()) {
-            return;
-          }
-          updateSession(
-            record.sessionId,
-            (current) => ({
-              ...current,
-              baseUrl,
-              workingDirectory,
-            }),
-            { persist: false },
-          );
-          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
-          return;
-        }
-
-        const historyPromise = captureOrchestratorFallback<SessionHistoryLoadResult>(
-          "load-sessions-load-history",
-          async () => {
-            const history = await adapter.loadSessionHistory({
-              baseUrl,
-              workingDirectory,
-              externalSessionId: record.externalSessionId,
-              limit: 2000,
-            });
-            return { ok: true as const, history };
-          },
-          {
-            tags: {
-              repoPath,
-              taskId: record.taskId,
-              sessionId: record.sessionId,
-              externalSessionId: record.externalSessionId,
-            },
-            logLevel: "warn",
-            fallback: (failure): SessionHistoryLoadResult => ({
-              ok: false,
-              reason: failure.reason,
-            }),
-          },
-        );
-
-        // Build basic prelude - documents loaded lazily when session is selected
-        const basicPreludeMessages: AgentSessionState["messages"] = [
-          {
-            id: `history:session-start:${record.sessionId}`,
-            role: "system",
-            content: `Session started (${record.role} - ${record.scenario})`,
-            timestamp: record.startedAt,
-          },
-        ];
-
-        const task = taskRef.current.find((entry) => entry.id === record.taskId);
-        const preludeMessages = task
-          ? [
-              ...basicPreludeMessages,
-              {
-                id: `history:system-prompt:${record.sessionId}`,
-                role: "system" as const,
-                content: `System prompt:\n\n${buildAgentSystemPrompt({
-                  role: record.role,
-                  scenario: record.scenario,
-                  task: {
-                    taskId: task.id,
-                    title: task.title,
-                    issueType: task.issueType,
-                    status: task.status,
-                    qaRequired: task.aiReviewEnabled,
-                    description: task.description,
-                    acceptanceCriteria: task.acceptanceCriteria,
-                    specMarkdown: "",
-                    planMarkdown: "",
-                    latestQaReportMarkdown: "",
-                  },
-                })}`,
-                timestamp: record.startedAt,
-              },
-            ]
-          : basicPreludeMessages;
-
-        if (isStaleRepoOperation()) {
-          return;
-        }
-
-        const historyResult = await historyPromise;
-        if (isStaleRepoOperation()) {
-          return;
-        }
-
-        if (!historyResult.ok) {
-          updateSession(
-            record.sessionId,
-            (current) => ({
-              ...current,
-              baseUrl,
-              workingDirectory,
-              messages: upsertMessage(current.messages, {
-                id: `history-unavailable:${record.sessionId}`,
-                role: "system",
-                content: `Session history unavailable: ${historyResult.reason}`,
-                timestamp: now(),
-              }),
-            }),
-            { persist: false },
-          );
-          warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
-          return;
-        }
-
         updateSession(
           record.sessionId,
           (current) => ({
             ...current,
             baseUrl,
             workingDirectory,
-            messages: [
-              ...preludeMessages,
-              ...historyToChatMessages(historyResult.history, {
-                role: record.role,
-                selectedModel: normalizePersistedSelection(record.selectedModel),
-              }),
-            ],
           }),
           { persist: false },
         );
         warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
-      }),
-    );
+        return;
+      }
+
+      const historyPromise = captureOrchestratorFallback<SessionHistoryLoadResult>(
+        "load-sessions-load-history",
+        async () => {
+          const history = await adapter.loadSessionHistory({
+            baseUrl,
+            workingDirectory,
+            externalSessionId: record.externalSessionId,
+            limit: INITIAL_SESSION_HISTORY_LIMIT,
+          });
+          return { ok: true as const, history };
+        },
+        {
+          tags: {
+            repoPath,
+            taskId: record.taskId,
+            sessionId: record.sessionId,
+            externalSessionId: record.externalSessionId,
+          },
+          logLevel: "warn",
+          fallback: (failure): SessionHistoryLoadResult => ({
+            ok: false,
+            reason: failure.reason,
+          }),
+        },
+      );
+
+      // Build basic prelude - documents loaded lazily when session is selected
+      const basicPreludeMessages: AgentSessionState["messages"] = [
+        {
+          id: `history:session-start:${record.sessionId}`,
+          role: "system",
+          content: `Session started (${record.role} - ${record.scenario})`,
+          timestamp: record.startedAt,
+        },
+      ];
+
+      const task = taskRef.current.find((entry) => entry.id === record.taskId);
+      const preludeMessages = task
+        ? [
+            ...basicPreludeMessages,
+            {
+              id: `history:system-prompt:${record.sessionId}`,
+              role: "system" as const,
+              content: `System prompt:\n\n${buildAgentSystemPrompt({
+                role: record.role,
+                scenario: record.scenario,
+                task: {
+                  taskId: task.id,
+                  title: task.title,
+                  issueType: task.issueType,
+                  status: task.status,
+                  qaRequired: task.aiReviewEnabled,
+                  description: task.description,
+                  acceptanceCriteria: task.acceptanceCriteria,
+                  specMarkdown: "",
+                  planMarkdown: "",
+                  latestQaReportMarkdown: "",
+                },
+              })}`,
+              timestamp: record.startedAt,
+            },
+          ]
+        : basicPreludeMessages;
+
+      if (isStaleRepoOperation()) {
+        return;
+      }
+
+      const historyResult = await historyPromise;
+      if (isStaleRepoOperation()) {
+        return;
+      }
+
+      if (!historyResult.ok) {
+        updateSession(
+          record.sessionId,
+          (current) => ({
+            ...current,
+            baseUrl,
+            workingDirectory,
+            messages: upsertMessage(current.messages, {
+              id: `history-unavailable:${record.sessionId}`,
+              role: "system",
+              content: `Session history unavailable: ${historyResult.reason}`,
+              timestamp: now(),
+            }),
+          }),
+          { persist: false },
+        );
+        warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
+        return;
+      }
+
+      updateSession(
+        record.sessionId,
+        (current) => ({
+          ...current,
+          baseUrl,
+          workingDirectory,
+          messages: [
+            ...preludeMessages,
+            ...historyToChatMessages(historyResult.history, {
+              role: record.role,
+              selectedModel: normalizePersistedSelection(record.selectedModel),
+            }),
+          ],
+        }),
+        { persist: false },
+      );
+      warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
+    };
+
+    for (
+      let offset = 0;
+      offset < recordsToHydrate.length;
+      offset += SESSION_HISTORY_HYDRATION_CONCURRENCY
+    ) {
+      if (isStaleRepoOperation()) {
+        return;
+      }
+      const batch = recordsToHydrate.slice(offset, offset + SESSION_HISTORY_HYDRATION_CONCURRENCY);
+      await Promise.all(batch.map((record) => hydrateRecord(record)));
+    }
   };
 };

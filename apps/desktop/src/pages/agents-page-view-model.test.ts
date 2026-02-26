@@ -220,6 +220,7 @@ describe("agents-page-view-model", () => {
       onInputChange: () => {},
       onSend,
       isSessionWorking: true,
+      isModelSelectionPending: false,
       selectedModelSelection: null,
       isSelectionCatalogLoading: false,
       agentOptions: [],

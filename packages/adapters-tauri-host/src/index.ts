@@ -85,6 +85,7 @@ const parseAgentSessions = (entries: unknown[]): AgentSessionRecord[] => {
 
 export class TauriHostClient implements PlannerTools {
   private readonly taskMetadataInFlight = new Map<string, Promise<ParsedTaskMetadata>>();
+  private readonly taskMetadataCache = new Map<string, ParsedTaskMetadata>();
 
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -92,8 +93,23 @@ export class TauriHostClient implements PlannerTools {
     return `${repoPath}::${taskId}`;
   }
 
+  private invalidateTaskMetadata(repoPath: string, taskId: string): void {
+    const cacheKey = this.taskMetadataKey(repoPath, taskId);
+    this.taskMetadataCache.delete(cacheKey);
+    this.taskMetadataInFlight.delete(cacheKey);
+  }
+
+  private clearTaskMetadataInFlight(repoPath: string, taskId: string): void {
+    this.taskMetadataInFlight.delete(this.taskMetadataKey(repoPath, taskId));
+  }
+
   private async getTaskMetadata(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
     const cacheKey = this.taskMetadataKey(repoPath, taskId);
+    const cachedMetadata = this.taskMetadataCache.get(cacheKey);
+    if (cachedMetadata) {
+      return cachedMetadata;
+    }
+
     const inFlight = this.taskMetadataInFlight.get(cacheKey);
     if (inFlight) {
       return inFlight;
@@ -102,13 +118,19 @@ export class TauriHostClient implements PlannerTools {
     const next = this.invokeFn<unknown>("task_metadata_get", { repoPath, taskId })
       .then((payload) => {
         const parsed = taskMetadataPayloadSchema.parse(payload);
-        return {
+        const metadata = {
           ...parsed,
           agentSessions: parseAgentSessions(parsed.agentSessions),
         };
+
+        if (this.taskMetadataInFlight.get(cacheKey) === next) {
+          this.taskMetadataCache.set(cacheKey, metadata);
+        }
+
+        return metadata;
       })
       .finally(() => {
-        this.taskMetadataInFlight.delete(cacheKey);
+        this.clearTaskMetadataInFlight(repoPath, taskId);
       });
     this.taskMetadataInFlight.set(cacheKey, next);
     return next;
@@ -173,11 +195,13 @@ export class TauriHostClient implements PlannerTools {
     taskId: string,
     deleteSubtasks = false,
   ): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("task_delete", {
+    const payload = await this.invokeFn<{ ok: boolean }>("task_delete", {
       repoPath,
       taskId,
       deleteSubtasks,
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
+    return payload;
   }
 
   async taskTransition(
@@ -239,6 +263,8 @@ export class TauriHostClient implements PlannerTools {
       markdown: input.markdown,
     });
 
+    this.invalidateTaskMetadata(input.repoPath, input.taskId);
+
     return { updatedAt: payload.updatedAt };
   }
 
@@ -252,6 +278,7 @@ export class TauriHostClient implements PlannerTools {
       taskId,
       markdown,
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
     return { updatedAt: payload.updatedAt };
   }
 
@@ -279,6 +306,8 @@ export class TauriHostClient implements PlannerTools {
       },
     });
 
+    this.invalidateTaskMetadata(input.repoPath, input.taskId);
+
     return { updatedAt: payload.updatedAt };
   }
 
@@ -292,6 +321,7 @@ export class TauriHostClient implements PlannerTools {
       taskId,
       markdown,
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
     return { updatedAt: payload.updatedAt };
   }
 
@@ -323,6 +353,7 @@ export class TauriHostClient implements PlannerTools {
       taskId,
       input: { markdown },
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
   }
 
@@ -332,6 +363,7 @@ export class TauriHostClient implements PlannerTools {
       taskId,
       input: { markdown },
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
   }
 
@@ -386,6 +418,7 @@ export class TauriHostClient implements PlannerTools {
       taskId,
       session,
     });
+    this.invalidateTaskMetadata(repoPath, taskId);
   }
 
   async workspaceUpdateRepoConfig(

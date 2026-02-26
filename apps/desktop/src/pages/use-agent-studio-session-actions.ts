@@ -33,6 +33,7 @@ type UseAgentStudioSessionActionsArgs = {
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
+  onContextSwitchIntent?: () => void;
 };
 
 export function useAgentStudioSessionActions({
@@ -55,6 +56,7 @@ export function useAgentStudioSessionActions({
   updateAgentSessionModel,
   answerAgentQuestion,
   updateQuery,
+  onContextSwitchIntent,
 }: UseAgentStudioSessionActionsArgs): {
   isStarting: boolean;
   isSending: boolean;
@@ -137,8 +139,10 @@ export function useAgentStudioSessionActions({
           taskId,
           role,
           scenario,
+          selectedModel: selectionForNewSession ?? null,
           sendKickoff: false,
           startMode: sessionStartPreference === "fresh" ? "fresh" : "reuse_latest",
+          requireModelReady: true,
         });
         if (selectionForNewSession) {
           updateAgentSessionModel(sessionId, selectionForNewSession);
@@ -250,6 +254,9 @@ export function useAgentStudioSessionActions({
     if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
       return;
     }
+    if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
+      return;
+    }
 
     const message = input.trim();
     if (!message || !taskId) {
@@ -315,6 +322,7 @@ export function useAgentStudioSessionActions({
   );
 
   const activeSessionStatus = activeSession?.status ?? "stopped";
+  const activeSessionId = activeSession?.sessionId ?? null;
   const isSessionWorking =
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
@@ -330,10 +338,15 @@ export function useAgentStudioSessionActions({
     setIsSending(false);
   }, [activeSessionStatus, isSending]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Session change must reset submit state map.
   useEffect(() => {
-    setIsSubmittingQuestionByRequestId({});
-  }, [activeSession?.sessionId]);
+    setIsSubmittingQuestionByRequestId((current) => {
+      if (activeSessionId === null && Object.keys(current).length === 0) {
+        return current;
+      }
+      return {};
+    });
+    setInput("");
+  }, [activeSessionId, setInput]);
 
   useEffect(() => {
     const activeRequestIds = new Set(
@@ -358,7 +371,14 @@ export function useAgentStudioSessionActions({
       if (!taskId) {
         return;
       }
+      const currentSessionId = activeSession?.sessionId ?? null;
+      const currentRole = activeSession?.role ?? role;
+
       if (!sessionId) {
+        if (currentSessionId !== null || currentRole !== nextRole) {
+          onContextSwitchIntent?.();
+        }
+
         updateQuery({
           task: taskId,
           session: undefined,
@@ -372,6 +392,11 @@ export function useAgentStudioSessionActions({
       if (!session) {
         return;
       }
+
+      if (session.sessionId !== currentSessionId || session.role !== currentRole) {
+        onContextSwitchIntent?.();
+      }
+
       updateQuery({
         task: session.taskId,
         session: session.sessionId,
@@ -380,7 +405,7 @@ export function useAgentStudioSessionActions({
         autostart: undefined,
       });
     },
-    [sessionsForTask, taskId, updateQuery],
+    [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
   );
 
   const handleSessionSelectionChange = useCallback(
@@ -392,6 +417,11 @@ export function useAgentStudioSessionActions({
       if (!selectedSession) {
         return;
       }
+
+      if (activeSession?.sessionId !== selectedSession.sessionId) {
+        onContextSwitchIntent?.();
+      }
+
       updateQuery({
         task: selectedSession.taskId,
         session: selectedSession.sessionId,
@@ -400,7 +430,7 @@ export function useAgentStudioSessionActions({
         autostart: undefined,
       });
     },
-    [sessionsForTask, taskId, updateQuery],
+    [activeSession?.sessionId, onContextSwitchIntent, sessionsForTask, taskId, updateQuery],
   );
 
   const handleCreateSession = useCallback(
@@ -440,6 +470,13 @@ export function useAgentStudioSessionActions({
         autostart: undefined,
       };
 
+      if (
+        (activeSession?.sessionId ?? null) !== null ||
+        (activeSession?.role ?? role) !== nextRole
+      ) {
+        onContextSwitchIntent?.();
+      }
+
       updateQuery({
         task: taskId,
         session: undefined,
@@ -460,6 +497,7 @@ export function useAgentStudioSessionActions({
                 scenario: nextScenario,
                 sendKickoff: false,
                 startMode: "fresh",
+                requireModelReady: true,
               }),
             {
               tags: {
@@ -521,6 +559,7 @@ export function useAgentStudioSessionActions({
       scenario,
       activeRepo,
       sendAgentMessage,
+      onContextSwitchIntent,
       startAgentSession,
       taskId,
       updateQuery,

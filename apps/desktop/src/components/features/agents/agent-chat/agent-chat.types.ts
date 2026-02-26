@@ -49,6 +49,7 @@ export type AgentChatComposerModel = {
   isSending: boolean;
   isStarting: boolean;
   isSessionWorking: boolean;
+  isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
@@ -74,4 +75,5 @@ export type AgentChatComposerModel = {
 export type AgentChatModel = {
   thread: AgentChatThreadModel;
   composer: AgentChatComposerModel;
+  isContextSwitching: boolean;
 };

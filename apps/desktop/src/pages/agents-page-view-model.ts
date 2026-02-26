@@ -143,6 +143,7 @@ type AgentChatComposerModelArgs = {
   isSending: boolean;
   isStarting: boolean;
   isSessionWorking: boolean;
+  isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
@@ -203,6 +204,7 @@ export const buildAgentChatComposerModel = (
   isSending: args.isSending,
   isStarting: args.isStarting,
   isSessionWorking: args.isSessionWorking,
+  isModelSelectionPending: args.isModelSelectionPending,
   selectedModelSelection: args.selectedModelSelection,
   isSelectionCatalogLoading: args.isSelectionCatalogLoading,
   agentOptions: args.agentOptions,
@@ -222,8 +224,12 @@ export const buildAgentChatComposerModel = (
 });
 
 export const buildAgentChatModel = (
-  args: AgentChatThreadModelArgs & AgentChatComposerModelArgs,
+  args: AgentChatThreadModelArgs &
+    AgentChatComposerModelArgs & {
+      isContextSwitching?: boolean;
+    },
 ): AgentChatModel => ({
   thread: buildAgentChatThreadModel(args),
   composer: buildAgentChatComposerModel(args),
+  isContextSwitching: args.isContextSwitching ?? false,
 });

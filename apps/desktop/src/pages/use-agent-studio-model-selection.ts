@@ -47,6 +47,10 @@ export type AgentStudioModelSelectionState = {
   handleSelectVariant: (variant: string) => void;
 };
 
+const toModelDescriptorKey = (providerId: string, modelId: string): string => {
+  return `${providerId}::${modelId}`;
+};
+
 export function useAgentStudioModelSelection({
   activeRepo,
   activeSession,
@@ -274,14 +278,28 @@ export function useAgentStudioModelSelection({
     return map;
   }, [selectionCatalog]);
 
+  const activeSessionMessages = activeSession?.messages;
+  const activeSessionModelCatalog = activeSession?.modelCatalog;
+  const activeSessionModelDescriptorByKey = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof activeSessionModelCatalog>["models"][number]>();
+    if (!activeSessionModelCatalog) {
+      return map;
+    }
+
+    for (const descriptor of activeSessionModelCatalog.models) {
+      map.set(toModelDescriptorKey(descriptor.providerId, descriptor.modelId), descriptor);
+    }
+
+    return map;
+  }, [activeSessionModelCatalog]);
+
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
-    if (!activeSession) {
+    if (!activeSessionMessages) {
       return null;
     }
 
-    const messages = activeSession.messages;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
+    for (let index = activeSessionMessages.length - 1; index >= 0; index -= 1) {
+      const message = activeSessionMessages[index];
       if (!message || message.role !== "assistant" || message.meta?.kind !== "assistant") {
         continue;
       }
@@ -292,9 +310,10 @@ export function useAgentStudioModelSelection({
 
       const metaProviderId = message.meta.providerId;
       const metaModelId = message.meta.modelId;
-      const modelDescriptor = activeSession.modelCatalog?.models.find(
-        (entry) => entry.providerId === metaProviderId && entry.modelId === metaModelId,
-      );
+      const modelDescriptor =
+        typeof metaProviderId === "string" && typeof metaModelId === "string"
+          ? activeSessionModelDescriptorByKey.get(toModelDescriptorKey(metaProviderId, metaModelId))
+          : undefined;
       const contextWindow =
         message.meta.contextWindow ??
         modelDescriptor?.contextWindow ??
@@ -312,7 +331,7 @@ export function useAgentStudioModelSelection({
     }
 
     return null;
-  }, [activeSession, selectedModelEntry?.contextWindow]);
+  }, [activeSessionMessages, activeSessionModelDescriptorByKey, selectedModelEntry?.contextWindow]);
 
   const handleSelectAgent = useCallback(
     (opencodeAgent: string) => {

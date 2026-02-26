@@ -1,5 +1,12 @@
 import type { AgentRole } from "@openducktor/core";
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactElement,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AgentChat,
@@ -10,9 +17,9 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 import { resolveAgentStudioActiveSession, resolveAgentStudioTaskId } from "./agents-page-selection";
-import { buildLatestSessionByTaskMap } from "./agents-page-session-tabs";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection";
@@ -23,6 +30,16 @@ import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
+
+const compareSessionsByRecency = (left: AgentSessionState, right: AgentSessionState): number => {
+  if (left.startedAt !== right.startedAt) {
+    return left.startedAt > right.startedAt ? -1 : 1;
+  }
+  if (left.sessionId === right.sessionId) {
+    return 0;
+  }
+  return left.sessionId > right.sessionId ? -1 : 1;
+};
 
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
@@ -41,6 +58,7 @@ export function AgentsPage(): ReactElement {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
+  const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
 
   const {
     taskIdParam,
@@ -57,9 +75,42 @@ export function AgentsPage(): ReactElement {
     setSearchParams,
   });
 
+  const scheduleQueryUpdate = useCallback(
+    (updates: Record<string, string | undefined>): void => {
+      startTransition(() => {
+        updateQuery(updates);
+      });
+    },
+    [updateQuery],
+  );
+
+  const tasksById = useMemo(() => {
+    return new Map(tasks.map((task) => [task.id, task]));
+  }, [tasks]);
+
+  const sessionsById = useMemo(() => {
+    return new Map(sessions.map((session) => [session.sessionId, session]));
+  }, [sessions]);
+
+  const sessionsByTaskId = useMemo(() => {
+    const grouped = new Map<string, AgentSessionState[]>();
+    for (const session of sessions) {
+      const current = grouped.get(session.taskId);
+      if (current) {
+        current.push(session);
+      } else {
+        grouped.set(session.taskId, [session]);
+      }
+    }
+    for (const group of grouped.values()) {
+      group.sort(compareSessionsByRecency);
+    }
+    return grouped;
+  }, [sessions]);
+
   const selectedSessionById = useMemo(
-    () => sessions.find((entry) => entry.sessionId === sessionParam) ?? null,
-    [sessionParam, sessions],
+    () => (sessionParam ? (sessionsById.get(sessionParam) ?? null) : null),
+    [sessionParam, sessionsById],
   );
 
   const taskId = resolveAgentStudioTaskId({
@@ -67,23 +118,16 @@ export function AgentsPage(): ReactElement {
     selectedSessionById,
   });
   const selectedTask = useMemo(
-    () => tasks.find((task) => task.id === taskId) ?? null,
-    [taskId, tasks],
+    () => (taskId ? (tasksById.get(taskId) ?? null) : null),
+    [taskId, tasksById],
   );
 
   const sessionsForTask = useMemo(() => {
-    return sessions
-      .filter((entry) => entry.taskId === taskId)
-      .sort((a, b) => {
-        if (a.startedAt !== b.startedAt) {
-          return a.startedAt > b.startedAt ? -1 : 1;
-        }
-        if (a.sessionId === b.sessionId) {
-          return 0;
-        }
-        return a.sessionId > b.sessionId ? -1 : 1;
-      });
-  }, [sessions, taskId]);
+    if (!taskId) {
+      return [];
+    }
+    return sessionsByTaskId.get(taskId) ?? [];
+  }, [sessionsByTaskId, taskId]);
 
   const activeSession = useMemo(() => {
     return resolveAgentStudioActiveSession({
@@ -94,13 +138,6 @@ export function AgentsPage(): ReactElement {
       sessionStartPreference,
     });
   }, [hasExplicitRoleParam, roleFromQuery, sessionStartPreference, sessionParam, sessionsForTask]);
-
-  const role: AgentRole = roleFromQuery;
-  const scenarios = SCENARIOS_BY_ROLE[role];
-  const scenario =
-    scenarioFromQuery && scenarios.includes(scenarioFromQuery)
-      ? scenarioFromQuery
-      : firstScenario(role);
 
   const agentStudioReady = Boolean(
     activeRepo && opencodeHealth?.runtimeOk && opencodeHealth?.mcpOk,
@@ -115,15 +152,28 @@ export function AgentsPage(): ReactElement {
           ? "Checking OpenCode and OpenDucktor MCP health..."
           : "OpenCode runtime or OpenDucktor MCP is not ready.";
 
-  const contextSessions = sessionsForTask;
-  const sessionByTaskId = useMemo(() => buildLatestSessionByTaskMap(sessions), [sessions]);
+  const sessionByTaskId = useMemo(() => {
+    const latestByTask = new Map<string, AgentSessionState>();
+    for (const [taskKey, taskSessions] of sessionsByTaskId) {
+      const latestSession = taskSessions[0];
+      if (latestSession) {
+        latestByTask.set(taskKey, latestSession);
+      }
+    }
+    return latestByTask;
+  }, [sessionsByTaskId]);
 
   const clearComposerInput = useCallback((): void => {
     setInput("");
   }, []);
 
+  const signalContextSwitchIntent = useCallback((): void => {
+    setContextSwitchVersion((current) => current + 1);
+  }, []);
+
   const {
     tabTaskIds,
+    activeTaskTabId,
     availableTabTasks,
     taskTabs,
     handleSelectTab,
@@ -138,16 +188,79 @@ export function AgentsPage(): ReactElement {
     latestSessionByTaskId: sessionByTaskId,
     updateQuery,
     clearComposerInput,
+    onContextSwitchIntent: signalContextSwitchIntent,
   });
+
+  const viewTaskId = activeTaskTabId || taskId;
+  const viewSelectedTask = useMemo(
+    () => (viewTaskId ? (tasksById.get(viewTaskId) ?? null) : null),
+    [tasksById, viewTaskId],
+  );
+  const viewSessionsForTask = useMemo(() => {
+    if (!viewTaskId) {
+      return [];
+    }
+    return sessionsByTaskId.get(viewTaskId) ?? [];
+  }, [sessionsByTaskId, viewTaskId]);
+
+  const viewSessionParam = useMemo(() => {
+    if (!sessionParam) {
+      return null;
+    }
+
+    const belongsToViewTask = viewSessionsForTask.some(
+      (session) => session.sessionId === sessionParam,
+    );
+    return belongsToViewTask ? sessionParam : null;
+  }, [sessionParam, viewSessionsForTask]);
+
+  const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
+
+  const hasViewRoleSelection = hasExplicitRoleParam && !isViewTaskDetachedFromQuery;
+
+  const normalizedSessionStartPreference = sessionStartPreference ?? null;
+  const viewSessionStartPreference = isViewTaskDetachedFromQuery
+    ? null
+    : normalizedSessionStartPreference;
+
+  const viewActiveSession = useMemo(() => {
+    return resolveAgentStudioActiveSession({
+      sessionsForTask: viewSessionsForTask,
+      sessionParam: viewSessionParam,
+      hasExplicitRoleParam: hasViewRoleSelection,
+      roleFromQuery,
+      sessionStartPreference: viewSessionStartPreference,
+    });
+  }, [
+    hasViewRoleSelection,
+    roleFromQuery,
+    viewSessionStartPreference,
+    viewSessionParam,
+    viewSessionsForTask,
+  ]);
+
+  const viewRole: AgentRole = hasViewRoleSelection
+    ? roleFromQuery
+    : (viewActiveSession?.role ??
+      viewSessionsForTask[0]?.role ??
+      (isViewTaskDetachedFromQuery ? "spec" : roleFromQuery));
+  const viewScenarios = SCENARIOS_BY_ROLE[viewRole];
+  const viewScenario = hasViewRoleSelection
+    ? scenarioFromQuery && viewScenarios.includes(scenarioFromQuery)
+      ? scenarioFromQuery
+      : firstScenario(viewRole)
+    : viewActiveSession?.scenario && viewScenarios.includes(viewActiveSession.scenario)
+      ? viewActiveSession.scenario
+      : firstScenario(viewRole);
 
   const hydratedTasksByRepoAndTask = useAgentStudioTaskHydration({
     activeRepo,
-    activeTaskId: taskId,
+    activeTaskId: viewTaskId,
     tabTaskIds,
     loadAgentSessions,
   });
 
-  const taskHydrationKey = activeRepo && taskId ? `${activeRepo}:${taskId}` : "";
+  const taskHydrationKey = activeRepo && viewTaskId ? `${activeRepo}:${viewTaskId}` : "";
   const isActiveTaskHydrated = taskHydrationKey
     ? (hydratedTasksByRepoAndTask[taskHydrationKey] ?? false)
     : false;
@@ -162,7 +275,7 @@ export function AgentsPage(): ReactElement {
     if (tasks.some((entry) => entry.id === taskIdParam)) {
       return;
     }
-    updateQuery({
+    scheduleQueryUpdate({
       task: undefined,
       session: undefined,
       agent: undefined,
@@ -170,21 +283,21 @@ export function AgentsPage(): ReactElement {
       autostart: undefined,
       start: undefined,
     });
-  }, [isLoadingTasks, selectedSessionById, taskIdParam, tasks, updateQuery]);
+  }, [isLoadingTasks, scheduleQueryUpdate, selectedSessionById, taskIdParam, tasks]);
 
   useEffect(() => {
     if (!selectedSessionById || taskIdParam) {
       return;
     }
-    updateQuery({ task: selectedSessionById.taskId });
-  }, [selectedSessionById, taskIdParam, updateQuery]);
+    scheduleQueryUpdate({ task: selectedSessionById.taskId });
+  }, [scheduleQueryUpdate, selectedSessionById, taskIdParam]);
 
   useEffect(() => {
     if (!sessionParam) {
       return;
     }
     if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
-      updateQuery({ session: undefined });
+      scheduleQueryUpdate({ session: undefined });
       return;
     }
     if (!taskId || !isActiveTaskHydrated) {
@@ -193,8 +306,8 @@ export function AgentsPage(): ReactElement {
     if (selectedSessionById && selectedSessionById.taskId === taskId) {
       return;
     }
-    updateQuery({ session: undefined });
-  }, [isActiveTaskHydrated, selectedSessionById, sessionParam, taskId, updateQuery]);
+    scheduleQueryUpdate({ session: undefined });
+  }, [isActiveTaskHydrated, scheduleQueryUpdate, selectedSessionById, sessionParam, taskId]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -224,16 +337,16 @@ export function AgentsPage(): ReactElement {
     if (Object.keys(updates).length === 0) {
       return;
     }
-    updateQuery(updates);
+    scheduleQueryUpdate(updates);
   }, [
     activeSession,
     autostart,
     roleFromQuery,
+    scheduleQueryUpdate,
     scenarioFromQuery,
     sessionParam,
     sessionStartPreference,
     taskIdParam,
-    updateQuery,
   ]);
 
   const { repoSettings } = useAgentStudioRepoSettings({
@@ -242,9 +355,10 @@ export function AgentsPage(): ReactElement {
   });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
-    taskId,
-    activeSession,
-    selectedTask,
+    activeRepo,
+    taskId: viewTaskId,
+    activeSession: viewActiveSession,
+    selectedTask: viewSelectedTask,
   });
 
   const {
@@ -262,8 +376,8 @@ export function AgentsPage(): ReactElement {
     handleSelectVariant,
   } = useAgentStudioModelSelection({
     activeRepo,
-    activeSession,
-    role,
+    activeSession: viewActiveSession,
+    role: viewRole,
     repoSettings,
     updateAgentSessionModel,
   });
@@ -284,14 +398,14 @@ export function AgentsPage(): ReactElement {
     handleCreateSession,
   } = useAgentStudioSessionActions({
     activeRepo,
-    taskId,
-    role,
-    scenario,
+    taskId: viewTaskId,
+    role: viewRole,
+    scenario: viewScenario,
     autostart,
     sessionStartPreference,
-    activeSession,
-    sessionsForTask,
-    selectedTask,
+    activeSession: viewActiveSession,
+    sessionsForTask: viewSessionsForTask,
+    selectedTask: viewSelectedTask,
     agentStudioReady,
     isActiveTaskHydrated,
     selectionForNewSession,
@@ -302,12 +416,13 @@ export function AgentsPage(): ReactElement {
     updateAgentSessionModel,
     answerAgentQuestion,
     updateQuery,
+    onContextSwitchIntent: signalContextSwitchIntent,
   });
 
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
     useAgentSessionPermissionActions({
-      activeSessionId: activeSession?.sessionId ?? null,
-      pendingPermissions: activeSession?.pendingPermissions ?? [],
+      activeSessionId: viewActiveSession?.sessionId ?? null,
+      pendingPermissions: viewActiveSession?.pendingPermissions ?? [],
       agentStudioReady,
       replyAgentPermission,
     });
@@ -319,14 +434,17 @@ export function AgentsPage(): ReactElement {
     agentStudioWorkspaceSidebarModel,
     agentChatModel,
   } = useAgentStudioPageModels({
-    taskId,
-    role,
-    selectedTask,
-    sessionsForTask,
-    contextSessionsLength: contextSessions.length,
-    activeSession,
+    activeTabValue: activeTaskTabId || viewTaskId || "__agent_studio_empty__",
+    taskId: viewTaskId,
+    role: viewRole,
+    selectedTask: viewSelectedTask,
+    sessionsForTask: viewSessionsForTask,
+    contextSessionsLength: viewSessionsForTask.length,
+    activeSession: viewActiveSession,
     taskTabs,
     availableTabTasks,
+    isTaskHydrating: Boolean(viewTaskId && !isActiveTaskHydrated),
+    contextSwitchVersion,
     isLoadingTasks,
     onCreateTab: handleCreateTab,
     onCloseTab: handleCloseTab,
@@ -370,8 +488,8 @@ export function AgentsPage(): ReactElement {
   });
 
   const rightPanel = useAgentStudioRightPanel({
-    role,
-    hasTaskContext: Boolean(taskId),
+    role: viewRole,
+    hasTaskContext: Boolean(viewTaskId),
     hasDocumentPanel: Boolean(agentStudioWorkspaceSidebarModel.activeDocument),
     hasDiffPanel: false,
   });
@@ -388,7 +506,7 @@ export function AgentsPage(): ReactElement {
       />
 
       <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 bg-white p-0">
-        {taskId ? (
+        {viewTaskId ? (
           <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
             <ResizablePanel defaultSize={63} minSize={35}>
               <AgentChat

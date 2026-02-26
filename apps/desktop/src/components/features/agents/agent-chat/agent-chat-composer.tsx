@@ -19,6 +19,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isSending,
     isStarting,
     isSessionWorking,
+    isModelSelectionPending,
     selectedModelSelection,
     isSelectionCatalogLoading,
     agentOptions,
@@ -41,6 +42,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     isSending ||
     isStarting ||
     isSessionWorking ||
+    isModelSelectionPending ||
     isReadOnly ||
     !taskId ||
     input.trim().length === 0 ||
@@ -80,7 +82,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
           }
           value={input}
           className="!min-h-0 h-10 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
-          disabled={!agentStudioReady || isReadOnly}
+          disabled={!agentStudioReady || isReadOnly || isModelSelectionPending}
           onChange={(event) => onInputChange(event.currentTarget.value)}
           onInput={onComposerTextareaInput}
           onKeyDown={(event) => {
@@ -174,10 +176,12 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
               type="submit"
               size="icon"
               className="size-8 rounded-full"
-              aria-label={isSending ? "Sending message" : "Send message"}
+              aria-label={
+                isSending || isModelSelectionPending ? "Preparing message" : "Send message"
+              }
               disabled={sendDisabled}
             >
-              {isSending ? (
+              {isSending || isModelSelectionPending ? (
                 <LoaderCircle className="size-3.5 animate-spin" />
               ) : (
                 <SendHorizontal className="size-3.5" />

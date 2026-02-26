@@ -32,12 +32,19 @@ const createInitialDocumentsState = (): TaskDocumentsState => ({
   qa: createInitialTaskDocumentState(),
 });
 
+const cloneDocumentsState = (documents: TaskDocumentsState): TaskDocumentsState => ({
+  spec: { ...documents.spec },
+  plan: { ...documents.plan },
+  qa: { ...documents.qa },
+});
+
 const toErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "Unable to load document.";
 
 export function useTaskDocuments(
   taskId: string | null,
   open: boolean,
+  cacheScope = "",
 ): {
   specDoc: TaskDocumentState;
   planDoc: TaskDocumentState;
@@ -49,13 +56,27 @@ export function useTaskDocuments(
   const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = useSpecState();
   const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
   const documentLoadSequence = useRef(0);
-  const previousContext = useRef<{ taskId: string | null; open: boolean } | null>(null);
+  const previousContext = useRef<{ taskCacheKey: string | null; open: boolean } | null>(null);
   const documentsRef = useRef<TaskDocumentsState>(documents);
+  const cachedDocumentsByTaskCacheKey = useRef<Record<string, TaskDocumentsState>>({});
+  const taskCacheKey = taskId ? `${cacheScope}::${taskId}` : null;
   const inFlightSections = useRef<Record<DocumentSectionKey, boolean>>({
     spec: false,
     plan: false,
     qa: false,
   });
+
+  const updateDocumentsSnapshot = useCallback(
+    (snapshot: TaskDocumentsState): void => {
+      documentsRef.current = snapshot;
+      setDocuments(snapshot);
+      if (!taskCacheKey) {
+        return;
+      }
+      cachedDocumentsByTaskCacheKey.current[taskCacheKey] = cloneDocumentsState(snapshot);
+    },
+    [taskCacheKey],
+  );
 
   useEffect(() => {
     documentsRef.current = documents;
@@ -63,14 +84,18 @@ export function useTaskDocuments(
 
   useEffect(() => {
     const contextDidChange =
-      previousContext.current?.taskId !== taskId || previousContext.current?.open !== open;
+      previousContext.current?.taskCacheKey !== taskCacheKey ||
+      previousContext.current?.open !== open;
     if (!contextDidChange) {
       return;
     }
 
-    previousContext.current = { taskId, open };
+    previousContext.current = { taskCacheKey, open };
     documentLoadSequence.current += 1;
-    const initialDocuments = createInitialDocumentsState();
+    const initialDocuments =
+      taskCacheKey && cachedDocumentsByTaskCacheKey.current[taskCacheKey]
+        ? cloneDocumentsState(cachedDocumentsByTaskCacheKey.current[taskCacheKey])
+        : createInitialDocumentsState();
     documentsRef.current = initialDocuments;
     setDocuments(initialDocuments);
     inFlightSections.current = {
@@ -78,7 +103,7 @@ export function useTaskDocuments(
       plan: false,
       qa: false,
     };
-  }, [open, taskId]);
+  }, [open, taskCacheKey]);
 
   const loadDocument = useCallback(
     (section: DocumentSectionKey, force: boolean): boolean => {
@@ -100,8 +125,7 @@ export function useTaskDocuments(
           error: null,
         },
       };
-      documentsRef.current = loadingSnapshot;
-      setDocuments(loadingSnapshot);
+      updateDocumentsSnapshot(loadingSnapshot);
 
       const sequence = documentLoadSequence.current;
       const loader: (id: string) => Promise<TaskDocumentPayload> =
@@ -129,8 +153,7 @@ export function useTaskDocuments(
               loaded: true,
             },
           };
-          documentsRef.current = successSnapshot;
-          setDocuments(successSnapshot);
+          updateDocumentsSnapshot(successSnapshot);
         })
         .catch((error: unknown) => {
           if (sequence !== documentLoadSequence.current) {
@@ -148,12 +171,18 @@ export function useTaskDocuments(
               loaded: true,
             },
           };
-          documentsRef.current = errorSnapshot;
-          setDocuments(errorSnapshot);
+          updateDocumentsSnapshot(errorSnapshot);
         });
       return true;
     },
-    [loadPlanDocument, loadQaReportDocument, loadSpecDocument, open, taskId],
+    [
+      loadPlanDocument,
+      loadQaReportDocument,
+      loadSpecDocument,
+      open,
+      taskId,
+      updateDocumentsSnapshot,
+    ],
   );
 
   const ensureDocumentLoaded = useCallback(
@@ -182,10 +211,9 @@ export function useTaskDocuments(
           loaded: true,
         },
       };
-      documentsRef.current = snapshot;
-      setDocuments(snapshot);
+      updateDocumentsSnapshot(snapshot);
     },
-    [],
+    [updateDocumentsSnapshot],
   );
 
   return {

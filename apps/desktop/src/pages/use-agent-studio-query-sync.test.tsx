@@ -209,4 +209,50 @@ describe("useAgentStudioQuerySync", () => {
       });
     }
   });
+
+  test("flushes pending context persistence on unmount cleanup", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        searchParams: new URLSearchParams("agent=spec&scenario=spec_initial"),
+        setSearchParams: () => {},
+      });
+
+      await harness.mount();
+      await harness.run((state) => {
+        state.updateQuery({ task: "task-from-cleanup", session: "session-from-cleanup" });
+      });
+
+      await harness.unmount();
+
+      const stored = memoryStorage.getItem(toContextStorageKey("/repo"));
+      if (!stored) {
+        throw new Error("Expected persisted context payload after unmount cleanup");
+      }
+
+      const parsed = JSON.parse(stored) as {
+        taskId?: string;
+        sessionId?: string;
+        role?: string;
+        scenario?: string;
+      };
+
+      expect(parsed.taskId).toBe("task-from-cleanup");
+      expect(parsed.sessionId).toBe("session-from-cleanup");
+      expect(parsed.role).toBe("spec");
+      expect(parsed.scenario).toBe("spec_initial");
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
 });

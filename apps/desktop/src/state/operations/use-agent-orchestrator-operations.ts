@@ -41,8 +41,10 @@ type UseAgentOrchestratorOperationsResult = {
     taskId: string;
     role: AgentRole;
     scenario?: AgentScenario;
+    selectedModel?: AgentModelSelection | null;
     sendKickoff?: boolean;
     startMode?: "reuse_latest" | "fresh";
+    requireModelReady?: boolean;
   }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;
@@ -134,6 +136,22 @@ export function useAgentOrchestratorOperations({
         return;
       }
       const nextSession = updater(current);
+      if (nextSession === current) {
+        return;
+      }
+
+      let hasChanges = false;
+      for (const key of Object.keys(nextSession) as Array<keyof AgentSessionState>) {
+        if (nextSession[key] !== current[key]) {
+          hasChanges = true;
+          break;
+        }
+      }
+
+      if (!hasChanges) {
+        return;
+      }
+
       const nextSessions = {
         ...currentSessions,
         [sessionId]: nextSession,

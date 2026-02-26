@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { firstScenario } from "./agents-page-constants";
@@ -45,8 +45,10 @@ export function useAgentStudioTaskTabs(args: {
   latestSessionByTaskId: Map<string, AgentSessionState>;
   updateQuery: (updates: QueryUpdate) => void;
   clearComposerInput: () => void;
+  onContextSwitchIntent?: () => void;
 }): {
   tabTaskIds: string[];
+  activeTaskTabId: string;
   availableTabTasks: TaskCard[];
   taskTabs: AgentStudioTaskTabsModel["tabs"];
   handleSelectTab: (nextTaskId: string) => void;
@@ -62,16 +64,40 @@ export function useAgentStudioTaskTabs(args: {
     latestSessionByTaskId,
     updateQuery,
     clearComposerInput,
+    onContextSwitchIntent,
   } = args;
 
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
+  const [intentActiveTaskId, setIntentActiveTaskId] = useState<string | null>(null);
   const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState<string | null>(null);
 
   const tabTaskIds = useMemo(
     () => ensureActiveTaskTab(openTaskTabs, taskId),
     [openTaskTabs, taskId],
   );
+
+  const activeTaskTabId = useMemo(() => {
+    if (intentActiveTaskId && tabTaskIds.includes(intentActiveTaskId)) {
+      return intentActiveTaskId;
+    }
+    if (taskId && tabTaskIds.includes(taskId)) {
+      return taskId;
+    }
+    if (persistedActiveTaskId && tabTaskIds.includes(persistedActiveTaskId)) {
+      return persistedActiveTaskId;
+    }
+    return tabTaskIds[0] ?? "";
+  }, [intentActiveTaskId, persistedActiveTaskId, tabTaskIds, taskId]);
+
+  useEffect(() => {
+    if (!intentActiveTaskId) {
+      return;
+    }
+    if (!tabTaskIds.includes(intentActiveTaskId) || taskId === intentActiveTaskId) {
+      setIntentActiveTaskId(null);
+    }
+  }, [intentActiveTaskId, tabTaskIds, taskId]);
 
   const availableTabTasks = useMemo(
     () => getAvailableTabTasks(tasks, tabTaskIds),
@@ -84,15 +110,25 @@ export function useAgentStudioTaskTabs(args: {
         tabTaskIds,
         tasks,
         latestSessionByTaskId,
-        activeTaskId: taskId,
+        activeTaskId: activeTaskTabId,
       }),
-    [latestSessionByTaskId, tabTaskIds, taskId, tasks],
+    [activeTaskTabId, latestSessionByTaskId, tabTaskIds, tasks],
+  );
+
+  const deferQueryUpdate = useCallback(
+    (updates: QueryUpdate): void => {
+      startTransition(() => {
+        updateQuery(updates);
+      });
+    },
+    [updateQuery],
   );
 
   useEffect(() => {
     if (!activeRepo) {
       setOpenTaskTabs([]);
       setPersistedActiveTaskId(null);
+      setIntentActiveTaskId(null);
       setTabsStorageHydratedRepo(null);
       return;
     }
@@ -144,10 +180,10 @@ export function useAgentStudioTaskTabs(args: {
       toTabsStorageKey(activeRepo),
       toPersistedTaskTabs({
         tabs: openTaskTabs,
-        activeTaskId: taskId || null,
+        activeTaskId: activeTaskTabId || null,
       }),
     );
-  }, [activeRepo, openTaskTabs, tabsStorageHydratedRepo, taskId]);
+  }, [activeRepo, activeTaskTabId, openTaskTabs, tabsStorageHydratedRepo]);
 
   useEffect(() => {
     if (taskId || openTaskTabs.length === 0) {
@@ -162,7 +198,7 @@ export function useAgentStudioTaskTabs(args: {
     }
     const fallbackSession = latestSessionByTaskId.get(fallbackTaskId);
     if (fallbackSession) {
-      updateQuery({
+      deferQueryUpdate({
         task: fallbackSession.taskId,
         session: fallbackSession.sessionId,
         agent: fallbackSession.role,
@@ -174,7 +210,7 @@ export function useAgentStudioTaskTabs(args: {
     }
     const fallbackTask = tasks.find((entry) => entry.id === fallbackTaskId) ?? null;
     const fallbackRole = resolveDefaultRoleForTask(fallbackTask);
-    updateQuery({
+    deferQueryUpdate({
       task: fallbackTaskId,
       session: undefined,
       agent: fallbackRole,
@@ -182,15 +218,21 @@ export function useAgentStudioTaskTabs(args: {
       autostart: undefined,
       start: undefined,
     });
-  }, [latestSessionByTaskId, openTaskTabs, persistedActiveTaskId, taskId, tasks, updateQuery]);
+  }, [deferQueryUpdate, latestSessionByTaskId, openTaskTabs, persistedActiveTaskId, taskId, tasks]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {
       if (!nextTaskId) {
         return;
       }
+      if (nextTaskId === activeTaskTabId) {
+        return;
+      }
+
+      onContextSwitchIntent?.();
 
       clearComposerInput();
+      setIntentActiveTaskId(nextTaskId);
       setOpenTaskTabs((current) => {
         if (current.includes(nextTaskId)) {
           return current;
@@ -201,7 +243,7 @@ export function useAgentStudioTaskTabs(args: {
 
       const sessionForTask = latestSessionByTaskId.get(nextTaskId);
       if (sessionForTask) {
-        updateQuery({
+        deferQueryUpdate({
           task: sessionForTask.taskId,
           session: sessionForTask.sessionId,
           agent: sessionForTask.role,
@@ -214,7 +256,7 @@ export function useAgentStudioTaskTabs(args: {
 
       const nextTask = tasks.find((entry) => entry.id === nextTaskId) ?? null;
       const nextRole = resolveDefaultRoleForTask(nextTask);
-      updateQuery({
+      deferQueryUpdate({
         task: nextTaskId,
         session: undefined,
         agent: nextRole,
@@ -223,7 +265,14 @@ export function useAgentStudioTaskTabs(args: {
         start: undefined,
       });
     },
-    [clearComposerInput, latestSessionByTaskId, tasks, updateQuery],
+    [
+      activeTaskTabId,
+      clearComposerInput,
+      deferQueryUpdate,
+      latestSessionByTaskId,
+      onContextSwitchIntent,
+      tasks,
+    ],
   );
 
   const handleCreateTab = useCallback(
@@ -238,7 +287,7 @@ export function useAgentStudioTaskTabs(args: {
       const { nextTabTaskIds, nextActiveTaskId } = closeTaskTab({
         tabTaskIds,
         taskIdToClose,
-        activeTaskId: taskId,
+        activeTaskId: activeTaskTabId,
       });
 
       if (nextTabTaskIds === tabTaskIds) {
@@ -248,13 +297,16 @@ export function useAgentStudioTaskTabs(args: {
       setOpenTaskTabs(nextTabTaskIds);
       setPersistedActiveTaskId(nextActiveTaskId ?? null);
 
-      if (taskIdToClose !== taskId) {
+      if (taskIdToClose !== activeTaskTabId) {
         return;
       }
 
       clearComposerInput();
+      onContextSwitchIntent?.();
+      setIntentActiveTaskId(nextActiveTaskId ?? null);
+
       if (!nextActiveTaskId) {
-        updateQuery({
+        deferQueryUpdate({
           task: undefined,
           session: undefined,
           agent: undefined,
@@ -266,6 +318,10 @@ export function useAgentStudioTaskTabs(args: {
       }
 
       globalThis.setTimeout(() => {
+        if (typeof globalThis.document === "undefined") {
+          return;
+        }
+
         const nextTrigger = globalThis.document.getElementById(
           `agent-studio-tab-${nextActiveTaskId}`,
         );
@@ -276,7 +332,7 @@ export function useAgentStudioTaskTabs(args: {
 
       const fallbackSession = latestSessionByTaskId.get(nextActiveTaskId);
       if (fallbackSession) {
-        updateQuery({
+        deferQueryUpdate({
           task: fallbackSession.taskId,
           session: fallbackSession.sessionId,
           agent: fallbackSession.role,
@@ -289,7 +345,7 @@ export function useAgentStudioTaskTabs(args: {
 
       const fallbackTask = tasks.find((entry) => entry.id === nextActiveTaskId) ?? null;
       const fallbackRole = resolveDefaultRoleForTask(fallbackTask);
-      updateQuery({
+      deferQueryUpdate({
         task: nextActiveTaskId,
         session: undefined,
         agent: fallbackRole,
@@ -298,11 +354,20 @@ export function useAgentStudioTaskTabs(args: {
         start: undefined,
       });
     },
-    [clearComposerInput, latestSessionByTaskId, tabTaskIds, taskId, tasks, updateQuery],
+    [
+      clearComposerInput,
+      deferQueryUpdate,
+      latestSessionByTaskId,
+      onContextSwitchIntent,
+      activeTaskTabId,
+      tabTaskIds,
+      tasks,
+    ],
   );
 
   return {
     tabTaskIds,
+    activeTaskTabId,
     availableTabTasks,
     taskTabs,
     handleSelectTab,
