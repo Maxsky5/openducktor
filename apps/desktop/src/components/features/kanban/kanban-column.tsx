@@ -321,7 +321,7 @@ export function KanbanColumn({
   return (
     <section
       className={cn(
-        "flex h-full min-h-[420px] w-[328px] min-w-[328px] flex-col rounded-2xl border shadow-sm",
+        "flex h-full min-h-[420px] w-[328px] min-w-[328px] flex-col overflow-hidden rounded-2xl border shadow-sm",
         theme.boardSurfaceClass,
       )}
     >
