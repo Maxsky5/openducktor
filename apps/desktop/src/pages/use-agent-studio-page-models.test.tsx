@@ -51,6 +51,7 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
 });
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
+  activeTabValue: "task-1",
   taskId: "task-1",
   role: "spec",
   selectedTask: createTask(),
@@ -280,6 +281,7 @@ describe("useAgentStudioPageModels", () => {
     const sessionA = createSession("session-a", "external-a");
     const sessionB = createSession("session-b", "external-b");
     const commonProps: Omit<HookArgs, "sessionsForTask" | "activeSession"> = {
+      activeTabValue: "task-1",
       taskId: "task-1",
       role: "spec",
       selectedTask: createTask(),

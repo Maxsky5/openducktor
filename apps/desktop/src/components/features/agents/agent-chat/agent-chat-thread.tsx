@@ -64,6 +64,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const activeSessionId = session?.sessionId ?? null;
   const measuredSessionIdRef = useRef<string | null>(null);
   const measuredRowHeightByKeyRef = useRef<Record<string, number>>({});
+  const previousVirtualizedSessionIdRef = useRef<string | null>(null);
 
   if (measuredSessionIdRef.current !== activeSessionId) {
     measuredSessionIdRef.current = activeSessionId;
@@ -124,48 +125,22 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
   useEffect(() => {
     if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
+      previousVirtualizedSessionIdRef.current = activeSessionId;
       return;
     }
-    virtualizer.measure();
-  }, [activeSessionId, shouldVirtualize, virtualRows.length, virtualizer]);
 
-  useEffect(() => {
-    if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
+    const sessionChanged = previousVirtualizedSessionIdRef.current !== activeSessionId;
+    previousVirtualizedSessionIdRef.current = activeSessionId;
+
+    if (!sessionChanged && !isPinnedToBottom) {
       return;
     }
+
     const lastRowIndex = virtualRows.length - 1;
     const scrollToBottom = (): void => {
-      virtualizer.measure();
-      virtualizer.scrollToIndex(lastRowIndex, { align: "end" });
-
-      const container = messagesContainerRef.current;
-      if (!container) {
-        return;
+      if (sessionChanged) {
+        virtualizer.measure();
       }
-      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
-    };
-
-    scrollToBottom();
-
-    if (typeof window === "undefined") {
-      return;
-    }
-    const rafId = window.requestAnimationFrame(() => {
-      scrollToBottom();
-    });
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [activeSessionId, messagesContainerRef, shouldVirtualize, virtualRows.length, virtualizer]);
-
-  useEffect(() => {
-    if (!activeSessionId || !shouldVirtualize || !isPinnedToBottom || virtualRows.length === 0) {
-      return;
-    }
-
-    const lastRowIndex = virtualRows.length - 1;
-
-    const scrollToBottom = (): void => {
       virtualizer.scrollToIndex(lastRowIndex, { align: "end" });
 
       const container = messagesContainerRef.current;
@@ -176,15 +151,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
     };
 
-    scrollToBottom();
-
     if (typeof window === "undefined") {
+      scrollToBottom();
       return;
     }
 
     const rafId = window.requestAnimationFrame(() => {
       scrollToBottom();
     });
+
     return () => {
       window.cancelAnimationFrame(rafId);
     };

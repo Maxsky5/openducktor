@@ -105,8 +105,10 @@ export type AgentStateContextValue = {
     taskId: string;
     role: AgentRole;
     scenario?: AgentScenario;
+    selectedModel?: AgentModelSelection | null;
     sendKickoff?: boolean;
     startMode?: "reuse_latest" | "fresh";
+    requireModelReady?: boolean;
   }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;

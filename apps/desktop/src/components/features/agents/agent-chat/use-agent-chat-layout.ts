@@ -59,6 +59,7 @@ export const useAgentChatLayout = ({
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [composerFormHeight, setComposerFormHeight] = useState(0);
+  const autoscrollVersion = `${composerFormHeight}:${scrollTrigger}`;
 
   const resizeComposerTextarea = useCallback((): void => {
     const textarea = composerTextareaRef.current;
@@ -69,6 +70,18 @@ export const useAgentChatLayout = ({
     const layout = computeComposerTextareaLayout(textarea.scrollHeight);
     textarea.style.height = `${layout.heightPx}px`;
     textarea.style.overflowY = layout.overflowY;
+  }, []);
+
+  const scrollToBottom = useCallback((): void => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "auto",
+    });
   }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Input string is an explicit resize trigger.
@@ -101,58 +114,49 @@ export const useAgentChatLayout = ({
     };
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Composer height is an explicit autoscroll trigger.
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container || !isPinnedToBottom) {
+    if (!isPinnedToBottom) {
       return;
     }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "auto",
-    });
-  }, [composerFormHeight, isPinnedToBottom]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Scroll trigger is a parent-owned version key.
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container || !isPinnedToBottom) {
+    if (autoscrollVersion.length === 0) {
       return;
     }
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "auto",
-    });
-  }, [isPinnedToBottom, scrollTrigger]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Session identity reset should repin to bottom.
-  useEffect(() => {
-    setIsPinnedToBottom(true);
-
-    const scrollToBottom = (): void => {
-      const container = messagesContainerRef.current;
-      if (!container) {
-        return;
-      }
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: "auto",
-      });
-    };
-
-    scrollToBottom();
 
     if (typeof window === "undefined") {
+      scrollToBottom();
       return;
     }
 
     const rafId = window.requestAnimationFrame(() => {
       scrollToBottom();
     });
+
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [activeSessionId]);
+  }, [autoscrollVersion, isPinnedToBottom, scrollToBottom]);
+
+  useEffect(() => {
+    setIsPinnedToBottom(true);
+
+    if (!activeSessionId) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      scrollToBottom();
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      scrollToBottom();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [activeSessionId, scrollToBottom]);
 
   return {
     messagesContainerRef,

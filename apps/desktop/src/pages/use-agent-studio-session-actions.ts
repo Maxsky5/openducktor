@@ -137,8 +137,10 @@ export function useAgentStudioSessionActions({
           taskId,
           role,
           scenario,
+          selectedModel: selectionForNewSession ?? null,
           sendKickoff: false,
           startMode: sessionStartPreference === "fresh" ? "fresh" : "reuse_latest",
+          requireModelReady: true,
         });
         if (selectionForNewSession) {
           updateAgentSessionModel(sessionId, selectionForNewSession);
@@ -250,6 +252,9 @@ export function useAgentStudioSessionActions({
     if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
       return;
     }
+    if (activeSession?.isLoadingModelCatalog && !activeSession.selectedModel) {
+      return;
+    }
 
     const message = input.trim();
     if (!message || !taskId) {
@@ -315,6 +320,7 @@ export function useAgentStudioSessionActions({
   );
 
   const activeSessionStatus = activeSession?.status ?? "stopped";
+  const activeSessionId = activeSession?.sessionId ?? null;
   const isSessionWorking =
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
@@ -333,7 +339,15 @@ export function useAgentStudioSessionActions({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Session change must reset submit state map.
   useEffect(() => {
     setIsSubmittingQuestionByRequestId({});
-  }, [activeSession?.sessionId]);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      setInput("");
+      return;
+    }
+    setInput("");
+  }, [activeSessionId, setInput]);
 
   useEffect(() => {
     const activeRequestIds = new Set(
@@ -460,6 +474,7 @@ export function useAgentStudioSessionActions({
                 scenario: nextScenario,
                 sendKickoff: false,
                 startMode: "fresh",
+                requireModelReady: true,
               }),
             {
               tags: {

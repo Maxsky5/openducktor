@@ -8,7 +8,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, startTransition, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
@@ -138,6 +138,13 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   } = model;
 
   const [isCreateSessionMenuOpen, setIsCreateSessionMenuOpen] = useState(false);
+  const [optimisticSelectedRole, setOptimisticSelectedRole] = useState<AgentRole | null>(
+    selectedRole,
+  );
+
+  useEffect(() => {
+    setOptimisticSelectedRole(selectedRole);
+  }, [selectedRole]);
 
   const normalizedTaskTitle = taskTitle?.trim() ?? "";
   const hasTaskTitle = normalizedTaskTitle.length > 0;
@@ -242,7 +249,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
         <div className="flex items-center gap-1">
           {workflowSteps.map((entry, index) => {
             const Icon = entry.icon;
-            const isSelected = selectedRole === entry.role;
+            const isSelected = optimisticSelectedRole === entry.role;
             const shouldSpinInProgress =
               entry.state === "in_progress" &&
               (sessionStatus === "running" || sessionStatus === "starting");
@@ -260,7 +267,12 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   )}
                   disabled={!agentStudioReady}
                   title={workflowStepHint(entry)}
-                  onClick={() => onWorkflowStepSelect(entry.role, entry.sessionId)}
+                  onClick={() => {
+                    setOptimisticSelectedRole(entry.role);
+                    startTransition(() => {
+                      onWorkflowStepSelect(entry.role, entry.sessionId);
+                    });
+                  }}
                 >
                   <Icon className="size-4" />
                   {entry.label}

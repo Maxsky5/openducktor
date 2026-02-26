@@ -35,6 +35,35 @@ const makeTaskCardPayload = () => ({
   createdAt: "2026-02-17T12:00:00Z",
 });
 
+const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
+  spec: { markdown: specMarkdown, updatedAt: "2026-02-20T09:00:00Z" },
+  plan: { markdown: "Plan Body", updatedAt: "2026-02-20T09:05:00Z" },
+  qaReport: {
+    markdown: "QA Body",
+    verdict: "approved",
+    updatedAt: "2026-02-20T09:10:00Z",
+    revision: 2,
+  },
+  agentSessions: [
+    {
+      sessionId: "session-1",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+      startedAt: "2026-02-18T17:20:00Z",
+      updatedAt: "2026-02-18T17:21:00Z",
+      endedAt: null,
+      runtimeId: "runtime-1",
+      runId: null,
+      baseUrl: "http://127.0.0.1:4173",
+      workingDirectory: "/repo",
+      selectedModel: null,
+    },
+  ],
+});
+
 const createClient = (resolver: (command: string, args?: Record<string, unknown>) => unknown) => {
   const calls: InvokeCall[] = [];
   const invoke = async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
@@ -464,34 +493,7 @@ describe("TauriHostClient", () => {
   test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_metadata_get") {
-        return {
-          spec: { markdown: "Spec Body", updatedAt: "2026-02-20T09:00:00Z" },
-          plan: { markdown: "Plan Body", updatedAt: "2026-02-20T09:05:00Z" },
-          qaReport: {
-            markdown: "QA Body",
-            verdict: "approved",
-            updatedAt: "2026-02-20T09:10:00Z",
-            revision: 2,
-          },
-          agentSessions: [
-            {
-              sessionId: "session-1",
-              externalSessionId: "external-1",
-              taskId: "task-1",
-              role: "build",
-              scenario: "build_implementation_start",
-              status: "idle",
-              startedAt: "2026-02-18T17:20:00Z",
-              updatedAt: "2026-02-18T17:21:00Z",
-              endedAt: null,
-              runtimeId: "runtime-1",
-              runId: null,
-              baseUrl: "http://127.0.0.1:4173",
-              workingDirectory: "/repo",
-              selectedModel: null,
-            },
-          ],
-        };
+        return makeTaskMetadataPayload();
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -515,6 +517,60 @@ describe("TauriHostClient", () => {
           taskId: "task-1",
         },
       },
+    ]);
+  });
+
+  test("sequential metadata reads reuse cache for the same task", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        return makeTaskMetadataPayload();
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const spec = await client.specGet("/repo", "task-1");
+    const plan = await client.planGet("/repo", "task-1");
+    const qa = await client.qaGetReport("/repo", "task-1");
+    const sessions = await client.agentSessionsList("/repo", "task-1");
+
+    expect(spec.markdown).toBe("Spec Body");
+    expect(plan.markdown).toBe("Plan Body");
+    expect(qa.markdown).toBe("QA Body");
+    expect(sessions).toHaveLength(1);
+    expect(calls).toEqual([
+      {
+        command: "task_metadata_get",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+    ]);
+  });
+
+  test("metadata cache invalidates after spec mutations", async () => {
+    let metadataReadCount = 0;
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        metadataReadCount += 1;
+        return makeTaskMetadataPayload(metadataReadCount === 1 ? "Spec V1" : "Spec V2");
+      }
+      if (command === "set_spec") {
+        return { updatedAt: "2026-02-20T10:00:00Z" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const beforeMutation = await client.specGet("/repo", "task-1");
+    await client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Updated" });
+    const afterMutation = await client.specGet("/repo", "task-1");
+
+    expect(beforeMutation.markdown).toBe("Spec V1");
+    expect(afterMutation.markdown).toBe("Spec V2");
+    expect(calls.map((entry) => entry.command)).toEqual([
+      "task_metadata_get",
+      "set_spec",
+      "task_metadata_get",
     ]);
   });
 });

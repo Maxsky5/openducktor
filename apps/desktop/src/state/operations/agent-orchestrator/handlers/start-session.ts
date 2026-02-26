@@ -26,8 +26,10 @@ export type StartAgentSessionInput = {
   taskId: string;
   role: AgentRole;
   scenario?: AgentScenario;
+  selectedModel?: AgentModelSelection | null;
   sendKickoff?: boolean;
   startMode?: "reuse_latest" | "fresh";
+  requireModelReady?: boolean;
 };
 
 type StartSessionDependencies = {
@@ -109,8 +111,10 @@ export const createStartAgentSession = ({
     taskId,
     role,
     scenario,
+    selectedModel = null,
     sendKickoff = false,
     startMode = "reuse_latest",
+    requireModelReady = false,
   }: StartAgentSessionInput): Promise<string> => {
     const repoPath = requireActiveRepo(activeRepo);
     const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}`;
@@ -163,12 +167,9 @@ export const createStartAgentSession = ({
       const runtimePromise = ensureRuntime(repoPath, taskId, role);
       const defaultModelSelectionPromise = loadRepoDefaultModel(repoPath, role);
 
-      const docs = await docsPromise;
+      const [docs, runtime] = await Promise.all([docsPromise, runtimePromise]);
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       const resolvedScenario = scenario ?? inferScenario(role, task, docs);
-      const runtime = await runtimePromise;
-      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      const defaultModelSelection = await defaultModelSelectionPromise;
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
       const systemPrompt = buildAgentSystemPrompt({
         role,
@@ -245,7 +246,7 @@ export const createStartAgentSession = ({
         pendingQuestions: [],
         todos: [],
         modelCatalog: null,
-        selectedModel: defaultModelSelection,
+        selectedModel,
         isLoadingModelCatalog: true,
       };
 
@@ -333,6 +334,67 @@ export const createStartAgentSession = ({
         );
       };
       warmSessionData();
+
+      const applyResolvedModelSelection = (resolvedModel: AgentModelSelection | null): void => {
+        if (isStaleRepoOperation() || !resolvedModel) {
+          return;
+        }
+
+        setSessionsById((current) => {
+          const currentSession = current[summary.sessionId];
+          if (!currentSession || currentSession.selectedModel) {
+            return current;
+          }
+
+          const nextSession: AgentSessionState = {
+            ...currentSession,
+            selectedModel: resolvedModel,
+          };
+          const nextSessions = {
+            ...current,
+            [summary.sessionId]: nextSession,
+          };
+          sessionsRef.current = nextSessions;
+          return nextSessions;
+        });
+      };
+
+      if (!selectedModel) {
+        if (requireModelReady) {
+          const resolvedModel = await captureOrchestratorFallback<AgentModelSelection | null>(
+            "start-session-await-default-model-selection",
+            async () => defaultModelSelectionPromise,
+            {
+              tags: {
+                repoPath,
+                taskId,
+                role,
+                scenario: resolvedScenario,
+                sessionId: summary.sessionId,
+              },
+              fallback: () => null,
+            },
+          );
+          throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+          applyResolvedModelSelection(resolvedModel);
+        } else {
+          runOrchestratorSideEffect(
+            "start-session-apply-default-model-selection",
+            defaultModelSelectionPromise.then((defaultModelSelection) => {
+              applyResolvedModelSelection(defaultModelSelection);
+            }),
+            {
+              tags: {
+                repoPath,
+                taskId,
+                role,
+                scenario: resolvedScenario,
+                sessionId: summary.sessionId,
+              },
+            },
+          );
+        }
+      }
 
       if (sendKickoff) {
         throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);

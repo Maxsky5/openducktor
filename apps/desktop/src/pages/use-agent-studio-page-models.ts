@@ -30,6 +30,7 @@ import {
 } from "./agents-page-view-model";
 
 type UseAgentStudioPageModelsArgs = {
+  activeTabValue: string;
   taskId: string;
   role: AgentRole;
   selectedTask: TaskCard | null;
@@ -85,6 +86,7 @@ type UseAgentStudioPageModelsArgs = {
 };
 
 export function useAgentStudioPageModels({
+  activeTabValue,
   taskId,
   role,
   selectedTask,
@@ -145,11 +147,9 @@ export function useAgentStudioPageModels({
   >({});
 
   const activeMessageCount = activeSession?.messages.length ?? 0;
-  const activeDraftText = activeSession?.draftAssistantText ?? "";
+  const activeDraftScrollBucket = Math.floor((activeSession?.draftAssistantText.length ?? 0) / 48);
   const activeSessionStatus = activeSession?.status ?? "stopped";
-  const scrollTrigger = `${activeSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${activeDraftText.length}:${
-    activeSession?.pendingQuestions.length ?? 0
-  }:${activeSession?.pendingPermissions.length ?? 0}`;
+  const scrollTrigger = `${activeSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${activeSession?.pendingQuestions.length ?? 0}:${activeSession?.pendingPermissions.length ?? 0}:${activeDraftScrollBucket}`;
 
   const {
     messagesContainerRef,
@@ -185,8 +185,6 @@ export function useAgentStudioPageModels({
     [agentStudioReady, availableTabTasks, isLoadingTasks, onCloseTab, onCreateTab, taskTabs],
   );
 
-  const activeTabValue = taskId || "__agent_studio_empty__";
-
   const roleEnabledByTask = useMemo(() => buildRoleEnabledMapForTask(selectedTask), [selectedTask]);
   const roleWorkflowsByTask = useMemo(
     () => buildRoleWorkflowMapForTask(selectedTask),
@@ -214,11 +212,11 @@ export function useAgentStudioPageModels({
   const sessionSelectorGroups = useMemo(
     () =>
       buildSessionSelectorGroups({
-        sessionsForTask,
+        sessionsForTask: sessionsForTask,
         scenarioLabels: SCENARIO_LABELS,
         roleLabelByRole,
       }),
-    [roleLabelByRole, sessionsForTask],
+    [sessionsForTask, roleLabelByRole],
   );
   const sessionSelectorValue = activeSession?.sessionId ?? sessionsForTask[0]?.sessionId ?? "";
   const createSessionDisabled = Boolean(activeSession && isSessionWorking);
@@ -279,7 +277,7 @@ export function useAgentStudioPageModels({
     () =>
       buildAgentStudioHeaderModel({
         selectedTask,
-        activeSession,
+        activeSession: activeSession,
         roleOptions: ROLE_OPTIONS,
         workflowStateByRole,
         selectedRole: activeSession?.role ?? role,
@@ -354,6 +352,9 @@ export function useAgentStudioPageModels({
   }, [startScenarioKickoff]);
 
   const activeSessionId = activeSession?.sessionId ?? null;
+  const isModelSelectionPending = Boolean(
+    activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
+  );
   const activeTodoPanelCollapsed = activeSessionId
     ? (todoPanelCollapsedBySession[activeSessionId] ?? false)
     : false;
@@ -382,7 +383,7 @@ export function useAgentStudioPageModels({
   const agentChatThreadModel = useMemo(
     () =>
       buildAgentChatThreadModel({
-        activeSession,
+        activeSession: activeSession,
         roleOptions: ROLE_OPTIONS,
         agentStudioReady,
         agentStudioBlockedReason,
@@ -448,6 +449,7 @@ export function useAgentStudioPageModels({
         isSending,
         isStarting,
         isSessionWorking,
+        isModelSelectionPending,
         selectedModelSelection,
         isSelectionCatalogLoading,
         agentOptions,
@@ -478,6 +480,7 @@ export function useAgentStudioPageModels({
       isSelectionCatalogLoading,
       isSending,
       isSessionWorking,
+      isModelSelectionPending,
       isStarting,
       modelGroups,
       modelOptions,

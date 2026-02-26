@@ -77,8 +77,15 @@ describe("useAgentStudioSessionActions", () => {
       taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
+      selectedModel: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        opencodeAgent: "spec",
+      },
       sendKickoff: false,
       startMode: "reuse_latest",
+      requireModelReady: true,
     });
     expect(updateAgentSessionModel).toHaveBeenCalledWith("session-new", {
       providerId: "openai",
@@ -113,8 +120,15 @@ describe("useAgentStudioSessionActions", () => {
       taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
+      selectedModel: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        opencodeAgent: "spec",
+      },
       sendKickoff: false,
       startMode: "fresh",
+      requireModelReady: true,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-fresh", "hello world");
 
@@ -142,8 +156,15 @@ describe("useAgentStudioSessionActions", () => {
       taskId: "task-1",
       role: "spec",
       scenario: "spec_initial",
+      selectedModel: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        opencodeAgent: "spec",
+      },
       sendKickoff: false,
       startMode: "fresh",
+      requireModelReady: true,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-fresh", "hello world");
 
@@ -319,6 +340,7 @@ describe("useAgentStudioSessionActions", () => {
         scenario: "planner_initial",
         sendKickoff: false,
         startMode: "fresh",
+        requireModelReady: true,
       });
 
       await harness.run(async () => {

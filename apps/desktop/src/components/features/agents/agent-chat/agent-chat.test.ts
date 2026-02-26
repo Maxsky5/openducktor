@@ -45,6 +45,7 @@ const buildModel = () => ({
     isSending: false,
     isStarting: false,
     isSessionWorking: false,
+    isModelSelectionPending: false,
     selectedModelSelection: buildModelSelection(),
     isSelectionCatalogLoading: false,
     agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
