@@ -49,6 +49,11 @@ let taskDocumentsState: TaskDocumentsState = {
   planDoc: createDocumentState(),
   qaDoc: createDocumentState(),
 };
+const taskDocumentsHookCalls: Array<{
+  taskId: string | null;
+  open: boolean;
+  cacheScope: string;
+}> = [];
 
 const ensureDocumentLoadedMock = mock((_section: DocumentSectionKey) => true);
 const reloadDocumentMock = mock((_section: DocumentSectionKey) => true);
@@ -66,14 +71,21 @@ const setTaskDocumentsState = (overrides: Partial<TaskDocumentsState> = {}): voi
 };
 
 mock.module("@/components/features/task-details/use-task-documents", () => ({
-  useTaskDocuments: (): UseTaskDocumentsReturn => ({
-    specDoc: taskDocumentsState.specDoc,
-    planDoc: taskDocumentsState.planDoc,
-    qaDoc: taskDocumentsState.qaDoc,
-    ensureDocumentLoaded: ensureDocumentLoadedMock,
-    reloadDocument: reloadDocumentMock,
-    applyDocumentUpdate: applyDocumentUpdateMock,
-  }),
+  useTaskDocuments: (
+    taskId: string | null,
+    open: boolean,
+    cacheScope = "",
+  ): UseTaskDocumentsReturn => {
+    taskDocumentsHookCalls.push({ taskId, open, cacheScope });
+    return {
+      specDoc: taskDocumentsState.specDoc,
+      planDoc: taskDocumentsState.planDoc,
+      qaDoc: taskDocumentsState.qaDoc,
+      ensureDocumentLoaded: ensureDocumentLoadedMock,
+      reloadDocument: reloadDocumentMock,
+      applyDocumentUpdate: applyDocumentUpdateMock,
+    };
+  },
 }));
 
 type UseAgentStudioDocumentsHook =
@@ -88,6 +100,7 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioDocuments, initialProps);
 
 const createBaseArgs = (): HookArgs => ({
+  activeRepo: "/repo",
   taskId: "task-1",
   activeSession: null,
   selectedTask: createTaskCardFixture({ id: "task-1", updatedAt: "2026-02-22T08:00:00.000Z" }),
@@ -127,6 +140,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   setTaskDocumentsState();
+  taskDocumentsHookCalls.length = 0;
   ensureDocumentLoadedMock.mockClear();
   reloadDocumentMock.mockClear();
   applyDocumentUpdateMock.mockClear();
@@ -165,6 +179,38 @@ describe("useAgentStudioDocuments", () => {
           id: "task-1",
           updatedAt: "2026-02-22T08:30:00.000Z",
         }),
+      });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(6);
+      expect(reloadDocumentMock).toHaveBeenNthCalledWith(4, "spec");
+      expect(reloadDocumentMock).toHaveBeenNthCalledWith(5, "plan");
+      expect(reloadDocumentMock).toHaveBeenNthCalledWith(6, "qa");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("scopes document cache and refresh dedupe by active repo", async () => {
+    const baseArgs = createBaseArgs();
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      expect(taskDocumentsHookCalls[taskDocumentsHookCalls.length - 1]).toMatchObject({
+        taskId: "task-1",
+        open: true,
+        cacheScope: "/repo",
+      });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(3);
+
+      await harness.update({
+        ...baseArgs,
+        activeRepo: "/other-repo",
+      });
+
+      expect(taskDocumentsHookCalls[taskDocumentsHookCalls.length - 1]).toMatchObject({
+        taskId: "task-1",
+        open: true,
+        cacheScope: "/other-repo",
       });
       expect(reloadDocumentMock).toHaveBeenCalledTimes(6);
       expect(reloadDocumentMock).toHaveBeenNthCalledWith(4, "spec");

@@ -44,6 +44,7 @@ const toErrorMessage = (error: unknown): string =>
 export function useTaskDocuments(
   taskId: string | null,
   open: boolean,
+  cacheScope = "",
 ): {
   specDoc: TaskDocumentState;
   planDoc: TaskDocumentState;
@@ -55,9 +56,10 @@ export function useTaskDocuments(
   const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = useSpecState();
   const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
   const documentLoadSequence = useRef(0);
-  const previousContext = useRef<{ taskId: string | null; open: boolean } | null>(null);
+  const previousContext = useRef<{ taskCacheKey: string | null; open: boolean } | null>(null);
   const documentsRef = useRef<TaskDocumentsState>(documents);
-  const cachedDocumentsByTaskId = useRef<Record<string, TaskDocumentsState>>({});
+  const cachedDocumentsByTaskCacheKey = useRef<Record<string, TaskDocumentsState>>({});
+  const taskCacheKey = taskId ? `${cacheScope}::${taskId}` : null;
   const inFlightSections = useRef<Record<DocumentSectionKey, boolean>>({
     spec: false,
     plan: false,
@@ -68,12 +70,12 @@ export function useTaskDocuments(
     (snapshot: TaskDocumentsState): void => {
       documentsRef.current = snapshot;
       setDocuments(snapshot);
-      if (!taskId) {
+      if (!taskCacheKey) {
         return;
       }
-      cachedDocumentsByTaskId.current[taskId] = cloneDocumentsState(snapshot);
+      cachedDocumentsByTaskCacheKey.current[taskCacheKey] = cloneDocumentsState(snapshot);
     },
-    [taskId],
+    [taskCacheKey],
   );
 
   useEffect(() => {
@@ -82,16 +84,17 @@ export function useTaskDocuments(
 
   useEffect(() => {
     const contextDidChange =
-      previousContext.current?.taskId !== taskId || previousContext.current?.open !== open;
+      previousContext.current?.taskCacheKey !== taskCacheKey ||
+      previousContext.current?.open !== open;
     if (!contextDidChange) {
       return;
     }
 
-    previousContext.current = { taskId, open };
+    previousContext.current = { taskCacheKey, open };
     documentLoadSequence.current += 1;
     const initialDocuments =
-      taskId && cachedDocumentsByTaskId.current[taskId]
-        ? cloneDocumentsState(cachedDocumentsByTaskId.current[taskId])
+      taskCacheKey && cachedDocumentsByTaskCacheKey.current[taskCacheKey]
+        ? cloneDocumentsState(cachedDocumentsByTaskCacheKey.current[taskCacheKey])
         : createInitialDocumentsState();
     documentsRef.current = initialDocuments;
     setDocuments(initialDocuments);
@@ -100,7 +103,7 @@ export function useTaskDocuments(
       plan: false,
       qa: false,
     };
-  }, [open, taskId]);
+  }, [open, taskCacheKey]);
 
   const loadDocument = useCallback(
     (section: DocumentSectionKey, force: boolean): boolean => {

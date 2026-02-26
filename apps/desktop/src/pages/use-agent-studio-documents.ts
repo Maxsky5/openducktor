@@ -6,12 +6,14 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-utils";
 
 type UseAgentStudioDocumentsArgs = {
+  activeRepo?: string | null;
   taskId: string;
   activeSession: AgentSessionState | null;
   selectedTask: TaskCard | null;
 };
 
 export function useAgentStudioDocuments({
+  activeRepo = null,
   taskId,
   activeSession,
   selectedTask,
@@ -21,7 +23,7 @@ export function useAgentStudioDocuments({
   qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
 } {
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded, reloadDocument, applyDocumentUpdate } =
-    useTaskDocuments(taskId || null, true);
+    useTaskDocuments(taskId || null, true, activeRepo ?? "");
 
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
@@ -50,7 +52,7 @@ export function useAgentStudioDocuments({
       return;
     }
 
-    const taskVersionKey = `${taskId}:${selectedTask.updatedAt}`;
+    const taskVersionKey = `${activeRepo ?? ""}:${taskId}:${selectedTask.updatedAt}`;
     if (refreshedTaskVersionsRef.current.has(taskVersionKey)) {
       return;
     }
@@ -59,7 +61,7 @@ export function useAgentStudioDocuments({
     reloadDocument("spec");
     reloadDocument("plan");
     reloadDocument("qa");
-  }, [reloadDocument, selectedTask, taskId]);
+  }, [activeRepo, reloadDocument, selectedTask, taskId]);
 
   useEffect(() => {
     if (!activeSession || !taskId) {

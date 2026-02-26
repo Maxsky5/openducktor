@@ -355,6 +355,7 @@ export function AgentsPage(): ReactElement {
   });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
+    activeRepo,
     taskId: viewTaskId,
     activeSession: viewActiveSession,
     selectedTask: viewSelectedTask,

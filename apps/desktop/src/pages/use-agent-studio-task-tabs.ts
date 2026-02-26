@@ -272,7 +272,7 @@ export function useAgentStudioTaskTabs(args: {
       const { nextTabTaskIds, nextActiveTaskId } = closeTaskTab({
         tabTaskIds,
         taskIdToClose,
-        activeTaskId: taskId,
+        activeTaskId: activeTaskTabId,
       });
 
       if (nextTabTaskIds === tabTaskIds) {
@@ -282,7 +282,7 @@ export function useAgentStudioTaskTabs(args: {
       setOpenTaskTabs(nextTabTaskIds);
       setPersistedActiveTaskId(nextActiveTaskId ?? null);
 
-      if (taskIdToClose !== taskId) {
+      if (taskIdToClose !== activeTaskTabId) {
         return;
       }
 
@@ -302,6 +302,10 @@ export function useAgentStudioTaskTabs(args: {
       }
 
       globalThis.setTimeout(() => {
+        if (typeof globalThis.document === "undefined") {
+          return;
+        }
+
         const nextTrigger = globalThis.document.getElementById(
           `agent-studio-tab-${nextActiveTaskId}`,
         );
@@ -339,8 +343,8 @@ export function useAgentStudioTaskTabs(args: {
       deferQueryUpdate,
       latestSessionByTaskId,
       onContextSwitchIntent,
+      activeTaskTabId,
       tabTaskIds,
-      taskId,
       tasks,
     ],
   );
