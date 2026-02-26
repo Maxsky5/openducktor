@@ -1,18 +1,28 @@
 import { FolderOpen, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useCallback, useEffect, useState } from "react";
+import {
+  lazy,
+  type ReactElement,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/open-repository-modal";
 import { RepositorySwitcher } from "@/components/features/repository-switcher";
 import {
+  AgentActivityCard,
   AppBrand,
   BranchSwitcher,
   SidebarNavigation,
   WorkspaceSummaryCard,
 } from "@/components/layout/sidebar";
+import { summarizeAgentActivity } from "@/components/layout/sidebar/agent-activity-model";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useWorkspaceState } from "@/state";
+import { useAgentState, useWorkspaceState } from "@/state";
 
 const SettingsModal = lazy(async () => {
   const module = await import("@/components/features/settings-modal");
@@ -21,9 +31,11 @@ const SettingsModal = lazy(async () => {
 
 export function AppShell(): ReactElement {
   const { activeRepo, workspaces } = useWorkspaceState();
+  const { sessions } = useAgentState();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isRepositoryModalBlocking = !activeRepo && workspaces.length === 0;
+  const agentActivity = useMemo(() => summarizeAgentActivity(sessions), [sessions]);
 
   useEffect(() => {
     if (activeRepo) {
@@ -95,6 +107,10 @@ export function AppShell(): ReactElement {
                   <DiagnosticsPanel />
 
                   <SidebarNavigation hasActiveRepo={Boolean(activeRepo)} />
+                  <AgentActivityCard
+                    activeSessionCount={agentActivity.activeSessionCount}
+                    waitingForInputCount={agentActivity.waitingForInputCount}
+                  />
                   <WorkspaceSummaryCard />
                 </div>
 
