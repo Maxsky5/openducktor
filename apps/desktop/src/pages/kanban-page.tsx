@@ -89,7 +89,7 @@ export function KanbanPage(): ReactElement {
   );
 
   return (
-    <div className="grid h-full min-w-0 gap-4 overflow-x-hidden">
+    <div className="grid h-full min-w-0 gap-4 overflow-x-hidden p-4">
       <KanbanSummaryCards
         taskCount={tasks.length}
         runningCount={runningCount}

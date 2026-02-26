@@ -10,9 +10,13 @@ const NAV_ITEMS = [
 
 type SidebarNavigationProps = {
   hasActiveRepo: boolean;
+  compact?: boolean;
 };
 
-export function SidebarNavigation({ hasActiveRepo }: SidebarNavigationProps): ReactElement {
+export function SidebarNavigation({
+  hasActiveRepo,
+  compact = false,
+}: SidebarNavigationProps): ReactElement {
   return (
     <nav className="space-y-1">
       {NAV_ITEMS.map((item) => {
@@ -22,9 +26,13 @@ export function SidebarNavigation({ hasActiveRepo }: SidebarNavigationProps): Re
           <NavLink
             key={item.to}
             to={isDisabled ? "/kanban" : item.to}
+            title={item.label}
+            aria-label={item.label}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition animate-rise-in",
+                compact
+                  ? "flex items-center justify-center rounded-lg p-2.5 text-sm font-medium transition"
+                  : "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition animate-rise-in",
                 isDisabled ? "cursor-not-allowed opacity-50" : "",
                 isActive
                   ? "bg-slate-900 text-white shadow-sm"
@@ -34,7 +42,7 @@ export function SidebarNavigation({ hasActiveRepo }: SidebarNavigationProps): Re
             aria-disabled={isDisabled}
           >
             <Icon className="size-4" />
-            {item.label}
+            {!compact ? item.label : null}
           </NavLink>
         );
       })}

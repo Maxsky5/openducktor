@@ -52,7 +52,7 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).not.toContain("rounded-full border");
     expect(html).not.toContain("bg-slate-50");
     expect(html).not.toContain("bg-white/80");
-    expect(html).toContain("border-0");
+    expect(html).toContain("bg-gray-700/70");
     expect(html).toContain("size-[1.4rem]");
 
     const lastTabCloseIndex = html.lastIndexOf("Close tab for Ship QA checklist");
@@ -77,6 +77,25 @@ describe("AgentStudioTaskTabs", () => {
 
     expect(html).toContain("Open a task tab to start working with an agent.");
     expect(html).toContain('aria-label="Open new task tab"');
+  });
+
+  test("renders right panel toggle when provided", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        Tabs,
+        { value: "task-1" },
+        createElement(AgentStudioTaskTabs, {
+          model: buildModel(),
+          rightPanelToggleModel: {
+            kind: "documents",
+            isOpen: true,
+            onToggle: () => {},
+          },
+        }),
+      ),
+    );
+
+    expect(html).toContain("Hide documents panel");
   });
 
   test("keeps new-tab button enabled while tab tasks are loading", () => {

@@ -13,6 +13,10 @@ import {
 } from "@/components/ui/dialog";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import {
+  AgentStudioRightPanelToggleButton,
+  type AgentStudioRightPanelToggleModel,
+} from "./agent-studio-right-panel";
 
 export type AgentStudioTaskTabStatus = "working" | "idle" | "waiting_input";
 
@@ -52,7 +56,13 @@ const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
   return <Circle className="size-3.5 fill-slate-300 text-slate-300" />;
 };
 
-export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel }): ReactElement {
+export function AgentStudioTaskTabs({
+  model,
+  rightPanelToggleModel,
+}: {
+  model: AgentStudioTaskTabsModel;
+  rightPanelToggleModel?: AgentStudioRightPanelToggleModel | null;
+}): ReactElement {
   const {
     tabs,
     availableTabTasks,
@@ -93,8 +103,8 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
   const hasAnyTab = useMemo(() => tabs.length > 0, [tabs]);
 
   return (
-    <div className="rounded-t-xl bg-gray-700/70 px-2 pt-2 pb-0">
-      <div className="flex min-w-0 items-center">
+    <div className="bg-gray-700/70 px-2 pt-1.5 pb-0">
+      <div className="flex min-w-0 items-center gap-1">
         <div className="min-w-0 flex-1 overflow-x-auto">
           <div className="inline-flex h-10 min-w-max items-center gap-1 px-2">
             {hasAnyTab ? (
@@ -159,13 +169,12 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
                 Open a task tab to start working with an agent.
               </p>
             )}
-
             <Button
               type="button"
               size="icon"
               variant="ghost"
               aria-label="Open new task tab"
-              className="h-10 w-10 shrink-0 self-center rounded-md border-0 bg-transparent hover:bg-transparent p-0 text-gray-50 shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-600"
+              className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-gray-50 shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-600"
               disabled={!canOpenCreateDialog}
               onClick={() => setIsCreateDialogOpen(true)}
             >
@@ -174,6 +183,11 @@ export function AgentStudioTaskTabs({ model }: { model: AgentStudioTaskTabsModel
             </Button>
           </div>
         </div>
+        {rightPanelToggleModel ? (
+          <div className="flex shrink-0 items-center pl-0.5">
+            <AgentStudioRightPanelToggleButton model={rightPanelToggleModel} />
+          </div>
+        ) : null}
       </div>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
