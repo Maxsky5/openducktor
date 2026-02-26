@@ -69,6 +69,7 @@ export function useAgentStudioTaskTabs(args: {
 
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
+  const [intentActiveTaskId, setIntentActiveTaskId] = useState<string | null>(null);
   const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState<string | null>(null);
 
   const tabTaskIds = useMemo(
@@ -77,14 +78,26 @@ export function useAgentStudioTaskTabs(args: {
   );
 
   const activeTaskTabId = useMemo(() => {
-    if (persistedActiveTaskId && tabTaskIds.includes(persistedActiveTaskId)) {
-      return persistedActiveTaskId;
+    if (intentActiveTaskId && tabTaskIds.includes(intentActiveTaskId)) {
+      return intentActiveTaskId;
     }
     if (taskId && tabTaskIds.includes(taskId)) {
       return taskId;
     }
+    if (persistedActiveTaskId && tabTaskIds.includes(persistedActiveTaskId)) {
+      return persistedActiveTaskId;
+    }
     return tabTaskIds[0] ?? "";
-  }, [persistedActiveTaskId, tabTaskIds, taskId]);
+  }, [intentActiveTaskId, persistedActiveTaskId, tabTaskIds, taskId]);
+
+  useEffect(() => {
+    if (!intentActiveTaskId) {
+      return;
+    }
+    if (!tabTaskIds.includes(intentActiveTaskId) || taskId === intentActiveTaskId) {
+      setIntentActiveTaskId(null);
+    }
+  }, [intentActiveTaskId, tabTaskIds, taskId]);
 
   const availableTabTasks = useMemo(
     () => getAvailableTabTasks(tasks, tabTaskIds),
@@ -115,6 +128,7 @@ export function useAgentStudioTaskTabs(args: {
     if (!activeRepo) {
       setOpenTaskTabs([]);
       setPersistedActiveTaskId(null);
+      setIntentActiveTaskId(null);
       setTabsStorageHydratedRepo(null);
       return;
     }
@@ -218,6 +232,7 @@ export function useAgentStudioTaskTabs(args: {
       onContextSwitchIntent?.();
 
       clearComposerInput();
+      setIntentActiveTaskId(nextTaskId);
       setOpenTaskTabs((current) => {
         if (current.includes(nextTaskId)) {
           return current;
@@ -288,6 +303,7 @@ export function useAgentStudioTaskTabs(args: {
 
       clearComposerInput();
       onContextSwitchIntent?.();
+      setIntentActiveTaskId(nextActiveTaskId ?? null);
 
       if (!nextActiveTaskId) {
         deferQueryUpdate({

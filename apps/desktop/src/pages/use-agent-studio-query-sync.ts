@@ -246,6 +246,7 @@ export function useAgentStudioQuerySync({
 
   useEffect(() => {
     if (!activeRepo) {
+      flushPendingContextPersist();
       restoredContextRepoRef.current = null;
       persistedContextPayloadRef.current = null;
       pendingContextPersistRef.current = null;
@@ -254,7 +255,7 @@ export function useAgentStudioQuerySync({
         pendingPersistTimeoutIdRef.current = null;
       }
     }
-  }, [activeRepo]);
+  }, [activeRepo, flushPendingContextPersist]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -347,11 +348,17 @@ export function useAgentStudioQuerySync({
 
     return () => {
       if (pendingPersistTimeoutIdRef.current === timeoutId) {
-        globalThis.clearTimeout(timeoutId);
-        pendingPersistTimeoutIdRef.current = null;
+        flushPendingContextPersist();
       }
     };
-  }, [activeRepo, navigation.role, navigation.scenario, navigation.sessionId, navigation.taskId]);
+  }, [
+    activeRepo,
+    flushPendingContextPersist,
+    navigation.role,
+    navigation.scenario,
+    navigation.sessionId,
+    navigation.taskId,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") {

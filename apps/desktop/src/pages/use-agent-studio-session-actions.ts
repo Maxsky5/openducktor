@@ -338,16 +338,13 @@ export function useAgentStudioSessionActions({
     setIsSending(false);
   }, [activeSessionStatus, isSending]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Session change must reset submit state map.
   useEffect(() => {
-    setIsSubmittingQuestionByRequestId({});
-  }, [activeSessionId]);
-
-  useEffect(() => {
-    if (!activeSessionId) {
-      setInput("");
-      return;
-    }
+    setIsSubmittingQuestionByRequestId((current) => {
+      if (activeSessionId === null && Object.keys(current).length === 0) {
+        return current;
+      }
+      return {};
+    });
     setInput("");
   }, [activeSessionId, setInput]);
 
