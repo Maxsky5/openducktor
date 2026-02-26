@@ -22,7 +22,7 @@ import {
 import { summarizeAgentActivity } from "@/components/layout/sidebar/agent-activity-model";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useAgentState, useWorkspaceState } from "@/state";
+import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
 
 const SettingsModal = lazy(async () => {
   const module = await import("@/components/features/settings-modal");
@@ -31,11 +31,20 @@ const SettingsModal = lazy(async () => {
 
 export function AppShell(): ReactElement {
   const { activeRepo, workspaces } = useWorkspaceState();
+  const { tasks } = useTasksState();
   const { sessions } = useAgentState();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const isRepositoryModalBlocking = !activeRepo && workspaces.length === 0;
-  const agentActivity = useMemo(() => summarizeAgentActivity(sessions), [sessions]);
+  const taskTitleById = useMemo(() => new Map(tasks.map((task) => [task.id, task.title])), [tasks]);
+  const agentActivity = useMemo(
+    () =>
+      summarizeAgentActivity({
+        sessions,
+        taskTitleById,
+      }),
+    [sessions, taskTitleById],
+  );
 
   useEffect(() => {
     if (activeRepo) {
@@ -110,6 +119,8 @@ export function AppShell(): ReactElement {
                   <AgentActivityCard
                     activeSessionCount={agentActivity.activeSessionCount}
                     waitingForInputCount={agentActivity.waitingForInputCount}
+                    activeSessions={agentActivity.activeSessions}
+                    waitingForInputSessions={agentActivity.waitingForInputSessions}
                   />
                   <WorkspaceSummaryCard />
                 </div>

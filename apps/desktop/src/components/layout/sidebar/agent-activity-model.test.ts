@@ -1,20 +1,26 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { summarizeAgentActivity } from "./agent-activity-model";
 
 const buildSession = (
   overrides: {
+    sessionId?: string;
+    taskId?: string;
+    role?: AgentSessionState["role"];
+    scenario?: AgentSessionState["scenario"];
+    startedAt?: string;
     status?: "starting" | "running" | "idle" | "error" | "stopped";
     pendingPermissions?: number;
     pendingQuestions?: number;
   } = {},
 ) => ({
-  sessionId: "session-1",
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "spec" as const,
-  scenario: "spec_initial" as const,
+  sessionId: overrides.sessionId ?? "session-1",
+  externalSessionId: `external-${overrides.sessionId ?? "session-1"}`,
+  taskId: overrides.taskId ?? "task-1",
+  role: overrides.role ?? ("spec" as const),
+  scenario: overrides.scenario ?? ("spec_initial" as const),
   status: overrides.status ?? "idle",
-  startedAt: "2026-02-26T09:00:00.000Z",
+  startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
   runtimeId: null,
   runId: null,
   baseUrl: "http://localhost:4096",
@@ -38,25 +44,61 @@ const buildSession = (
 
 describe("summarizeAgentActivity", () => {
   test("counts active sessions from starting/running statuses", () => {
-    const summary = summarizeAgentActivity([
-      buildSession({ status: "starting" }),
-      buildSession({ status: "running" }),
-      buildSession({ status: "idle" }),
-      buildSession({ status: "error" }),
-    ]);
+    const summary = summarizeAgentActivity({
+      sessions: [
+        buildSession({ sessionId: "session-1", taskId: "task-1", status: "starting" }),
+        buildSession({
+          sessionId: "session-2",
+          taskId: "task-2",
+          status: "running",
+          startedAt: "2026-02-26T10:00:00.000Z",
+        }),
+        buildSession({ sessionId: "session-3", taskId: "task-3", status: "idle" }),
+        buildSession({ sessionId: "session-4", taskId: "task-4", status: "error" }),
+      ],
+      taskTitleById: new Map([
+        ["task-1", "One"],
+        ["task-2", "Two"],
+      ]),
+    });
 
     expect(summary.activeSessionCount).toBe(2);
     expect(summary.waitingForInputCount).toBe(0);
+    expect(summary.activeSessions).toHaveLength(2);
+    expect(summary.activeSessions[0]).toMatchObject({
+      sessionId: "session-2",
+      taskId: "task-2",
+      taskTitle: "Two",
+    });
+    expect(summary.activeSessions[1]).toMatchObject({
+      sessionId: "session-1",
+      taskId: "task-1",
+      taskTitle: "One",
+    });
   });
 
   test("counts waiting sessions from permissions or questions", () => {
-    const summary = summarizeAgentActivity([
-      buildSession({ status: "running", pendingPermissions: 1 }),
-      buildSession({ status: "idle", pendingQuestions: 1 }),
-      buildSession({ status: "stopped" }),
-    ]);
+    const summary = summarizeAgentActivity({
+      sessions: [
+        buildSession({
+          sessionId: "session-1",
+          status: "running",
+          pendingPermissions: 1,
+        }),
+        buildSession({
+          sessionId: "session-2",
+          status: "idle",
+          pendingQuestions: 1,
+          startedAt: "2026-02-26T10:00:00.000Z",
+        }),
+        buildSession({ sessionId: "session-3", status: "stopped" }),
+      ],
+    });
 
     expect(summary.activeSessionCount).toBe(1);
     expect(summary.waitingForInputCount).toBe(2);
+    expect(summary.waitingForInputSessions).toHaveLength(2);
+    expect(summary.waitingForInputSessions[0]?.sessionId).toBe("session-2");
+    expect(summary.waitingForInputSessions[1]?.sessionId).toBe("session-1");
   });
 });

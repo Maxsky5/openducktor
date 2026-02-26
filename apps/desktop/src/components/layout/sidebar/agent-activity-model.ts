@@ -1,8 +1,20 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
+export type AgentActivitySessionItem = {
+  sessionId: string;
+  taskId: string;
+  taskTitle: string;
+  role: AgentSessionState["role"];
+  scenario: AgentSessionState["scenario"];
+  status: AgentSessionState["status"];
+  startedAt: string;
+};
+
 export type AgentActivitySummary = {
   activeSessionCount: number;
   waitingForInputCount: number;
+  activeSessions: AgentActivitySessionItem[];
+  waitingForInputSessions: AgentActivitySessionItem[];
 };
 
 const ACTIVE_SESSION_STATUS: ReadonlySet<AgentSessionState["status"]> = new Set([
@@ -10,22 +22,55 @@ const ACTIVE_SESSION_STATUS: ReadonlySet<AgentSessionState["status"]> = new Set(
   "running",
 ]);
 
-export const summarizeAgentActivity = (sessions: AgentSessionState[]): AgentActivitySummary => {
-  let activeSessionCount = 0;
-  let waitingForInputCount = 0;
+const byNewestSession = (
+  left: AgentActivitySessionItem,
+  right: AgentActivitySessionItem,
+): number => {
+  if (left.startedAt !== right.startedAt) {
+    return left.startedAt > right.startedAt ? -1 : 1;
+  }
+  if (left.sessionId === right.sessionId) {
+    return 0;
+  }
+  return left.sessionId > right.sessionId ? -1 : 1;
+};
+
+export const summarizeAgentActivity = ({
+  sessions,
+  taskTitleById,
+}: {
+  sessions: AgentSessionState[];
+  taskTitleById?: ReadonlyMap<string, string>;
+}): AgentActivitySummary => {
+  const activeSessions: AgentActivitySessionItem[] = [];
+  const waitingForInputSessions: AgentActivitySessionItem[] = [];
 
   for (const session of sessions) {
-    if (ACTIVE_SESSION_STATUS.has(session.status)) {
-      activeSessionCount += 1;
-    }
+    const sessionItem: AgentActivitySessionItem = {
+      sessionId: session.sessionId,
+      taskId: session.taskId,
+      taskTitle: taskTitleById?.get(session.taskId) ?? session.taskId,
+      role: session.role,
+      scenario: session.scenario,
+      status: session.status,
+      startedAt: session.startedAt,
+    };
 
+    if (ACTIVE_SESSION_STATUS.has(session.status)) {
+      activeSessions.push(sessionItem);
+    }
     if (session.pendingPermissions.length > 0 || session.pendingQuestions.length > 0) {
-      waitingForInputCount += 1;
+      waitingForInputSessions.push(sessionItem);
     }
   }
 
+  activeSessions.sort(byNewestSession);
+  waitingForInputSessions.sort(byNewestSession);
+
   return {
-    activeSessionCount,
-    waitingForInputCount,
+    activeSessionCount: activeSessions.length,
+    waitingForInputCount: waitingForInputSessions.length,
+    activeSessions,
+    waitingForInputSessions,
   };
 };
