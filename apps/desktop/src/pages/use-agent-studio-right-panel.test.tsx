@@ -28,6 +28,22 @@ describe("useAgentStudioRightPanel", () => {
     await harness.unmount();
   });
 
+  test("hides panel and toggle when no task context is active", async () => {
+    const harness = createHookHarness({
+      role: "spec",
+      hasTaskContext: false,
+      hasDocumentPanel: true,
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().panelKind).toBeNull();
+    expect(harness.getLatest().isPanelOpen).toBe(false);
+    expect(harness.getLatest().rightPanelToggleModel).toBeNull();
+
+    await harness.unmount();
+  });
+
   test("persists open state per role when switching roles", async () => {
     const harness = createHookHarness({
       role: "spec",

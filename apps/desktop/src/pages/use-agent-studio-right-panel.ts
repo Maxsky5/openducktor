@@ -9,6 +9,7 @@ type UseAgentStudioRightPanelInput = {
   role: AgentRole;
   hasDocumentPanel: boolean;
   hasDiffPanel?: boolean;
+  hasTaskContext?: boolean;
 };
 
 type UseAgentStudioRightPanelState = {
@@ -45,15 +46,18 @@ export function useAgentStudioRightPanel({
   role,
   hasDocumentPanel,
   hasDiffPanel = false,
+  hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
   const [isOpenByRole, setIsOpenByRole] =
     useState<Record<AgentRole, boolean>>(DEFAULT_OPEN_BY_ROLE);
 
   const panelKindForRole = PANEL_KIND_BY_ROLE[role];
-  const panelAvailable = isRightPanelKindAvailable(panelKindForRole, {
-    hasDocumentPanel,
-    hasDiffPanel,
-  });
+  const panelAvailable =
+    hasTaskContext &&
+    isRightPanelKindAvailable(panelKindForRole, {
+      hasDocumentPanel,
+      hasDiffPanel,
+    });
   const panelKind = panelAvailable ? panelKindForRole : null;
   const isPanelOpen = panelKind ? isOpenByRole[role] : false;
 

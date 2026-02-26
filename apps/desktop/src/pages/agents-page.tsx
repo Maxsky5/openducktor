@@ -371,6 +371,7 @@ export function AgentsPage(): ReactElement {
 
   const rightPanel = useAgentStudioRightPanel({
     role,
+    hasTaskContext: Boolean(taskId),
     hasDocumentPanel: Boolean(agentStudioWorkspaceSidebarModel.activeDocument),
     hasDiffPanel: false,
   });
