@@ -61,6 +61,48 @@ const isWorkflowAction = (action: TaskAction): action is TaskWorkflowAction =>
 const dedupeActions = (actions: TaskWorkflowAction[]): TaskWorkflowAction[] =>
   Array.from(new Set(actions));
 
+const prioritize = (
+  actionPriority: readonly TaskWorkflowAction[],
+  prioritizeAhead: readonly TaskWorkflowAction[],
+): TaskWorkflowAction[] => {
+  const uniqueAhead = dedupeActions(Array.from(prioritizeAhead));
+  const seen = new Set(uniqueAhead);
+  return [...uniqueAhead, ...actionPriority.filter((action) => !seen.has(action))];
+};
+
+const resolvePriorityForTask = (task: TaskCard): TaskWorkflowAction[] => {
+  const basePriority =
+    ACTION_PRIORITY_BY_ISSUE_TYPE[task.issueType] ?? ACTION_PRIORITY_BY_ISSUE_TYPE.task;
+
+  switch (task.status) {
+    case "spec_ready": {
+      return prioritize(basePriority, ["set_plan", "set_spec"]);
+    }
+    case "ready_for_dev": {
+      return prioritize(basePriority, ["build_start"]);
+    }
+    case "deferred": {
+      return prioritize(basePriority, ["resume_deferred"]);
+    }
+    case "in_progress":
+    case "blocked":
+    case "ai_review": {
+      return prioritize(basePriority, ["open_builder", "build_start"]);
+    }
+    case "human_review": {
+      return prioritize(basePriority, [
+        "human_approve",
+        "human_request_changes",
+        "open_builder",
+        "build_start",
+      ]);
+    }
+    default: {
+      return basePriority;
+    }
+  }
+};
+
 export const resolveTaskCardActions = (
   task: TaskCard,
   options: ResolveTaskCardActionsOptions = {},
@@ -72,8 +114,7 @@ export const resolveTaskCardActions = (
       .filter((action) => (includeSet ? includeSet.has(action) : true)),
   );
 
-  const priority =
-    ACTION_PRIORITY_BY_ISSUE_TYPE[task.issueType] ?? ACTION_PRIORITY_BY_ISSUE_TYPE.task;
+  const priority = resolvePriorityForTask(task);
   const primaryAction = priority.find((action) => enabled.includes(action)) ?? enabled[0] ?? null;
 
   return {

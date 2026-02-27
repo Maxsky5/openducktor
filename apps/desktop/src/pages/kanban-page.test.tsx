@@ -1,0 +1,474 @@
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { isValidElement, type ReactElement, useState } from "react";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { createTaskCardFixture, enableReactActEnvironment } from "./agent-studio-test-utils";
+
+enableReactActEnvironment();
+
+const startAgentSessionMock = mock(async () => "session-1");
+const sendAgentMessageMock = mock(async () => {});
+const updateAgentSessionModelMock = mock(() => {});
+const humanApproveTaskMock = mock(async () => {});
+const humanRequestChangesTaskMock = mock(async () => {});
+const deleteTaskMock = mock(async () => {});
+const deferTaskMock = mock(async () => {});
+const resumeDeferredTaskMock = mock(async () => {});
+const toastSuccessMock = mock(() => {});
+const toastErrorMock = mock(() => {});
+
+let latestKanbanColumnProps: Record<string, unknown> | null = null;
+let latestSessionStartModalModel: Record<string, unknown> | null = null;
+let latestLocation = "/";
+
+let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
+
+mock.module("sonner", () => ({
+  toast: {
+    success: toastSuccessMock,
+    error: toastErrorMock,
+  },
+}));
+
+mock.module("@/components/features/kanban", () => ({
+  KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
+    latestKanbanColumnProps = props;
+    return null;
+  },
+  TaskComposerDialog: (): ReactElement | null => null,
+  TaskDetailsSheet: (): ReactElement | null => null,
+}));
+
+mock.module("@/components/features/agents", () => ({
+  SessionStartModal: ({ model }: { model: Record<string, unknown> }): ReactElement | null => {
+    latestSessionStartModalModel = model;
+    return null;
+  },
+}));
+
+mock.module("@/state", () => ({
+  AppStateProvider: ({ children }: { children: ReactElement }): ReactElement => children,
+  useWorkspaceState: () => ({
+    activeRepo: "/repo",
+    isSwitchingWorkspace: false,
+    loadRepoSettings: async () => null,
+  }),
+  useAgentState: () => ({
+    sessions: [
+      {
+        sessionId: "session-spec",
+        taskId: "TASK-123",
+        role: "spec",
+        scenario: "spec_initial",
+        status: "running",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        pendingPermissions: 0,
+        pendingQuestions: 0,
+      },
+    ],
+    startAgentSession: startAgentSessionMock,
+    sendAgentMessage: sendAgentMessageMock,
+    updateAgentSessionModel: updateAgentSessionModelMock,
+  }),
+  useTasksState: () => ({
+    tasks: [currentTaskFixture],
+    runs: [],
+    isLoadingTasks: false,
+    runningTaskSessionByTaskId: {},
+    createTask: async () => {},
+    updateTaskStatus: async () => {},
+    refreshTasks: async () => {},
+    deleteTask: deleteTaskMock,
+    deferTask: deferTaskMock,
+    resumeDeferredTask: resumeDeferredTaskMock,
+    humanApproveTask: humanApproveTaskMock,
+    humanRequestChangesTask: humanRequestChangesTaskMock,
+  }),
+  useChecksState: () => ({}),
+  useDelegationState: () => ({}),
+  useSpecState: () => ({}),
+}));
+
+mock.module("./use-agent-studio-repo-settings", () => ({
+  useAgentStudioRepoSettings: () => ({ repoSettings: null }),
+}));
+
+mock.module("./use-session-start-modal-state", () => ({
+  useSessionStartModalState: () => {
+    const [intent, setIntent] = useState<Record<string, unknown> | null>(null);
+    const [selection, setSelection] = useState({
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      opencodeAgent: "build-agent",
+    });
+
+    return {
+      intent,
+      isOpen: intent !== null,
+      selection,
+      isCatalogLoading: false,
+      agentOptions: [],
+      modelOptions: [],
+      modelGroups: [],
+      variantOptions: [],
+      openStartModal: (nextIntent: Record<string, unknown>) => {
+        setIntent(nextIntent);
+        setSelection({
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "default",
+          opencodeAgent: "build-agent",
+        });
+      },
+      closeStartModal: () => {
+        setIntent(null);
+      },
+      handleSelectAgent: (opencodeAgent: string) => {
+        setSelection((current) => ({
+          ...current,
+          opencodeAgent,
+        }));
+      },
+      handleSelectModel: (modelKey: string) => {
+        if (modelKey === "anthropic/claude-sonnet") {
+          setSelection((current) => ({
+            ...current,
+            providerId: "anthropic",
+            modelId: "claude-sonnet",
+            variant: "default",
+          }));
+          return;
+        }
+        setSelection((current) => ({
+          ...current,
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "default",
+        }));
+      },
+      handleSelectVariant: (variant: string) => {
+        setSelection((current) => ({
+          ...current,
+          variant,
+        }));
+      },
+    };
+  },
+}));
+
+const renderPage = async (): Promise<ReactTestRenderer> => {
+  const { KanbanPage } = await import("./kanban-page");
+  const LocationProbe = (): ReactElement | null => {
+    const location = useLocation();
+    latestLocation = `${location.pathname}${location.search}`;
+    return null;
+  };
+
+  let renderer!: ReactTestRenderer;
+  await act(async () => {
+    renderer = create(
+      <MemoryRouter initialEntries={["/"]}>
+        <LocationProbe />
+        <KanbanPage />
+      </MemoryRouter>,
+    );
+  });
+  return renderer;
+};
+
+describe("KanbanPage session start modal flow", () => {
+  beforeEach(() => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
+    latestKanbanColumnProps = null;
+    latestSessionStartModalModel = null;
+    latestLocation = "/";
+    startAgentSessionMock.mockClear();
+    sendAgentMessageMock.mockClear();
+    updateAgentSessionModelMock.mockClear();
+    humanApproveTaskMock.mockClear();
+    humanRequestChangesTaskMock.mockClear();
+    deleteTaskMock.mockClear();
+    deferTaskMock.mockClear();
+    resumeDeferredTaskMock.mockClear();
+    toastSuccessMock.mockClear();
+    toastErrorMock.mockClear();
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
+  test("delegate action opens modal and foreground confirm navigates to Agent Studio", async () => {
+    const renderer = await renderPage();
+
+    expect(latestKanbanColumnProps).toBeTruthy();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    expect(latestSessionStartModalModel?.open).toBe(true);
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_implementation_start",
+        requireModelReady: true,
+      }),
+    );
+    expect(updateAgentSessionModelMock).toHaveBeenCalledWith("session-1", {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      opencodeAgent: "build-agent",
+    });
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("background confirm keeps user on Kanban and shows background success toast", async () => {
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as (runInBackground: boolean) => void)(true);
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(updateAgentSessionModelMock).toHaveBeenCalledTimes(1);
+    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+    expect(latestLocation).toBe("/");
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      "Started Build session in background for TASK-123.",
+      expect.objectContaining({
+        duration: 10000,
+      }),
+    );
+    const toastCall = toastSuccessMock.mock.calls.at(0) as
+      | [string, { description?: unknown }?]
+      | undefined;
+    const toastDescription = toastCall?.[1]?.description;
+    expect(isValidElement(toastDescription)).toBe(true);
+    if (isValidElement<{ className?: string }>(toastDescription)) {
+      expect(toastDescription.props.className).toContain("cursor-pointer");
+    }
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("background kickoff pending does not keep modal in loading state on next open", async () => {
+    let resolveKickoff: (() => void) | null = null;
+    sendAgentMessageMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveKickoff = resolve;
+        }),
+    );
+
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as (runInBackground: boolean) => void)(true);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    expect(latestSessionStartModalModel?.isStarting).toBe(false);
+
+    if (resolveKickoff) {
+      await act(async () => {
+        resolveKickoff?.();
+        await Promise.resolve();
+      });
+    }
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("foreground kickoff failure still navigates and reports kickoff error", async () => {
+    sendAgentMessageMock.mockImplementationOnce(async () => {
+      throw new Error("kickoff failed");
+    });
+
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.");
+    expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("modal model edits are propagated to session start payload", async () => {
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onSelectModel as (value: string) => void)(
+        "anthropic/claude-sonnet",
+      );
+      (latestSessionStartModalModel?.onSelectAgent as (value: string) => void)("build-agent");
+      (latestSessionStartModalModel?.onSelectVariant as (value: string) => void)("default");
+    });
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedModel: {
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "default",
+          opencodeAgent: "build-agent",
+        },
+      }),
+    );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("plan action opens modal and starts planner session", async () => {
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onPlan as (taskId: string, action: string) => void)(
+        "TASK-123",
+        "set_plan",
+      );
+    });
+
+    expect(latestSessionStartModalModel?.open).toBe(true);
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-123",
+        role: "planner",
+        scenario: "planner_initial",
+        startMode: "fresh",
+      }),
+    );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("continue spec action navigates to latest spec session without opening modal", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "spec_ready" });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onPlan as (taskId: string, action: string) => void)(
+        "TASK-123",
+        "set_spec",
+      );
+    });
+
+    expect(latestSessionStartModalModel).toBeNull();
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(latestLocation).toContain("session=session-spec");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("human request changes action opens modal with build follow-up scenario", async () => {
+    const renderer = await renderPage();
+
+    await act(async () => {
+      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
+        "TASK-123",
+      );
+    });
+
+    expect(humanRequestChangesTaskMock).toHaveBeenCalledWith("TASK-123");
+    expect(latestSessionStartModalModel?.open).toBe(true);
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        startMode: "reuse_latest",
+      }),
+    );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("build action bypasses modal and navigates directly", async () => {
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onBuild as (taskId: string) => void)("TASK-123");
+    });
+
+    expect(latestSessionStartModalModel).toBeNull();
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+});
