@@ -69,41 +69,40 @@ export type AgentStudioHeaderModel = {
   agentStudioReady: boolean;
 };
 
-const workflowStepClassName = (state: AgentWorkflowStep["state"]): string => {
-  if (state === "in_progress") {
-    return "border-sky-300 bg-sky-50 hover:bg-sky-50 text-sky-700 shadow-sm";
-  }
-  if (state === "done") {
-    return "border-emerald-300 bg-emerald-50 hover:bg-emerald-50 text-emerald-700 shadow-sm";
-  }
-  if (state === "available") {
-    return "border-slate-300 bg-white text-slate-700";
-  }
-  if (state === "optional") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-  return "border-slate-200 bg-slate-100 text-slate-400";
+const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
+  in_progress: "border-sky-300 bg-sky-50 hover:bg-sky-50 text-sky-700 shadow-sm",
+  done: "border-emerald-300 bg-emerald-50 hover:bg-emerald-50 text-emerald-700 shadow-sm",
+  available: "border-slate-300 bg-white text-slate-700",
+  optional: "border-amber-200 bg-amber-50 text-amber-700",
+  blocked: "border-slate-200 bg-slate-100 text-slate-400",
 };
 
-const workflowConnectorClassName = (state: AgentWorkflowStep["state"]): string => {
-  if (state === "done") {
-    return "bg-emerald-300";
-  }
-  if (state === "in_progress") {
-    return "bg-sky-300";
-  }
-  if (state === "available") {
-    return "bg-slate-300";
-  }
-  if (state === "optional") {
-    return "bg-amber-300";
-  }
-  return "bg-slate-200";
+const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
+  done: "bg-emerald-300",
+  in_progress: "bg-sky-300",
+  available: "bg-slate-300",
+  optional: "bg-amber-300",
+  blocked: "bg-slate-200",
 };
 
-const workflowSelectionClassName = (isSelected: boolean): string => {
-  return isSelected ? "ring-3 ring-offset-3 ring-blue-400" : "";
+const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
+  done: "ring-2 ring-offset-2 ring-emerald-400",
+  in_progress: "ring-2 ring-offset-2 ring-sky-400",
+  available: "ring-2 ring-offset-2 ring-slate-400",
+  optional: "ring-2 ring-offset-2 ring-amber-400",
+  blocked: "ring-2 ring-offset-2 ring-slate-300",
 };
+
+const workflowStepClassName = (state: AgentWorkflowStep["state"]): string =>
+  WORKFLOW_STEP_CLASSES[state] ?? WORKFLOW_STEP_CLASSES.blocked;
+
+const workflowConnectorClassName = (state: AgentWorkflowStep["state"] | "blocked"): string =>
+  WORKFLOW_CONNECTOR_CLASSES[state] ?? WORKFLOW_CONNECTOR_CLASSES.blocked;
+
+const workflowSelectionClassName = (
+  isSelected: boolean,
+  state: AgentWorkflowStep["state"],
+): string => (isSelected ? (WORKFLOW_SELECTION_CLASSES[state] ?? WORKFLOW_SELECTION_CLASSES.blocked) : "");
 
 const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (entry.sessionId) {
@@ -170,14 +169,14 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     <CardHeader className="space-y-2 border-b border-slate-200 bg-white pb-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <CardTitle className="max-w-[40rem] truncate text-xl">
+          <CardTitle className="max-w-160 truncate text-xl">
             {hasTaskTitle ? normalizedTaskTitle : "Agent Studio"}
           </CardTitle>
           {hasTaskId ? (
             <p className="font-mono text-[11px] text-slate-500">{normalizedTaskId}</p>
           ) : null}
         </div>
-        <div className="flex min-w-[14rem] max-w-full items-stretch gap-2 sm:min-w-[18rem]">
+        <div className="flex min-w-56 max-w-full items-stretch gap-2 sm:min-w-[18rem]">
           <div className="min-w-0 flex-1">
             <Combobox
               value={sessionSelector.value}
@@ -262,7 +261,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   className={cn(
                     "h-10 shrink-0 gap-2 rounded-lg border px-4 text-sm transition-colors",
                     workflowStepClassName(entry.state),
-                    workflowSelectionClassName(isSelected),
+                    workflowSelectionClassName(isSelected, entry.state),
                     "cursor-pointer",
                   )}
                   disabled={!agentStudioReady}
