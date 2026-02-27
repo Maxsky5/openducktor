@@ -127,16 +127,15 @@ export const registerOdtTool = (
   );
 };
 
-export const ODT_REGISTERED_TOOL_SPECS: Readonly<
-  Record<RegisteredToolName, RegisteredToolSpec>
-> = {
+export const ODT_REGISTERED_TOOL_SPECS: Readonly<Record<RegisteredToolName, RegisteredToolSpec>> = {
   odt_read_task: {
     description:
       "Read one OpenDucktor task with its current status and agent documents (spec/plan/latest QA).",
     execute: (store, input) => store.readTask(input),
   },
   odt_set_spec: {
-    description: "Persist specification markdown for a task and transition open->spec_ready when needed.",
+    description:
+      "Persist specification markdown for a task and transition open->spec_ready when needed.",
     execute: (store, input) => store.setSpec(input),
   },
   odt_set_plan: {

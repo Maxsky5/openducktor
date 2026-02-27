@@ -1,6 +1,6 @@
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import type { IssueType, TaskCard, TaskStatus } from "./contracts";
 import {
   canReplaceEpicSubtaskStatus,
@@ -20,7 +20,10 @@ type WorkflowContractFixture = {
 const ISSUE_TYPES: IssueType[] = ["epic", "feature", "task", "bug"];
 
 const loadFixture = (): WorkflowContractFixture => {
-  const fixturePath = join(import.meta.dir, "../../../docs/contracts/workflow-contract-fixture.json");
+  const fixturePath = join(
+    import.meta.dir,
+    "../../../docs/contracts/workflow-contract-fixture.json",
+  );
   const raw = readFileSync(fixturePath, "utf8");
   return JSON.parse(raw) as WorkflowContractFixture;
 };

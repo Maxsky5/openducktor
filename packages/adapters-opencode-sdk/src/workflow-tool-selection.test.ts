@@ -47,7 +47,11 @@ describe("workflow-tool-selection", () => {
   test("ignores malformed runtime aliases and keeps canonical role policy", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
-        toolIds: ["customprefix_odt_set_spec_extra", "customprefix_odt_", "customprefix_odt_set_plan"],
+        toolIds: [
+          "customprefix_odt_set_spec_extra",
+          "customprefix_odt_",
+          "customprefix_odt_set_plan",
+        ],
       }),
       role: "spec",
       workingDirectory: "/repo",

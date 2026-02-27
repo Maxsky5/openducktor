@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ODT_TOOL_SCHEMAS } from "./lib";
 import { ODT_REGISTERED_TOOL_NAMES, registerOdtTool } from "./index";
+import { ODT_TOOL_SCHEMAS } from "./lib";
 
 const loadWorkflowFixture = () => {
-  const fixturePath = join(import.meta.dir, "../../../docs/contracts/workflow-contract-fixture.json");
+  const fixturePath = join(
+    import.meta.dir,
+    "../../../docs/contracts/workflow-contract-fixture.json",
+  );
   return JSON.parse(readFileSync(fixturePath, "utf8"));
 };
 

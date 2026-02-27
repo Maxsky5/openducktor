@@ -1,6 +1,6 @@
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { AGENT_ROLE_TOOL_POLICY } from "./agent-orchestrator";
 
 type WorkflowContractFixture = {
@@ -8,7 +8,10 @@ type WorkflowContractFixture = {
 };
 
 const loadFixture = (): WorkflowContractFixture => {
-  const fixturePath = join(import.meta.dir, "../../../../docs/contracts/workflow-contract-fixture.json");
+  const fixturePath = join(
+    import.meta.dir,
+    "../../../../docs/contracts/workflow-contract-fixture.json",
+  );
   const raw = readFileSync(fixturePath, "utf8");
   return JSON.parse(raw) as WorkflowContractFixture;
 };

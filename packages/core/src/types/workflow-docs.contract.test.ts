@@ -1,6 +1,6 @@
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 
 type WorkflowContractFixture = {
   tools: string[];
@@ -8,14 +8,20 @@ type WorkflowContractFixture = {
 };
 
 const loadFixture = (): WorkflowContractFixture => {
-  const fixturePath = join(import.meta.dir, "../../../../docs/contracts/workflow-contract-fixture.json");
+  const fixturePath = join(
+    import.meta.dir,
+    "../../../../docs/contracts/workflow-contract-fixture.json",
+  );
   return JSON.parse(readFileSync(fixturePath, "utf8")) as WorkflowContractFixture;
 };
 
 describe("workflow docs contract", () => {
   test("transition matrix references canonical mutation tools and statuses", () => {
     const fixture = loadFixture();
-    const transitionDocPath = join(import.meta.dir, "../../../../docs/task-workflow-transition-matrix.md");
+    const transitionDocPath = join(
+      import.meta.dir,
+      "../../../../docs/task-workflow-transition-matrix.md",
+    );
     const transitionDoc = readFileSync(transitionDocPath, "utf8");
 
     for (const status of fixture.statuses) {
