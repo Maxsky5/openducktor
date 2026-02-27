@@ -90,11 +90,6 @@ mock.module("@/state", () => ({
   useSpecState: () => ({}),
 }));
 
-mock.module("./use-agent-studio-repo-settings", () => ({
-  REPO_SETTINGS_UPDATED_EVENT: "odt:repo-settings-updated",
-  useAgentStudioRepoSettings: () => ({ repoSettings: null }),
-}));
-
 mock.module("./use-session-start-modal-state", () => ({
   useSessionStartModalState: () => {
     const [intent, setIntent] = useState<Record<string, unknown> | null>(null);
