@@ -9,6 +9,7 @@ import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { Button } from "@/components/ui/button";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { firstScenario, kickoffPromptForScenario, SCENARIO_LABELS } from "./agents-page-constants";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
@@ -27,6 +28,8 @@ const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
   build: "Build",
   qa: "QA",
 };
+
+const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
 
 export function KanbanPage(): ReactElement {
   const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
@@ -78,6 +81,32 @@ export function KanbanPage(): ReactElement {
     () => new Map(runs.map((run) => [run.taskId, run.state])),
     [runs],
   );
+  const activeSessionsByTaskId = useMemo(() => {
+    const sessionsByTaskId = new Map<string, AgentSessionState[]>();
+    for (const session of sessions) {
+      if (!ACTIVE_SESSION_STATUS.has(session.status)) {
+        continue;
+      }
+
+      const existing = sessionsByTaskId.get(session.taskId);
+      if (existing) {
+        existing.push(session);
+      } else {
+        sessionsByTaskId.set(session.taskId, [session]);
+      }
+    }
+
+    for (const taskSessions of sessionsByTaskId.values()) {
+      taskSessions.sort((left, right) => {
+        if (left.status !== right.status) {
+          return left.status === "running" ? -1 : 1;
+        }
+        return right.startedAt.localeCompare(left.startedAt);
+      });
+    }
+
+    return sessionsByTaskId;
+  }, [sessions]);
   const detailsTask = useMemo(
     () => tasks.find((task) => task.id === detailsTaskId) ?? null,
     [detailsTaskId, tasks],
@@ -368,6 +397,7 @@ export function KanbanPage(): ReactElement {
                 key={column.id}
                 column={column}
                 runStateByTaskId={runStateByTaskId}
+                activeSessionsByTaskId={activeSessionsByTaskId}
                 onOpenDetails={(taskId) => setDetailsTaskId(taskId)}
                 onDelegate={handleDelegate}
                 onPlan={handlePlan}

@@ -13,6 +13,7 @@ import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const VIRTUALIZATION_MIN_TASK_COUNT = 30;
 const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
@@ -23,6 +24,7 @@ const INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX = 900;
 type KanbanColumnProps = {
   column: KanbanColumnData;
   runStateByTaskId: Map<string, RunSummary["state"]>;
+  activeSessionsByTaskId: Map<string, AgentSessionState[]>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -41,6 +43,7 @@ type TaskCardHandlers = Pick<
 const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   runState,
+  activeSessions,
   onMeasuredHeight,
   onOpenDetails,
   onDelegate,
@@ -51,6 +54,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
 }: {
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
+  activeSessions: AgentSessionState[] | undefined;
   onMeasuredHeight: (taskId: string, height: number) => void;
 } & TaskCardHandlers): ReactElement {
   const taskWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -89,6 +93,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       <KanbanTaskCard
         task={task}
         runState={runState}
+        activeSessions={activeSessions}
         onOpenDetails={onOpenDetails}
         onDelegate={onDelegate}
         onPlan={onPlan}
@@ -149,6 +154,7 @@ function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
 export function KanbanColumn({
   column,
   runStateByTaskId,
+  activeSessionsByTaskId,
   onOpenDetails,
   onDelegate,
   onPlan,
@@ -338,6 +344,7 @@ export function KanbanColumn({
                   key={task.id}
                   task={task}
                   runState={runStateByTaskId.get(task.id)}
+                  activeSessions={activeSessionsByTaskId.get(task.id) ?? []}
                   onMeasuredHeight={handleMeasuredHeight}
                   onOpenDetails={onOpenDetails}
                   onDelegate={onDelegate}
@@ -359,6 +366,7 @@ export function KanbanColumn({
                 key={task.id}
                 task={task}
                 runState={runStateByTaskId.get(task.id)}
+                activeSessions={activeSessionsByTaskId.get(task.id) ?? []}
                 onOpenDetails={onOpenDetails}
                 onDelegate={onDelegate}
                 onPlan={onPlan}
