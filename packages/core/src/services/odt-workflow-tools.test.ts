@@ -12,6 +12,10 @@ describe("odt workflow tools", () => {
     expect(normalizeOdtWorkflowToolName("odt_set_spec")).toBe("odt_set_spec");
     expect(normalizeOdtWorkflowToolName("OpenDucktor_ODT_SET_SPEC")).toBe("odt_set_spec");
     expect(normalizeOdtWorkflowToolName("  openducktor_odt_qa_rejected  ")).toBe("odt_qa_rejected");
+    expect(normalizeOdtWorkflowToolName("customprefix_odt_set_plan")).toBe("odt_set_plan");
+    expect(normalizeOdtWorkflowToolName("customprefix_odt_")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("customprefix_odt_set_plan_extra")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("ODT_")).toBeNull();
     expect(normalizeOdtWorkflowToolName("read")).toBeNull();
     expect(normalizeOdtWorkflowToolName("openducktor_odt_set_spec_extra")).toBeNull();
   });

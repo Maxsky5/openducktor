@@ -43,4 +43,23 @@ describe("workflow-tool-selection", () => {
     expect(selection.odt_qa_approved).toBe(true);
     expect(selection.odt_set_spec).toBe(false);
   });
+
+  test("ignores malformed runtime aliases and keeps canonical role policy", async () => {
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: [
+          "customprefix_odt_set_spec_extra",
+          "customprefix_odt_",
+          "customprefix_odt_set_plan",
+        ],
+      }),
+      role: "spec",
+      workingDirectory: "/repo",
+    });
+
+    expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_set_spec).toBe(true);
+    expect(selection.customprefix_odt_set_spec_extra).toBeUndefined();
+    expect(selection.customprefix_odt_set_plan).toBe(false);
+  });
 });

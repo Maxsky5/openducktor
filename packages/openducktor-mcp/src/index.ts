@@ -78,6 +78,13 @@ type RegisteredTool = {
   execute: (store: OdtTaskStore, input: unknown) => Promise<unknown>;
 };
 
+type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
+
+type RegisteredToolSpec = {
+  description: string;
+  execute: (store: OdtTaskStore, input: unknown) => Promise<unknown>;
+};
+
 type ToolInputSchema = {
   shape: Record<string, unknown>;
   parse: (input: unknown) => unknown;
@@ -120,54 +127,56 @@ export const registerOdtTool = (
   );
 };
 
-const registerTools = (server: McpServer, store: OdtTaskStore): void => {
-  const tools: RegisteredTool[] = [
-    {
-      name: "odt_read_task",
-      description:
-        "Read one OpenDucktor task with its current status and agent documents (spec/plan/latest QA).",
-      execute: (currentStore, input) => currentStore.readTask(input),
-    },
-    {
-      name: "odt_set_spec",
-      description:
-        "Persist specification markdown for a task and transition open->spec_ready when needed.",
-      execute: (currentStore, input) => currentStore.setSpec(input),
-    },
-    {
-      name: "odt_set_plan",
-      description:
-        "Persist implementation plan markdown and transition task to ready_for_dev (with optional epic subtask proposals).",
-      execute: (currentStore, input) => currentStore.setPlan(input),
-    },
-    {
-      name: "odt_build_blocked",
-      description: "Transition task to blocked with explicit reason.",
-      execute: (currentStore, input) => currentStore.buildBlocked(input),
-    },
-    {
-      name: "odt_build_resumed",
-      description: "Transition blocked task back to in_progress.",
-      execute: (currentStore, input) => currentStore.buildResumed(input),
-    },
-    {
-      name: "odt_build_completed",
-      description: "Transition in_progress task to ai_review/human_review according to qaRequired.",
-      execute: (currentStore, input) => currentStore.buildCompleted(input),
-    },
-    {
-      name: "odt_qa_approved",
-      description: "Append approved QA report and transition ai_review->human_review.",
-      execute: (currentStore, input) => currentStore.qaApproved(input),
-    },
-    {
-      name: "odt_qa_rejected",
-      description: "Append rejected QA report and transition ai_review->in_progress.",
-      execute: (currentStore, input) => currentStore.qaRejected(input),
-    },
-  ];
+export const ODT_REGISTERED_TOOL_SPECS: Readonly<Record<RegisteredToolName, RegisteredToolSpec>> = {
+  odt_read_task: {
+    description:
+      "Read one OpenDucktor task with its current status and agent documents (spec/plan/latest QA).",
+    execute: (store, input) => store.readTask(input),
+  },
+  odt_set_spec: {
+    description:
+      "Persist specification markdown for a task and transition open->spec_ready when needed.",
+    execute: (store, input) => store.setSpec(input),
+  },
+  odt_set_plan: {
+    description:
+      "Persist implementation plan markdown and transition task to ready_for_dev (with optional epic subtask proposals).",
+    execute: (store, input) => store.setPlan(input),
+  },
+  odt_build_blocked: {
+    description: "Transition task to blocked with explicit reason.",
+    execute: (store, input) => store.buildBlocked(input),
+  },
+  odt_build_resumed: {
+    description: "Transition blocked task back to in_progress.",
+    execute: (store, input) => store.buildResumed(input),
+  },
+  odt_build_completed: {
+    description: "Transition in_progress task to ai_review/human_review according to qaRequired.",
+    execute: (store, input) => store.buildCompleted(input),
+  },
+  odt_qa_approved: {
+    description: "Append approved QA report and transition ai_review->human_review.",
+    execute: (store, input) => store.qaApproved(input),
+  },
+  odt_qa_rejected: {
+    description: "Append rejected QA report and transition ai_review->in_progress.",
+    execute: (store, input) => store.qaRejected(input),
+  },
+};
 
-  for (const tool of tools) {
+export const ODT_REGISTERED_TOOL_NAMES = Object.keys(
+  ODT_REGISTERED_TOOL_SPECS,
+) as RegisteredToolName[];
+
+const registerTools = (server: McpServer, store: OdtTaskStore): void => {
+  for (const toolName of ODT_REGISTERED_TOOL_NAMES) {
+    const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
+    const tool: RegisteredTool = {
+      name: toolName,
+      description: spec.description,
+      execute: spec.execute,
+    };
     registerOdtTool(server, store, tool);
   }
 };

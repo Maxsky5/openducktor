@@ -102,7 +102,8 @@ const workflowConnectorClassName = (state: AgentWorkflowStep["state"] | "blocked
 const workflowSelectionClassName = (
   isSelected: boolean,
   state: AgentWorkflowStep["state"],
-): string => (isSelected ? (WORKFLOW_SELECTION_CLASSES[state] ?? WORKFLOW_SELECTION_CLASSES.blocked) : "");
+): string =>
+  isSelected ? (WORKFLOW_SELECTION_CLASSES[state] ?? WORKFLOW_SELECTION_CLASSES.blocked) : "";
 
 const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (entry.sessionId) {

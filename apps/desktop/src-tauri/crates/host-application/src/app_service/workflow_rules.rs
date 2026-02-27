@@ -431,11 +431,33 @@ pub(crate) fn normalize_subtask_plan_inputs(
 #[cfg(test)]
 mod tests {
     use super::{
+        allows_transition, can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
         derive_agent_workflows, derive_available_actions, normalize_subtask_plan_inputs,
         normalize_title_key,
     };
     use crate::app_service::test_support::make_task;
     use host_domain::{PlanSubtaskInput, QaWorkflowVerdict, TaskAction, TaskStatus};
+    use serde::Deserialize;
+    use std::collections::BTreeMap;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct WorkflowContractFixture {
+        statuses: Vec<String>,
+        transitions: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+        set_spec_allowed_statuses: Vec<String>,
+        set_plan_allowed_statuses: BTreeMap<String, Vec<String>>,
+        epic_subtask_replacement_allowed_statuses: Vec<String>,
+    }
+
+    fn load_workflow_contract_fixture() -> WorkflowContractFixture {
+        let raw = include_str!("../../../../../../../docs/contracts/workflow-contract-fixture.json");
+        serde_json::from_str(raw).expect("workflow contract fixture must parse")
+    }
+
+    fn parse_status(value: &str) -> TaskStatus {
+        TaskStatus::from_cli_value(value).unwrap_or_else(|| panic!("unknown fixture status: {value}"))
+    }
 
     #[test]
     fn module_normalize_title_key_is_case_insensitive_and_trimmed() {
@@ -590,5 +612,95 @@ mod tests {
         assert!(reopened.planner.available);
         assert!(reopened.builder.available);
         assert!(reopened.qa.available);
+    }
+
+    #[test]
+    fn workflow_contract_transitions_match_fixture() {
+        let fixture = load_workflow_contract_fixture();
+        for issue_type in ["epic", "feature", "task", "bug"] {
+            let issue_transitions = fixture
+                .transitions
+                .get(issue_type)
+                .unwrap_or_else(|| panic!("missing transitions for issue type: {issue_type}"));
+            for from in &fixture.statuses {
+                let from_status = parse_status(from);
+                let task = make_task("fixture-task", issue_type, from_status.clone());
+                let expected_targets = issue_transitions
+                    .get(from)
+                    .unwrap_or_else(|| panic!("missing transitions for status: {from}"));
+
+                for to in &fixture.statuses {
+                    let to_status = parse_status(to);
+                    let expected_allowed = from == to || expected_targets.contains(to);
+                    let actual_allowed = allows_transition(&task, &from_status, &to_status);
+                    assert_eq!(
+                        actual_allowed, expected_allowed,
+                        "transition mismatch for issue_type={issue_type} {from}->{to}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn workflow_contract_set_spec_statuses_match_fixture() {
+        let fixture = load_workflow_contract_fixture();
+        let expected = fixture
+            .set_spec_allowed_statuses
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+
+        for status in &fixture.statuses {
+            let parsed = parse_status(status);
+            let actual_allowed = can_set_spec_from_status(&parsed);
+            let expected_allowed = expected.contains(&status.as_str());
+            assert_eq!(
+                actual_allowed, expected_allowed,
+                "set_spec mismatch for status={status}"
+            );
+        }
+    }
+
+    #[test]
+    fn workflow_contract_set_plan_statuses_match_fixture() {
+        let fixture = load_workflow_contract_fixture();
+        for issue_type in ["epic", "feature", "task", "bug"] {
+            let expected_statuses = fixture
+                .set_plan_allowed_statuses
+                .get(issue_type)
+                .unwrap_or_else(|| panic!("missing set_plan statuses for issue_type={issue_type}"));
+
+            for status in &fixture.statuses {
+                let parsed_status = parse_status(status);
+                let task = make_task("fixture-task", issue_type, parsed_status);
+                let actual_allowed = can_set_plan(&task);
+                let expected_allowed = expected_statuses.contains(status);
+                assert_eq!(
+                    actual_allowed, expected_allowed,
+                    "set_plan mismatch for issue_type={issue_type} status={status}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn workflow_contract_epic_subtask_replacement_statuses_match_fixture() {
+        let fixture = load_workflow_contract_fixture();
+        let expected = fixture
+            .epic_subtask_replacement_allowed_statuses
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+
+        for status in &fixture.statuses {
+            let parsed = parse_status(status);
+            let actual_allowed = can_replace_epic_subtask_status(&parsed);
+            let expected_allowed = expected.contains(&status.as_str());
+            assert_eq!(
+                actual_allowed, expected_allowed,
+                "epic subtask replacement mismatch for status={status}"
+            );
+        }
     }
 }

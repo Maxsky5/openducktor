@@ -876,6 +876,7 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
     use host_domain::RuntimeCheck;
+    use serde_json::json;
 
     #[test]
     fn namespace_with_startup_warning_uses_configured_namespace() {
@@ -941,5 +942,47 @@ mod tests {
         ));
         let error = result.expect_err("panic in worker should map to join failure");
         assert!(error.to_string().contains("test-join worker join failure"));
+    }
+
+    #[test]
+    fn task_create_payload_deserialization_surfaces_missing_required_fields() {
+        let payload = json!({
+            "issueType": "task",
+            "priority": 2
+        });
+
+        let error = serde_json::from_value::<TaskCreatePayload>(payload)
+            .expect_err("missing title should fail deserialization");
+        assert!(
+            error.to_string().contains("title"),
+            "deserialization error should mention missing title: {error}"
+        );
+    }
+
+    #[test]
+    fn plan_payload_deserialization_rejects_non_array_subtasks() {
+        let payload = json!({
+            "markdown": "## Plan",
+            "subtasks": {
+                "title": "Not an array payload"
+            }
+        });
+
+        let error = serde_json::from_value::<PlanPayload>(payload)
+            .expect_err("non-array subtasks should fail deserialization");
+        assert!(
+            error.to_string().contains("expected a sequence"),
+            "deserialization error should preserve serde type detail: {error}"
+        );
+    }
+
+    #[test]
+    fn task_status_deserialization_rejects_unknown_status() {
+        let error = serde_json::from_value::<TaskStatus>(json!("backlog"))
+            .expect_err("unknown status should fail deserialization");
+        assert!(
+            error.to_string().contains("unknown variant"),
+            "status parse error should include variant details: {error}"
+        );
     }
 }

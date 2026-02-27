@@ -150,6 +150,23 @@ describe("TauriHostClient", () => {
     });
   });
 
+  test("setPlan preserves host error details for invalid command payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "set_plan") {
+        throw new Error("invalid args: input.markdown is required");
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.setPlan({
+        repoPath: "/repo",
+        taskId: "epic-1",
+        markdown: "## Plan",
+      }),
+    ).rejects.toThrow("invalid args: input.markdown is required");
+  });
+
   test("runtimeCheck forwards force flag to IPC command", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "runtime_check") {
