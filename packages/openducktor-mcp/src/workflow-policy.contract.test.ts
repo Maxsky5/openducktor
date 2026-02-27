@@ -62,6 +62,19 @@ describe("workflow policy contract", () => {
     }
   });
 
+  test("epic completion is blocked when a direct subtask is still active", () => {
+    const epic = makeTask("epic", "human_review");
+    epic.id = "epic-1";
+
+    const activeSubtask = makeTask("task", "open");
+    activeSubtask.id = "task-1";
+    activeSubtask.parentId = epic.id;
+
+    const error = getTransitionError(epic, [epic, activeSubtask], "human_review", "closed");
+    expect(error).not.toBeNull();
+    expect(error).toContain("still active");
+  });
+
   test("set_spec allowed statuses match canonical fixture", () => {
     const fixture = loadFixture();
     const expected = new Set(fixture.setSpecAllowedStatuses);
