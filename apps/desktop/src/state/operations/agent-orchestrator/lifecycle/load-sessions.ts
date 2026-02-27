@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import {
   captureOrchestratorFallback,
@@ -70,8 +70,11 @@ export const createLoadAgentSessions = ({
   updateSession,
   loadSessionTodos,
   loadSessionModelCatalog,
-}: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
-  return async (taskId: string): Promise<void> => {
+}: CreateLoadAgentSessionsArgs): ((
+  taskId: string,
+  options?: AgentSessionLoadOptions,
+) => Promise<void>) => {
+  return async (taskId: string, options?: AgentSessionLoadOptions): Promise<void> => {
     if (!activeRepo || taskId.trim().length === 0) {
       return;
     }
@@ -119,6 +122,9 @@ export const createLoadAgentSessions = ({
     if (isStaleRepoOperation()) {
       return;
     }
+
+    const requestedSessionId = options?.hydrateHistoryForSessionId?.trim() || null;
+    const shouldHydrateRequestedSession = requestedSessionId !== null;
     setSessionsById((current) => {
       if (isStaleRepoOperation()) {
         return current;
@@ -139,23 +145,37 @@ export const createLoadAgentSessions = ({
     }
 
     const recordsToHydrate = persisted.filter((record) => {
+      if (shouldHydrateRequestedSession && record.sessionId !== requestedSessionId) {
+        return false;
+      }
+      if (!shouldHydrateRequestedSession) {
+        return false;
+      }
       const existingSession = sessionsRef.current[record.sessionId];
       return !existingSession || existingSession.messages.length === 0;
     });
 
     if (recordsToHydrate.length === 0) {
-      const existingSessions = Object.values(sessionsRef.current).filter(
-        (entry) => entry.taskId === taskId && !entry.modelCatalog && !entry.isLoadingModelCatalog,
-      );
-      for (const session of existingSessions) {
-        if (!session.baseUrl || !session.workingDirectory) {
-          continue;
-        }
+      if (!shouldHydrateRequestedSession) {
+        return;
+      }
+
+      const requestedSession = requestedSessionId
+        ? sessionsRef.current[requestedSessionId]
+        : undefined;
+      if (
+        requestedSession &&
+        requestedSession.taskId === taskId &&
+        !requestedSession.modelCatalog &&
+        !requestedSession.isLoadingModelCatalog &&
+        requestedSession.baseUrl &&
+        requestedSession.workingDirectory
+      ) {
         warmSessionData(
-          session.sessionId,
-          session.baseUrl,
-          session.workingDirectory,
-          session.externalSessionId,
+          requestedSession.sessionId,
+          requestedSession.baseUrl,
+          requestedSession.workingDirectory,
+          requestedSession.externalSessionId,
         );
       }
       return;

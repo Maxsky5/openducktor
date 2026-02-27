@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
@@ -16,7 +17,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo-a",
   activeTaskId: "task-1",
-  tabTaskIds: [],
+  activeSessionId: null,
   loadAgentSessions: async () => {},
   ...overrides,
 });
@@ -56,54 +57,48 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
-  test("hydrates tab tasks in the background and skips duplicates/active task", async () => {
-    const deferredByTask = new Map<string, ReturnType<typeof createDeferred<void>>>([
-      ["task-1", createDeferred<void>()],
-      ["task-2", createDeferred<void>()],
-      ["task-3", createDeferred<void>()],
-    ]);
-    const loadAgentSessions = mock((taskId: string) => {
-      const deferred = deferredByTask.get(taskId);
-      if (!deferred) {
-        return Promise.resolve();
-      }
-      return deferred.promise;
-    });
-
-    const args = createBaseArgs({
-      tabTaskIds: ["task-1", "task-2", "task-3", "task-2"],
-      loadAgentSessions,
-    });
-    const harness = createHookHarness(args);
+  test("loads message history only for the active session", async () => {
+    const loadAgentSessions = mock(
+      async (_taskId: string, _options?: AgentSessionLoadOptions): Promise<void> => {},
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSessionId: "session-1",
+        loadAgentSessions,
+      }),
+    );
 
     try {
       await harness.mount();
 
-      expect(loadAgentSessions).toHaveBeenCalledTimes(3);
-      expect(loadAgentSessions).toHaveBeenCalledWith("task-1");
-      expect(loadAgentSessions).toHaveBeenCalledWith("task-2");
-      expect(loadAgentSessions).toHaveBeenCalledWith("task-3");
+      expect(loadAgentSessions).toHaveBeenCalledTimes(2);
+      expect(loadAgentSessions.mock.calls[0]).toEqual(["task-1"]);
+      expect(loadAgentSessions.mock.calls[1]).toEqual([
+        "task-1",
+        { hydrateHistoryForSessionId: "session-1" },
+      ]);
 
-      await harness.update(args);
-      expect(loadAgentSessions).toHaveBeenCalledTimes(3);
-
-      await harness.run(async () => {
-        deferredByTask.get("task-1")?.resolve(undefined);
-        deferredByTask.get("task-2")?.resolve(undefined);
-        deferredByTask.get("task-3")?.resolve(undefined);
-        await Promise.all([...deferredByTask.values()].map((entry) => entry.promise));
-      });
-
-      await harness.waitFor(
-        (state) =>
-          state["/repo-a:task-1"] === true &&
-          state["/repo-a:task-2"] === true &&
-          state["/repo-a:task-3"] === true,
+      await harness.update(
+        createBaseArgs({
+          activeSessionId: "session-1",
+          loadAgentSessions,
+        }),
       );
+      expect(loadAgentSessions).toHaveBeenCalledTimes(2);
+
+      await harness.update(
+        createBaseArgs({
+          activeSessionId: "session-2",
+          loadAgentSessions,
+        }),
+      );
+
+      expect(loadAgentSessions).toHaveBeenCalledTimes(3);
+      expect(loadAgentSessions.mock.calls[2]).toEqual([
+        "task-1",
+        { hydrateHistoryForSessionId: "session-2" },
+      ]);
     } finally {
-      for (const deferred of deferredByTask.values()) {
-        deferred.resolve(undefined);
-      }
       await harness.unmount();
     }
   });
@@ -169,7 +164,7 @@ describe("useAgentStudioTaskHydration", () => {
         createBaseArgs({
           activeRepo: "/repo-b",
           activeTaskId: "task-1",
-          tabTaskIds: [],
+          activeSessionId: null,
           loadAgentSessions,
         }),
       );

@@ -329,7 +329,6 @@ export function AgentsPage(): ReactElement {
   }, []);
 
   const {
-    tabTaskIds,
     activeTaskTabId,
     availableTabTasks,
     taskTabs,
@@ -413,7 +412,7 @@ export function AgentsPage(): ReactElement {
   const hydratedTasksByRepoAndTask = useAgentStudioTaskHydration({
     activeRepo,
     activeTaskId: viewTaskId,
-    tabTaskIds,
+    activeSessionId: viewActiveSession?.sessionId ?? null,
     loadAgentSessions,
   });
 

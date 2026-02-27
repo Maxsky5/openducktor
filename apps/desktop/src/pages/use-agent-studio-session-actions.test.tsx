@@ -407,6 +407,7 @@ describe("useAgentStudioSessionActions", () => {
         agent: "planner",
         scenario: "planner_initial",
         autostart: undefined,
+        start: "fresh",
       });
       expect(startAgentSession).toHaveBeenCalledWith({
         taskId: "task-1",
@@ -434,6 +435,7 @@ describe("useAgentStudioSessionActions", () => {
         agent: "planner",
         scenario: "planner_initial",
         autostart: undefined,
+        start: undefined,
       });
       expect(sendAgentMessage).toHaveBeenCalledWith(
         "session-plan",
@@ -441,6 +443,52 @@ describe("useAgentStudioSessionActions", () => {
       );
     } finally {
       deferredStart.resolve("session-plan");
+      await harness.unmount();
+    }
+  });
+
+  test("handleCreateSession sets fresh-start query when creating another session for same role", async () => {
+    const deferredStart = createDeferred<string>();
+    const startAgentSession = mock(async () => deferredStart.promise);
+    const sendAgentMessage = mock(async () => {});
+    const updateCalls: Array<Record<string, string | undefined>> = [];
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "spec",
+      scenario: "spec_initial",
+      activeSession: createSession({ sessionId: "session-spec", role: "spec" }),
+      selectedTask: createTask(),
+      startAgentSession,
+      sendAgentMessage,
+      updateQuery: (updates) => {
+        updateCalls.push(updates);
+      },
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleCreateSession({
+          id: "spec:spec_initial:fresh",
+          role: "spec",
+          scenario: "spec_initial",
+          label: "Spec · Start Spec",
+          description: "Create a new spec session from scratch",
+          disabled: false,
+        });
+      });
+
+      expect(updateCalls[0]).toEqual({
+        task: "task-1",
+        session: undefined,
+        agent: "spec",
+        scenario: "spec_initial",
+        autostart: undefined,
+        start: "fresh",
+      });
+    } finally {
+      deferredStart.resolve("session-spec-fresh");
       await harness.unmount();
     }
   });
@@ -612,6 +660,7 @@ describe("useAgentStudioSessionActions", () => {
         agent: "planner",
         scenario: "planner_initial",
         autostart: undefined,
+        start: "fresh",
       });
       expect(updateCalls).toContainEqual({
         task: "task-1",
@@ -619,6 +668,7 @@ describe("useAgentStudioSessionActions", () => {
         agent: "spec",
         scenario: "spec_initial",
         autostart: undefined,
+        start: undefined,
       });
       expect(sendAgentMessage).not.toHaveBeenCalled();
     } finally {

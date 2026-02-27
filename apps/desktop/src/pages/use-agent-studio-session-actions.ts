@@ -519,6 +519,7 @@ export function useAgentStudioSessionActions({
         agent: role,
         scenario,
         autostart: undefined,
+        start: undefined,
       };
 
       const startPromise = (async (): Promise<string | undefined> => {
@@ -548,6 +549,7 @@ export function useAgentStudioSessionActions({
             agent: nextRole,
             scenario: nextScenario,
             autostart: undefined,
+            start: "fresh",
           });
 
           const sessionId = await captureOrchestratorFallback<string | undefined>(
@@ -585,6 +587,7 @@ export function useAgentStudioSessionActions({
             agent: nextRole,
             scenario: nextScenario,
             autostart: undefined,
+            start: undefined,
           });
           runOrchestratorSideEffect(
             "agent-studio-send-kickoff-message",

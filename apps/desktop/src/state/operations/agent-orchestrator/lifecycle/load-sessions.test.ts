@@ -110,6 +110,67 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-1"]?.status).toBe("stopped");
   });
 
+  test("does not eagerly hydrate session history without an explicit target session", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    let historyLoads = 0;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          historyLoads += 1;
+          return [];
+        },
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: () => {},
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      },
+    ];
+
+    try {
+      await loadAgentSessions("task-1");
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+    }
+
+    expect(Object.keys(state)).toContain("session-1");
+    expect(historyLoads).toBe(0);
+    expect(state["session-1"]?.messages).toEqual([]);
+  });
+
   test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
     const existingSession: AgentSessionState = {
       sessionId: "session-1",
@@ -201,7 +262,7 @@ describe("agent-orchestrator-load-sessions", () => {
     ];
 
     try {
-      await loadAgentSessions("task-1");
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
     }
@@ -377,7 +438,7 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1");
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.specGet = originalSpecGet;
