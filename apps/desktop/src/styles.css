@@ -110,10 +110,7 @@ pre {
 
 .odt-border-ray-segment-halo,
 .odt-border-ray-segment-glow,
-.odt-border-ray-segment,
-.kanban-active-session-ray-segment-halo,
-.kanban-active-session-ray-segment-glow,
-.kanban-active-session-ray-segment {
+.odt-border-ray-segment {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -124,24 +121,21 @@ pre {
   animation: odt-border-ray-run var(--odt-border-ray-turn-duration) linear infinite;
 }
 
-.odt-border-ray-segment-halo,
-.kanban-active-session-ray-segment-halo {
+.odt-border-ray-segment-halo {
   stroke: rgba(56, 189, 248, 0.44);
   stroke-width: 14;
   opacity: 0.42;
   filter: blur(7px);
 }
 
-.odt-border-ray-segment-glow,
-.kanban-active-session-ray-segment-glow {
+.odt-border-ray-segment-glow {
   stroke: rgba(125, 211, 252, 0.9);
   stroke-width: 9.8;
   opacity: 0.58;
   filter: blur(3.3px) drop-shadow(0 0 8px rgba(56, 189, 248, 0.62));
 }
 
-.odt-border-ray-segment,
-.kanban-active-session-ray-segment {
+.odt-border-ray-segment {
   stroke: rgba(56, 189, 248, 1);
   stroke-width: 4.4;
   filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9));
@@ -155,10 +149,7 @@ pre {
 @media (prefers-reduced-motion: reduce) {
   .odt-border-ray-segment-halo,
   .odt-border-ray-segment-glow,
-  .odt-border-ray-segment,
-  .kanban-active-session-ray-segment-halo,
-  .kanban-active-session-ray-segment-glow,
-  .kanban-active-session-ray-segment {
+  .odt-border-ray-segment {
     animation: none;
   }
 }

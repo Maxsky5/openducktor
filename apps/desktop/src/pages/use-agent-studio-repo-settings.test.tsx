@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
@@ -118,6 +119,75 @@ describe("useAgentStudioRepoSettings", () => {
         configurable: true,
         value: originalWindow,
       });
+    }
+  });
+
+  test("keeps the latest event reload result when concurrent loads resolve out of order", async () => {
+    const globalWithWindow = globalThis as typeof globalThis & {
+      window?: EventTarget;
+    };
+    const originalWindow = globalWithWindow.window;
+    const eventWindow = new EventTarget();
+    Object.defineProperty(globalWithWindow, "window", {
+      configurable: true,
+      value: eventWindow,
+    });
+
+    const firstSettings = createSettings();
+    const secondSettings: RepoSettingsInput = {
+      ...createSettings(),
+      branchPrefix: "feature/latest",
+    };
+    const firstLoad = createDeferred<RepoSettingsInput>();
+    const secondLoad = createDeferred<RepoSettingsInput>();
+    let loadCount = 0;
+    const loadRepoSettings = mock((): Promise<RepoSettingsInput> => {
+      loadCount += 1;
+      return loadCount === 1 ? firstLoad.promise : secondLoad.promise;
+    });
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      loadRepoSettings,
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run(() => {
+        eventWindow.dispatchEvent(
+          new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
+            detail: { repoPath: "/repo" },
+          }),
+        );
+      });
+
+      await harness.run(async () => {
+        secondLoad.resolve(secondSettings);
+        await secondLoad.promise;
+      });
+      await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature/latest");
+
+      await harness.run(async () => {
+        firstLoad.resolve(firstSettings);
+        await firstLoad.promise;
+      });
+
+      expect(loadRepoSettings).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().repoSettings).toEqual(secondSettings);
+    } finally {
+      firstLoad.resolve(firstSettings);
+      secondLoad.resolve(secondSettings);
+      await harness.unmount();
+
+      if (typeof originalWindow === "undefined") {
+        Reflect.deleteProperty(globalWithWindow, "window");
+      } else {
+        Object.defineProperty(globalWithWindow, "window", {
+          configurable: true,
+          value: originalWindow,
+        });
+      }
     }
   });
 });

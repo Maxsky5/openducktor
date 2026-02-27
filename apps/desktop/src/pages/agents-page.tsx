@@ -117,6 +117,7 @@ function AgentStudioSessionStartModal({
       role: request.role,
       scenario: request.scenario,
       startMode: request.startMode,
+      selectedModel: request.selectedModel,
       postStartAction:
         request.reason === "composer_send"
           ? "send_message"

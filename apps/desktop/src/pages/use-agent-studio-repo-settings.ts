@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export const REPO_SETTINGS_UPDATED_EVENT = "odt:repo-settings-updated";
@@ -15,22 +15,26 @@ export function useAgentStudioRepoSettings(args: {
 } {
   const { activeRepo, loadRepoSettings } = args;
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
+  const latestReloadIdRef = useRef(0);
 
   const reloadRepoSettings = useCallback(() => {
     if (!activeRepo) {
+      latestReloadIdRef.current += 1;
       setRepoSettings(null);
       return () => {};
     }
 
+    const reloadId = latestReloadIdRef.current + 1;
+    latestReloadIdRef.current = reloadId;
     let cancelled = false;
     void loadRepoSettings()
       .then((settings) => {
-        if (!cancelled) {
+        if (!cancelled && reloadId === latestReloadIdRef.current) {
           setRepoSettings(settings);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && reloadId === latestReloadIdRef.current) {
           setRepoSettings(null);
         }
       });

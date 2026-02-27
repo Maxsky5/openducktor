@@ -31,6 +31,7 @@ export type SessionStartModalIntent = {
   startMode: "fresh" | "reuse_latest";
   postStartAction: SessionStartPostAction;
   message?: string;
+  selectedModel?: AgentModelSelection | null;
   title: string;
   description?: string;
 };
@@ -78,11 +79,15 @@ const resolveInitialSelection = (
   repoSettings: RepoSettingsInput | null,
   role: AgentRole,
   catalog: AgentModelCatalog | null,
+  selectedModel: AgentModelSelection | null,
 ): AgentModelSelection | null => {
+  const requestedSelection = normalizeSelectionForCatalog(catalog, selectedModel);
   const roleDefault = roleDefaultSelectionFor(repoSettings, role);
   return (
+    requestedSelection ??
     normalizeSelectionForCatalog(catalog, roleDefault) ??
     pickDefaultSelectionForCatalog(catalog) ??
+    selectedModel ??
     roleDefault
   );
 };
@@ -137,7 +142,14 @@ export function useSessionStartModalState({
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
       setIntent(nextIntent);
-      setSelection(resolveInitialSelection(repoSettings, nextIntent.role, catalog));
+      setSelection(
+        resolveInitialSelection(
+          repoSettings,
+          nextIntent.role,
+          catalog,
+          nextIntent.selectedModel ?? null,
+        ),
+      );
     },
     [catalog, repoSettings],
   );
@@ -151,11 +163,16 @@ export function useSessionStartModalState({
 
     setSelection((current) => {
       const normalizedCurrent = normalizeSelectionForCatalog(catalog, current);
-      const fallback = resolveInitialSelection(repoSettings, activeRole, catalog);
+      const fallback = resolveInitialSelection(
+        repoSettings,
+        activeRole,
+        catalog,
+        intent?.selectedModel ?? null,
+      );
       const next = normalizedCurrent ?? fallback;
       return isSameSelection(current, next) ? current : next;
     });
-  }, [activeRole, catalog, repoSettings]);
+  }, [activeRole, catalog, intent?.selectedModel, repoSettings]);
 
   const selectedModelEntry = useMemo(() => {
     if (!catalog || !selection) {
@@ -231,7 +248,14 @@ export function useSessionStartModalState({
     (opencodeAgent: string): void => {
       const baseSelection =
         selection ??
-        (activeRole ? resolveInitialSelection(repoSettings, activeRole, catalog) : null) ??
+        (activeRole
+          ? resolveInitialSelection(
+              repoSettings,
+              activeRole,
+              catalog,
+              intent?.selectedModel ?? null,
+            )
+          : null) ??
         pickDefaultSelectionForCatalog(catalog);
       if (!baseSelection) {
         return;
@@ -242,7 +266,7 @@ export function useSessionStartModalState({
         opencodeAgent,
       });
     },
-    [activeRole, catalog, repoSettings, selection],
+    [activeRole, catalog, intent?.selectedModel, repoSettings, selection],
   );
 
   const handleSelectModel = useCallback(

@@ -254,4 +254,39 @@ describe("useSessionStartModalState", () => {
 
     await harness.unmount();
   });
+
+  test("preserves caller-selected model when opening modal", async () => {
+    const harness = createHookHarness(createBaseProps());
+
+    await harness.mount();
+    await harness.waitFor((state) => state.isCatalogLoading === false);
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-5",
+        role: "spec",
+        scenario: "spec_initial",
+        startMode: "fresh",
+        postStartAction: "none",
+        selectedModel: {
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "default",
+          opencodeAgent: "build-agent",
+        },
+        title: "Start Spec Session",
+      });
+    });
+
+    await harness.waitFor((state) => state.selection?.modelId === "claude-sonnet");
+    expect(harness.getLatest().selection).toEqual({
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+      variant: "default",
+      opencodeAgent: "build-agent",
+    });
+
+    await harness.unmount();
+  });
 });
