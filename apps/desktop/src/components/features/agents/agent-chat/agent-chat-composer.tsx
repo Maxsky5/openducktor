@@ -149,27 +149,28 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-2">
             {contextUsage ? (
-              <AgentContextUsageIndicator
-                totalTokens={contextUsage.totalTokens}
-                contextWindow={contextUsage.contextWindow}
-                {...(typeof contextUsage.outputLimit === "number"
-                  ? { outputLimit: contextUsage.outputLimit }
-                  : {})}
-              />
+              <div className="mr-3">
+                <AgentContextUsageIndicator
+                  totalTokens={contextUsage.totalTokens}
+                  contextWindow={contextUsage.contextWindow}
+                  {...(typeof contextUsage.outputLimit === "number"
+                    ? { outputLimit: contextUsage.outputLimit }
+                    : {})}
+                />
+              </div>
             ) : null}
             {canStopSession ? (
               <Button
                 type="button"
                 size="icon"
-                variant="outline"
-                className="size-8 rounded-full border-input bg-card hover:bg-muted"
+                className="size-8 rounded-full border-0 bg-red-500 text-white shadow-sm hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
                 disabled={!agentStudioReady}
                 aria-label="Stop session"
                 onClick={onStopSession}
               >
-                <Square className="size-3.5 text-red-500" />
+                <Square className="size-3 fill-current" />
               </Button>
             ) : null}
             <Button

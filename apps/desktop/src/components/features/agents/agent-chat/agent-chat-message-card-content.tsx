@@ -224,10 +224,10 @@ export const MessageBody = ({
 
   if (meta?.kind === "subtask") {
     return (
-      <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-violet-700">
-        <MessageSquareQuote className="size-3.5 shrink-0 text-violet-500" />
+      <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-violet-700 dark:text-violet-300">
+        <MessageSquareQuote className="size-3.5 shrink-0 text-violet-500 dark:text-violet-400" />
         <p className="shrink-0 font-medium">subagent {meta.agent}</p>
-        <p className="truncate text-violet-700/90">{meta.description}</p>
+        <p className="truncate text-violet-700/90 dark:text-violet-300/90">{meta.description}</p>
         {timeLabel ? (
           <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{timeLabel}</span>
         ) : null}

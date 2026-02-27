@@ -104,8 +104,8 @@ export const WorkflowToolMessage = ({
   const statusLabel =
     lifecyclePhase === "queued" ? "QUEUED" : lifecyclePhase === "executing" ? "RUNNING" : null;
   const statusClassName = isExecuting
-    ? "border-blue-300/70 bg-blue-100/80 text-blue-800"
-    : "border-violet-300/70 bg-violet-100/80 text-violet-800";
+    ? "border-blue-300/70 dark:border-blue-700/70 bg-blue-100/80 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200"
+    : "border-violet-300/70 dark:border-violet-700/70 bg-violet-100/80 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200";
 
   return (
     <div className="space-y-2">
@@ -115,14 +115,14 @@ export const WorkflowToolMessage = ({
           className={cn(
             "text-xs font-semibold",
             isFailure
-              ? "text-rose-900"
+              ? "text-rose-900 dark:text-rose-200"
               : isCancelled
-                ? "text-orange-900"
+                ? "text-orange-900 dark:text-orange-200"
                 : isSuccessfulCompletion
-                  ? "text-emerald-900"
+                  ? "text-emerald-900 dark:text-emerald-200"
                   : isExecuting
-                    ? "text-blue-900"
-                    : "text-violet-900",
+                    ? "text-blue-900 dark:text-blue-200"
+                    : "text-violet-900 dark:text-violet-200",
           )}
         >
           {toolDisplayName(meta.tool)}
@@ -215,9 +215,9 @@ export const RegularToolMessage = ({
         "flex min-h-6 items-center gap-2 text-xs",
         hasExpandableDetails ? "cursor-pointer" : "",
         lifecyclePhase === "failed"
-          ? "text-rose-700"
+          ? "text-rose-700 dark:text-rose-300"
           : lifecyclePhase === "cancelled"
-            ? "text-orange-700"
+            ? "text-orange-700 dark:text-orange-300"
             : "text-foreground",
       )}
     >
@@ -269,11 +269,11 @@ export const RegularToolMessage = ({
               </details>
             ) : null}
             {hasError && meta.error ? (
-              <details className="rounded border border-rose-200 bg-rose-50/60">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-rose-700">
+              <details className="rounded border border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/40">
+                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-rose-700 dark:text-rose-300">
                   Error
                 </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-rose-700">
+                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-rose-700 dark:text-rose-300">
                   {formatRawJsonLikeText(meta.error)}
                 </pre>
               </details>

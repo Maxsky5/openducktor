@@ -218,7 +218,7 @@ export function SettingsModal({
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-6 py-4">
           {!activeRepo ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3 text-sm text-amber-800 dark:text-amber-300">
               Select or add a workspace first, then save settings for that repository.
             </div>
           ) : null}
@@ -285,12 +285,12 @@ export function SettingsModal({
               </p>
             ) : null}
             {catalogError ? (
-              <p className="text-xs text-amber-700">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
                 Failed to load OpenCode values: {catalogError}
               </p>
             ) : null}
             {!isLoadingCatalog && !canSaveRoleDefaults ? (
-              <p className="text-xs text-rose-700">
+              <p className="text-xs text-rose-700 dark:text-rose-400">
                 Agent and model are required for: {missingRequiredRoleLabels.join(", ")}.
               </p>
             ) : null}
@@ -389,7 +389,7 @@ export function SettingsModal({
         </div>
 
         <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-border px-6 pb-6 pt-4">
-          {saveError ? <p className="text-sm text-rose-700">{saveError}</p> : <span />}
+          {saveError ? <p className="text-sm text-rose-700 dark:text-rose-400">{saveError}</p> : <span />}
           <div className="flex items-center gap-2">
             <Button
               type="button"

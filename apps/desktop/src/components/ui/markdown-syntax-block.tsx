@@ -2,7 +2,9 @@ import { type CSSProperties, type ReactElement, useEffect, useState } from "reac
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
 import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 import { createMarkdownSyntaxLanguageRegistry } from "./markdown-syntax-language-registry";
 
@@ -57,6 +59,13 @@ const SYNTAX_CODE_TAG_STYLE: CSSProperties = {
   fontFamily: '"IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
 };
 
+const useResolvedDark = (): boolean => {
+  const { theme } = useTheme();
+  if (theme === "dark") return true;
+  if (theme === "light") return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+};
+
 export default function MarkdownSyntaxBlock({
   language,
   code,
@@ -68,6 +77,7 @@ export default function MarkdownSyntaxBlock({
     markdownSyntaxLanguageRegistry.isLanguageSupported(normalizedLanguage);
   const isLanguageRegistered =
     markdownSyntaxLanguageRegistry.isLanguageRegistered(normalizedLanguage);
+  const isDark = useResolvedDark();
 
   useEffect(() => {
     const shouldRegisterLanguage =
@@ -114,7 +124,7 @@ export default function MarkdownSyntaxBlock({
     >
       <SyntaxHighlighter
         language={normalizedLanguage}
-        style={oneLight}
+        style={isDark ? oneDark : oneLight}
         customStyle={SYNTAX_PRE_STYLE}
         codeTagProps={{ style: SYNTAX_CODE_TAG_STYLE }}
         PreTag="div"

@@ -65,7 +65,7 @@ function ActiveSessionChip({
   return (
     <Link
       to={toSessionHref({ taskId, session })}
-      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100/75"
+      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 px-2 py-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 transition hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-100/75 dark:hover:bg-sky-900/50"
     >
       <PlayCircle className="size-3" />
       {roleLabel}

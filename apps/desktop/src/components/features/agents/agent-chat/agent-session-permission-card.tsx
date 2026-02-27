@@ -28,10 +28,10 @@ export function AgentSessionPermissionCard({
     request.patterns.length > 0 ? request.patterns.join(", ") : "No pattern constraints";
 
   return (
-    <section className="rounded-xl border border-amber-300 bg-amber-50/70 shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-amber-200 px-3 py-1.5">
+    <section className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/40 shadow-sm">
+      <header className="flex items-center justify-between gap-2 border-b border-amber-200 dark:border-amber-800 px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <ShieldAlert className="size-4 text-amber-700" />
+          <ShieldAlert className="size-4 text-amber-700 dark:text-amber-300" />
           <p className="text-[13px] font-semibold text-foreground">Permission request</p>
         </div>
         <p className="text-[11px] font-medium text-muted-foreground">Action required</p>
@@ -79,7 +79,7 @@ export function AgentSessionPermissionCard({
         </div>
 
         {errorMessage ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+          <p className="rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 px-2 py-1 text-xs text-rose-700 dark:text-rose-300">
             {errorMessage}
           </p>
         ) : null}

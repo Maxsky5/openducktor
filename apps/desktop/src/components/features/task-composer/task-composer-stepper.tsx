@@ -22,7 +22,7 @@ export function TaskComposerStepper({
           type="button"
           className={cn(
             "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
-            isTypeStep ? "border-sky-300 bg-sky-50" : "border-emerald-200 bg-emerald-50/70",
+            isTypeStep ? "border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50" : "border-emerald-200 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/40",
           )}
           onClick={() => onStepChange("type")}
         >
@@ -30,8 +30,8 @@ export function TaskComposerStepper({
             className={cn(
               "inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
               isTypeStep
-                ? "border-sky-400 bg-sky-100 text-sky-800"
-                : "border-emerald-300 bg-emerald-100 text-emerald-700",
+                ? "border-sky-400 dark:border-sky-600 bg-sky-100 dark:bg-sky-900/60 text-sky-800 dark:text-sky-200"
+                : "border-emerald-300 dark:border-emerald-600 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-200",
             )}
           >
             {isTypeStep ? 1 : <Check className="size-4" />}
@@ -51,7 +51,7 @@ export function TaskComposerStepper({
           className={cn(
             "flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
             isDetailsStep
-              ? "cursor-pointer border-sky-300 bg-sky-50"
+              ? "cursor-pointer border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50"
               : "cursor-not-allowed border-border bg-card text-muted-foreground",
           )}
           disabled={!isDetailsStep}
@@ -61,7 +61,7 @@ export function TaskComposerStepper({
             className={cn(
               "inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
               isDetailsStep
-                ? "border-sky-400 bg-sky-100 text-sky-800"
+                ? "border-sky-400 dark:border-sky-600 bg-sky-100 dark:bg-sky-900/60 text-sky-800 dark:text-sky-200"
                 : "border-input bg-muted text-muted-foreground",
             )}
           >

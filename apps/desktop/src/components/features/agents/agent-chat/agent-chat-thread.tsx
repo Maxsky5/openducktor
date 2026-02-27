@@ -247,7 +247,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {!agentStudioReady ? (
-        <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-lg border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
           <div className="flex min-w-0 items-start gap-2">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <p className="min-w-0">{blockedReason}</p>

@@ -1,4 +1,4 @@
-import { FolderOpen, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { FolderOpen, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import {
   lazy,
   type ReactElement,
@@ -20,6 +20,7 @@ import {
   WorkspaceSummaryCard,
 } from "@/components/layout/sidebar";
 import { summarizeAgentActivity } from "@/components/layout/sidebar/agent-activity-model";
+import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
@@ -125,6 +126,10 @@ export function AppShell(): ReactElement {
                   <WorkspaceSummaryCard />
                 </div>
 
+                <div className="flex justify-center px-3 pb-2 pt-1">
+                  <ThemeToggle />
+                </div>
+
                 <div className="border-t border-sidebar-border p-3">
                   <Suspense
                     fallback={
@@ -134,6 +139,7 @@ export function AppShell(): ReactElement {
                         className="w-full justify-start"
                         disabled
                       >
+                        <Settings2 className="size-4" />
                         Settings
                       </Button>
                     }

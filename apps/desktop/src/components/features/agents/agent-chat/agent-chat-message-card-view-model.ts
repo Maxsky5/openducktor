@@ -86,17 +86,17 @@ const toArticleClassName = (
     isToolMessage
       ? isWorkflowToolMessage
         ? workflowToolPhase === "completed"
-          ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 my-2 text-emerald-900"
+          ? "rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-2 my-2 text-emerald-900 dark:text-emerald-200"
           : workflowToolPhase === "failed"
-            ? "rounded-md border border-rose-200 bg-rose-50 px-3 py-2 my-2 text-rose-900"
+            ? "rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 px-3 py-2 my-2 text-rose-900 dark:text-rose-200"
             : workflowToolPhase === "cancelled"
-              ? "rounded-md border border-orange-200 bg-orange-50 px-3 py-2 my-2 text-orange-900"
+              ? "rounded-md border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/50 px-3 py-2 my-2 text-orange-900 dark:text-orange-200"
               : workflowToolPhase === "executing"
-                ? "rounded-md border border-blue-200 bg-blue-50 px-3 py-2 my-2 text-blue-900"
-                : "rounded-md border border-violet-200 bg-violet-50 px-3 py-2 my-2 text-violet-900"
+                ? "rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 px-3 py-2 my-2 text-blue-900 dark:text-blue-200"
+                : "rounded-md border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/50 px-3 py-2 my-2 text-violet-900 dark:text-violet-200"
         : "border-none bg-transparent px-0 py-0 text-foreground"
       : isSubtaskMessage
-        ? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900"
+        ? "rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 px-3 py-2 text-amber-900 dark:text-amber-200"
         : isSystemPromptMessage
           ? "rounded-md border border-border bg-muted px-3 py-2 text-foreground"
           : message.role === "assistant"

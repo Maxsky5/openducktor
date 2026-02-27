@@ -71,10 +71,10 @@ export type AgentStudioHeaderModel = {
 };
 
 const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  in_progress: "border-sky-300 bg-sky-50 hover:bg-sky-50 text-sky-700 shadow-sm",
-  done: "border-emerald-300 bg-emerald-50 hover:bg-emerald-50 text-emerald-700 shadow-sm",
+  in_progress: "border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-50 dark:hover:bg-sky-950/50 text-sky-700 dark:text-sky-300 shadow-sm",
+  done: "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 shadow-sm",
   available: "border-input bg-card text-foreground",
-  optional: "border-amber-200 bg-amber-50 text-amber-700",
+  optional: "border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",
   blocked: "border-border bg-muted text-muted-foreground",
 };
 
@@ -87,11 +87,11 @@ const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStep["state"] | "blocked",
 };
 
 const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  done: "ring-2 ring-offset-2 ring-emerald-400",
-  in_progress: "ring-2 ring-offset-2 ring-sky-400",
-  available: "ring-2 ring-offset-2 ring-ring",
-  optional: "ring-2 ring-offset-2 ring-amber-400",
-  blocked: "ring-2 ring-offset-2 ring-input",
+  done: "ring-2 ring-offset-2 ring-offset-background ring-emerald-400",
+  in_progress: "ring-2 ring-offset-2 ring-offset-background ring-sky-400",
+  available: "ring-2 ring-offset-2 ring-offset-background ring-ring",
+  optional: "ring-2 ring-offset-2 ring-offset-background ring-amber-400",
+  blocked: "ring-2 ring-offset-2 ring-offset-background ring-input",
 };
 
 const workflowStepClassName = (state: AgentWorkflowStep["state"]): string =>

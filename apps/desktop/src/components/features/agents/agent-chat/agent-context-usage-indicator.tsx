@@ -11,12 +11,12 @@ type AgentContextUsageIndicatorProps = {
 
 const usageColorClasses = (usagePercent: number): { text: string; bar: string } => {
   if (usagePercent >= 90) {
-    return { text: "text-rose-700", bar: "bg-rose-500" };
+    return { text: "text-rose-700 dark:text-rose-300", bar: "bg-rose-500" };
   }
   if (usagePercent >= 75) {
-    return { text: "text-amber-700", bar: "bg-amber-500" };
+    return { text: "text-amber-700 dark:text-amber-300", bar: "bg-amber-500" };
   }
-  return { text: "text-emerald-700", bar: "bg-emerald-500" };
+  return { text: "text-emerald-700 dark:text-emerald-300", bar: "bg-emerald-500" };
 };
 
 export function AgentContextUsageIndicator({

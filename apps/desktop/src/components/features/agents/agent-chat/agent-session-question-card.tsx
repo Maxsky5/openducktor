@@ -10,6 +10,7 @@ import {
   Square,
 } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -95,7 +96,7 @@ export function AgentSessionQuestionCard({
   }
 
   return (
-    <section className="rounded-xl border border-input bg-muted shadow-sm">
+    <section className="rounded-xl border border-input bg-card shadow-sm">
       <header className="flex items-center justify-between gap-2 border-b border-input px-3 py-1.5">
         <div className="flex items-center gap-2 text-foreground">
           <CircleDotDashed className="size-4 text-muted-foreground" />
@@ -122,15 +123,15 @@ export function AgentSessionQuestionCard({
                   className={cn(
                     "h-7 cursor-pointer border-input px-2 text-[11px]",
                     isTabActive
-                      ? "bg-sidebar-accent text-white hover:bg-sidebar-accent/90"
-                      : "bg-card text-foreground hover:bg-muted",
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "bg-card text-foreground hover:bg-accent",
                   )}
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
-                    <CheckCircle2 className="size-3.5 text-emerald-500" />
+                    <CheckCircle2 className={cn("size-3.5", isTabActive ? "text-primary-foreground/70" : "text-emerald-500")} />
                   ) : (
-                    <Circle className="size-3.5 text-muted-foreground" />
+                    <Circle className={cn("size-3.5", isTabActive ? "text-primary-foreground/70" : "text-muted-foreground")} />
                   )}
                   {question.header?.trim() || `Question ${index + 1}`}
                 </Button>
@@ -162,7 +163,7 @@ export function AgentSessionQuestionCard({
                 <button
                   key={`${request.requestId}:summary:${question.header}:${index}`}
                   type="button"
-                  className="w-full cursor-pointer rounded-md px-2 py-1 text-left hover:bg-muted"
+                  className="w-full cursor-pointer rounded-md px-2 py-1 text-left hover:bg-accent"
                   onClick={() => setActiveTabId(String(index))}
                 >
                   <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -217,37 +218,39 @@ export function AgentSessionQuestionCard({
                         "w-full cursor-pointer rounded-md border px-2 py-1 text-left transition-colors",
                         isSelected
                           ? "border-muted-foreground bg-secondary text-foreground"
-                          : "border-border bg-card text-foreground hover:border-input hover:bg-muted",
+                          : "border-border bg-card text-foreground hover:border-input hover:bg-accent",
                         (disabled || isSubmitting) && "cursor-not-allowed opacity-70",
                       )}
                       onClick={() => {
                         setSubmitError(null);
                         let shouldAdvance = false;
-                        setDraft((current) => {
-                          const next = normalizeAgentQuestionDraft(request, current);
-                          const target = next[activeQuestionIndex] ?? {
-                            selectedOptionLabels: [],
-                            freeText: "",
-                            useFreeText: false,
-                          };
-                          const wasSelected = target.selectedOptionLabels.includes(option.label);
-                          const nextEntry = toggleAgentQuestionOption(
-                            activeQuestion,
-                            target,
-                            option.label,
-                          );
-                          next[activeQuestionIndex] =
-                            !activeQuestion.multiple && nextEntry.selectedOptionLabels.length > 0
-                              ? {
-                                  ...nextEntry,
-                                  useFreeText: false,
-                                }
-                              : nextEntry;
-                          shouldAdvance =
-                            !activeQuestion.multiple &&
-                            !wasSelected &&
-                            nextEntry.selectedOptionLabels.length > 0;
-                          return next;
+                        flushSync(() => {
+                          setDraft((current) => {
+                            const next = normalizeAgentQuestionDraft(request, current);
+                            const target = next[activeQuestionIndex] ?? {
+                              selectedOptionLabels: [],
+                              freeText: "",
+                              useFreeText: false,
+                            };
+                            const wasSelected = target.selectedOptionLabels.includes(option.label);
+                            const nextEntry = toggleAgentQuestionOption(
+                              activeQuestion,
+                              target,
+                              option.label,
+                            );
+                            next[activeQuestionIndex] =
+                              !activeQuestion.multiple && nextEntry.selectedOptionLabels.length > 0
+                                ? {
+                                    ...nextEntry,
+                                    useFreeText: false,
+                                  }
+                                : nextEntry;
+                            shouldAdvance =
+                              !activeQuestion.multiple &&
+                              !wasSelected &&
+                              nextEntry.selectedOptionLabels.length > 0;
+                            return next;
+                          });
                         });
                         if (shouldAdvance && hasMultipleQuestions) {
                           const nextQuestionIndex = activeQuestionIndex + 1;
@@ -296,8 +299,8 @@ export function AgentSessionQuestionCard({
                 className={cn(
                   "h-6 cursor-pointer border-input px-2 text-[11px]",
                   activeEntry?.useFreeText
-                    ? "bg-sidebar-accent text-white hover:bg-sidebar-accent/90"
-                    : "bg-card text-foreground hover:bg-muted",
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "bg-card text-foreground hover:bg-accent",
                 )}
                 disabled={disabled || isSubmitting}
                 onClick={() => {
@@ -362,7 +365,7 @@ export function AgentSessionQuestionCard({
         ) : null}
 
         {submitError ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs text-rose-700">
+          <p className="rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 px-2 py-1.5 text-xs text-rose-700 dark:text-rose-300">
             {submitError}
           </p>
         ) : null}
