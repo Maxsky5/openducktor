@@ -48,7 +48,7 @@ pub(super) fn migrate_repos_to_canonical_keys(
                 // 1. If this canonical key doesn't exist, insert it.
                 // 2. If it exists, prefer the entry that matches active_repo.
                 // 3. Otherwise prefer the entry where original_key == canonical_key (the "true" entry).
-                let is_from_active = active_repo.as_ref().is_some_and(|active| **active == original_key);
+                let is_from_active = active_repo.is_some_and(|active| active == &original_key);
 
                 let should_insert = match canonical_repos.get(&canonical_key) {
                     None => true,
@@ -73,7 +73,7 @@ pub(super) fn migrate_repos_to_canonical_keys(
                 canonical_repos.insert(original_key.clone(), repo_config);
                 from_active_repo.insert(
                     original_key.clone(),
-                    active_repo.as_ref().is_some_and(|active| **active == original_key),
+                    active_repo.is_some_and(|active| active == &original_key),
                 );
             }
         }
