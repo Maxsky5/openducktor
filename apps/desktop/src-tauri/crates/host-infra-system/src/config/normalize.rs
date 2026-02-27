@@ -1,0 +1,84 @@
+use super::types::{
+    default_branch_prefix, default_task_metadata_namespace, AgentModelDefault, GlobalConfig,
+    OpencodeStartupReadinessConfig, RepoConfig,
+};
+
+fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
+    value.and_then(|entry| {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn normalize_hook_commands(commands: &mut Vec<String>) {
+    *commands = std::mem::take(commands)
+        .into_iter()
+        .filter_map(|command| {
+            let trimmed = command.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect();
+}
+
+fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
+    let Some(entry) = value.as_mut() else {
+        return;
+    };
+
+    entry.provider_id = entry.provider_id.trim().to_string();
+    entry.model_id = entry.model_id.trim().to_string();
+    entry.variant = normalize_optional_non_empty(entry.variant.take());
+    entry.opencode_agent = normalize_optional_non_empty(entry.opencode_agent.take());
+
+    if entry.provider_id.is_empty() || entry.model_id.is_empty() {
+        *value = None;
+    }
+}
+
+pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
+    repo.worktree_base_path = normalize_optional_non_empty(repo.worktree_base_path.take());
+    let branch_prefix = repo.branch_prefix.trim();
+    repo.branch_prefix = if branch_prefix.is_empty() {
+        default_branch_prefix()
+    } else {
+        branch_prefix.to_string()
+    };
+    normalize_hook_commands(&mut repo.hooks.pre_start);
+    normalize_hook_commands(&mut repo.hooks.post_complete);
+    normalize_agent_model_default(&mut repo.agent_defaults.spec);
+    normalize_agent_model_default(&mut repo.agent_defaults.planner);
+    normalize_agent_model_default(&mut repo.agent_defaults.build);
+    normalize_agent_model_default(&mut repo.agent_defaults.qa);
+}
+
+pub(super) fn normalize_opencode_startup_readiness_config(config: &mut OpencodeStartupReadinessConfig) {
+    config.timeout_ms = config.timeout_ms.clamp(250, 120_000);
+    config.connect_timeout_ms = config.connect_timeout_ms.clamp(25, 10_000);
+    config.initial_retry_delay_ms = config.initial_retry_delay_ms.clamp(5, 5_000);
+    config.max_retry_delay_ms = config.max_retry_delay_ms.clamp(10, 10_000);
+    config.child_check_interval_ms = config.child_check_interval_ms.clamp(10, 2_000);
+    if config.max_retry_delay_ms < config.initial_retry_delay_ms {
+        config.max_retry_delay_ms = config.initial_retry_delay_ms;
+    }
+}
+
+pub(super) fn normalize_global_config(config: &mut GlobalConfig) {
+    let namespace = config.task_metadata_namespace.trim();
+    config.task_metadata_namespace = if namespace.is_empty() {
+        default_task_metadata_namespace()
+    } else {
+        namespace.to_string()
+    };
+    normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
+    for repo in config.repos.values_mut() {
+        normalize_repo_config(repo);
+    }
+}

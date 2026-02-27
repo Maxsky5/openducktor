@@ -1,193 +1,119 @@
-import {
-  type AgentRuntimeSummary,
-  type AgentSessionRecord,
-  agentRuntimeSummarySchema,
-  agentSessionRecordSchema,
-  type BeadsCheck,
-  beadsCheckSchema,
-  type GitBranch,
-  type GitCurrentBranch,
-  type GitPushSummary,
-  type GitWorktreeSummary,
-  gitBranchSchema,
-  gitCurrentBranchSchema,
-  gitPushSummarySchema,
-  gitWorktreeSummarySchema,
-  type RepoConfig,
-  type RunSummary,
-  type RuntimeCheck,
-  repoConfigSchema,
-  runSummarySchema,
-  runtimeCheckSchema,
-  type SystemCheck,
-  systemCheckSchema,
-  type TaskCard,
-  type TaskCreateInput,
-  type TaskMetadataPayload,
-  type TaskStatus,
-  type TaskUpdatePatch,
-  taskCardSchema,
-  taskCreateInputSchema,
-  taskMetadataPayloadSchema,
-  taskStatusSchema,
-  taskUpdatePatchSchema,
-  type WorkspaceRecord,
-  workspaceRecordSchema,
+import type {
+  AgentRuntimeSummary,
+  AgentSessionRecord,
+  BeadsCheck,
+  GitBranch,
+  GitCurrentBranch,
+  GitPushSummary,
+  GitWorktreeSummary,
+  RepoConfig,
+  RunSummary,
+  RuntimeCheck,
+  SystemCheck,
+  TaskCard,
+  TaskCreateInput,
+  TaskStatus,
+  TaskUpdatePatch,
+  WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { PlannerTools, SetPlanOutput, SetSpecOutput } from "@openducktor/core";
-
-type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
-
-const LEGACY_AGENT_SESSION_SCENARIO_MAP: Record<string, AgentSessionRecord["scenario"]> = {
-  spec_revision: "spec_initial",
-  planner_revision: "planner_initial",
-};
-
-const parseArray = <T>(schema: { parse: (value: unknown) => T }, payload: unknown): T[] => {
-  if (!Array.isArray(payload)) {
-    throw new Error("Expected array payload from host command");
-  }
-  return payload.map((entry) => schema.parse(entry));
-};
-
-const normalizeLegacyAgentSessionScenario = (entry: unknown): unknown => {
-  if (!entry || typeof entry !== "object") {
-    return entry;
-  }
-  const candidate = entry as { scenario?: unknown };
-  if (typeof candidate.scenario !== "string") {
-    return entry;
-  }
-  const normalizedScenario = LEGACY_AGENT_SESSION_SCENARIO_MAP[candidate.scenario];
-  if (!normalizedScenario) {
-    return entry;
-  }
-  return {
-    ...entry,
-    scenario: normalizedScenario,
-  };
-};
-
-type ParsedTaskMetadata = Omit<TaskMetadataPayload, "agentSessions"> & {
-  agentSessions: AgentSessionRecord[];
-};
-
-const parseAgentSessions = (entries: unknown[]): AgentSessionRecord[] => {
-  const sessions: AgentSessionRecord[] = [];
-  for (const entry of entries) {
-    const parsed = agentSessionRecordSchema.safeParse(normalizeLegacyAgentSessionScenario(entry));
-    if (parsed.success) {
-      sessions.push(parsed.data);
-    }
-  }
-  return sessions;
-};
+import {
+  beadsCheck,
+  buildBlocked,
+  buildCleanup,
+  buildCompleted,
+  buildRespond,
+  buildResumed,
+  buildStart,
+  buildStop,
+  humanApprove,
+  humanRequestChanges,
+  opencodeRepoRuntimeEnsure,
+  opencodeRuntimeList,
+  opencodeRuntimeStart,
+  opencodeRuntimeStop,
+  runsList,
+  runtimeCheck,
+  systemCheck,
+} from "./build-runtime-client";
+import {
+  gitCreateWorktree,
+  gitGetBranches,
+  gitGetCurrentBranch,
+  gitPushBranch,
+  gitRemoveWorktree,
+  gitSwitchBranch,
+} from "./git-client";
+import type { InvokeFn } from "./invoke-utils";
+import {
+  agentSessionsList,
+  agentSessionUpsert,
+  planGet,
+  qaApproved,
+  qaGetReport,
+  qaRejected,
+  savePlanDocument,
+  saveSpecDocument,
+  setPlan,
+  setSpec,
+  specGet,
+  taskCreate,
+  taskDefer,
+  taskDelete,
+  taskResumeDeferred,
+  tasksList,
+  taskTransition,
+  taskUpdate,
+} from "./task-client";
+import { TaskMetadataCache } from "./task-metadata-cache";
+import {
+  workspaceAdd,
+  workspaceGetRepoConfig,
+  workspaceList,
+  workspaceSelect,
+  workspaceSetTrustedHooks,
+  workspaceUpdateRepoConfig,
+} from "./workspace-client";
 
 export class TauriHostClient implements PlannerTools {
-  private readonly taskMetadataInFlight = new Map<string, Promise<ParsedTaskMetadata>>();
-  private readonly taskMetadataCache = new Map<string, ParsedTaskMetadata>();
+  private readonly taskMetadataCache = new TaskMetadataCache();
 
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  private taskMetadataKey(repoPath: string, taskId: string): string {
-    return `${repoPath}::${taskId}`;
-  }
-
-  private invalidateTaskMetadata(repoPath: string, taskId: string): void {
-    const cacheKey = this.taskMetadataKey(repoPath, taskId);
-    this.taskMetadataCache.delete(cacheKey);
-    this.taskMetadataInFlight.delete(cacheKey);
-  }
-
-  private clearTaskMetadataInFlight(repoPath: string, taskId: string): void {
-    this.taskMetadataInFlight.delete(this.taskMetadataKey(repoPath, taskId));
-  }
-
-  private async getTaskMetadata(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
-    const cacheKey = this.taskMetadataKey(repoPath, taskId);
-    const cachedMetadata = this.taskMetadataCache.get(cacheKey);
-    if (cachedMetadata) {
-      return cachedMetadata;
-    }
-
-    const inFlight = this.taskMetadataInFlight.get(cacheKey);
-    if (inFlight) {
-      return inFlight;
-    }
-
-    const next = this.invokeFn<unknown>("task_metadata_get", { repoPath, taskId })
-      .then((payload) => {
-        const parsed = taskMetadataPayloadSchema.parse(payload);
-        const metadata = {
-          ...parsed,
-          agentSessions: parseAgentSessions(parsed.agentSessions),
-        };
-
-        if (this.taskMetadataInFlight.get(cacheKey) === next) {
-          this.taskMetadataCache.set(cacheKey, metadata);
-        }
-
-        return metadata;
-      })
-      .finally(() => {
-        this.clearTaskMetadataInFlight(repoPath, taskId);
-      });
-    this.taskMetadataInFlight.set(cacheKey, next);
-    return next;
-  }
-
   async workspaceList(): Promise<WorkspaceRecord[]> {
-    const payload = await this.invokeFn<unknown>("workspace_list");
-    return parseArray(workspaceRecordSchema, payload);
+    return workspaceList(this.invokeFn);
   }
 
   async workspaceAdd(repoPath: string): Promise<WorkspaceRecord> {
-    const payload = await this.invokeFn<unknown>("workspace_add", { repoPath });
-    return workspaceRecordSchema.parse(payload);
+    return workspaceAdd(this.invokeFn, repoPath);
   }
 
   async workspaceSelect(repoPath: string): Promise<WorkspaceRecord> {
-    const payload = await this.invokeFn<unknown>("workspace_select", { repoPath });
-    return workspaceRecordSchema.parse(payload);
+    return workspaceSelect(this.invokeFn, repoPath);
   }
 
   async systemCheck(repoPath: string): Promise<SystemCheck> {
-    const payload = await this.invokeFn<unknown>("system_check", { repoPath });
-    return systemCheckSchema.parse(payload);
+    return systemCheck(this.invokeFn, repoPath);
   }
 
   async runtimeCheck(force = false): Promise<RuntimeCheck> {
-    const payload = await this.invokeFn<unknown>("runtime_check", { force });
-    return runtimeCheckSchema.parse(payload);
+    return runtimeCheck(this.invokeFn, force);
   }
 
   async beadsCheck(repoPath: string): Promise<BeadsCheck> {
-    const payload = await this.invokeFn<unknown>("beads_check", { repoPath });
-    return beadsCheckSchema.parse(payload);
+    return beadsCheck(this.invokeFn, repoPath);
   }
 
   async tasksList(repoPath: string): Promise<TaskCard[]> {
-    const payload = await this.invokeFn<unknown>("tasks_list", { repoPath });
-    return parseArray(taskCardSchema, payload);
+    return tasksList(this.invokeFn, repoPath);
   }
 
   async taskCreate(repoPath: string, input: TaskCreateInput): Promise<TaskCard> {
-    const createInput = taskCreateInputSchema.parse(input);
-    const payload = await this.invokeFn<unknown>("task_create", {
-      repoPath,
-      input: createInput,
-    });
-    return taskCardSchema.parse(payload);
+    return taskCreate(this.invokeFn, repoPath, input);
   }
 
   async taskUpdate(repoPath: string, taskId: string, patch: TaskUpdatePatch): Promise<TaskCard> {
-    const updatePatch = taskUpdatePatchSchema.parse(patch);
-    const payload = await this.invokeFn<unknown>("task_update", {
-      repoPath,
-      taskId,
-      patch: updatePatch,
-    });
-    return taskCardSchema.parse(payload);
+    return taskUpdate(this.invokeFn, repoPath, taskId, patch);
   }
 
   async taskDelete(
@@ -195,13 +121,7 @@ export class TauriHostClient implements PlannerTools {
     taskId: string,
     deleteSubtasks = false,
   ): Promise<{ ok: boolean }> {
-    const payload = await this.invokeFn<{ ok: boolean }>("task_delete", {
-      repoPath,
-      taskId,
-      deleteSubtasks,
-    });
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return payload;
+    return taskDelete(this.invokeFn, this.taskMetadataCache, repoPath, taskId, deleteSubtasks);
   }
 
   async taskTransition(
@@ -210,42 +130,22 @@ export class TauriHostClient implements PlannerTools {
     status: TaskStatus,
     reason?: string,
   ): Promise<TaskCard> {
-    taskStatusSchema.parse(status);
-    const payload = await this.invokeFn<unknown>("task_transition", {
-      repoPath,
-      taskId,
-      status,
-      reason,
-    });
-    return taskCardSchema.parse(payload);
+    return taskTransition(this.invokeFn, repoPath, taskId, status, reason);
   }
 
   async taskDefer(repoPath: string, taskId: string, reason?: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("task_defer", {
-      repoPath,
-      taskId,
-      reason,
-    });
-    return taskCardSchema.parse(payload);
+    return taskDefer(this.invokeFn, repoPath, taskId, reason);
   }
 
   async taskResumeDeferred(repoPath: string, taskId: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("task_resume_deferred", {
-      repoPath,
-      taskId,
-    });
-    return taskCardSchema.parse(payload);
+    return taskResumeDeferred(this.invokeFn, repoPath, taskId);
   }
 
   async specGet(
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.getTaskMetadata(repoPath, taskId);
-    return {
-      markdown: payload.spec.markdown,
-      updatedAt: payload.spec.updatedAt ?? null,
-    };
+    return specGet(this.taskMetadataCache, this.invokeFn, repoPath, taskId);
   }
 
   async setSpec(input: {
@@ -253,19 +153,7 @@ export class TauriHostClient implements PlannerTools {
     markdown: string;
     repoPath?: string;
   }): Promise<SetSpecOutput> {
-    if (!input.repoPath) {
-      throw new Error("repoPath is required to set spec");
-    }
-
-    const payload = await this.invokeFn<{ updatedAt: string }>("set_spec", {
-      repoPath: input.repoPath,
-      taskId: input.taskId,
-      markdown: input.markdown,
-    });
-
-    this.invalidateTaskMetadata(input.repoPath, input.taskId);
-
-    return { updatedAt: payload.updatedAt };
+    return setSpec(this.invokeFn, this.taskMetadataCache, input);
   }
 
   async saveSpecDocument(
@@ -273,13 +161,7 @@ export class TauriHostClient implements PlannerTools {
     taskId: string,
     markdown: string,
   ): Promise<SetSpecOutput> {
-    const payload = await this.invokeFn<{ updatedAt: string }>("spec_save_document", {
-      repoPath,
-      taskId,
-      markdown,
-    });
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return { updatedAt: payload.updatedAt };
+    return saveSpecDocument(this.invokeFn, this.taskMetadataCache, repoPath, taskId, markdown);
   }
 
   async setPlan(input: {
@@ -293,22 +175,7 @@ export class TauriHostClient implements PlannerTools {
     }>;
     repoPath?: string;
   }): Promise<SetPlanOutput> {
-    if (!input.repoPath) {
-      throw new Error("repoPath is required to set plan");
-    }
-
-    const payload = await this.invokeFn<{ updatedAt: string }>("set_plan", {
-      repoPath: input.repoPath,
-      taskId: input.taskId,
-      input: {
-        markdown: input.markdown,
-        subtasks: input.subtasks,
-      },
-    });
-
-    this.invalidateTaskMetadata(input.repoPath, input.taskId);
-
-    return { updatedAt: payload.updatedAt };
+    return setPlan(this.invokeFn, this.taskMetadataCache, input);
   }
 
   async savePlanDocument(
@@ -316,65 +183,37 @@ export class TauriHostClient implements PlannerTools {
     taskId: string,
     markdown: string,
   ): Promise<SetPlanOutput> {
-    const payload = await this.invokeFn<{ updatedAt: string }>("plan_save_document", {
-      repoPath,
-      taskId,
-      markdown,
-    });
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return { updatedAt: payload.updatedAt };
+    return savePlanDocument(this.invokeFn, this.taskMetadataCache, repoPath, taskId, markdown);
   }
 
   async planGet(
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.getTaskMetadata(repoPath, taskId);
-    return {
-      markdown: payload.plan.markdown,
-      updatedAt: payload.plan.updatedAt ?? null,
-    };
+    return planGet(this.taskMetadataCache, this.invokeFn, repoPath, taskId);
   }
 
   async qaGetReport(
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.getTaskMetadata(repoPath, taskId);
-    return {
-      markdown: payload.qaReport?.markdown ?? "",
-      updatedAt: payload.qaReport?.updatedAt ?? null,
-    };
+    return qaGetReport(this.taskMetadataCache, this.invokeFn, repoPath, taskId);
   }
 
   async qaApproved(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("qa_approved", {
-      repoPath,
-      taskId,
-      input: { markdown },
-    });
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return taskCardSchema.parse(payload);
+    return qaApproved(this.invokeFn, this.taskMetadataCache, repoPath, taskId, markdown);
   }
 
   async qaRejected(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("qa_rejected", {
-      repoPath,
-      taskId,
-      input: { markdown },
-    });
-    this.invalidateTaskMetadata(repoPath, taskId);
-    return taskCardSchema.parse(payload);
+    return qaRejected(this.invokeFn, this.taskMetadataCache, repoPath, taskId, markdown);
   }
 
   async runsList(repoPath?: string): Promise<RunSummary[]> {
-    const payload = await this.invokeFn<unknown>("runs_list", { repoPath });
-    return parseArray(runSummarySchema, payload);
+    return runsList(this.invokeFn, repoPath);
   }
 
   async opencodeRuntimeList(repoPath?: string): Promise<AgentRuntimeSummary[]> {
-    const payload = await this.invokeFn<unknown>("opencode_runtime_list", { repoPath });
-    return parseArray(agentRuntimeSummarySchema, payload);
+    return opencodeRuntimeList(this.invokeFn, repoPath);
   }
 
   async opencodeRuntimeStart(
@@ -382,30 +221,19 @@ export class TauriHostClient implements PlannerTools {
     taskId: string,
     role: "spec" | "planner" | "qa",
   ): Promise<AgentRuntimeSummary> {
-    const payload = await this.invokeFn<unknown>("opencode_runtime_start", {
-      repoPath,
-      taskId,
-      role,
-    });
-    return agentRuntimeSummarySchema.parse(payload);
+    return opencodeRuntimeStart(this.invokeFn, repoPath, taskId, role);
   }
 
   async opencodeRuntimeStop(runtimeId: string): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("opencode_runtime_stop", {
-      runtimeId,
-    });
+    return opencodeRuntimeStop(this.invokeFn, runtimeId);
   }
 
   async opencodeRepoRuntimeEnsure(repoPath: string): Promise<AgentRuntimeSummary> {
-    const payload = await this.invokeFn<unknown>("opencode_repo_runtime_ensure", {
-      repoPath,
-    });
-    return agentRuntimeSummarySchema.parse(payload);
+    return opencodeRepoRuntimeEnsure(this.invokeFn, repoPath);
   }
 
   async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
-    const payload = await this.getTaskMetadata(repoPath, taskId);
-    return payload.agentSessions;
+    return agentSessionsList(this.taskMetadataCache, this.invokeFn, repoPath, taskId);
   }
 
   async agentSessionUpsert(
@@ -413,12 +241,7 @@ export class TauriHostClient implements PlannerTools {
     taskId: string,
     session: AgentSessionRecord,
   ): Promise<void> {
-    await this.invokeFn<unknown>("agent_session_upsert", {
-      repoPath,
-      taskId,
-      session,
-    });
-    this.invalidateTaskMetadata(repoPath, taskId);
+    return agentSessionUpsert(this.invokeFn, this.taskMetadataCache, repoPath, taskId, session);
   }
 
   async workspaceUpdateRepoConfig(
@@ -436,34 +259,23 @@ export class TauriHostClient implements PlannerTools {
       };
     },
   ): Promise<WorkspaceRecord> {
-    const payload = await this.invokeFn<unknown>("workspace_update_repo_config", {
-      repoPath,
-      config,
-    });
-    return workspaceRecordSchema.parse(payload);
+    return workspaceUpdateRepoConfig(this.invokeFn, repoPath, config);
   }
 
   async workspaceGetRepoConfig(repoPath: string): Promise<RepoConfig> {
-    const payload = await this.invokeFn<unknown>("workspace_get_repo_config", { repoPath });
-    return repoConfigSchema.parse(payload);
+    return workspaceGetRepoConfig(this.invokeFn, repoPath);
   }
 
   async workspaceSetTrustedHooks(repoPath: string, trusted: boolean): Promise<WorkspaceRecord> {
-    const payload = await this.invokeFn<unknown>("workspace_set_trusted_hooks", {
-      repoPath,
-      trusted,
-    });
-    return workspaceRecordSchema.parse(payload);
+    return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted);
   }
 
   async gitGetBranches(repoPath: string): Promise<GitBranch[]> {
-    const payload = await this.invokeFn<unknown>("git_get_branches", { repoPath });
-    return parseArray(gitBranchSchema, payload);
+    return gitGetBranches(this.invokeFn, repoPath);
   }
 
   async gitGetCurrentBranch(repoPath: string): Promise<GitCurrentBranch> {
-    const payload = await this.invokeFn<unknown>("git_get_current_branch", { repoPath });
-    return gitCurrentBranchSchema.parse(payload);
+    return gitGetCurrentBranch(this.invokeFn, repoPath);
   }
 
   async gitSwitchBranch(
@@ -471,12 +283,7 @@ export class TauriHostClient implements PlannerTools {
     branch: string,
     options?: { create?: boolean },
   ): Promise<GitCurrentBranch> {
-    const payload = await this.invokeFn<unknown>("git_switch_branch", {
-      repoPath,
-      branch,
-      create: options?.create ?? false,
-    });
-    return gitCurrentBranchSchema.parse(payload);
+    return gitSwitchBranch(this.invokeFn, repoPath, branch, options);
   }
 
   async gitCreateWorktree(
@@ -485,13 +292,7 @@ export class TauriHostClient implements PlannerTools {
     branch: string,
     options?: { createBranch?: boolean },
   ): Promise<GitWorktreeSummary> {
-    const payload = await this.invokeFn<unknown>("git_create_worktree", {
-      repoPath,
-      worktreePath,
-      branch,
-      createBranch: options?.createBranch ?? false,
-    });
-    return gitWorktreeSummarySchema.parse(payload);
+    return gitCreateWorktree(this.invokeFn, repoPath, worktreePath, branch, options);
   }
 
   async gitRemoveWorktree(
@@ -499,11 +300,7 @@ export class TauriHostClient implements PlannerTools {
     worktreePath: string,
     options?: { force?: boolean },
   ): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("git_remove_worktree", {
-      repoPath,
-      worktreePath,
-      force: options?.force ?? false,
-    });
+    return gitRemoveWorktree(this.invokeFn, repoPath, worktreePath, options);
   }
 
   async gitPushBranch(
@@ -515,62 +312,31 @@ export class TauriHostClient implements PlannerTools {
       forceWithLease?: boolean;
     },
   ): Promise<GitPushSummary> {
-    const payload = await this.invokeFn<unknown>("git_push_branch", {
-      repoPath,
-      branch,
-      remote: options?.remote,
-      setUpstream: options?.setUpstream ?? false,
-      forceWithLease: options?.forceWithLease ?? false,
-    });
-    return gitPushSummarySchema.parse(payload);
+    return gitPushBranch(this.invokeFn, repoPath, branch, options);
   }
 
   async buildStart(repoPath: string, taskId: string): Promise<RunSummary> {
-    const payload = await this.invokeFn<unknown>("build_start", { repoPath, taskId });
-    return runSummarySchema.parse(payload);
+    return buildStart(this.invokeFn, repoPath, taskId);
   }
 
   async buildBlocked(repoPath: string, taskId: string, reason: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("build_blocked", {
-      repoPath,
-      taskId,
-      reason,
-    });
-    return taskCardSchema.parse(payload);
+    return buildBlocked(this.invokeFn, repoPath, taskId, reason);
   }
 
   async buildResumed(repoPath: string, taskId: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("build_resumed", {
-      repoPath,
-      taskId,
-    });
-    return taskCardSchema.parse(payload);
+    return buildResumed(this.invokeFn, repoPath, taskId);
   }
 
   async buildCompleted(repoPath: string, taskId: string, summary?: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("build_completed", {
-      repoPath,
-      taskId,
-      input: { summary },
-    });
-    return taskCardSchema.parse(payload);
+    return buildCompleted(this.invokeFn, repoPath, taskId, summary);
   }
 
   async humanRequestChanges(repoPath: string, taskId: string, note?: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("human_request_changes", {
-      repoPath,
-      taskId,
-      note,
-    });
-    return taskCardSchema.parse(payload);
+    return humanRequestChanges(this.invokeFn, repoPath, taskId, note);
   }
 
   async humanApprove(repoPath: string, taskId: string): Promise<TaskCard> {
-    const payload = await this.invokeFn<unknown>("human_approve", {
-      repoPath,
-      taskId,
-    });
-    return taskCardSchema.parse(payload);
+    return humanApprove(this.invokeFn, repoPath, taskId);
   }
 
   async buildRespond(
@@ -578,14 +344,14 @@ export class TauriHostClient implements PlannerTools {
     action: "approve" | "deny" | "message",
     payload?: string,
   ): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("build_respond", { runId, action, payload });
+    return buildRespond(this.invokeFn, runId, action, payload);
   }
 
   async buildStop(runId: string): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("build_stop", { runId });
+    return buildStop(this.invokeFn, runId);
   }
 
   async buildCleanup(runId: string, mode: "success" | "failure"): Promise<{ ok: boolean }> {
-    return this.invokeFn<{ ok: boolean }>("build_cleanup", { runId, mode });
+    return buildCleanup(this.invokeFn, runId, mode);
   }
 }

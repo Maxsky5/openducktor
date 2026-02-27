@@ -173,6 +173,35 @@ describe("openducktor-mcp lib", () => {
     ).toThrow();
   });
 
+  test("schema enforces odt_set_plan subtask priority range", () => {
+    const parsed = ODT_TOOL_SCHEMAS.odt_set_plan.parse({
+      taskId: "task-1",
+      markdown: "## Plan",
+      subtasks: [
+        {
+          title: "Implement callback",
+          issueType: "feature",
+          priority: 4,
+        },
+      ],
+    });
+    expect(parsed.subtasks?.[0]?.priority).toBe(4);
+
+    expect(() =>
+      ODT_TOOL_SCHEMAS.odt_set_plan.parse({
+        taskId: "task-1",
+        markdown: "## Plan",
+        subtasks: [
+          {
+            title: "Invalid priority",
+            issueType: "feature",
+            priority: 5,
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
   test("setSpec resolves unique slug-like task identifier to canonical task id", async () => {
     let metadataTargetTaskId: string | null = null;
     let statusTargetTaskId: string | null = null;

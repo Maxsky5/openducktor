@@ -1,3 +1,5 @@
+import type { TaskPriority } from "@openducktor/contracts";
+
 export type SetSpecInput = {
   taskId: string;
   markdown: string;
@@ -13,7 +15,7 @@ export type SetPlanInput = {
   subtasks?: Array<{
     title: string;
     issueType?: "task" | "feature" | "bug";
-    priority?: number;
+    priority?: TaskPriority;
     description?: string;
   }>;
 };

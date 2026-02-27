@@ -27,7 +27,7 @@ export type BuildAgentPromptInput = {
 const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   odt_read_task: `odt_read_task({"taskId": string})`,
   odt_set_spec: `odt_set_spec({"taskId": string, "markdown": string})`,
-  odt_set_plan: `odt_set_plan({"taskId": string, "markdown": string, "subtasks"?: [{"title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: number, "description"?: string}]})`,
+  odt_set_plan: `odt_set_plan({"taskId": string, "markdown": string, "subtasks"?: [{"title": string, "issueType"?: "task"|"feature"|"bug", "priority"?: 0|1|2|3|4, "description"?: string}]})`,
   odt_build_blocked: `odt_build_blocked({"taskId": string, "reason": string})`,
   odt_build_resumed: `odt_build_resumed({"taskId": string})`,
   odt_build_completed: `odt_build_completed({"taskId": string, "summary"?: string})`,
@@ -42,6 +42,7 @@ Workflow constraints you must obey:
 - odt_set_spec allowed from open/spec_ready only.
 - odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev.
 - odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev.
+- For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).
 - odt_build_completed from in_progress transitions to ai_review when qaRequired=true, else human_review.
 - odt_qa_rejected transitions ai_review -> in_progress.
 - odt_qa_approved transitions ai_review -> human_review.
@@ -70,6 +71,7 @@ Plan quality bar:
 - Break work into concrete, ordered steps.
 - Include validation strategy and rollback/risk notes.
 - For epic tasks, propose direct subtasks when useful (max one level deep, no epic subtasks).
+- If you include subtask priority, use integers only in 0..4 (default 2).
 - Use read/list/search tools when additional repository context is needed.
 - You operate in read-only mode for repository mutation. Never modify files, git state, or environment.
 `;

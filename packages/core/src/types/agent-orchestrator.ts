@@ -1,3 +1,5 @@
+import type { TaskPriority } from "@openducktor/contracts";
+
 export type AgentRole = "spec" | "planner" | "build" | "qa";
 
 export type AgentScenario =
@@ -77,7 +79,7 @@ export type AgentToolCall =
         subtasks?: Array<{
           title: string;
           issueType?: "task" | "feature" | "bug";
-          priority?: number;
+          priority?: TaskPriority;
           description?: string;
         }>;
       };
