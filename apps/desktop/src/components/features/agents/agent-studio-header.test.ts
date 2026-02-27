@@ -196,7 +196,7 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain("ring-3 ring-offset-3 ring-blue-400");
+    expect(html).toContain("ring-2 ring-offset-2 ring-emerald-400");
     expect(html).toContain("border-emerald-300");
     expect(html).toContain("bg-emerald-50");
     expect(html).toContain("text-emerald-700");

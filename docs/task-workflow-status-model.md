@@ -54,7 +54,7 @@ Removed from OpenDucktor UI scope:
 ## Type-Specific Flow Rules
 - `feature` and `epic` follow the standard path:
   `open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed`
-- `feature` and `epic` cannot start planning directly from `open`; `set_plan` is allowed only from `spec_ready`.
+- `feature` and `epic` cannot start planning directly from `open`; `set_plan` is allowed from `spec_ready` and `ready_for_dev`.
 - `task` and `bug` may skip spec/planning:
   `open -> in_progress`
 
@@ -102,7 +102,7 @@ Root namespace key is configurable and defaults to `openducktor`.
           "markdown": "## Spec",
           "updatedAt": "2026-02-17T12:34:56Z",
           "updatedBy": "planner-agent",
-          "sourceTool": "set_spec",
+          "sourceTool": "odt_set_spec",
           "revision": 1
         }
       ],
@@ -111,7 +111,7 @@ Root namespace key is configurable and defaults to `openducktor`.
           "markdown": "## Plan",
           "updatedAt": "2026-02-17T12:40:10Z",
           "updatedBy": "planner-agent",
-          "sourceTool": "set_plan",
+          "sourceTool": "odt_set_plan",
           "revision": 1
         }
       ],
@@ -121,7 +121,7 @@ Root namespace key is configurable and defaults to `openducktor`.
           "verdict": "approved",
           "updatedAt": "2026-02-17T13:02:00Z",
           "updatedBy": "qa-agent",
-          "sourceTool": "qa_approved",
+          "sourceTool": "odt_qa_approved",
           "revision": 1
         }
       ]

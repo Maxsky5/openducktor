@@ -37,8 +37,8 @@ The backend is the single source of truth for which actions are currently allowe
 ### `set_plan`
 - Purpose: author or revise implementation plan markdown.
 - Transition:
-  - `feature/epic`: `spec_ready -> ready_for_dev`
-  - `task/bug`: `open/spec_ready -> ready_for_dev`
+  - `feature/epic`: allowed from `spec_ready` and `ready_for_dev` (`ready_for_dev` remains `ready_for_dev`).
+  - `task/bug`: allowed from `open`, `spec_ready`, and `ready_for_dev` (`ready_for_dev` remains `ready_for_dev`).
 
 ### `build_start`
 - Purpose: start build execution for this task.

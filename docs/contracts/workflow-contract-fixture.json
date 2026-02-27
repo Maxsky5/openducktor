@@ -1,0 +1,233 @@
+{
+  "roles": {
+    "spec": [
+      "odt_read_task",
+      "odt_set_spec"
+    ],
+    "planner": [
+      "odt_read_task",
+      "odt_set_plan"
+    ],
+    "build": [
+      "odt_read_task",
+      "odt_build_blocked",
+      "odt_build_resumed",
+      "odt_build_completed"
+    ],
+    "qa": [
+      "odt_read_task",
+      "odt_qa_approved",
+      "odt_qa_rejected"
+    ]
+  },
+  "tools": [
+    "odt_read_task",
+    "odt_set_spec",
+    "odt_set_plan",
+    "odt_build_blocked",
+    "odt_build_resumed",
+    "odt_build_completed",
+    "odt_qa_approved",
+    "odt_qa_rejected"
+  ],
+  "statuses": [
+    "open",
+    "spec_ready",
+    "ready_for_dev",
+    "in_progress",
+    "blocked",
+    "ai_review",
+    "human_review",
+    "deferred",
+    "closed"
+  ],
+  "transitions": {
+    "feature": {
+      "open": [
+        "spec_ready",
+        "deferred"
+      ],
+      "spec_ready": [
+        "ready_for_dev",
+        "deferred"
+      ],
+      "ready_for_dev": [
+        "in_progress",
+        "deferred"
+      ],
+      "in_progress": [
+        "blocked",
+        "ai_review",
+        "human_review",
+        "deferred"
+      ],
+      "blocked": [
+        "in_progress",
+        "deferred"
+      ],
+      "ai_review": [
+        "in_progress",
+        "human_review",
+        "deferred"
+      ],
+      "human_review": [
+        "in_progress",
+        "closed",
+        "deferred"
+      ],
+      "deferred": [
+        "open"
+      ],
+      "closed": []
+    },
+    "epic": {
+      "open": [
+        "spec_ready",
+        "deferred"
+      ],
+      "spec_ready": [
+        "ready_for_dev",
+        "deferred"
+      ],
+      "ready_for_dev": [
+        "in_progress",
+        "deferred"
+      ],
+      "in_progress": [
+        "blocked",
+        "ai_review",
+        "human_review",
+        "deferred"
+      ],
+      "blocked": [
+        "in_progress",
+        "deferred"
+      ],
+      "ai_review": [
+        "in_progress",
+        "human_review",
+        "deferred"
+      ],
+      "human_review": [
+        "in_progress",
+        "closed",
+        "deferred"
+      ],
+      "deferred": [
+        "open"
+      ],
+      "closed": []
+    },
+    "task": {
+      "open": [
+        "spec_ready",
+        "ready_for_dev",
+        "in_progress",
+        "deferred"
+      ],
+      "spec_ready": [
+        "ready_for_dev",
+        "in_progress",
+        "deferred"
+      ],
+      "ready_for_dev": [
+        "in_progress",
+        "deferred"
+      ],
+      "in_progress": [
+        "blocked",
+        "ai_review",
+        "human_review",
+        "deferred"
+      ],
+      "blocked": [
+        "in_progress",
+        "deferred"
+      ],
+      "ai_review": [
+        "in_progress",
+        "human_review",
+        "deferred"
+      ],
+      "human_review": [
+        "in_progress",
+        "closed",
+        "deferred"
+      ],
+      "deferred": [
+        "open"
+      ],
+      "closed": []
+    },
+    "bug": {
+      "open": [
+        "spec_ready",
+        "ready_for_dev",
+        "in_progress",
+        "deferred"
+      ],
+      "spec_ready": [
+        "ready_for_dev",
+        "in_progress",
+        "deferred"
+      ],
+      "ready_for_dev": [
+        "in_progress",
+        "deferred"
+      ],
+      "in_progress": [
+        "blocked",
+        "ai_review",
+        "human_review",
+        "deferred"
+      ],
+      "blocked": [
+        "in_progress",
+        "deferred"
+      ],
+      "ai_review": [
+        "in_progress",
+        "human_review",
+        "deferred"
+      ],
+      "human_review": [
+        "in_progress",
+        "closed",
+        "deferred"
+      ],
+      "deferred": [
+        "open"
+      ],
+      "closed": []
+    }
+  },
+  "setSpecAllowedStatuses": [
+    "open",
+    "spec_ready"
+  ],
+  "setPlanAllowedStatuses": {
+    "epic": [
+      "spec_ready",
+      "ready_for_dev"
+    ],
+    "feature": [
+      "spec_ready",
+      "ready_for_dev"
+    ],
+    "task": [
+      "open",
+      "spec_ready",
+      "ready_for_dev"
+    ],
+    "bug": [
+      "open",
+      "spec_ready",
+      "ready_for_dev"
+    ]
+  },
+  "epicSubtaskReplacementAllowedStatuses": [
+    "open",
+    "spec_ready",
+    "ready_for_dev"
+  ]
+}
