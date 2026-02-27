@@ -355,8 +355,8 @@ export function KanbanPage(): ReactElement {
   );
 
   return (
-    <div className="grid min-h-full min-w-0 content-start gap-4 overflow-x-hidden p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="grid min-h-full min-w-0 content-start gap-4 overflow-x-hidden py-4 pl-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 pl-2 pr-4">
         <h2 className="text-lg font-semibold tracking-tight text-foreground">Kanban Board</h2>
         <div className="flex items-center gap-2">
           <Button

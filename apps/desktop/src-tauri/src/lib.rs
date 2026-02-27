@@ -246,7 +246,9 @@ pub fn run() -> anyhow::Result<()> {
             opencode_runtime_stop,
             opencode_repo_runtime_ensure,
             agent_sessions_list,
-            agent_session_upsert
+            agent_session_upsert,
+            get_theme,
+            set_theme
         ])
         .build(tauri::generate_context!())
         .context("error while building openducktor")?

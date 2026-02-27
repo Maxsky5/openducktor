@@ -34,7 +34,7 @@ function RequireRepository(): ReactElement {
 
 export function App(): ReactElement {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="openducktor-ui-theme">
+    <ThemeProvider>
       <AppStateProvider>
         <Routes>
           <Route element={<AppShell />}>

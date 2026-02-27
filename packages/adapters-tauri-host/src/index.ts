@@ -67,6 +67,8 @@ import {
 } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
 import {
+  getTheme,
+  setTheme,
   workspaceAdd,
   workspaceGetRepoConfig,
   workspaceList,
@@ -268,6 +270,14 @@ export class TauriHostClient implements PlannerTools {
 
   async workspaceSetTrustedHooks(repoPath: string, trusted: boolean): Promise<WorkspaceRecord> {
     return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted);
+  }
+
+  async getTheme(): Promise<string> {
+    return getTheme(this.invokeFn);
+  }
+
+  async setTheme(theme: string): Promise<void> {
+    return setTheme(this.invokeFn, theme);
   }
 
   async gitGetBranches(repoPath: string): Promise<GitBranch[]> {

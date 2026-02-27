@@ -5,8 +5,7 @@ import { Switch } from "@/components/ui/switch";
 
 export function ThemeToggle(): ReactElement {
   const { theme, setTheme } = useTheme();
-  const resolvedDark =
-    theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const resolvedDark = theme === "dark";
 
   return (
     <div className="flex items-center gap-2">
