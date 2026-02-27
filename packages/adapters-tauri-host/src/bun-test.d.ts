@@ -4,7 +4,7 @@ type RejectMatchers = {
   toThrow(message?: string | RegExp): Promise<void>;
 };
 
-type Matchers<T> = {
+type Matchers<_T> = {
   toBe(expected: unknown): void;
   toEqual(expected: unknown): void;
   toHaveLength(expected: number): void;
