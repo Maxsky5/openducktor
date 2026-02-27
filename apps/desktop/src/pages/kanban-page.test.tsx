@@ -91,6 +91,7 @@ mock.module("@/state", () => ({
 }));
 
 mock.module("./use-agent-studio-repo-settings", () => ({
+  REPO_SETTINGS_UPDATED_EVENT: "odt:repo-settings-updated",
   useAgentStudioRepoSettings: () => ({ repoSettings: null }),
 }));
 
