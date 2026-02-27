@@ -1,0 +1,207 @@
+import type {
+  AgentEvent,
+  AgentSessionHistoryMessage,
+  AgentSessionTodoItem,
+  AgentStreamPart,
+  ReplyPermissionInput,
+  ReplyQuestionInput,
+  SendAgentUserMessageInput,
+} from "@openducktor/core";
+import { unwrapData } from "./data-utils";
+import {
+  extractMessageTotalTokens,
+  readTextFromMessageInfo,
+  readTextFromParts,
+  sanitizeAssistantMessage,
+} from "./message-normalizers";
+import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
+import { toIsoFromEpoch } from "./session-runtime-utils";
+import { mapPartToAgentStreamPart } from "./stream-part-mapper";
+import { normalizeTodoList } from "./todo-normalizers";
+import type { ClientFactory, SessionRecord } from "./types";
+import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
+import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
+
+export const loadSessionHistory = async (
+  createClient: ClientFactory,
+  now: () => string,
+  input: {
+    baseUrl: string;
+    workingDirectory: string;
+    externalSessionId: string;
+    limit?: number;
+  },
+): Promise<AgentSessionHistoryMessage[]> => {
+  const client = createClient({
+    baseUrl: input.baseUrl,
+    workingDirectory: input.workingDirectory,
+  });
+  const response = await client.session.messages({
+    sessionID: input.externalSessionId,
+    directory: input.workingDirectory,
+    ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+  });
+  const data = unwrapData(response, "load session messages");
+  const mapped = data.map((entry) => {
+    const rawTextFromParts = readTextFromParts(entry.parts);
+    const rawText =
+      rawTextFromParts.length > 0 ? rawTextFromParts : readTextFromMessageInfo(entry.info);
+    const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
+    const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
+    const parts = entry.parts
+      .map(mapPartToAgentStreamPart)
+      .filter((part): part is AgentStreamPart => part !== null && part.kind !== "text");
+
+    return {
+      messageId: entry.info.id,
+      role: entry.info.role,
+      timestamp: toIsoFromEpoch(entry.info.time.created, now),
+      text,
+      ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+      parts,
+    };
+  });
+
+  mapped.sort((a, b) => {
+    const aTime = Date.parse(a.timestamp);
+    const bTime = Date.parse(b.timestamp);
+    if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+      return 0;
+    }
+    return aTime - bTime;
+  });
+
+  return mapped;
+};
+
+export const loadSessionTodos = async (input: {
+  baseUrl: string;
+  workingDirectory: string;
+  externalSessionId: string;
+}): Promise<AgentSessionTodoItem[]> => {
+  try {
+    const baseUrl = input.baseUrl.replace(/\/+$/, "");
+    const url = new URL(`${baseUrl}/session/${encodeURIComponent(input.externalSessionId)}/todo`);
+    if (input.workingDirectory.trim().length > 0) {
+      url.searchParams.set("directory", input.workingDirectory);
+    }
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = (await response.json().catch(() => null)) as unknown;
+    return normalizeTodoList(payload);
+  } catch {
+    return [];
+  }
+};
+
+export const sendUserMessage = async (input: {
+  session: SessionRecord;
+  request: SendAgentUserMessageInput;
+  now: () => string;
+  emit: (event: AgentEvent) => void;
+}): Promise<void> => {
+  const model = input.request.model ?? input.session.input.model;
+  const modelInput = normalizeModelInput(model);
+
+  const nowEpoch = Date.now();
+  const cacheAge = input.session.workflowToolSelectionCachedAt
+    ? nowEpoch - input.session.workflowToolSelectionCachedAt
+    : Infinity;
+  const workflowToolSelection =
+    input.session.workflowToolSelectionCache && cacheAge < WORKFLOW_TOOL_CACHE_TTL_MS
+      ? input.session.workflowToolSelectionCache
+      : await resolveWorkflowToolSelection({
+          client: input.session.client,
+          role: input.session.input.role,
+          workingDirectory: input.session.input.workingDirectory,
+        });
+
+  if (cacheAge >= WORKFLOW_TOOL_CACHE_TTL_MS) {
+    input.session.workflowToolSelectionCache = workflowToolSelection;
+    input.session.workflowToolSelectionCachedAt = nowEpoch;
+  }
+
+  const response = await input.session.client.session.prompt({
+    sessionID: input.session.externalSessionId,
+    directory: input.session.input.workingDirectory,
+    ...(input.session.input.systemPrompt.trim().length > 0
+      ? { system: input.session.input.systemPrompt }
+      : {}),
+    ...(modelInput.model ? { model: modelInput.model } : {}),
+    ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+    ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+    tools: workflowToolSelection,
+    parts: [{ type: "text", text: input.request.content }],
+  });
+  const responseData = unwrapData(response, "prompt session");
+  const responseMessageId = resolveAssistantResponseMessageId(responseData);
+
+  for (const responsePart of responseData.parts) {
+    const mappedPart = mapPartToAgentStreamPart(responsePart);
+    if (!mappedPart) {
+      continue;
+    }
+    input.emit({
+      type: "assistant_part",
+      sessionId: input.session.summary.sessionId,
+      timestamp: input.now(),
+      part: mappedPart,
+    });
+  }
+
+  const assistantMessage = sanitizeAssistantMessage(readTextFromParts(responseData.parts));
+  const totalTokens = extractMessageTotalTokens(
+    (responseData as { info?: unknown }).info,
+    responseData.parts,
+  );
+  if (assistantMessage.length > 0) {
+    input.emit({
+      type: "assistant_message",
+      sessionId: input.session.summary.sessionId,
+      timestamp: input.now(),
+      message: assistantMessage,
+      ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+    });
+    if (responseMessageId) {
+      input.session.emittedAssistantMessageIds.add(responseMessageId);
+    }
+  }
+
+  input.emit({
+    type: "session_idle",
+    sessionId: input.session.summary.sessionId,
+    timestamp: input.now(),
+  });
+};
+
+export const replyPermission = async (
+  session: SessionRecord,
+  input: ReplyPermissionInput,
+): Promise<void> => {
+  await session.client.permission.reply({
+    directory: session.input.workingDirectory,
+    requestID: input.requestId,
+    reply: input.reply,
+    ...(input.message ? { message: input.message } : {}),
+  });
+};
+
+export const replyQuestion = async (
+  session: SessionRecord,
+  input: ReplyQuestionInput,
+): Promise<void> => {
+  await session.client.question.reply({
+    directory: session.input.workingDirectory,
+    requestID: input.requestId,
+    answers: input.answers,
+  });
+};

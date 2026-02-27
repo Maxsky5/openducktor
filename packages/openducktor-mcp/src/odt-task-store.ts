@@ -1,260 +1,5 @@
-/**
- * Indexed lookup maps for O(1) task resolution.
- * Built once per tasks load, enables single-pass matching.
- */
-interface TaskIndex {
-  /** All tasks array (for fallback hints) */
-  tasks: TaskCard[];
-  entries: TaskIndexEntry[];
-  /** Exact ID lookup (case-sensitive) */
-  idExact: Map<string, TaskCard>;
-  /** Case-insensitive ID lookup */
-  idLower: Map<string, TaskCard[]>;
-  idSuffix: Map<string, TaskCard[]>;
-  /** Exact title lookup (lowercase) */
-  titleExact: Map<string, TaskCard[]>;
-  /** Title slug lookup (sanitized) */
-  titleSlug: Map<string, TaskCard[]>;
-}
-
-interface TaskIndexEntry {
-  task: TaskCard;
-  idLower: string;
-  titleLower: string;
-  titleSlug: string;
-}
-
-const MAX_TASK_CANDIDATES = 5;
-
-const formatTaskRef = (task: TaskCard): string => `${task.id} (${task.title})`;
-
-class TaskResolutionAmbiguousError extends Error {
-  readonly requestedTaskId: string;
-  readonly candidates: string[];
-
-  constructor(requestedTaskId: string, candidates: string[]) {
-    super(
-      `Task identifier "${requestedTaskId}" is ambiguous. Use exact task id. Candidates: ${candidates.join(", ")}`,
-    );
-    this.name = "TaskResolutionAmbiguousError";
-    this.requestedTaskId = requestedTaskId;
-    this.candidates = candidates;
-  }
-}
-
-class TaskResolutionNotFoundError extends Error {
-  readonly requestedTaskId: string;
-  readonly candidates: string[];
-
-  constructor(requestedTaskId: string, candidates: string[]) {
-    const hintSuffix = candidates.length > 0 ? ` Candidate task ids: ${candidates.join(", ")}` : "";
-    super(`Task not found: ${requestedTaskId}.${hintSuffix}`);
-    this.name = "TaskResolutionNotFoundError";
-    this.requestedTaskId = requestedTaskId;
-    this.candidates = candidates;
-  }
-}
-
-function throwAmbiguousTaskIdentifier(requestedTaskId: string, matches: TaskCard[]): never {
-  const candidates = matches.slice(0, MAX_TASK_CANDIDATES).map(formatTaskRef);
-  throw new TaskResolutionAmbiguousError(requestedTaskId, candidates);
-}
-
-/**
- * Build normalized lookup maps from tasks array.
- * O(n) build time, enables O(1) lookups.
- */
-function buildTaskIndex(tasks: TaskCard[]): TaskIndex {
-  const idExact = new Map<string, TaskCard>();
-  const idLower = new Map<string, TaskCard[]>();
-  const idSuffix = new Map<string, TaskCard[]>();
-  const titleExact = new Map<string, TaskCard[]>();
-  const titleSlug = new Map<string, TaskCard[]>();
-  const entries: TaskIndexEntry[] = [];
-
-  const addTaskToBucket = (map: Map<string, TaskCard[]>, key: string, task: TaskCard): void => {
-    const existing = map.get(key);
-    if (existing) {
-      existing.push(task);
-    } else {
-      map.set(key, [task]);
-    }
-  };
-
-  for (const task of tasks) {
-    const normalizedId = normalizeTitleKey(task.id);
-    const normalizedTitle = normalizeTitleKey(task.title);
-    const normalizedTitleSlug = toSearchSlug(task.title);
-
-    // Exact ID (case-sensitive)
-    idExact.set(task.id, task);
-
-    // Case-insensitive ID
-    addTaskToBucket(idLower, normalizedId, task);
-
-    addTaskToBucket(idSuffix, normalizedId, task);
-    for (let i = 0; i < normalizedId.length; i += 1) {
-      if (normalizedId[i] !== "-") {
-        continue;
-      }
-      const suffix = normalizedId.slice(i + 1);
-      if (suffix.length > 0) {
-        addTaskToBucket(idSuffix, suffix, task);
-      }
-    }
-
-    // Exact title (lowercase)
-    addTaskToBucket(titleExact, normalizedTitle, task);
-
-    // Title slug
-    if (normalizedTitleSlug.length > 0) {
-      addTaskToBucket(titleSlug, normalizedTitleSlug, task);
-    }
-
-    entries.push({
-      task,
-      idLower: normalizedId,
-      titleLower: normalizedTitle,
-      titleSlug: normalizedTitleSlug,
-    });
-  }
-
-  return {
-    tasks,
-    entries,
-    idExact,
-    idLower,
-    idSuffix,
-    titleExact,
-    titleSlug,
-  };
-}
-
-/**
- * Resolve task using indexed lookup.
- * Single-pass for contains/hints, O(1) for exact matches.
- */
-function resolveTaskFromIndex(index: TaskIndex, requestedTaskId: string): TaskCard {
-  const requestedLiteral = requestedTaskId.trim();
-  if (requestedLiteral.length === 0) {
-    throw new Error("Missing taskId.");
-  }
-
-  const requestedLower = normalizeTitleKey(requestedLiteral);
-  const requestedSlug = toSearchSlug(requestedLiteral);
-
-  // 1. Exact ID (case-sensitive) - O(1)
-  const exact = index.idExact.get(requestedLiteral);
-  if (exact) {
-    return exact;
-  }
-
-  // 2. Case-insensitive ID - O(1)
-  const byCaseInsensitiveId = index.idLower.get(requestedLower);
-  if (byCaseInsensitiveId) {
-    if (byCaseInsensitiveId.length === 1 && byCaseInsensitiveId[0]) {
-      return byCaseInsensitiveId[0];
-    }
-    if (byCaseInsensitiveId.length > 1) {
-      throwAmbiguousTaskIdentifier(requestedTaskId, byCaseInsensitiveId);
-    }
-  }
-
-  // 3. ID slug suffix match - scan for IDs ending with requestedSlug
-  if (requestedSlug.length > 0) {
-    const byIdSuffix = index.idSuffix.get(requestedSlug);
-
-    if (byIdSuffix?.length === 1 && byIdSuffix[0]) {
-      return byIdSuffix[0];
-    }
-    if (byIdSuffix && byIdSuffix.length > 1) {
-      throwAmbiguousTaskIdentifier(requestedTaskId, byIdSuffix);
-    }
-  }
-
-  // 4. Exact title (lowercase) - O(1)
-  const byTitleExact = index.titleExact.get(requestedLower);
-  if (byTitleExact) {
-    if (byTitleExact.length === 1 && byTitleExact[0]) {
-      return byTitleExact[0];
-    }
-    if (byTitleExact.length > 1) {
-      throwAmbiguousTaskIdentifier(requestedTaskId, byTitleExact);
-    }
-  }
-
-  // 5. Title slug exact match - O(1)
-  if (requestedSlug.length > 0) {
-    const byTitleSlugExact = index.titleSlug.get(requestedSlug);
-    if (byTitleSlugExact) {
-      if (byTitleSlugExact.length === 1 && byTitleSlugExact[0]) {
-        return byTitleSlugExact[0];
-      }
-      if (byTitleSlugExact.length > 1) {
-        throwAmbiguousTaskIdentifier(requestedTaskId, byTitleSlugExact);
-      }
-    }
-  }
-
-  // 6. Contains search (title contains) - single pass O(n)
-  const byTitleContains: TaskCard[] = [];
-  if (requestedLower.length > 0 || requestedSlug.length > 0) {
-    for (const entry of index.entries) {
-      const matchesLower = requestedLower.length > 0 && entry.titleLower.includes(requestedLower);
-      const matchesSlug = requestedSlug.length > 0 && entry.titleSlug.includes(requestedSlug);
-
-      if (matchesLower || matchesSlug) {
-        byTitleContains.push(entry.task);
-        if (byTitleContains.length > MAX_TASK_CANDIDATES) {
-          break; // Only need 6+ to detect ambiguity
-        }
-      }
-    }
-  }
-
-  if (byTitleContains.length === 1 && byTitleContains[0]) {
-    return byTitleContains[0];
-  }
-  if (byTitleContains.length > 1) {
-    throwAmbiguousTaskIdentifier(requestedTaskId, byTitleContains);
-  }
-
-  // 7. Fallback hints (partial ID/title match) - single pass O(n)
-  const hints: TaskCard[] = [];
-  if (requestedLower.length > 0 || requestedSlug.length > 0) {
-    for (const entry of index.entries) {
-      const matchesIdLower = requestedLower.length > 0 && entry.idLower.includes(requestedLower);
-      const matchesTitleLower =
-        requestedLower.length > 0 && entry.titleLower.includes(requestedLower);
-      const matchesIdSlug = requestedSlug.length > 0 && entry.idLower.includes(requestedSlug);
-      const matchesTitleSlug = requestedSlug.length > 0 && entry.titleSlug.includes(requestedSlug);
-
-      if (matchesIdLower || matchesTitleLower || matchesIdSlug || matchesTitleSlug) {
-        hints.push(entry.task);
-        if (hints.length >= MAX_TASK_CANDIDATES) {
-          break;
-        }
-      }
-    }
-  }
-
-  const fallback = (hints.length > 0 ? hints : index.tasks.slice(0, MAX_TASK_CANDIDATES)).map(
-    formatTaskRef,
-  );
-  throw new TaskResolutionNotFoundError(requestedTaskId, fallback);
-}
-
-import { basename } from "node:path";
-import {
-  type BeadsDirResolver,
-  CUSTOM_STATUS_VALUES,
-  nowIso,
-  type ProcessRunner,
-  resolveCentralBeadsDir,
-  runProcess,
-  sanitizeSlug,
-  type TimeProvider,
-} from "./beads-runtime";
+import { BdRuntimeClient, type BdRuntimeClientDeps } from "./bd-runtime-client";
+import { nowIso, type TimeProvider } from "./beads-runtime";
 import type {
   JsonObject,
   MarkdownEntry,
@@ -264,15 +9,26 @@ import type {
   TaskCard,
   TaskStatus,
 } from "./contracts";
+import { createSubtask, deleteTaskById } from "./epic-subtasks";
+import { getNamespaceData, parseTaskDocuments } from "./metadata-docs";
 import { normalizePlanSubtasks } from "./plan-subtasks";
 import type { OdtStoreOptions } from "./store-context";
+import { issueToTaskCard, parseMarkdownEntries, parseQaEntries } from "./task-mapping";
 import {
-  ensureObject,
-  issueToTaskCard,
-  parseMarkdownEntries,
-  parseMetadataRoot,
-  parseQaEntries,
-} from "./task-mapping";
+  buildTaskIndex,
+  normalizeTitleKey,
+  resolveTaskFromIndex,
+  type TaskIndex,
+  TaskResolutionAmbiguousError,
+  TaskResolutionNotFoundError,
+} from "./task-resolution";
+import {
+  assertTransitionAllowed as assertTaskTransitionAllowed,
+  refreshTaskContext,
+  resolveTaskContext,
+  type TaskContext,
+  transitionTask,
+} from "./task-transitions";
 import {
   BuildBlockedInputSchema,
   BuildCompletedInputSchema,
@@ -289,136 +45,40 @@ import {
   getSetPlanError,
   getSetSpecError,
   validatePlanSubtaskRules,
-  validateTransition,
 } from "./workflow-policy";
 
 export type OdtTaskStoreDeps = {
-  runProcess?: ProcessRunner;
-  resolveBeadsDir?: BeadsDirResolver;
+  runProcess?: BdRuntimeClientDeps["runProcess"];
+  resolveBeadsDir?: BdRuntimeClientDeps["resolveBeadsDir"];
   now?: TimeProvider;
-};
-
-const normalizeTitleKey = (value: string): string => value.trim().toLowerCase();
-
-const toSearchSlug = (value: string): string => {
-  if (!/[a-z0-9]/i.test(value)) {
-    return "";
-  }
-  return sanitizeSlug(value);
-};
-
-type TaskContext = {
-  task: TaskCard;
-  tasks: TaskCard[];
 };
 
 export class OdtTaskStore {
   readonly repoPath: string;
   readonly metadataNamespace: string;
-  private beadsDir: string | null;
-  private readonly runProcess: ProcessRunner;
-  private readonly resolveBeadsDir: BeadsDirResolver;
+  private readonly bdClient: BdRuntimeClient;
   private readonly now: TimeProvider;
-  private initialized: boolean;
-  private initializationPromise: Promise<void> | null;
   private taskIndex: TaskIndex | null;
   private taskIndexBuildPromise: Promise<TaskIndex> | null;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.repoPath = options.repoPath;
     this.metadataNamespace = options.metadataNamespace;
-    this.beadsDir = options.beadsDir ?? null;
-    this.runProcess = deps.runProcess ?? runProcess;
-    this.resolveBeadsDir = deps.resolveBeadsDir ?? resolveCentralBeadsDir;
+    this.bdClient = new BdRuntimeClient(this.repoPath, options.beadsDir ?? null, {
+      ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
+      ...(deps.resolveBeadsDir ? { resolveBeadsDir: deps.resolveBeadsDir } : {}),
+    });
     this.now = deps.now ?? nowIso;
-    this.initialized = false;
-    this.initializationPromise = null;
     this.taskIndex = null;
     this.taskIndexBuildPromise = null;
   }
 
-  private async ensureBeadsDir(): Promise<string> {
-    if (this.beadsDir) {
-      return this.beadsDir;
-    }
-
-    this.beadsDir = await this.resolveBeadsDir(this.repoPath);
-    return this.beadsDir;
-  }
-
-  private async runBd(
-    args: string[],
-    options?: { json?: boolean; allowFailure?: boolean },
-  ): Promise<string> {
-    const beadsDir = await this.ensureBeadsDir();
-    const finalArgs = ["--no-daemon", ...args];
-    if (options?.json) {
-      finalArgs.push("--json");
-    }
-
-    const result = await this.runProcess("bd", finalArgs, this.repoPath, {
-      BEADS_DIR: beadsDir,
-    });
-
-    if (!result.ok && !options?.allowFailure) {
-      const details = result.stderr || result.stdout || "bd command failed";
-      throw new Error(`bd ${finalArgs.join(" ")} failed: ${details}`);
-    }
-
-    return result.stdout;
-  }
-
   private async runBdJson(args: string[]): Promise<unknown> {
-    const output = await this.runBd(args, { json: true });
-    try {
-      return JSON.parse(output);
-    } catch {
-      throw new Error(`Failed to parse bd JSON output for args: ${args.join(" ")}`);
-    }
+    return this.bdClient.runBdJson(args);
   }
 
   private async ensureInitialized(): Promise<void> {
-    if (this.initialized) {
-      return;
-    }
-
-    if (this.initializationPromise) {
-      await this.initializationPromise;
-      return;
-    }
-
-    this.initializationPromise = (async () => {
-      const whereOutput = await this.runBd(["where"], { json: true, allowFailure: true });
-      let ready = false;
-
-      try {
-        const parsed = JSON.parse(whereOutput) as { path?: unknown };
-        ready = typeof parsed.path === "string" && parsed.path.trim().length > 0;
-      } catch {
-        ready = false;
-      }
-
-      if (!ready) {
-        const slug = sanitizeSlug(basename(this.repoPath));
-        await this.runBd([
-          "init",
-          "--quiet",
-          "--skip-hooks",
-          "--skip-merge-driver",
-          "--prefix",
-          slug,
-        ]);
-      }
-
-      await this.runBd(["config", "set", "status.custom", CUSTOM_STATUS_VALUES]);
-      this.initialized = true;
-    })();
-
-    try {
-      await this.initializationPromise;
-    } finally {
-      this.initializationPromise = null;
-    }
+    await this.bdClient.ensureInitialized();
   }
 
   private async showRawIssue(taskId: string): Promise<RawIssue> {
@@ -481,52 +141,37 @@ export class OdtTaskStore {
   }
 
   private async resolveTaskContext(taskId: string): Promise<TaskContext> {
-    const tasks = await this.listTasks();
-    const task = resolveTaskFromIndex(buildTaskIndex(tasks), taskId);
-    return { task, tasks };
+    return resolveTaskContext(taskId, () => this.listTasks());
   }
 
   private async refreshTaskContext(taskId: string, context?: TaskContext): Promise<TaskContext> {
-    const issue = await this.showRawIssue(taskId);
-    const task = issueToTaskCard(issue, this.metadataNamespace);
-
-    if (!context) {
-      return {
-        task,
-        tasks: [task],
-      };
-    }
-
-    const hasTask = context.tasks.some((entry) => entry.id === task.id);
-    const tasks = hasTask
-      ? context.tasks.map((entry) => (entry.id === task.id ? task : entry))
-      : [...context.tasks, task];
-
-    return { task, tasks };
+    return refreshTaskContext({
+      taskId,
+      ...(context ? { context } : {}),
+      showRawIssue: (id) => this.showRawIssue(id),
+      metadataNamespace: this.metadataNamespace,
+    });
   }
 
   private assertTransitionAllowed(task: TaskCard, tasks: TaskCard[], nextStatus: TaskStatus): void {
-    validateTransition(task, tasks, task.status, nextStatus);
-  }
-
-  private async applyTransition(task: TaskCard, nextStatus: TaskStatus): Promise<TaskCard> {
-    if (task.status !== nextStatus) {
-      await this.runBdJson(["update", task.id, "--status", nextStatus]);
-    }
-
-    const refreshed = await this.showRawIssue(task.id);
-    this.invalidateTaskIndex();
-    return issueToTaskCard(refreshed, this.metadataNamespace);
+    assertTaskTransitionAllowed(task, tasks, nextStatus);
   }
 
   private async transitionTask(
     taskId: string,
-    next: TaskStatus,
+    nextStatus: TaskStatus,
     context?: TaskContext,
   ): Promise<TaskCard> {
-    const { task, tasks } = context ?? (await this.resolveTaskContext(taskId));
-    this.assertTransitionAllowed(task, tasks, next);
-    return this.applyTransition(task, next);
+    return transitionTask({
+      taskId,
+      nextStatus,
+      ...(context ? { context } : {}),
+      listTasks: () => this.listTasks(),
+      runBdJson: (args) => this.runBdJson(args),
+      showRawIssue: (id) => this.showRawIssue(id),
+      invalidateTaskIndex: () => this.invalidateTaskIndex(),
+      metadataNamespace: this.metadataNamespace,
+    });
   }
 
   private getNamespaceData(issue: RawIssue): {
@@ -534,14 +179,7 @@ export class OdtTaskStore {
     namespace: JsonObject;
     documents: JsonObject;
   } {
-    const root = parseMetadataRoot(issue.metadata);
-    const namespace = ensureObject(root[this.metadataNamespace]);
-    const documents = ensureObject(namespace.documents);
-    return {
-      root,
-      namespace,
-      documents,
-    };
+    return getNamespaceData(issue, this.metadataNamespace);
   }
 
   private async writeNamespace(
@@ -566,70 +204,25 @@ export class OdtTaskStore {
       verdict: "approved" | "rejected" | null;
     };
   } {
-    const { documents } = this.getNamespaceData(issue);
-    const specEntries = parseMarkdownEntries(documents.spec);
-    const planEntries = parseMarkdownEntries(documents.implementationPlan);
-    const qaEntries = parseQaEntries(documents.qaReports);
-
-    const specLatest = specEntries.at(-1);
-    const planLatest = planEntries.at(-1);
-    const qaLatest = qaEntries.at(-1);
-
-    return {
-      spec: {
-        markdown: specLatest?.markdown ?? "",
-        updatedAt: specLatest?.updatedAt ?? null,
-      },
-      implementationPlan: {
-        markdown: planLatest?.markdown ?? "",
-        updatedAt: planLatest?.updatedAt ?? null,
-      },
-      latestQaReport: {
-        markdown: qaLatest?.markdown ?? "",
-        updatedAt: qaLatest?.updatedAt ?? null,
-        verdict: qaLatest?.verdict ?? null,
-      },
-    };
+    return parseTaskDocuments(issue, this.metadataNamespace);
   }
 
   private async createSubtask(parentTaskId: string, subtask: PlanSubtaskInput): Promise<string> {
-    const args = [
-      "create",
-      subtask.title,
-      "--type",
-      subtask.issueType ?? "task",
-      "--priority",
-      String(subtask.priority ?? 2),
-      "--parent",
+    return createSubtask(
       parentTaskId,
-    ];
-
-    if (subtask.description && subtask.description.trim().length > 0) {
-      args.push("--description", subtask.description.trim());
-    }
-
-    const payload = await this.runBdJson(args);
-    if (!payload || typeof payload !== "object") {
-      throw new Error("Failed to create subtask");
-    }
-
-    const id = (payload as { id?: unknown }).id;
-    if (typeof id !== "string" || id.trim().length === 0) {
-      throw new Error("Failed to resolve created subtask id");
-    }
-
-    this.invalidateTaskIndex();
-    return id;
+      subtask,
+      (args) => this.runBdJson(args),
+      () => this.invalidateTaskIndex(),
+    );
   }
 
   private async deleteTask(taskId: string, deleteSubtasks = false): Promise<void> {
-    const args = ["delete", "--force", "--reason", "Deleted from OpenDucktor"];
-    if (deleteSubtasks) {
-      args.push("--cascade");
-    }
-    args.push("--", taskId);
-    await this.runBdJson(args);
-    this.invalidateTaskIndex();
+    await deleteTaskById(
+      taskId,
+      (args) => this.runBdJson(args),
+      () => this.invalidateTaskIndex(),
+      deleteSubtasks,
+    );
   }
 
   async readTask(rawInput: unknown): Promise<unknown> {

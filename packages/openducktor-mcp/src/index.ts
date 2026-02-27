@@ -140,7 +140,7 @@ export const ODT_REGISTERED_TOOL_SPECS: Readonly<Record<RegisteredToolName, Regi
   },
   odt_set_plan: {
     description:
-      "Persist implementation plan markdown and transition task to ready_for_dev (with optional epic subtask proposals).",
+      "Persist implementation plan markdown and transition task to ready_for_dev (with optional epic subtask proposals). Subtask priority values must be integers in [0, 4], default 2.",
     execute: (store, input) => store.setPlan(input),
   },
   odt_build_blocked: {
@@ -194,7 +194,7 @@ export const createOpenducktorMcpServer = async (
     },
     {
       instructions:
-        "OpenDucktor workflow server. Use odt_read_task for context, then odt_* transition tools to mutate workflow state.",
+        "OpenDucktor workflow server. Use odt_read_task for context, then odt_* transition tools to mutate workflow state. For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).",
     },
   );
 
