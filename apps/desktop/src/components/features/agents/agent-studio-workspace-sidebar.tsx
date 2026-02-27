@@ -48,7 +48,7 @@ function DocumentSection({ emptyState, document }: DocumentSectionProps): ReactE
           premiumCodeBlocks={hasLabeledCodeFence(document.markdown)}
         />
       ) : (
-        <p className="text-sm text-slate-500">{emptyState}</p>
+        <p className="text-sm text-muted-foreground">{emptyState}</p>
       )}
     </div>
   );
@@ -65,16 +65,16 @@ export function AgentStudioWorkspaceSidebar({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="space-y-1 border-b border-slate-200 p-4">
+      <div className="space-y-1 border-b border-border p-4">
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold leading-none tracking-tight">
             {model.activeDocument.title}
           </h2>
-          <p className="shrink-0 text-right text-xs text-slate-500">
+          <p className="shrink-0 text-right text-xs text-muted-foreground">
             {formatDocumentUpdatedAt(model.activeDocument.document.updatedAt) ?? "Not set"}
           </p>
         </div>
-        <p className="text-sm text-slate-500">{model.activeDocument.description}</p>
+        <p className="text-sm text-muted-foreground">{model.activeDocument.description}</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DocumentSection

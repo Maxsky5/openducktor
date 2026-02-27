@@ -27,16 +27,16 @@ export const buildDiagnosticsSummary = ({
   if (!hasActiveRepo) {
     return {
       label: "No repository selected",
-      toneClass: "text-slate-500",
-      iconClass: "text-slate-500",
+      toneClass: "text-muted-foreground",
+      iconClass: "text-muted-foreground",
     };
   }
 
   if (isChecking) {
     return {
       label: "Checking...",
-      toneClass: "text-slate-500",
-      iconClass: "text-slate-500",
+      toneClass: "text-muted-foreground",
+      iconClass: "text-muted-foreground",
     };
   }
 

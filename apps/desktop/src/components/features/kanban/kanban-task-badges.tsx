@@ -38,7 +38,7 @@ const ISSUE_TYPE_STYLES: Record<
   task: {
     label: "Task",
     icon: CheckSquare,
-    className: "border-slate-200 bg-slate-100 text-slate-700",
+    className: "border-border bg-muted text-foreground",
   },
 };
 
@@ -80,8 +80,8 @@ const PRIORITY_STYLES: Record<
   4: {
     label: "P4",
     hint: "Lowest",
-    dotClassName: "bg-slate-400",
-    badgeClassName: "border-slate-200 bg-slate-100 text-slate-700",
+    dotClassName: "bg-muted-foreground",
+    badgeClassName: "border-border bg-muted text-foreground",
   },
 };
 
@@ -137,7 +137,7 @@ const runStateClassName = (value: RunSummary["state"]): string => {
   if (value === "running" || value === "starting") {
     return "border-amber-200 bg-amber-50 text-amber-700";
   }
-  return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-border bg-muted text-foreground";
 };
 
 export function IssueTypeBadge({ issueType }: { issueType: IssueType }): ReactElement {

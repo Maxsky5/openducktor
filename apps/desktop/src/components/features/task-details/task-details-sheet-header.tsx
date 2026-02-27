@@ -22,7 +22,7 @@ export function TaskDetailsSheetHeader({
       AI QA required
     </Badge>
   ) : (
-    <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-700">
+    <Badge variant="outline" className="border-input bg-muted text-foreground">
       AI QA optional
     </Badge>
   );
@@ -31,11 +31,11 @@ export function TaskDetailsSheetHeader({
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-900">
-            <Sparkles className="size-5 shrink-0 text-sky-600" />
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-foreground">
+            <Sparkles className="size-5 shrink-0 text-primary" />
             <span className="truncate">{task.title}</span>
           </h2>
-          <p className="truncate font-mono text-xs text-slate-500">{task.id}</p>
+          <p className="truncate font-mono text-xs text-muted-foreground">{task.id}</p>
         </div>
         <Badge variant={statusBadgeVariant(task.status)}>{statusLabel(task.status)}</Badge>
       </div>
@@ -57,7 +57,7 @@ export function TaskDetailsSheetHeader({
             <Badge
               key={label}
               variant="outline"
-              className="h-6 rounded-full border-slate-300 bg-white px-2.5 text-[11px] font-medium text-slate-700"
+              className="h-6 rounded-full border-input bg-card px-2.5 text-[11px] font-medium text-foreground"
             >
               {label}
             </Badge>

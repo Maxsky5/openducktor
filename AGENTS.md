@@ -1,8 +1,5 @@
 # AGENTS.md
 
-This file is the operating guide for coding agents working in this repository.
-Use it as the default source of truth for project-specific implementation rules.
-
 ## Purpose
 
 OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app that orchestrates AI planning/building workflows with Beads as task source-of-truth.
@@ -11,7 +8,6 @@ Goals for agent contributions:
 
 - Preserve clean hexagonal boundaries and replaceable adapters.
 - Keep frontend code modular, composable, and easy to evolve.
-- Preserve the established product UX decisions (repository-first workflow, modal-driven setup, diagnostics behavior, structured task workflows).
 
 ## Monorepo Map
 
@@ -74,6 +70,47 @@ Goals for agent contributions:
   - disable the full form scope (not only buttons),
   - show in-button loading indicator,
   - preserve clear pending/error/success feedback.
+
+### Styling and theming (critical)
+
+The app uses **Shadcn semantic tokens** with **Tailwind CSS v4**. A dark theme already exists. All styling must be theme-aware.
+
+#### Token system
+
+Theme tokens are defined as CSS custom properties in `apps/desktop/src/styles.css` (`:root` for light, `.dark` for dark) and mapped to Tailwind via `@theme inline`. Always use these semantic tokens:
+
+| Purpose | Use | Never use |
+|---|---|---|
+| Page background | `bg-background` | `bg-white`, `bg-slate-50` |
+| Card/surface | `bg-card` | `bg-white` |
+| Text (primary) | `text-foreground` | `text-gray-900`, `text-slate-900` |
+| Text (secondary) | `text-muted-foreground` | `text-gray-500`, `text-slate-500` |
+| Borders (layout) | `border-border` | `border-gray-200`, `border-slate-200` |
+| Borders (inputs) | `border-input` | `border-gray-300`, `border-slate-300` |
+| Subtle surfaces | `bg-muted` | `bg-gray-100`, `bg-slate-100` |
+| Interactive accent | `bg-primary` / `text-primary-foreground` | `bg-sky-600` / `text-white` directly |
+| Destructive | `bg-destructive` / `text-destructive` | `bg-red-500` |
+| Sidebar surfaces | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` | Hardcoded equivalents |
+
+#### When hardcoded colors are acceptable
+
+Semantic tokens do **not** cover every use case. Hardcoded Tailwind colors are acceptable for:
+
+- **Status/state indicators**: `bg-emerald-*` (success), `bg-sky-*` (active/info), `bg-amber-*` (warning), `bg-rose-*` (error/destructive accents).
+- **Kanban lane themes**: Lane-specific accent, header, and badge colors in `kanban-theme.ts`.
+- **Workflow step states**: Color-coded step indicators (done=emerald, in_progress=sky, optional=amber, blocked=muted).
+- **Badges and tags**: Small decorative elements with semantic meaning (priority badges, status pills).
+
+When using hardcoded colors, prefer **lighter shades for backgrounds** (e.g. `bg-sky-50`, `bg-emerald-50`) and **darker shades for text** (e.g. `text-sky-700`, `text-emerald-700`). These combinations generally work in both light and dark themes with minor adjustments.
+
+#### Styling rules
+
+1. **Never hardcode gray-scale** values for structural UI (backgrounds, text, borders). Always use semantic tokens.
+2. **Use opacity modifiers** when you need lighter variants of a semantic token (e.g. `bg-muted/30`, `text-muted-foreground/60`).
+3. **Tailwind Typography prose overrides** (`prose-code:*`, `prose-pre:*`, etc.) must be tested carefully — they can leak into nested components. Use CSS specificity in `styles.css` to contain them when needed.
+4. **Code blocks in markdown**: The `<pre>` wrapper should be transparent/unpadded (`prose-pre:bg-transparent prose-pre:p-0`). Styling is handled by `MarkdownSyntaxBlock` for language blocks and `.markdown-body pre > code:only-child` CSS for plain blocks.
+5. **Shadcn component styling**: Never override base shadcn component files with hardcoded colors. Use `className` props and semantic tokens at the usage site.
+6. **Dark mode readiness**: Every new UI element must render correctly in both light and dark themes. Avoid any color that assumes a white background.
 
 ## Backend / Tauri Standards
 

@@ -35,8 +35,8 @@ export function SidebarNavigation({
                   : "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition animate-rise-in",
                 isDisabled ? "cursor-not-allowed opacity-50" : "",
                 isActive
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                  : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground",
               )
             }
             aria-disabled={isDisabled}

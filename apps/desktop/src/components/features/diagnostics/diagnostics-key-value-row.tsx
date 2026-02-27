@@ -10,8 +10,8 @@ export function DiagnosticsKeyValueRow({
   valueClassName,
 }: DiagnosticKeyValueRowModel): ReactElement {
   return (
-    <p className="text-xs text-slate-700">
-      <span className="font-medium text-slate-600">{label}:</span>{" "}
+    <p className="text-xs text-foreground">
+      <span className="font-medium text-muted-foreground">{label}:</span>{" "}
       <span
         className={cn(
           mono ? "font-mono text-[11px]" : "",

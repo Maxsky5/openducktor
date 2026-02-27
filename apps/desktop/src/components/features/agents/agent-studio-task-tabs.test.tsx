@@ -43,15 +43,15 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).toContain('aria-label="Waiting input"');
     expect(html).toContain('aria-label="Open new task tab"');
     expect(html).toContain("Close tab for Add social login");
-    expect(html).toContain("bg-slate-200");
+    expect(html).toContain("bg-secondary");
     expect(html).not.toContain("bg-gradient-to-b");
     expect(html).toContain("border-b-transparent");
-    expect(html).toContain("after:bg-white");
+    expect(html).toContain("after:bg-card");
     expect(html).toContain("overflow-x-auto");
     expect(html).not.toContain("overflow-y-visible");
     expect(html).not.toContain("rounded-full border");
-    expect(html).not.toContain("bg-slate-50");
-    expect(html).not.toContain("bg-white/80");
+    expect(html).not.toContain("bg-muted");
+    expect(html).not.toContain("bg-card/80");
     expect(html).toContain("bg-gray-700/70");
     expect(html).toContain("size-[1.4rem]");
 

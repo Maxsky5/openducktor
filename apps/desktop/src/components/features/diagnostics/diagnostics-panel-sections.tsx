@@ -16,9 +16,9 @@ const renderSection = ({
   return (
     <DiagnosticsSection title={section.title} badge={section.badge}>
       {section.emptyMessage ? (
-        <p className="text-xs text-slate-500">{section.emptyMessage}</p>
+        <p className="text-xs text-muted-foreground">{section.emptyMessage}</p>
       ) : (
-        <div className="space-y-1 text-xs text-slate-700">
+        <div className="space-y-1 text-xs text-foreground">
           {section.rows.map((row, index) => (
             <DiagnosticsKeyValueRow key={`${row.label}-${index}`} {...row} />
           ))}

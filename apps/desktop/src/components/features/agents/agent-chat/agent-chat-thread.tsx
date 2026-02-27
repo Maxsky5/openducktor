@@ -222,20 +222,20 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
       if (row.kind === "draft") {
         return (
-          <article className="px-1 py-1 text-sm text-slate-700">
-            <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <article className="px-1 py-1 text-sm text-foreground">
+            <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               <StreamingRoleIcon className="size-3" />
               {streamingRoleLabel} (streaming)
               <LoaderCircle className="size-3 animate-spin" />
             </header>
-            <p className="whitespace-pre-wrap leading-6 text-slate-700">{row.draftText}</p>
+            <p className="whitespace-pre-wrap leading-6 text-foreground">{row.draftText}</p>
           </article>
         );
       }
 
       return (
-        <div className="flex items-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
-          <LoaderCircle className="size-3.5 animate-spin text-slate-500" />
+        <div className="flex items-center gap-2 rounded-md border border-dashed border-input bg-card px-3 py-2 text-xs text-muted-foreground">
+          <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
           <Brain className="size-3.5 text-violet-600" />
           Agent is thinking...
         </div>
@@ -256,7 +256,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 border-rose-300 bg-white text-rose-700 hover:bg-rose-100"
+            className="h-7 border-rose-300 bg-card text-rose-700 hover:bg-rose-100"
             disabled={isLoadingChecks}
             onClick={onRefreshChecks}
           >
@@ -272,7 +272,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         onScroll={handleMessagesContainerScroll}
       >
         {!session ? (
-          <div className="space-y-3 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+          <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
             <p>
               {taskSelected
                 ? isStarting
@@ -332,7 +332,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           hasRenderableSessionRows ? (
             virtualRows.map((row) => <Fragment key={row.key}>{renderVirtualRow(row)}</Fragment>)
           ) : (
-            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+            <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
               Loading session history...
             </div>
           )

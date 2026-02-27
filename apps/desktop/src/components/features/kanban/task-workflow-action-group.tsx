@@ -104,6 +104,7 @@ export function TaskWorkflowActionGroup({
               className={cn(
                 compactMenuTrigger ? "px-2.5" : "px-3",
                 expandPrimary ? "shrink-0" : "",
+                "h-9",
               )}
             >
               {compactMenuTrigger ? null : <MoreHorizontal className="size-3.5" />}
@@ -130,7 +131,7 @@ export function TaskWorkflowActionGroup({
                 </Button>
               ))}
               {actionItems.length > 0 && hasExtraMenuAction ? (
-                <div className="my-1 border-t border-slate-200" />
+                <div className="my-1 border-t border-border" />
               ) : null}
               {extraMenuActions.map((action) => (
                 <Button

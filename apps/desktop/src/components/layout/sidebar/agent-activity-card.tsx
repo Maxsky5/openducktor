@@ -28,14 +28,14 @@ function SessionList({
   accentClassName: string;
 }): ReactElement {
   return (
-    <ul className="mt-1 space-y-1 border-t border-slate-200 pt-2">
+    <ul className="mt-1 space-y-1 border-t border-border pt-2">
       {sessions.map((session) => (
         <li key={session.sessionId}>
           <Link
             to={toSessionHref(session)}
-            className="block rounded-md border border-slate-200 bg-white px-2 py-1.5 hover:border-slate-300 hover:bg-slate-50"
+            className="block rounded-md border border-border bg-card px-2 py-1.5 hover:border-input hover:bg-accent"
           >
-            <p className="truncate text-xs font-medium text-slate-800">{session.taskTitle}</p>
+            <p className="truncate text-xs font-medium text-foreground">{session.taskTitle}</p>
             <p className={`truncate text-[11px] ${accentClassName}`}>
               {session.role.toUpperCase()} · {session.status}
             </p>
@@ -65,8 +65,8 @@ function ActivitySection({
 }): ReactElement {
   if (count === 0) {
     return (
-      <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-2">
-        <div className="flex items-center gap-2 text-slate-600">
+      <div className="flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2">
+        <div className="flex items-center gap-2 text-muted-foreground">
           <span className={iconClassName}>{icon}</span>
           <span>{label}</span>
         </div>
@@ -76,15 +76,15 @@ function ActivitySection({
   }
 
   return (
-    <details className="group rounded-md border border-slate-200 bg-white px-2.5 py-2 [&_summary::-webkit-details-marker]:hidden">
+    <details className="group rounded-md border border-border bg-card px-2.5 py-2 [&_summary::-webkit-details-marker]:hidden">
       <summary className="flex list-none cursor-pointer items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-slate-600">
+        <div className="flex items-center gap-2 text-muted-foreground">
           <span className={iconClassName}>{icon}</span>
           <span>{label}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className={badgeClassName}>{count}</span>
-          <ChevronRight className="size-3.5 text-slate-500 transition-transform group-open:rotate-90" />
+          <ChevronRight className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90" />
         </div>
       </summary>
       <SessionList sessions={sessions} accentClassName={accentClassName} />
@@ -101,8 +101,8 @@ export function AgentActivityCard({
   const hasWaitingInput = waitingForInputCount > 0;
 
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-      <div className="flex items-center gap-2 text-slate-700">
+    <div className="space-y-2 rounded-lg border border-border bg-muted p-3 text-xs">
+      <div className="flex items-center gap-2 text-foreground">
         <Activity className="size-3.5 text-sky-600" />
         <span className="text-[11px] font-semibold uppercase tracking-wide">Agent Activity</span>
       </div>
@@ -122,17 +122,17 @@ export function AgentActivityCard({
           count={waitingForInputCount}
           icon={
             <CircleAlert
-              className={hasWaitingInput ? "size-3.5 text-amber-600" : "size-3.5 text-slate-400"}
+              className={hasWaitingInput ? "size-3.5 text-amber-600" : "size-3.5 text-muted-foreground"}
             />
           }
           iconClassName="inline-flex"
           badgeClassName={
             hasWaitingInput
               ? "rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700"
-              : "rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600"
+               : "rounded-full bg-muted px-2 py-0.5 font-semibold text-muted-foreground"
           }
           sessions={waitingForInputSessions}
-          accentClassName={hasWaitingInput ? "text-amber-700" : "text-slate-600"}
+          accentClassName={hasWaitingInput ? "text-amber-700" : "text-muted-foreground"}
         />
       </div>
     </div>

@@ -11,8 +11,8 @@ describe("buildDiagnosticsSummary", () => {
     });
 
     expect(summary.label).toBe("Checking...");
-    expect(summary.toneClass).toBe("text-slate-500");
-    expect(summary.iconClass).toBe("text-slate-500");
+    expect(summary.toneClass).toBe("text-muted-foreground");
+    expect(summary.iconClass).toBe("text-muted-foreground");
   });
 
   test("keeps no-repository label as highest priority", () => {

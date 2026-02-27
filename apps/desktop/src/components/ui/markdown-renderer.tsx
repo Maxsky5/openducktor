@@ -32,7 +32,7 @@ const SHARED_COMPONENTS: Components = {
       target="_blank"
       rel="noreferrer noopener"
       className={cn(
-        "text-black underline decoration-slate-500 underline-offset-2 transition hover:decoration-slate-700",
+        "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
         className,
       )}
     />
@@ -45,7 +45,7 @@ const COMPACT_COMPONENTS: Components = {
     <pre
       {...props}
       className={cn(
-        "overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5",
+        "overflow-x-auto rounded-lg border border-border bg-muted/30 p-2.5",
         className,
       )}
     />
@@ -58,7 +58,7 @@ const DOCUMENT_COMPONENTS: Components = {
     <pre
       {...props}
       className={cn(
-        "overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 shadow-inner",
+        "overflow-x-auto",
         className,
       )}
     />
@@ -72,27 +72,27 @@ const MARKDOWN_COMPONENTS: Record<MarkdownRendererVariant, Components> = {
 
 const MARKDOWN_CLASSES: Record<MarkdownRendererVariant, string> = {
   compact: cn(
-    "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-black",
-    "prose-headings:my-1 prose-headings:text-sm prose-headings:font-semibold prose-headings:text-black",
+    "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-foreground",
+    "prose-headings:my-1 prose-headings:text-sm prose-headings:font-semibold prose-headings:text-foreground",
     "prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0",
-    "prose-strong:text-black prose-em:text-black prose-li:text-black",
-    "prose-hr:border-slate-300 prose-th:border-slate-300 prose-td:border-slate-300",
-    "prose-code:rounded-md prose-code:border prose-code:border-slate-300 prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[11px] prose-code:font-medium prose-code:text-black",
+    "prose-strong:text-foreground prose-em:text-foreground prose-li:text-foreground",
+    "prose-hr:border-input prose-th:border-input prose-td:border-input",
+    "prose-code:rounded-md prose-code:border prose-code:border-input prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[11px] prose-code:font-medium prose-code:text-foreground",
     "prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:my-2 prose-pre:text-[11px] prose-pre:text-black",
-    "prose-blockquote:my-2 prose-blockquote:border-slate-300 prose-blockquote:bg-slate-50 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-black",
+    "prose-pre:my-2 prose-pre:text-[11px] prose-pre:text-foreground",
+    "prose-blockquote:my-2 prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
   ),
   document: cn(
-    "markdown-body prose max-w-none text-sm leading-relaxed text-black",
-    "prose-headings:text-black prose-headings:font-semibold",
+    "markdown-body prose max-w-none text-sm leading-relaxed text-foreground",
+    "prose-headings:text-foreground prose-headings:font-semibold",
     "prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5",
-    "prose-strong:text-black prose-em:text-black prose-li:text-black",
-    "prose-hr:my-4 prose-hr:border-slate-300",
-    "prose-table:my-3 prose-th:border-slate-300 prose-td:border-slate-300",
-    "prose-code:rounded-md prose-code:border prose-code:border-slate-300 prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-code:font-medium prose-code:text-black",
+    "prose-strong:text-foreground prose-em:text-foreground prose-li:text-foreground",
+    "prose-hr:my-4 prose-hr:border-input",
+    "prose-table:my-3 prose-th:border-input prose-td:border-input",
+    "prose-code:rounded-md prose-code:border prose-code:border-input prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-code:font-medium prose-code:text-foreground",
     "prose-code:before:content-none prose-code:after:content-none",
-    "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-black",
-    "prose-blockquote:border-slate-300 prose-blockquote:bg-slate-50 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-black",
+    "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-foreground",
+    "prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
   ),
 };
 

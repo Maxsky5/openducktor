@@ -110,15 +110,15 @@ export const buildDiagnosticsPanelModel = (
             label: "Repository path",
             value: activeWorkspace.path,
             breakAll: true,
-            valueClassName: "text-slate-500",
+            valueClassName: "text-muted-foreground",
           },
           {
             label: "Worktree directory",
             value: activeWorkspace.configuredWorktreeBasePath ?? "Not configured",
             breakAll: true,
             valueClassName: activeWorkspace.configuredWorktreeBasePath
-              ? "text-slate-500"
-              : "text-slate-400",
+              ? "text-muted-foreground"
+              : "text-muted-foreground",
           },
         ]
       : [],
@@ -164,19 +164,19 @@ export const buildDiagnosticsPanelModel = (
             label: "Runtime ID",
             value: opencodeHealth.runtime.runtimeId,
             mono: true,
-            valueClassName: "text-slate-600",
+            valueClassName: "text-muted-foreground",
           },
           {
             label: "Endpoint",
             value: `http://127.0.0.1:${opencodeHealth.runtime.port}`,
             mono: true,
-            valueClassName: "text-slate-600",
+            valueClassName: "text-muted-foreground",
           },
           {
             label: "Working directory",
             value: opencodeHealth.runtime.workingDirectory,
             breakAll: true,
-            valueClassName: "text-slate-500",
+            valueClassName: "text-muted-foreground",
           },
         ]
       : [],
@@ -205,13 +205,13 @@ export const buildDiagnosticsPanelModel = (
           {
             label: "Status",
             value: opencodeHealth?.mcpServerStatus ?? "unavailable",
-            valueClassName: opencodeHealth?.mcpServerStatus ? "font-medium" : "text-slate-500",
+            valueClassName: opencodeHealth?.mcpServerStatus ? "font-medium" : "text-muted-foreground",
           },
           {
             label: "Tools detected",
             value: String(opencodeHealth?.availableToolIds.length ?? 0),
             mono: true,
-            valueClassName: "text-slate-600",
+            valueClassName: "text-muted-foreground",
           },
         ]
       : [],
@@ -235,7 +235,7 @@ export const buildDiagnosticsPanelModel = (
               label: "Store path",
               value: beadsCheck.beadsPath,
               breakAll: true,
-              valueClassName: "text-slate-500",
+              valueClassName: "text-muted-foreground",
             },
           ]
         : [],

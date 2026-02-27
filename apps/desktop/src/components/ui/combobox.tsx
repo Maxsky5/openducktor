@@ -85,7 +85,7 @@ const comboboxOptionLabelTextVariants = cva("", {
   },
 });
 
-const comboboxOptionDescriptionVariants = cva("text-xs text-slate-500", {
+const comboboxOptionDescriptionVariants = cva("text-xs text-muted-foreground", {
   variants: {
     wrap: {
       true: "whitespace-normal break-all",
@@ -182,13 +182,13 @@ export function Combobox({
         ) : null}
       </div>
       {option.secondaryLabel ? (
-        <span className="mr-1 shrink-0 text-xs font-medium text-slate-500">
+        <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">
           {option.secondaryLabel}
         </span>
       ) : null}
       <Check
         className={cn(
-          "ml-2 size-4 text-sky-600 transition-opacity",
+          "ml-2 size-4 text-primary transition-opacity",
           value === option.value ? "opacity-100" : "opacity-0",
         )}
       />
@@ -218,14 +218,14 @@ export function Combobox({
           variant="outline"
           disabled={disabled}
           className={cn(
-            "h-9 w-full min-w-0 justify-between border-slate-300 bg-white px-3 font-normal text-slate-900 hover:bg-slate-50",
+            "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal text-foreground hover:bg-accent",
             triggerClassName,
           )}
         >
           <span className={comboboxTriggerValueVariants({ wrap: shouldWrapTriggerLabel })}>
             {selected ? renderOptionLabel(selected, shouldWrapTriggerLabel) : placeholder}
           </span>
-          <ChevronsUpDown className="size-4 shrink-0 text-slate-400" />
+          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent

@@ -48,7 +48,7 @@ type PaneProps = {
 function Pane({ label, hiddenOnMobile = false, children }: PaneProps): ReactElement {
   return (
     <div className={cn("space-y-2", hiddenOnMobile ? "max-md:hidden" : "")}>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       {children}
     </div>
   );
@@ -61,11 +61,11 @@ function LoadingPaneSkeleton({ kind }: { kind: "editor" | "preview" }): ReactEle
     <div
       className={cn(
         PANEL_MIN_HEIGHT_CLASS,
-        "space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3",
+        "space-y-3 rounded-md border border-border bg-muted p-3",
       )}
     >
       {widths.map((width) => (
-        <div key={width} className={cn("h-3 animate-pulse rounded bg-slate-200", width)} />
+        <div key={width} className={cn("h-3 animate-pulse rounded bg-secondary", width)} />
       ))}
     </div>
   );
@@ -98,13 +98,13 @@ export function TaskDocumentEditor({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+      <div className="rounded-xl border border-border bg-muted/70 px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="space-y-0.5">
-            <p className="text-sm font-semibold text-slate-900">{title}</p>
-            <p className="text-xs text-slate-500">{subtitle}</p>
+            <p className="text-sm font-semibold text-foreground">{title}</p>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
-          <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-card p-1">
             {VIEW_OPTIONS.map((option) => {
               const Icon = option.icon;
               const isActive = option.id === view;
@@ -115,8 +115,8 @@ export function TaskDocumentEditor({
                   className={cn(
                     "inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
                     isActive
-                      ? "bg-sky-600 text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                   onClick={() => onViewChange(option.id)}
                   aria-pressed={isActive}
@@ -129,7 +129,7 @@ export function TaskDocumentEditor({
           </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
           <span>{lineCount.toLocaleString()} lines</span>
           <span>Last saved: {updatedAt ? humanDate(updatedAt) : "Not saved yet"}</span>
           {hasUnsavedChanges ? (
@@ -183,7 +183,7 @@ export function TaskDocumentEditor({
                 className={cn(
                   PANEL_MIN_HEIGHT_CLASS,
                   PANEL_SCROLL_VIEWPORT_CLASS,
-                  "rounded-md border border-slate-200 bg-white p-3",
+                  "rounded-md border border-border bg-card p-3",
                 )}
               >
                 {deferredMarkdown.trim().length > 0 ? (
@@ -193,7 +193,7 @@ export function TaskDocumentEditor({
                     premiumCodeBlocks={hasLabeledCodeFence(deferredMarkdown)}
                   />
                 ) : (
-                  <p className="text-sm text-slate-500">Nothing to preview yet.</p>
+                  <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
                 )}
               </div>
             </Pane>
@@ -202,7 +202,7 @@ export function TaskDocumentEditor({
       )}
 
       {showMobileSplitHint ? (
-        <p className="text-xs text-slate-500 md:hidden">
+        <p className="text-xs text-muted-foreground md:hidden">
           Split preview is available side-by-side on wider screens.
         </p>
       ) : null}

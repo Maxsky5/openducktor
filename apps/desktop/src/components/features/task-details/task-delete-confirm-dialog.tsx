@@ -57,7 +57,7 @@ export function TaskDeleteConfirmDialog({
           <Button
             type="button"
             variant="outline"
-            className="w-[132px] justify-center disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100"
+            className="w-[132px] justify-center disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
             disabled={isDeletePending}
             onClick={onCancel}
           >

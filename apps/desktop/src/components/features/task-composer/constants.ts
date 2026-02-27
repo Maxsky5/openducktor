@@ -25,8 +25,8 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     label: "Task",
     description: "Standard implementation work item.",
     icon: ListTodo,
-    accentClass: "border-slate-300 bg-slate-100/80",
-    iconClass: "bg-slate-200 text-slate-700",
+    accentClass: "border-input bg-muted/80",
+    iconClass: "bg-secondary text-foreground",
     supportsParent: true,
   },
   {

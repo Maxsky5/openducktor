@@ -32,15 +32,15 @@ export function AgentSessionPermissionCard({
       <header className="flex items-center justify-between gap-2 border-b border-amber-200 px-3 py-1.5">
         <div className="flex items-center gap-2">
           <ShieldAlert className="size-4 text-amber-700" />
-          <p className="text-[13px] font-semibold text-slate-900">Permission request</p>
+          <p className="text-[13px] font-semibold text-foreground">Permission request</p>
         </div>
-        <p className="text-[11px] font-medium text-slate-600">Action required</p>
+        <p className="text-[11px] font-medium text-muted-foreground">Action required</p>
       </header>
 
       <div className="space-y-2 p-2.5">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-slate-900">{request.permission}</p>
-          <p className="text-xs text-slate-700">Paths: {patternsText}</p>
+          <p className="text-sm font-medium text-foreground">{request.permission}</p>
+          <p className="text-xs text-foreground">Paths: {patternsText}</p>
         </div>
 
         <div className="flex flex-wrap gap-2 pt-1">
@@ -85,7 +85,7 @@ export function AgentSessionPermissionCard({
         ) : null}
 
         {isSubmitting ? (
-          <p className="flex items-center gap-1.5 text-xs text-slate-500">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <CircleSlash2 className="size-3" />
             Submitting permission choice...
           </p>

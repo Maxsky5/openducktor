@@ -39,21 +39,21 @@ export function TaskDetailsForm({
     <div className="space-y-4">
       <div className="grid gap-2">
         <Label>Issue Type *</Label>
-        <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3">
           <div className="flex min-w-0 items-start gap-3">
             <span
               className={cn(
                 "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
-                selectedType?.iconClass ?? "bg-slate-100 text-slate-700",
+                selectedType?.iconClass ?? "bg-muted text-foreground",
               )}
             >
               <SelectedIcon className="size-4" />
             </span>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-900">
+              <p className="text-sm font-semibold text-foreground">
                 {selectedType?.label ?? state.issueType}
               </p>
-              <p className="text-xs text-slate-600">{issueTypeGuidance(state.issueType)}</p>
+              <p className="text-xs text-muted-foreground">{issueTypeGuidance(state.issueType)}</p>
             </div>
           </div>
           {mode === "create" ? (
@@ -115,20 +115,20 @@ export function TaskDetailsForm({
         <Label htmlFor="task-ai-review">AI Review</Label>
         <label
           htmlFor="task-ai-review"
-          className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700"
+          className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm text-foreground"
         >
           <input
             id="task-ai-review"
             type="checkbox"
-            className="mt-0.5 size-4 rounded border-slate-300 accent-sky-600"
+            className="mt-0.5 size-4 rounded border-input accent-sky-600"
             checked={state.aiReviewEnabled}
             onChange={(event) => onStateChange({ aiReviewEnabled: event.currentTarget.checked })}
           />
           <span className="space-y-0.5">
-            <span className="block font-semibold text-slate-900">
+            <span className="block font-semibold text-foreground">
               Run QA agent before human review
             </span>
-            <span className="block text-xs text-slate-500">
+            <span className="block text-xs text-muted-foreground">
               Enabled by default. If disabled, completed tasks go directly to Human Review.
             </span>
           </span>

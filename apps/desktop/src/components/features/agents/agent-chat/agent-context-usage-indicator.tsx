@@ -39,8 +39,8 @@ export function AgentContextUsageIndicator({
 
   return (
     <div className={cn("group relative", className)}>
-      <div className="flex items-center gap-2 rounded-full border border-slate-300 bg-white px-2.5 py-1">
-        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-200">
+      <div className="flex items-center gap-2 rounded-full border border-input bg-card px-2.5 py-1">
+        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
           <div
             className={cn("h-full transition-[width] duration-200", colors.bar)}
             style={{ width: `${barUsagePercent}%` }}
@@ -49,11 +49,11 @@ export function AgentContextUsageIndicator({
         <span className={cn("text-[11px] font-medium", colors.text)}>
           {textUsagePercent >= 100 ? Math.round(textUsagePercent) : textUsagePercent.toFixed(1)}%
         </span>
-        <span className="text-[11px] text-slate-500">{compactTotal}</span>
+        <span className="text-[11px] text-muted-foreground">{compactTotal}</span>
       </div>
 
-      <div className="pointer-events-none absolute bottom-full right-0 z-30 mb-2 hidden w-64 rounded-md border border-slate-200 bg-white p-2 text-[11px] text-slate-700 shadow-lg group-hover:block">
-        <p className="font-semibold text-slate-800">Session Context</p>
+      <div className="pointer-events-none absolute bottom-full right-0 z-30 mb-2 hidden w-64 rounded-md border border-border bg-card p-2 text-[11px] text-foreground shadow-lg group-hover:block">
+        <p className="font-semibold text-foreground">Session Context</p>
         <p className="mt-1">Used: {exactTotal} tokens</p>
         <p>Max context: {exactWindow} tokens</p>
         {exactOutput ? <p>Output limit: {exactOutput} tokens</p> : null}

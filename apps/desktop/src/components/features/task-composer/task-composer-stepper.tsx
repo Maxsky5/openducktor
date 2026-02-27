@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import type { ComposerStep } from "@/types/task-composer";
@@ -16,8 +16,8 @@ export function TaskComposerStepper({
   const isDetailsStep = step === "details";
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-center gap-3">
         <button
           type="button"
           className={cn(
@@ -37,13 +37,13 @@ export function TaskComposerStepper({
             {isTypeStep ? 1 : <Check className="size-4" />}
           </span>
           <span className="space-y-0.5">
-            <span className="block text-sm font-semibold text-slate-900">Issue Type</span>
-            <span className="block text-xs text-slate-500">Choose the task category</span>
+            <span className="block text-sm font-semibold text-foreground">Issue Type</span>
+            <span className="block text-xs text-muted-foreground">Choose the task category</span>
           </span>
         </button>
 
-        <span
-          className={cn("h-px w-8 rounded-full", isDetailsStep ? "bg-emerald-300" : "bg-slate-300")}
+        <ChevronRight
+          className={cn("size-5", isDetailsStep ? "text-emerald-400" : "text-muted-foreground/40")}
         />
 
         <button
@@ -52,7 +52,7 @@ export function TaskComposerStepper({
             "flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
             isDetailsStep
               ? "cursor-pointer border-sky-300 bg-sky-50"
-              : "cursor-not-allowed border-slate-200 bg-white text-slate-400",
+              : "cursor-not-allowed border-border bg-card text-muted-foreground",
           )}
           disabled={!isDetailsStep}
           onClick={() => onStepChange("details")}
@@ -62,14 +62,14 @@ export function TaskComposerStepper({
               "inline-flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
               isDetailsStep
                 ? "border-sky-400 bg-sky-100 text-sky-800"
-                : "border-slate-300 bg-slate-100 text-slate-500",
+                : "border-input bg-muted text-muted-foreground",
             )}
           >
             2
           </span>
           <span className="space-y-0.5">
-            <span className="block text-sm font-semibold text-slate-900">Task Details</span>
-            <span className="block text-xs text-slate-500">Add required metadata</span>
+            <span className="block text-sm font-semibold text-foreground">Task Details</span>
+            <span className="block text-xs text-muted-foreground">Add required metadata</span>
           </span>
         </button>
       </div>

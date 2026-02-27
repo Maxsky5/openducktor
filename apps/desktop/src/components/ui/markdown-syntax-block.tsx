@@ -99,7 +99,7 @@ export default function MarkdownSyntaxBlock({
     return (
       <pre
         className={cn(
-          "overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-xs leading-relaxed text-slate-800",
+          "overflow-x-auto rounded-xl border border-border bg-muted/30 p-3.5 font-mono text-xs leading-relaxed text-foreground",
           className,
         )}
       >
@@ -110,7 +110,7 @@ export default function MarkdownSyntaxBlock({
 
   return (
     <div
-      className={cn("overflow-x-auto rounded-xl border border-slate-200 bg-slate-50", className)}
+      className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}
     >
       <SyntaxHighlighter
         language={normalizedLanguage}

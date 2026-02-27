@@ -1,6 +1,7 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import {
   Check,
+  ChevronRight,
   Circle,
   CircleDashed,
   CircleDotDashed,
@@ -72,25 +73,25 @@ export type AgentStudioHeaderModel = {
 const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
   in_progress: "border-sky-300 bg-sky-50 hover:bg-sky-50 text-sky-700 shadow-sm",
   done: "border-emerald-300 bg-emerald-50 hover:bg-emerald-50 text-emerald-700 shadow-sm",
-  available: "border-slate-300 bg-white text-slate-700",
+  available: "border-input bg-card text-foreground",
   optional: "border-amber-200 bg-amber-50 text-amber-700",
-  blocked: "border-slate-200 bg-slate-100 text-slate-400",
+  blocked: "border-border bg-muted text-muted-foreground",
 };
 
 const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  done: "bg-emerald-300",
-  in_progress: "bg-sky-300",
-  available: "bg-slate-300",
-  optional: "bg-amber-300",
-  blocked: "bg-slate-200",
+  done: "text-emerald-400",
+  in_progress: "text-sky-400",
+  available: "text-muted-foreground/40",
+  optional: "text-amber-400",
+  blocked: "text-muted-foreground/20",
 };
 
 const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
   done: "ring-2 ring-offset-2 ring-emerald-400",
   in_progress: "ring-2 ring-offset-2 ring-sky-400",
-  available: "ring-2 ring-offset-2 ring-slate-400",
+  available: "ring-2 ring-offset-2 ring-ring",
   optional: "ring-2 ring-offset-2 ring-amber-400",
-  blocked: "ring-2 ring-offset-2 ring-slate-300",
+  blocked: "ring-2 ring-offset-2 ring-input",
 };
 
 const workflowStepClassName = (state: AgentWorkflowStep["state"]): string =>
@@ -167,14 +168,14 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   );
 
   return (
-    <CardHeader className="space-y-2 border-b border-slate-200 bg-white pb-4">
+    <CardHeader className="space-y-2 border-b border-border bg-card pb-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <CardTitle className="max-w-160 truncate text-xl">
             {hasTaskTitle ? normalizedTaskTitle : "Agent Studio"}
           </CardTitle>
           {hasTaskId ? (
-            <p className="font-mono text-[11px] text-slate-500">{normalizedTaskId}</p>
+            <p className="font-mono text-[11px] text-muted-foreground">{normalizedTaskId}</p>
           ) : null}
         </div>
         <div className="flex min-w-56 max-w-full items-stretch gap-2 sm:min-w-[18rem]">
@@ -225,12 +226,12 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                             setIsCreateSessionMenuOpen(false);
                           }}
                         >
-                          <Sparkles className="size-3.5 text-slate-500" />
+                          <Sparkles className="size-3.5 text-muted-foreground" />
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-800">
+                            <p className="truncate text-sm font-medium text-foreground">
                               {option.label}
                             </p>
-                            <p className="truncate text-[11px] text-slate-500">
+                            <p className="truncate text-[11px] text-muted-foreground">
                               {option.description}
                             </p>
                           </div>
@@ -254,7 +255,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
               entry.state === "in_progress" &&
               (sessionStatus === "running" || sessionStatus === "starting");
             return (
-              <div key={entry.role} className="flex min-w-0 items-center gap-1">
+              <div key={entry.role} className="flex min-w-0 items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
@@ -285,9 +286,9 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   {entry.state === "optional" ? <CircleDashed className="size-3" /> : null}
                 </Button>
                 {index < workflowSteps.length - 1 ? (
-                  <span
+                  <ChevronRight
                     className={cn(
-                      "h-px w-7 shrink-0 rounded-full",
+                      "size-4 shrink-0",
                       workflowConnectorClassName(workflowSteps[index + 1]?.state ?? "blocked"),
                     )}
                   />
@@ -299,7 +300,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
       </div>
 
       {createSessionDisabled ? (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Session creation is locked while the current session is actively running.
         </p>
       ) : null}

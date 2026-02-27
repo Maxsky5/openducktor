@@ -26,7 +26,7 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
-      className={cn("fixed inset-0 z-[70] bg-slate-950/45 backdrop-blur-sm", className)}
+      className={cn("fixed inset-0 z-[70] bg-black/45 backdrop-blur-sm", className)}
       {...props}
     />
   );
@@ -42,7 +42,7 @@ function DialogContent({
 }) {
   const renderedCloseButton =
     closeButton === undefined ? (
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900">
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
         <X className="size-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -56,7 +56,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed left-1/2 top-1/2 z-[70] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-6 shadow-xl",
+          "fixed left-1/2 top-1/2 z-[70] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-6 shadow-xl",
           className,
         )}
         {...props}
@@ -81,7 +81,7 @@ function DialogTitle(props: React.ComponentProps<typeof DialogPrimitive.Title>) 
 }
 
 function DialogDescription(props: React.ComponentProps<typeof DialogPrimitive.Description>) {
-  return <DialogPrimitive.Description className="text-sm text-slate-500" {...props} />;
+  return <DialogPrimitive.Description className="text-sm text-muted-foreground" {...props} />;
 }
 
 export {

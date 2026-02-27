@@ -656,14 +656,14 @@ export function AgentsPage(): ReactElement {
     <Tabs
       value={activeTabValue}
       onValueChange={handleSelectTab}
-      className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-white"
+      className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-card"
     >
       <AgentStudioTaskTabs
         model={agentStudioTaskTabsModel}
         rightPanelToggleModel={rightPanel.rightPanelToggleModel}
       />
 
-      <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 bg-white p-0">
+      <TabsContent value={activeTabValue} className="m-0 min-h-0 flex-1 bg-card p-0">
         {viewTaskId ? (
           <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
             <ResizablePanel defaultSize={63} minSize={35}>
@@ -687,7 +687,7 @@ export function AgentsPage(): ReactElement {
             ) : null}
           </ResizablePanelGroup>
         ) : (
-          <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-slate-300 bg-white text-sm text-slate-500">
+          <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
             Open a task tab to start a workspace.
           </div>
         )}

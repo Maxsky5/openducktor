@@ -23,10 +23,10 @@ export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): Rea
             key={option.value}
             type="button"
             className={cn(
-              "group min-h-36 cursor-pointer rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40",
+              "group min-h-36 cursor-pointer rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
               selected
                 ? option.accentClass
-                : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50",
+                : "border-border bg-card text-foreground hover:border-input hover:bg-muted",
             )}
             onClick={() =>
               onStateChange({
@@ -40,7 +40,7 @@ export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): Rea
               <span
                 className={cn(
                   "inline-flex size-9 items-center justify-center rounded-lg",
-                  selected ? option.iconClass : "bg-slate-100 text-slate-600",
+                  selected ? option.iconClass : "bg-muted text-muted-foreground",
                 )}
               >
                 <Icon className="size-4" />
@@ -50,14 +50,14 @@ export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): Rea
                   "inline-flex size-6 items-center justify-center rounded-full border transition-colors",
                   selected
                     ? "border-sky-300 bg-sky-100 text-sky-700"
-                    : "border-slate-300 bg-white text-transparent",
+                    : "border-input bg-card text-transparent",
                 )}
               >
                 <Check className="size-3.5" />
               </span>
             </div>
-            <p className="mt-3 text-base font-semibold text-slate-900">{option.label}</p>
-            <p className="mt-1 text-sm text-slate-600">{option.description}</p>
+            <p className="mt-3 text-base font-semibold text-foreground">{option.label}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{option.description}</p>
           </button>
         );
       })}

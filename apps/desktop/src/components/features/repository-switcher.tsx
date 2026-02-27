@@ -44,7 +44,7 @@ export function RepositorySwitcher({ className, triggerClassName }: RepositorySw
           });
         }}
         triggerClassName={cn(
-          "h-9 w-full rounded-md border-slate-300 bg-white px-3 text-sm text-slate-700",
+          "h-9 w-full rounded-md border-input bg-card px-3 text-sm text-foreground",
           triggerClassName,
         )}
       />
