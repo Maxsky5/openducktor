@@ -83,3 +83,73 @@ pre {
 .markdown-body pre code::after {
   content: none;
 }
+
+@keyframes odt-border-ray-run {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: calc(var(--odt-border-ray-perimeter) * -1);
+  }
+}
+
+.kanban-active-session-card {
+  position: relative;
+  isolation: isolate;
+  border-color: rgba(14, 165, 233, 0.58);
+  box-shadow: 0 0 9px rgba(14, 165, 233, 0.22);
+}
+
+.kanban-active-session-ray,
+.odt-border-ray {
+  overflow: visible;
+  --odt-border-ray-turn-duration: 3000ms;
+  --odt-border-ray-perimeter: 1000;
+  --odt-border-ray-length: 190;
+}
+
+.odt-border-ray-segment-halo,
+.odt-border-ray-segment-glow,
+.odt-border-ray-segment {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: geometricPrecision;
+  stroke-dasharray: var(--odt-border-ray-length)
+    calc(var(--odt-border-ray-perimeter) - var(--odt-border-ray-length));
+  animation: odt-border-ray-run var(--odt-border-ray-turn-duration) linear infinite;
+}
+
+.odt-border-ray-segment-halo {
+  stroke: rgba(56, 189, 248, 0.44);
+  stroke-width: 14;
+  opacity: 0.42;
+  filter: blur(7px);
+}
+
+.odt-border-ray-segment-glow {
+  stroke: rgba(125, 211, 252, 0.9);
+  stroke-width: 9.8;
+  opacity: 0.58;
+  filter: blur(3.3px) drop-shadow(0 0 8px rgba(56, 189, 248, 0.62));
+}
+
+.odt-border-ray-segment {
+  stroke: rgba(56, 189, 248, 1);
+  stroke-width: 4.4;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9));
+}
+
+.kanban-active-session-content {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odt-border-ray-segment-halo,
+  .odt-border-ray-segment-glow,
+  .odt-border-ray-segment {
+    animation: none;
+  }
+}

@@ -1,5 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepoSettingsInput } from "@/types/state-slices";
+
+export const REPO_SETTINGS_UPDATED_EVENT = "odt:repo-settings-updated";
+
+type RepoSettingsUpdatedEventDetail = {
+  repoPath: string;
+};
 
 export function useAgentStudioRepoSettings(args: {
   activeRepo: string | null;
@@ -9,22 +15,26 @@ export function useAgentStudioRepoSettings(args: {
 } {
   const { activeRepo, loadRepoSettings } = args;
   const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
+  const latestReloadIdRef = useRef(0);
 
-  useEffect(() => {
+  const reloadRepoSettings = useCallback(() => {
     if (!activeRepo) {
+      latestReloadIdRef.current += 1;
       setRepoSettings(null);
-      return;
+      return () => {};
     }
 
+    const reloadId = latestReloadIdRef.current + 1;
+    latestReloadIdRef.current = reloadId;
     let cancelled = false;
     void loadRepoSettings()
       .then((settings) => {
-        if (!cancelled) {
+        if (!cancelled && reloadId === latestReloadIdRef.current) {
           setRepoSettings(settings);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && reloadId === latestReloadIdRef.current) {
           setRepoSettings(null);
         }
       });
@@ -33,6 +43,31 @@ export function useAgentStudioRepoSettings(args: {
       cancelled = true;
     };
   }, [activeRepo, loadRepoSettings]);
+
+  useEffect(() => {
+    return reloadRepoSettings();
+  }, [reloadRepoSettings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleRepoSettingsUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<RepoSettingsUpdatedEventDetail>;
+      const repoPath = customEvent.detail?.repoPath;
+      if (!repoPath || !activeRepo || repoPath !== activeRepo) {
+        return;
+      }
+
+      reloadRepoSettings();
+    };
+
+    window.addEventListener(REPO_SETTINGS_UPDATED_EVENT, handleRepoSettingsUpdated);
+    return () => {
+      window.removeEventListener(REPO_SETTINGS_UPDATED_EVENT, handleRepoSettingsUpdated);
+    };
+  }, [activeRepo, reloadRepoSettings]);
 
   return {
     repoSettings,

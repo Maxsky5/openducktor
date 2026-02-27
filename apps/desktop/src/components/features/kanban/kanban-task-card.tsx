@@ -1,6 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, PlayCircle } from "lucide-react";
 import type { ReactElement } from "react";
+import { Link } from "react-router-dom";
 import {
   IssueTypeBadge,
   PriorityBadge,
@@ -9,10 +10,23 @@ import {
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Badge } from "@/components/ui/badge";
+import { BorderRay } from "@/components/ui/border-ray";
+import { cn } from "@/lib/utils";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+
+type RunningTaskSession = Pick<AgentSessionState, "sessionId" | "role" | "scenario" | "status">;
+
+const ACTIVE_SESSION_ROLE_LABEL: Record<RunningTaskSession["role"], string> = {
+  spec: "Spec",
+  planner: "Planner",
+  build: "Build",
+  qa: "QA",
+};
 
 type KanbanTaskCardProps = {
   task: TaskCard;
   runState?: RunSummary["state"] | undefined;
+  activeSessions?: RunningTaskSession[] | undefined;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -20,6 +34,66 @@ type KanbanTaskCardProps = {
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
 };
+
+function toSessionHref({
+  taskId,
+  session,
+}: {
+  taskId: string;
+  session: RunningTaskSession;
+}): string {
+  const params = new URLSearchParams({
+    task: taskId,
+    session: session.sessionId,
+    agent: session.role,
+    scenario: session.scenario,
+  });
+
+  return `/agents?${params.toString()}`;
+}
+
+function ActiveSessionChip({
+  taskId,
+  session,
+}: {
+  taskId: string;
+  session: RunningTaskSession;
+}): ReactElement {
+  const roleLabel = ACTIVE_SESSION_ROLE_LABEL[session.role] ?? session.role;
+  const statusLabel = session.status === "starting" ? "Starting" : "Running";
+
+  return (
+    <Link
+      to={toSessionHref({ taskId, session })}
+      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100/75"
+    >
+      <PlayCircle className="size-3" />
+      {roleLabel}
+      <span className="text-[10px] font-medium text-sky-600/90">{statusLabel}</span>
+    </Link>
+  );
+}
+
+function ActiveSessionsLine({
+  taskId,
+  activeSessions,
+}: {
+  taskId: string;
+  activeSessions: RunningTaskSession[];
+}): ReactElement {
+  return (
+    <div className="space-y-1 border-t border-sky-100/80 pt-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        Active sessions
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {activeSessions.map((session) => (
+          <ActiveSessionChip key={session.sessionId} taskId={taskId} session={session} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function TaskMeta({
   task,
@@ -108,6 +182,7 @@ function TaskActions({
 export function KanbanTaskCard({
   task,
   runState,
+  activeSessions = [],
   onOpenDetails,
   onDelegate,
   onPlan,
@@ -115,38 +190,57 @@ export function KanbanTaskCard({
   onHumanApprove,
   onHumanRequestChanges,
 }: KanbanTaskCardProps): ReactElement {
+  const hasActiveSessions = activeSessions.length > 0;
+
   return (
-    <article className="group flex min-w-0 cursor-pointer flex-col space-y-2.5 overflow-hidden rounded-xl border border-slate-200/90 bg-white/95 p-3.5 shadow-sm transition duration-150 hover:border-sky-200 hover:shadow-md">
-      <button
-        type="button"
-        className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
-        onClick={() => onOpenDetails(task.id)}
-      >
-        <div className="min-w-0 space-y-1">
-          <p
-            className="line-clamp-2 break-words text-sm font-semibold leading-tight text-slate-900"
-            title={task.title}
-          >
-            {task.title}
-          </p>
-          <p className="truncate font-mono text-[11px] text-slate-500">{task.id}</p>
-        </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-slate-400 transition group-hover:border-slate-200 group-hover:bg-slate-50 group-hover:text-slate-600">
-          <ExternalLink className="size-3" />
-          Open
-        </span>
-      </button>
+    <article
+      className={cn(
+        "group min-w-0 rounded-xl border border-slate-200/90 bg-white/95 shadow-sm transition duration-150 hover:border-sky-200 hover:shadow-md",
+        hasActiveSessions
+          ? "kanban-active-session-card border-sky-300/80 shadow-sky-200/50"
+          : undefined,
+      )}
+    >
+      {hasActiveSessions ? (
+        <BorderRay turnDurationMs={2500} className="kanban-active-session-ray" />
+      ) : null}
 
-      <TaskMeta task={task} runState={runState} />
+      <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">
+        <button
+          type="button"
+          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+          onClick={() => onOpenDetails(task.id)}
+        >
+          <div className="min-w-0 space-y-1">
+            <p
+              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-slate-900"
+              title={task.title}
+            >
+              {task.title}
+            </p>
+            <p className="truncate font-mono text-[11px] text-slate-500">{task.id}</p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-slate-400 transition group-hover:border-slate-200 group-hover:bg-slate-50 group-hover:text-slate-600">
+            <ExternalLink className="size-3" />
+            Open
+          </span>
+        </button>
 
-      <TaskActions
-        task={task}
-        onPlan={onPlan}
-        onBuild={onBuild}
-        onDelegate={onDelegate}
-        {...(onHumanApprove ? { onHumanApprove } : {})}
-        {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-      />
+        <TaskMeta task={task} runState={runState} />
+
+        {hasActiveSessions ? (
+          <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} />
+        ) : null}
+
+        <TaskActions
+          task={task}
+          onPlan={onPlan}
+          onBuild={onBuild}
+          onDelegate={onDelegate}
+          {...(onHumanApprove ? { onHumanApprove } : {})}
+          {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+        />
+      </div>
     </article>
   );
 }

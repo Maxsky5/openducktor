@@ -38,6 +38,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/use-agent-studio-repo-settings";
 import { useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations";
 
@@ -170,6 +171,14 @@ export function SettingsModal({
         postCompleteHooks: parseHookLines(postCompleteHooks),
         agentDefaults,
       });
+
+      if (typeof window !== "undefined" && activeRepo) {
+        window.dispatchEvent(
+          new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
+            detail: { repoPath: activeRepo },
+          }),
+        );
+      }
 
       setOpen(false);
     } catch (error: unknown) {

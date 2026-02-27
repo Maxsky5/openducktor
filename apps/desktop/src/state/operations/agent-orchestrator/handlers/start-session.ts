@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import { requireActiveRepo } from "../../task-operations-model";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
@@ -60,7 +60,7 @@ type StartSessionDependencies = {
     baseUrl: string,
     workingDirectory: string,
   ) => Promise<void>;
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   refreshTaskData: (repoPath: string) => Promise<void>;
   persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
@@ -148,7 +148,9 @@ export const createStartAgentSession = ({
         );
         if (latestPersistedSession) {
           if (!sessionsRef.current[latestPersistedSession.sessionId]) {
-            await loadAgentSessions(taskId);
+            await loadAgentSessions(taskId, {
+              hydrateHistoryForSessionId: latestPersistedSession.sessionId,
+            });
             throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
           }
           return latestPersistedSession.sessionId;

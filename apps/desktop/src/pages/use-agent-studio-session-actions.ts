@@ -13,6 +13,21 @@ import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-p
 
 type QueryUpdate = Record<string, string | undefined>;
 
+export type SessionStartRequestReason = "create_session" | "composer_send" | "scenario_kickoff";
+
+export type NewSessionStartRequest = {
+  taskId: string;
+  role: AgentRole;
+  scenario: AgentScenario;
+  startMode: "fresh" | "reuse_latest";
+  reason: SessionStartRequestReason;
+  selectedModel: AgentModelSelection | null;
+};
+
+export type NewSessionStartDecision = {
+  selectedModel: AgentModelSelection | null;
+} | null;
+
 type UseAgentStudioSessionActionsArgs = {
   activeRepo: string | null;
   taskId: string;
@@ -34,6 +49,7 @@ type UseAgentStudioSessionActionsArgs = {
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
+  requestNewSessionStart?: (request: NewSessionStartRequest) => Promise<NewSessionStartDecision>;
 };
 
 export function useAgentStudioSessionActions({
@@ -57,6 +73,7 @@ export function useAgentStudioSessionActions({
   answerAgentQuestion,
   updateQuery,
   onContextSwitchIntent,
+  requestNewSessionStart,
 }: UseAgentStudioSessionActionsArgs): {
   isStarting: boolean;
   isSending: boolean;
@@ -91,93 +108,127 @@ export function useAgentStudioSessionActions({
     startingSessionByTaskRef.current.clear();
   }, [activeRepo]);
 
-  const startSession = useCallback(async (): Promise<string | undefined> => {
-    if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
-      return undefined;
-    }
-    if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
-      return undefined;
-    }
-
-    const isFreshStartRequested = sessionStartPreference === "fresh";
-
-    if (activeSession && !isFreshStartRequested) {
-      updateQuery({
-        task: activeSession.taskId,
-        session: activeSession.sessionId,
-        agent: activeSession.role,
-        scenario: activeSession.scenario,
-        autostart: undefined,
-        start: undefined,
+  const resolveRequestedSelection = useCallback(
+    async (
+      request: Omit<NewSessionStartRequest, "selectedModel">,
+    ): Promise<AgentModelSelection | null | undefined> => {
+      if (!requestNewSessionStart) {
+        return selectionForNewSession ?? null;
+      }
+      const decision = await requestNewSessionStart({
+        ...request,
+        selectedModel: selectionForNewSession ?? null,
       });
-      return activeSession.sessionId;
-    }
-
-    if (sessionStartPreference === "continue") {
-      const latestSessionForRole = sessionsForTask.find((entry) => entry.role === role);
-      if (latestSessionForRole) {
-        updateQuery({
-          task: latestSessionForRole.taskId,
-          session: latestSessionForRole.sessionId,
-          agent: latestSessionForRole.role,
-          scenario: latestSessionForRole.scenario,
-          autostart: undefined,
-        });
-        return latestSessionForRole.sessionId;
+      if (!decision) {
+        return undefined;
       }
-    }
+      return decision.selectedModel;
+    },
+    [requestNewSessionStart, selectionForNewSession],
+  );
 
-    const inFlightSessionStart = startingSessionByTaskRef.current.get(taskId);
-    if (inFlightSessionStart) {
-      return inFlightSessionStart;
-    }
+  const startSession = useCallback(
+    async (reason: SessionStartRequestReason): Promise<string | undefined> => {
+      if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
+        return undefined;
+      }
+      if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
+        return undefined;
+      }
 
-    const startPromise = (async (): Promise<string | undefined> => {
-      setIsStarting(true);
-      try {
-        const sessionId = await startAgentSession({
-          taskId,
-          role,
-          scenario,
-          selectedModel: selectionForNewSession ?? null,
-          sendKickoff: false,
-          startMode: sessionStartPreference === "fresh" ? "fresh" : "reuse_latest",
-          requireModelReady: true,
+      const isFreshStartRequested = sessionStartPreference === "fresh";
+
+      if (activeSession && !isFreshStartRequested) {
+        updateQuery({
+          task: activeSession.taskId,
+          session: activeSession.sessionId,
+          agent: activeSession.role,
+          scenario: activeSession.scenario,
+          autostart: undefined,
+          start: undefined,
         });
-        if (selectionForNewSession) {
-          updateAgentSessionModel(sessionId, selectionForNewSession);
+        return activeSession.sessionId;
+      }
+
+      if (sessionStartPreference === "continue") {
+        const latestSessionForRole = sessionsForTask.find((entry) => entry.role === role);
+        if (latestSessionForRole) {
+          updateQuery({
+            task: latestSessionForRole.taskId,
+            session: latestSessionForRole.sessionId,
+            agent: latestSessionForRole.role,
+            scenario: latestSessionForRole.scenario,
+            autostart: undefined,
+          });
+          return latestSessionForRole.sessionId;
         }
-        updateQuery({
-          task: taskId,
-          agent: role,
-          scenario,
-          session: sessionId,
-          autostart: undefined,
-        });
-        return sessionId;
-      } finally {
-        startingSessionByTaskRef.current.delete(taskId);
-        setIsStarting(false);
       }
-    })();
 
-    startingSessionByTaskRef.current.set(taskId, startPromise);
-    return startPromise;
-  }, [
-    activeSession,
-    agentStudioReady,
-    isActiveTaskHydrated,
-    role,
-    scenario,
-    sessionStartPreference,
-    sessionsForTask,
-    selectedTask,
-    selectionForNewSession,
-    startAgentSession,
-    taskId,
-    updateAgentSessionModel,
-    updateQuery,
-  ]);
+      const inFlightSessionStart = startingSessionByTaskRef.current.get(taskId);
+      if (inFlightSessionStart) {
+        return inFlightSessionStart;
+      }
+
+      const startPromise = (async (): Promise<string | undefined> => {
+        setIsStarting(true);
+        try {
+          const startMode = sessionStartPreference === "fresh" ? "fresh" : "reuse_latest";
+          const selectedModel = await resolveRequestedSelection({
+            taskId,
+            role,
+            scenario,
+            startMode,
+            reason,
+          });
+          if (selectedModel === undefined) {
+            return undefined;
+          }
+
+          const sessionId = await startAgentSession({
+            taskId,
+            role,
+            scenario,
+            selectedModel,
+            sendKickoff: false,
+            startMode,
+            requireModelReady: true,
+          });
+          if (selectedModel) {
+            updateAgentSessionModel(sessionId, selectedModel);
+          }
+          updateQuery({
+            task: taskId,
+            agent: role,
+            scenario,
+            session: sessionId,
+            autostart: undefined,
+          });
+          return sessionId;
+        } finally {
+          startingSessionByTaskRef.current.delete(taskId);
+          setIsStarting(false);
+        }
+      })();
+
+      startingSessionByTaskRef.current.set(taskId, startPromise);
+      return startPromise;
+    },
+    [
+      activeSession,
+      agentStudioReady,
+      isActiveTaskHydrated,
+      resolveRequestedSelection,
+      role,
+      scenario,
+      sessionStartPreference,
+      sessionsForTask,
+      selectedTask,
+      startAgentSession,
+      taskId,
+      updateAgentSessionModel,
+      updateQuery,
+    ],
+  );
 
   const startScenarioKickoff = useCallback(async (): Promise<void> => {
     if (!taskId || !agentStudioReady) {
@@ -186,7 +237,7 @@ export function useAgentStudioSessionActions({
     if (selectedTask && !isRoleAvailableForTask(selectedTask, role)) {
       return;
     }
-    const sessionId = await startSession();
+    const sessionId = await startSession("scenario_kickoff");
     if (!sessionId) {
       updateQuery({ autostart: undefined });
       return;
@@ -265,7 +316,7 @@ export function useAgentStudioSessionActions({
 
     let targetSessionId = sessionStartPreference === "fresh" ? undefined : activeSession?.sessionId;
     if (!targetSessionId) {
-      targetSessionId = await startSession();
+      targetSessionId = await startSession("composer_send");
     }
 
     if (!targetSessionId) {
@@ -468,26 +519,39 @@ export function useAgentStudioSessionActions({
         agent: role,
         scenario,
         autostart: undefined,
+        start: undefined,
       };
-
-      if (
-        (activeSession?.sessionId ?? null) !== null ||
-        (activeSession?.role ?? role) !== nextRole
-      ) {
-        onContextSwitchIntent?.();
-      }
-
-      updateQuery({
-        task: taskId,
-        session: undefined,
-        agent: nextRole,
-        scenario: nextScenario,
-        autostart: undefined,
-      });
 
       const startPromise = (async (): Promise<string | undefined> => {
         try {
           setIsStarting(true);
+          const selectedModel = await resolveRequestedSelection({
+            taskId,
+            role: nextRole,
+            scenario: nextScenario,
+            startMode: "fresh",
+            reason: "create_session",
+          });
+          if (selectedModel === undefined) {
+            return undefined;
+          }
+
+          if (
+            (activeSession?.sessionId ?? null) !== null ||
+            (activeSession?.role ?? role) !== nextRole
+          ) {
+            onContextSwitchIntent?.();
+          }
+
+          updateQuery({
+            task: taskId,
+            session: undefined,
+            agent: nextRole,
+            scenario: nextScenario,
+            autostart: undefined,
+            start: "fresh",
+          });
+
           const sessionId = await captureOrchestratorFallback<string | undefined>(
             "agent-studio-start-fresh-session",
             async () =>
@@ -495,6 +559,7 @@ export function useAgentStudioSessionActions({
                 taskId,
                 role: nextRole,
                 scenario: nextScenario,
+                selectedModel,
                 sendKickoff: false,
                 startMode: "fresh",
                 requireModelReady: true,
@@ -522,6 +587,7 @@ export function useAgentStudioSessionActions({
             agent: nextRole,
             scenario: nextScenario,
             autostart: undefined,
+            start: undefined,
           });
           runOrchestratorSideEffect(
             "agent-studio-send-kickoff-message",
@@ -555,6 +621,7 @@ export function useAgentStudioSessionActions({
       isActiveTaskHydrated,
       isSessionWorking,
       selectedTask,
+      resolveRequestedSelection,
       role,
       scenario,
       activeRepo,

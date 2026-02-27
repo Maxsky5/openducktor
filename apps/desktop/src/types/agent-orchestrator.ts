@@ -110,3 +110,7 @@ export type AgentSessionState = {
   selectedModel: AgentModelSelection | null;
   isLoadingModelCatalog: boolean;
 };
+
+export type AgentSessionLoadOptions = {
+  hydrateHistoryForSessionId?: string | null;
+};

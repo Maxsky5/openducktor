@@ -8,7 +8,11 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionLoadOptions,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import {
   attachAgentSessionListener,
   createAgentSessionActions,
@@ -36,7 +40,7 @@ type UseAgentOrchestratorOperationsArgs = {
 
 type UseAgentOrchestratorOperationsResult = {
   sessions: AgentSessionState[];
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   startAgentSession: (input: {
     taskId: string;
     role: AgentRole;
@@ -396,9 +400,9 @@ export function useAgentOrchestratorOperations({
 
   return {
     sessions,
-    loadAgentSessions: async (taskId) => {
+    loadAgentSessions: async (taskId, options) => {
       try {
-        await loadAgentSessions(taskId);
+        await loadAgentSessions(taskId, options);
       } catch (error) {
         toast.error("Failed to load agent sessions", {
           description: errorMessage(error),

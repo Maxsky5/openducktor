@@ -42,3 +42,5 @@ export {
   toModelOptions,
   toPrimaryAgentOptions,
 } from "./catalog-select-options";
+export type { SessionStartModalModel } from "./session-start-modal";
+export { SessionStartModal } from "./session-start-modal";

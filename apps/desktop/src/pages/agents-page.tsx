@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -13,12 +14,14 @@ import {
   AgentStudioHeader,
   AgentStudioRightPanel,
   AgentStudioTaskTabs,
+  SessionStartModal,
 } from "@/components/features/agents";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
+import type { RepoSettingsInput } from "@/types/state-slices";
+import { firstScenario, SCENARIO_LABELS, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 import { resolveAgentStudioActiveSession, resolveAgentStudioTaskId } from "./agents-page-selection";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
@@ -27,9 +30,14 @@ import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
-import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
+import {
+  type NewSessionStartDecision,
+  type NewSessionStartRequest,
+  useAgentStudioSessionActions,
+} from "./use-agent-studio-session-actions";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
+import { useSessionStartModalState } from "./use-session-start-modal-state";
 
 const compareSessionsByRecency = (left: AgentSessionState, right: AgentSessionState): number => {
   if (left.startedAt !== right.startedAt) {
@@ -40,6 +48,126 @@ const compareSessionsByRecency = (left: AgentSessionState, right: AgentSessionSt
   }
   return left.sessionId > right.sessionId ? -1 : 1;
 };
+
+const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
+  spec: "Spec",
+  planner: "Planner",
+  build: "Build",
+  qa: "QA",
+};
+
+type AgentStudioSessionStartModalProps = {
+  request: NewSessionStartRequest;
+  activeRepo: string | null;
+  repoSettings: RepoSettingsInput | null;
+  onCancel: () => void;
+  onConfirm: (decision: NonNullable<NewSessionStartDecision>) => void;
+};
+
+function AgentStudioSessionStartModal({
+  request,
+  activeRepo,
+  repoSettings,
+  onCancel,
+  onConfirm,
+}: AgentStudioSessionStartModalProps): ReactElement {
+  const initializedRequestKeyRef = useRef<string | null>(null);
+  const {
+    intent,
+    isOpen,
+    selection,
+    isCatalogLoading,
+    agentOptions,
+    modelOptions,
+    modelGroups,
+    variantOptions,
+    openStartModal,
+    closeStartModal,
+    handleSelectAgent,
+    handleSelectModel,
+    handleSelectVariant,
+  } = useSessionStartModalState({
+    activeRepo,
+    repoSettings,
+  });
+
+  useEffect(() => {
+    const requestKey = [
+      request.taskId,
+      request.role,
+      request.scenario,
+      request.startMode,
+      request.reason,
+    ].join(":");
+    if (initializedRequestKeyRef.current === requestKey) {
+      return;
+    }
+    initializedRequestKeyRef.current = requestKey;
+
+    const roleLabel = ROLE_LABEL_BY_ROLE[request.role] ?? request.role.toUpperCase();
+    const scenarioLabel = SCENARIO_LABELS[request.scenario] ?? request.scenario;
+    const startModeLabel =
+      request.startMode === "fresh"
+        ? "Start a fresh session"
+        : "Continue latest or start a new session";
+
+    openStartModal({
+      source: "agent_studio",
+      taskId: request.taskId,
+      role: request.role,
+      scenario: request.scenario,
+      startMode: request.startMode,
+      selectedModel: request.selectedModel,
+      postStartAction:
+        request.reason === "composer_send"
+          ? "send_message"
+          : request.reason === "scenario_kickoff"
+            ? "kickoff"
+            : "none",
+      title: `Start ${roleLabel} Session`,
+      description: `${startModeLabel} for ${scenarioLabel}.`,
+    });
+  }, [openStartModal, request]);
+
+  const fallbackRoleLabel = ROLE_LABEL_BY_ROLE[request.role] ?? request.role.toUpperCase();
+  const fallbackScenarioLabel = SCENARIO_LABELS[request.scenario] ?? request.scenario;
+  const fallbackStartModeLabel =
+    request.startMode === "fresh"
+      ? "Start a fresh session"
+      : "Continue latest or start a new session";
+
+  return (
+    <SessionStartModal
+      model={{
+        open: isOpen,
+        title: intent?.title ?? `Start ${fallbackRoleLabel} Session`,
+        description:
+          intent?.description ?? `${fallbackStartModeLabel} for ${fallbackScenarioLabel}.`,
+        confirmLabel: "Start session",
+        selectedModelSelection: selection,
+        isSelectionCatalogLoading: isCatalogLoading,
+        agentOptions,
+        modelOptions,
+        modelGroups,
+        variantOptions,
+        onSelectAgent: handleSelectAgent,
+        onSelectModel: handleSelectModel,
+        onSelectVariant: handleSelectVariant,
+        allowRunInBackground: false,
+        isStarting: false,
+        onOpenChange: (nextOpen) => {
+          if (!nextOpen) {
+            closeStartModal();
+            onCancel();
+          }
+        },
+        onConfirm: (_runInBackground) => {
+          onConfirm({ selectedModel: selection ?? null });
+        },
+      }}
+    />
+  );
+}
 
 export function AgentsPage(): ReactElement {
   const { activeRepo, loadRepoSettings } = useWorkspaceState();
@@ -59,6 +187,36 @@ export function AgentsPage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
+  const [pendingSessionStartRequest, setPendingSessionStartRequest] =
+    useState<NewSessionStartRequest | null>(null);
+  const pendingSessionStartResolverRef = useRef<
+    ((decision: NewSessionStartDecision) => void) | null
+  >(null);
+
+  const resolvePendingSessionStart = useCallback((decision: NewSessionStartDecision): void => {
+    const resolver = pendingSessionStartResolverRef.current;
+    pendingSessionStartResolverRef.current = null;
+    setPendingSessionStartRequest(null);
+    resolver?.(decision);
+  }, []);
+
+  const requestNewSessionStart = useCallback(
+    (request: NewSessionStartRequest): Promise<NewSessionStartDecision> => {
+      pendingSessionStartResolverRef.current?.(null);
+      return new Promise((resolve) => {
+        pendingSessionStartResolverRef.current = resolve;
+        setPendingSessionStartRequest(request);
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      pendingSessionStartResolverRef.current?.(null);
+      pendingSessionStartResolverRef.current = null;
+    };
+  }, []);
 
   const {
     taskIdParam,
@@ -172,7 +330,6 @@ export function AgentsPage(): ReactElement {
   }, []);
 
   const {
-    tabTaskIds,
     activeTaskTabId,
     availableTabTasks,
     taskTabs,
@@ -256,7 +413,7 @@ export function AgentsPage(): ReactElement {
   const hydratedTasksByRepoAndTask = useAgentStudioTaskHydration({
     activeRepo,
     activeTaskId: viewTaskId,
-    tabTaskIds,
+    activeSessionId: viewActiveSession?.sessionId ?? null,
     loadAgentSessions,
   });
 
@@ -401,8 +558,8 @@ export function AgentsPage(): ReactElement {
     taskId: viewTaskId,
     role: viewRole,
     scenario: viewScenario,
-    autostart,
-    sessionStartPreference,
+    autostart: false,
+    sessionStartPreference: null,
     activeSession: viewActiveSession,
     sessionsForTask: viewSessionsForTask,
     selectedTask: viewSelectedTask,
@@ -417,6 +574,7 @@ export function AgentsPage(): ReactElement {
     answerAgentQuestion,
     updateQuery,
     onContextSwitchIntent: signalContextSwitchIntent,
+    requestNewSessionStart,
   });
 
   const { isSubmittingPermissionByRequestId, permissionReplyErrorByRequestId, onReplyPermission } =
@@ -534,6 +692,15 @@ export function AgentsPage(): ReactElement {
           </div>
         )}
       </TabsContent>
+      {pendingSessionStartRequest ? (
+        <AgentStudioSessionStartModal
+          request={pendingSessionStartRequest}
+          activeRepo={activeRepo}
+          repoSettings={repoSettings}
+          onCancel={() => resolvePendingSessionStart(null)}
+          onConfirm={resolvePendingSessionStart}
+        />
+      ) : null}
     </Tabs>
   );
 }

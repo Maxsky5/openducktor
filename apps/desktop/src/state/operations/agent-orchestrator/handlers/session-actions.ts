@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { annotateQuestionToolMessage } from "../support/question-messages";
@@ -44,7 +44,7 @@ type SessionActionsDependencies = {
     baseUrl: string,
     workingDirectory: string,
   ) => Promise<void>;
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
   persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;

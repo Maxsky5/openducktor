@@ -12,7 +12,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
-import type { AgentSessionState } from "./agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoOpencodeHealthCheck } from "./diagnostics";
 
 export type RepoAgentDefaultInput = {
@@ -100,7 +100,7 @@ export type SpecStateContextValue = {
 
 export type AgentStateContextValue = {
   sessions: AgentSessionState[];
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   startAgentSession: (input: {
     taskId: string;
     role: AgentRole;
