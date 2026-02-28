@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
@@ -219,6 +220,41 @@ fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
     assert!(bad_role
         .to_string()
         .contains("Unsupported agent runtime role"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn opencode_runtime_start_persists_canonical_repo_path_in_summary() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("runtime-canonical-repo-path");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+    let repo_path_with_suffix = format!("{}/.", repo.to_string_lossy());
+    let runtime =
+        service.opencode_runtime_start(repo_path_with_suffix.as_str(), "task-1", "spec")?;
+
+    let expected_repo_key = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    assert_eq!(runtime.repo_path, expected_repo_key);
+    assert!(service.opencode_runtime_stop(runtime.runtime_id.as_str())?);
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -452,6 +488,131 @@ fn opencode_runtime_start_reuses_existing_runtime_for_same_task_and_role() -> Re
     let second = service.opencode_runtime_start(repo_path.as_str(), "task-1", "spec")?;
     assert_eq!(first.runtime_id, second.runtime_id);
     assert!(service.opencode_runtime_stop(first.runtime_id.as_str())?);
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn opencode_runtime_start_deduplicates_concurrent_same_task_and_role() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("runtime-concurrent-dedup");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+    let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "700");
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+
+    let (first, second) = thread::scope(|scope| {
+        let first_start =
+            scope.spawn(|| service.opencode_runtime_start(repo_path.as_str(), "task-1", "spec"));
+        let second_start =
+            scope.spawn(|| service.opencode_runtime_start(repo_path.as_str(), "task-1", "spec"));
+        (
+            first_start
+                .join()
+                .expect("first runtime start thread should join"),
+            second_start
+                .join()
+                .expect("second runtime start thread should join"),
+        )
+    });
+    let first = first?;
+    let second = second?;
+    assert_eq!(first.runtime_id, second.runtime_id);
+    assert_eq!(
+        service
+            .agent_runtimes
+            .lock()
+            .expect("runtime lock poisoned")
+            .len(),
+        1
+    );
+    assert!(service.opencode_runtime_stop(first.runtime_id.as_str())?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn opencode_workspace_runtime_ensure_cleans_up_spawned_child_when_runtime_lock_is_poisoned(
+) -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("runtime-workspace-lock-poison");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let pid_file = root.join("spawned-runtime.pid");
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+    let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
+    let _pid_guard = set_env_var(
+        "OPENDUCKTOR_TEST_PID_FILE",
+        pid_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+
+    let repo_path = repo.to_string_lossy().to_string();
+    let ensure_error = thread::scope(|scope| -> Result<anyhow::Error> {
+        let ensure_handle =
+            scope.spawn(|| service.opencode_repo_runtime_ensure(repo_path.as_str()));
+
+        assert!(wait_for_path_exists(
+            pid_file.as_path(),
+            Duration::from_secs(2)
+        ));
+        let spawned_pid = fs::read_to_string(pid_file.as_path())?
+            .trim()
+            .parse::<i32>()
+            .expect("spawned runtime pid should parse as i32");
+
+        let poison_handle = scope.spawn(|| {
+            let _lock = service
+                .agent_runtimes
+                .lock()
+                .expect("runtime lock should be available for poisoning");
+            panic!("poison runtime lock");
+        });
+        assert!(poison_handle.join().is_err());
+
+        let ensure_error = ensure_handle
+            .join()
+            .expect("workspace ensure thread should join")
+            .expect_err("workspace ensure should fail when runtime lock is poisoned");
+        assert!(wait_for_process_exit(spawned_pid, Duration::from_secs(2)));
+        Ok(ensure_error)
+    })?;
+    assert!(ensure_error
+        .to_string()
+        .contains("Agent runtime state lock poisoned"));
+
     let _ = fs::remove_dir_all(root);
     Ok(())
 }

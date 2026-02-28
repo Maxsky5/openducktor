@@ -1,7 +1,6 @@
 use super::types::{
     default_branch_prefix, default_task_metadata_namespace, hook_set_fingerprint,
-    AgentModelDefault, GlobalConfig,
-    OpencodeStartupReadinessConfig, RepoConfig,
+    AgentModelDefault, GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
