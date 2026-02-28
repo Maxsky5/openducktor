@@ -20,6 +20,7 @@ const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
 const VIRTUAL_CARD_GAP_PX = 12;
 const VIRTUAL_OVERSCAN_PX = 360;
 const INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX = 900;
+const EMPTY_ACTIVE_SESSIONS: AgentSessionState[] = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
@@ -341,7 +342,7 @@ export function KanbanColumn({
                   key={task.id}
                   task={task}
                   runState={runStateByTaskId.get(task.id)}
-                  activeSessions={activeSessionsByTaskId.get(task.id) ?? []}
+                  activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
                   onMeasuredHeight={handleMeasuredHeight}
                   onOpenDetails={onOpenDetails}
                   onDelegate={onDelegate}
@@ -363,7 +364,7 @@ export function KanbanColumn({
                 key={task.id}
                 task={task}
                 runState={runStateByTaskId.get(task.id)}
-                activeSessions={activeSessionsByTaskId.get(task.id) ?? []}
+                activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
                 onOpenDetails={onOpenDetails}
                 onDelegate={onDelegate}
                 onPlan={onPlan}
