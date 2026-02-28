@@ -22,6 +22,14 @@ Current adapters:
 - Opencode adapter: `/Users/20017260/.codex/worktrees/1317/openducktor/packages/adapters-opencode-sdk/src/index.ts`
 - Beads adapter: `/Users/20017260/.codex/worktrees/1317/openducktor/apps/desktop/src-tauri/crates/host-infra-beads/src/lib.rs`
 
+## Architecture Docs
+
+- End-to-end architecture and runtime data flow: [docs/architecture-overview.md](docs/architecture-overview.md)
+- Agent orchestrator internals: [docs/agent-orchestrator-module-map.md](docs/agent-orchestrator-module-map.md)
+- Workflow lifecycle/status contract: [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)
+- Workflow actions: [docs/task-workflow-actions.md](docs/task-workflow-actions.md)
+- Workflow transition matrix: [docs/task-workflow-transition-matrix.md](docs/task-workflow-transition-matrix.md)
+
 ## Home Config
 
 OpenDucktor stores config at:
