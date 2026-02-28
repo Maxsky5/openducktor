@@ -78,7 +78,7 @@ Agent-triggered path:
 | Role, scenario, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
 | Role-to-tool allowlist | `AGENT_ROLE_TOOL_POLICY` in `packages/core/src/types/agent-orchestrator.ts` | `@openducktor/core` |
 | ODT tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/openducktor-mcp/src/lib.ts` (defined in `src/tool-schemas.ts`) | `@openducktor/openducktor-mcp` |
-| Transition legality and backend-derived actions/workflows | `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs` | Rust host application |
+| Transition legality and backend-derived actions/workflows | Rust host path: `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs`; MCP path: `packages/openducktor-mcp/src/workflow-policy.ts` + `packages/openducktor-mcp/src/task-transitions.ts` | Rust host application + MCP workflow service |
 | Persisted task lifecycle state | Beads `status` field | Beads store accessed through `TaskStore` implementations |
 | Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` + `openducktor-mcp` |
 
@@ -96,6 +96,7 @@ Concrete adapters today:
 3. If workflow transitions/actions change, update Rust `workflow_rules`, then docs and frontend rendering expectations.
 4. Keep Tauri commands as transport/mapping layer; place policy in `AppService`/domain layers.
 5. Preserve Beads as lifecycle source of truth; do not move lifecycle authority into UI-local state.
+6. Keep Rust host and MCP transition policy matrices aligned; when one changes, update the other in the same change set.
 
 ## Related Docs
 - `docs/agent-orchestrator-module-map.md`
