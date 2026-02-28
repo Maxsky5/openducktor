@@ -208,6 +208,7 @@ export function KanbanTaskCard({
       <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">
         <button
           type="button"
+          aria-label={`Open details for ${task.title}`}
           className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => onOpenDetails(task.id)}
         >
