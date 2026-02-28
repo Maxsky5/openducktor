@@ -430,14 +430,15 @@ mod tests {
     }
 
     #[test]
-    fn validate_trust_challenge_entry_checks_repo_and_fingerprint_and_expiry() {
+    fn validate_trust_challenge_entry_checks_repo_and_fingerprint_and_expiry() -> Result<(), String>
+    {
         let now = SystemTime::now();
         let challenge = HookTrustChallenge {
             repo_path: "/repo".to_string(),
             fingerprint: "abc".to_string(),
             expires_at: now
                 .checked_add(Duration::from_secs(5))
-                .expect("challenge expiry"),
+                .ok_or_else(|| "challenge expiry".to_string())?,
         };
         assert!(
             validate_trust_challenge_entry(&challenge, "/repo", "abc", now).is_ok(),
@@ -455,12 +456,13 @@ mod tests {
         let expired = HookTrustChallenge {
             expires_at: now
                 .checked_sub(Duration::from_secs(1))
-                .expect("expired instant"),
+                .ok_or_else(|| "expired instant".to_string())?,
             ..challenge
         };
         let expired_error = validate_trust_challenge_entry(&expired, "/repo", "abc", now)
             .expect_err("expired challenge should fail");
         assert!(expired_error.contains("expired"));
+        Ok(())
     }
 
     #[test]

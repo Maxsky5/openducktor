@@ -162,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn map_task_update_payload_parses_valid_issue_type() {
+    fn map_task_update_payload_parses_valid_issue_type() -> Result<(), String> {
         let patch = map_task_update_payload(TaskUpdatePayload {
             title: None,
             description: None,
@@ -173,9 +173,9 @@ mod tests {
             labels: None,
             assignee: None,
             parent_id: None,
-        })
-        .expect("feature should parse");
+        })?;
 
         assert_eq!(patch.issue_type, Some(IssueType::Feature));
+        Ok(())
     }
 }
