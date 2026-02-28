@@ -88,18 +88,12 @@ const loadOneDarkTheme = async (): Promise<PrismTheme | null> => {
   return oneDarkThemePromise;
 };
 
-const useResolvedDark = (): boolean => {
-  const { theme } = useTheme();
-  if (theme === "dark") return true;
-  if (theme === "light") return false;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-};
-
 export default function MarkdownSyntaxBlock({
   language,
   code,
   className,
 }: MarkdownSyntaxBlockProps): ReactElement {
+  const { theme } = useTheme();
   const [, setLanguageRegistrationVersion] = useState(0);
   const [oneDarkTheme, setOneDarkTheme] = useState<PrismTheme | null>(() => cachedOneDarkTheme);
   const normalizedLanguage = markdownSyntaxLanguageRegistry.normalizeLanguage(language);
@@ -107,7 +101,18 @@ export default function MarkdownSyntaxBlock({
     markdownSyntaxLanguageRegistry.isLanguageSupported(normalizedLanguage);
   const isLanguageRegistered =
     markdownSyntaxLanguageRegistry.isLanguageRegistered(normalizedLanguage);
-  const isDark = useResolvedDark();
+  const isDark = theme === "dark";
+
+  const renderPlainCodeBlock = (): ReactElement => (
+    <pre
+      className={cn(
+        "overflow-x-auto rounded-xl border border-border bg-muted/30 p-3.5 font-mono text-xs leading-relaxed text-foreground",
+        className,
+      )}
+    >
+      <code>{code}</code>
+    </pre>
+  );
 
   useEffect(() => {
     if (!isDark || oneDarkTheme) {
@@ -156,23 +161,20 @@ export default function MarkdownSyntaxBlock({
   }, [normalizedLanguage]);
 
   if (!isSupportedLanguage || !isLanguageRegistered) {
-    return (
-      <pre
-        className={cn(
-          "overflow-x-auto rounded-xl border border-border bg-muted/30 p-3.5 font-mono text-xs leading-relaxed text-foreground",
-          className,
-        )}
-      >
-        <code>{code}</code>
-      </pre>
-    );
+    return renderPlainCodeBlock();
   }
+
+  if (isDark && !oneDarkTheme) {
+    return renderPlainCodeBlock();
+  }
+
+  const syntaxTheme: PrismTheme = isDark ? (oneDarkTheme as PrismTheme) : oneLight;
 
   return (
     <div className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}>
       <SyntaxHighlighter
         language={normalizedLanguage}
-        style={isDark ? (oneDarkTheme ?? oneLight) : oneLight}
+        style={syntaxTheme}
         customStyle={SYNTAX_PRE_STYLE}
         codeTagProps={{ style: SYNTAX_CODE_TAG_STYLE }}
         PreTag="div"
