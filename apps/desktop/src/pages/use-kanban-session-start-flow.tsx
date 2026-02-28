@@ -44,8 +44,7 @@ export const findLatestSessionByRoleForTask = (
   return (
     sessions
       .filter((session) => session.taskId === taskId && session.role === role)
-      .sort((a, b) => (a.startedAt > b.startedAt ? -1 : a.startedAt < b.startedAt ? 1 : 0))[0] ??
-    null
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null
   );
 };
 
