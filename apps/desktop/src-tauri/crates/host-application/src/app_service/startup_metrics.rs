@@ -163,7 +163,7 @@ impl<'a> StartupEventPayload<'a> {
         }
     }
 
-    fn event_name(self) -> &'static str {
+    fn event_name(&self) -> &'static str {
         match self.kind {
             StartupEventKind::WaitBegin => "startup_wait_begin",
             StartupEventKind::Ready(_) => "startup_ready",
@@ -171,7 +171,7 @@ impl<'a> StartupEventPayload<'a> {
         }
     }
 
-    fn report(self) -> Option<OpencodeStartupWaitReport> {
+    fn report(&self) -> Option<OpencodeStartupWaitReport> {
         match self.kind {
             StartupEventKind::WaitBegin => None,
             StartupEventKind::Ready(report) => Some(report),
@@ -179,14 +179,14 @@ impl<'a> StartupEventPayload<'a> {
         }
     }
 
-    fn failure_reason(self) -> Option<&'static str> {
+    fn failure_reason(&self) -> Option<&'static str> {
         match self.kind {
             StartupEventKind::WaitBegin | StartupEventKind::Ready(_) => None,
             StartupEventKind::Failed { failure_reason, .. } => Some(failure_reason),
         }
     }
 
-    fn correlation_parts(self) -> (Option<&'a str>, Option<&'a str>) {
+    fn correlation_parts(&self) -> (Option<&'a str>, Option<&'a str>) {
         self.correlation.map_or((None, None), |correlation| {
             (
                 Some(correlation.correlation_type),
