@@ -85,19 +85,32 @@ pub fn run_command_allow_failure_with_env(
     ))
 }
 
+/// Resolves a command name using the active shell's PATH lookup.
+///
+/// The lookup script is static and `program` is passed as a positional shell
+/// argument (`$1`) to avoid shell interpolation of untrusted input.
 pub fn command_path(program: &str) -> Option<String> {
-    let lookup = format!("command -v {} 2>/dev/null", shell_escape(program));
-    run_command("sh", &["-lc", &lookup], None)
-        .ok()
-        .and_then(|output| {
-            output
-                .lines()
-                .find(|line| !line.trim().is_empty())
-                .map(|line| line.trim().to_string())
-        })
-        .filter(|path| !path.is_empty())
+    run_command(
+        "sh",
+        &[
+            "-lc",
+            "command -v \"$1\" 2>/dev/null",
+            "odt-command-path",
+            program,
+        ],
+        None,
+    )
+    .ok()
+    .and_then(|output| {
+        output
+            .lines()
+            .find(|line| !line.trim().is_empty())
+            .map(|line| line.trim().to_string())
+    })
+    .filter(|path| !path.is_empty())
 }
 
+/// Returns whether `program` can be resolved on PATH by [`command_path`].
 pub fn command_exists(program: &str) -> bool {
     command_path(program).is_some()
 }
@@ -112,16 +125,13 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
     })
 }
 
-fn shell_escape(value: &str) -> String {
-    value.replace('"', "\\\"")
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         command_exists, command_path, run_command, run_command_allow_failure,
         run_command_allow_failure_with_env, run_command_with_env, version_command,
     };
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn run_command_returns_stdout() {
@@ -182,5 +192,27 @@ mod tests {
         assert_eq!(version.as_deref(), Some("v-test"));
         assert!(!command_exists("definitely_not_a_real_binary_name"));
         assert!(command_path("definitely_not_a_real_binary_name").is_none());
+    }
+
+    #[test]
+    fn command_path_treats_metacharacters_as_literal_program_name() {
+        let payload = "definitely_not_real_$(echo injected)`uname`;touch /tmp/odt";
+        assert!(command_path(payload).is_none());
+    }
+
+    #[test]
+    fn command_path_does_not_execute_shell_substitution_payloads() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let marker = std::env::temp_dir().join(format!("odt-command-path-marker-{nonce}"));
+        let payload = format!("definitely_not_real_$(touch {})", marker.display());
+
+        assert!(command_path(payload.as_str()).is_none());
+        assert!(
+            !marker.exists(),
+            "payload should not be able to execute touch via shell expansion"
+        );
     }
 }
