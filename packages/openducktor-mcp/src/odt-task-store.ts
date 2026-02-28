@@ -225,6 +225,56 @@ export class OdtTaskStore {
     );
   }
 
+  private async applyEpicSubtaskReplacement(
+    task: TaskCard,
+    normalizedSubtasks: PlanSubtaskInput[],
+    persistPlanDocument: () => Promise<{ updatedAt: string; revision: number }>,
+  ): Promise<{ createdSubtaskIds: string[]; document: { updatedAt: string; revision: number } }> {
+    const latestTasks = await this.listTasks();
+    const latestTask = latestTasks.find((entry) => entry.id === task.id);
+    if (!latestTask) {
+      throw new Error(`Task not found: ${task.id}`);
+    }
+
+    assertNoValidationError(getSetPlanError(latestTask));
+    validatePlanSubtaskRules(latestTask, latestTasks, normalizedSubtasks);
+
+    const existingDirectSubtasks = latestTasks.filter((entry) => entry.parentId === task.id);
+    const blockedSubtasks = existingDirectSubtasks.filter(
+      (entry) => !canReplaceEpicSubtaskStatus(entry.status),
+    );
+    if (blockedSubtasks.length > 0) {
+      const blockedSummary = blockedSubtasks
+        .map((entry) => `${entry.id} (${entry.status})`)
+        .join(", ");
+      throw new Error(
+        "Cannot replace epic subtasks while active work exists. " +
+          `Move subtasks to open/spec_ready/ready_for_dev first: ${blockedSummary}`,
+      );
+    }
+
+    const document = await persistPlanDocument();
+
+    for (const existingSubtask of existingDirectSubtasks) {
+      await this.deleteTask(existingSubtask.id);
+    }
+
+    const createdSubtaskIds: string[] = [];
+    const createdTitleKeys = new Set<string>();
+    for (const subtask of normalizedSubtasks) {
+      const key = normalizeTitleKey(subtask.title);
+      if (createdTitleKeys.has(key)) {
+        continue;
+      }
+
+      const createdId = await this.createSubtask(task.id, subtask);
+      createdSubtaskIds.push(createdId);
+      createdTitleKeys.add(key);
+    }
+
+    return { createdSubtaskIds, document };
+  }
+
   async readTask(rawInput: unknown): Promise<unknown> {
     await this.ensureInitialized();
     const input = ReadTaskInputSchema.parse(rawInput);
@@ -315,77 +365,51 @@ export class OdtTaskStore {
     assertNoValidationError(getSetPlanError(task));
 
     const normalizedSubtasks = normalizePlanSubtasks(input.subtasks ?? []);
-    validatePlanSubtaskRules(task, tasks, normalizedSubtasks);
+    const persistPlanDocument = async (): Promise<{ updatedAt: string; revision: number }> => {
+      const issue = await this.showRawIssue(task.id);
+      const { root, namespace, documents } = this.getNamespaceData(issue);
+      const nextRevision =
+        (parseMarkdownEntries(documents.implementationPlan).at(-1)?.revision ?? 0) + 1;
 
-    let existingDirectSubtasks: TaskCard[] = [];
+      const updatedAt = this.now();
+      const entry: MarkdownEntry = {
+        markdown,
+        updatedAt,
+        updatedBy: "planner-agent",
+        sourceTool: "odt_set_plan",
+        revision: nextRevision,
+      };
+
+      const nextDocuments = {
+        ...documents,
+        implementationPlan: [entry],
+      };
+
+      const nextNamespace = {
+        ...namespace,
+        documents: nextDocuments,
+      };
+
+      await this.writeNamespace(task.id, root, nextNamespace);
+      return {
+        updatedAt,
+        revision: nextRevision,
+      };
+    };
+
+    let persistedDocument: { updatedAt: string; revision: number };
+    let createdSubtaskIds: string[] = [];
     if (task.issueType === "epic") {
-      const latestTasks = await this.listTasks();
-      const latestTask = latestTasks.find((entry) => entry.id === task.id);
-      if (!latestTask) {
-        throw new Error(`Task not found: ${task.id}`);
-      }
-
-      assertNoValidationError(getSetPlanError(latestTask));
-      validatePlanSubtaskRules(latestTask, latestTasks, normalizedSubtasks);
-
-      existingDirectSubtasks = latestTasks.filter((entry) => entry.parentId === task.id);
-      const blockedSubtasks = existingDirectSubtasks.filter(
-        (entry) => !canReplaceEpicSubtaskStatus(entry.status),
+      const epicReplacement = await this.applyEpicSubtaskReplacement(
+        task,
+        normalizedSubtasks,
+        persistPlanDocument,
       );
-      if (blockedSubtasks.length > 0) {
-        const blockedSummary = blockedSubtasks
-          .map((entry) => `${entry.id} (${entry.status})`)
-          .join(", ");
-        throw new Error(
-          "Cannot replace epic subtasks while active work exists. " +
-            `Move subtasks to open/spec_ready/ready_for_dev first: ${blockedSummary}`,
-        );
-      }
-    }
-
-    const issue = await this.showRawIssue(task.id);
-    const { root, namespace, documents } = this.getNamespaceData(issue);
-    const nextRevision =
-      (parseMarkdownEntries(documents.implementationPlan).at(-1)?.revision ?? 0) + 1;
-
-    const updatedAt = this.now();
-    const entry: MarkdownEntry = {
-      markdown,
-      updatedAt,
-      updatedBy: "planner-agent",
-      sourceTool: "odt_set_plan",
-      revision: nextRevision,
-    };
-
-    const nextDocuments = {
-      ...documents,
-      implementationPlan: [entry],
-    };
-
-    const nextNamespace = {
-      ...namespace,
-      documents: nextDocuments,
-    };
-
-    await this.writeNamespace(task.id, root, nextNamespace);
-
-    const createdSubtaskIds: string[] = [];
-    if (task.issueType === "epic") {
-      for (const existingSubtask of existingDirectSubtasks) {
-        await this.deleteTask(existingSubtask.id);
-      }
-
-      const createdTitleKeys = new Set<string>();
-      for (const subtask of normalizedSubtasks) {
-        const key = normalizeTitleKey(subtask.title);
-        if (createdTitleKeys.has(key)) {
-          continue;
-        }
-
-        const createdId = await this.createSubtask(task.id, subtask);
-        createdSubtaskIds.push(createdId);
-        createdTitleKeys.add(key);
-      }
+      createdSubtaskIds = epicReplacement.createdSubtaskIds;
+      persistedDocument = epicReplacement.document;
+    } else {
+      validatePlanSubtaskRules(task, tasks, normalizedSubtasks);
+      persistedDocument = await persistPlanDocument();
     }
 
     const refreshedTransitionContext = await this.refreshTaskContext(task.id, context);
@@ -399,8 +423,8 @@ export class OdtTaskStore {
       task: nextTask,
       document: {
         markdown,
-        updatedAt,
-        revision: nextRevision,
+        updatedAt: persistedDocument.updatedAt,
+        revision: persistedDocument.revision,
       },
       createdSubtaskIds,
     };
