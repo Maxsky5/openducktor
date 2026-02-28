@@ -57,7 +57,11 @@ impl BeadsTaskStore {
         Ok(())
     }
 
-    pub(super) fn get_task_metadata_impl(&self, repo_path: &Path, task_id: &str) -> Result<TaskMetadata> {
+    pub(super) fn get_task_metadata_impl(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+    ) -> Result<TaskMetadata> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();

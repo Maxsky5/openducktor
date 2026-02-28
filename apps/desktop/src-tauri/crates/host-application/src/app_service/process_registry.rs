@@ -69,7 +69,9 @@ struct OpencodeProcessRegistryFile {
     instances: Vec<OpencodeProcessRegistryInstance>,
 }
 
-fn normalize_opencode_process_registry_instances(instances: &mut Vec<OpencodeProcessRegistryInstance>) {
+fn normalize_opencode_process_registry_instances(
+    instances: &mut Vec<OpencodeProcessRegistryInstance>,
+) {
     for instance in instances.iter_mut() {
         instance.child_pids.sort_unstable();
         instance.child_pids.dedup();
@@ -114,7 +116,12 @@ pub(crate) fn with_locked_opencode_process_registry<T>(
         .read(true)
         .write(true)
         .open(path)
-        .with_context(|| format!("Failed opening OpenCode process registry {}", path.display()))?;
+        .with_context(|| {
+            format!(
+                "Failed opening OpenCode process registry {}",
+                path.display()
+            )
+        })?;
     file.lock_exclusive().with_context(|| {
         format!(
             "Failed acquiring lock for OpenCode process registry {}",
@@ -123,8 +130,12 @@ pub(crate) fn with_locked_opencode_process_registry<T>(
     })?;
 
     let mut data = String::new();
-    file.read_to_string(&mut data)
-        .with_context(|| format!("Failed reading OpenCode process registry {}", path.display()))?;
+    file.read_to_string(&mut data).with_context(|| {
+        format!(
+            "Failed reading OpenCode process registry {}",
+            path.display()
+        )
+    })?;
 
     let mut parsed = if data.trim().is_empty() {
         OpencodeProcessRegistryFile::default()
@@ -143,14 +154,30 @@ pub(crate) fn with_locked_opencode_process_registry<T>(
 
     let payload = serde_json::to_string_pretty(&parsed)
         .context("Failed serializing OpenCode process registry payload")?;
-    file.set_len(0)
-        .with_context(|| format!("Failed truncating OpenCode process registry {}", path.display()))?;
-    file.seek(SeekFrom::Start(0))
-        .with_context(|| format!("Failed seeking OpenCode process registry {}", path.display()))?;
-    file.write_all(payload.as_bytes())
-        .with_context(|| format!("Failed writing OpenCode process registry {}", path.display()))?;
-    file.flush()
-        .with_context(|| format!("Failed flushing OpenCode process registry {}", path.display()))?;
+    file.set_len(0).with_context(|| {
+        format!(
+            "Failed truncating OpenCode process registry {}",
+            path.display()
+        )
+    })?;
+    file.seek(SeekFrom::Start(0)).with_context(|| {
+        format!(
+            "Failed seeking OpenCode process registry {}",
+            path.display()
+        )
+    })?;
+    file.write_all(payload.as_bytes()).with_context(|| {
+        format!(
+            "Failed writing OpenCode process registry {}",
+            path.display()
+        )
+    })?;
+    file.flush().with_context(|| {
+        format!(
+            "Failed flushing OpenCode process registry {}",
+            path.display()
+        )
+    })?;
 
     Ok(output)
 }

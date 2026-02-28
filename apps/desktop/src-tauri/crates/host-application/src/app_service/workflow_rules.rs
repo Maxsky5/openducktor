@@ -32,7 +32,8 @@ pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
             | TaskStatus::AiReview
             | TaskStatus::HumanReview
     );
-    let is_planner_feature_epic_status = task.status == TaskStatus::SpecReady || is_ready_for_dev_or_later;
+    let is_planner_feature_epic_status =
+        task.status == TaskStatus::SpecReady || is_ready_for_dev_or_later;
 
     let spec_required = is_feature_epic;
     let spec_can_skip = !spec_required;
@@ -437,12 +438,14 @@ mod tests {
     }
 
     fn load_workflow_contract_fixture() -> WorkflowContractFixture {
-        let raw = include_str!("../../../../../../../docs/contracts/workflow-contract-fixture.json");
+        let raw =
+            include_str!("../../../../../../../docs/contracts/workflow-contract-fixture.json");
         serde_json::from_str(raw).expect("workflow contract fixture must parse")
     }
 
     fn parse_status(value: &str) -> TaskStatus {
-        TaskStatus::from_cli_value(value).unwrap_or_else(|| panic!("unknown fixture status: {value}"))
+        TaskStatus::from_cli_value(value)
+            .unwrap_or_else(|| panic!("unknown fixture status: {value}"))
     }
 
     #[test]

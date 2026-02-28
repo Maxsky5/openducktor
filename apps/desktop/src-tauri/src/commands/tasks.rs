@@ -1,12 +1,7 @@
+use super::issue_type::parse_issue_type;
 use crate::{as_error, AppState, TaskCreatePayload, TaskUpdatePayload};
-use host_domain::{CreateTaskInput, IssueType, TaskCard, TaskStatus, UpdateTaskPatch};
+use host_domain::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
 use tauri::State;
-
-fn parse_issue_type(value: &str, field_name: &str) -> Result<IssueType, String> {
-    IssueType::from_cli_value(value).ok_or_else(|| {
-        format!("Invalid {field_name}: '{value}'. Allowed values: task, feature, bug, epic.")
-    })
-}
 
 fn map_task_create_payload(input: TaskCreatePayload) -> Result<CreateTaskInput, String> {
     Ok(CreateTaskInput {

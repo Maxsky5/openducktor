@@ -105,8 +105,9 @@ impl AppConfigStore {
 
     pub fn save(&self, config: &GlobalConfig) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed creating config directory {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed creating config directory {}", parent.display())
+            })?;
         }
         let mut normalized = config.clone();
         normalize_global_config(&mut normalized);

@@ -5,13 +5,7 @@ const STARTUP_ATTEMPTS_WARN: u32 = 20;
 const STARTUP_FAILURE_RATE_WARN_MIN_SAMPLES: u64 = 10;
 const STARTUP_FAILURE_RATE_WARN_PCT: u64 = 30;
 const STARTUP_MS_BUCKETS: [&str; 7] = [
-    "<=100",
-    "<=250",
-    "<=500",
-    "<=1000",
-    "<=2000",
-    "<=5000",
-    ">5000",
+    "<=100", "<=250", "<=500", "<=1000", "<=2000", "<=5000", ">5000",
 ];
 const STARTUP_ATTEMPTS_BUCKETS: [&str; 6] = ["<=1", "<=3", "<=5", "<=10", "<=20", ">20"];
 

@@ -73,12 +73,9 @@ impl AppService {
     }
 
     fn update_runtime_check_cache(&self, check: RuntimeCheck) -> Result<()> {
-        let mut cache = self
-            .runtime_check_cache
-            .lock()
-            .map_err(|_| {
-                anyhow!("Runtime check cache lock poisoned in `update_runtime_check_cache`")
-            })?;
+        let mut cache = self.runtime_check_cache.lock().map_err(|_| {
+            anyhow!("Runtime check cache lock poisoned in `update_runtime_check_cache`")
+        })?;
         *cache = Some(CachedRuntimeCheck {
             checked_at: Instant::now(),
             value: check,

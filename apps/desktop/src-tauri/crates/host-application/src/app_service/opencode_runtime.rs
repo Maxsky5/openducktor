@@ -595,14 +595,12 @@ async fn probe_local_server_async(
         }
 
         attempts.fetch_add(1, Ordering::Relaxed);
-        let connected = tokio::time::timeout(
-            connect_timeout,
-            tokio::net::TcpStream::connect(address),
-        )
-        .await
-        .ok()
-        .and_then(|result| result.ok())
-        .is_some();
+        let connected =
+            tokio::time::timeout(connect_timeout, tokio::net::TcpStream::connect(address))
+                .await
+                .ok()
+                .and_then(|result| result.ok())
+                .is_some();
         if connected {
             return LocalServerProbeEvent {
                 state: LocalServerProbeState::Ready,

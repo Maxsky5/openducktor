@@ -889,7 +889,9 @@ pub(crate) fn build_service_with_store(
     (service, task_state, git_state)
 }
 
-pub(crate) fn make_emitter(events: Arc<Mutex<Vec<RunEvent>>>) -> Arc<dyn Fn(RunEvent) + Send + Sync> {
+pub(crate) fn make_emitter(
+    events: Arc<Mutex<Vec<RunEvent>>>,
+) -> Arc<dyn Fn(RunEvent) + Send + Sync> {
     Arc::new(move |event| {
         events.lock().expect("events lock poisoned").push(event);
     })

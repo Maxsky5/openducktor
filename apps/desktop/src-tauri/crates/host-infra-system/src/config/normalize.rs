@@ -71,7 +71,9 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     normalize_agent_model_default(&mut repo.agent_defaults.qa);
 }
 
-pub(super) fn normalize_opencode_startup_readiness_config(config: &mut OpencodeStartupReadinessConfig) {
+pub(super) fn normalize_opencode_startup_readiness_config(
+    config: &mut OpencodeStartupReadinessConfig,
+) {
     config.timeout_ms = config.timeout_ms.clamp(250, 120_000);
     config.connect_timeout_ms = config.connect_timeout_ms.clamp(25, 10_000);
     config.initial_retry_delay_ms = config.initial_retry_delay_ms.clamp(5, 5_000);

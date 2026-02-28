@@ -336,8 +336,11 @@ pub trait TaskStore: Send + Sync {
         markdown: &str,
         verdict: QaVerdict,
     ) -> Result<QaReportDocument>;
-    fn list_agent_sessions(&self, repo_path: &Path, task_id: &str)
-        -> Result<Vec<AgentSessionDocument>>;
+    fn list_agent_sessions(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+    ) -> Result<Vec<AgentSessionDocument>>;
     fn upsert_agent_session(
         &self,
         repo_path: &Path,
@@ -423,8 +426,12 @@ pub struct GitPushSummary {
 pub trait GitPort: Send + Sync {
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>>;
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch>;
-    fn switch_branch(&self, repo_path: &Path, branch: &str, create: bool)
-    -> Result<GitCurrentBranch>;
+    fn switch_branch(
+        &self,
+        repo_path: &Path,
+        branch: &str,
+        create: bool,
+    ) -> Result<GitCurrentBranch>;
     fn create_worktree(
         &self,
         repo_path: &Path,

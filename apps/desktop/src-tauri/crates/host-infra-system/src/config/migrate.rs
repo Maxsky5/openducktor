@@ -16,8 +16,8 @@ pub(super) fn canonicalize_workspace_key(repo_path: &str) -> Result<String> {
         return Ok(repo_path.to_string());
     }
     // Canonicalize resolves symlinks and normalizes the path.
-    let canonical =
-        fs::canonicalize(path).with_context(|| format!("Failed to canonicalize path: {}", repo_path))?;
+    let canonical = fs::canonicalize(path)
+        .with_context(|| format!("Failed to canonicalize path: {}", repo_path))?;
     Ok(canonical.to_string_lossy().to_string())
 }
 

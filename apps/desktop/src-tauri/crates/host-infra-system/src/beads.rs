@@ -116,8 +116,8 @@ mod tests {
 
     #[test]
     fn central_beads_dir_uses_expected_layout_suffix() {
-        let resolved = resolve_central_beads_dir(Path::new("/tmp/openducktor-test/repo"))
-            .expect("beads dir");
+        let resolved =
+            resolve_central_beads_dir(Path::new("/tmp/openducktor-test/repo")).expect("beads dir");
         let as_string = resolved.to_string_lossy();
         assert!(as_string.contains(".openducktor/beads/"));
         assert!(as_string.ends_with("/.beads"));

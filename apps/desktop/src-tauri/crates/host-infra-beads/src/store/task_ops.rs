@@ -46,7 +46,8 @@ impl BeadsTaskStore {
                 ));
             }
 
-            let (is_ready_after, reason_after) = self.verify_repo_initialized(repo_path, &beads_dir)?;
+            let (is_ready_after, reason_after) =
+                self.verify_repo_initialized(repo_path, &beads_dir)?;
             if !is_ready_after {
                 return Err(anyhow!(
                     "Beads init completed but store is not ready at {}: {}",
@@ -77,8 +78,8 @@ impl BeadsTaskStore {
             .as_array()
             .ok_or_else(|| anyhow!("bd list did not return an array"))?
         {
-            let issue: RawIssue =
-                serde_json::from_value(entry.clone()).context("Failed to decode task from bd list")?;
+            let issue: RawIssue = serde_json::from_value(entry.clone())
+                .context("Failed to decode task from bd list")?;
             if issue.issue_type == "event" || issue.issue_type == "gate" {
                 continue;
             }
@@ -101,11 +102,20 @@ impl BeadsTaskStore {
             task.subtask_ids = subtasks;
         }
 
-        self.cache_task_list_if_generation(&repo_key, &metadata_namespace, cache_generation, &tasks)?;
+        self.cache_task_list_if_generation(
+            &repo_key,
+            &metadata_namespace,
+            cache_generation,
+            &tasks,
+        )?;
         Ok(tasks)
     }
 
-    pub(super) fn create_task_impl(&self, repo_path: &Path, input: CreateTaskInput) -> Result<TaskCard> {
+    pub(super) fn create_task_impl(
+        &self,
+        repo_path: &Path,
+        input: CreateTaskInput,
+    ) -> Result<TaskCard> {
         let mut args = vec![
             "create".to_string(),
             input.title,
@@ -139,7 +149,8 @@ impl BeadsTaskStore {
         let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         let value = self.run_bd_json(repo_path, &arg_refs)?;
         self.invalidate_task_list_cache(repo_path)?;
-        let raw: RawIssue = serde_json::from_value(value).context("Failed to decode created issue")?;
+        let raw: RawIssue =
+            serde_json::from_value(value).context("Failed to decode created issue")?;
         let created_id = raw.id.clone();
 
         let mut metadata_root = parse_metadata_root(raw.metadata);
