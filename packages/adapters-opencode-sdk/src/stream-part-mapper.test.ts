@@ -67,6 +67,83 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps started tool without end timing as running and keeps title", () => {
+    const part = {
+      id: "tool-3",
+      sessionID: "session-1",
+      messageID: "assistant-3",
+      callID: "call-3",
+      type: "tool",
+      tool: "todowrite",
+      state: {
+        status: "started",
+        input: {},
+        title: "Working",
+        time: {
+          start: 25,
+        },
+      },
+    } as unknown as Part;
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      status: "running",
+      title: "Working",
+      startedAtMs: 25,
+    });
+  });
+
+  test("maps failed tool status as error", () => {
+    const part = {
+      id: "tool-4",
+      sessionID: "session-1",
+      messageID: "assistant-4",
+      callID: "call-4",
+      type: "tool",
+      tool: "todowrite",
+      state: {
+        status: "failed",
+        input: {},
+        error: "Execution failed",
+      },
+    } as unknown as Part;
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      status: "error",
+      error: "Execution failed",
+    });
+  });
+
+  test("maps unknown tool status with end timing as completed", () => {
+    const part = {
+      id: "tool-5",
+      sessionID: "session-1",
+      messageID: "assistant-5",
+      callID: "call-5",
+      type: "tool",
+      tool: "todowrite",
+      state: {
+        status: "unknown",
+        input: {},
+        time: {
+          start: 10,
+          end: 12,
+        },
+      },
+    } as unknown as Part;
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      status: "completed",
+      startedAtMs: 10,
+      endedAtMs: 12,
+    });
+  });
+
   test("returns null for unsupported part type", () => {
     const part = {
       id: "unknown-1",
