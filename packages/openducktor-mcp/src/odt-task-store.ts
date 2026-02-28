@@ -225,11 +225,10 @@ export class OdtTaskStore {
     );
   }
 
-  private async applyEpicSubtaskReplacement(
+  private async prepareEpicSubtaskReplacement(
     task: TaskCard,
     normalizedSubtasks: PlanSubtaskInput[],
-    persistPlanDocument: () => Promise<{ updatedAt: string; revision: number }>,
-  ): Promise<{ createdSubtaskIds: string[]; document: { updatedAt: string; revision: number } }> {
+  ): Promise<{ latestTask: TaskCard; existingDirectSubtasks: TaskCard[] }> {
     const latestTasks = await this.listTasks();
     const latestTask = latestTasks.find((entry) => entry.id === task.id);
     if (!latestTask) {
@@ -253,8 +252,14 @@ export class OdtTaskStore {
       );
     }
 
-    const document = await persistPlanDocument();
+    return { latestTask, existingDirectSubtasks };
+  }
 
+  private async applyEpicSubtaskReplacement(
+    task: TaskCard,
+    existingDirectSubtasks: TaskCard[],
+    normalizedSubtasks: PlanSubtaskInput[],
+  ): Promise<string[]> {
     for (const existingSubtask of existingDirectSubtasks) {
       await this.deleteTask(existingSubtask.id);
     }
@@ -272,7 +277,42 @@ export class OdtTaskStore {
       createdTitleKeys.add(key);
     }
 
-    return { createdSubtaskIds, document };
+    return createdSubtaskIds;
+  }
+
+  private async persistImplementationPlan(
+    taskId: string,
+    markdown: string,
+  ): Promise<{ updatedAt: string; revision: number }> {
+    const issue = await this.showRawIssue(taskId);
+    const { root, namespace, documents } = this.getNamespaceData(issue);
+    const nextRevision =
+      (parseMarkdownEntries(documents.implementationPlan).at(-1)?.revision ?? 0) + 1;
+
+    const updatedAt = this.now();
+    const entry: MarkdownEntry = {
+      markdown,
+      updatedAt,
+      updatedBy: "planner-agent",
+      sourceTool: "odt_set_plan",
+      revision: nextRevision,
+    };
+
+    const nextDocuments = {
+      ...documents,
+      implementationPlan: [entry],
+    };
+
+    const nextNamespace = {
+      ...namespace,
+      documents: nextDocuments,
+    };
+
+    await this.writeNamespace(taskId, root, nextNamespace);
+    return {
+      updatedAt,
+      revision: nextRevision,
+    };
   }
 
   async readTask(rawInput: unknown): Promise<unknown> {
@@ -365,51 +405,20 @@ export class OdtTaskStore {
     assertNoValidationError(getSetPlanError(task));
 
     const normalizedSubtasks = normalizePlanSubtasks(input.subtasks ?? []);
-    const persistPlanDocument = async (): Promise<{ updatedAt: string; revision: number }> => {
-      const issue = await this.showRawIssue(task.id);
-      const { root, namespace, documents } = this.getNamespaceData(issue);
-      const nextRevision =
-        (parseMarkdownEntries(documents.implementationPlan).at(-1)?.revision ?? 0) + 1;
-
-      const updatedAt = this.now();
-      const entry: MarkdownEntry = {
-        markdown,
-        updatedAt,
-        updatedBy: "planner-agent",
-        sourceTool: "odt_set_plan",
-        revision: nextRevision,
-      };
-
-      const nextDocuments = {
-        ...documents,
-        implementationPlan: [entry],
-      };
-
-      const nextNamespace = {
-        ...namespace,
-        documents: nextDocuments,
-      };
-
-      await this.writeNamespace(task.id, root, nextNamespace);
-      return {
-        updatedAt,
-        revision: nextRevision,
-      };
-    };
-
     let persistedDocument: { updatedAt: string; revision: number };
     let createdSubtaskIds: string[] = [];
     if (task.issueType === "epic") {
-      const epicReplacement = await this.applyEpicSubtaskReplacement(
-        task,
+      // Epic subtask replacement must validate against a fresh snapshot, not the initial context.
+      const epicReplacement = await this.prepareEpicSubtaskReplacement(task, normalizedSubtasks);
+      persistedDocument = await this.persistImplementationPlan(task.id, markdown);
+      createdSubtaskIds = await this.applyEpicSubtaskReplacement(
+        epicReplacement.latestTask,
+        epicReplacement.existingDirectSubtasks,
         normalizedSubtasks,
-        persistPlanDocument,
       );
-      createdSubtaskIds = epicReplacement.createdSubtaskIds;
-      persistedDocument = epicReplacement.document;
     } else {
       validatePlanSubtaskRules(task, tasks, normalizedSubtasks);
-      persistedDocument = await persistPlanDocument();
+      persistedDocument = await this.persistImplementationPlan(task.id, markdown);
     }
 
     const refreshedTransitionContext = await this.refreshTaskContext(task.id, context);

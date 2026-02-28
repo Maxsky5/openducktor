@@ -467,6 +467,64 @@ describe("OdtTaskStore workflow mutation paths", () => {
     expect(harness.getMetadataUpdateCalls()).toHaveLength(0);
   });
 
+  test("setPlan epic rules use fresh snapshot when context is stale", async () => {
+    const harness = new OdtStoreHarness({
+      issues: [
+        makeIssue({
+          id: "epic-1",
+          title: "Epic task",
+          status: "spec_ready",
+          issueType: "epic",
+          metadata: {},
+        }),
+      ],
+      listSnapshots: [
+        [
+          makeIssue({
+            id: "epic-1",
+            title: "Epic task",
+            status: "spec_ready",
+            issueType: "epic",
+            metadata: {},
+          }),
+        ],
+        [
+          makeIssue({
+            id: "epic-1",
+            title: "Epic task",
+            status: "spec_ready",
+            issueType: "epic",
+            metadata: {},
+          }),
+          makeIssue({
+            id: "legacy-subtask",
+            title: "Legacy subtask",
+            status: "open",
+            issueType: "task",
+            parentId: "epic-1",
+            metadata: {},
+          }),
+        ],
+      ],
+    });
+    const store = harness.createStore();
+
+    const result = (await store.setPlan({
+      taskId: "epic-1",
+      markdown: "# Plan without proposed subtasks",
+    })) as {
+      task: { status: string };
+      createdSubtaskIds: string[];
+    };
+
+    expect(result.task.status).toBe("ready_for_dev");
+    expect(result.createdSubtaskIds).toEqual([]);
+    expect(harness.getCommandCalls("list")).toHaveLength(2);
+    expect(harness.getCommandCalls("delete")).toHaveLength(1);
+    expect(harness.getCommandCalls("create")).toHaveLength(0);
+    expect(harness.getMetadataUpdateCalls()).toHaveLength(1);
+  });
+
   test("setPlan replaces epic subtasks, deduplicates by title key, and stores latest-only plan", async () => {
     const harness = new OdtStoreHarness({
       issues: [
@@ -532,6 +590,14 @@ describe("OdtTaskStore workflow mutation paths", () => {
     expect(harness.getCommandCalls("create")).toHaveLength(2);
     expect(harness.getStatusUpdateCalls()).toHaveLength(1);
     expect(harness.getStatusUpdateCalls()[0]?.args).toContain("ready_for_dev");
+    const metadataUpdateIndex = harness.calls.findIndex(
+      (call) => call.args[1] === "update" && call.args.includes("--metadata"),
+    );
+    const firstDeleteIndex = harness.calls.findIndex((call) => call.args[1] === "delete");
+    const firstCreateIndex = harness.calls.findIndex((call) => call.args[1] === "create");
+    expect(metadataUpdateIndex).toBeGreaterThanOrEqual(0);
+    expect(firstDeleteIndex).toBeGreaterThan(metadataUpdateIndex);
+    expect(firstCreateIndex).toBeGreaterThan(metadataUpdateIndex);
 
     const documents = getNamespaceDocuments(harness.getIssue("epic-1"));
     const implementationPlan = Array.isArray(documents.implementationPlan)
