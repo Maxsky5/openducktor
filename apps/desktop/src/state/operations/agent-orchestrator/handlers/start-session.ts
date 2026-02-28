@@ -399,18 +399,22 @@ const createOrReuseSession = async ({
     systemPrompt: resolved.systemPrompt,
   });
 
-  deps.session.sessionsRef.current = {
+  const optimisticSessions = {
     ...deps.session.sessionsRef.current,
     [summary.sessionId]: initialSession,
   };
+  deps.session.sessionsRef.current = optimisticSessions;
   deps.session.setSessionsById((current) => {
     if (ctx.isStaleRepoOperation()) {
+      deps.session.sessionsRef.current = current;
       return current;
     }
-    return {
+    const nextSessions = {
       ...current,
       [summary.sessionId]: initialSession,
     };
+    deps.session.sessionsRef.current = nextSessions;
+    return nextSessions;
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 

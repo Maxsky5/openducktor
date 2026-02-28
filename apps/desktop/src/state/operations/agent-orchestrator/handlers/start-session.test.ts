@@ -648,6 +648,71 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("does not diverge ref/state when workspace becomes stale during initial session commit", async () => {
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    let sessionsState: Record<string, AgentSessionState> = {};
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      previousRepoRef.current = "/tmp/other";
+      sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
+    };
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => ({
+      sessionId: "session-created",
+      externalSessionId: "external-created",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+    });
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById,
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef,
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
+        "Workspace changed while starting session.",
+      );
+      expect(sessionsRef.current).toEqual({});
+      expect(sessionsState).toEqual({});
+    } finally {
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("rolls back started remote session when workspace becomes stale after start", async () => {
     const previousRepoRef = { current: "/tmp/repo" as string | null };
     let stopCalls = 0;
