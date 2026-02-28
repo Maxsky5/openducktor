@@ -56,6 +56,20 @@ pub(crate) struct OpencodeStartupEventPayload {
     alerts: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StartupEventPayload<'a> {
+    pub(crate) event_name: &'a str,
+    pub(crate) runtime_type: &'a str,
+    pub(crate) repo_path: &'a str,
+    pub(crate) task_id: Option<&'a str>,
+    pub(crate) role: &'a str,
+    pub(crate) port: u16,
+    pub(crate) extra: Option<(&'a str, &'a str)>,
+    pub(crate) policy: Option<OpencodeStartupReadinessPolicy>,
+    pub(crate) report: Option<OpencodeStartupWaitReport>,
+    pub(crate) failure_reason: Option<&'a str>,
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct OpencodeStartupMetrics {
     total: u64,
@@ -275,29 +289,31 @@ impl AppService {
         self.startup_cancel_epoch.load(Ordering::SeqCst)
     }
 
-    pub(crate) fn emit_opencode_startup_event(
-        &self,
-        event: &str,
-        scope: &str,
-        repo_path: &str,
-        task_id: Option<&str>,
-        role: &str,
-        port: u16,
-        correlation_type: Option<&str>,
-        correlation_id: Option<&str>,
-        policy: Option<OpencodeStartupReadinessPolicy>,
-        report: Option<OpencodeStartupWaitReport>,
-        reason: Option<&str>,
-    ) {
+    pub(crate) fn emit_opencode_startup_event(&self, event: StartupEventPayload<'_>) {
+        let StartupEventPayload {
+            event_name,
+            runtime_type,
+            repo_path,
+            task_id,
+            role,
+            port,
+            extra,
+            policy,
+            report,
+            failure_reason,
+        } = event;
+        let (correlation_type, correlation_id) =
+            extra.map_or((None, None), |(key, value)| (Some(key), Some(value)));
+
         let (metrics, alerts) = match report {
-            Some(report) if matches!(event, "startup_ready" | "startup_failed") => {
+            Some(report) if matches!(event_name, "startup_ready" | "startup_failed") => {
                 match self.startup_metrics.lock() {
-                    Ok(mut metrics) => metrics.record_terminal(event, report, reason),
+                    Ok(mut metrics) => metrics.record_terminal(event_name, report, failure_reason),
                     Err(_) => {
                         tracing::warn!(
                             target: "openducktor.opencode.startup",
-                            event,
-                            scope,
+                            event = event_name,
+                            scope = runtime_type,
                             repo_path,
                             "OpenCode startup metrics lock poisoned; continuing without metrics"
                         );
@@ -307,10 +323,10 @@ impl AppService {
             }
             _ => (OpencodeStartupMetricsSnapshot::default(), Vec::new()),
         };
-        let include_metrics = matches!(event, "startup_ready" | "startup_failed");
+        let include_metrics = matches!(event_name, "startup_ready" | "startup_failed");
         let payload = build_opencode_startup_event_payload(
-            event,
-            scope,
+            event_name,
+            runtime_type,
             repo_path,
             task_id,
             role,
@@ -319,7 +335,7 @@ impl AppService {
             correlation_id,
             policy,
             report,
-            reason,
+            failure_reason,
             include_metrics.then_some(metrics),
             alerts.clone(),
         );
@@ -329,15 +345,15 @@ impl AppService {
         let attempts = report.map(|entry| entry.attempts()).unwrap_or_default();
         tracing::info!(
             target: "openducktor.opencode.startup",
-            event,
-            scope,
+            event = event_name,
+            scope = runtime_type,
             repo_path,
             task_id = task_id.unwrap_or(""),
             role,
             port,
             correlation_type = correlation_type.unwrap_or(""),
             correlation_id = correlation_id.unwrap_or(""),
-            reason = reason.unwrap_or(""),
+            reason = failure_reason.unwrap_or(""),
             startup_ms,
             attempts,
             payload = %payload_json,
@@ -346,15 +362,15 @@ impl AppService {
             tracing::warn!(
                 target: "openducktor.opencode.startup.alert",
                 alert = %alert,
-                event,
-                scope,
+                event = event_name,
+                scope = runtime_type,
                 repo_path,
                 task_id = task_id.unwrap_or(""),
                 role,
                 port,
                 correlation_type = correlation_type.unwrap_or(""),
                 correlation_id = correlation_id.unwrap_or(""),
-                reason = reason.unwrap_or(""),
+                reason = failure_reason.unwrap_or(""),
                 startup_ms,
                 attempts,
                 "OpenCode startup threshold exceeded"

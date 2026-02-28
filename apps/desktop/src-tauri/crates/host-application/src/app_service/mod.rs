@@ -49,6 +49,7 @@ pub(crate) use process_registry::{
 };
 pub(crate) use service_core::{AgentRuntimeProcess, CachedRuntimeCheck, RunProcess};
 pub use service_core::{AppService, RunEmitter};
+pub(crate) use startup_metrics::StartupEventPayload;
 #[cfg(test)]
 pub(crate) use startup_metrics::{
     build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,
