@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.2.10",
+    "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*"
   }
 }

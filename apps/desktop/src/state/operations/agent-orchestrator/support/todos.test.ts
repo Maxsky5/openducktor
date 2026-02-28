@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
   mergeTodoListPreservingOrder,
   parseTodosFromToolInput,
@@ -36,7 +35,7 @@ describe("agent-orchestrator/support/todos", () => {
     expect(fromOutput?.[0]?.content).toBe("third");
   });
 
-  test("matches shared core normalization behavior for object and string payload variants", () => {
+  test("normalizes object and string payload variants with explicit expected output", () => {
     const inputTodos = {
       items: [
         "first",
@@ -57,14 +56,28 @@ describe("agent-orchestrator/support/todos", () => {
       "ignored string value",
     ];
 
-    expect(parseTodosFromToolInput(inputTodos)).toEqual(
-      normalizeAgentSessionTodoList(inputTodos.items, {
-        allowStringEntries: true,
-      }),
-    );
-    expect(parseTodosFromToolOutput(JSON.stringify(outputTodos))).toEqual(
-      normalizeAgentSessionTodoList(outputTodos),
-    );
+    expect(parseTodosFromToolInput(inputTodos)).toEqual([
+      {
+        id: "todo:0",
+        content: "first",
+        status: "pending",
+        priority: "medium",
+      },
+      {
+        id: "todo-2",
+        content: "second",
+        status: "in_progress",
+        priority: "low",
+      },
+    ]);
+    expect(parseTodosFromToolOutput(JSON.stringify(outputTodos))).toEqual([
+      {
+        id: "todo-3",
+        content: "third",
+        status: "completed",
+        priority: "medium",
+      },
+    ]);
   });
 
   test("preserves existing order when merging", () => {

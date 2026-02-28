@@ -24,8 +24,8 @@ describe("agent session todo normalizers", () => {
   test("normalizes todo items and applies completed boolean precedence", () => {
     expect(
       normalizeAgentSessionTodoItem({
-        todoId: "todo-a",
-        title: "Write tests",
+        id: "todo-a",
+        content: "Write tests",
         status: "active",
         completed: true,
         priority: "invalid",
@@ -38,10 +38,10 @@ describe("agent session todo normalizers", () => {
     });
   });
 
-  test("normalizes todo list entries with optional string support", () => {
+  test("normalizes canonical todo list entries and drops invalid rows", () => {
     const payload = [
-      "first",
       {
+        id: "todo:0",
         content: "second",
         status: "done",
         priority: "high",
@@ -50,41 +50,19 @@ describe("agent session todo normalizers", () => {
         id: "   ",
         content: "missing id",
       },
+      {
+        id: "todo:2",
+        content: "   ",
+        status: "pending",
+      },
     ];
 
     expect(normalizeAgentSessionTodoList(payload)).toEqual([
       {
-        id: "todo:1",
-        content: "second",
-        status: "completed",
-        priority: "high",
-      },
-      {
-        id: "todo:2",
-        content: "missing id",
-        status: "pending",
-        priority: "medium",
-      },
-    ]);
-
-    expect(normalizeAgentSessionTodoList(payload, { allowStringEntries: true })).toEqual([
-      {
         id: "todo:0",
-        content: "first",
-        status: "pending",
-        priority: "medium",
-      },
-      {
-        id: "todo:1",
         content: "second",
         status: "completed",
         priority: "high",
-      },
-      {
-        id: "todo:2",
-        content: "missing id",
-        status: "pending",
-        priority: "medium",
       },
     ]);
   });

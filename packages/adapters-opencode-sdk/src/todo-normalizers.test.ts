@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import { normalizeTodoList } from "./todo-normalizers";
 
 describe("todo-normalizers", () => {
@@ -37,7 +36,7 @@ describe("todo-normalizers", () => {
     expect(normalizeTodoList({})).toEqual([]);
   });
 
-  test("matches shared core normalization behavior across payload variants", () => {
+  test("normalizes payload variants with explicit expected output", () => {
     const payload = [
       {
         todoId: "todo-a",
@@ -57,6 +56,25 @@ describe("todo-normalizers", () => {
       "string entries are ignored by adapter normalizer",
     ];
 
-    expect(normalizeTodoList(payload)).toEqual(normalizeAgentSessionTodoList(payload));
+    expect(normalizeTodoList(payload)).toEqual([
+      {
+        id: "todo-a",
+        content: "A",
+        status: "in_progress",
+        priority: "high",
+      },
+      {
+        id: "todo-b",
+        content: "B",
+        status: "completed",
+        priority: "medium",
+      },
+      {
+        id: "todo:2",
+        content: "C",
+        status: "pending",
+        priority: "medium",
+      },
+    ]);
   });
 });
