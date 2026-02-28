@@ -100,7 +100,7 @@
   --sidebar-ring: oklch(0.631 0.158 241.966);
 
   --studio-chrome: oklch(0.332 0.038 260.912); /* ~slate-700 */
-  --studio-chrome-foreground: oklch(0.968 0.007 247.896);
+  --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
 }
 
 /* Expose CSS variables as Tailwind v4 color utilities (bg-*, text-*, etc.) */
