@@ -107,7 +107,7 @@ fn validate_parent_relationships_for_update_enforces_hierarchy_constraints() {
         .contains("Tasks with subtasks cannot become subtasks."));
 
     let mut non_epic_patch = empty_patch();
-    non_epic_patch.issue_type = Some("feature".to_string());
+    non_epic_patch.issue_type = Some(IssueType::Feature);
     let type_error = validate_parent_relationships_for_update(&tasks, &current, &non_epic_patch)
         .expect_err("task with direct subtasks must remain epic");
     assert!(type_error

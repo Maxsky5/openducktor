@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use host_application::{AppService, RunEmitter};
+use host_domain::RunEvent;
 #[cfg(test)]
 use host_domain::TaskStatus;
-use host_domain::{PlanSubtaskInput, RunEvent};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::AppConfigStore;
 use serde::Deserialize;
@@ -95,7 +95,16 @@ struct MarkdownPayload {
 #[serde(rename_all = "camelCase")]
 struct PlanPayload {
     markdown: String,
-    subtasks: Option<Vec<PlanSubtaskInput>>,
+    subtasks: Option<Vec<PlanSubtaskPayload>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlanSubtaskPayload {
+    title: String,
+    issue_type: Option<String>,
+    priority: Option<i32>,
+    description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

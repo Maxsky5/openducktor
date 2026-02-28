@@ -4,10 +4,6 @@ use host_domain::{
     QaWorkflowVerdict, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
 };
 
-pub(crate) fn normalize_issue_type(issue_type: &str) -> IssueType {
-    IssueType::from_cli_value(issue_type).unwrap_or(IssueType::Task)
-}
-
 pub(crate) fn default_qa_required_for_issue_type(issue_type: &IssueType) -> bool {
     matches!(
         issue_type,
@@ -232,8 +228,7 @@ pub(crate) fn validate_parent_relationships_for_update(
 ) -> Result<()> {
     let next_issue_type = patch
         .issue_type
-        .as_deref()
-        .map(normalize_issue_type)
+        .clone()
         .unwrap_or_else(|| current.issue_type.clone());
 
     let next_parent_id = match patch.parent_id.as_deref() {

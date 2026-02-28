@@ -1,7 +1,6 @@
 use super::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
-    default_qa_required_for_issue_type,
-    normalize_issue_type, normalize_required_markdown, normalize_subtask_plan_inputs,
+    default_qa_required_for_issue_type, normalize_required_markdown, normalize_subtask_plan_inputs,
     normalize_title_key, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
     AppService,
@@ -39,16 +38,13 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        mut patch: UpdateTaskPatch,
+        patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
         self.ensure_repo_initialized(repo_path)?;
         if patch.status.is_some() {
             return Err(anyhow!(
                 "Status cannot be updated directly. Use workflow transitions."
             ));
-        }
-        if let Some(issue_type) = patch.issue_type.as_ref() {
-            patch.issue_type = Some(normalize_issue_type(issue_type).as_cli_value().to_string());
         }
 
         let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;

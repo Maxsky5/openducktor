@@ -240,7 +240,7 @@ pub struct UpdateTaskPatch {
     pub notes: Option<String>,
     pub status: Option<TaskStatus>,
     pub priority: Option<i32>,
-    pub issue_type: Option<String>,
+    pub issue_type: Option<IssueType>,
     pub ai_review_enabled: Option<bool>,
     pub labels: Option<Vec<String>>,
     pub assignee: Option<String>,

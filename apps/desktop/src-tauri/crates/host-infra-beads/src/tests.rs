@@ -1064,7 +1064,7 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
             notes: Some("Updated notes".to_string()),
             status: Some(TaskStatus::Blocked),
             priority: Some(1),
-            issue_type: Some("feature".to_string()),
+            issue_type: Some(IssueType::Feature),
             ai_review_enabled: Some(false),
             labels: Some(vec![
                 "backend".to_string(),

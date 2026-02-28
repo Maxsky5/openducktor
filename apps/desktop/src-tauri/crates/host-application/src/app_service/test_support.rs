@@ -155,8 +155,7 @@ impl TaskStore for FakeTaskStore {
             updated.status = status;
         }
         if let Some(issue_type) = patch.issue_type {
-            updated.issue_type =
-                IssueType::from_cli_value(&issue_type).unwrap_or(IssueType::Task);
+            updated.issue_type = issue_type;
         }
         if let Some(ai_review_enabled) = patch.ai_review_enabled {
             updated.ai_review_enabled = ai_review_enabled;

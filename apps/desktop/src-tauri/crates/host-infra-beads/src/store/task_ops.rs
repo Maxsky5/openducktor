@@ -204,7 +204,7 @@ impl BeadsTaskStore {
 
         if let Some(issue_type) = patch.issue_type {
             args.push("--type".to_string());
-            args.push(issue_type);
+            args.push(issue_type.as_cli_value().to_string());
         }
 
         if let Some(assignee) = patch.assignee {
