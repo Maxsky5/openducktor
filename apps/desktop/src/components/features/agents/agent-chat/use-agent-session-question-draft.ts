@@ -99,12 +99,16 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
     setSubmitErrorState(null);
   }, []);
 
-  const setActiveTabId = useCallback((tabId: string) => {
-    setUiState((current) => ({
-      ...current,
-      activeTabId: tabId,
-    }));
-  }, []);
+  const setActiveTabId = useCallback(
+    (tabId: string) => {
+      clearSubmitError();
+      setUiState((current) => ({
+        ...current,
+        activeTabId: tabId,
+      }));
+    },
+    [clearSubmitError],
+  );
 
   const selectOption = useCallback(
     (questionIndex: number, optionLabel: string): void => {

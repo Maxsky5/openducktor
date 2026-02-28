@@ -267,4 +267,22 @@ describe("useQuestionDraft", () => {
 
     await harness.unmount();
   });
+
+  test("clears submit error when switching tabs", async () => {
+    const request = buildRequest({
+      questions: [baseQuestion({ header: "Question 1" }), baseQuestion({ header: "Question 2" })],
+    });
+    const harness = createHookHarness(request);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.setSubmitError("Submission failed");
+      state.setActiveTabId("1");
+    });
+
+    expect(harness.getLatest().activeTabId).toBe("1");
+    expect(harness.getLatest().submitError).toBeNull();
+
+    await harness.unmount();
+  });
 });
