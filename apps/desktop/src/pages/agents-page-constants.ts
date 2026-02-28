@@ -1,15 +1,16 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 
 export const ROLE_OPTIONS: Array<{
   role: AgentRole;
   label: string;
   icon: typeof Sparkles;
 }> = [
-  { role: "spec", label: "Spec", icon: Sparkles },
-  { role: "planner", label: "Planner", icon: Bot },
-  { role: "build", label: "Build", icon: Wrench },
-  { role: "qa", label: "QA", icon: ShieldCheck },
+  { role: "spec", label: AGENT_ROLE_LABELS.spec, icon: Sparkles },
+  { role: "planner", label: AGENT_ROLE_LABELS.planner, icon: Bot },
+  { role: "build", label: AGENT_ROLE_LABELS.build, icon: Wrench },
+  { role: "qa", label: AGENT_ROLE_LABELS.qa, icon: ShieldCheck },
 ];
 
 export const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {

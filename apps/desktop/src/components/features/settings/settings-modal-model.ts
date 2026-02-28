@@ -1,5 +1,6 @@
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
 export type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
@@ -8,10 +9,10 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
   role: RepoDefaultRole;
   label: string;
 }> = [
-  { role: "spec", label: "Spec" },
-  { role: "planner", label: "Planner" },
-  { role: "build", label: "Build" },
-  { role: "qa", label: "QA" },
+  { role: "spec", label: AGENT_ROLE_LABELS.spec },
+  { role: "planner", label: AGENT_ROLE_LABELS.planner },
+  { role: "build", label: AGENT_ROLE_LABELS.build },
+  { role: "qa", label: AGENT_ROLE_LABELS.qa },
 ];
 
 const EMPTY_AGENT_DEFAULT: RepoAgentDefaultInput = {

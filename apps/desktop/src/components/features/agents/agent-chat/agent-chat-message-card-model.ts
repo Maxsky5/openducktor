@@ -1,6 +1,7 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { isOdtWorkflowMutationToolName, toOdtWorkflowToolDisplayName } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "read",
@@ -16,13 +17,6 @@ const OUTPUT_IGNORED_TOOL_NAMES = new Set([
 const REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES = new Set(["task", "subtask", "delegate"]);
 
 export const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
-
-const AGENT_ROLE_LABEL: Record<AgentRole, string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Builder",
-  qa: "QA",
-};
 
 type ToolMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
 
@@ -104,7 +98,7 @@ export const roleLabel = (
 ): string => {
   if (role === "assistant") {
     const assistantRole = assistantRoleFromMessage(message, sessionRole);
-    return assistantRole ? AGENT_ROLE_LABEL[assistantRole] : "Assistant";
+    return assistantRole ? AGENT_ROLE_LABELS[assistantRole] : "Assistant";
   }
   if (role === "thinking") {
     return "Thinking";

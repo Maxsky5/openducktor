@@ -13,15 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 
 type RunningTaskSession = Pick<AgentSessionState, "sessionId" | "role" | "scenario" | "status">;
-
-const ACTIVE_SESSION_ROLE_LABEL: Record<RunningTaskSession["role"], string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Build",
-  qa: "QA",
-};
 
 type KanbanTaskCardProps = {
   task: TaskCard;
@@ -59,7 +53,7 @@ function ActiveSessionChip({
   taskId: string;
   session: RunningTaskSession;
 }): ReactElement {
-  const roleLabel = ACTIVE_SESSION_ROLE_LABEL[session.role] ?? session.role;
+  const roleLabel = AGENT_ROLE_LABELS[session.role] ?? session.role;
   const statusLabel = session.status === "starting" ? "Starting" : "Running";
 
   return (
