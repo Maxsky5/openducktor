@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type {
   IssueType,
   JsonObject,
@@ -31,69 +32,41 @@ export const ensureObject = (value: unknown): JsonObject => {
   return { ...(value as JsonObject) };
 };
 
-export const parseMarkdownEntries = (value: unknown): MarkdownEntry[] => {
+const MarkdownEntrySchema = z.object({
+  markdown: z.string(),
+  updatedAt: z.string(),
+  updatedBy: z.string(),
+  sourceTool: z.string(),
+  revision: z.number(),
+});
+
+const QaEntrySchema = MarkdownEntrySchema.extend({
+  verdict: z.enum(["approved", "rejected"]),
+});
+
+const parseTypedEntries = <T>(schema: z.ZodType<T>, value: unknown): T[] => {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const entries: MarkdownEntry[] = [];
+  const entries: T[] = [];
   for (const entry of value) {
-    if (!entry || typeof entry !== "object") {
+    const parsed = schema.safeParse(entry);
+    if (!parsed.success) {
       continue;
     }
-    const record = entry as Record<string, unknown>;
-    if (
-      typeof record.markdown !== "string" ||
-      typeof record.updatedAt !== "string" ||
-      typeof record.updatedBy !== "string" ||
-      typeof record.sourceTool !== "string" ||
-      typeof record.revision !== "number"
-    ) {
-      continue;
-    }
-    entries.push({
-      markdown: record.markdown,
-      updatedAt: record.updatedAt,
-      updatedBy: record.updatedBy,
-      sourceTool: record.sourceTool,
-      revision: record.revision,
-    });
+    entries.push(parsed.data);
   }
+
   return entries;
 };
 
+export const parseMarkdownEntries = (value: unknown): MarkdownEntry[] => {
+  return parseTypedEntries(MarkdownEntrySchema, value);
+};
+
 export const parseQaEntries = (value: unknown): QaEntry[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const entries: QaEntry[] = [];
-  for (const entry of value) {
-    if (!entry || typeof entry !== "object") {
-      continue;
-    }
-    const record = entry as Record<string, unknown>;
-    if (
-      typeof record.markdown !== "string" ||
-      (record.verdict !== "approved" && record.verdict !== "rejected") ||
-      typeof record.updatedAt !== "string" ||
-      typeof record.updatedBy !== "string" ||
-      typeof record.sourceTool !== "string" ||
-      typeof record.revision !== "number"
-    ) {
-      continue;
-    }
-
-    entries.push({
-      markdown: record.markdown,
-      verdict: record.verdict,
-      updatedAt: record.updatedAt,
-      updatedBy: record.updatedBy,
-      sourceTool: record.sourceTool,
-      revision: record.revision,
-    });
-  }
-  return entries;
+  return parseTypedEntries(QaEntrySchema, value);
 };
 
 const normalizeParentId = (issue: RawIssue): string | null => {
