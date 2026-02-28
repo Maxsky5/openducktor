@@ -1,7 +1,7 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { isOdtWorkflowMutationToolName, toOdtWorkflowToolDisplayName } from "@openducktor/core";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "read",

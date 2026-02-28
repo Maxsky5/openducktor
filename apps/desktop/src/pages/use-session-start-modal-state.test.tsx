@@ -118,7 +118,7 @@ describe("useSessionStartModalState", () => {
         scenario: "build_implementation_start",
         startMode: "fresh",
         postStartAction: "kickoff",
-        title: "Start Build Session",
+        title: "Start Builder Session",
       });
     });
 

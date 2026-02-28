@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
@@ -22,12 +23,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
     ...overrides,
   });
 
-const roleLabelByRole = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Build",
-  qa: "QA",
-} as const;
+const roleLabelByRole = { ...AGENT_ROLE_LABELS } as const;
 
 describe("use-agent-studio-page-model-builders", () => {
   test("buildActiveDocumentForRole maps documents by role", () => {

@@ -17,7 +17,7 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import {

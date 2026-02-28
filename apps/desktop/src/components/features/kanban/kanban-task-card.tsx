@@ -12,8 +12,8 @@ import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workf
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { cn } from "@/lib/utils";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 
 type RunningTaskSession = Pick<AgentSessionState, "sessionId" | "role" | "scenario" | "status">;
 

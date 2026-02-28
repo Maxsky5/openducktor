@@ -1,6 +1,6 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { AGENT_ROLE_LABELS } from "@/types";
 
 export const ROLE_OPTIONS: Array<{
   role: AgentRole;

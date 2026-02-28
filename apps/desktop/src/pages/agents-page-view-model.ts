@@ -12,8 +12,8 @@ import type {
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 
