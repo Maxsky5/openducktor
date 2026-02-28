@@ -58,7 +58,7 @@ const createToolPart = ({
 };
 
 describe("stream-part-mapper", () => {
-  test("maps completed MCP tool output with isError as tool error part", () => {
+  test("maps completed MCP tool output with isError as tool error part and omits title", () => {
     const part = createToolPart({
       id: "tool-1",
       tool: "openducktor_odt_set_spec",
@@ -71,6 +71,7 @@ describe("stream-part-mapper", () => {
       metadata: {
         scope: "mcp",
       },
+      title: "Spec write",
       time: {
         start: 100,
         end: 130,

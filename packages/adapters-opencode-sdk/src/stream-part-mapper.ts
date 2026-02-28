@@ -152,17 +152,16 @@ const buildToolStreamPart = (
   }
 
   const output = readToolOutputText(toolState.output);
-  const title = toDisplayText(toolState.title);
-  const titleField = title ? { title } : {};
   if (isToolOutputError(toolState.output) || (error && error.trim().length > 0)) {
     return {
       ...base,
       status: "error",
       error: output ?? error ?? "Tool failed",
-      ...titleField,
     };
   }
 
+  const title = toDisplayText(toolState.title);
+  const titleField = title ? { title } : {};
   return {
     ...base,
     ...(output ? { output } : {}),
