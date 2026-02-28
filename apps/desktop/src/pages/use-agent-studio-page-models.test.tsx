@@ -63,25 +63,28 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
 
 const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const defaultSession = createSession();
+  const sessionsForTask = overrides.core?.sessionsForTask ?? [defaultSession];
+  const activeSession =
+    overrides.core?.activeSession !== undefined
+      ? overrides.core.activeSession
+      : (sessionsForTask[0] ?? null);
+  const contextSessionsLength =
+    overrides.core?.contextSessionsLength !== undefined
+      ? overrides.core.contextSessionsLength
+      : sessionsForTask.length;
+
   const core: HookArgs["core"] = {
     activeTabValue: "task-1",
     taskId: "task-1",
     role: "spec",
     selectedTask: createTask(),
-    sessionsForTask: [defaultSession],
-    contextSessionsLength: 1,
-    activeSession: defaultSession,
     isTaskHydrating: false,
     contextSwitchVersion: 0,
     ...overrides.core,
+    sessionsForTask,
+    activeSession,
+    contextSessionsLength,
   };
-
-  if (overrides.core?.activeSession === undefined && overrides.core?.sessionsForTask) {
-    core.activeSession = overrides.core.sessionsForTask[0] ?? null;
-  }
-  if (overrides.core?.contextSessionsLength === undefined) {
-    core.contextSessionsLength = core.sessionsForTask.length;
-  }
 
   return {
     core,
