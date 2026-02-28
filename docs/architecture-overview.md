@@ -19,7 +19,7 @@ Use it to answer:
 | Tauri command bridge (Rust) | `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src-tauri/src/commands/*` | Typed command surface (`tauri::command`), argument mapping, command registration | Deep business policy (kept in `AppService`) |
 | Host application/domain (Rust) | `apps/desktop/src-tauri/crates/host-application/src/app_service/*`, `apps/desktop/src-tauri/crates/host-domain/src/*` | Workflow transition rules, task enrichment (`available_actions`, `agent_workflows`), runtime orchestration, `TaskStore` trait | UI concerns, view-level behavior |
 | Infrastructure/persistence (Rust) | `apps/desktop/src-tauri/crates/host-infra-beads/*`, `apps/desktop/src-tauri/crates/host-infra-system/*` | Beads-backed `TaskStore`, config/worktree/process integrations | UI workflow decisions |
-| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/odt-task-store.ts`, `packages/openducktor-mcp/src/tool-schemas.ts` | `odt_*` tool execution and validation against Beads metadata/status | Frontend rendering/state |
+| MCP workflow service (TS) | `packages/openducktor-mcp/src/index.ts`, `packages/openducktor-mcp/src/lib.ts`, `packages/openducktor-mcp/src/odt-task-store.ts` | `odt_*` tool execution and validation against Beads metadata/status | Frontend rendering/state |
 
 ## Runtime Data Flows
 
@@ -49,6 +49,10 @@ Key boundary:
 7. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
 8. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
 
+Critical session invariants:
+- Read-only roles (`spec`, `planner`, `qa`) must auto-reject mutating permission prompts; on auto-reply failure, permission remains actionable and a system error is emitted.
+- Stale workspace protection must roll back newly started/resumed sessions with best-effort `stopSession` cleanup.
+
 ### 3) Workflow transition
 OpenDucktor has two transition paths that converge on Beads as persistent truth.
 
@@ -73,7 +77,7 @@ Agent-triggered path:
 | Task statuses, issue types, action IDs | `packages/contracts/src/task-schemas.ts` | `@openducktor/contracts`, consumed by adapters/frontend/host |
 | Role, scenario, ODT tool IDs | `packages/contracts/src/agent-workflow-schemas.ts` | `@openducktor/contracts` |
 | Role-to-tool allowlist | `AGENT_ROLE_TOOL_POLICY` in `packages/core/src/types/agent-orchestrator.ts` | `@openducktor/core` |
-| ODT tool schema validation | `ODT_TOOL_SCHEMAS` in `packages/openducktor-mcp/src/tool-schemas.ts` | `@openducktor/openducktor-mcp` |
+| ODT tool schema validation | `ODT_TOOL_SCHEMAS` exported from `packages/openducktor-mcp/src/lib.ts` (defined in `src/tool-schemas.ts`) | `@openducktor/openducktor-mcp` |
 | Transition legality and backend-derived actions/workflows | `apps/desktop/src-tauri/crates/host-application/src/app_service/workflow_rules.rs` | Rust host application |
 | Persisted task lifecycle state | Beads `status` field | Beads store accessed through `TaskStore` implementations |
 | Agent-authored docs (spec/plan/qa) and session snapshots | Task metadata under configurable namespace (`openducktor` default) | `host-infra-beads` + `openducktor-mcp` |
