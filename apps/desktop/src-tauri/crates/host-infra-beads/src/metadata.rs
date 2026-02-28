@@ -2,6 +2,7 @@ use host_domain::{
     AgentSessionDocument, QaVerdict, QaWorkflowVerdict, TaskDocumentPresence, TaskDocumentSummary,
     TaskQaDocumentPresence,
 };
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use crate::model::{MarkdownEntry, QaEntry};
@@ -90,7 +91,7 @@ pub(crate) fn parse_markdown_entries(value: &Value) -> Option<Vec<MarkdownEntry>
     let entries = value
         .as_array()?
         .iter()
-        .filter_map(|entry| serde_json::from_value::<MarkdownEntry>(entry.clone()).ok())
+        .filter_map(|entry| MarkdownEntry::deserialize(entry).ok())
         .collect::<Vec<_>>();
     Some(entries)
 }
@@ -99,7 +100,7 @@ pub(crate) fn parse_qa_entries(value: &Value) -> Option<Vec<QaEntry>> {
     let entries = value
         .as_array()?
         .iter()
-        .filter_map(|entry| serde_json::from_value::<QaEntry>(entry.clone()).ok())
+        .filter_map(|entry| QaEntry::deserialize(entry).ok())
         .collect::<Vec<_>>();
     Some(entries)
 }
@@ -108,7 +109,7 @@ pub(crate) fn parse_agent_sessions(value: &Value) -> Option<Vec<AgentSessionDocu
     let entries = value
         .as_array()?
         .iter()
-        .filter_map(|entry| serde_json::from_value::<AgentSessionDocument>(entry.clone()).ok())
+        .filter_map(|entry| AgentSessionDocument::deserialize(entry).ok())
         .collect::<Vec<_>>();
     Some(entries)
 }
