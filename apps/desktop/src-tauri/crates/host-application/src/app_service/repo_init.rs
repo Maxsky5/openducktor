@@ -24,7 +24,7 @@ impl AppService {
         Ok(repo_key)
     }
 
-    pub(super) fn ensure_repo_initialized(&self, repo_path: &str) -> Result<()> {
+    pub(super) fn resolve_initialized_repo_path(&self, repo_path: &str) -> Result<String> {
         let repo_key = self.ensure_repo_authorized(repo_path)?;
         {
             let cache = self
@@ -32,20 +32,24 @@ impl AppService {
                 .lock()
                 .map_err(|_| anyhow!("Initialized repo cache lock poisoned"))?;
             if cache.contains(&repo_key) {
-                return Ok(());
+                return Ok(repo_key);
             }
         }
 
         self.task_store
-            .ensure_repo_initialized(Path::new(repo_path))
-            .with_context(|| format!("Failed to initialize task store for {repo_path}"))?;
+            .ensure_repo_initialized(Path::new(&repo_key))
+            .with_context(|| format!("Failed to initialize task store for {}", repo_key))?;
 
         let mut cache = self
             .initialized_repos
             .lock()
             .map_err(|_| anyhow!("Initialized repo cache lock poisoned"))?;
-        cache.insert(repo_key);
+        cache.insert(repo_key.clone());
 
-        Ok(())
+        Ok(repo_key)
+    }
+
+    pub(super) fn ensure_repo_initialized(&self, repo_path: &str) -> Result<()> {
+        self.resolve_initialized_repo_path(repo_path).map(|_| ())
     }
 }

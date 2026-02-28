@@ -196,7 +196,9 @@ impl AppService {
                     ));
                 }
             } else {
-                return Err(anyhow!("Hook trust confirmation requires fingerprint challenge."));
+                return Err(anyhow!(
+                    "Hook trust confirmation requires fingerprint challenge."
+                ));
             }
 
             return self.config_store.set_repo_trust_hooks(
@@ -206,7 +208,8 @@ impl AppService {
             );
         }
 
-        self.config_store.set_repo_trust_hooks(repo_path, false, None)
+        self.config_store
+            .set_repo_trust_hooks(repo_path, false, None)
     }
 
     pub fn get_theme(&self) -> Result<String> {
@@ -218,13 +221,13 @@ impl AppService {
     }
 
     pub fn git_get_branches(&self, repo_path: &str) -> Result<Vec<GitBranch>> {
-        self.ensure_repo_initialized(repo_path)?;
-        self.git_port.get_branches(Path::new(repo_path))
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        self.git_port.get_branches(Path::new(&repo_path))
     }
 
     pub fn git_get_current_branch(&self, repo_path: &str) -> Result<GitCurrentBranch> {
-        self.ensure_repo_initialized(repo_path)?;
-        self.git_port.get_current_branch(Path::new(repo_path))
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        self.git_port.get_current_branch(Path::new(&repo_path))
     }
 
     pub fn git_switch_branch(
@@ -233,9 +236,9 @@ impl AppService {
         branch: &str,
         create: bool,
     ) -> Result<GitCurrentBranch> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         self.git_port
-            .switch_branch(Path::new(repo_path), branch, create)
+            .switch_branch(Path::new(&repo_path), branch, create)
     }
 
     pub fn git_create_worktree(
@@ -245,14 +248,14 @@ impl AppService {
         branch: &str,
         create_branch: bool,
     ) -> Result<GitWorktreeSummary> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let worktree = worktree_path.trim();
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
         }
 
         self.git_port.create_worktree(
-            Path::new(repo_path),
+            Path::new(&repo_path),
             Path::new(worktree),
             branch,
             create_branch,
@@ -270,13 +273,13 @@ impl AppService {
         worktree_path: &str,
         force: bool,
     ) -> Result<bool> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let worktree = worktree_path.trim();
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
         }
         self.git_port
-            .remove_worktree(Path::new(repo_path), Path::new(worktree), force)?;
+            .remove_worktree(Path::new(&repo_path), Path::new(worktree), force)?;
         Ok(true)
     }
 
@@ -288,13 +291,13 @@ impl AppService {
         set_upstream: bool,
         force_with_lease: bool,
     ) -> Result<GitPushSummary> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let remote = remote
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or("origin");
         self.git_port.push_branch(
-            Path::new(repo_path),
+            Path::new(&repo_path),
             remote,
             branch,
             set_upstream,

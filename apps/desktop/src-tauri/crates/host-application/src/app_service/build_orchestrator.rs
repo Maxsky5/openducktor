@@ -54,8 +54,7 @@ impl AppService {
         task_id: &str,
         emitter: RunEmitter,
     ) -> Result<RunSummary> {
-        self.ensure_repo_initialized(repo_path)?;
-        let repo_path = Self::repo_key(repo_path);
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_path.as_str();
 
         let repo_config = self.config_store.repo_config(repo_path)?;

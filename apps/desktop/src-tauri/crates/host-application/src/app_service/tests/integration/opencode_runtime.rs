@@ -189,6 +189,7 @@ fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
@@ -265,6 +266,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
 
     service.workspace_update_repo_config(
         repo_path.as_str(),
@@ -345,6 +347,7 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
 
     let pre_start_cleanup_failure_hooks = HookSet {
         pre_start: vec![format!("sh -lc 'rm -rf \"{repo_path}\"; exit 1'")],
@@ -397,6 +400,7 @@ fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Resu
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
