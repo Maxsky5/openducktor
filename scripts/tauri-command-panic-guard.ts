@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const COMMANDS_ROOT = "apps/desktop/src-tauri/src/commands";
-const BANNED_PATTERN = /\.(expect|unwrap)\(|panic!\(/g;
+const BANNED_PATTERN = /\.(expect|unwrap)\s*\(|panic\s*!\s*\(/g;
 
 type Violation = {
   filePath: string;
