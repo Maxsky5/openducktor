@@ -2,7 +2,7 @@ import { type CSSProperties, type ReactElement, useEffect, useState } from "reac
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
 import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
-import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
+import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light";
 import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 import { createMarkdownSyntaxLanguageRegistry } from "./markdown-syntax-language-registry";
@@ -58,34 +58,34 @@ const SYNTAX_CODE_TAG_STYLE: CSSProperties = {
   fontFamily: '"IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
 };
 
-type PrismTheme = typeof oneDark;
+type PrismTheme = typeof oneLight;
 
-let cachedOneLightTheme: PrismTheme | null = null;
-let oneLightThemePromise: Promise<PrismTheme | null> | null = null;
+let cachedOneDarkTheme: PrismTheme | null = null;
+let oneDarkThemePromise: Promise<PrismTheme | null> | null = null;
 
-const loadOneLightTheme = async (): Promise<PrismTheme | null> => {
-  if (cachedOneLightTheme) {
-    return cachedOneLightTheme;
+const loadOneDarkTheme = async (): Promise<PrismTheme | null> => {
+  if (cachedOneDarkTheme) {
+    return cachedOneDarkTheme;
   }
 
-  if (oneLightThemePromise) {
-    return oneLightThemePromise;
+  if (oneDarkThemePromise) {
+    return oneDarkThemePromise;
   }
 
-  oneLightThemePromise = import("react-syntax-highlighter/dist/esm/styles/prism/one-light")
+  oneDarkThemePromise = import("react-syntax-highlighter/dist/esm/styles/prism/one-dark")
     .then((module) => {
-      cachedOneLightTheme = module.default;
+      cachedOneDarkTheme = module.default;
       return module.default;
     })
     .catch((error) => {
-      console.error("Failed to lazy-load Prism light theme:", error);
+      console.error("Failed to lazy-load Prism dark theme:", error);
       return null;
     })
     .finally(() => {
-      oneLightThemePromise = null;
+      oneDarkThemePromise = null;
     });
 
-  return oneLightThemePromise;
+  return oneDarkThemePromise;
 };
 
 const useResolvedDark = (): boolean => {
@@ -101,7 +101,7 @@ export default function MarkdownSyntaxBlock({
   className,
 }: MarkdownSyntaxBlockProps): ReactElement {
   const [, setLanguageRegistrationVersion] = useState(0);
-  const [oneLightTheme, setOneLightTheme] = useState<PrismTheme | null>(() => cachedOneLightTheme);
+  const [oneDarkTheme, setOneDarkTheme] = useState<PrismTheme | null>(() => cachedOneDarkTheme);
   const normalizedLanguage = markdownSyntaxLanguageRegistry.normalizeLanguage(language);
   const isSupportedLanguage =
     markdownSyntaxLanguageRegistry.isLanguageSupported(normalizedLanguage);
@@ -110,24 +110,24 @@ export default function MarkdownSyntaxBlock({
   const isDark = useResolvedDark();
 
   useEffect(() => {
-    if (isDark || oneLightTheme) {
+    if (!isDark || oneDarkTheme) {
       return;
     }
 
     let isActive = true;
 
-    void loadOneLightTheme().then((theme) => {
+    void loadOneDarkTheme().then((theme) => {
       if (!isActive || !theme) {
         return;
       }
 
-      setOneLightTheme(theme);
+      setOneDarkTheme(theme);
     });
 
     return () => {
       isActive = false;
     };
-  }, [isDark, oneLightTheme]);
+  }, [isDark, oneDarkTheme]);
 
   useEffect(() => {
     const shouldRegisterLanguage =
@@ -172,7 +172,7 @@ export default function MarkdownSyntaxBlock({
     <div className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}>
       <SyntaxHighlighter
         language={normalizedLanguage}
-        style={isDark ? oneDark : (oneLightTheme ?? oneDark)}
+        style={isDark ? (oneDarkTheme ?? oneLight) : oneLight}
         customStyle={SYNTAX_PRE_STYLE}
         codeTagProps={{ style: SYNTAX_CODE_TAG_STYLE }}
         PreTag="div"
