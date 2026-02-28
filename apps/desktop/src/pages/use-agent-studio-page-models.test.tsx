@@ -15,6 +15,17 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
 
+type HookArgsOverrides = {
+  core?: Partial<HookArgs["core"]>;
+  taskTabs?: Partial<HookArgs["taskTabs"]>;
+  documents?: Partial<HookArgs["documents"]>;
+  readiness?: Partial<HookArgs["readiness"]>;
+  sessionActions?: Partial<HookArgs["sessionActions"]>;
+  modelSelection?: Partial<HookArgs["modelSelection"]>;
+  permissions?: Partial<HookArgs["permissions"]>;
+  composer?: Partial<HookArgs["composer"]>;
+};
+
 let useAgentStudioPageModels: UseAgentStudioPageModelsHook;
 
 beforeAll(async () => {
@@ -50,60 +61,98 @@ const createDocumentState = (markdown: string): TaskDocumentState => ({
   loaded: true,
 });
 
-const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeTabValue: "task-1",
-  taskId: "task-1",
-  role: "spec",
-  selectedTask: createTask(),
-  sessionsForTask: [createSession()],
-  contextSessionsLength: 1,
-  activeSession: createSession(),
-  taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
-  availableTabTasks: [createTask()],
-  isTaskHydrating: false,
-  contextSwitchVersion: 0,
-  isLoadingTasks: false,
-  onCreateTab: () => {},
-  onCloseTab: () => {},
-  handleWorkflowStepSelect: () => {},
-  handleSessionSelectionChange: () => {},
-  handleCreateSession: () => {},
-  specDoc: createDocumentState("spec"),
-  planDoc: createDocumentState(""),
-  qaDoc: createDocumentState(""),
-  agentStudioReady: true,
-  agentStudioBlockedReason: "",
-  isLoadingChecks: false,
-  refreshChecks: async () => {},
-  isStarting: false,
-  isSending: false,
-  isSessionWorking: true,
-  canKickoffNewSession: false,
-  kickoffLabel: "Start Spec",
-  canStopSession: true,
-  startScenarioKickoff: async () => {},
-  onSend: async () => {},
-  onSubmitQuestionAnswers: async () => {},
-  isSubmittingQuestionByRequestId: {},
-  selectedModelSelection: null,
-  isSelectionCatalogLoading: false,
-  agentOptions: [{ value: "spec", label: "Spec" }],
-  modelOptions: [],
-  modelGroups: [],
-  variantOptions: [],
-  onSelectAgent: () => {},
-  onSelectModel: () => {},
-  onSelectVariant: () => {},
-  activeSessionAgentColors: {},
-  activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
-  isSubmittingPermissionByRequestId: {},
-  permissionReplyErrorByRequestId: {},
-  onReplyPermission: async () => {},
-  input: "",
-  setInput: () => {},
-  stopAgentSession: async () => {},
-  ...overrides,
-});
+const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
+  const defaultSession = createSession();
+  const sessionsForTask = overrides.core?.sessionsForTask ?? [defaultSession];
+  const activeSession =
+    overrides.core?.activeSession !== undefined
+      ? overrides.core.activeSession
+      : (sessionsForTask[0] ?? null);
+  const contextSessionsLength =
+    overrides.core?.contextSessionsLength !== undefined
+      ? overrides.core.contextSessionsLength
+      : sessionsForTask.length;
+
+  const core: HookArgs["core"] = {
+    activeTabValue: "task-1",
+    taskId: "task-1",
+    role: "spec",
+    selectedTask: createTask(),
+    isTaskHydrating: false,
+    contextSwitchVersion: 0,
+    ...overrides.core,
+    sessionsForTask,
+    activeSession,
+    contextSessionsLength,
+  };
+
+  return {
+    core,
+    taskTabs: {
+      taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
+      availableTabTasks: [createTask()],
+      isLoadingTasks: false,
+      onCreateTab: () => {},
+      onCloseTab: () => {},
+      ...overrides.taskTabs,
+    },
+    documents: {
+      specDoc: createDocumentState("spec"),
+      planDoc: createDocumentState(""),
+      qaDoc: createDocumentState(""),
+      ...overrides.documents,
+    },
+    readiness: {
+      agentStudioReady: true,
+      agentStudioBlockedReason: "",
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+      ...overrides.readiness,
+    },
+    sessionActions: {
+      handleWorkflowStepSelect: () => {},
+      handleSessionSelectionChange: () => {},
+      handleCreateSession: () => {},
+      isStarting: false,
+      isSending: false,
+      isSessionWorking: true,
+      canKickoffNewSession: false,
+      kickoffLabel: "Start Spec",
+      canStopSession: true,
+      startScenarioKickoff: async () => {},
+      onSend: async () => {},
+      onSubmitQuestionAnswers: async () => {},
+      isSubmittingQuestionByRequestId: {},
+      stopAgentSession: async () => {},
+      ...overrides.sessionActions,
+    },
+    modelSelection: {
+      selectedModelSelection: null,
+      isSelectionCatalogLoading: false,
+      agentOptions: [{ value: "spec", label: "Spec" }],
+      modelOptions: [],
+      modelGroups: [],
+      variantOptions: [],
+      onSelectAgent: () => {},
+      onSelectModel: () => {},
+      onSelectVariant: () => {},
+      activeSessionAgentColors: {},
+      activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
+      ...overrides.modelSelection,
+    },
+    permissions: {
+      isSubmittingPermissionByRequestId: {},
+      permissionReplyErrorByRequestId: {},
+      onReplyPermission: async () => {},
+      ...overrides.permissions,
+    },
+    composer: {
+      input: "",
+      setInput: () => {},
+      ...overrides.composer,
+    },
+  };
+};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioPageModels, initialProps);
@@ -115,18 +164,24 @@ describe("useAgentStudioPageModels", () => {
     const onSend = mock(async () => {});
     const onStopSession = mock(async () => {});
 
-    const harness = createHookHarness({
-      ...createHookArgs({
-        activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
-        input: "message",
-        onReplyPermission: async () => {},
-        onSend,
-        refreshChecks: onRefreshChecks,
-        startScenarioKickoff: onKickoff,
-        stopAgentSession: onStopSession,
+    const harness = createHookHarness(
+      createHookArgs({
+        modelSelection: {
+          activeSessionContextUsage: { totalTokens: 12, contextWindow: 100 },
+        },
+        composer: {
+          input: "message",
+        },
+        readiness: {
+          refreshChecks: onRefreshChecks,
+        },
+        sessionActions: {
+          onSend,
+          startScenarioKickoff: onKickoff,
+          stopAgentSession: onStopSession,
+        },
       }),
-      refreshChecks: onRefreshChecks,
-    });
+    );
 
     await harness.mount();
 
@@ -156,12 +211,16 @@ describe("useAgentStudioPageModels", () => {
     const specSession = createSession("session-spec", "external-spec", { role: "spec" });
     const harness = createHookHarness(
       createHookArgs({
-        role: "spec",
-        activeSession: specSession,
-        sessionsForTask: [specSession],
-        specDoc: createDocumentState("spec"),
-        planDoc: createDocumentState(""),
-        qaDoc: createDocumentState(""),
+        core: {
+          role: "spec",
+          activeSession: specSession,
+          sessionsForTask: [specSession],
+        },
+        documents: {
+          specDoc: createDocumentState("spec"),
+          planDoc: createDocumentState(""),
+          qaDoc: createDocumentState(""),
+        },
       }),
     );
     await harness.mount();
@@ -175,12 +234,16 @@ describe("useAgentStudioPageModels", () => {
     });
     const plannerHarness = createHookHarness(
       createHookArgs({
-        role: "planner",
-        activeSession: plannerSession,
-        sessionsForTask: [plannerSession],
-        specDoc: createDocumentState(""),
-        planDoc: createDocumentState("plan"),
-        qaDoc: createDocumentState(""),
+        core: {
+          role: "planner",
+          activeSession: plannerSession,
+          sessionsForTask: [plannerSession],
+        },
+        documents: {
+          specDoc: createDocumentState(""),
+          planDoc: createDocumentState("plan"),
+          qaDoc: createDocumentState(""),
+        },
       }),
     );
     await plannerHarness.mount();
@@ -195,12 +258,16 @@ describe("useAgentStudioPageModels", () => {
     });
     const qaHarness = createHookHarness(
       createHookArgs({
-        role: "qa",
-        activeSession: qaSession,
-        sessionsForTask: [qaSession],
-        specDoc: createDocumentState(""),
-        planDoc: createDocumentState(""),
-        qaDoc: createDocumentState("qa"),
+        core: {
+          role: "qa",
+          activeSession: qaSession,
+          sessionsForTask: [qaSession],
+        },
+        documents: {
+          specDoc: createDocumentState(""),
+          planDoc: createDocumentState(""),
+          qaDoc: createDocumentState("qa"),
+        },
       }),
     );
     await qaHarness.mount();
@@ -212,12 +279,16 @@ describe("useAgentStudioPageModels", () => {
     const buildSession = createSession("session-build", "external-build", { role: "build" });
     const buildHarness = createHookHarness(
       createHookArgs({
-        role: "build",
-        activeSession: buildSession,
-        sessionsForTask: [buildSession],
-        specDoc: createDocumentState(""),
-        planDoc: createDocumentState(""),
-        qaDoc: createDocumentState(""),
+        core: {
+          role: "build",
+          activeSession: buildSession,
+          sessionsForTask: [buildSession],
+        },
+        documents: {
+          specDoc: createDocumentState(""),
+          planDoc: createDocumentState(""),
+          qaDoc: createDocumentState(""),
+        },
       }),
     );
     await buildHarness.mount();
@@ -232,12 +303,16 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        role: "spec",
-        activeSession: plannerSession,
-        sessionsForTask: [plannerSession],
-        specDoc: createDocumentState("spec"),
-        planDoc: createDocumentState("plan"),
-        qaDoc: createDocumentState(""),
+        core: {
+          role: "spec",
+          activeSession: plannerSession,
+          sessionsForTask: [plannerSession],
+        },
+        documents: {
+          specDoc: createDocumentState("spec"),
+          planDoc: createDocumentState("plan"),
+          qaDoc: createDocumentState(""),
+        },
       }),
     );
 
@@ -255,8 +330,10 @@ describe("useAgentStudioPageModels", () => {
     });
     const harness = createHookHarness(
       createHookArgs({
-        activeSession: permissionSession,
-        sessionsForTask: [permissionSession],
+        core: {
+          activeSession: permissionSession,
+          sessionsForTask: [permissionSession],
+        },
       }),
     );
 
@@ -268,12 +345,14 @@ describe("useAgentStudioPageModels", () => {
       pendingPermissions: [],
     });
 
-    await harness.update({
-      ...createHookArgs({
-        activeSession: permissionSessionWithoutRequests,
-        sessionsForTask: [permissionSessionWithoutRequests],
+    await harness.update(
+      createHookArgs({
+        core: {
+          activeSession: permissionSessionWithoutRequests,
+          sessionsForTask: [permissionSessionWithoutRequests],
+        },
       }),
-    });
+    );
 
     expect(harness.getLatest().agentStudioHeaderModel.stats.permissions).toBe(0);
     await harness.unmount();
@@ -282,63 +361,28 @@ describe("useAgentStudioPageModels", () => {
   test("tracks todo panel collapse state per active session", async () => {
     const sessionA = createSession("session-a", "external-a");
     const sessionB = createSession("session-b", "external-b");
-    const commonProps: Omit<HookArgs, "sessionsForTask" | "activeSession"> = {
-      activeTabValue: "task-1",
-      taskId: "task-1",
-      role: "spec",
-      selectedTask: createTask(),
-      contextSessionsLength: 2,
-      taskTabs: [{ taskId: "task-1", taskTitle: "Task 1", status: "idle", isActive: true }],
-      availableTabTasks: [createTask()],
-      isTaskHydrating: false,
-      contextSwitchVersion: 0,
-      isLoadingTasks: false,
-      onCreateTab: () => {},
-      onCloseTab: () => {},
-      handleWorkflowStepSelect: () => {},
-      handleSessionSelectionChange: () => {},
-      handleCreateSession: () => {},
-      specDoc: createDocumentState("spec"),
-      planDoc: createDocumentState(""),
-      qaDoc: createDocumentState(""),
-      agentStudioReady: true,
-      agentStudioBlockedReason: "",
-      isLoadingChecks: false,
-      refreshChecks: async () => {},
-      isStarting: false,
-      isSending: false,
-      isSessionWorking: false,
-      canKickoffNewSession: false,
-      kickoffLabel: "Start Spec",
-      canStopSession: true,
-      startScenarioKickoff: async () => {},
-      onSend: async () => {},
-      onSubmitQuestionAnswers: async () => {},
-      isSubmittingQuestionByRequestId: {},
-      selectedModelSelection: null,
-      isSelectionCatalogLoading: false,
-      agentOptions: [{ value: "spec", label: "Spec" }],
-      modelOptions: [],
-      modelGroups: [],
-      variantOptions: [],
-      onSelectAgent: () => {},
-      onSelectModel: () => {},
-      onSelectVariant: () => {},
-      activeSessionAgentColors: {},
-      activeSessionContextUsage: null,
-      isSubmittingPermissionByRequestId: {},
-      permissionReplyErrorByRequestId: {},
-      onReplyPermission: async () => {},
-      input: "",
-      setInput: () => {},
-      stopAgentSession: async () => {},
+    const sharedOverrides: HookArgsOverrides = {
+      core: {
+        contextSessionsLength: 2,
+      },
+      sessionActions: {
+        isSessionWorking: false,
+      },
+      modelSelection: {
+        activeSessionContextUsage: null,
+      },
     };
 
-    const harness = createHookHarness({
-      ...commonProps,
-      sessionsForTask: [sessionA, sessionB],
-      activeSession: sessionA,
-    });
+    const harness = createHookHarness(
+      createHookArgs({
+        ...sharedOverrides,
+        core: {
+          ...sharedOverrides.core,
+          sessionsForTask: [sessionA, sessionB],
+          activeSession: sessionA,
+        },
+      }),
+    );
 
     await harness.mount();
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
@@ -348,11 +392,16 @@ describe("useAgentStudioPageModels", () => {
     });
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
-    await harness.update({
-      ...commonProps,
-      sessionsForTask: [sessionA, sessionB],
-      activeSession: sessionB,
-    });
+    await harness.update(
+      createHookArgs({
+        ...sharedOverrides,
+        core: {
+          ...sharedOverrides.core,
+          sessionsForTask: [sessionA, sessionB],
+          activeSession: sessionB,
+        },
+      }),
+    );
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(false);
 
     await harness.run((state) => {
@@ -360,11 +409,16 @@ describe("useAgentStudioPageModels", () => {
     });
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
-    await harness.update({
-      ...commonProps,
-      sessionsForTask: [sessionA, sessionB],
-      activeSession: sessionA,
-    });
+    await harness.update(
+      createHookArgs({
+        ...sharedOverrides,
+        core: {
+          ...sharedOverrides.core,
+          sessionsForTask: [sessionA, sessionB],
+          activeSession: sessionA,
+        },
+      }),
+    );
     expect(harness.getLatest().agentChatModel.thread.todoPanelCollapsed).toBe(true);
 
     await harness.unmount();
@@ -373,9 +427,13 @@ describe("useAgentStudioPageModels", () => {
   test("keeps thread model stable for input-only composer updates", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
-      activeSession: session,
-      sessionsForTask: [session],
-      input: "",
+      core: {
+        activeSession: session,
+        sessionsForTask: [session],
+      },
+      composer: {
+        input: "",
+      },
     });
     const harness = createHookHarness(baseProps);
 
@@ -386,7 +444,10 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update({
       ...baseProps,
-      input: "draft update",
+      composer: {
+        ...baseProps.composer,
+        input: "draft update",
+      },
     });
 
     const nextState = harness.getLatest();
@@ -410,12 +471,16 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        role: "planner",
-        selectedTask: unavailablePlannerTask,
-        activeSession: null,
-        sessionsForTask: [],
-        canKickoffNewSession: true,
-        isSessionWorking: false,
+        core: {
+          role: "planner",
+          selectedTask: unavailablePlannerTask,
+          activeSession: null,
+          sessionsForTask: [],
+        },
+        sessionActions: {
+          canKickoffNewSession: true,
+          isSessionWorking: false,
+        },
       }),
     );
 
@@ -447,12 +512,16 @@ describe("useAgentStudioPageModels", () => {
 
     const harness = createHookHarness(
       createHookArgs({
-        role: "planner",
-        selectedTask: unavailablePlannerTask,
-        activeSession: runningPlannerSession,
-        sessionsForTask: [runningPlannerSession],
-        canStopSession: true,
-        isSessionWorking: true,
+        core: {
+          role: "planner",
+          selectedTask: unavailablePlannerTask,
+          activeSession: runningPlannerSession,
+          sessionsForTask: [runningPlannerSession],
+        },
+        sessionActions: {
+          canStopSession: true,
+          isSessionWorking: true,
+        },
       }),
     );
 

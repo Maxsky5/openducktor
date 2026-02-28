@@ -1,35 +1,36 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type UIEvent, useCallback, useMemo, useState } from "react";
 import {
   type AgentChatModel,
   type AgentStudioTaskTabsModel,
   isNearBottom,
   useAgentChatLayout,
 } from "@/components/features/agents";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { ROLE_OPTIONS, SCENARIO_LABELS } from "./agents-page-constants";
+import { ROLE_OPTIONS } from "./agents-page-constants";
+import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
-  buildLatestSessionByRoleMap,
-  buildRoleEnabledMapForTask,
-  buildSessionCreateOptions,
-  buildSessionSelectorGroups,
-  buildWorkflowStateByRole,
-  type SessionCreateOption,
-} from "./agents-page-session-tabs";
-import {
-  buildAgentChatComposerModel,
-  buildAgentChatThreadModel,
-  buildAgentStudioHeaderModel,
   buildAgentStudioTaskTabsModel,
   buildAgentStudioWorkspaceSidebarModel,
   buildRoleLabelByRole,
 } from "./agents-page-view-model";
+import {
+  type AgentStudioDocumentsContext,
+  type AgentStudioSessionContextUsage,
+  buildActiveDocumentForRole,
+  buildWorkflowModelContext,
+  toChatContextUsage,
+} from "./use-agent-studio-page-model-builders";
+import {
+  useAgentStudioComposerModel,
+  useAgentStudioHeaderModel,
+  useAgentStudioThreadModel,
+} from "./use-agent-studio-page-submodels";
+import { useAgentStudioThreadContext } from "./use-agent-studio-thread-context";
 
-type UseAgentStudioPageModelsArgs = {
+type AgentStudioCoreContext = {
   activeTabValue: string;
   taskId: string;
   role: AgentRole;
@@ -37,23 +38,22 @@ type UseAgentStudioPageModelsArgs = {
   sessionsForTask: AgentSessionState[];
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
-  taskTabs: AgentStudioTaskTabsModel["tabs"];
-  availableTabTasks: TaskCard[];
   isTaskHydrating: boolean;
   contextSwitchVersion: number;
+};
+
+type AgentStudioTaskTabsContext = {
+  taskTabs: AgentStudioTaskTabsModel["tabs"];
+  availableTabTasks: TaskCard[];
   isLoadingTasks: boolean;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
+};
+
+type AgentStudioSessionActionsContext = {
   handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
-  specDoc: TaskDocumentState;
-  planDoc: TaskDocumentState;
-  qaDoc: TaskDocumentState;
-  agentStudioReady: boolean;
-  agentStudioBlockedReason: string;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
   isStarting: boolean;
   isSending: boolean;
   isSessionWorking: boolean;
@@ -64,6 +64,17 @@ type UseAgentStudioPageModelsArgs = {
   onSend: () => Promise<void>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
+  stopAgentSession: (sessionId: string) => Promise<void>;
+};
+
+type AgentStudioReadinessContext = {
+  agentStudioReady: boolean;
+  agentStudioBlockedReason: string;
+  isLoadingChecks: boolean;
+  refreshChecks: () => Promise<void>;
+};
+
+type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
@@ -74,180 +85,56 @@ type UseAgentStudioPageModelsArgs = {
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
   activeSessionAgentColors: Record<string, string>;
-  activeSessionContextUsage: {
-    totalTokens: number;
-    contextWindow: number;
-    outputLimit?: number;
-  } | null;
+  activeSessionContextUsage: AgentStudioSessionContextUsage;
+};
+
+type AgentStudioPermissionContext = {
   isSubmittingPermissionByRequestId: Record<string, boolean>;
   permissionReplyErrorByRequestId: Record<string, string>;
   onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
+};
+
+type AgentStudioComposerContext = {
   input: string;
   setInput: (value: string) => void;
-  stopAgentSession: (sessionId: string) => Promise<void>;
+};
+
+type UseAgentStudioPageModelsArgs = {
+  core: AgentStudioCoreContext;
+  taskTabs: AgentStudioTaskTabsContext;
+  documents: AgentStudioDocumentsContext;
+  readiness: AgentStudioReadinessContext;
+  sessionActions: AgentStudioSessionActionsContext;
+  modelSelection: AgentStudioModelSelectionContext;
+  permissions: AgentStudioPermissionContext;
+  composer: AgentStudioComposerContext;
 };
 
 export function useAgentStudioPageModels({
-  activeTabValue,
-  taskId,
-  role,
-  selectedTask,
-  sessionsForTask,
-  contextSessionsLength,
-  activeSession,
+  core,
   taskTabs,
-  availableTabTasks,
-  isTaskHydrating,
-  contextSwitchVersion,
-  isLoadingTasks,
-  onCreateTab,
-  onCloseTab,
-  handleWorkflowStepSelect,
-  handleSessionSelectionChange,
-  handleCreateSession,
-  specDoc,
-  planDoc,
-  qaDoc,
-  agentStudioReady,
-  agentStudioBlockedReason,
-  isLoadingChecks,
-  refreshChecks,
-  isStarting,
-  isSending,
-  isSessionWorking,
-  canKickoffNewSession,
-  kickoffLabel,
-  canStopSession,
-  startScenarioKickoff,
-  onSend,
-  onSubmitQuestionAnswers,
-  isSubmittingQuestionByRequestId,
-  selectedModelSelection,
-  isSelectionCatalogLoading,
-  agentOptions,
-  modelOptions,
-  modelGroups,
-  variantOptions,
-  onSelectAgent,
-  onSelectModel,
-  onSelectVariant,
-  activeSessionAgentColors,
-  activeSessionContextUsage,
-  isSubmittingPermissionByRequestId,
-  permissionReplyErrorByRequestId,
-  onReplyPermission,
-  input,
-  setInput,
-  stopAgentSession,
+  documents,
+  readiness,
+  sessionActions,
+  modelSelection,
+  permissions,
+  composer,
 }: UseAgentStudioPageModelsArgs): {
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
-  agentStudioHeaderModel: ReturnType<typeof buildAgentStudioHeaderModel>;
+  agentStudioHeaderModel: ReturnType<typeof useAgentStudioHeaderModel>;
   agentStudioWorkspaceSidebarModel: ReturnType<typeof buildAgentStudioWorkspaceSidebarModel>;
   agentChatModel: AgentChatModel;
 } {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
-  const [threadSession, setThreadSession] = useState<AgentSessionState | null>(activeSession);
-  const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
-  const contextSwitchVersionRef = useRef(contextSwitchVersion);
-  const hasObservedContextSwitchRef = useRef(false);
-  const contextSwitchIntentRafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (contextSwitchVersionRef.current === contextSwitchVersion) {
-      return;
-    }
-
-    contextSwitchVersionRef.current = contextSwitchVersion;
-    hasObservedContextSwitchRef.current = false;
-    setIsContextSwitchIntentActive(true);
-
-    if (contextSwitchIntentRafRef.current !== null && typeof window !== "undefined") {
-      window.cancelAnimationFrame(contextSwitchIntentRafRef.current);
-      contextSwitchIntentRafRef.current = null;
-    }
-
-    if (typeof window === "undefined") {
-      setIsContextSwitchIntentActive(false);
-      return;
-    }
-
-    const rafId = window.requestAnimationFrame(() => {
-      const nestedRafId = window.requestAnimationFrame(() => {
-        contextSwitchIntentRafRef.current = null;
-        if (!hasObservedContextSwitchRef.current) {
-          setIsContextSwitchIntentActive(false);
-        }
-      });
-      contextSwitchIntentRafRef.current = nestedRafId;
+  const { threadSession, activeSessionId, isContextSwitching, scrollTrigger } =
+    useAgentStudioThreadContext({
+      activeSession: core.activeSession,
+      isTaskHydrating: core.isTaskHydrating,
+      contextSwitchVersion: core.contextSwitchVersion,
     });
-    contextSwitchIntentRafRef.current = rafId;
-  }, [contextSwitchVersion]);
-
-  useEffect(() => {
-    const nextSessionId = activeSession?.sessionId ?? null;
-    const currentThreadSessionId = threadSession?.sessionId ?? null;
-    if (nextSessionId === currentThreadSessionId) {
-      if (activeSession !== threadSession) {
-        setThreadSession(activeSession);
-      }
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      setThreadSession(activeSession);
-      return;
-    }
-
-    const rafId = window.requestAnimationFrame(() => {
-      setThreadSession(activeSession);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [activeSession, threadSession]);
-
-  useEffect(() => {
-    return () => {
-      if (contextSwitchIntentRafRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(contextSwitchIntentRafRef.current);
-      }
-    };
-  }, []);
-
-  const activeSessionId = activeSession?.sessionId ?? null;
-  const threadSessionId = threadSession?.sessionId ?? null;
-
-  const isThreadContextSwitching = activeSessionId !== threadSessionId;
-
-  useEffect(() => {
-    if (!isContextSwitchIntentActive) {
-      return;
-    }
-
-    if (isTaskHydrating || isThreadContextSwitching) {
-      hasObservedContextSwitchRef.current = true;
-      return;
-    }
-
-    if (!hasObservedContextSwitchRef.current) {
-      return;
-    }
-
-    hasObservedContextSwitchRef.current = false;
-    setIsContextSwitchIntentActive(false);
-  }, [isContextSwitchIntentActive, isTaskHydrating, isThreadContextSwitching]);
-
-  const isContextSwitching =
-    isTaskHydrating || isThreadContextSwitching || isContextSwitchIntentActive;
-
-  const activeMessageCount = threadSession?.messages.length ?? 0;
-  const activeDraftScrollBucket = Math.floor((threadSession?.draftAssistantText.length ?? 0) / 48);
-  const activeSessionStatus = threadSession?.status ?? "stopped";
-  const scrollTrigger = `${threadSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${threadSession?.pendingQuestions.length ?? 0}:${threadSession?.pendingPermissions.length ?? 0}:${activeDraftScrollBucket}`;
 
   const {
     messagesContainerRef,
@@ -258,7 +145,7 @@ export function useAgentStudioPageModels({
     todoPanelBottomOffset,
     resizeComposerTextarea,
   } = useAgentChatLayout({
-    input,
+    input: composer.input,
     scrollTrigger,
     activeSessionId: threadSession?.sessionId ?? null,
   });
@@ -273,156 +160,89 @@ export function useAgentStudioPageModels({
   const agentStudioTaskTabsModel = useMemo(
     () =>
       buildAgentStudioTaskTabsModel({
-        taskTabs,
-        availableTabTasks,
-        isLoadingTasks,
-        onCreateTab,
-        onCloseTab,
-        agentStudioReady,
-      }),
-    [agentStudioReady, availableTabTasks, isLoadingTasks, onCloseTab, onCreateTab, taskTabs],
-  );
-
-  const roleEnabledByTask = useMemo(() => buildRoleEnabledMapForTask(selectedTask), [selectedTask]);
-  const roleWorkflowsByTask = useMemo(
-    () => buildRoleWorkflowMapForTask(selectedTask),
-    [selectedTask],
-  );
-  const latestSessionByRole = useMemo(
-    () => buildLatestSessionByRoleMap(sessionsForTask),
-    [sessionsForTask],
-  );
-  const workflowStateByRole = useMemo(
-    () =>
-      buildWorkflowStateByRole({
-        roleWorkflowsByTask,
-        latestSessionByRole,
-      }),
-    [latestSessionByRole, roleWorkflowsByTask],
-  );
-  const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
-  const selectedInteractionRole = activeSession?.role ?? role;
-  const selectedRoleWorkflow = roleWorkflowsByTask[selectedInteractionRole];
-  const selectedRoleAvailable = selectedRoleWorkflow.available;
-  const selectedRoleReadOnlyReason = selectedRoleAvailable
-    ? null
-    : `${roleLabelByRole[selectedInteractionRole]} is unavailable for this task right now.`;
-  const sessionSelectorGroups = useMemo(
-    () =>
-      buildSessionSelectorGroups({
-        sessionsForTask: sessionsForTask,
-        scenarioLabels: SCENARIO_LABELS,
-        roleLabelByRole,
-      }),
-    [sessionsForTask, roleLabelByRole],
-  );
-  const fallbackSessionForSelectedRole = useMemo(
-    () => sessionsForTask.find((session) => session.role === selectedInteractionRole) ?? null,
-    [selectedInteractionRole, sessionsForTask],
-  );
-  const sessionSelectorValue =
-    activeSession?.sessionId ?? fallbackSessionForSelectedRole?.sessionId ?? "";
-  const createSessionDisabled = Boolean(activeSession && isSessionWorking);
-  const hasQaFeedback = qaDoc.markdown.trim().length > 0;
-  const hasHumanFeedback = Boolean(
-    selectedTask &&
-      (selectedTask.status === "human_review" ||
-        selectedTask.availableActions.includes("human_request_changes") ||
-        selectedTask.availableActions.includes("human_approve")),
-  );
-  const activeDocumentRole = activeSession?.role ?? role;
-
-  const activeDocument = useMemo(() => {
-    if (activeDocumentRole === "spec") {
-      return {
-        title: "Specification",
-        description: "Current spec document for this task.",
-        emptyState: "No spec document yet.",
-        document: specDoc,
-      };
-    }
-
-    if (activeDocumentRole === "planner") {
-      return {
-        title: "Implementation Plan",
-        description: "Current implementation plan for this task.",
-        emptyState: "No implementation plan yet.",
-        document: planDoc,
-      };
-    }
-
-    if (activeDocumentRole === "qa") {
-      return {
-        title: "QA Report",
-        description: "Latest QA report for this task.",
-        emptyState: "No QA report yet.",
-        document: qaDoc,
-      };
-    }
-
-    return null;
-  }, [activeDocumentRole, qaDoc, planDoc, specDoc]);
-
-  const sessionCreateOptions = useMemo(
-    () =>
-      buildSessionCreateOptions({
-        roleEnabledByTask,
-        hasQaFeedback,
-        hasHumanFeedback,
-        createSessionDisabled,
-        roleLabelByRole,
-        scenarioLabels: SCENARIO_LABELS,
-      }),
-    [createSessionDisabled, hasHumanFeedback, hasQaFeedback, roleEnabledByTask, roleLabelByRole],
-  );
-
-  const agentStudioHeaderModel = useMemo(
-    () =>
-      buildAgentStudioHeaderModel({
-        selectedTask,
-        activeSession: activeSession,
-        roleOptions: ROLE_OPTIONS,
-        workflowStateByRole,
-        selectedRole: activeSession?.role ?? role,
-        latestSessionByRole,
-        onWorkflowStepSelect: handleWorkflowStepSelect,
-        onSessionSelectionChange: handleSessionSelectionChange,
-        sessionSelectorValue,
-        sessionSelectorGroups,
-        agentStudioReady,
-        sessionsForTaskLength: sessionsForTask.length,
-        sessionCreateOptions,
-        onCreateSession: handleCreateSession,
-        createSessionDisabled,
-        isStarting,
-        contextSessionsLength,
+        taskTabs: taskTabs.taskTabs,
+        availableTabTasks: taskTabs.availableTabTasks,
+        isLoadingTasks: taskTabs.isLoadingTasks,
+        onCreateTab: taskTabs.onCreateTab,
+        onCloseTab: taskTabs.onCloseTab,
+        agentStudioReady: readiness.agentStudioReady,
       }),
     [
-      activeSession,
-      agentStudioReady,
-      contextSessionsLength,
-      createSessionDisabled,
-      handleCreateSession,
-      handleSessionSelectionChange,
-      handleWorkflowStepSelect,
-      isStarting,
-      latestSessionByRole,
-      role,
-      selectedTask,
-      sessionCreateOptions,
-      sessionSelectorGroups,
-      sessionSelectorValue,
-      sessionsForTask.length,
-      workflowStateByRole,
+      readiness.agentStudioReady,
+      taskTabs.availableTabTasks,
+      taskTabs.isLoadingTasks,
+      taskTabs.onCloseTab,
+      taskTabs.onCreateTab,
+      taskTabs.taskTabs,
     ],
   );
 
-  const handlePermissionReply = useCallback(
-    (requestId: string, reply: "once" | "always" | "reject"): Promise<void> => {
-      return onReplyPermission(requestId, reply);
-    },
-    [onReplyPermission],
+  const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
+  const workflowModelContext = useMemo(
+    () =>
+      buildWorkflowModelContext({
+        selectedTask: core.selectedTask,
+        sessionsForTask: core.sessionsForTask,
+        activeSession: core.activeSession,
+        role: core.role,
+        isSessionWorking: sessionActions.isSessionWorking,
+        qaDoc: documents.qaDoc,
+        roleLabelByRole,
+      }),
+    [
+      core.activeSession,
+      core.role,
+      core.selectedTask,
+      core.sessionsForTask,
+      documents.qaDoc,
+      roleLabelByRole,
+      sessionActions.isSessionWorking,
+    ],
   );
+  const {
+    latestSessionByRole,
+    workflowStateByRole,
+    sessionSelectorGroups,
+    sessionSelectorValue,
+    sessionCreateOptions,
+    selectedInteractionRole,
+    selectedRoleAvailable,
+    selectedRoleReadOnlyReason,
+    createSessionDisabled,
+  } = workflowModelContext;
+
+  const activeDocumentRole = core.activeSession?.role ?? core.role;
+  const activeDocument = useMemo(
+    () =>
+      buildActiveDocumentForRole({
+        activeRole: activeDocumentRole,
+        specDoc: documents.specDoc,
+        planDoc: documents.planDoc,
+        qaDoc: documents.qaDoc,
+      }),
+    [activeDocumentRole, documents.planDoc, documents.qaDoc, documents.specDoc],
+  );
+
+  const agentStudioHeaderModel = useAgentStudioHeaderModel({
+    selectedTask: core.selectedTask,
+    activeSession: core.activeSession,
+    sessionsForTaskLength: core.sessionsForTask.length,
+    contextSessionsLength: core.contextSessionsLength,
+    agentStudioReady: readiness.agentStudioReady,
+    isStarting: sessionActions.isStarting,
+    onWorkflowStepSelect: sessionActions.handleWorkflowStepSelect,
+    onSessionSelectionChange: sessionActions.handleSessionSelectionChange,
+    onCreateSession: sessionActions.handleCreateSession,
+    workflow: {
+      workflowStateByRole,
+      selectedInteractionRole,
+      latestSessionByRole,
+      sessionSelectorValue,
+      sessionSelectorGroups,
+      sessionCreateOptions,
+      createSessionDisabled,
+    },
+  });
 
   const agentStudioWorkspaceSidebarModel = useMemo(
     () =>
@@ -433,30 +253,10 @@ export function useAgentStudioPageModels({
   );
 
   const chatContextUsage = useMemo(
-    () =>
-      activeSessionContextUsage === null
-        ? null
-        : {
-            totalTokens: activeSessionContextUsage.totalTokens,
-            contextWindow: activeSessionContextUsage.contextWindow,
-            ...(typeof activeSessionContextUsage.outputLimit === "number"
-              ? { outputLimit: activeSessionContextUsage.outputLimit }
-              : {}),
-          },
-    [activeSessionContextUsage],
+    () => toChatContextUsage(modelSelection.activeSessionContextUsage),
+    [modelSelection.activeSessionContextUsage],
   );
 
-  const handleRefreshChecks = useCallback((): void => {
-    void refreshChecks();
-  }, [refreshChecks]);
-
-  const handleKickoff = useCallback((): void => {
-    void startScenarioKickoff();
-  }, [startScenarioKickoff]);
-
-  const isModelSelectionPending = Boolean(
-    activeSession?.isLoadingModelCatalog && !activeSession?.selectedModel,
-  );
   const activeTodoPanelCollapsed = activeSessionId
     ? (todoPanelCollapsedBySession[activeSessionId] ?? false)
     : false;
@@ -471,134 +271,64 @@ export function useAgentStudioPageModels({
     }));
   }, [activeSessionId]);
 
-  const handleSend = useCallback((): void => {
-    void onSend();
-  }, [onSend]);
+  const agentChatThreadModel = useAgentStudioThreadModel({
+    threadSession,
+    taskId: core.taskId,
+    agentStudioReady: readiness.agentStudioReady,
+    agentStudioBlockedReason: readiness.agentStudioBlockedReason,
+    isLoadingChecks: readiness.isLoadingChecks,
+    refreshChecks: readiness.refreshChecks,
+    canKickoffNewSession: sessionActions.canKickoffNewSession,
+    selectedRoleAvailable,
+    kickoffLabel: sessionActions.kickoffLabel,
+    startScenarioKickoff: sessionActions.startScenarioKickoff,
+    isStarting: sessionActions.isStarting,
+    isSending: sessionActions.isSending,
+    activeSessionAgentColors: modelSelection.activeSessionAgentColors,
+    isSubmittingQuestionByRequestId: sessionActions.isSubmittingQuestionByRequestId,
+    onSubmitQuestionAnswers: sessionActions.onSubmitQuestionAnswers,
+    isSubmittingPermissionByRequestId: permissions.isSubmittingPermissionByRequestId,
+    permissionReplyErrorByRequestId: permissions.permissionReplyErrorByRequestId,
+    onReplyPermission: permissions.onReplyPermission,
+    todoPanelCollapsed: activeTodoPanelCollapsed,
+    onToggleTodoPanel: handleToggleTodoPanel,
+    todoPanelBottomOffset,
+    isPinnedToBottom,
+    messagesContainerRef,
+    onMessagesScroll: handleMessagesScroll,
+  });
 
-  const handleStopSession = useCallback((): void => {
-    if (!activeSession) {
-      return;
-    }
-    void stopAgentSession(activeSession.sessionId);
-  }, [activeSession, stopAgentSession]);
-
-  const agentChatThreadModel = useMemo(
-    () =>
-      buildAgentChatThreadModel({
-        activeSession: threadSession,
-        roleOptions: ROLE_OPTIONS,
-        agentStudioReady,
-        agentStudioBlockedReason,
-        isLoadingChecks,
-        onRefreshChecks: handleRefreshChecks,
-        taskId,
-        canKickoffNewSession: canKickoffNewSession && selectedRoleAvailable,
-        kickoffLabel,
-        onKickoff: handleKickoff,
-        isStarting,
-        isSending,
-        activeSessionAgentColors,
-        isSubmittingQuestionByRequestId,
-        onSubmitQuestionAnswers,
-        isSubmittingPermissionByRequestId,
-        permissionReplyErrorByRequestId,
-        onReplyPermission: handlePermissionReply,
-        todoPanelCollapsed: activeTodoPanelCollapsed,
-        onToggleTodoPanel: handleToggleTodoPanel,
-        todoPanelBottomOffset,
-        isPinnedToBottom,
-        messagesContainerRef,
-        onMessagesScroll: handleMessagesScroll,
-      }),
-    [
-      threadSession,
-      activeSessionAgentColors,
-      activeTodoPanelCollapsed,
-      agentStudioBlockedReason,
-      agentStudioReady,
-      canKickoffNewSession,
-      selectedRoleAvailable,
-      handleKickoff,
-      handleMessagesScroll,
-      handleRefreshChecks,
-      handleToggleTodoPanel,
-      isLoadingChecks,
-      isSending,
-      isStarting,
-      isSubmittingQuestionByRequestId,
-      isSubmittingPermissionByRequestId,
-      handlePermissionReply,
-      kickoffLabel,
-      permissionReplyErrorByRequestId,
-      isPinnedToBottom,
-      messagesContainerRef,
-      onSubmitQuestionAnswers,
-      taskId,
-      todoPanelBottomOffset,
-    ],
-  );
-
-  const agentChatComposerModel = useMemo(
-    () =>
-      buildAgentChatComposerModel({
-        taskId,
-        agentStudioReady,
-        isReadOnly: !selectedRoleAvailable,
-        readOnlyReason: selectedRoleReadOnlyReason,
-        input,
-        onInputChange: setInput,
-        onSend: handleSend,
-        isSending,
-        isStarting,
-        isSessionWorking,
-        isModelSelectionPending,
-        selectedModelSelection,
-        isSelectionCatalogLoading,
-        agentOptions,
-        modelOptions,
-        modelGroups,
-        variantOptions,
-        onSelectAgent,
-        onSelectModel,
-        onSelectVariant,
-        activeSessionAgentColors,
-        contextUsage: chatContextUsage,
-        canStopSession,
-        onStopSession: handleStopSession,
-        composerFormRef,
-        composerTextareaRef,
-        onComposerTextareaInput: resizeComposerTextarea,
-      }),
-    [
-      agentOptions,
-      agentStudioReady,
-      canStopSession,
-      chatContextUsage,
-      composerFormRef,
-      composerTextareaRef,
-      handleSend,
-      handleStopSession,
-      input,
-      isSelectionCatalogLoading,
-      isSending,
-      isSessionWorking,
-      isModelSelectionPending,
-      isStarting,
-      modelGroups,
-      modelOptions,
-      onSelectAgent,
-      onSelectModel,
-      onSelectVariant,
-      activeSessionAgentColors,
-      resizeComposerTextarea,
+  const agentChatComposerModel = useAgentStudioComposerModel({
+    taskId: core.taskId,
+    activeSession: core.activeSession,
+    agentStudioReady: readiness.agentStudioReady,
+    workflow: {
       selectedRoleAvailable,
       selectedRoleReadOnlyReason,
-      selectedModelSelection,
-      setInput,
-      taskId,
-      variantOptions,
-    ],
-  );
+    },
+    input: composer.input,
+    setInput: composer.setInput,
+    onSend: sessionActions.onSend,
+    isSending: sessionActions.isSending,
+    isStarting: sessionActions.isStarting,
+    isSessionWorking: sessionActions.isSessionWorking,
+    selectedModelSelection: modelSelection.selectedModelSelection,
+    isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
+    agentOptions: modelSelection.agentOptions,
+    modelOptions: modelSelection.modelOptions,
+    modelGroups: modelSelection.modelGroups,
+    variantOptions: modelSelection.variantOptions,
+    onSelectAgent: modelSelection.onSelectAgent,
+    onSelectModel: modelSelection.onSelectModel,
+    onSelectVariant: modelSelection.onSelectVariant,
+    activeSessionAgentColors: modelSelection.activeSessionAgentColors,
+    chatContextUsage,
+    canStopSession: sessionActions.canStopSession,
+    stopAgentSession: sessionActions.stopAgentSession,
+    composerFormRef,
+    composerTextareaRef,
+    resizeComposerTextarea,
+  });
 
   const agentChatModel = useMemo(
     () => ({
@@ -610,7 +340,7 @@ export function useAgentStudioPageModels({
   );
 
   return {
-    activeTabValue,
+    activeTabValue: core.activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,
     agentStudioWorkspaceSidebarModel,

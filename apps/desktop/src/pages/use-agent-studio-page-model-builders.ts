@@ -1,0 +1,172 @@
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
+import type { AgentChatModel, AgentStudioWorkspaceDocument } from "@/components/features/agents";
+import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import type { ComboboxGroup } from "@/components/ui/combobox";
+import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { SCENARIO_LABELS } from "./agents-page-constants";
+import {
+  buildLatestSessionByRoleMap,
+  buildRoleEnabledMapForTask,
+  buildSessionCreateOptions,
+  buildSessionSelectorGroups,
+  buildWorkflowStateByRole,
+} from "./agents-page-session-tabs";
+
+export type AgentStudioDocumentsContext = {
+  specDoc: TaskDocumentState;
+  planDoc: TaskDocumentState;
+  qaDoc: TaskDocumentState;
+};
+
+export type AgentStudioSessionContextUsage = {
+  totalTokens: number;
+  contextWindow: number;
+  outputLimit?: number;
+} | null;
+
+type BuildWorkflowModelContextArgs = {
+  selectedTask: TaskCard | null;
+  sessionsForTask: AgentSessionState[];
+  activeSession: AgentSessionState | null;
+  role: AgentRole;
+  isSessionWorking: boolean;
+  qaDoc: TaskDocumentState;
+  roleLabelByRole: Record<AgentRole, string>;
+};
+
+export type WorkflowModelContext = {
+  latestSessionByRole: ReturnType<typeof buildLatestSessionByRoleMap>;
+  workflowStateByRole: ReturnType<typeof buildWorkflowStateByRole>;
+  sessionSelectorGroups: ComboboxGroup[];
+  sessionSelectorValue: string;
+  sessionCreateOptions: ReturnType<typeof buildSessionCreateOptions>;
+  selectedInteractionRole: AgentRole;
+  selectedRoleAvailable: boolean;
+  selectedRoleReadOnlyReason: string | null;
+  createSessionDisabled: boolean;
+};
+
+const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
+  if (!task) {
+    return false;
+  }
+  return (
+    task.status === "human_review" ||
+    task.availableActions.includes("human_request_changes") ||
+    task.availableActions.includes("human_approve")
+  );
+};
+
+export const buildWorkflowModelContext = ({
+  selectedTask,
+  sessionsForTask,
+  activeSession,
+  role,
+  isSessionWorking,
+  qaDoc,
+  roleLabelByRole,
+}: BuildWorkflowModelContextArgs): WorkflowModelContext => {
+  const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
+  const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
+  const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
+  const workflowStateByRole = buildWorkflowStateByRole({
+    roleWorkflowsByTask,
+    latestSessionByRole,
+  });
+  const selectedInteractionRole = activeSession?.role ?? role;
+  const selectedRoleAvailable = roleWorkflowsByTask[selectedInteractionRole].available;
+  const selectedRoleReadOnlyReason = selectedRoleAvailable
+    ? null
+    : `${roleLabelByRole[selectedInteractionRole]} is unavailable for this task right now.`;
+  const sessionSelectorGroups = buildSessionSelectorGroups({
+    sessionsForTask,
+    scenarioLabels: SCENARIO_LABELS,
+    roleLabelByRole,
+  });
+  const fallbackSessionForSelectedRole =
+    sessionsForTask.find((session) => session.role === selectedInteractionRole) ?? null;
+  const sessionSelectorValue =
+    activeSession?.sessionId ?? fallbackSessionForSelectedRole?.sessionId ?? "";
+  const createSessionDisabled = Boolean(activeSession && isSessionWorking);
+  const sessionCreateOptions = buildSessionCreateOptions({
+    roleEnabledByTask,
+    hasQaFeedback: qaDoc.markdown.trim().length > 0,
+    hasHumanFeedback: isTaskAwaitingHumanFeedback(selectedTask),
+    createSessionDisabled,
+    roleLabelByRole,
+    scenarioLabels: SCENARIO_LABELS,
+  });
+
+  return {
+    latestSessionByRole,
+    workflowStateByRole,
+    sessionSelectorGroups,
+    sessionSelectorValue,
+    sessionCreateOptions,
+    selectedInteractionRole,
+    selectedRoleAvailable,
+    selectedRoleReadOnlyReason,
+    createSessionDisabled,
+  };
+};
+
+type BuildActiveDocumentForRoleArgs = {
+  activeRole: AgentRole;
+  specDoc: TaskDocumentState;
+  planDoc: TaskDocumentState;
+  qaDoc: TaskDocumentState;
+};
+
+export const buildActiveDocumentForRole = ({
+  activeRole,
+  specDoc,
+  planDoc,
+  qaDoc,
+}: BuildActiveDocumentForRoleArgs): AgentStudioWorkspaceDocument | null => {
+  if (activeRole === "spec") {
+    return {
+      title: "Specification",
+      description: "Current spec document for this task.",
+      emptyState: "No spec document yet.",
+      document: specDoc,
+    };
+  }
+
+  if (activeRole === "planner") {
+    return {
+      title: "Implementation Plan",
+      description: "Current implementation plan for this task.",
+      emptyState: "No implementation plan yet.",
+      document: planDoc,
+    };
+  }
+
+  if (activeRole === "qa") {
+    return {
+      title: "QA Report",
+      description: "Latest QA report for this task.",
+      emptyState: "No QA report yet.",
+      document: qaDoc,
+    };
+  }
+
+  return null;
+};
+
+export const toChatContextUsage = (
+  activeSessionContextUsage: AgentStudioSessionContextUsage,
+): AgentChatModel["composer"]["contextUsage"] => {
+  if (activeSessionContextUsage === null) {
+    return null;
+  }
+
+  return {
+    totalTokens: activeSessionContextUsage.totalTokens,
+    contextWindow: activeSessionContextUsage.contextWindow,
+    ...(typeof activeSessionContextUsage.outputLimit === "number"
+      ? { outputLimit: activeSessionContextUsage.outputLimit }
+      : {}),
+  };
+};
