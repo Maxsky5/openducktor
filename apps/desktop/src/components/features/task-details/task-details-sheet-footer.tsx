@@ -23,7 +23,7 @@ export function TaskDetailsSheetFooter({
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
   return (
-    <div className="mt-0 flex-none flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3">
+    <div className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
           Close

@@ -1,11 +1,138 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 @plugin "@tailwindcss/typography";
+
+/* ── Shadcn Slate theme tokens ─────────────────────────────────────────── */
 
 :root {
   --radius: 0.75rem;
-  --ring: #0369a1;
+
+  /* surfaces */
+  --background: oklch(0.918 0.006 264.531); /* ~gray-200 #e5e7eb – page bg */
+  --foreground: oklch(0.129 0.042 264.695); /* ~slate-900 #0f172a */
+
+  --card: oklch(1 0 0); /* white */
+  --card-foreground: oklch(0.129 0.042 264.695);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+
+  /* primary = sky-600 */
+  --primary: oklch(0.588 0.158 241.966); /* ~sky-600 #0284c7 */
+  --primary-foreground: oklch(1 0 0); /* white */
+
+  /* secondary */
+  --secondary: oklch(0.929 0.013 255.508); /* ~slate-200 */
+  --secondary-foreground: oklch(0.208 0.042 265.755); /* ~slate-800 */
+
+  /* muted */
+  --muted: oklch(0.968 0.007 247.896); /* ~slate-100 */
+  --muted-foreground: oklch(0.554 0.046 257.417); /* ~slate-500 */
+
+  /* accent */
+  --accent: oklch(0.968 0.007 247.896); /* ~slate-100 */
+  --accent-foreground: oklch(0.208 0.042 265.755);
+
+  /* destructive = rose-600 */
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
+
+  /* chrome */
+  --border: oklch(0.929 0.013 255.508); /* ~slate-200 */
+  --input: oklch(0.869 0.022 252.894); /* ~slate-300 */
+  --ring: oklch(0.588 0.158 241.966); /* matches primary (sky-600) */
+
+  /* sidebar */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.446 0.043 257.281); /* ~slate-600 */
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-accent: oklch(0.208 0.042 265.755); /* ~slate-900 – active nav */
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-muted-foreground: oklch(0.554 0.046 257.417);
+  --sidebar-primary: oklch(0.588 0.158 241.966);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-ring: oklch(0.588 0.158 241.966);
 }
+
+.dark {
+  --background: oklch(0.145 0.017 265.755); /* ~slate-950 */
+  --foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
+
+  --card: oklch(0.208 0.042 265.755); /* ~slate-900 */
+  --card-foreground: oklch(0.968 0.007 247.896);
+
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.968 0.007 247.896);
+
+  /* primary – slightly lighter sky for dark bg */
+  --primary: oklch(0.631 0.158 241.966); /* ~sky-500 */
+  --primary-foreground: oklch(1 0 0); /* white — sky-500 needs white text for contrast */
+
+  --secondary: oklch(0.279 0.041 260.031); /* ~slate-800 */
+  --secondary-foreground: oklch(0.968 0.007 247.896);
+
+  --muted: oklch(0.279 0.041 260.031); /* ~slate-800 */
+  --muted-foreground: oklch(0.64 0.03 257.417); /* ~slate-400 — readable on dark surfaces */
+
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.968 0.007 247.896);
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.968 0.007 247.896);
+
+  --border: oklch(0.332 0.038 260.912); /* ~slate-700 */
+  --input: oklch(0.332 0.038 260.912);
+  --ring: oklch(0.631 0.158 241.966);
+
+  --sidebar: oklch(0.175 0.03 265.755); /* slightly lighter than bg */
+  --sidebar-foreground: oklch(0.869 0.022 252.894);
+  --sidebar-border: oklch(0.279 0.041 260.031);
+  --sidebar-accent: oklch(0.968 0.007 247.896); /* ~slate-50 – active nav */
+  --sidebar-accent-foreground: oklch(0.145 0.017 265.755);
+  --sidebar-muted-foreground: oklch(0.64 0.03 257.417);
+  --sidebar-primary: oklch(0.631 0.158 241.966);
+  --sidebar-primary-foreground: oklch(0.145 0.017 265.755);
+  --sidebar-ring: oklch(0.631 0.158 241.966);
+}
+
+/* Expose CSS variables as Tailwind v4 color utilities (bg-*, text-*, etc.) */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ── Base resets ────────────────────────────────────────────────────────── */
 
 * {
   box-sizing: border-box;
@@ -20,10 +147,10 @@ body,
 
 body {
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  color: #0f172a;
+  color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  background: #e5e7eb;
+  background: var(--background);
 }
 
 code,
@@ -32,7 +159,7 @@ pre {
 }
 
 ::selection {
-  background: rgba(14, 165, 233, 0.25);
+  background: oklch(from var(--primary) l c h / 25%);
 }
 
 ::-webkit-scrollbar {
@@ -43,7 +170,7 @@ pre {
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
   border: 2px solid transparent;
-  background: rgba(15, 23, 42, 0.25);
+  background: oklch(from var(--foreground) l c h / 25%);
   background-clip: padding-box;
 }
 
@@ -73,10 +200,19 @@ pre {
 
 .markdown-body pre code {
   border-radius: 0;
+  border: none;
   padding: 0;
   background: transparent;
   color: inherit;
   font-size: inherit;
+}
+
+.markdown-body pre > code:only-child {
+  display: block;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  padding: 0.875rem;
+  background: oklch(from var(--muted) l c h / 30%);
 }
 
 .markdown-body pre code::before,

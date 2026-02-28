@@ -70,3 +70,11 @@ export const workspaceSetTrustedHooks = async (
   });
   return workspaceRecordSchema.parse(payload);
 };
+
+export const getTheme = async (invokeFn: InvokeFn): Promise<string> => {
+  return invokeFn<string>("get_theme");
+};
+
+export const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
+  await invokeFn<void>("set_theme", { theme });
+};

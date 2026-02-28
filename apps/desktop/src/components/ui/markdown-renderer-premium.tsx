@@ -12,7 +12,7 @@ const LANGUAGE_CLASS_PATTERN = /language-([a-z0-9-]+)/i;
 
 function createPlainCodeFallback(code: string): ReactElement {
   return (
-    <pre className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 shadow-inner">
+    <pre className="overflow-x-auto rounded-xl border border-border bg-muted/30 p-3.5 shadow-inner">
       <code>{code}</code>
     </pre>
   );

@@ -158,6 +158,10 @@ impl Default for OpencodeStartupReadinessConfig {
     }
 }
 
+fn default_theme() -> String {
+    "light".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalConfig {
@@ -165,6 +169,8 @@ pub struct GlobalConfig {
     pub active_repo: Option<String>,
     #[serde(default = "default_task_metadata_namespace")]
     pub task_metadata_namespace: String,
+    #[serde(default = "default_theme")]
+    pub theme: String,
     #[serde(default)]
     pub opencode_startup: OpencodeStartupReadinessConfig,
     #[serde(default)]
@@ -181,6 +187,7 @@ impl Default for GlobalConfig {
             version: 1,
             active_repo: None,
             task_metadata_namespace: default_task_metadata_namespace(),
+            theme: default_theme(),
             opencode_startup: OpencodeStartupReadinessConfig::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),

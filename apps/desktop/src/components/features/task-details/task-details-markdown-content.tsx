@@ -59,7 +59,9 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
         variant="document"
         premiumCodeBlocks={hasLabeledCodeFence}
         fallback={
-          <p className="text-xs text-slate-500">Rendering markdown with syntax highlighting…</p>
+          <p className="text-xs text-muted-foreground">
+            Rendering markdown with syntax highlighting…
+          </p>
         }
       />
     ),
@@ -68,7 +70,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
 
   if (!hasContent) {
     return (
-      <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+      <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
         {empty}
       </p>
     );
@@ -76,10 +78,10 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
 
   if (!isMarkdownReady) {
     return (
-      <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <div className="h-3 w-4/5 animate-pulse rounded bg-slate-200" />
-        <div className="h-3 w-full animate-pulse rounded bg-slate-200" />
-        <div className="h-3 w-3/4 animate-pulse rounded bg-slate-200" />
+      <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
+        <div className="h-3 w-4/5 animate-pulse rounded bg-secondary" />
+        <div className="h-3 w-full animate-pulse rounded bg-secondary" />
+        <div className="h-3 w-3/4 animate-pulse rounded bg-secondary" />
       </div>
     );
   }

@@ -50,9 +50,9 @@ export function DiagnosticsPanel(): ReactElement {
   return (
     <>
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
           <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               {model.isSummaryChecking ? (
                 <RefreshCcw className={cn("size-3.5 animate-spin", model.summaryState.iconClass)} />
               ) : (
@@ -68,7 +68,7 @@ export function DiagnosticsPanel(): ReactElement {
             type="button"
             size="icon"
             variant="outline"
-            className="size-8 border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50"
+            className="size-8 border-input bg-card text-foreground shadow-sm hover:border-input hover:bg-muted"
             onClick={() => setOpen(true)}
             aria-label="Open diagnostics"
             title="Open diagnostics"
@@ -89,7 +89,7 @@ export function DiagnosticsPanel(): ReactElement {
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
                 <SheetTitle className="flex items-center gap-2">
-                  <ShieldCheck className="size-4 text-sky-600" />
+                  <ShieldCheck className="size-4 text-primary" />
                   Diagnostics
                 </SheetTitle>
                 <SheetDescription>

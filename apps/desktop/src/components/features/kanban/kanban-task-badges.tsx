@@ -23,22 +23,25 @@ const ISSUE_TYPE_STYLES: Record<
   bug: {
     label: "Bug",
     icon: Bug,
-    className: "border-rose-200 bg-rose-50 text-rose-700",
+    className:
+      "border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300",
   },
   feature: {
     label: "Feature",
     icon: Sparkles,
-    className: "border-sky-200 bg-sky-50 text-sky-700",
+    className:
+      "border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",
   },
   epic: {
     label: "Epic",
     icon: Layers3,
-    className: "border-violet-200 bg-violet-50 text-violet-700",
+    className:
+      "border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300",
   },
   task: {
     label: "Task",
     icon: CheckSquare,
-    className: "border-slate-200 bg-slate-100 text-slate-700",
+    className: "border-border bg-muted text-foreground",
   },
 };
 
@@ -57,31 +60,35 @@ const PRIORITY_STYLES: Record<
     label: "P0",
     hint: "Critical",
     dotClassName: "bg-rose-500",
-    badgeClassName: "border-rose-200 bg-rose-50 text-rose-700",
+    badgeClassName:
+      "border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300",
   },
   1: {
     label: "P1",
     hint: "High",
     dotClassName: "bg-orange-500",
-    badgeClassName: "border-orange-200 bg-orange-50 text-orange-700",
+    badgeClassName:
+      "border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300",
   },
   2: {
     label: "P2",
     hint: "Normal",
     dotClassName: "bg-amber-500",
-    badgeClassName: "border-amber-200 bg-amber-50 text-amber-700",
+    badgeClassName:
+      "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",
   },
   3: {
     label: "P3",
     hint: "Low",
     dotClassName: "bg-sky-500",
-    badgeClassName: "border-sky-200 bg-sky-50 text-sky-700",
+    badgeClassName:
+      "border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300",
   },
   4: {
     label: "P4",
     hint: "Lowest",
-    dotClassName: "bg-slate-400",
-    badgeClassName: "border-slate-200 bg-slate-100 text-slate-700",
+    dotClassName: "bg-muted-foreground",
+    badgeClassName: "border-border bg-muted text-foreground",
   },
 };
 
@@ -132,12 +139,12 @@ const runStateIcon = (value: RunSummary["state"]): LucideIcon => {
 
 const runStateClassName = (value: RunSummary["state"]): string => {
   if (value === "blocked" || value === "failed") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
+    return "border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300";
   }
   if (value === "running" || value === "starting") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
+    return "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300";
   }
-  return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-border bg-muted text-foreground";
 };
 
 export function IssueTypeBadge({ issueType }: { issueType: IssueType }): ReactElement {

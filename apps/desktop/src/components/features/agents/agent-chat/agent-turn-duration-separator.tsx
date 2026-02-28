@@ -12,12 +12,14 @@ export function AgentTurnDurationSeparator({
   className,
 }: AgentTurnDurationSeparatorProps): ReactElement {
   return (
-    <div className={cn("flex items-center gap-3 px-1 py-1 text-xs text-slate-500", className)}>
-      <div className="h-px flex-1 bg-slate-200" aria-hidden />
+    <div
+      className={cn("flex items-center gap-3 px-1 py-1 text-xs text-muted-foreground", className)}
+    >
+      <div className="h-px flex-1 bg-border" aria-hidden />
       <span className="shrink-0 font-medium tracking-wide">
         Worked for {formatAgentDuration(durationMs)}
       </span>
-      <div className="h-px flex-1 bg-slate-200" aria-hidden />
+      <div className="h-px flex-1 bg-border" aria-hidden />
     </div>
   );
 }

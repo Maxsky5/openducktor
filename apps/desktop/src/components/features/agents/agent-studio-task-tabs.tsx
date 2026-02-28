@@ -48,12 +48,12 @@ const statusLabelByTab = (status: AgentStudioTaskTabStatus): string => {
 
 const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
   if (status === "working") {
-    return <LoaderCircle className="size-3.5 animate-spin text-sky-600" />;
+    return <LoaderCircle className="size-3.5 animate-spin text-primary" />;
   }
   if (status === "waiting_input") {
     return <CircleAlert className="size-3.5 text-amber-600" />;
   }
-  return <Circle className="size-3.5 fill-slate-300 text-slate-300" />;
+  return <Circle className="size-3.5 fill-input text-input" />;
 };
 
 export function AgentStudioTaskTabs({
@@ -120,8 +120,8 @@ export function AgentStudioTaskTabs({
                       "group relative z-1 inline-flex h-10 shrink-0 items-center gap-1 rounded-t-[10px] pl-2 pr-1",
                       "transition-colors",
                       tab.isActive
-                        ? "z-10 border-slate-300 border-b-transparent bg-white text-slate-900 hover:bg-white after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-white"
-                        : "border-slate-300 border-b-slate-300 bg-slate-200 text-slate-700 hover:bg-slate-100",
+                        ? "z-10 border-input border-b-transparent bg-card text-foreground hover:bg-card after:absolute after:right-0 after:bottom-0 after:left-0 after:h-px after:bg-card"
+                        : "border-input border-b-input bg-secondary text-foreground hover:bg-muted",
                     )}
                   >
                     <TabsTrigger
@@ -130,7 +130,7 @@ export function AgentStudioTaskTabs({
                       className={cn(
                         "h-9 max-w-[19rem] cursor-pointer justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
                         "text-inherit data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-600",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                       )}
                     >
                       <span
@@ -146,8 +146,8 @@ export function AgentStudioTaskTabs({
                     <button
                       type="button"
                       className={cn(
-                        "mr-1 cursor-pointer rounded-md p-1 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-600",
+                        "mr-1 cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         "opacity-60 group-hover:opacity-100 data-[active=true]:opacity-100",
                       )}
                       data-active={tab.isActive ? "true" : "false"}
@@ -165,7 +165,7 @@ export function AgentStudioTaskTabs({
                 ))}
               </TabsList>
             ) : (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted-foreground">
                 Open a task tab to start working with an agent.
               </p>
             )}
@@ -174,7 +174,7 @@ export function AgentStudioTaskTabs({
               size="icon"
               variant="ghost"
               aria-label="Open new task tab"
-              className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-gray-50 shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-600"
+              className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-gray-50 shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               disabled={!canOpenCreateDialog}
               onClick={() => setIsCreateDialogOpen(true)}
             >
@@ -210,7 +210,7 @@ export function AgentStudioTaskTabs({
                 disabled
                 onValueChange={() => undefined}
               />
-              <LoaderCircle className="pointer-events-none absolute right-9 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-500" />
+              <LoaderCircle className="pointer-events-none absolute right-9 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
             </div>
           ) : hasCreatableTasks ? (
             <TaskSelector
@@ -222,7 +222,9 @@ export function AgentStudioTaskTabs({
               onValueChange={setPendingTaskId}
             />
           ) : (
-            <p className="text-sm text-slate-500">All available tasks already have an open tab.</p>
+            <p className="text-sm text-muted-foreground">
+              All available tasks already have an open tab.
+            </p>
           )}
 
           <DialogFooter>

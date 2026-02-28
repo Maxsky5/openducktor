@@ -71,7 +71,7 @@ export function TaskDetailsSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]">
-        <SheetHeader className="border-b border-slate-200 bg-white px-5 py-4">
+        <SheetHeader className="border-b border-border bg-card px-5 py-4">
           <TaskDetailsSheetHeader
             task={task}
             subtasksCount={viewModel.subtasks.length}

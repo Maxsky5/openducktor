@@ -262,6 +262,16 @@ impl AppConfigStore {
             configured_worktree_base_path,
         })
     }
+
+    pub fn get_theme(&self) -> Result<String> {
+        Ok(self.load()?.theme)
+    }
+
+    pub fn set_theme(&self, theme: &str) -> Result<()> {
+        let mut config = self.load()?;
+        config.theme = theme.to_string();
+        self.save(&config)
+    }
 }
 
 pub(crate) fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {

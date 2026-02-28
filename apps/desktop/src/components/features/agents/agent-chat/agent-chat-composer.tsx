@@ -69,7 +69,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       }}
     >
       <div
-        className="rounded-none border-l-4 bg-white shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
+        className="rounded-none border-l-4 bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl"
         style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
       >
         <Textarea
@@ -93,24 +93,24 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
           }}
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 px-2.5 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             <div className="relative">
-              <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
+              <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Combobox
                 value={selectedModelSelection?.opencodeAgent ?? ""}
                 options={agentOptions}
                 className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
                 placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
                 searchPlaceholder="Search agent..."
-                triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
+                triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
                 disabled={selectorDisabled}
                 onValueChange={onSelectAgent}
               />
             </div>
 
             <div className="relative">
-              <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
+              <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Combobox
                 value={
                   selectedModelSelection
@@ -122,21 +122,21 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 className="w-[26rem] max-w-[min(90vw,34rem)] p-0"
                 placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
                 searchPlaceholder="Search model..."
-                triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
+                triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
                 disabled={selectorDisabled}
                 onValueChange={onSelectModel}
               />
             </div>
 
             <div className="relative">
-              <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
+              <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Combobox
                 value={selectedModelSelection?.variant ?? ""}
                 options={variantOptions}
                 className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
                 placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
                 searchPlaceholder="Search variant..."
-                triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-slate-300 !bg-white !pl-7 !pr-2 text-xs text-slate-700 shadow-none hover:!bg-slate-100"
+                triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
                 disabled={
                   !taskId ||
                   variantOptions.length === 0 ||
@@ -149,27 +149,28 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-2">
             {contextUsage ? (
-              <AgentContextUsageIndicator
-                totalTokens={contextUsage.totalTokens}
-                contextWindow={contextUsage.contextWindow}
-                {...(typeof contextUsage.outputLimit === "number"
-                  ? { outputLimit: contextUsage.outputLimit }
-                  : {})}
-              />
+              <div className="mr-3">
+                <AgentContextUsageIndicator
+                  totalTokens={contextUsage.totalTokens}
+                  contextWindow={contextUsage.contextWindow}
+                  {...(typeof contextUsage.outputLimit === "number"
+                    ? { outputLimit: contextUsage.outputLimit }
+                    : {})}
+                />
+              </div>
             ) : null}
             {canStopSession ? (
               <Button
                 type="button"
                 size="icon"
-                variant="outline"
-                className="size-8 rounded-full border-slate-300 bg-white hover:bg-slate-100"
+                className="size-8 rounded-full border-0 bg-red-500 text-white shadow-sm hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
                 disabled={!agentStudioReady}
                 aria-label="Stop session"
                 onClick={onStopSession}
               >
-                <Square className="size-3.5 text-red-500" />
+                <Square className="size-3 fill-current" />
               </Button>
             ) : null}
             <Button

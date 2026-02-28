@@ -104,8 +104,8 @@ export const WorkflowToolMessage = ({
   const statusLabel =
     lifecyclePhase === "queued" ? "QUEUED" : lifecyclePhase === "executing" ? "RUNNING" : null;
   const statusClassName = isExecuting
-    ? "border-blue-300/70 bg-blue-100/80 text-blue-800"
-    : "border-violet-300/70 bg-violet-100/80 text-violet-800";
+    ? "border-blue-300/70 dark:border-blue-700/70 bg-blue-100/80 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200"
+    : "border-violet-300/70 dark:border-violet-700/70 bg-violet-100/80 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200";
 
   return (
     <div className="space-y-2">
@@ -115,14 +115,14 @@ export const WorkflowToolMessage = ({
           className={cn(
             "text-xs font-semibold",
             isFailure
-              ? "text-rose-900"
+              ? "text-rose-900 dark:text-rose-200"
               : isCancelled
-                ? "text-orange-900"
+                ? "text-orange-900 dark:text-orange-200"
                 : isSuccessfulCompletion
-                  ? "text-emerald-900"
+                  ? "text-emerald-900 dark:text-emerald-200"
                   : isExecuting
-                    ? "text-blue-900"
-                    : "text-violet-900",
+                    ? "text-blue-900 dark:text-blue-200"
+                    : "text-violet-900 dark:text-violet-200",
           )}
         >
           {toolDisplayName(meta.tool)}
@@ -147,7 +147,7 @@ export const WorkflowToolMessage = ({
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
           {hasInput && meta.input ? (
-            <details className="rounded border border-current/20 bg-white">
+            <details className="rounded border border-current/20 bg-card">
               <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
                 Input
               </summary>
@@ -160,7 +160,7 @@ export const WorkflowToolMessage = ({
             <ToolJsonDetails
               label="Output"
               value={meta.output}
-              className="rounded border border-current/20 bg-white"
+              className="rounded border border-current/20 bg-card"
               titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
             />
           ) : null}
@@ -168,7 +168,7 @@ export const WorkflowToolMessage = ({
             <ToolJsonDetails
               label="Error"
               value={meta.error}
-              className="rounded border border-current/20 bg-slate-100/90"
+              className="rounded border border-current/20 bg-muted/90"
               titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
             />
           ) : null}
@@ -215,10 +215,10 @@ export const RegularToolMessage = ({
         "flex min-h-6 items-center gap-2 text-xs",
         hasExpandableDetails ? "cursor-pointer" : "",
         lifecyclePhase === "failed"
-          ? "text-rose-700"
+          ? "text-rose-700 dark:text-rose-300"
           : lifecyclePhase === "cancelled"
-            ? "text-orange-700"
-            : "text-slate-700",
+            ? "text-orange-700 dark:text-orange-300"
+            : "text-foreground",
       )}
     >
       <span
@@ -227,14 +227,16 @@ export const RegularToolMessage = ({
             ? "text-rose-500"
             : lifecyclePhase === "cancelled"
               ? "text-orange-500"
-              : "text-slate-500",
+              : "text-muted-foreground",
         )}
       >
         {toolIcon(meta.tool)}
       </span>
       <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
-      {summaryText.length > 0 ? <p className="truncate text-slate-600">{summaryText}</p> : null}
-      <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+      {summaryText.length > 0 ? (
+        <p className="truncate text-muted-foreground">{summaryText}</p>
+      ) : null}
+      <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
         {isActive ? <LoaderCircle className="size-3 animate-spin" /> : null}
         {!isActive && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
         {timeLabel ? <span>{timeLabel}</span> : null}
@@ -249,31 +251,31 @@ export const RegularToolMessage = ({
           <summary className="list-none [&::-webkit-details-marker]:hidden">{summaryRow}</summary>
           <div className="ml-5 mt-1 space-y-2">
             {hasInput && meta.input ? (
-              <details className="rounded border border-slate-200 bg-white">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-slate-700">
+              <details className="rounded border border-border bg-card">
+                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
                   Input
                 </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-slate-700">
+                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-foreground">
                   {JSON.stringify(meta.input, null, 2)}
                 </pre>
               </details>
             ) : null}
             {hasOutput && meta.output ? (
-              <details className="rounded border border-slate-200 bg-white">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-slate-700">
+              <details className="rounded border border-border bg-card">
+                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
                   Output
                 </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-slate-700">
+                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-foreground">
                   {formatRawJsonLikeText(meta.output)}
                 </pre>
               </details>
             ) : null}
             {hasError && meta.error ? (
-              <details className="rounded border border-rose-200 bg-rose-50/60">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-rose-700">
+              <details className="rounded border border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/40">
+                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-rose-700 dark:text-rose-300">
                   Error
                 </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-rose-700">
+                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-rose-700 dark:text-rose-300">
                   {formatRawJsonLikeText(meta.error)}
                 </pre>
               </details>
@@ -285,18 +287,18 @@ export const RegularToolMessage = ({
       )}
 
       {questionDetails.length > 0 ? (
-        <details className="ml-5 rounded border border-slate-200 bg-slate-100/90">
-          <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-slate-700">
+        <details className="ml-5 rounded border border-border bg-muted/90">
+          <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-foreground">
             Questions and answers
           </summary>
-          <div className="space-y-2 border-t border-slate-200 px-2 py-2 text-xs text-slate-700">
+          <div className="space-y-2 border-t border-border px-2 py-2 text-xs text-foreground">
             {questionDetails.map((entry, index) => (
               <div key={`${meta.callId}:question:${index}`} className="space-y-0.5">
-                <p className="font-medium text-slate-700">{entry.prompt}</p>
+                <p className="font-medium text-foreground">{entry.prompt}</p>
                 <p
                   className={cn(
                     "whitespace-pre-wrap",
-                    entry.answers.length > 0 ? "text-slate-900" : "italic text-slate-500",
+                    entry.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground",
                   )}
                 >
                   {entry.answers.length > 0 ? entry.answers.join(", ") : "No answer yet"}

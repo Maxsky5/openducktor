@@ -65,11 +65,11 @@ function ActiveSessionChip({
   return (
     <Link
       to={toSessionHref({ taskId, session })}
-      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100/75"
+      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 px-2 py-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 transition hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-100/75 dark:hover:bg-sky-900/50"
     >
       <PlayCircle className="size-3" />
       {roleLabel}
-      <span className="text-[10px] font-medium text-sky-600/90">{statusLabel}</span>
+      <span className="text-[10px] font-medium text-primary/90">{statusLabel}</span>
     </Link>
   );
 }
@@ -83,7 +83,7 @@ function ActiveSessionsLine({
 }): ReactElement {
   return (
     <div className="space-y-1 border-t border-sky-100/80 pt-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Active sessions
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -109,7 +109,7 @@ function TaskMeta({
       {task.subtaskIds.length > 0 ? (
         <Badge
           variant="secondary"
-          className="h-6 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700"
+          className="h-6 rounded-full border border-border bg-card px-2.5 text-[11px] text-foreground"
         >
           {task.subtaskIds.length} subtasks
         </Badge>
@@ -158,7 +158,7 @@ function TaskActions({
   };
 
   return (
-    <div className="mt-3 cursor-default border-t border-slate-100 pt-2.5">
+    <div className="mt-3 cursor-default border-t border-border pt-2.5">
       <TaskWorkflowActionGroup
         task={task}
         includeActions={[
@@ -195,7 +195,7 @@ export function KanbanTaskCard({
   return (
     <article
       className={cn(
-        "group min-w-0 rounded-xl border border-slate-200/90 bg-white/95 shadow-sm transition duration-150 hover:border-sky-200 hover:shadow-md",
+        "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm transition duration-150 hover:border-sky-200 hover:shadow-md",
         hasActiveSessions
           ? "kanban-active-session-card border-sky-300/80 shadow-sky-200/50"
           : undefined,
@@ -208,19 +208,19 @@ export function KanbanTaskCard({
       <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">
         <button
           type="button"
-          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           onClick={() => onOpenDetails(task.id)}
         >
           <div className="min-w-0 space-y-1">
             <p
-              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-slate-900"
+              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground"
               title={task.title}
             >
               {task.title}
             </p>
-            <p className="truncate font-mono text-[11px] text-slate-500">{task.id}</p>
+            <p className="truncate font-mono text-[11px] text-muted-foreground">{task.id}</p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-slate-400 transition group-hover:border-slate-200 group-hover:bg-slate-50 group-hover:text-slate-600">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
             <ExternalLink className="size-3" />
             Open
           </span>

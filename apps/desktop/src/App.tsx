@@ -1,6 +1,7 @@
 import { lazy, type ReactElement, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { loadAgentsPage, loadKanbanPage, loadNotFoundPage } from "@/pages";
 import { AppStateProvider, useWorkspaceState } from "@/state";
@@ -13,7 +14,7 @@ const NotFoundPage = lazy(loadNotFoundPage);
 
 function RouteFallback(): ReactElement {
   return (
-    <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500">
+    <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
       Loading page...
     </div>
   );
@@ -33,20 +34,22 @@ function RequireRepository(): ReactElement {
 
 export function App(): ReactElement {
   return (
-    <AppStateProvider>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route path="/" element={<Navigate to="/kanban" replace />} />
-          <Route path="/kanban" element={withRouteFallback(<KanbanPage />)} />
-          <Route element={<RequireRepository />}>
-            <Route path="/agents" element={withRouteFallback(<AgentsPage />)} />
-            <Route path="/planner" element={<Navigate to="/agents?agent=planner" replace />} />
-            <Route path="/builder" element={<Navigate to="/agents?agent=build" replace />} />
+    <ThemeProvider>
+      <AppStateProvider>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<Navigate to="/kanban" replace />} />
+            <Route path="/kanban" element={withRouteFallback(<KanbanPage />)} />
+            <Route element={<RequireRepository />}>
+              <Route path="/agents" element={withRouteFallback(<AgentsPage />)} />
+              <Route path="/planner" element={<Navigate to="/agents?agent=planner" replace />} />
+              <Route path="/builder" element={<Navigate to="/agents?agent=build" replace />} />
+            </Route>
+            <Route path="*" element={withRouteFallback(<NotFoundPage />)} />
           </Route>
-          <Route path="*" element={withRouteFallback(<NotFoundPage />)} />
-        </Route>
-      </Routes>
-      <Toaster />
-    </AppStateProvider>
+        </Routes>
+        <Toaster />
+      </AppStateProvider>
+    </ThemeProvider>
   );
 }

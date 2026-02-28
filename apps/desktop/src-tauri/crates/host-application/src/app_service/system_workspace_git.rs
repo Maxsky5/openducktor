@@ -180,6 +180,14 @@ impl AppService {
         self.config_store.set_repo_trust_hooks(repo_path, trusted)
     }
 
+    pub fn get_theme(&self) -> Result<String> {
+        self.config_store.get_theme()
+    }
+
+    pub fn set_theme(&self, theme: &str) -> Result<()> {
+        self.config_store.set_theme(theme)
+    }
+
     pub fn git_get_branches(&self, repo_path: &str) -> Result<Vec<GitBranch>> {
         self.ensure_repo_initialized(repo_path)?;
         self.git_port.get_branches(Path::new(repo_path))

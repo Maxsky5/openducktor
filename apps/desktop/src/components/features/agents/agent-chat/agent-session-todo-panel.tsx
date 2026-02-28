@@ -15,9 +15,9 @@ const statusIcon = (status: AgentSessionTodoItem["status"]): ReactElement => {
     return <CheckCircle2 className="size-3.5 text-emerald-600" />;
   }
   if (status === "in_progress") {
-    return <LoaderCircle className="size-3.5 animate-spin text-sky-600" />;
+    return <LoaderCircle className="size-3.5 animate-spin text-primary" />;
   }
-  return <Circle className="size-3.5 text-slate-500" />;
+  return <Circle className="size-3.5 text-muted-foreground" />;
 };
 
 export function AgentSessionTodoPanel({
@@ -50,31 +50,31 @@ export function AgentSessionTodoPanel({
   return (
     <section
       className={cn(
-        "w-full max-w-md rounded-lg border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur-sm",
+        "w-full max-w-md rounded-lg border border-border bg-card/95 p-2 shadow-sm backdrop-blur-sm",
         className,
       )}
       aria-label="Agent todo list"
     >
       <button
         type="button"
-        className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-slate-100"
+        className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-muted"
         onClick={onToggleCollapse}
         aria-label={collapsed ? "Expand todo list" : "Collapse todo list"}
       >
-        <ListTodo className="size-3.5 text-slate-600" />
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Todo</p>
-        <p className="ml-auto text-xs text-slate-500">
+        <ListTodo className="size-3.5 text-muted-foreground" />
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Todo</p>
+        <p className="ml-auto text-xs text-muted-foreground">
           {completedCount}/{visibleTodos.length}
         </p>
         {collapsed ? (
-          <ChevronUp className="size-3.5 text-slate-500" />
+          <ChevronUp className="size-3.5 text-muted-foreground" />
         ) : (
-          <ChevronDown className="size-3.5 text-slate-500" />
+          <ChevronDown className="size-3.5 text-muted-foreground" />
         )}
       </button>
 
       {collapsed ? (
-        <div className="mt-2 grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700">
+        <div className="mt-2 grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 rounded border border-border bg-muted px-2 py-1.5 text-sm text-foreground">
           <span className="mt-[3px] inline-flex size-4 items-center justify-center">
             {statusIcon(activeTodo.status)}
           </span>
@@ -93,9 +93,9 @@ export function AgentSessionTodoPanel({
                 </span>
                 <span
                   className={cn(
-                    "leading-5 text-slate-700",
-                    todo.status === "in_progress" && "font-medium text-slate-900",
-                    todo.status === "completed" && "text-slate-500 line-through",
+                    "leading-5 text-foreground",
+                    todo.status === "in_progress" && "font-medium text-foreground",
+                    todo.status === "completed" && "text-muted-foreground line-through",
                   )}
                 >
                   {todo.content}

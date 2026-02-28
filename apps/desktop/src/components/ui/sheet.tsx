@@ -15,23 +15,23 @@ function SheetOverlay({
 }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay
-      className={cn("fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-sm", className)}
+      className={cn("fixed inset-0 z-50 bg-black/45 backdrop-blur-sm", className)}
       {...props}
     />
   );
 }
 
 const sheetVariants = cva(
-  "fixed z-50 flex flex-col gap-4 bg-white p-6 shadow-xl transition data-[state=open]:animate-in data-[state=closed]:animate-out",
+  "fixed z-50 flex flex-col gap-4 bg-popover p-6 shadow-xl transition data-[state=open]:animate-in data-[state=closed]:animate-out",
   {
     variants: {
       side: {
-        top: "inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+        top: "inset-x-0 top-0 border-b border-border data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
         bottom:
-          "inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
-        left: "inset-y-0 left-0 h-full w-full border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-xl",
+          "inset-x-0 bottom-0 border-t border-border data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+        left: "inset-y-0 left-0 h-full w-full border-r border-border data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-xl",
         right:
-          "inset-y-0 right-0 h-full w-full border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-2xl",
+          "inset-y-0 right-0 h-full w-full border-l border-border data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-2xl",
       },
     },
     defaultVariants: {
@@ -52,7 +52,7 @@ function SheetContent({
   }) {
   const renderedCloseButton =
     closeButton === undefined ? (
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900">
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
         <X className="size-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -93,7 +93,10 @@ function SheetDescription({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Description>) {
   return (
-    <DialogPrimitive.Description className={cn("text-sm text-slate-500", className)} {...props} />
+    <DialogPrimitive.Description
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    />
   );
 }
 

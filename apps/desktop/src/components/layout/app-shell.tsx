@@ -1,4 +1,4 @@
-import { FolderOpen, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { FolderOpen, PanelLeftClose, PanelLeftOpen, Settings2 } from "lucide-react";
 import {
   lazy,
   type ReactElement,
@@ -20,6 +20,7 @@ import {
   WorkspaceSummaryCard,
 } from "@/components/layout/sidebar";
 import { summarizeAgentActivity } from "@/components/layout/sidebar/agent-activity-model";
+import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
@@ -70,7 +71,7 @@ export function AppShell(): ReactElement {
         <div className="flex h-full min-h-0 w-full">
           <aside
             className={cn(
-              "flex h-full min-w-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ease-out",
+              "flex h-full min-w-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out",
               isSidebarOpen ? "w-[248px]" : "w-14",
             )}
           >
@@ -83,7 +84,7 @@ export function AppShell(): ReactElement {
                       type="button"
                       size="icon"
                       variant="ghost"
-                      className="mt-0.5 h-8 w-8 shrink-0 text-slate-500 hover:text-slate-900"
+                      className="mt-0.5 h-8 w-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
                       onClick={() => setSidebarOpen(false)}
                       aria-label="Hide sidebar"
                       title="Hide sidebar"
@@ -93,7 +94,7 @@ export function AppShell(): ReactElement {
                   </div>
 
                   <div className="space-y-2">
-                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground">
                       Repository
                     </p>
                     <div className="flex items-center gap-2">
@@ -101,7 +102,7 @@ export function AppShell(): ReactElement {
                       <Button
                         type="button"
                         size="icon"
-                        className="shrink-0 bg-sky-600 text-white hover:bg-sky-500"
+                        className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
                         onClick={() => setRepositoryModalOpen(true)}
                         aria-label="Open repository"
                         title="Open repository"
@@ -125,7 +126,11 @@ export function AppShell(): ReactElement {
                   <WorkspaceSummaryCard />
                 </div>
 
-                <div className="border-t border-slate-200 p-3">
+                <div className="flex justify-center px-3 pb-2 pt-1">
+                  <ThemeToggle />
+                </div>
+
+                <div className="border-t border-sidebar-border p-3">
                   <Suspense
                     fallback={
                       <Button
@@ -134,6 +139,7 @@ export function AppShell(): ReactElement {
                         className="w-full justify-start"
                         disabled
                       >
+                        <Settings2 className="size-4" />
                         Settings
                       </Button>
                     }
@@ -148,7 +154,7 @@ export function AppShell(): ReactElement {
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 text-slate-500 hover:text-slate-900"
+                  className="h-8 w-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
                   onClick={() => setSidebarOpen(true)}
                   aria-label="Show sidebar"
                   title="Show sidebar"
@@ -158,21 +164,21 @@ export function AppShell(): ReactElement {
                 <Button
                   type="button"
                   size="icon"
-                  className="h-8 w-8 bg-sky-600 text-white hover:bg-sky-500"
+                  className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={() => setRepositoryModalOpen(true)}
                   aria-label="Open repository"
                   title="Open repository"
                 >
                   <FolderOpen className="size-4" />
                 </Button>
-                <div className="w-full border-t border-slate-200 pt-2">
+                <div className="w-full border-t border-sidebar-border pt-2">
                   <SidebarNavigation hasActiveRepo={Boolean(activeRepo)} compact />
                 </div>
               </div>
             )}
           </aside>
 
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
             <main
               data-main-scroll-container="true"
               className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"

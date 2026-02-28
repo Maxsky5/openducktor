@@ -38,7 +38,7 @@ export function AgentStudioRightPanelToggleButton({
       type="button"
       size="icon"
       variant="ghost"
-      className="h-10 w-10 rounded-md border border-transparent bg-transparent text-gray-50 hover:border-white/30 hover:bg-white/10"
+      className="h-10 w-10 rounded-md border border-transparent bg-transparent text-gray-50 hover:border-white/30 hover:bg-card/10"
       onClick={model.onToggle}
       aria-label={model.isOpen ? `Hide ${panelLabel} panel` : `Show ${panelLabel} panel`}
       title={model.isOpen ? `Hide ${panelLabel} panel` : `Show ${panelLabel} panel`}
@@ -63,12 +63,14 @@ export function AgentStudioRightPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="space-y-1 border-b border-slate-200 p-4">
+      <div className="space-y-1 border-b border-border p-4">
         <h2 className="text-lg font-semibold leading-none tracking-tight">File Diff</h2>
-        <p className="text-sm text-slate-500">Latest builder file changes for this task session.</p>
+        <p className="text-sm text-muted-foreground">
+          Latest builder file changes for this task session.
+        </p>
       </div>
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-        <p className="text-sm text-slate-500">File diff panel is not available yet.</p>
+        <p className="text-sm text-muted-foreground">File diff panel is not available yet.</p>
       </div>
     </div>
   );

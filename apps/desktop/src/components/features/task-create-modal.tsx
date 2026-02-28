@@ -48,9 +48,9 @@ export function TaskCreateModal({
     <>
       <Dialog open={open} onOpenChange={controller.onDialogOpenChange}>
         <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
-          <DialogHeader className="border-b border-slate-200 px-5 py-4">
+          <DialogHeader className="border-b border-border px-5 py-4">
             <DialogTitle className="flex items-center gap-2 text-2xl">
-              <Sparkles className="size-5 text-sky-600" />
+              <Sparkles className="size-5 text-primary" />
               {controller.mode === "create" ? "Create Task" : "Edit Task"}
             </DialogTitle>
             <DialogDescription>
@@ -137,7 +137,7 @@ export function TaskCreateModal({
               )}
             </div>
 
-            <DialogFooter className="mt-0 justify-between border-t border-slate-200 px-5 py-4">
+            <DialogFooter className="mt-0 justify-between border-t border-border px-5 py-4">
               {controller.mode === "create" && controller.step === "details" ? (
                 <Button
                   type="button"

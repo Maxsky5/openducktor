@@ -84,3 +84,18 @@ pub async fn workspace_set_trusted_hooks(
             .workspace_set_trusted_hooks(&repo_path, trusted),
     )
 }
+
+#[tauri::command]
+pub async fn get_theme(
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    as_error(state.service.get_theme())
+}
+
+#[tauri::command]
+pub async fn set_theme(
+    state: State<'_, AppState>,
+    theme: String,
+) -> Result<(), String> {
+    as_error(state.service.set_theme(&theme))
+}

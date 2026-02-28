@@ -91,7 +91,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         >
           <fieldset className="space-y-4" disabled={isStarting}>
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium text-slate-700" htmlFor="session-start-agent">
+              <label className="text-sm font-medium text-foreground" htmlFor="session-start-agent">
                 Agent
               </label>
               <Combobox
@@ -104,7 +104,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
             </div>
 
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium text-slate-700" htmlFor="session-start-model">
+              <label className="text-sm font-medium text-foreground" htmlFor="session-start-model">
                 Model
               </label>
               <Combobox
@@ -118,7 +118,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
             </div>
 
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium text-slate-700" htmlFor="session-start-variant">
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="session-start-variant"
+              >
                 Variant
               </label>
               <Combobox

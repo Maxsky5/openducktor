@@ -47,7 +47,7 @@ export function TaskEditSectionSwitcher({
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-1.5">
+    <div className="rounded-xl border border-border bg-muted/50 p-1">
       <div className="flex flex-wrap gap-1">
         {sections.map((item) => {
           const isActive = item.id === section;
@@ -59,10 +59,10 @@ export function TaskEditSectionSwitcher({
               disabled={disabled}
               onClick={() => onSectionChange(item.id)}
               className={cn(
-                "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors",
+                "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors",
                 isActive
-                  ? "border-sky-300 bg-sky-100 text-sky-900 shadow-sm"
-                  : "border-transparent bg-white/80 text-slate-700 hover:border-slate-300 hover:bg-white",
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
                 disabled ? "cursor-not-allowed opacity-60" : "",
               )}
               aria-pressed={isActive}
@@ -73,7 +73,9 @@ export function TaskEditSectionSwitcher({
                 <span
                   className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                    isActive ? "bg-sky-200 text-sky-800" : "bg-amber-100 text-amber-700",
+                    isActive
+                      ? "bg-primary-foreground text-primary"
+                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
                   )}
                 >
                   Unsaved

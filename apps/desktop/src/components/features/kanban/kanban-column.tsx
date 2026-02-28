@@ -117,14 +117,11 @@ function LaneHeader({
   const theme = laneTheme(id);
   return (
     <header
-      className={cn(
-        "space-y-3 border-b border-slate-200/80 px-4 pb-3 pt-4",
-        theme.headerSurfaceClass,
-      )}
+      className={cn("space-y-3 border-b border-border/80 px-4 pb-3 pt-4", theme.headerSurfaceClass)}
     >
       <span className={cn("block h-1.5 w-14 rounded-full", theme.headerAccentClass)} />
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-800">{title}</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">{title}</h3>
         <Badge
           variant="outline"
           className={cn("h-6 rounded-full px-2 text-[11px] font-semibold", theme.countBadgeClass)}
@@ -327,7 +324,7 @@ export function KanbanColumn({
   return (
     <section
       className={cn(
-        "flex h-full min-h-[420px] w-[328px] min-w-[328px] flex-col overflow-hidden rounded-2xl border shadow-sm",
+        "flex w-[328px] min-w-[328px] flex-col overflow-hidden rounded-2xl border shadow-sm",
         theme.boardSurfaceClass,
       )}
     >

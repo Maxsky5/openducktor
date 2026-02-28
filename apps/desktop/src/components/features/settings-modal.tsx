@@ -209,7 +209,7 @@ export function SettingsModal({
         </Button>
       </DialogTrigger>
       <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col p-0">
-        <DialogHeader className="shrink-0 border-b border-slate-200 px-6 pb-4 pt-6">
+        <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
           <DialogTitle>Workspace Settings</DialogTitle>
           <DialogDescription>
             Settings are stored in <code>~/.openducktor/config.json</code>.
@@ -218,13 +218,13 @@ export function SettingsModal({
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-6 py-4">
           {!activeRepo ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3 text-sm text-amber-800 dark:text-amber-300">
               Select or add a workspace first, then save settings for that repository.
             </div>
           ) : null}
 
           {activeRepo ? (
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <div className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
               Active repo: <code className="font-mono">{activeRepo}</code>
             </div>
           ) : null}
@@ -272,25 +272,25 @@ export function SettingsModal({
             />
           </div>
 
-          <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="grid gap-3 rounded-md border border-border bg-muted p-3">
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">Agent Defaults (Per Role)</h3>
-              <p className="text-xs text-slate-600">
+              <h3 className="text-sm font-semibold text-foreground">Agent Defaults (Per Role)</h3>
+              <p className="text-xs text-muted-foreground">
                 Required defaults applied when sessions start in this repository.
               </p>
             </div>
             {isLoadingCatalog ? (
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-muted-foreground">
                 Loading available agents/models from OpenCode...
               </p>
             ) : null}
             {catalogError ? (
-              <p className="text-xs text-amber-700">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
                 Failed to load OpenCode values: {catalogError}
               </p>
             ) : null}
             {!isLoadingCatalog && !canSaveRoleDefaults ? (
-              <p className="text-xs text-rose-700">
+              <p className="text-xs text-rose-700 dark:text-rose-400">
                 Agent and model are required for: {missingRequiredRoleLabels.join(", ")}.
               </p>
             ) : null}
@@ -300,9 +300,9 @@ export function SettingsModal({
               const roleVariantOptions = toRoleVariantOptions(catalog, agentDefaults, role);
               const modelKey = selectedModelKeyForRole(agentDefaults, role);
               return (
-                <div key={role} className="grid gap-2 rounded border border-slate-200 bg-white p-3">
+                <div key={role} className="grid gap-2 rounded border border-border bg-card p-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {label}
                     </p>
                     <Button
@@ -377,7 +377,7 @@ export function SettingsModal({
             })}
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-foreground">
             <input
               type="checkbox"
               checked={trustedHooks}
@@ -388,8 +388,12 @@ export function SettingsModal({
           </label>
         </div>
 
-        <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-slate-200 px-6 pb-6 pt-4">
-          {saveError ? <p className="text-sm text-rose-700">{saveError}</p> : <span />}
+        <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-border px-6 pb-6 pt-4">
+          {saveError ? (
+            <p className="text-sm text-rose-700 dark:text-rose-400">{saveError}</p>
+          ) : (
+            <span />
+          )}
           <div className="flex items-center gap-2">
             <Button
               type="button"

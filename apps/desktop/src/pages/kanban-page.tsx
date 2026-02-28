@@ -213,7 +213,7 @@ export function KanbanPage(): ReactElement {
               description: (
                 <button
                   type="button"
-                  className="w-fit cursor-pointer p-0 text-sm font-medium text-slate-700 underline underline-offset-2"
+                  className="w-fit cursor-pointer p-0 text-sm font-medium text-foreground underline underline-offset-2"
                   onClick={() => openSessionInAgentStudio(intent, sessionId)}
                 >
                   Open in Agent Studio
@@ -355,9 +355,9 @@ export function KanbanPage(): ReactElement {
   );
 
   return (
-    <div className="grid min-h-full min-w-0 gap-4 overflow-x-hidden p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold tracking-tight text-slate-800">Kanban Board</h2>
+    <div className="grid min-h-full min-w-0 content-start gap-4 overflow-x-hidden py-4 pl-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 pl-2 pr-4">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">Kanban Board</h2>
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -391,7 +391,7 @@ export function KanbanPage(): ReactElement {
 
       <section className="min-h-0 min-w-0">
         <div className="hide-scrollbar max-w-full overflow-x-auto">
-          <div className="flex min-w-max items-stretch gap-4">
+          <div className="flex min-w-max items-start gap-4">
             {columns.map((column) => (
               <KanbanColumn
                 key={column.id}

@@ -27,8 +27,8 @@ const LazyMarkdownRenderer = lazy(async () => {
 });
 
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
-  compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-black",
-  document: "whitespace-pre-wrap leading-6 text-black",
+  compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-foreground",
+  document: "whitespace-pre-wrap leading-6 text-foreground",
 };
 
 type PlainTextMarkdownFallbackProps = {
@@ -92,7 +92,7 @@ export const MessageHeader = ({
   return (
     <header
       className={cn(
-        "mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500",
+        "mb-1 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground",
         message.role === "assistant" ? "mb-2" : "mb-1",
         compactPadding ? "" : "px-1",
       )}
@@ -122,14 +122,14 @@ const ReasoningMessage = ({
   if (completed) {
     return (
       <details className="px-1 py-0.5">
-        <summary className="flex min-h-6 cursor-pointer items-center gap-2 text-xs text-slate-700">
-          <Brain className="size-3.5 shrink-0 text-slate-500" />
-          <span className="shrink-0 font-medium text-slate-500">Thinking</span>
-          <span className="min-w-0 flex-1 truncate text-slate-600">
+        <summary className="flex min-h-6 cursor-pointer items-center gap-2 text-xs text-foreground">
+          <Brain className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="shrink-0 font-medium text-muted-foreground">Thinking</span>
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">
             {toSingleLineMarkdown(content || "Reasoning complete")}
           </span>
           {timeLabel ? (
-            <span className="shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground">{timeLabel}</span>
           ) : null}
         </summary>
         <div className="pl-6 pt-2">
@@ -140,12 +140,12 @@ const ReasoningMessage = ({
   }
 
   return (
-    <div className="space-y-1 px-1 py-0.5 text-xs text-slate-700">
+    <div className="space-y-1 px-1 py-0.5 text-xs text-foreground">
       <div className="flex min-h-6 items-center gap-2">
-        <Brain className="size-3.5 shrink-0 text-slate-500" />
-        <span className="shrink-0 font-medium text-slate-500">Thinking</span>
+        <Brain className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-medium text-muted-foreground">Thinking</span>
         {timeLabel ? (
-          <span className="ml-auto shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
+          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{timeLabel}</span>
         ) : null}
       </div>
       <DeferredMarkdownRenderer markdown={content || "Thinking..."} variant="compact" />
@@ -169,7 +169,7 @@ const AssistantMessage = ({
     <div className="space-y-2">
       <DeferredMarkdownRenderer markdown={message.content} variant="document" />
       {footer.infoParts.length > 0 ? (
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span
             className="size-1.5 rounded-sm bg-amber-500"
             style={assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined}
@@ -224,12 +224,12 @@ export const MessageBody = ({
 
   if (meta?.kind === "subtask") {
     return (
-      <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-violet-700">
-        <MessageSquareQuote className="size-3.5 shrink-0 text-violet-500" />
+      <div className="flex min-h-6 items-center gap-2 px-1 py-0.5 text-xs text-violet-700 dark:text-violet-300">
+        <MessageSquareQuote className="size-3.5 shrink-0 text-violet-500 dark:text-violet-400" />
         <p className="shrink-0 font-medium">subagent {meta.agent}</p>
-        <p className="truncate text-violet-700/90">{meta.description}</p>
+        <p className="truncate text-violet-700/90 dark:text-violet-300/90">{meta.description}</p>
         {timeLabel ? (
-          <span className="ml-auto shrink-0 text-[11px] text-slate-500">{timeLabel}</span>
+          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{timeLabel}</span>
         ) : null}
       </div>
     );
@@ -237,11 +237,11 @@ export const MessageBody = ({
 
   if (message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX)) {
     return (
-      <details className="rounded border border-slate-200 bg-slate-50/70">
-        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-slate-700">
+      <details className="rounded border border-border bg-muted/70">
+        <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
           Show system prompt
         </summary>
-        <div className="border-t border-slate-200 px-2 py-2">
+        <div className="border-t border-border px-2 py-2">
           <DeferredMarkdownRenderer markdown={systemPromptBody} variant="compact" />
         </div>
       </details>
@@ -253,14 +253,16 @@ export const MessageBody = ({
       <>
         <p className="whitespace-pre-wrap leading-6">{message.content}</p>
         {timeLabel ? (
-          <p className="mt-2 text-right text-[11px] font-medium text-slate-500">{timeLabel}</p>
+          <p className="mt-2 text-right text-[11px] font-medium text-muted-foreground">
+            {timeLabel}
+          </p>
         ) : null}
       </>
     );
   }
 
   if (message.role === "thinking" || message.role === "system") {
-    return <p className="whitespace-pre-wrap leading-6 text-slate-700">{message.content}</p>;
+    return <p className="whitespace-pre-wrap leading-6 text-foreground">{message.content}</p>;
   }
 
   if (message.role === "assistant") {

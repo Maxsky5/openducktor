@@ -91,7 +91,7 @@ export function OpenRepositoryModal({
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Sparkles className="size-5 text-sky-600" />
+            <Sparkles className="size-5 text-primary" />
             Open a Repository
           </DialogTitle>
           <DialogDescription>
@@ -119,9 +119,9 @@ export function OpenRepositoryModal({
           ) : null}
 
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-800">Recent Workspaces</p>
+            <p className="text-sm font-semibold text-foreground">Recent Workspaces</p>
             {sortedRecent.length === 0 ? (
-              <p className="text-sm text-slate-500">No repositories configured yet.</p>
+              <p className="text-sm text-muted-foreground">No repositories configured yet.</p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {sortedRecent.map((workspace) => (
@@ -133,7 +133,7 @@ export function OpenRepositoryModal({
                     disabled={isModalBusy}
                     onClick={() => void selectRecentWorkspace(workspace.path)}
                   >
-                    <span className="truncate text-sm font-semibold text-slate-900">
+                    <span className="truncate text-sm font-semibold text-foreground">
                       {workspaceLabelFromPath(workspace.path, { includeParent: true })}
                     </span>
                     {workspace.path === activeRepo ? (
@@ -142,7 +142,7 @@ export function OpenRepositoryModal({
                         Active
                       </span>
                     ) : (
-                      <span className="inline-flex shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                      <span className="inline-flex shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                         Switch
                       </span>
                     )}

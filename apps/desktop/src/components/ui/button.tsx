@@ -4,15 +4,15 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all outline-none disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 focus-visible:ring-2 focus-visible:ring-sky-500/40",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all outline-none disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 focus-visible:ring-2 focus-visible:ring-ring/40",
   {
     variants: {
       variant: {
-        default: "bg-sky-600 text-white shadow-sm hover:bg-sky-500",
-        secondary: "bg-slate-200/70 text-slate-900 hover:bg-slate-200",
-        ghost: "text-slate-700 hover:bg-slate-200/60",
-        outline: "border border-slate-300 bg-white hover:bg-slate-50",
-        destructive: "bg-rose-600 text-white hover:bg-rose-500",
+        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+        secondary: "bg-secondary/70 text-secondary-foreground hover:bg-secondary",
+        ghost: "text-foreground hover:bg-accent/60",
+        outline: "border border-input bg-card hover:bg-accent",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
       },
       size: {
         default: "h-9 px-4 py-2",

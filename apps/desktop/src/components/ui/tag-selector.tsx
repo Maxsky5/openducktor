@@ -78,7 +78,7 @@ export function TagSelector({
 
   return (
     <div className="space-y-2">
-      <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-slate-300 bg-white px-2 py-2">
+      <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-input bg-card px-2 py-2">
         {value.length > 0 ? (
           value.map((label) => (
             <Badge key={label} variant="secondary" className="gap-1.5 rounded-md px-2 py-1">
@@ -86,7 +86,7 @@ export function TagSelector({
               {label}
               <button
                 type="button"
-                className="cursor-pointer rounded-sm p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+                className="cursor-pointer rounded-sm p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
                 onClick={() => removeTag(label)}
                 aria-label={`Remove label ${label}`}
                 disabled={disabled}
@@ -96,7 +96,7 @@ export function TagSelector({
             </Badge>
           ))
         ) : (
-          <p className="px-1 text-sm text-slate-500">No labels selected</p>
+          <p className="px-1 text-sm text-muted-foreground">No labels selected</p>
         )}
       </div>
 
@@ -129,7 +129,7 @@ export function TagSelector({
                       addTag(candidateTag);
                     }}
                   >
-                    <Plus className="size-4 text-sky-600" />
+                    <Plus className="size-4 text-primary" />
                     Create "{candidateTag}"
                   </CommandItem>
                 ) : null}
@@ -137,7 +137,7 @@ export function TagSelector({
                   <CommandItem key={label} value={label} onSelect={() => toggleTag(label)}>
                     <Check
                       className={cn(
-                        "size-4 text-sky-600 transition-opacity",
+                        "size-4 text-primary transition-opacity",
                         selectedSet.has(label) ? "opacity-100" : "opacity-0",
                       )}
                     />

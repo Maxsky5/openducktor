@@ -48,11 +48,11 @@ export function BranchSwitcher(): ReactElement | null {
 
   return (
     <div className="space-y-2">
-      <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground">
         Branch
       </p>
       <div className="relative">
-        <GitBranchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-500" />
+        <GitBranchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Combobox
           value={selectedBranchValue}
           options={branchOptions}
@@ -62,7 +62,7 @@ export function BranchSwitcher(): ReactElement | null {
           emptyText="No branch found."
           wrapOptionLabels
           className="w-[min(28rem,calc(100vw-2rem))] p-0"
-          triggerClassName="h-9 w-full rounded-md border-slate-300 bg-white pl-8 pr-3 text-sm text-slate-700"
+          triggerClassName="h-9 w-full rounded-md border-input bg-card pl-8 pr-3 text-sm text-foreground"
           onValueChange={(nextBranch) => {
             const previousBranch = activeBranch?.name ?? "";
 
@@ -78,7 +78,7 @@ export function BranchSwitcher(): ReactElement | null {
         />
       </div>
       {activeBranch?.detached ? (
-        <p className="px-1 text-[11px] text-slate-500">Detached HEAD</p>
+        <p className="px-1 text-[11px] text-muted-foreground">Detached HEAD</p>
       ) : null}
     </div>
   );
