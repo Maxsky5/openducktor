@@ -92,6 +92,83 @@ const extractPartTiming = (
   };
 };
 
+type ToolPart = Extract<Part, { type: "tool" }>;
+type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
+type ToolStatus = ToolStreamPart["status"];
+
+const normalizeToolStatus = (rawStatus: string, hasEndedTiming: boolean): ToolStatus => {
+  const normalized = rawStatus.trim().toLowerCase();
+  if (normalized === "completed") {
+    return "completed";
+  }
+  if (normalized === "error" || normalized === "failed") {
+    return "error";
+  }
+  if (normalized === "pending") {
+    return hasEndedTiming ? "completed" : "pending";
+  }
+  if (normalized === "running" || normalized === "started") {
+    return hasEndedTiming ? "completed" : "running";
+  }
+  return hasEndedTiming ? "completed" : "running";
+};
+
+const buildToolStreamPart = (
+  part: ToolPart,
+  normalizedStatus: ToolStatus,
+  timing: ReturnType<typeof extractPartTiming>,
+  metadata: Record<string, unknown> | undefined,
+): ToolStreamPart => {
+  const toolState = part.state as Record<string, unknown>;
+  const base: ToolStreamPart = {
+    kind: "tool",
+    messageId: part.messageID,
+    partId: part.id,
+    callId: part.callID,
+    tool: part.tool,
+    status: normalizedStatus,
+    input: part.state.input,
+    ...(metadata ? { metadata } : {}),
+    ...timing,
+  };
+
+  if (normalizedStatus === "pending") {
+    return base;
+  }
+  if (normalizedStatus === "running") {
+    const title = toDisplayText(toolState.title);
+    return {
+      ...base,
+      ...(title ? { title } : {}),
+    };
+  }
+
+  const error = toDisplayText(toolState.error);
+  if (normalizedStatus === "error") {
+    return {
+      ...base,
+      ...(error ? { error } : {}),
+    };
+  }
+
+  const output = readToolOutputText(toolState.output);
+  if (isToolOutputError(toolState.output) || (error && error.trim().length > 0)) {
+    return {
+      ...base,
+      status: "error",
+      error: output ?? error ?? "Tool failed",
+    };
+  }
+
+  const title = toDisplayText(toolState.title);
+  const titleField = title ? { title } : {};
+  return {
+    ...base,
+    ...(output ? { output } : {}),
+    ...titleField,
+  };
+};
+
 export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
   switch (part.type) {
     case "text":
@@ -112,105 +189,15 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         completed: Boolean(part.time?.end),
       };
     case "tool": {
-      const toolState = part.state as Record<string, unknown>;
       const timing = extractPartTiming(part);
       const metadata = normalizeMetadata(
         (part as { state?: { metadata?: unknown } }).state?.metadata,
       );
-      const rawStatus =
-        typeof part.state.status === "string" ? part.state.status.trim().toLowerCase() : "";
-      const hasEndedTiming = typeof timing.endedAtMs === "number";
-      const normalizedStatus: "pending" | "running" | "completed" | "error" = (() => {
-        if (rawStatus === "completed") {
-          return "completed";
-        }
-        if (rawStatus === "error" || rawStatus === "failed") {
-          return "error";
-        }
-        if (rawStatus === "pending") {
-          return hasEndedTiming ? "completed" : "pending";
-        }
-        if (rawStatus === "running" || rawStatus === "started") {
-          return hasEndedTiming ? "completed" : "running";
-        }
-        return hasEndedTiming ? "completed" : "running";
-      })();
-
-      if (normalizedStatus === "pending") {
-        return {
-          kind: "tool",
-          messageId: part.messageID,
-          partId: part.id,
-          callId: part.callID,
-          tool: part.tool,
-          status: "pending",
-          input: part.state.input,
-          ...(metadata ? { metadata } : {}),
-          ...timing,
-        };
-      }
-      if (normalizedStatus === "running") {
-        const title = toDisplayText(toolState.title);
-        return {
-          kind: "tool",
-          messageId: part.messageID,
-          partId: part.id,
-          callId: part.callID,
-          tool: part.tool,
-          status: "running",
-          input: part.state.input,
-          ...(title ? { title } : {}),
-          ...(metadata ? { metadata } : {}),
-          ...timing,
-        };
-      }
-      if (normalizedStatus === "completed") {
-        const output = readToolOutputText(toolState.output);
-        const error = toDisplayText(toolState.error);
-        const title = toDisplayText(toolState.title);
-        if (isToolOutputError(toolState.output) || (error && error.trim().length > 0)) {
-          const errorText = output ?? error ?? "Tool failed";
-          return {
-            kind: "tool",
-            messageId: part.messageID,
-            partId: part.id,
-            callId: part.callID,
-            tool: part.tool,
-            status: "error",
-            input: part.state.input,
-            error: errorText,
-            ...(title ? { title } : {}),
-            ...(metadata ? { metadata } : {}),
-            ...timing,
-          };
-        }
-        return {
-          kind: "tool",
-          messageId: part.messageID,
-          partId: part.id,
-          callId: part.callID,
-          tool: part.tool,
-          status: "completed",
-          input: part.state.input,
-          ...(output ? { output } : {}),
-          ...(title ? { title } : {}),
-          ...(metadata ? { metadata } : {}),
-          ...timing,
-        };
-      }
-      const error = toDisplayText(toolState.error);
-      return {
-        kind: "tool",
-        messageId: part.messageID,
-        partId: part.id,
-        callId: part.callID,
-        tool: part.tool,
-        status: "error",
-        input: part.state.input,
-        ...(error ? { error } : {}),
-        ...(metadata ? { metadata } : {}),
-        ...timing,
-      };
+      const normalizedStatus = normalizeToolStatus(
+        typeof part.state.status === "string" ? part.state.status : "",
+        typeof timing.endedAtMs === "number",
+      );
+      return buildToolStreamPart(part, normalizedStatus, timing, metadata);
     }
     case "step-start":
       return {
