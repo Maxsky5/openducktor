@@ -1,21 +1,9 @@
+import { taskStatusSchema } from "@openducktor/contracts";
 import type { IssueType, PlanSubtaskInput, TaskCard, TaskStatus } from "./contracts";
 
-const TASK_STATUS_VALUES: readonly TaskStatus[] = [
-  "open",
-  "spec_ready",
-  "ready_for_dev",
-  "in_progress",
-  "blocked",
-  "ai_review",
-  "human_review",
-  "deferred",
-  "closed",
-];
+const TASK_STATUS_SET = new Set<string>(taskStatusSchema.options);
 
-const TASK_STATUS_SET = new Set<TaskStatus>(TASK_STATUS_VALUES);
-
-const isTaskStatus = (value: string): value is TaskStatus =>
-  TASK_STATUS_SET.has(value as TaskStatus);
+const isTaskStatus = (value: string): value is TaskStatus => TASK_STATUS_SET.has(value);
 
 export const toTaskStatus = (value: unknown): TaskStatus => {
   if (typeof value !== "string") {
@@ -104,7 +92,7 @@ const canSetSpecFromStatus = (status: TaskStatus): boolean => {
 };
 
 const canSetPlan = (task: TaskCard): boolean => {
-  return isStatusAllowed(task.status, SET_PLAN_ALLOWED_STATUSES[task.issueType]);
+  return isStatusAllowed(task.status, SET_PLAN_ALLOWED_STATUSES[task.issueType] ?? []);
 };
 
 export const canReplaceEpicSubtaskStatus = (status: TaskStatus): boolean => {

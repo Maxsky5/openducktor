@@ -1,24 +1,13 @@
-import type { TaskPriority } from "@openducktor/contracts";
+import type {
+  AgentRole as ContractsAgentRole,
+  AgentScenario as ContractsAgentScenario,
+  AgentToolName as ContractsAgentToolName,
+  TaskPriority,
+} from "@openducktor/contracts";
 
-export type AgentRole = "spec" | "planner" | "build" | "qa";
-
-export type AgentScenario =
-  | "spec_initial"
-  | "planner_initial"
-  | "build_implementation_start"
-  | "build_after_qa_rejected"
-  | "build_after_human_request_changes"
-  | "qa_review";
-
-export type AgentToolName =
-  | "odt_read_task"
-  | "odt_set_spec"
-  | "odt_set_plan"
-  | "odt_build_blocked"
-  | "odt_build_resumed"
-  | "odt_build_completed"
-  | "odt_qa_approved"
-  | "odt_qa_rejected";
+export type AgentRole = ContractsAgentRole;
+export type AgentScenario = ContractsAgentScenario;
+export type AgentToolName = ContractsAgentToolName;
 
 export type AgentModelSelection = {
   providerId: string;

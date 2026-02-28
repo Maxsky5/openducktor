@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type {
   AgentModelDefault,
+  AgentRole,
   AgentRuntimeSummary,
+  AgentScenario,
   AgentSessionModelSelection,
   AgentSessionRecord,
   AgentSessionRole,
   AgentSessionScenario,
   AgentSessionStatus,
   AgentSessionTodoPayloadRecord,
+  AgentToolName,
   AgentWorkflowState,
   AgentWorkflows,
   BeadsCheck,
@@ -44,7 +47,13 @@ import type {
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "agentRoleSchema",
+  "agentRoleValues",
+  "agentScenarioSchema",
+  "agentScenarioValues",
   "agentModelDefaultSchema",
+  "agentToolNameSchema",
+  "agentToolNameValues",
   "agentRuntimeSummarySchema",
   "agentSessionModelSelectionSchema",
   "agentSessionRecordSchema",
@@ -87,7 +96,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
 ] as const;
 
 type ExportedTypeContract = {
+  AgentRole: AgentRole;
   AgentModelDefault: AgentModelDefault;
+  AgentScenario: AgentScenario;
   AgentRuntimeSummary: AgentRuntimeSummary;
   AgentSessionModelSelection: AgentSessionModelSelection;
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
@@ -95,6 +106,7 @@ type ExportedTypeContract = {
   AgentSessionRole: AgentSessionRole;
   AgentSessionScenario: AgentSessionScenario;
   AgentSessionStatus: AgentSessionStatus;
+  AgentToolName: AgentToolName;
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;

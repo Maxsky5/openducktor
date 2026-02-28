@@ -1,19 +1,13 @@
 import { z } from "zod";
+import { agentRoleSchema, agentScenarioSchema } from "./agent-workflow-schemas";
 
 export const agentSessionStatusSchema = z.enum(["starting", "running", "idle", "error", "stopped"]);
 export type AgentSessionStatus = z.infer<typeof agentSessionStatusSchema>;
 
-export const agentSessionRoleSchema = z.enum(["spec", "planner", "build", "qa"]);
+export const agentSessionRoleSchema = agentRoleSchema;
 export type AgentSessionRole = z.infer<typeof agentSessionRoleSchema>;
 
-export const agentSessionScenarioSchema = z.enum([
-  "spec_initial",
-  "planner_initial",
-  "build_implementation_start",
-  "build_after_qa_rejected",
-  "build_after_human_request_changes",
-  "qa_review",
-]);
+export const agentSessionScenarioSchema = agentScenarioSchema;
 export type AgentSessionScenario = z.infer<typeof agentSessionScenarioSchema>;
 
 export const agentSessionModelSelectionSchema = z.object({

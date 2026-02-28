@@ -1,30 +1,19 @@
-export type TaskStatus =
-  | "open"
-  | "spec_ready"
-  | "ready_for_dev"
-  | "in_progress"
-  | "blocked"
-  | "ai_review"
-  | "human_review"
-  | "deferred"
-  | "closed";
+import type { TaskCard as CanonicalTaskCard, IssueType, TaskStatus } from "@openducktor/contracts";
 
-export type IssueType = "epic" | "feature" | "task" | "bug";
+export type { IssueType, TaskStatus };
 
 export type PlanSubtaskInput = {
   title: string;
-  issueType?: "task" | "feature" | "bug" | undefined;
+  issueType?: Exclude<IssueType, "epic"> | undefined;
   priority?: number | undefined;
   description?: string | undefined;
 };
 
-export type TaskCard = {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  issueType: IssueType;
-  aiReviewEnabled: boolean;
-  parentId: string | null;
+export type TaskCard = Pick<
+  CanonicalTaskCard,
+  "id" | "title" | "status" | "issueType" | "aiReviewEnabled"
+> & {
+  parentId?: string;
 };
 
 export type RawIssue = {
