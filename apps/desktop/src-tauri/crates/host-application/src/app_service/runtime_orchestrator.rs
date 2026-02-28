@@ -1,13 +1,12 @@
 use super::{
-    run_parsed_hook_command_allow_failure, spawn_opencode_server, terminate_child_process,
-    validate_hook_trust, wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
-    StartupEventCorrelation, StartupEventPayload,
+    qa_worktree::{prepare_qa_worktree, remove_runtime_worktree},
+    spawn_opencode_server, terminate_child_process, wait_for_local_server_with_process,
+    AgentRuntimeProcess, AppService, StartupEventCorrelation, StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
-use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, run_command};
+use host_infra_system::pick_free_port;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -271,77 +270,17 @@ impl AppService {
             }
         }
 
-        let mut cleanup_repo_path: Option<String> = None;
-        let mut cleanup_worktree_path: Option<String> = None;
-        let runtime_working_directory = if role == "qa" {
-            let repo_config = self.config_store.repo_config(repo_path)?;
-            let worktree_base = repo_config.worktree_base_path.clone().ok_or_else(|| {
-                anyhow!(
-                    "QA blocked: configure repos.{repo_path}.worktreeBasePath in {}",
-                    self.config_store.path().display()
-                )
-            })?;
-
-            validate_hook_trust(repo_path, &repo_config)?;
-
-            let worktree_base_path = Path::new(&worktree_base);
-            fs::create_dir_all(worktree_base_path).with_context(|| {
-                format!(
-                    "Failed creating QA worktree base directory {}",
-                    worktree_base_path.display()
-                )
-            })?;
-
-            let qa_worktree = worktree_base_path.join(format!("qa-{task_id}"));
-            if qa_worktree.exists() {
-                return Err(anyhow!(
-                    "QA worktree path already exists for task {}: {}",
-                    task_id,
-                    qa_worktree.display()
-                ));
-            }
-
-            let repo_path_ref = Path::new(repo_path);
-            let branch = build_branch_name(&repo_config.branch_prefix, task_id, &task.title);
-            let qa_worktree_str = qa_worktree
-                .to_str()
-                .ok_or_else(|| anyhow!("Invalid QA worktree path"))?;
-            let checkout_existing = run_command(
-                "git",
-                &["worktree", "add", qa_worktree_str, &branch],
-                Some(repo_path_ref),
-            );
-            if let Err(existing_error) = checkout_existing {
-                run_command(
-                    "git",
-                    &["worktree", "add", qa_worktree_str, "-b", &branch],
-                    Some(repo_path_ref),
-                )
-                .with_context(|| {
-                    format!("Failed to create or checkout QA branch {branch}: {existing_error}")
-                })?;
-            }
-
-            for hook in &repo_config.hooks.pre_start {
-                let (ok, _stdout, stderr) =
-                    run_parsed_hook_command_allow_failure(hook, qa_worktree.as_path());
-                if !ok {
-                    if let Err(cleanup_error) =
-                        Self::remove_runtime_worktree(repo_path_ref, qa_worktree.as_path())
-                    {
-                        return Err(anyhow!(
-                            "QA pre-start hook failed: {hook}\n{stderr}\nAlso failed to remove QA worktree: {cleanup_error}"
-                        ));
-                    }
-                    return Err(anyhow!("QA pre-start hook failed: {hook}\n{stderr}"));
-                }
-            }
-
-            cleanup_repo_path = Some(repo_path.to_string());
-            cleanup_worktree_path = Some(qa_worktree_str.to_string());
-            qa_worktree_str.to_string()
+        let (runtime_working_directory, cleanup_repo_path, cleanup_worktree_path) = if role == "qa"
+        {
+            let setup =
+                prepare_qa_worktree(repo_path, task_id, task.title.as_str(), &self.config_store)?;
+            (
+                setup.worktree_path.clone(),
+                Some(setup.repo_path),
+                Some(setup.worktree_path),
+            )
         } else {
-            repo_path.to_string()
+            (repo_path.to_string(), None, None)
         };
 
         let port = pick_free_port()?;
@@ -406,7 +345,7 @@ impl AppService {
                     cleanup_worktree_path.as_deref(),
                 ) {
                     if let Err(cleanup_error) =
-                        Self::remove_runtime_worktree(Path::new(repo), Path::new(worktree))
+                        remove_runtime_worktree(Path::new(repo), Path::new(worktree))
                     {
                         return Err(anyhow!(
                             "{startup_context}\nAlso failed to remove QA worktree: {cleanup_error}"
@@ -470,7 +409,7 @@ impl AppService {
             runtime.cleanup_repo_path.as_deref(),
             runtime.cleanup_worktree_path.as_deref(),
         ) {
-            Self::remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
+            remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
         }
         Ok(true)
     }
@@ -502,10 +441,9 @@ impl AppService {
                         runtime.cleanup_repo_path.as_deref(),
                         runtime.cleanup_worktree_path.as_deref(),
                     ) {
-                        if let Err(error) = Self::remove_runtime_worktree(
-                            Path::new(repo_path),
-                            Path::new(worktree_path),
-                        ) {
+                        if let Err(error) =
+                            remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))
+                        {
                             cleanup_errors.push(format!(
                                 "Failed shutting down runtime {}: {}",
                                 runtime.summary.runtime_id, error
@@ -522,15 +460,6 @@ impl AppService {
         } else {
             Err(anyhow!(cleanup_errors.join("\n")))
         }
-    }
-
-    fn remove_runtime_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
-        remove_worktree(repo_path, worktree_path).with_context(|| {
-            format!(
-                "Failed removing QA worktree runtime {}",
-                worktree_path.display()
-            )
-        })
     }
 
     pub(crate) fn prune_stale_runtimes(
@@ -555,10 +484,9 @@ impl AppService {
                     runtime.cleanup_repo_path.as_deref(),
                     runtime.cleanup_worktree_path.as_deref(),
                 ) {
-                    if let Err(error) = Self::remove_runtime_worktree(
-                        Path::new(repo_path),
-                        Path::new(worktree_path),
-                    ) {
+                    if let Err(error) =
+                        remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))
+                    {
                         cleanup_errors.push(format!(
                             "Failed pruning stale runtime {runtime_id}: {error}"
                         ));
