@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const COMMANDS_ROOT = "apps/desktop/src-tauri/src/commands";
-const BANNED_PATTERN = /\.(expect|unwrap)\s*\(|panic\s*!\s*\(/g;
+const BANNED_PATTERN = /\.(expect|unwrap)\s*\(|(?:panic|todo|unimplemented)\s*!\s*\(/g;
 
 type Violation = {
   filePath: string;
@@ -37,7 +37,7 @@ const walkRustFiles = (root: string): string[] => {
 };
 
 const runtimeSource = (source: string): string => {
-  const cfgTestIndex = source.indexOf("#[cfg(test)]");
+  const cfgTestIndex = source.search(/^#\[cfg\(test\)\]/m);
   if (cfgTestIndex === -1) {
     return source;
   }
