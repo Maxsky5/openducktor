@@ -1,6 +1,4 @@
-use crate::{
-    as_error, extend_runtime_errors_with_startup, run_service_blocking, AppState,
-};
+use crate::{as_error, extend_runtime_errors_with_startup, run_service_blocking, AppState};
 use host_domain::{AgentRuntimeSummary, BeadsCheck, RuntimeCheck, SystemCheck};
 use tauri::State;
 

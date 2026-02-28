@@ -1,11 +1,12 @@
 use super::{
     emit_event, spawn_opencode_server, spawn_output_forwarder, terminate_child_process,
-    validate_transition, wait_for_local_server_with_process, AppService, RunEmitter, RunProcess,
+    run_parsed_hook_command_allow_failure, validate_hook_trust, validate_transition,
+    wait_for_local_server_with_process, AppService, RunEmitter, RunProcess,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
 use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree, run_command_allow_failure,
+    build_branch_name, pick_free_port, remove_worktree,
 };
 use serde::Deserialize;
 use std::fs;
@@ -64,13 +65,7 @@ impl AppService {
             )
         })?;
 
-        if (!repo_config.hooks.pre_start.is_empty() || !repo_config.hooks.post_complete.is_empty())
-            && !repo_config.trusted_hooks
-        {
-            return Err(anyhow!(
-                "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
-            ));
-        }
+        validate_hook_trust(repo_path, &repo_config)?;
 
         let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
         let task = tasks
@@ -115,7 +110,7 @@ impl AppService {
 
         for hook in &repo_config.hooks.pre_start {
             let (ok, _stdout, stderr) =
-                run_command_allow_failure("sh", &["-lc", hook], Some(worktree_dir.as_path()))?;
+                run_parsed_hook_command_allow_failure(hook, worktree_dir.as_path());
             if !ok {
                 let _ = self.task_transition(
                     repo_path,
@@ -407,11 +402,8 @@ impl AppService {
                 },
             );
 
-            let (ok, _stdout, stderr) = run_command_allow_failure(
-                "sh",
-                &["-lc", hook],
-                Some(Path::new(&run.worktree_path)),
-            )?;
+            let (ok, _stdout, stderr) =
+                run_parsed_hook_command_allow_failure(hook, Path::new(&run.worktree_path));
 
             if !ok {
                 self.task_transition(

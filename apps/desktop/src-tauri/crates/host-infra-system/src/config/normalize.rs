@@ -1,5 +1,6 @@
 use super::types::{
-    default_branch_prefix, default_task_metadata_namespace, AgentModelDefault, GlobalConfig,
+    default_branch_prefix, default_task_metadata_namespace, hook_set_fingerprint,
+    AgentModelDefault, GlobalConfig,
     OpencodeStartupReadinessConfig, RepoConfig,
 };
 
@@ -53,6 +54,17 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     };
     normalize_hook_commands(&mut repo.hooks.pre_start);
     normalize_hook_commands(&mut repo.hooks.post_complete);
+    let current_fingerprint = hook_set_fingerprint(&repo.hooks);
+    if repo.trusted_hooks {
+        if repo.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
+            repo.trusted_hooks = false;
+            repo.trusted_hooks_fingerprint = None;
+        } else {
+            repo.trusted_hooks_fingerprint = Some(current_fingerprint);
+        }
+    } else {
+        repo.trusted_hooks_fingerprint = None;
+    }
     normalize_agent_model_default(&mut repo.agent_defaults.spec);
     normalize_agent_model_default(&mut repo.agent_defaults.planner);
     normalize_agent_model_default(&mut repo.agent_defaults.build);

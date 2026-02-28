@@ -94,8 +94,14 @@ export function useRepoSettingsOperations({
       const qaDefault = toConfigDefault(input.agentDefaults.qa);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
+      const agentDefaults = {
+        ...(specDefault ? { spec: specDefault } : {}),
+        ...(plannerDefault ? { planner: plannerDefault } : {}),
+        ...(buildDefault ? { build: buildDefault } : {}),
+        ...(qaDefault ? { qa: qaDefault } : {}),
+      };
 
-      await host.workspaceUpdateRepoConfig(repo, {
+      await host.workspaceSaveRepoSettings(repo, {
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         trustedHooks: input.trustedHooks,
@@ -103,12 +109,7 @@ export function useRepoSettingsOperations({
           preStart: input.preStartHooks,
           postComplete: input.postCompleteHooks,
         },
-        agentDefaults: {
-          ...(specDefault ? { spec: specDefault } : {}),
-          ...(plannerDefault ? { planner: plannerDefault } : {}),
-          ...(buildDefault ? { build: buildDefault } : {}),
-          ...(qaDefault ? { qa: qaDefault } : {}),
-        },
+        agentDefaults,
       });
 
       await refreshWorkspaces();

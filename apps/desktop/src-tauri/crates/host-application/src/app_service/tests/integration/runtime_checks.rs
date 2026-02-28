@@ -97,6 +97,7 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
             worktree_base_path: Some(worktree_base.clone()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: false,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -112,7 +113,17 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
     assert!(service
         .workspace_get_repo_config_optional(repo_path.as_str())?
         .is_some());
-    let trusted = service.workspace_set_trusted_hooks(repo_path.as_str(), true)?;
+    let stale_trust_error = service
+        .workspace_set_trusted_hooks(repo_path.as_str(), true, Some("stale-fingerprint"))
+        .expect_err("stale fingerprint should be rejected");
+    assert!(stale_trust_error
+        .to_string()
+        .contains("Hook trust challenge is stale"));
+    let trusted = service.workspace_set_trusted_hooks(
+        repo_path.as_str(),
+        true,
+        Some(host_infra_system::hook_set_fingerprint(&config.hooks).as_str()),
+    )?;
     assert!(trusted.has_config);
 
     let records = service.workspace_list()?;
@@ -194,4 +205,3 @@ fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
     let _ = fs::remove_dir_all(root);
     Ok(())
 }
-

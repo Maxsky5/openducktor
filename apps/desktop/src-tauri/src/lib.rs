@@ -1,14 +1,16 @@
 use anyhow::{anyhow, Context};
 use host_application::{AppService, RunEmitter};
+#[cfg(test)]
+use host_domain::TaskStatus;
 use host_domain::{PlanSubtaskInput, RunEvent};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::AppConfigStore;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent};
-#[cfg(test)]
-use host_domain::TaskStatus;
 
 mod commands;
 
@@ -23,10 +25,19 @@ use commands::workspace::*;
 struct AppState {
     service: Arc<AppService>,
     startup_errors: Vec<String>,
+    hook_trust_challenges: Mutex<HashMap<String, HookTrustChallenge>>,
 }
 
 const FALLBACK_TASK_METADATA_NAMESPACE: &str = "openducktor";
+const HOOK_TRUST_CHALLENGE_TTL: Duration = Duration::from_secs(120);
 static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
+
+#[derive(Debug, Clone)]
+struct HookTrustChallenge {
+    repo_path: String,
+    fingerprint: String,
+    expires_at: SystemTime,
+}
 
 fn init_tracing_subscriber() {
     TRACING_INITIALIZED.get_or_init(|| {
@@ -98,7 +109,15 @@ struct BuildCompletePayload {
 struct RepoConfigPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
-    trusted_hooks: Option<bool>,
+    agent_defaults: Option<host_infra_system::AgentDefaults>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RepoSettingsPayload {
+    worktree_base_path: Option<String>,
+    branch_prefix: Option<String>,
+    trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
@@ -197,6 +216,7 @@ pub fn run() -> anyhow::Result<()> {
         .manage(AppState {
             service,
             startup_errors,
+            hook_trust_challenges: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             system_check,
@@ -206,6 +226,9 @@ pub fn run() -> anyhow::Result<()> {
             workspace_add,
             workspace_select,
             workspace_update_repo_config,
+            workspace_save_repo_settings,
+            workspace_update_repo_hooks,
+            workspace_prepare_trusted_hooks_challenge,
             workspace_get_repo_config,
             workspace_set_trusted_hooks,
             git_get_branches,

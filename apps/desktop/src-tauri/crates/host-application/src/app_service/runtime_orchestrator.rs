@@ -1,11 +1,11 @@
 use super::{
-    spawn_opencode_server, terminate_child_process, wait_for_local_server_with_process,
-    AgentRuntimeProcess, AppService,
+    run_parsed_hook_command_allow_failure, spawn_opencode_server, terminate_child_process,
+    validate_hook_trust, wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
 use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree, run_command, run_command_allow_failure,
+    build_branch_name, pick_free_port, remove_worktree, run_command,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -250,14 +250,7 @@ impl AppService {
                 )
             })?;
 
-            if (!repo_config.hooks.pre_start.is_empty()
-                || !repo_config.hooks.post_complete.is_empty())
-                && !repo_config.trusted_hooks
-            {
-                return Err(anyhow!(
-                    "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
-                ));
-            }
+            validate_hook_trust(repo_path, &repo_config)?;
 
             let worktree_base_path = Path::new(&worktree_base);
             fs::create_dir_all(worktree_base_path).with_context(|| {
@@ -299,7 +292,7 @@ impl AppService {
 
             for hook in &repo_config.hooks.pre_start {
                 let (ok, _stdout, stderr) =
-                    run_command_allow_failure("sh", &["-lc", hook], Some(qa_worktree.as_path()))?;
+                    run_parsed_hook_command_allow_failure(hook, qa_worktree.as_path());
                 if !ok {
                     if let Err(cleanup_error) =
                         Self::remove_runtime_worktree(repo_path_ref, qa_worktree.as_path())

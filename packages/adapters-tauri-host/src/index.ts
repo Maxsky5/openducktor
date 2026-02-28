@@ -72,9 +72,12 @@ import {
   workspaceAdd,
   workspaceGetRepoConfig,
   workspaceList,
+  workspacePrepareTrustedHooksChallenge,
+  workspaceSaveRepoSettings,
   workspaceSelect,
   workspaceSetTrustedHooks,
   workspaceUpdateRepoConfig,
+  workspaceUpdateRepoHooks,
 } from "./workspace-client";
 
 export class TauriHostClient implements PlannerTools {
@@ -251,8 +254,6 @@ export class TauriHostClient implements PlannerTools {
     config: {
       worktreeBasePath?: string;
       branchPrefix?: string;
-      trustedHooks?: boolean;
-      hooks?: { preStart?: string[]; postComplete?: string[] };
       agentDefaults?: {
         spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
         planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
@@ -264,12 +265,52 @@ export class TauriHostClient implements PlannerTools {
     return workspaceUpdateRepoConfig(this.invokeFn, repoPath, config);
   }
 
+  async workspaceSaveRepoSettings(
+    repoPath: string,
+    settings: {
+      worktreeBasePath?: string;
+      branchPrefix?: string;
+      trustedHooks: boolean;
+      hooks?: { preStart?: string[]; postComplete?: string[] };
+      agentDefaults?: {
+        spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        build?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        qa?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+      };
+    },
+  ): Promise<WorkspaceRecord> {
+    return workspaceSaveRepoSettings(this.invokeFn, repoPath, settings);
+  }
+
+  async workspaceUpdateRepoHooks(
+    repoPath: string,
+    hooks: { preStart?: string[]; postComplete?: string[] },
+  ): Promise<WorkspaceRecord> {
+    return workspaceUpdateRepoHooks(this.invokeFn, repoPath, hooks);
+  }
+
   async workspaceGetRepoConfig(repoPath: string): Promise<RepoConfig> {
     return workspaceGetRepoConfig(this.invokeFn, repoPath);
   }
 
-  async workspaceSetTrustedHooks(repoPath: string, trusted: boolean): Promise<WorkspaceRecord> {
-    return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted);
+  async workspacePrepareTrustedHooksChallenge(repoPath: string): Promise<{
+    nonce: string;
+    repoPath: string;
+    fingerprint: string;
+    expiresAt: string;
+    preStartCount: number;
+    postCompleteCount: number;
+  }> {
+    return workspacePrepareTrustedHooksChallenge(this.invokeFn, repoPath);
+  }
+
+  async workspaceSetTrustedHooks(
+    repoPath: string,
+    trusted: boolean,
+    challenge?: { nonce: string; fingerprint: string },
+  ): Promise<WorkspaceRecord> {
+    return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted, challenge);
   }
 
   async getTheme(): Promise<string> {

@@ -5,7 +5,7 @@ mod types;
 
 pub use store::AppConfigStore;
 pub use types::{
-    AgentDefaults, AgentModelDefault, GlobalConfig, HookSet, OpencodeStartupReadinessConfig,
+    hook_set_fingerprint, AgentDefaults, AgentModelDefault, GlobalConfig, HookSet, OpencodeStartupReadinessConfig,
     RepoConfig, SchedulerConfig, SoftGuardrails,
 };
 
@@ -15,7 +15,8 @@ pub(super) use store::touch_recent;
 #[cfg(test)]
 mod tests {
     use super::{
-        touch_recent, AppConfigStore, GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig,
+        hook_set_fingerprint, touch_recent, AppConfigStore, GlobalConfig,
+        OpencodeStartupReadinessConfig, RepoConfig,
     };
     use serde_json::json;
     use std::fs;
@@ -140,6 +141,7 @@ mod tests {
                     worktree_base_path: Some("/tmp/worktrees".to_string()),
                     branch_prefix: "duck".to_string(),
                     trusted_hooks: true,
+                    trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     agent_defaults: Default::default(),
                 },
@@ -217,7 +219,7 @@ mod tests {
         assert!(optional.is_none());
 
         let trust_error = store
-            .set_repo_trust_hooks(missing_repo_str.as_str(), true)
+            .set_repo_trust_hooks(missing_repo_str.as_str(), true, Some("fingerprint".to_string()))
             .expect_err("set trust should fail when repo missing");
         assert!(trust_error
             .to_string()
@@ -239,6 +241,7 @@ mod tests {
                     worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                     branch_prefix: "duck".to_string(),
                     trusted_hooks: false,
+                    trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     agent_defaults: Default::default(),
                 },
@@ -248,7 +251,11 @@ mod tests {
         assert!(updated.has_config);
 
         let trusted = store
-            .set_repo_trust_hooks(repo_str.as_str(), true)
+            .set_repo_trust_hooks(
+                repo_str.as_str(),
+                true,
+                Some(hook_set_fingerprint(&Default::default())),
+            )
             .expect("set trust should succeed");
         assert!(trusted.is_active);
         assert!(trusted.has_config);
@@ -281,6 +288,7 @@ mod tests {
                     worktree_base_path: Some("   ".to_string()),
                     branch_prefix: "duck".to_string(),
                     trusted_hooks: false,
+                    trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     agent_defaults: Default::default(),
                 },
@@ -293,6 +301,54 @@ mod tests {
         let loaded = store.repo_config(&repo_str).expect("load repo config");
         assert!(loaded.worktree_base_path.is_none());
         assert_eq!(loaded.branch_prefix, "duck");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn update_repo_hooks_revokes_trust_when_commands_change() {
+        let (store, root) = test_store("hooks-revoke-trust");
+        let repo = root.join("repo");
+        fake_git_workspace(&repo);
+        let repo_str = repo.to_string_lossy().to_string();
+
+        store
+            .update_repo_config(
+                repo_str.as_str(),
+                RepoConfig {
+                    worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
+                    branch_prefix: "duck".to_string(),
+                    trusted_hooks: false,
+                    trusted_hooks_fingerprint: None,
+                    hooks: Default::default(),
+                    agent_defaults: Default::default(),
+                },
+            )
+            .expect("repo config update should succeed");
+
+        store
+            .set_repo_trust_hooks(
+                repo_str.as_str(),
+                true,
+                Some(hook_set_fingerprint(&Default::default())),
+            )
+            .expect("set trust should succeed");
+
+        store
+            .update_repo_hooks(
+                repo_str.as_str(),
+                super::HookSet {
+                    pre_start: vec!["echo pre".to_string()],
+                    post_complete: Vec::new(),
+                },
+            )
+            .expect("updating hooks should succeed");
+
+        let repo_config = store
+            .repo_config(repo_str.as_str())
+            .expect("repo config should exist");
+        assert!(!repo_config.trusted_hooks);
+        assert!(repo_config.trusted_hooks_fingerprint.is_none());
 
         let _ = fs::remove_dir_all(root);
     }

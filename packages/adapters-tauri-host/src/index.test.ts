@@ -205,6 +205,61 @@ describe("TauriHostClient", () => {
     expect(calls).toHaveLength(0);
   });
 
+  test("workspaceSaveRepoSettings uses atomic repo-settings IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_save_repo_settings") {
+        return {
+          path: "/repo",
+          isActive: true,
+          hasConfig: true,
+          configuredWorktreeBasePath: "/tmp/worktrees",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.workspaceSaveRepoSettings("/repo", {
+      worktreeBasePath: "/tmp/worktrees",
+      branchPrefix: "codex",
+      trustedHooks: true,
+      hooks: {
+        preStart: ["echo pre"],
+        postComplete: ["echo post"],
+      },
+      agentDefaults: {
+        build: {
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      },
+    });
+
+    expect(result.hasConfig).toBe(true);
+    expect(calls).toEqual([
+      {
+        command: "workspace_save_repo_settings",
+        args: {
+          repoPath: "/repo",
+          settings: {
+            worktreeBasePath: "/tmp/worktrees",
+            branchPrefix: "codex",
+            trustedHooks: true,
+            hooks: {
+              preStart: ["echo pre"],
+              postComplete: ["echo post"],
+            },
+            agentDefaults: {
+              build: {
+                providerId: "openai",
+                modelId: "gpt-5",
+              },
+            },
+          },
+        },
+      },
+    ]);
+  });
+
   test("taskDelete uses expected IPC route and payload", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "task_delete") {

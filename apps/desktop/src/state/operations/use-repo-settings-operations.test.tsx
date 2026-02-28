@@ -163,7 +163,7 @@ describe("use-repo-settings-operations", () => {
 
   test("saveRepoSettings trims values, omits blank defaults, and refreshes workspaces", async () => {
     const refreshWorkspaces = mock(async () => {});
-    const workspaceUpdateRepoConfig = mock(async () => ({
+    const workspaceSaveRepoSettings = mock(async () => ({
       path: "/repo-a",
       isActive: true,
       hasConfig: true,
@@ -171,9 +171,9 @@ describe("use-repo-settings-operations", () => {
     }));
 
     const original = {
-      workspaceUpdateRepoConfig: host.workspaceUpdateRepoConfig,
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
     };
-    host.workspaceUpdateRepoConfig = workspaceUpdateRepoConfig;
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({ activeRepo: "/repo-a", refreshWorkspaces });
 
@@ -181,7 +181,7 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveRepoSettings(inputFixture);
 
-      expect(workspaceUpdateRepoConfig).toHaveBeenCalledWith("/repo-a", {
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
         trustedHooks: true,
@@ -205,14 +205,14 @@ describe("use-repo-settings-operations", () => {
       expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
-      host.workspaceUpdateRepoConfig = original.workspaceUpdateRepoConfig;
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
     }
   });
 
   test("supports retry after update failure and preserves refresh invariant", async () => {
     const refreshWorkspaces = mock(async () => {});
     let shouldFail = true;
-    const workspaceUpdateRepoConfig = mock(async () => {
+    const workspaceSaveRepoSettings = mock(async () => {
       if (shouldFail) {
         shouldFail = false;
         throw new Error("write failed");
@@ -226,9 +226,9 @@ describe("use-repo-settings-operations", () => {
     });
 
     const original = {
-      workspaceUpdateRepoConfig: host.workspaceUpdateRepoConfig,
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
     };
-    host.workspaceUpdateRepoConfig = workspaceUpdateRepoConfig;
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({ activeRepo: "/repo-a", refreshWorkspaces });
 
@@ -240,11 +240,11 @@ describe("use-repo-settings-operations", () => {
       expect(refreshWorkspaces).not.toHaveBeenCalled();
 
       await harness.getLatest().saveRepoSettings(inputFixture);
-      expect(workspaceUpdateRepoConfig).toHaveBeenCalledTimes(2);
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(2);
       expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
-      host.workspaceUpdateRepoConfig = original.workspaceUpdateRepoConfig;
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
     }
   });
 });
