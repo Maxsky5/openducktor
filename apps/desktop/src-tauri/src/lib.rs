@@ -221,7 +221,6 @@ pub fn run() -> anyhow::Result<()> {
     let app_service = service.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             service,
             startup_errors,
@@ -301,7 +300,7 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
     use host_domain::RuntimeCheck;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     #[test]
     fn namespace_with_startup_warning_uses_configured_namespace() {
@@ -410,6 +409,34 @@ mod tests {
         assert!(
             error.to_string().contains("unknown variant"),
             "status parse error should include variant details: {error}"
+        );
+    }
+
+    #[test]
+    fn default_capability_permissions_are_minimal_and_shell_free() {
+        let capability: Value = serde_json::from_str(include_str!("../capabilities/default.json"))
+            .expect("default capability JSON should parse");
+        let permissions = capability
+            .get("permissions")
+            .and_then(Value::as_array)
+            .expect("default capability should contain permissions array");
+        let expected = vec![
+            Value::String("core:default".to_string()),
+            Value::String("dialog:allow-open".to_string()),
+        ];
+
+        assert_eq!(
+            permissions, &expected,
+            "default capability should keep exact minimum approved permissions"
+        );
+        assert!(
+            permissions.iter().all(|entry| {
+                !matches!(
+                    entry,
+                    Value::String(value) if value.starts_with("shell:")
+                )
+            }),
+            "default capability must not expose shell permissions"
         );
     }
 }
