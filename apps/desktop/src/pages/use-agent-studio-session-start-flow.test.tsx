@@ -175,6 +175,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       autostart: undefined,
       start: undefined,
     });
+    expect(updateCalls).toHaveLength(2);
     expect(sendAgentMessage).not.toHaveBeenCalled();
 
     await harness.unmount();

@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 
 const hasMarkdown = (value: string): boolean => value.trim().length > 0;
+const quoteTaskIdForPrompt = (taskId: string): string => JSON.stringify(taskId);
 
 const buildKickoffBaseMessage = (role: AgentRole, scenario: AgentScenario): string => {
   if (role === "spec") {
@@ -53,6 +54,6 @@ export const inferScenario = (
 };
 
 export const kickoffPrompt = (role: AgentRole, scenario: AgentScenario, taskId: string): string => {
-  const taskInstruction = `Use taskId "${taskId}" for every odt_* tool call.`;
+  const taskInstruction = `Use taskId ${quoteTaskIdForPrompt(taskId)} for every odt_* tool call.`;
   return `${buildKickoffBaseMessage(role, scenario)}\n${taskInstruction}`;
 };

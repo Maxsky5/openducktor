@@ -52,12 +52,14 @@ export const firstScenario = (role: AgentRole): AgentScenario => {
   return "spec_initial";
 };
 
+const quoteTaskIdForPrompt = (taskId: string): string => JSON.stringify(taskId);
+
 export const kickoffPromptForScenario = (
   role: AgentRole,
   scenario: AgentScenario,
   taskId: string,
 ): string => {
-  const taskInstruction = `Use taskId "${taskId}" for every odt_* tool call.`;
+  const taskInstruction = `Use taskId ${quoteTaskIdForPrompt(taskId)} for every odt_* tool call.`;
   if (role === "spec") {
     const base =
       "Create or update the specification and call odt_set_spec with complete markdown when ready.";

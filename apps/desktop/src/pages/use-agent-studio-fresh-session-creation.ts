@@ -134,7 +134,6 @@ export function useAgentStudioFreshSessionCreation({
             scenario: params.nextScenario,
           },
           fallback: () => {
-            updateQuery(params.previousSelection);
             return undefined;
           },
         },

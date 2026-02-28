@@ -670,6 +670,7 @@ describe("useAgentStudioSessionActions", () => {
         autostart: undefined,
         start: undefined,
       });
+      expect(updateCalls).toHaveLength(2);
       expect(sendAgentMessage).not.toHaveBeenCalled();
     } finally {
       deferredStart.resolve("session-plan");
