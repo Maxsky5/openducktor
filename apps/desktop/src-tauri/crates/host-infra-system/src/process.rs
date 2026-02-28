@@ -113,7 +113,7 @@ pub fn version_command(program: &str, args: &[&str]) -> Option<String> {
 }
 
 fn shell_escape(value: &str) -> String {
-    value.replace('"', "\\\"")
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 #[cfg(test)]
@@ -182,5 +182,23 @@ mod tests {
         assert_eq!(version.as_deref(), Some("v-test"));
         assert!(!command_exists("definitely_not_a_real_binary_name"));
         assert!(command_path("definitely_not_a_real_binary_name").is_none());
+    }
+
+    #[test]
+    fn shell_escape_round_trips_dangerous_characters() {
+        let input = "name;$(echo injected)`uname`";
+        let escaped = super::shell_escape(input);
+        let output = run_command("sh", &["-lc", &format!("printf '%s' {}", escaped)], None)
+            .expect("escaped value should be treated as a literal");
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn shell_escape_handles_single_quotes() {
+        let input = "a'b";
+        let escaped = super::shell_escape(input);
+        let output = run_command("sh", &["-lc", &format!("printf '%s' {}", escaped)], None)
+            .expect("escaped value should preserve single quote");
+        assert_eq!(output, input);
     }
 }
