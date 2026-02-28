@@ -1,4 +1,3 @@
-use super::mcp_config::build_opencode_config_content;
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::command_path;
 use std::path::{Path, PathBuf};
@@ -192,15 +191,22 @@ fn spawn_parent_death_watcher(_parent_pid: u32, _child_pid: u32) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn spawn_opencode_server(
+pub(super) fn spawn_opencode_server_with_config(
     working_directory: &Path,
-    repo_path_for_mcp: &Path,
-    metadata_namespace: &str,
+    config_content: &str,
     port: u16,
 ) -> Result<Child> {
-    let config_content = build_opencode_config_content(repo_path_for_mcp, metadata_namespace)?;
     let opencode_binary = resolve_opencode_binary_path()
         .ok_or_else(|| anyhow!("opencode binary not found in PATH or ~/.opencode/bin"))?;
+    spawn_opencode_server_with_binary(opencode_binary.as_str(), working_directory, config_content, port)
+}
+
+fn spawn_opencode_server_with_binary(
+    opencode_binary: &str,
+    working_directory: &Path,
+    config_content: &str,
+    port: u16,
+) -> Result<Child> {
     let mut command = Command::new(&opencode_binary);
     command
         .arg("serve")
@@ -226,4 +232,89 @@ pub(crate) fn spawn_opencode_server(
         );
     }
     Ok(child)
+}
+
+#[cfg(test)]
+#[cfg(unix)]
+mod tests {
+    use super::terminate_child_process;
+    use anyhow::{Context, Result};
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    fn temp_test_dir(prefix: &str) -> Result<PathBuf> {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .context("system clock error")?
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("odt-{prefix}-{nanos}"));
+        fs::create_dir_all(&dir).with_context(|| format!("failed creating {}", dir.display()))?;
+        Ok(dir)
+    }
+
+    fn wait_for_capture(path: &Path) -> Result<String> {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            if let Ok(contents) = fs::read_to_string(path) {
+                if contents.contains("config=") && contents.contains("args=") {
+                    return Ok(contents);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        Err(anyhow::anyhow!(
+            "timed out waiting for complete capture in {}",
+            path.display()
+        ))
+    }
+
+    #[test]
+    fn spawn_with_config_injects_config_content_and_args() -> Result<()> {
+        let sandbox = temp_test_dir("spawn-with-config")?;
+        let output_path = sandbox.join("captured.txt");
+        let script_path = sandbox.join("fake-opencode.sh");
+        let script = format!(
+            r#"#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "opencode-fake 0.0.1"
+  exit 0
+fi
+echo "config=$OPENCODE_CONFIG_CONTENT" > "{}"
+echo "args=$*" >> "{}"
+sleep 5
+"#,
+            output_path.display(),
+            output_path.display()
+        );
+        fs::write(&script_path, script)
+            .with_context(|| format!("failed writing {}", script_path.display()))?;
+        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("failed chmod {}", script_path.display()))?;
+
+        let config = r#"{"logLevel":"INFO","mcp":{"openducktor":{"enabled":true}}}"#;
+        let mut child = super::spawn_opencode_server_with_binary(
+            script_path.to_string_lossy().as_ref(),
+            sandbox.as_path(),
+            config,
+            43123,
+        )?;
+
+        let captured = wait_for_capture(output_path.as_path())?;
+        assert!(captured.contains("config="), "captured output: {captured}");
+        assert!(
+            captured.contains(r#""logLevel":"INFO""#),
+            "captured output: {captured}"
+        );
+        assert!(
+            captured.contains(r#""openducktor":{"enabled":true}"#),
+            "captured output: {captured}"
+        );
+        assert!(captured.contains("args=serve --hostname 127.0.0.1 --port 43123"));
+
+        terminate_child_process(&mut child);
+        fs::remove_dir_all(&sandbox).ok();
+        Ok(())
+    }
 }
