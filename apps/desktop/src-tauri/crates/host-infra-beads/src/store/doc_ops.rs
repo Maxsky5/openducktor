@@ -3,7 +3,7 @@ use super::*;
 impl BeadsTaskStore {
     pub(super) fn get_spec_impl(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
-        let metadata_root = parse_metadata_root(issue.metadata.clone());
+        let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
         let entries = metadata_namespace(&metadata_root, &namespace_key)
             .and_then(|ns| ns.get("documents"))
@@ -25,7 +25,7 @@ impl BeadsTaskStore {
         task_id: &str,
         markdown: &str,
     ) -> Result<SpecDocument> {
-        let (_issue, mut root, namespace_key, mut namespace_map) =
+        let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
         let mut documents_map = namespace_map
             .get("documents")
@@ -64,7 +64,7 @@ impl BeadsTaskStore {
 
     pub(super) fn get_plan_impl(&self, repo_path: &Path, task_id: &str) -> Result<SpecDocument> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
-        let metadata_root = parse_metadata_root(issue.metadata.clone());
+        let metadata_root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
         let entries = metadata_namespace(&metadata_root, &namespace_key)
             .and_then(|ns| ns.get("documents"))
@@ -86,7 +86,7 @@ impl BeadsTaskStore {
         task_id: &str,
         markdown: &str,
     ) -> Result<SpecDocument> {
-        let (_issue, mut root, namespace_key, mut namespace_map) =
+        let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
         let mut documents_map = namespace_map
             .get("documents")
@@ -155,7 +155,7 @@ impl BeadsTaskStore {
         markdown: &str,
         verdict: QaVerdict,
     ) -> Result<QaReportDocument> {
-        let (_issue, mut root, namespace_key, mut namespace_map) =
+        let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
         let mut documents_map = namespace_map
             .get("documents")

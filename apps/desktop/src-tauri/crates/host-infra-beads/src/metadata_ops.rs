@@ -3,7 +3,6 @@ use serde_json::{Map, Value};
 use std::path::Path;
 
 use crate::metadata::parse_metadata_root;
-use crate::model::RawIssue;
 use crate::store::BeadsTaskStore;
 
 impl BeadsTaskStore {
@@ -26,9 +25,9 @@ impl BeadsTaskStore {
         &self,
         repo_path: &Path,
         task_id: &str,
-    ) -> Result<(RawIssue, Map<String, Value>, String, Map<String, Value>)> {
+    ) -> Result<(Map<String, Value>, String, Map<String, Value>)> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
-        let mut root = parse_metadata_root(issue.metadata.clone());
+        let mut root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();
 
         let namespace = root
@@ -43,7 +42,7 @@ impl BeadsTaskStore {
             .cloned()
             .ok_or_else(|| anyhow!("Invalid metadata namespace payload"))?;
 
-        Ok((issue, root, namespace_key, namespace_map))
+        Ok((root, namespace_key, namespace_map))
     }
 
     pub(crate) fn persist_namespace(

@@ -1,4 +1,5 @@
 use super::*;
+use serde::Deserialize;
 
 impl BeadsTaskStore {
     pub(super) fn ensure_repo_initialized_impl(&self, repo_path: &Path) -> Result<()> {
@@ -78,8 +79,8 @@ impl BeadsTaskStore {
             .as_array()
             .ok_or_else(|| anyhow!("bd list did not return an array"))?
         {
-            let issue: RawIssue = serde_json::from_value(entry.clone())
-                .context("Failed to decode task from bd list")?;
+            let issue: RawIssue =
+                RawIssue::deserialize(entry).context("Failed to decode task from bd list")?;
             if issue.issue_type == "event" || issue.issue_type == "gate" {
                 continue;
             }
@@ -242,7 +243,7 @@ impl BeadsTaskStore {
         }
 
         if let Some(ai_review_enabled) = patch.ai_review_enabled {
-            let (_issue, mut root, namespace_key, mut namespace_map) =
+            let (mut root, namespace_key, mut namespace_map) =
                 self.load_namespace(repo_path, task_id)?;
             namespace_map.insert("qaRequired".to_string(), Value::Bool(ai_review_enabled));
             self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
