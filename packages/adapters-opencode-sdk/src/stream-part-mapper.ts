@@ -120,8 +120,6 @@ const buildToolStreamPart = (
   metadata: Record<string, unknown> | undefined,
 ): ToolStreamPart => {
   const toolState = part.state as Record<string, unknown>;
-  const title = toDisplayText(toolState.title);
-  const titleField = title ? { title } : {};
   const base: ToolStreamPart = {
     kind: "tool",
     messageId: part.messageID,
@@ -138,9 +136,10 @@ const buildToolStreamPart = (
     return base;
   }
   if (normalizedStatus === "running") {
+    const title = toDisplayText(toolState.title);
     return {
       ...base,
-      ...titleField,
+      ...(title ? { title } : {}),
     };
   }
 
@@ -153,6 +152,8 @@ const buildToolStreamPart = (
   }
 
   const output = readToolOutputText(toolState.output);
+  const title = toDisplayText(toolState.title);
+  const titleField = title ? { title } : {};
   if (isToolOutputError(toolState.output) || (error && error.trim().length > 0)) {
     return {
       ...base,
