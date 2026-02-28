@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentSessionTodoItem } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
 
 const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -270,6 +270,38 @@ const startDefaultSession = async (
     systemPrompt: "system prompt",
     baseUrl: "http://127.0.0.1:12345",
   });
+};
+
+const defaultLoadSessionTodosInput = {
+  baseUrl: "http://127.0.0.1:12345",
+  workingDirectory: "/repo",
+  externalSessionId: "session-opencode-1",
+};
+
+const runLoadSessionTodosWithWarningCapture = async (
+  fetchImpl: typeof fetch,
+): Promise<{ todos: AgentSessionTodoItem[]; warnCalls: unknown[][] }> => {
+  const originalFetch = globalThis.fetch;
+  const originalWarn = console.warn;
+  const warnCalls: unknown[][] = [];
+  console.warn = ((...args: unknown[]) => {
+    warnCalls.push(args);
+  }) as typeof console.warn;
+  globalThis.fetch = fetchImpl;
+
+  try {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const todos = await adapter.loadSessionTodos(defaultLoadSessionTodosInput);
+    return { todos, warnCalls };
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+  }
 };
 
 describe("OpencodeSdkAdapter", () => {
@@ -854,6 +886,34 @@ describe("OpencodeSdkAdapter", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  test("loadSessionTodos logs non-ok responses and returns empty todos", async () => {
+    const { todos, warnCalls } = await runLoadSessionTodosWithWarningCapture(async () => {
+      return new Response("upstream unavailable", {
+        status: 503,
+        statusText: "Service Unavailable",
+      });
+    });
+
+    expect(todos).toEqual([]);
+    expect(warnCalls).toHaveLength(1);
+    expect(warnCalls[0][0]).toBe("loadSessionTodos: HTTP 503");
+    expect(warnCalls[0][1]).toEqual({
+      statusText: "Service Unavailable",
+    });
+  });
+
+  test("loadSessionTodos logs fetch errors and returns empty todos", async () => {
+    const fetchError = new Error("network down");
+    const { todos, warnCalls } = await runLoadSessionTodosWithWarningCapture(async () => {
+      throw fetchError;
+    });
+
+    expect(todos).toEqual([]);
+    expect(warnCalls).toHaveLength(1);
+    expect(warnCalls[0][0]).toBe("loadSessionTodos: fetch failed");
+    expect(warnCalls[0][1]).toBe(fetchError);
   });
 
   test("listAvailableModels returns provider models and primary agents", async () => {
