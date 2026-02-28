@@ -1,5 +1,6 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback } from "react";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import type { SessionStartRequestReason } from "./use-agent-studio-session-start-types";
@@ -9,18 +10,11 @@ import {
   useSessionStartModalState,
 } from "./use-session-start-modal-state";
 
-const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Build",
-  qa: "QA",
-};
-
 const startModeLabelFor = (startMode: SessionStartModalIntent["startMode"]): string =>
   startMode === "fresh" ? "Start a fresh session" : "Continue latest or start a new session";
 
 export const buildSessionStartModalTitle = (role: AgentRole): string => {
-  const roleLabel = ROLE_LABEL_BY_ROLE[role] ?? role.toUpperCase();
+  const roleLabel = AGENT_ROLE_LABELS[role] ?? role.toUpperCase();
   return `Start ${roleLabel} Session`;
 };
 

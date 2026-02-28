@@ -9,7 +9,7 @@ describe("use-session-start-modal-coordinator", () => {
   test("builds role-specific session start titles", () => {
     expect(buildSessionStartModalTitle("spec")).toBe("Start Spec Session");
     expect(buildSessionStartModalTitle("planner")).toBe("Start Planner Session");
-    expect(buildSessionStartModalTitle("build")).toBe("Start Build Session");
+    expect(buildSessionStartModalTitle("build")).toBe("Start Builder Session");
     expect(buildSessionStartModalTitle("qa")).toBe("Start QA Session");
   });
 

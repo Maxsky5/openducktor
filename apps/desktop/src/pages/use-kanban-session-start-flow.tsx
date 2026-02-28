@@ -4,18 +4,12 @@ import { useCallback, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { firstScenario, kickoffPromptForScenario } from "./agents-page-constants";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
-
-const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Build",
-  qa: "QA",
-};
 
 type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
@@ -174,7 +168,7 @@ export function useKanbanSessionStartFlow({
           closeStartModal();
 
           if (startInBackground) {
-            const roleLabel = ROLE_LABEL_BY_ROLE[intent.role] ?? intent.role.toUpperCase();
+            const roleLabel = AGENT_ROLE_LABELS[intent.role] ?? intent.role.toUpperCase();
             toast.success(`Started ${roleLabel} session in background for ${intent.taskId}.`, {
               duration: 10000,
               description: (
