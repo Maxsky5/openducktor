@@ -72,13 +72,13 @@ export const parseQaEntries = (value: unknown): QaEntry[] => {
   return parseTypedEntries(QaEntrySchema, value);
 };
 
-const normalizeParentId = (issue: RawIssue): string | null => {
+const normalizeParentId = (issue: RawIssue): string | undefined => {
   if (typeof issue.parent === "string" && issue.parent.trim().length > 0) {
     return issue.parent;
   }
 
   if (!Array.isArray(issue.dependencies)) {
-    return null;
+    return undefined;
   }
 
   for (const dependency of issue.dependencies) {
@@ -100,7 +100,7 @@ const normalizeParentId = (issue: RawIssue): string | null => {
     }
   }
 
-  return null;
+  return undefined;
 };
 
 export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): TaskCard => {
@@ -111,12 +111,14 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
       ? namespace.qaRequired
       : defaultQaRequiredForIssueType(normalizeIssueType(issue.issue_type));
 
+  const parentId = normalizeParentId(issue);
+
   return {
     id: issue.id,
     title: issue.title,
     status: toTaskStatus(issue.status),
     issueType: normalizeIssueType(issue.issue_type),
     aiReviewEnabled: qaRequired,
-    parentId: normalizeParentId(issue),
+    parentId,
   };
 };

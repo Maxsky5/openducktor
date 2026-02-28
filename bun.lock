@@ -94,6 +94,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.26.0",
+        "@openducktor/contracts": "workspace:*",
         "zod": "^4.3.6",
       },
     },

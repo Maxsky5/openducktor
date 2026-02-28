@@ -1,19 +1,12 @@
+import { agentToolNameSchema } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
   type AgentToolName,
 } from "../types/agent-orchestrator";
 
-export const ODT_WORKFLOW_TOOL_NAMES = [
-  "odt_read_task",
-  "odt_set_spec",
-  "odt_set_plan",
-  "odt_build_blocked",
-  "odt_build_resumed",
-  "odt_build_completed",
-  "odt_qa_approved",
-  "odt_qa_rejected",
-] as const satisfies readonly AgentToolName[];
+export const ODT_WORKFLOW_TOOL_NAMES =
+  agentToolNameSchema.options satisfies readonly AgentToolName[];
 
 const ODT_WORKFLOW_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_TOOL_NAMES);
 export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(

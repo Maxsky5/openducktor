@@ -35,7 +35,7 @@ const makeTask = (issueType: IssueType, status: TaskStatus): TaskCard => {
     issueType,
     status,
     aiReviewEnabled: true,
-    parentId: null,
+    parentId: undefined,
   };
 };
 

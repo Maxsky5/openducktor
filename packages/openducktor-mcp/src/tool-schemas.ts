@@ -1,3 +1,4 @@
+import type { AgentToolName } from "@openducktor/contracts";
 import { z } from "zod";
 
 const PLAN_SUBTASK_PRIORITY_VALUES = [0, 1, 2, 3, 4] as const;
@@ -75,4 +76,4 @@ export const ODT_TOOL_SCHEMAS = {
   odt_build_completed: BuildCompletedInputSchema,
   odt_qa_approved: QaApprovedInputSchema,
   odt_qa_rejected: QaRejectedInputSchema,
-} as const;
+} as const satisfies Record<AgentToolName, z.ZodTypeAny>;
