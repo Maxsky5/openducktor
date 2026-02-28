@@ -14,13 +14,21 @@ OpenDucktor is a macOS-first Tauri v2 desktop app with a Bun monorepo, React fro
 
 Replaceable ports:
 
-- `AgentEnginePort` in `/Users/20017260/.codex/worktrees/1317/openducktor/packages/core/src/ports/agent-engine.ts`
-- `TaskStore` trait in `/Users/20017260/.codex/worktrees/1317/openducktor/apps/desktop/src-tauri/crates/host-domain/src/lib.rs`
+- `AgentEnginePort` in `packages/core/src/ports/agent-engine.ts`
+- `TaskStore` trait in `apps/desktop/src-tauri/crates/host-domain/src/store.rs` (re-exported by `apps/desktop/src-tauri/crates/host-domain/src/lib.rs`)
 
 Current adapters:
 
-- Opencode adapter: `/Users/20017260/.codex/worktrees/1317/openducktor/packages/adapters-opencode-sdk/src/index.ts`
-- Beads adapter: `/Users/20017260/.codex/worktrees/1317/openducktor/apps/desktop/src-tauri/crates/host-infra-beads/src/lib.rs`
+- Opencode adapter: `packages/adapters-opencode-sdk/src/index.ts`
+- Beads adapter: `apps/desktop/src-tauri/crates/host-infra-beads/src/lib.rs`
+
+## Architecture Docs
+
+- End-to-end architecture and runtime data flow: [docs/architecture-overview.md](docs/architecture-overview.md)
+- Agent orchestrator internals: [docs/agent-orchestrator-module-map.md](docs/agent-orchestrator-module-map.md)
+- Workflow lifecycle/status contract: [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)
+- Workflow actions: [docs/task-workflow-actions.md](docs/task-workflow-actions.md)
+- Workflow transition matrix: [docs/task-workflow-transition-matrix.md](docs/task-workflow-transition-matrix.md)
 
 ## Home Config
 
@@ -85,7 +93,7 @@ Required sections:
 7. `Risks`
 8. `Test Plan`
 
-Planner tool surface is intentionally reduced to `set_spec_markdown` only.
+Task document commands are `spec_get`, `set_spec`, `spec_save_document`, `plan_get`, `set_plan`, and `plan_save_document`.
 
 ## Commands
 
@@ -125,12 +133,31 @@ cd apps/desktop/src-tauri && cargo check
 
 ## IPC Commands (Implemented)
 
-- `system_check`
-- `workspace_list`, `workspace_add`, `workspace_select`
-- `workspace_update_repo_config`, `workspace_set_trusted_hooks`
-- `tasks_list`, `task_create`, `task_update`, `task_set_phase`
-- `spec_get`, `spec_set_markdown`
-- `delegate_start`, `delegate_respond`, `delegate_stop`, `delegate_cleanup`
-- `runs_list`
+- Runtime/system:
+  - `system_check`, `runtime_check`, `beads_check`
+- Workspace/config:
+  - `workspace_list`, `workspace_add`, `workspace_select`
+  - `workspace_update_repo_config`, `workspace_save_repo_settings`, `workspace_update_repo_hooks`
+  - `workspace_prepare_trusted_hooks_challenge`, `workspace_get_repo_config`, `workspace_set_trusted_hooks`
+- Git:
+  - `git_get_branches`, `git_get_current_branch`, `git_switch_branch`
+  - `git_create_worktree`, `git_remove_worktree`, `git_push_branch`
+- Tasks:
+  - `tasks_list`, `task_create`, `task_update`, `task_delete`
+  - `task_transition`, `task_defer`, `task_resume_deferred`
+- Documents/workflow:
+  - `spec_get`, `task_metadata_get`, `set_spec`, `spec_save_document`
+  - `plan_get`, `set_plan`, `plan_save_document`
+  - `qa_get_report`, `qa_approved`, `qa_rejected`
+  - `build_start`, `build_respond`, `build_stop`, `build_cleanup`
+  - `build_blocked`, `build_resumed`, `build_completed`
+  - `human_request_changes`, `human_approve`
+- Runs/runtimes:
+  - `runs_list`
+  - `opencode_runtime_list`, `opencode_runtime_start`, `opencode_runtime_stop`, `opencode_repo_runtime_ensure`
+- Agent sessions:
+  - `agent_sessions_list`, `agent_session_upsert`
+- Theme:
+  - `get_theme`, `set_theme`
 
 Run events emit on `openducktor://run-event`.
