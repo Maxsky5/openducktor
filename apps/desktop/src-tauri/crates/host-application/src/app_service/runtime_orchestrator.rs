@@ -94,9 +94,8 @@ impl AppService {
     }
 
     pub fn opencode_repo_runtime_ensure(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
-        let repo_path = repo_path.as_str();
-        let repo_key = repo_path.to_string();
+        let repo_key = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = repo_key.as_str();
 
         {
             let mut runtimes = self
@@ -240,9 +239,8 @@ impl AppService {
         task_id: &str,
         role: &str,
     ) -> Result<AgentRuntimeSummary> {
-        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
-        let repo_path = repo_path.as_str();
-        let repo_key = repo_path.to_string();
+        let repo_key = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = repo_key.as_str();
         if !matches!(role, "spec" | "planner" | "qa") {
             return Err(anyhow!(
                 "Unsupported agent runtime role: {role}. Supported: spec, planner, qa"
