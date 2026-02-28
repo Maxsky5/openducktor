@@ -139,6 +139,11 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
+    fn register_workspace(config_store: &AppConfigStore, repo_path: &str) -> Result<()> {
+        config_store.add_workspace(repo_path)?;
+        Ok(())
+    }
+
     #[test]
     fn prepare_qa_worktree_returns_setup_for_valid_config() -> Result<()> {
         let root = unique_temp_path("qa-worktree-setup-success");
@@ -147,6 +152,7 @@ mod tests {
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         let repo_path = repo.to_string_lossy().to_string();
         let worktree_base = root.join("qa-worktrees");
+        register_workspace(&config_store, repo_path.as_str())?;
 
         config_store.update_repo_config(
             repo_path.as_str(),
@@ -177,6 +183,7 @@ mod tests {
         init_git_repo(&repo)?;
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         let repo_path = repo.to_string_lossy().to_string();
+        register_workspace(&config_store, repo_path.as_str())?;
 
         config_store.update_repo_config(
             repo_path.as_str(),
@@ -210,6 +217,7 @@ mod tests {
             pre_start: vec!["sh -lc 'exit 1'".to_string()],
             post_complete: Vec::new(),
         };
+        register_workspace(&config_store, repo_path.as_str())?;
 
         config_store.update_repo_config(
             repo_path.as_str(),
@@ -244,6 +252,7 @@ mod tests {
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         let repo_path = repo.to_string_lossy().to_string();
         let worktree_base = root.join("qa-worktrees");
+        register_workspace(&config_store, repo_path.as_str())?;
 
         config_store.update_repo_config(
             repo_path.as_str(),
