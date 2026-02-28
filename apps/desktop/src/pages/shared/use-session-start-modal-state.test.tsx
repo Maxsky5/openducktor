@@ -4,7 +4,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "../agents/agent-studio-test-utils";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
 enableReactActEnvironment();

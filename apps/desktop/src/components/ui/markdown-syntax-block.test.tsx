@@ -17,7 +17,7 @@ const registerLanguageMock = mock((_language: string, _grammar: unknown) => {});
 const syntaxHighlighterRenderMock = mock((_props: Record<string, unknown>) => {});
 const darkThemeModuleLoadMock = mock(() => DARK_THEME);
 
-mock.module("@/components/theme-provider", () => ({
+mock.module("@/components/layout/theme-provider", () => ({
   useTheme: () => ({
     theme: currentTheme,
     setTheme: (_theme: Theme) => {},

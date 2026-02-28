@@ -2,7 +2,10 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { isValidElement, type ReactElement, useCallback, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { createTaskCardFixture, enableReactActEnvironment } from "./agent-studio-test-utils";
+import {
+  createTaskCardFixture,
+  enableReactActEnvironment,
+} from "../agents/agent-studio-test-utils";
 
 enableReactActEnvironment();
 
@@ -90,7 +93,7 @@ mock.module("@/state", () => ({
   useSpecState: () => ({}),
 }));
 
-mock.module("./use-session-start-modal-state", () => ({
+mock.module("../shared/use-session-start-modal-state", () => ({
   useSessionStartModalState: () => {
     const [intent, setIntent] = useState<Record<string, unknown> | null>(null);
     const [selection, setSelection] = useState({

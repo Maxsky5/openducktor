@@ -6,7 +6,7 @@ import type { AgentStateContextValue } from "@/types/state-slices";
 import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
-} from "../state/operations/agent-orchestrator/support/async-side-effects";
+} from "../../state/operations/agent-orchestrator/support/async-side-effects";
 import { kickoffPromptForScenario } from "./agents-page-constants";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-page-session-tabs";
 import {

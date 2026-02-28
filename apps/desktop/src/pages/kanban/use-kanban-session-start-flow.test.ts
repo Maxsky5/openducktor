@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import {
+  createAgentSessionFixture,
+  createTaskCardFixture,
+} from "../agents/agent-studio-test-utils";
 import {
   findLatestSessionByRoleForTask,
   resolveKanbanPlanningStartPreference,

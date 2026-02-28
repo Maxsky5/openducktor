@@ -19,6 +19,12 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  buildSessionStartModalDescription,
+  buildSessionStartModalTitle,
+  toSessionStartPostAction,
+  useSessionStartModalCoordinator,
+} from "../shared/use-session-start-modal-coordinator";
+import {
   type AgentStudioOrchestrationActionsContext,
   type AgentStudioOrchestrationComposerContext,
   type AgentStudioOrchestrationReadinessContext,
@@ -34,12 +40,6 @@ import type {
   NewSessionStartRequest,
 } from "./use-agent-studio-session-actions";
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
-import {
-  buildSessionStartModalDescription,
-  buildSessionStartModalTitle,
-  toSessionStartPostAction,
-  useSessionStartModalCoordinator,
-} from "./use-session-start-modal-coordinator";
 
 type AgentStudioSessionStartModalProps = {
   request: NewSessionStartRequest;

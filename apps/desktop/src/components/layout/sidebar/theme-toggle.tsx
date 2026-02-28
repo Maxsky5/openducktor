@@ -1,6 +1,6 @@
 import { Moon, Sun } from "lucide-react";
 import type { ReactElement } from "react";
-import { useTheme } from "@/components/theme-provider";
+import { useTheme } from "@/components/layout/theme-provider";
 import { Switch } from "@/components/ui/switch";
 
 export function ThemeToggle(): ReactElement {

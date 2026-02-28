@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
-import { TaskCreateModal } from "@/components/features/task-create-modal";
-import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
+import { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
+import { TaskDetailsSheet } from "@/components/features/task-details/task-details-sheet";
 import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanSessionStartModal } from "./kanban-session-start-modal";

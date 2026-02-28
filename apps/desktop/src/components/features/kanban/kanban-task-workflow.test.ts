@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createTaskCardFixture } from "@/pages/agent-studio-test-utils";
+import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import { resolveTaskCardActions } from "./kanban-task-workflow";
 
 describe("resolveTaskCardActions", () => {
