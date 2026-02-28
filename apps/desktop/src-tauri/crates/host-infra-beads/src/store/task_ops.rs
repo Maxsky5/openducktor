@@ -46,7 +46,8 @@ impl BeadsTaskStore {
                 ));
             }
 
-            let (is_ready_after, reason_after) = self.verify_repo_initialized(repo_path, &beads_dir)?;
+            let (is_ready_after, reason_after) =
+                self.verify_repo_initialized(repo_path, &beads_dir)?;
             if !is_ready_after {
                 return Err(anyhow!(
                     "Beads init completed but store is not ready at {}: {}",
@@ -72,21 +73,18 @@ impl BeadsTaskStore {
 
         let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
 
-        let mut tasks = value
+        let mut tasks = Vec::new();
+        for entry in value
             .as_array()
             .ok_or_else(|| anyhow!("bd list did not return an array"))?
-            .iter()
-            .map(|entry| {
-                let issue: RawIssue = serde_json::from_value(entry.clone())
-                    .context("Failed to decode task from bd list")?;
-                self.parse_task_card(issue, &metadata_namespace)
-            })
-            .collect::<Result<Vec<TaskCard>>>()?;
-
-        tasks = tasks
-            .into_iter()
-            .filter(|task| task.issue_type != "event" && task.issue_type != "gate")
-            .collect::<Vec<_>>();
+        {
+            let issue: RawIssue = serde_json::from_value(entry.clone())
+                .context("Failed to decode task from bd list")?;
+            if issue.issue_type == "event" || issue.issue_type == "gate" {
+                continue;
+            }
+            tasks.push(self.parse_task_card(issue, &metadata_namespace)?);
+        }
 
         let mut subtasks_by_parent: HashMap<String, Vec<String>> = HashMap::new();
         for task in &tasks {
@@ -104,16 +102,25 @@ impl BeadsTaskStore {
             task.subtask_ids = subtasks;
         }
 
-        self.cache_task_list_if_generation(&repo_key, &metadata_namespace, cache_generation, &tasks)?;
+        self.cache_task_list_if_generation(
+            &repo_key,
+            &metadata_namespace,
+            cache_generation,
+            &tasks,
+        )?;
         Ok(tasks)
     }
 
-    pub(super) fn create_task_impl(&self, repo_path: &Path, input: CreateTaskInput) -> Result<TaskCard> {
+    pub(super) fn create_task_impl(
+        &self,
+        repo_path: &Path,
+        input: CreateTaskInput,
+    ) -> Result<TaskCard> {
         let mut args = vec![
             "create".to_string(),
             input.title,
             "--type".to_string(),
-            input.issue_type,
+            input.issue_type.as_cli_value().to_string(),
             "--priority".to_string(),
             input.priority.to_string(),
         ];
@@ -142,7 +149,8 @@ impl BeadsTaskStore {
         let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         let value = self.run_bd_json(repo_path, &arg_refs)?;
         self.invalidate_task_list_cache(repo_path)?;
-        let raw: RawIssue = serde_json::from_value(value).context("Failed to decode created issue")?;
+        let raw: RawIssue =
+            serde_json::from_value(value).context("Failed to decode created issue")?;
         let created_id = raw.id.clone();
 
         let mut metadata_root = parse_metadata_root(raw.metadata);
@@ -207,7 +215,7 @@ impl BeadsTaskStore {
 
         if let Some(issue_type) = patch.issue_type {
             args.push("--type".to_string());
-            args.push(issue_type);
+            args.push(issue_type.as_cli_value().to_string());
         }
 
         if let Some(assignee) = patch.assignee {

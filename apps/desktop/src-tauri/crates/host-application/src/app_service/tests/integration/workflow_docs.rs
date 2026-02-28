@@ -3,8 +3,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
-    TaskStore, UpdateTaskPatch,
+    GitPort, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -17,22 +17,21 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
-use crate::app_service::{
-    build_opencode_config_content, can_set_plan, default_mcp_workspace_root, parse_mcp_command_json,
-    read_opencode_process_registry, read_opencode_version, resolve_mcp_command,
-    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    validate_parent_relationships_for_update, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
-    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
-    with_locked_opencode_process_registry,
-};
 use crate::app_service::test_support::{
-    FakeTaskStore, GitCall, TaskStoreState, build_service_with_git_state, build_service_with_store,
-    create_fake_bd, create_fake_opencode, create_failing_opencode,
-    create_failing_opencode_with_worktree_cleanup, create_orphanable_opencode, empty_patch,
-    init_git_repo, lock_env, make_emitter, make_session, make_task, prepend_path,
-    process_is_alive, remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script,
+    build_service_with_git_state, build_service_with_store, create_failing_opencode,
+    create_failing_opencode_with_worktree_cleanup, create_fake_bd, create_fake_opencode,
+    create_orphanable_opencode, empty_patch, init_git_repo, lock_env, make_emitter, make_session,
+    make_task, prepend_path, process_is_alive, remove_env_var, set_env_var, spawn_sleep_process,
+    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
+    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+};
+use crate::app_service::{
+    build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
+    parse_mcp_command_json, read_opencode_process_registry, read_opencode_version,
+    resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
+    terminate_process_by_pid, validate_parent_relationships_for_update,
+    with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
+    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
 #[test]
@@ -107,7 +106,7 @@ fn validate_parent_relationships_for_update_enforces_hierarchy_constraints() {
         .contains("Tasks with subtasks cannot become subtasks."));
 
     let mut non_epic_patch = empty_patch();
-    non_epic_patch.issue_type = Some("feature".to_string());
+    non_epic_patch.issue_type = Some(IssueType::Feature);
     let type_error = validate_parent_relationships_for_update(&tasks, &current, &non_epic_patch)
         .expect_err("task with direct subtasks must remain epic");
     assert!(type_error
@@ -298,7 +297,7 @@ fn tasks_list_enriches_available_actions() -> Result<()> {
 }
 
 #[test]
-fn task_create_normalizes_issue_type_and_defaults_ai_review() -> Result<()> {
+fn task_create_defaults_ai_review_for_typed_issue_type() -> Result<()> {
     let repo_path = "/tmp/odt-repo-create";
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
@@ -313,7 +312,7 @@ fn task_create_normalizes_issue_type_and_defaults_ai_review() -> Result<()> {
         repo_path,
         CreateTaskInput {
             title: "New task".to_string(),
-            issue_type: "something-unknown".to_string(),
+            issue_type: IssueType::Task,
             priority: 2,
             description: None,
             acceptance_criteria: None,
@@ -322,12 +321,12 @@ fn task_create_normalizes_issue_type_and_defaults_ai_review() -> Result<()> {
             parent_id: None,
         },
     )?;
-    assert_eq!(created.issue_type, "task");
+    assert_eq!(created.issue_type, IssueType::Task);
     assert!(created.ai_review_enabled);
 
     let task_state = task_state.lock().expect("task lock poisoned");
     assert_eq!(task_state.created_inputs.len(), 1);
-    assert_eq!(task_state.created_inputs[0].issue_type, "task");
+    assert_eq!(task_state.created_inputs[0].issue_type, IssueType::Task);
     assert_eq!(task_state.created_inputs[0].ai_review_enabled, Some(true));
     Ok(())
 }
@@ -632,19 +631,19 @@ fn set_plan_for_epic_replaces_existing_subtasks_with_new_plan_proposals() -> Res
         Some(vec![
             PlanSubtaskInput {
                 title: "Build API".to_string(),
-                issue_type: Some("task".to_string()),
+                issue_type: Some(IssueType::Task),
                 priority: Some(2),
                 description: None,
             },
             PlanSubtaskInput {
                 title: "Build UI".to_string(),
-                issue_type: Some("feature".to_string()),
+                issue_type: Some(IssueType::Feature),
                 priority: Some(2),
                 description: Some("Add interface".to_string()),
             },
             PlanSubtaskInput {
                 title: "Build UI".to_string(),
-                issue_type: Some("feature".to_string()),
+                issue_type: Some(IssueType::Feature),
                 priority: Some(2),
                 description: Some("Duplicate".to_string()),
             },
@@ -730,7 +729,7 @@ fn set_plan_for_epic_rejects_subtask_replacement_when_existing_subtask_is_active
             "# Epic Plan",
             Some(vec![PlanSubtaskInput {
                 title: "Build API".to_string(),
-                issue_type: Some("task".to_string()),
+                issue_type: Some(IssueType::Task),
                 priority: Some(2),
                 description: None,
             }]),
@@ -913,4 +912,3 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     assert_eq!(task_state.upserted_sessions[0].1.task_id, "task-1");
     Ok(())
 }
-

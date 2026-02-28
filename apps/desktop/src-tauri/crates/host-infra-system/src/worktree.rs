@@ -177,9 +177,7 @@ mod tests {
 
         let error = remove_worktree(&repo, &missing_worktree).expect_err("removal should fail");
         assert!(
-            error
-                .to_string()
-                .contains("git worktree remove failed for"),
+            error.to_string().contains("git worktree remove failed for"),
             "unexpected remove_worktree error: {error}"
         );
         let _ = fs::remove_dir_all(root);

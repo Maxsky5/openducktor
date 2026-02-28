@@ -1,6 +1,7 @@
 use anyhow::Result;
 use host_domain::{
-    CreateTaskInput, PlanSubtaskInput, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, OpencodeStartupReadinessConfig};
 use std::fs;
@@ -10,15 +11,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::app_service::{
-    allows_transition, build_opencode_startup_event_payload, can_set_plan, can_set_spec_from_status,
-    derive_available_actions, normalize_required_markdown, normalize_subtask_plan_inputs,
-    terminate_child_process, validate_parent_relationships_for_create,
-    validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
-    wait_for_local_server, wait_for_local_server_with_process, AppService,
-    OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
+use crate::app_service::test_support::{
+    make_task, unique_temp_path, FakeTaskStore, TaskStoreState,
 };
-use crate::app_service::test_support::{FakeTaskStore, TaskStoreState, make_task, unique_temp_path};
+use crate::app_service::{
+    allows_transition, build_opencode_startup_event_payload, can_set_plan,
+    can_set_spec_from_status, derive_available_actions, normalize_required_markdown,
+    normalize_subtask_plan_inputs, terminate_child_process,
+    validate_parent_relationships_for_create, validate_parent_relationships_for_update,
+    validate_plan_subtask_rules, validate_transition, wait_for_local_server,
+    wait_for_local_server_with_process, AppService, OpencodeStartupMetricsSnapshot,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
+};
 
 #[test]
 fn app_service_new_constructor_is_callable() -> Result<()> {
@@ -127,7 +131,7 @@ fn only_epics_can_have_subtasks_and_depth_is_one_level() {
 
     let invalid_non_epic_parent = CreateTaskInput {
         title: "child".to_string(),
-        issue_type: "task".to_string(),
+        issue_type: IssueType::Task,
         priority: 2,
         description: None,
         acceptance_criteria: None,
@@ -139,7 +143,7 @@ fn only_epics_can_have_subtasks_and_depth_is_one_level() {
 
     let invalid_depth_two = CreateTaskInput {
         title: "child".to_string(),
-        issue_type: "task".to_string(),
+        issue_type: IssueType::Task,
         priority: 2,
         description: None,
         acceptance_criteria: None,
@@ -179,7 +183,7 @@ fn markdown_documents_require_non_empty_content() {
 fn subtask_plan_inputs_are_normalized_and_validated() {
     let normalized = normalize_subtask_plan_inputs(vec![PlanSubtaskInput {
         title: "  Build API  ".to_string(),
-        issue_type: Some("feature".to_string()),
+        issue_type: Some(IssueType::Feature),
         priority: Some(99),
         description: Some("  add endpoint ".to_string()),
     }])
@@ -188,7 +192,7 @@ fn subtask_plan_inputs_are_normalized_and_validated() {
     assert_eq!(normalized.len(), 1);
     let first = &normalized[0];
     assert_eq!(first.title, "Build API");
-    assert_eq!(first.issue_type, "feature");
+    assert_eq!(first.issue_type, IssueType::Feature);
     assert_eq!(first.priority, 4);
     assert_eq!(first.description.as_deref(), Some("add endpoint"));
 }
@@ -197,7 +201,7 @@ fn subtask_plan_inputs_are_normalized_and_validated() {
 fn subtask_plan_inputs_reject_epic_issue_type() {
     let result = normalize_subtask_plan_inputs(vec![PlanSubtaskInput {
         title: "Do work".to_string(),
-        issue_type: Some("epic".to_string()),
+        issue_type: Some(IssueType::Epic),
         priority: Some(2),
         description: None,
     }]);
@@ -242,7 +246,7 @@ fn epic_plan_requires_existing_or_proposed_direct_subtasks() {
 
     let proposals = vec![CreateTaskInput {
         title: "Subtask".to_string(),
-        issue_type: "task".to_string(),
+        issue_type: IssueType::Task,
         priority: 2,
         description: None,
         acceptance_criteria: None,
@@ -258,7 +262,7 @@ fn non_epic_plan_cannot_accept_subtask_proposals() {
     let task = make_task("task-1", "task", TaskStatus::Open);
     let proposals = vec![CreateTaskInput {
         title: "Child".to_string(),
-        issue_type: "bug".to_string(),
+        issue_type: IssueType::Bug,
         priority: 2,
         description: None,
         acceptance_criteria: None,

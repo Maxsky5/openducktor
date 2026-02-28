@@ -1,6 +1,41 @@
-use crate::{as_error, AppState, MarkdownPayload, PlanPayload};
-use host_domain::{SpecDocument, TaskCard, TaskMetadata};
+use super::issue_type::parse_issue_type;
+use crate::{as_error, AppState, MarkdownPayload, PlanPayload, PlanSubtaskPayload};
+use host_domain::{PlanSubtaskInput, SpecDocument, TaskCard, TaskMetadata};
 use tauri::State;
+
+fn map_plan_subtask_payload(
+    subtask: PlanSubtaskPayload,
+    index: usize,
+) -> Result<PlanSubtaskInput, String> {
+    let issue_type = match subtask.issue_type {
+        Some(issue_type) => Some(parse_issue_type(
+            &issue_type,
+            &format!("subtasks[{index}].issueType"),
+        )?),
+        None => None,
+    };
+
+    Ok(PlanSubtaskInput {
+        title: subtask.title,
+        issue_type,
+        priority: subtask.priority,
+        description: subtask.description,
+    })
+}
+
+fn map_plan_subtasks(
+    subtasks: Option<Vec<PlanSubtaskPayload>>,
+) -> Result<Option<Vec<PlanSubtaskInput>>, String> {
+    subtasks
+        .map(|items| {
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(index, item)| map_plan_subtask_payload(item, index))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()
+}
 
 #[tauri::command]
 pub async fn spec_get(
@@ -60,10 +95,11 @@ pub async fn set_plan(
     task_id: String,
     input: PlanPayload,
 ) -> Result<SpecDocument, String> {
+    let mapped_subtasks = map_plan_subtasks(input.subtasks)?;
     as_error(
         state
             .service
-            .set_plan(&repo_path, &task_id, &input.markdown, input.subtasks),
+            .set_plan(&repo_path, &task_id, &input.markdown, mapped_subtasks),
     )
 }
 
@@ -116,4 +152,39 @@ pub async fn qa_rejected(
             .service
             .qa_rejected(&repo_path, &task_id, &input.markdown),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::map_plan_subtasks;
+    use crate::PlanSubtaskPayload;
+    use host_domain::IssueType;
+
+    #[test]
+    fn map_plan_subtasks_rejects_unknown_issue_type_with_field_path() {
+        let error = map_plan_subtasks(Some(vec![PlanSubtaskPayload {
+            title: "Build UI".to_string(),
+            issue_type: Some("featur".to_string()),
+            priority: Some(2),
+            description: None,
+        }]))
+        .expect_err("unknown issue type should fail");
+
+        assert!(error.contains("subtasks[0].issueType"));
+        assert!(error.contains("task, feature, bug, epic"));
+    }
+
+    #[test]
+    fn map_plan_subtasks_parses_valid_issue_type() {
+        let subtasks = map_plan_subtasks(Some(vec![PlanSubtaskPayload {
+            title: "Build API".to_string(),
+            issue_type: Some("bug".to_string()),
+            priority: Some(1),
+            description: Some("Fix bug".to_string()),
+        }]))
+        .expect("valid issue type should parse")
+        .expect("subtasks should be present");
+
+        assert_eq!(subtasks[0].issue_type, Some(IssueType::Bug));
+    }
 }

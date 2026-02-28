@@ -1,15 +1,14 @@
 use super::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
-    default_qa_required_for_issue_type,
-    normalize_issue_type, normalize_required_markdown, normalize_subtask_plan_inputs,
+    default_qa_required_for_issue_type, normalize_required_markdown, normalize_subtask_plan_inputs,
     normalize_title_key, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
     AppService,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, PlanSubtaskInput, QaVerdict, SpecDocument, TaskCard,
-    TaskMetadata, TaskStatus, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, IssueType, PlanSubtaskInput, QaVerdict, SpecDocument,
+    TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch,
 };
 use std::collections::HashSet;
 use std::path::Path;
@@ -23,7 +22,6 @@ impl AppService {
 
     pub fn task_create(&self, repo_path: &str, mut input: CreateTaskInput) -> Result<TaskCard> {
         self.ensure_repo_initialized(repo_path)?;
-        input.issue_type = normalize_issue_type(&input.issue_type).to_string();
         if input.ai_review_enabled.is_none() {
             input.ai_review_enabled = Some(default_qa_required_for_issue_type(&input.issue_type));
         }
@@ -40,16 +38,13 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        mut patch: UpdateTaskPatch,
+        patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
         self.ensure_repo_initialized(repo_path)?;
         if patch.status.is_some() {
             return Err(anyhow!(
                 "Status cannot be updated directly. Use workflow transitions."
             ));
-        }
-        if let Some(issue_type) = patch.issue_type.as_ref() {
-            patch.issue_type = Some(normalize_issue_type(issue_type).to_string());
         }
 
         let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;
@@ -337,15 +332,15 @@ impl AppService {
         if !can_set_plan(&task) {
             return Err(anyhow!(
                 "set_plan is not allowed for issue type {} from status {}",
-                normalize_issue_type(&task.issue_type),
+                task.issue_type.as_cli_value(),
                 task.status.as_cli_value()
             ));
         }
 
-        let issue_type = normalize_issue_type(&task.issue_type);
+        let issue_type = task.issue_type.clone();
         let mut subtask_creates = normalize_subtask_plan_inputs(subtasks.unwrap_or_default())?;
         validate_plan_subtask_rules(&task, &tasks, &subtask_creates)?;
-        if issue_type != "epic" {
+        if issue_type != IssueType::Epic {
             subtask_creates.clear();
         }
 
@@ -354,7 +349,7 @@ impl AppService {
             .set_plan(Path::new(repo_path), task_id, &markdown)
             .with_context(|| format!("Failed to persist implementation plan for {task_id}"))?;
 
-        if issue_type == "epic" {
+        if issue_type == IssueType::Epic {
             let mut current_tasks = self.task_store.list_tasks(Path::new(repo_path))?;
             let refreshed_task = current_tasks
                 .iter()
@@ -364,7 +359,7 @@ impl AppService {
             if !can_set_plan(&refreshed_task) {
                 return Err(anyhow!(
                     "set_plan is not allowed for issue type {} from status {}",
-                    normalize_issue_type(&refreshed_task.issue_type),
+                    refreshed_task.issue_type.as_cli_value(),
                     refreshed_task.status.as_cli_value()
                 ));
             }

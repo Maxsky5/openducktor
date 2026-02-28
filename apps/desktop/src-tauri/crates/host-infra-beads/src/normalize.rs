@@ -1,3 +1,5 @@
+use host_domain::IssueType;
+
 pub(crate) fn normalize_labels(labels: Vec<String>) -> Vec<String> {
     let mut normalized: Vec<String> = labels
         .into_iter()
@@ -20,19 +22,13 @@ pub(crate) fn normalize_text_option(value: Option<String>) -> Option<String> {
     })
 }
 
-pub(crate) fn normalize_issue_type(issue_type: &str) -> &'static str {
-    match issue_type {
-        "epic" => "epic",
-        "feature" => "feature",
-        "bug" => "bug",
-        _ => "task",
-    }
+pub(crate) fn normalize_issue_type(issue_type: &str) -> IssueType {
+    IssueType::from_cli_value(issue_type).unwrap_or(IssueType::Task)
 }
 
 pub(crate) fn default_ai_review_enabled(issue_type: &str) -> bool {
     matches!(
         normalize_issue_type(issue_type),
-        "epic" | "feature" | "task" | "bug"
+        IssueType::Epic | IssueType::Feature | IssueType::Task | IssueType::Bug
     )
 }
-

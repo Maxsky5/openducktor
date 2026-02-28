@@ -102,7 +102,13 @@ impl GitPort for GitCliPort {
         if create_branch {
             self.run_git(
                 repo_path,
-                &["worktree", "add", "-b", branch.as_str(), worktree_path.as_str()],
+                &[
+                    "worktree",
+                    "add",
+                    "-b",
+                    branch.as_str(),
+                    worktree_path.as_str(),
+                ],
             )?;
         } else {
             self.run_git(
@@ -295,7 +301,10 @@ mod tests {
     fn setup_repo(prefix: &str) -> TempPath {
         let repo = TempPath::new(prefix);
         run_git_ok(&repo.path, &["init"]);
-        run_git_ok(&repo.path, &["config", "user.email", "tests@openducktor.local"]);
+        run_git_ok(
+            &repo.path,
+            &["config", "user.email", "tests@openducktor.local"],
+        );
         run_git_ok(&repo.path, &["config", "user.name", "OpenDucktor Tests"]);
         fs::write(repo.path.join("README.md"), "# OpenDucktor\n").expect("seed file should write");
         run_git_ok(&repo.path, &["add", "README.md"]);
@@ -382,7 +391,10 @@ mod tests {
         let repo = setup_repo("branches");
         let remote = setup_bare_remote("branches-remote");
         let remote_path = remote.path.to_string_lossy().to_string();
-        run_git_ok(&repo.path, &["remote", "add", "origin", remote_path.as_str()]);
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
         run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
         run_git_ok(&repo.path, &["switch", "-c", "feature/list"]);
         fs::write(repo.path.join("feature.txt"), "feature\n").expect("feature file should write");
@@ -400,17 +412,15 @@ mod tests {
         assert_eq!(branches[0].name, "main");
         assert!(branches[0].is_current);
         assert!(!branches[0].is_remote);
-        assert!(branches.iter().any(|entry| entry.name == "feature/list" && !entry.is_remote));
-        assert!(
-            branches
-                .iter()
-                .any(|entry| entry.name == "origin/main" && entry.is_remote)
-        );
-        assert!(
-            !branches
-                .iter()
-                .any(|entry| entry.name == "origin/HEAD" && entry.is_remote)
-        );
+        assert!(branches
+            .iter()
+            .any(|entry| entry.name == "feature/list" && !entry.is_remote));
+        assert!(branches
+            .iter()
+            .any(|entry| entry.name == "origin/main" && entry.is_remote));
+        assert!(!branches
+            .iter()
+            .any(|entry| entry.name == "origin/HEAD" && entry.is_remote));
     }
 
     #[test]
@@ -483,7 +493,10 @@ mod tests {
             .expect("dirty file should write");
 
         let no_force = git.remove_worktree(&repo.path, &worktree.path, false);
-        assert!(no_force.is_err(), "dirty worktree removal without force should fail");
+        assert!(
+            no_force.is_err(),
+            "dirty worktree removal without force should fail"
+        );
 
         git.remove_worktree(&repo.path, &worktree.path, true)
             .expect("dirty worktree removal with force should succeed");
@@ -498,7 +511,10 @@ mod tests {
         let repo = setup_repo("push");
         let remote = setup_bare_remote("push-remote");
         let remote_path = remote.path.to_string_lossy().to_string();
-        run_git_ok(&repo.path, &["remote", "add", "origin", remote_path.as_str()]);
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
         let git = GitCliPort::new();
 
         git.switch_branch(&repo.path, "feature/push", true)
@@ -513,7 +529,10 @@ mod tests {
         assert_eq!(summary.remote, "origin");
         assert_eq!(summary.branch, "feature/push");
 
-        let ls_remote = run_git_ok(&repo.path, &["ls-remote", "--heads", "origin", "feature/push"]);
+        let ls_remote = run_git_ok(
+            &repo.path,
+            &["ls-remote", "--heads", "origin", "feature/push"],
+        );
         assert!(
             ls_remote.contains("refs/heads/feature/push"),
             "remote should contain pushed branch"
@@ -532,8 +551,14 @@ mod tests {
 
         assert!(git.get_branches(&non_repo.path).is_err());
         assert!(git.switch_branch(&repo.path, "   ", false).is_err());
-        assert!(git.create_worktree(&repo.path, &TempPath::new("w").path, " ", true).is_err());
-        assert!(git.push_branch(&repo.path, "", "main", false, false).is_err());
-        assert!(git.push_branch(&repo.path, "origin", " ", false, false).is_err());
+        assert!(git
+            .create_worktree(&repo.path, &TempPath::new("w").path, " ", true)
+            .is_err());
+        assert!(git
+            .push_branch(&repo.path, "", "main", false, false)
+            .is_err());
+        assert!(git
+            .push_branch(&repo.path, "origin", " ", false, false)
+            .is_err());
     }
 }

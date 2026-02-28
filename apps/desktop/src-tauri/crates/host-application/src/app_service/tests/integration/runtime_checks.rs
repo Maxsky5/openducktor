@@ -3,8 +3,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
-    TaskStore, UpdateTaskPatch,
+    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
+    TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -17,22 +17,21 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
-use crate::app_service::{
-    build_opencode_config_content, can_set_plan, default_mcp_workspace_root, parse_mcp_command_json,
-    read_opencode_process_registry, read_opencode_version, resolve_mcp_command,
-    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
-    validate_parent_relationships_for_update, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
-    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
-    with_locked_opencode_process_registry,
-};
 use crate::app_service::test_support::{
-    FakeTaskStore, GitCall, TaskStoreState, build_service_with_git_state, build_service_with_store,
-    create_fake_bd, create_fake_opencode, create_failing_opencode,
-    create_failing_opencode_with_worktree_cleanup, create_orphanable_opencode, empty_patch,
-    init_git_repo, lock_env, make_emitter, make_session, make_task, prepend_path,
-    process_is_alive, remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script,
+    build_service_with_git_state, build_service_with_store, create_failing_opencode,
+    create_failing_opencode_with_worktree_cleanup, create_fake_bd, create_fake_opencode,
+    create_orphanable_opencode, empty_patch, init_git_repo, lock_env, make_emitter, make_session,
+    make_task, prepend_path, process_is_alive, remove_env_var, set_env_var, spawn_sleep_process,
+    unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
+    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+};
+use crate::app_service::{
+    build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
+    parse_mcp_command_json, read_opencode_process_registry, read_opencode_version,
+    resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
+    terminate_process_by_pid, validate_parent_relationships_for_update,
+    with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
+    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
 #[test]

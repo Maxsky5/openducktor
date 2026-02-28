@@ -41,14 +41,14 @@ pub(crate) use opencode_runtime::{
     OpencodeStartupWaitReport, StartupCancelEpoch,
 };
 #[cfg(test)]
+pub(crate) use process_registry::read_opencode_process_registry;
+#[cfg(test)]
 pub(crate) use process_registry::{
     with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
     TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
-#[cfg(test)]
-pub(crate) use process_registry::read_opencode_process_registry;
-pub use service_core::{AppService, RunEmitter};
 pub(crate) use service_core::{AgentRuntimeProcess, CachedRuntimeCheck, RunProcess};
+pub use service_core::{AppService, RunEmitter};
 #[cfg(test)]
 pub(crate) use startup_metrics::{
     build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,
@@ -56,9 +56,9 @@ pub(crate) use startup_metrics::{
 pub(crate) use workflow_rules::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
     default_qa_required_for_issue_type, derive_agent_workflows, derive_available_actions,
-    normalize_issue_type, normalize_required_markdown, normalize_subtask_plan_inputs,
-    normalize_title_key, validate_parent_relationships_for_create,
-    validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
+    normalize_required_markdown, normalize_subtask_plan_inputs, normalize_title_key,
+    validate_parent_relationships_for_create, validate_parent_relationships_for_update,
+    validate_plan_subtask_rules, validate_transition,
 };
 
 #[cfg(test)]

@@ -24,11 +24,7 @@ impl BeadsTaskStore {
             .unwrap_or_else(|| default_ai_review_enabled(&issue.issue_type));
         let document_summary = metadata_document_summary(namespace);
 
-        let normalized_issue_type = if issue.issue_type == "event" || issue.issue_type == "gate" {
-            issue.issue_type.clone()
-        } else {
-            normalize_issue_type(&issue.issue_type).to_string()
-        };
+        let normalized_issue_type = normalize_issue_type(&issue.issue_type);
 
         let parent_id = issue.parent.or_else(|| {
             issue.dependencies.iter().find_map(|dependency| {
