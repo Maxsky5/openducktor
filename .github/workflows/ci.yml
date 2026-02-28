@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Dependency vulnerability guard (hono)
+        run: bun run deps:audit:hono
+
       - name: Lint workspaces
         run: bun run lint
 

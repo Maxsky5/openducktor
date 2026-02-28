@@ -12,7 +12,7 @@
     "lint": "biome check src"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^4.3.6"
   }
 }

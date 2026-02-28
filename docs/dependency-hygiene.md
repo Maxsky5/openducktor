@@ -49,10 +49,21 @@ Implementation notes:
 
 - Dedicated report workflow: `.github/workflows/dependency-hygiene-report.yml`
 
+## 4) Targeted Vulnerability Gate (Hono)
+
+- Command: `bun run deps:audit:hono`
+- Backed by: `bun audit --json`
+- Scope: blocks GHSA-`xh87-mx6m-69f3` reintroduction (`hono` must resolve to `>=4.12.2`)
+
+Implementation notes:
+
+- Included in `.github/workflows/ci.yml` Bun quality job.
+- Included in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
+
 ## Cadence
 
 - Weekly (automated): Dependabot creates update PRs, and report CI publishes `bun run deps:unused:exports` plus `bun run deps:outdated` outputs.
-- Per PR (automated): CI runs `bun run deps:check` to catch new dependency drift.
+- Per PR (automated): CI runs `bun run deps:check` to catch dependency drift and the targeted Hono regression.
 - Monthly (manual): open a dependency refresh PR for safe patch/minor updates.
 - Urgent security advisories: process outside cadence and patch immediately.
 
