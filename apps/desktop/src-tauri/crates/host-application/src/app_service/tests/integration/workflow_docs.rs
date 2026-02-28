@@ -3,8 +3,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
-    TaskStore, UpdateTaskPatch,
+    GitPort, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -298,7 +298,7 @@ fn tasks_list_enriches_available_actions() -> Result<()> {
 }
 
 #[test]
-fn task_create_normalizes_issue_type_and_defaults_ai_review() -> Result<()> {
+fn task_create_defaults_ai_review_for_typed_issue_type() -> Result<()> {
     let repo_path = "/tmp/odt-repo-create";
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
@@ -313,7 +313,7 @@ fn task_create_normalizes_issue_type_and_defaults_ai_review() -> Result<()> {
         repo_path,
         CreateTaskInput {
             title: "New task".to_string(),
-            issue_type: "something-unknown".to_string(),
+            issue_type: IssueType::Task,
             priority: 2,
             description: None,
             acceptance_criteria: None,
@@ -322,12 +322,12 @@ fn task_create_normalizes_issue_type_and_defaults_ai_review() -> Result<()> {
             parent_id: None,
         },
     )?;
-    assert_eq!(created.issue_type, "task");
+    assert_eq!(created.issue_type, IssueType::Task);
     assert!(created.ai_review_enabled);
 
     let task_state = task_state.lock().expect("task lock poisoned");
     assert_eq!(task_state.created_inputs.len(), 1);
-    assert_eq!(task_state.created_inputs[0].issue_type, "task");
+    assert_eq!(task_state.created_inputs[0].issue_type, IssueType::Task);
     assert_eq!(task_state.created_inputs[0].ai_review_enabled, Some(true));
     Ok(())
 }
@@ -632,19 +632,19 @@ fn set_plan_for_epic_replaces_existing_subtasks_with_new_plan_proposals() -> Res
         Some(vec![
             PlanSubtaskInput {
                 title: "Build API".to_string(),
-                issue_type: Some("task".to_string()),
+                issue_type: Some(IssueType::Task),
                 priority: Some(2),
                 description: None,
             },
             PlanSubtaskInput {
                 title: "Build UI".to_string(),
-                issue_type: Some("feature".to_string()),
+                issue_type: Some(IssueType::Feature),
                 priority: Some(2),
                 description: Some("Add interface".to_string()),
             },
             PlanSubtaskInput {
                 title: "Build UI".to_string(),
-                issue_type: Some("feature".to_string()),
+                issue_type: Some(IssueType::Feature),
                 priority: Some(2),
                 description: Some("Duplicate".to_string()),
             },
@@ -730,7 +730,7 @@ fn set_plan_for_epic_rejects_subtask_replacement_when_existing_subtask_is_active
             "# Epic Plan",
             Some(vec![PlanSubtaskInput {
                 title: "Build API".to_string(),
-                issue_type: Some("task".to_string()),
+                issue_type: Some(IssueType::Task),
                 priority: Some(2),
                 description: None,
             }]),
@@ -913,4 +913,3 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     assert_eq!(task_state.upserted_sessions[0].1.task_id, "task-1");
     Ok(())
 }
-

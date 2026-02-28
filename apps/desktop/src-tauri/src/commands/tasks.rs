@@ -1,5 +1,5 @@
 use crate::{as_error, AppState, TaskCreatePayload, TaskUpdatePayload};
-use host_domain::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
+use host_domain::{CreateTaskInput, IssueType, TaskCard, TaskStatus, UpdateTaskPatch};
 use tauri::State;
 
 #[tauri::command]
@@ -18,7 +18,7 @@ pub async fn task_create(
 ) -> Result<TaskCard, String> {
     let create = CreateTaskInput {
         title: input.title,
-        issue_type: input.issue_type,
+        issue_type: IssueType::from_cli_value(&input.issue_type).unwrap_or(IssueType::Task),
         priority: input.priority,
         description: input.description,
         acceptance_criteria: input.acceptance_criteria,

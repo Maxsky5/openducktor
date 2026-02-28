@@ -18,9 +18,9 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitBranch,
-    GitCurrentBranch, GitPort, GitPushSummary, PlanSubtaskInput, QaReportDocument, QaVerdict,
-    RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
-    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitCurrentBranch, GitPort, GitPushSummary, IssueType, PlanSubtaskInput, QaReportDocument,
+    QaVerdict, RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard,
+    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -45,7 +45,7 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         notes: String::new(),
         status,
         priority: 2,
-        issue_type: issue_type.to_string(),
+        issue_type: IssueType::from_cli_value(issue_type).unwrap_or(IssueType::Task),
         ai_review_enabled: true,
         available_actions: Vec::new(),
         labels: Vec::new(),
@@ -155,7 +155,8 @@ impl TaskStore for FakeTaskStore {
             updated.status = status;
         }
         if let Some(issue_type) = patch.issue_type {
-            updated.issue_type = issue_type;
+            updated.issue_type =
+                IssueType::from_cli_value(&issue_type).unwrap_or(IssueType::Task);
         }
         if let Some(ai_review_enabled) = patch.ai_review_enabled {
             updated.ai_review_enabled = ai_review_enabled;

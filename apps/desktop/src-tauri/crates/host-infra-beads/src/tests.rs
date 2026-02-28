@@ -6,7 +6,8 @@ use super::{
 };
 use anyhow::{anyhow, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, QaVerdict, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, IssueType, QaVerdict, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
 use serde_json::{json, Value};
@@ -377,8 +378,8 @@ fn show_task_uses_id_flag_when_loading_issue() -> Result<()> {
 
 #[test]
 fn issue_type_and_ai_review_defaults_are_normalized() {
-    assert_eq!(normalize_issue_type("feature"), "feature");
-    assert_eq!(normalize_issue_type("unknown-type"), "task");
+    assert_eq!(normalize_issue_type("feature"), IssueType::Feature);
+    assert_eq!(normalize_issue_type("unknown-type"), IssueType::Task);
     assert!(default_ai_review_enabled("epic"));
     assert!(default_ai_review_enabled("unknown-type"));
 }
@@ -864,7 +865,7 @@ fn list_tasks_cache_is_invalidated_after_create_mutation() -> Result<()> {
         repo.path(),
         CreateTaskInput {
             title: "New task".to_string(),
-            issue_type: "task".to_string(),
+            issue_type: IssueType::Task,
             priority: 2,
             description: None,
             acceptance_criteria: None,
@@ -966,7 +967,7 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
         repo.path(),
         CreateTaskInput {
             title: "Build API".to_string(),
-            issue_type: "feature".to_string(),
+            issue_type: IssueType::Feature,
             priority: 3,
             description: Some("  expose endpoint ".to_string()),
             acceptance_criteria: Some("  green tests ".to_string()),

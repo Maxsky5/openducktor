@@ -1,22 +1,17 @@
 use anyhow::{anyhow, Result};
 use host_domain::{
-    AgentWorkflowState, AgentWorkflows, CreateTaskInput, PlanSubtaskInput, QaWorkflowVerdict,
-    TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
+    AgentWorkflowState, AgentWorkflows, CreateTaskInput, IssueType, PlanSubtaskInput,
+    QaWorkflowVerdict, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
 };
 
-pub(crate) fn normalize_issue_type(issue_type: &str) -> &'static str {
-    match issue_type {
-        "epic" => "epic",
-        "feature" => "feature",
-        "bug" => "bug",
-        _ => "task",
-    }
+pub(crate) fn normalize_issue_type(issue_type: &str) -> IssueType {
+    IssueType::from_cli_value(issue_type).unwrap_or(IssueType::Task)
 }
 
-pub(crate) fn default_qa_required_for_issue_type(issue_type: &str) -> bool {
+pub(crate) fn default_qa_required_for_issue_type(issue_type: &IssueType) -> bool {
     matches!(
-        normalize_issue_type(issue_type),
-        "epic" | "feature" | "task" | "bug"
+        issue_type,
+        IssueType::Epic | IssueType::Feature | IssueType::Task | IssueType::Bug
     )
 }
 
@@ -25,13 +20,12 @@ pub(crate) fn is_open_state(status: &TaskStatus) -> bool {
 }
 
 fn can_skip_spec_and_planning(task: &TaskCard) -> bool {
-    matches!(normalize_issue_type(&task.issue_type), "task" | "bug")
+    matches!(task.issue_type, IssueType::Task | IssueType::Bug)
 }
 
 pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
-    let issue_type = normalize_issue_type(&task.issue_type);
-    let is_feature_epic = matches!(issue_type, "feature" | "epic");
-    let is_task_bug = matches!(issue_type, "task" | "bug");
+    let is_feature_epic = matches!(task.issue_type, IssueType::Feature | IssueType::Epic);
+    let is_task_bug = matches!(task.issue_type, IssueType::Task | IssueType::Bug);
     let qa_required = task.ai_review_enabled;
     let is_closed = task.status == TaskStatus::Closed;
     let is_ready_for_dev_or_later = matches!(
@@ -174,13 +168,13 @@ pub(crate) fn validate_transition(
         return Err(anyhow!(
             "Transition not allowed for {} ({}): {} -> {}",
             task.id,
-            task.issue_type,
+            task.issue_type.as_cli_value(),
             from.as_cli_value(),
             to.as_cli_value()
         ));
     }
 
-    if *to == TaskStatus::Closed && normalize_issue_type(&task.issue_type) == "epic" {
+    if *to == TaskStatus::Closed && task.issue_type == IssueType::Epic {
         let blocking_subtasks = all_tasks.iter().filter(|candidate| {
             candidate.parent_id.as_deref() == Some(task.id.as_str())
                 && !matches!(candidate.status, TaskStatus::Closed | TaskStatus::Deferred)
@@ -208,20 +202,19 @@ pub(crate) fn validate_parent_relationships_for_create(
     tasks: &[TaskCard],
     input: &CreateTaskInput,
 ) -> Result<()> {
-    let issue_type = normalize_issue_type(&input.issue_type);
     let parent_id = input
         .parent_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    if issue_type == "epic" && parent_id.is_some() {
+    if input.issue_type == IssueType::Epic && parent_id.is_some() {
         return Err(anyhow!("Epics cannot be created as subtasks."));
     }
 
     if let Some(parent_id) = parent_id {
         let parent = find_task(tasks, parent_id)?;
-        if normalize_issue_type(&parent.issue_type) != "epic" {
+        if parent.issue_type != IssueType::Epic {
             return Err(anyhow!("Only epics can have subtasks."));
         }
         if parent.parent_id.is_some() {
@@ -241,7 +234,7 @@ pub(crate) fn validate_parent_relationships_for_update(
         .issue_type
         .as_deref()
         .map(normalize_issue_type)
-        .unwrap_or_else(|| normalize_issue_type(&current.issue_type));
+        .unwrap_or_else(|| current.issue_type.clone());
 
     let next_parent_id = match patch.parent_id.as_deref() {
         Some(value) => {
@@ -255,7 +248,7 @@ pub(crate) fn validate_parent_relationships_for_update(
         None => current.parent_id.as_deref(),
     };
 
-    if next_issue_type == "epic" && next_parent_id.is_some() {
+    if next_issue_type == IssueType::Epic && next_parent_id.is_some() {
         return Err(anyhow!("Epics cannot be converted to subtasks."));
     }
 
@@ -266,13 +259,13 @@ pub(crate) fn validate_parent_relationships_for_update(
         return Err(anyhow!("Tasks with subtasks cannot become subtasks."));
     }
 
-    if has_direct_subtasks && next_issue_type != "epic" {
+    if has_direct_subtasks && next_issue_type != IssueType::Epic {
         return Err(anyhow!("Only epics can have subtasks."));
     }
 
     if let Some(parent_id) = next_parent_id {
         let parent = find_task(tasks, parent_id)?;
-        if normalize_issue_type(&parent.issue_type) != "epic" {
+        if parent.issue_type != IssueType::Epic {
             return Err(anyhow!("Only epics can be selected as parents."));
         }
         if parent.parent_id.is_some() {
@@ -296,14 +289,14 @@ pub(crate) fn can_set_spec_from_status(status: &TaskStatus) -> bool {
 }
 
 pub(crate) fn can_set_plan(task: &TaskCard) -> bool {
-    let issue_type = normalize_issue_type(&task.issue_type);
-    match issue_type {
-        "epic" | "feature" => matches!(task.status, TaskStatus::SpecReady | TaskStatus::ReadyForDev),
-        "task" | "bug" => matches!(
+    match task.issue_type {
+        IssueType::Epic | IssueType::Feature => {
+            matches!(task.status, TaskStatus::SpecReady | TaskStatus::ReadyForDev)
+        }
+        IssueType::Task | IssueType::Bug => matches!(
             task.status,
             TaskStatus::Open | TaskStatus::SpecReady | TaskStatus::ReadyForDev
         ),
-        _ => false,
     }
 }
 
@@ -360,8 +353,7 @@ pub(crate) fn validate_plan_subtask_rules(
     all_tasks: &[TaskCard],
     plan_subtasks: &[CreateTaskInput],
 ) -> Result<()> {
-    let issue_type = normalize_issue_type(&task.issue_type);
-    if issue_type != "epic" {
+    if task.issue_type != IssueType::Epic {
         if !plan_subtasks.is_empty() {
             return Err(anyhow!(
                 "Only epics can receive subtask proposals during planning."
@@ -396,9 +388,8 @@ pub(crate) fn normalize_subtask_plan_inputs(
             return Err(anyhow!("Subtask proposals require a non-empty title."));
         }
 
-        let issue_type =
-            normalize_issue_type(entry.issue_type.as_deref().unwrap_or("task")).to_string();
-        if issue_type == "epic" {
+        let issue_type = entry.issue_type.unwrap_or(IssueType::Task);
+        if issue_type == IssueType::Epic {
             return Err(anyhow!(
                 "Epic subtasks are not allowed. Subtask hierarchy depth is limited to one level."
             ));

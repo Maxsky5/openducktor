@@ -72,21 +72,18 @@ impl BeadsTaskStore {
 
         let value = self.run_bd_json(repo_path, &["list", "--all", "--limit", "0"])?;
 
-        let mut tasks = value
+        let mut tasks = Vec::new();
+        for entry in value
             .as_array()
             .ok_or_else(|| anyhow!("bd list did not return an array"))?
-            .iter()
-            .map(|entry| {
-                let issue: RawIssue = serde_json::from_value(entry.clone())
-                    .context("Failed to decode task from bd list")?;
-                self.parse_task_card(issue, &metadata_namespace)
-            })
-            .collect::<Result<Vec<TaskCard>>>()?;
-
-        tasks = tasks
-            .into_iter()
-            .filter(|task| task.issue_type != "event" && task.issue_type != "gate")
-            .collect::<Vec<_>>();
+        {
+            let issue: RawIssue =
+                serde_json::from_value(entry.clone()).context("Failed to decode task from bd list")?;
+            if issue.issue_type == "event" || issue.issue_type == "gate" {
+                continue;
+            }
+            tasks.push(self.parse_task_card(issue, &metadata_namespace)?);
+        }
 
         let mut subtasks_by_parent: HashMap<String, Vec<String>> = HashMap::new();
         for task in &tasks {
@@ -113,7 +110,7 @@ impl BeadsTaskStore {
             "create".to_string(),
             input.title,
             "--type".to_string(),
-            input.issue_type,
+            input.issue_type.as_cli_value().to_string(),
             "--priority".to_string(),
             input.priority.to_string(),
         ];

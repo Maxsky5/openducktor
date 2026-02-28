@@ -16,6 +16,44 @@ pub enum TaskStatus {
     Closed,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IssueType {
+    Task,
+    Feature,
+    Bug,
+    Epic,
+}
+
+impl IssueType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            IssueType::Task => "task",
+            IssueType::Feature => "feature",
+            IssueType::Bug => "bug",
+            IssueType::Epic => "epic",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "task" => Some(IssueType::Task),
+            "feature" => Some(IssueType::Feature),
+            "bug" => Some(IssueType::Bug),
+            "epic" => Some(IssueType::Epic),
+            _ => None,
+        }
+    }
+
+    pub fn as_cli_value(&self) -> &'static str {
+        self.as_str()
+    }
+
+    pub fn from_cli_value(value: &str) -> Option<Self> {
+        Self::from_str(value)
+    }
+}
+
 impl TaskStatus {
     pub fn as_cli_value(&self) -> &'static str {
         match self {
@@ -158,7 +196,7 @@ pub struct TaskCard {
     pub notes: String,
     pub status: TaskStatus,
     pub priority: i32,
-    pub issue_type: String,
+    pub issue_type: IssueType,
     pub ai_review_enabled: bool,
     pub available_actions: Vec<TaskAction>,
     pub labels: Vec<String>,
@@ -175,7 +213,7 @@ pub struct TaskCard {
 #[serde(rename_all = "camelCase")]
 pub struct CreateTaskInput {
     pub title: String,
-    pub issue_type: String,
+    pub issue_type: IssueType,
     pub priority: i32,
     pub description: Option<String>,
     pub acceptance_criteria: Option<String>,
@@ -188,7 +226,7 @@ pub struct CreateTaskInput {
 #[serde(rename_all = "camelCase")]
 pub struct PlanSubtaskInput {
     pub title: String,
-    pub issue_type: Option<String>,
+    pub issue_type: Option<IssueType>,
     pub priority: Option<i32>,
     pub description: Option<String>,
 }
@@ -502,7 +540,7 @@ pub fn now_rfc3339() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{now_rfc3339, TaskStatus};
+    use super::{now_rfc3339, IssueType, TaskStatus};
 
     #[test]
     fn task_status_cli_roundtrip() {
@@ -529,6 +567,28 @@ mod tests {
     fn task_status_rejects_unknown_value() {
         assert!(TaskStatus::from_cli_value("backlog").is_none());
         assert!(TaskStatus::from_cli_value("").is_none());
+    }
+
+    #[test]
+    fn issue_type_cli_roundtrip() {
+        let issue_types = [
+            IssueType::Task,
+            IssueType::Feature,
+            IssueType::Bug,
+            IssueType::Epic,
+        ];
+
+        for issue_type in issue_types {
+            let raw = issue_type.as_cli_value();
+            let parsed = IssueType::from_cli_value(raw).expect("issue type should parse");
+            assert_eq!(parsed, issue_type);
+        }
+    }
+
+    #[test]
+    fn issue_type_rejects_unknown_value() {
+        assert!(IssueType::from_cli_value("event").is_none());
+        assert!(IssueType::from_cli_value("").is_none());
     }
 
     #[test]
