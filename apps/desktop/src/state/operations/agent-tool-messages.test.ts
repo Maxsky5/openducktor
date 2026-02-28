@@ -3,15 +3,15 @@ import { settleDanglingTodoToolMessages } from "./agent-tool-messages";
 
 const baseTodoToolMessage = (overrides = {}) => ({
   id: "tool:1",
-  role: "tool",
+  role: "tool" as const,
   content: "Tool todowrite running...",
   timestamp: "2026-02-19T00:00:00.000Z",
   meta: {
-    kind: "tool",
+    kind: "tool" as const,
     partId: "part-1",
     callId: "call-1",
     tool: "todowrite",
-    status: "running",
+    status: "running" as const,
     startedAtMs: 1000,
   },
   ...overrides,
@@ -22,7 +22,7 @@ describe("settleDanglingTodoToolMessages", () => {
     const messages = [
       {
         id: "assistant-1",
-        role: "assistant",
+        role: "assistant" as const,
         content: "done",
         timestamp: "2026-02-19T00:00:01.000Z",
       },
@@ -65,15 +65,15 @@ describe("settleDanglingTodoToolMessages", () => {
     const messages = [
       {
         id: "tool:2",
-        role: "tool",
+        role: "tool" as const,
         content: "Tool bash running...",
         timestamp: "2026-02-19T00:00:01.000Z",
         meta: {
-          kind: "tool",
+          kind: "tool" as const,
           partId: "part-2",
           callId: "call-2",
           tool: "bash",
-          status: "running",
+          status: "running" as const,
         },
       },
     ];

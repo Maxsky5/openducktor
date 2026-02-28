@@ -39,7 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
-import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/use-agent-studio-repo-settings";
+import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-repo-settings";
 import { useWorkspaceState } from "@/state";
 import { loadRepoOpencodeCatalog } from "@/state/operations";
 

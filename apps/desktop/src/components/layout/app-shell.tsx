@@ -10,8 +10,8 @@ import {
 } from "react";
 import { Outlet } from "react-router-dom";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
-import { OpenRepositoryModal } from "@/components/features/open-repository-modal";
-import { RepositorySwitcher } from "@/components/features/repository-switcher";
+import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
+import { RepositorySwitcher } from "@/components/features/repository/repository-switcher";
 import {
   AgentActivityCard,
   AppBrand,
@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
 
 const SettingsModal = lazy(async () => {
-  const module = await import("@/components/features/settings-modal");
+  const module = await import("@/components/features/settings/settings-modal");
   return { default: module.SettingsModal };
 });
 

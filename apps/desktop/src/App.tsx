@@ -1,7 +1,7 @@
 import { lazy, type ReactElement, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { loadAgentsPage, loadKanbanPage, loadNotFoundPage } from "@/pages";
 import { AppStateProvider, useWorkspaceState } from "@/state";

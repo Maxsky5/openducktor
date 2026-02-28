@@ -2,8 +2,8 @@ import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback } from "react";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { SCENARIO_LABELS } from "./agents-page-constants";
-import type { SessionStartRequestReason } from "./use-agent-studio-session-start-types";
+import { SCENARIO_LABELS } from "../agents/agents-page-constants";
+import type { SessionStartRequestReason } from "../agents/use-agent-studio-session-start-types";
 import {
   type SessionStartModalIntent,
   type SessionStartPostAction,

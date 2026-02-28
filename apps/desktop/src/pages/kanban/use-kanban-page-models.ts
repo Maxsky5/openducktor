@@ -1,8 +1,8 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
-import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 import { useKanbanTaskDialogs } from "./use-kanban-task-dialogs";

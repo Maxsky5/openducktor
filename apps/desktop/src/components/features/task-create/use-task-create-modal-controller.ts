@@ -9,12 +9,6 @@ import {
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
-import {
-  hasUnsavedDocumentChanges,
-  isDocumentSection,
-  toTaskCreateInput,
-  toTaskUpdatePatch,
-} from "@/components/features/task-create-modal-model";
 import { errorMessage } from "@/lib/errors";
 import { useSpecState, useTasksState, useWorkspaceState } from "@/state";
 import type {
@@ -23,6 +17,12 @@ import type {
   ComposerStep,
   EditTaskSection,
 } from "@/types/task-composer";
+import {
+  hasUnsavedDocumentChanges,
+  isDocumentSection,
+  toTaskCreateInput,
+  toTaskUpdatePatch,
+} from "./task-create-modal-model";
 
 type DocumentSection = TaskDocumentSection;
 

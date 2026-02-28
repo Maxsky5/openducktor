@@ -2,7 +2,10 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { createTaskCardFixture, enableReactActEnvironment } from "@/pages/agent-studio-test-utils";
+import {
+  createTaskCardFixture,
+  enableReactActEnvironment,
+} from "@/pages/agents/agent-studio-test-utils";
 
 enableReactActEnvironment();
 

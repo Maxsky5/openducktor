@@ -7,9 +7,9 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import { firstScenario, kickoffPromptForScenario } from "./agents-page-constants";
+import { firstScenario, kickoffPromptForScenario } from "../agents/agents-page-constants";
+import { useSessionStartModalCoordinator } from "../shared/use-session-start-modal-coordinator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
-import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
 
 type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
