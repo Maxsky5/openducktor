@@ -52,13 +52,15 @@ export function useWorkspaceOperations({
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const activeRepoRef = useRef(activeRepo);
-  const isSwitchingWorkspaceRef = useRef(isSwitchingWorkspace);
-  const isLoadingBranchesRef = useRef(isLoadingBranches);
-  const isSwitchingBranchRef = useRef(isSwitchingBranch);
+  const probeGatesRef = useRef({
+    isSwitchingWorkspace,
+    isLoadingBranches,
+    isSwitchingBranch,
+  });
 
-  isSwitchingWorkspaceRef.current = isSwitchingWorkspace;
-  isLoadingBranchesRef.current = isLoadingBranches;
-  isSwitchingBranchRef.current = isSwitchingBranch;
+  probeGatesRef.current.isSwitchingWorkspace = isSwitchingWorkspace;
+  probeGatesRef.current.isLoadingBranches = isLoadingBranches;
+  probeGatesRef.current.isSwitchingBranch = isSwitchingBranch;
 
   useEffect(() => {
     activeRepoRef.current = activeRepo;
@@ -188,9 +190,9 @@ export function useWorkspaceOperations({
     if (
       !shouldProbeExternalBranchChange({
         activeRepo: repoPath,
-        isSwitchingWorkspace: isSwitchingWorkspaceRef.current,
-        isSwitchingBranch: isSwitchingBranchRef.current,
-        isLoadingBranches: isLoadingBranchesRef.current,
+        isSwitchingWorkspace: probeGatesRef.current.isSwitchingWorkspace,
+        isSwitchingBranch: probeGatesRef.current.isSwitchingBranch,
+        isLoadingBranches: probeGatesRef.current.isLoadingBranches,
         isSyncInFlight: branchSyncInFlightRef.current,
       })
     ) {

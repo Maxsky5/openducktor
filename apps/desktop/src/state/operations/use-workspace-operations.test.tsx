@@ -15,6 +15,47 @@ const flush = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+const setGlobalProperty = (key: "window" | "document", value: unknown): void => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+  if (!descriptor || descriptor.configurable) {
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value,
+    });
+    return;
+  }
+
+  if ("writable" in descriptor && descriptor.writable) {
+    (globalThis as Record<string, unknown>)[key] = value;
+    return;
+  }
+
+  throw new Error(`Cannot override global ${key}`);
+};
+
+const mockBrowserGlobals = (windowValue: Window, documentValue: Document): (() => void) => {
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
+
+  setGlobalProperty("window", windowValue);
+  setGlobalProperty("document", documentValue);
+
+  return () => {
+    if (windowDescriptor) {
+      Object.defineProperty(globalThis, "window", windowDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
+
+    if (documentDescriptor) {
+      Object.defineProperty(globalThis, "document", documentDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "document");
+    }
+  };
+};
+
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
   let reject: ((reason?: unknown) => void) | null = null;
@@ -311,8 +352,6 @@ describe("use-workspace-operations", () => {
     const clearIntervalMock = mock(() => {});
     const addDocumentEventListener = mock(() => {});
     const removeDocumentEventListener = mock(() => {});
-    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
-    const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
     const fakeWindow = {
       addEventListener: addWindowEventListener,
       removeEventListener: removeWindowEventListener,
@@ -324,6 +363,7 @@ describe("use-workspace-operations", () => {
       removeEventListener: removeDocumentEventListener,
       visibilityState: "visible" as const,
     } as unknown as Document;
+    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
 
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -352,16 +392,6 @@ describe("use-workspace-operations", () => {
       gitSwitchBranch: host.gitSwitchBranch,
     };
 
-    Object.defineProperty(globalThis, "window", {
-      configurable: true,
-      writable: true,
-      value: fakeWindow,
-    });
-    Object.defineProperty(globalThis, "document", {
-      configurable: true,
-      writable: true,
-      value: fakeDocument,
-    });
     host.gitGetCurrentBranch = gitGetCurrentBranch;
     host.gitGetBranches = gitGetBranches;
     host.gitSwitchBranch = gitSwitchBranch;
@@ -394,20 +424,14 @@ describe("use-workspace-operations", () => {
       expect(clearIntervalMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
+      expect(removeWindowEventListener).toHaveBeenCalledTimes(1);
+      expect(removeDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(clearIntervalMock).toHaveBeenCalledTimes(1);
+
       host.gitGetCurrentBranch = original.gitGetCurrentBranch;
       host.gitGetBranches = original.gitGetBranches;
       host.gitSwitchBranch = original.gitSwitchBranch;
-
-      if (windowDescriptor) {
-        Object.defineProperty(globalThis, "window", windowDescriptor);
-      } else {
-        Reflect.deleteProperty(globalThis, "window");
-      }
-      if (documentDescriptor) {
-        Object.defineProperty(globalThis, "document", documentDescriptor);
-      } else {
-        Reflect.deleteProperty(globalThis, "document");
-      }
+      restoreBrowserGlobals();
     }
   });
 });
