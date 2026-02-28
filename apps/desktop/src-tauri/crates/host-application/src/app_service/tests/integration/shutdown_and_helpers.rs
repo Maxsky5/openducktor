@@ -1,0 +1,660 @@
+#![allow(unused_imports)]
+
+use anyhow::{anyhow, Context, Result};
+use host_domain::{
+    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
+    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
+    TaskStore, UpdateTaskPatch,
+};
+use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
+use serde_json::Value;
+use std::fs;
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
+use crate::app_service::{
+    build_opencode_config_content, can_set_plan, default_mcp_workspace_root, parse_mcp_command_json,
+    read_opencode_process_registry, read_opencode_version, resolve_mcp_command,
+    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
+    validate_parent_relationships_for_update, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
+    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    with_locked_opencode_process_registry,
+};
+use crate::app_service::test_support::{
+    FakeTaskStore, GitCall, TaskStoreState, build_service_with_git_state, build_service_with_store,
+    create_fake_bd, create_fake_opencode, create_failing_opencode,
+    create_failing_opencode_with_worktree_cleanup, create_orphanable_opencode, empty_patch,
+    init_git_repo, lock_env, make_emitter, make_session, make_task, prepend_path,
+    process_is_alive, remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
+    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
+    write_executable_script,
+};
+
+#[test]
+fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let run_id = "run-shutdown".to_string();
+    service.runs.lock().expect("run lock poisoned").insert(
+        run_id.clone(),
+        RunProcess {
+            summary: RunSummary {
+                run_id: run_id.clone(),
+                repo_path: "/tmp/repo".to_string(),
+                task_id: "task-1".to_string(),
+                branch: "odt/task-1".to_string(),
+                worktree_path: "/tmp/worktree".to_string(),
+                port: 1,
+                state: RunState::Running,
+                last_message: None,
+                started_at: "2026-02-20T12:00:00Z".to_string(),
+            },
+            child: spawn_sleep_process(20),
+            _opencode_process_guard: None,
+            repo_path: "/tmp/repo".to_string(),
+            task_id: "task-1".to_string(),
+            worktree_path: "/tmp/worktree".to_string(),
+            repo_config: RepoConfig {
+                worktree_base_path: None,
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        },
+    );
+
+    let runtime_id = "runtime-shutdown".to_string();
+    service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .insert(
+            runtime_id.clone(),
+            AgentRuntimeProcess {
+                summary: AgentRuntimeSummary {
+                    runtime_id,
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    role: "qa".to_string(),
+                    working_directory: "/tmp/worktree".to_string(),
+                    port: 1,
+                    started_at: "2026-02-20T12:00:00Z".to_string(),
+                },
+                child: spawn_sleep_process(20),
+                _opencode_process_guard: None,
+                cleanup_repo_path: Some("/tmp/non-existent-repo-for-shutdown".to_string()),
+                cleanup_worktree_path: Some("/tmp/non-existent-worktree-for-shutdown".to_string()),
+            },
+        );
+
+    let error = service
+        .shutdown()
+        .expect_err("shutdown should aggregate runtime cleanup failures");
+    assert!(error
+        .to_string()
+        .contains("Failed removing QA worktree runtime"));
+    assert!(service.runs.lock().expect("run lock poisoned").is_empty());
+    assert!(service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let root = unique_temp_path("shutdown-pending-opencode");
+    let orphanable_opencode = root.join("opencode");
+    create_orphanable_opencode(&orphanable_opencode)?;
+    let mut pending_child = Command::new(orphanable_opencode.as_path())
+        .arg("serve")
+        .arg("--hostname")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg("54323")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("failed spawning pending opencode process")?;
+    let pending_pid = pending_child.id();
+    service
+        .tracked_opencode_processes
+        .lock()
+        .expect("pending OpenCode process lock poisoned")
+        .insert(pending_pid, 1);
+
+    service.shutdown()?;
+
+    assert!(
+        wait_for_process_exit(pending_pid as i32, Duration::from_secs(2)),
+        "pending OpenCode process should have exited during shutdown"
+    );
+    let _ = pending_child.wait().context("failed waiting pending OpenCode process")?;
+    assert!(service
+        .tracked_opencode_processes
+        .lock()
+        .expect("pending OpenCode process lock poisoned")
+        .is_empty());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Result<()> {
+    let root = unique_temp_path("shutdown-drains-after-pending-cleanup-failure");
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+
+    let run_child = spawn_sleep_process(20);
+    let run_pid = run_child.id() as i32;
+    service.runs.lock().expect("run lock poisoned").insert(
+        "run-shutdown-registry-error".to_string(),
+        RunProcess {
+            summary: RunSummary {
+                run_id: "run-shutdown-registry-error".to_string(),
+                repo_path: "/tmp/repo".to_string(),
+                task_id: "task-1".to_string(),
+                branch: "odt/task-1".to_string(),
+                worktree_path: "/tmp/worktree".to_string(),
+                port: 1,
+                state: RunState::Running,
+                last_message: None,
+                started_at: "2026-02-20T12:00:00Z".to_string(),
+            },
+            child: run_child,
+            _opencode_process_guard: None,
+            repo_path: "/tmp/repo".to_string(),
+            task_id: "task-1".to_string(),
+            worktree_path: "/tmp/worktree".to_string(),
+            repo_config: RepoConfig {
+                worktree_base_path: None,
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        },
+    );
+
+    let runtime_child = spawn_sleep_process(20);
+    let runtime_pid = runtime_child.id() as i32;
+    service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .insert(
+            "runtime-shutdown-registry-error".to_string(),
+            AgentRuntimeProcess {
+                summary: AgentRuntimeSummary {
+                    runtime_id: "runtime-shutdown-registry-error".to_string(),
+                    repo_path: "/tmp/repo".to_string(),
+                    task_id: "task-1".to_string(),
+                    role: "spec".to_string(),
+                    working_directory: "/tmp/repo".to_string(),
+                    port: 1,
+                    started_at: "2026-02-20T12:00:00Z".to_string(),
+                },
+                child: runtime_child,
+                _opencode_process_guard: None,
+                cleanup_repo_path: None,
+                cleanup_worktree_path: None,
+            },
+        );
+
+    let registry_path = root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
+    if let Some(parent) = registry_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(registry_path.as_path(), "{ this is not valid json")?;
+
+    let error = service
+        .shutdown()
+        .expect_err("shutdown should surface pending opencode cleanup failure");
+    let message = error.to_string();
+    assert!(message.contains("Failed terminating pending OpenCode processes"));
+    assert!(service.runs.lock().expect("run lock poisoned").is_empty());
+    assert!(service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .is_empty());
+    assert!(wait_for_process_exit(run_pid, Duration::from_secs(2)));
+    assert!(wait_for_process_exit(runtime_pid, Duration::from_secs(2)));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn tracked_guard_drop_refcounts_prevent_pid_reuse_untracking() -> Result<()> {
+    let root = unique_temp_path("guard-drop-refcount-pid-reuse");
+    let registry_path = root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
+    let parent_pid = 70_001;
+    let child_pid = 80_001;
+
+    with_locked_opencode_process_registry(registry_path.as_path(), |instances| {
+        instances.push(OpencodeProcessRegistryInstance::with_child(
+            parent_pid, child_pid,
+        ));
+        Ok(())
+    })?;
+
+    let tracked = Arc::new(Mutex::new(std::collections::HashMap::<u32, usize>::new()));
+    tracked
+        .lock()
+        .expect("tracked lock poisoned")
+        .insert(child_pid, 2);
+
+    {
+        let first_guard = TrackedOpencodeProcessGuard {
+            tracked_opencode_processes: tracked.clone(),
+            opencode_process_registry_path: registry_path.clone(),
+            parent_pid,
+            child_pid,
+        };
+        drop(first_guard);
+    }
+    assert_eq!(
+        tracked
+            .lock()
+            .expect("tracked lock poisoned")
+            .get(&child_pid)
+            .copied(),
+        Some(1)
+    );
+    let remaining_after_first = read_opencode_process_registry(registry_path.as_path())?;
+    assert!(remaining_after_first.iter().any(|instance| {
+        instance.parent_pid == parent_pid && instance.child_pids.iter().any(|pid| *pid == child_pid)
+    }));
+
+    {
+        let second_guard = TrackedOpencodeProcessGuard {
+            tracked_opencode_processes: tracked.clone(),
+            opencode_process_registry_path: registry_path.clone(),
+            parent_pid,
+            child_pid,
+        };
+        drop(second_guard);
+    }
+    assert!(tracked
+        .lock()
+        .expect("tracked lock poisoned")
+        .get(&child_pid)
+        .is_none());
+    assert!(read_opencode_process_registry(registry_path.as_path())?.is_empty());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn startup_reconcile_terminates_orphaned_registered_opencode_processes() -> Result<()> {
+    let root = unique_temp_path("startup-reconcile-orphan-opencode");
+    let orphanable_opencode = root.join("opencode");
+    create_orphanable_opencode(&orphanable_opencode)?;
+
+    let spawn_command = format!(
+        "\"{}\" serve --hostname 127.0.0.1 --port 54321 >/dev/null 2>&1 & echo $!",
+        orphanable_opencode.display()
+    );
+    let output = Command::new("/bin/sh")
+        .arg("-lc")
+        .arg(spawn_command)
+        .output()?;
+    assert!(output.status.success());
+
+    let orphan_pid = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse::<u32>()
+        .expect("spawned orphan pid should parse as u32");
+    assert!(wait_for_orphaned_opencode_process(
+        orphan_pid,
+        Duration::from_secs(2)
+    ));
+
+    let registry_path = root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
+    with_locked_opencode_process_registry(registry_path.as_path(), |instances| {
+        instances.push(OpencodeProcessRegistryInstance::with_child(
+            999_999, orphan_pid,
+        ));
+        Ok(())
+    })?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (_service, _task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+
+    assert!(wait_for_process_exit(
+        orphan_pid as i32,
+        Duration::from_secs(2)
+    ));
+    assert!(read_opencode_process_registry(registry_path.as_path())?.is_empty());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn startup_reconcile_keeps_non_orphan_registered_opencode_processes() -> Result<()> {
+    let root = unique_temp_path("startup-reconcile-live-opencode");
+    let orphanable_opencode = root.join("opencode");
+    create_orphanable_opencode(&orphanable_opencode)?;
+    let pid_file = root.join("live-opencode-pids.txt");
+    let spawn_command = format!(
+            "\"{}\" serve --hostname 127.0.0.1 --port 54322 >/dev/null 2>&1 & echo \"$$ $!\" > \"{}\"; sleep 30",
+            orphanable_opencode.display(),
+            pid_file.display()
+        );
+    let mut live_parent_process = Command::new("/bin/sh")
+        .arg("-lc")
+        .arg(spawn_command)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    assert!(wait_for_path_exists(
+        pid_file.as_path(),
+        Duration::from_secs(2)
+    ));
+    let pids = fs::read_to_string(pid_file.as_path())?;
+    let mut parts = pids.split_whitespace();
+    let live_parent_pid = parts
+        .next()
+        .ok_or_else(|| anyhow!("missing live parent pid"))?
+        .parse::<u32>()
+        .context("failed parsing live parent pid")?;
+    let live_pid = parts
+        .next()
+        .ok_or_else(|| anyhow!("missing live child pid"))?
+        .parse::<u32>()
+        .context("failed parsing live child pid")?;
+    assert!(process_is_alive(live_parent_pid as i32));
+    assert!(process_is_alive(live_pid as i32));
+
+    let registry_path = root.join(OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH);
+    with_locked_opencode_process_registry(registry_path.as_path(), |instances| {
+        instances.push(OpencodeProcessRegistryInstance::with_child(
+            live_parent_pid,
+            live_pid,
+        ));
+        Ok(())
+    })?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (_service, _task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+
+    assert!(process_is_alive(live_pid as i32));
+    let remaining = read_opencode_process_registry(registry_path.as_path())?;
+    assert!(remaining.iter().any(|instance| {
+        instance.parent_pid == live_parent_pid
+            && instance.child_pids.iter().any(|entry| *entry == live_pid)
+    }));
+
+    terminate_child_process(&mut live_parent_process);
+    terminate_process_by_pid(live_pid);
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn helper_functions_cover_mcp_and_opencode_resolution_paths() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("helpers");
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
+    let version = read_opencode_version(fake_opencode.to_string_lossy().as_ref());
+    assert_eq!(version.as_deref(), Some("opencode-fake 0.0.1"));
+    assert_eq!(
+        resolve_opencode_binary_path().as_deref(),
+        Some(fake_opencode.to_string_lossy().as_ref())
+    );
+
+    let _workspace_guard = set_env_var(
+        "OPENDUCKTOR_WORKSPACE_ROOT",
+        root.to_string_lossy().as_ref(),
+    );
+    let _command_guard = set_env_var("OPENDUCKTOR_MCP_COMMAND_JSON", "[\"mcp-bin\",\"--stdio\"]");
+    let parsed = resolve_mcp_command()?;
+    assert_eq!(parsed, vec!["mcp-bin".to_string(), "--stdio".to_string()]);
+    assert_eq!(
+        default_mcp_workspace_root()?,
+        root.to_string_lossy().to_string()
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn resolve_opencode_binary_path_uses_home_fallback_when_override_and_path_missing() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("opencode-home-fallback");
+    let home_bin = root.join(".opencode").join("bin");
+    fs::create_dir_all(&home_bin)?;
+    let home_opencode = home_bin.join("opencode");
+    create_fake_opencode(&home_opencode)?;
+    let empty_bin = root.join("empty-bin");
+    fs::create_dir_all(&empty_bin)?;
+    let fallback_path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
+
+    let _override_guard = set_env_var("OPENDUCKTOR_OPENCODE_BINARY", "   ");
+    let _home_guard = set_env_var("HOME", root.to_string_lossy().as_ref());
+    let _path_guard = set_env_var("PATH", fallback_path.as_str());
+
+    let resolved = resolve_opencode_binary_path();
+    assert_eq!(
+        resolved.as_deref(),
+        Some(home_opencode.to_string_lossy().as_ref())
+    );
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn resolve_mcp_command_supports_cli_and_bun_fallback_modes() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("mcp-command-fallbacks");
+    let cli_bin = root.join("cli-bin");
+    let empty_bin = root.join("empty-bin");
+    let bun_bin = root.join("bun-bin");
+    fs::create_dir_all(&cli_bin)?;
+    fs::create_dir_all(&empty_bin)?;
+    fs::create_dir_all(&bun_bin)?;
+    write_executable_script(&cli_bin.join("openducktor-mcp"), "#!/bin/sh\nexit 0\n")?;
+    write_executable_script(&bun_bin.join("bun"), "#!/bin/sh\nexit 0\n")?;
+
+    let _mcp_env_guard = remove_env_var("OPENDUCKTOR_MCP_COMMAND_JSON");
+
+    {
+        let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
+        let path = format!("{}:/usr/bin:/bin", cli_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let command = resolve_mcp_command()?;
+        assert_eq!(command, vec!["openducktor-mcp".to_string()]);
+    }
+
+    {
+        let _workspace_guard = remove_env_var("OPENDUCKTOR_WORKSPACE_ROOT");
+        let path = format!("{}:/usr/bin:/bin", empty_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let error = resolve_mcp_command().expect_err("missing mcp + bun should fail");
+        assert!(error.to_string().contains("Missing MCP runner"));
+    }
+
+    let workspace_direct = root.join("workspace-direct");
+    let direct_entrypoint = workspace_direct
+        .join("packages")
+        .join("openducktor-mcp")
+        .join("src")
+        .join("index.ts");
+    fs::create_dir_all(
+        direct_entrypoint
+            .parent()
+            .expect("entrypoint parent should exist"),
+    )?;
+    fs::write(&direct_entrypoint, "console.log('mcp');\n")?;
+
+    {
+        let path = format!("{}:/usr/bin:/bin", bun_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _workspace_guard = set_env_var(
+            "OPENDUCKTOR_WORKSPACE_ROOT",
+            workspace_direct.to_string_lossy().as_ref(),
+        );
+        let command = resolve_mcp_command()?;
+        assert_eq!(
+            command,
+            vec![
+                "bun".to_string(),
+                direct_entrypoint.to_string_lossy().to_string()
+            ]
+        );
+    }
+
+    let workspace_filter = root.join("workspace-filter");
+    fs::create_dir_all(&workspace_filter)?;
+    {
+        let path = format!("{}:/usr/bin:/bin", bun_bin.to_string_lossy());
+        let _path_guard = set_env_var("PATH", path.as_str());
+        let _workspace_guard = set_env_var(
+            "OPENDUCKTOR_WORKSPACE_ROOT",
+            workspace_filter.to_string_lossy().as_ref(),
+        );
+        let command = resolve_mcp_command()?;
+        assert_eq!(
+            command,
+            vec![
+                "bun".to_string(),
+                "run".to_string(),
+                "--silent".to_string(),
+                "--cwd".to_string(),
+                workspace_filter.to_string_lossy().to_string(),
+                "--filter".to_string(),
+                "@openducktor/openducktor-mcp".to_string(),
+                "start".to_string(),
+            ]
+        );
+    }
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn parse_mcp_command_json_accepts_non_empty_string_array() {
+    let parsed = parse_mcp_command_json(r#"["openducktor-mcp","--repo","/tmp/repo"]"#)
+        .expect("command should parse");
+    assert_eq!(
+        parsed,
+        vec![
+            "openducktor-mcp".to_string(),
+            "--repo".to_string(),
+            "/tmp/repo".to_string()
+        ]
+    );
+}
+
+#[test]
+fn parse_mcp_command_json_rejects_invalid_payloads() {
+    assert!(parse_mcp_command_json("{}").is_err());
+    assert!(parse_mcp_command_json("[]").is_err());
+    assert!(parse_mcp_command_json(r#"["openducktor-mcp",""]"#).is_err());
+}
+
+#[test]
+fn parse_mcp_command_json_trims_entries() {
+    let parsed = parse_mcp_command_json(r#"["  openducktor-mcp  "," --repo "," /tmp/repo "]"#)
+        .expect("command should parse");
+    assert_eq!(
+        parsed,
+        vec![
+            "openducktor-mcp".to_string(),
+            "--repo".to_string(),
+            "/tmp/repo".to_string()
+        ]
+    );
+}
+
+#[test]
+fn build_opencode_config_content_embeds_mcp_command_and_env() {
+    let previous = std::env::var("OPENDUCKTOR_MCP_COMMAND_JSON").ok();
+    std::env::set_var(
+        "OPENDUCKTOR_MCP_COMMAND_JSON",
+        r#"["/usr/local/bin/openducktor-mcp","--stdio"]"#,
+    );
+
+    let config = build_opencode_config_content(Path::new("/tmp/openducktor-repo"), "odt-ns")
+        .expect("config should serialize");
+
+    match previous {
+        Some(value) => std::env::set_var("OPENDUCKTOR_MCP_COMMAND_JSON", value),
+        None => std::env::remove_var("OPENDUCKTOR_MCP_COMMAND_JSON"),
+    }
+
+    let parsed: Value = serde_json::from_str(&config).expect("valid json");
+    assert_eq!(parsed["logLevel"].as_str(), Some("INFO"));
+    let command = parsed["mcp"]["openducktor"]["command"]
+        .as_array()
+        .expect("command array")
+        .iter()
+        .filter_map(|entry| entry.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(command, vec!["/usr/local/bin/openducktor-mcp", "--stdio"]);
+
+    let env = &parsed["mcp"]["openducktor"]["environment"];
+    assert_eq!(env["ODT_REPO_PATH"].as_str(), Some("/tmp/openducktor-repo"));
+    assert_eq!(env["ODT_METADATA_NAMESPACE"].as_str(), Some("odt-ns"));
+    assert!(env["ODT_BEADS_DIR"].as_str().is_some());
+}
