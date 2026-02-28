@@ -163,27 +163,7 @@ describe("use-repo-settings-operations", () => {
 
   test("saveRepoSettings trims values, omits blank defaults, and refreshes workspaces", async () => {
     const refreshWorkspaces = mock(async () => {});
-    const workspaceUpdateRepoConfig = mock(async () => ({
-      path: "/repo-a",
-      isActive: true,
-      hasConfig: true,
-      configuredWorktreeBasePath: "/tmp/worktrees",
-    }));
-    const workspaceUpdateRepoHooks = mock(async () => ({
-      path: "/repo-a",
-      isActive: true,
-      hasConfig: true,
-      configuredWorktreeBasePath: "/tmp/worktrees",
-    }));
-    const workspacePrepareTrustedHooksChallenge = mock(async () => ({
-      nonce: "nonce-1",
-      repoPath: "/repo-a",
-      fingerprint: "fingerprint-1",
-      expiresAt: "2026-02-22T08:02:00.000Z",
-      preStartCount: 1,
-      postCompleteCount: 1,
-    }));
-    const workspaceSetTrustedHooks = mock(async () => ({
+    const workspaceSaveRepoSettings = mock(async () => ({
       path: "/repo-a",
       isActive: true,
       hasConfig: true,
@@ -191,15 +171,9 @@ describe("use-repo-settings-operations", () => {
     }));
 
     const original = {
-      workspaceUpdateRepoConfig: host.workspaceUpdateRepoConfig,
-      workspaceUpdateRepoHooks: host.workspaceUpdateRepoHooks,
-      workspacePrepareTrustedHooksChallenge: host.workspacePrepareTrustedHooksChallenge,
-      workspaceSetTrustedHooks: host.workspaceSetTrustedHooks,
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
     };
-    host.workspaceUpdateRepoConfig = workspaceUpdateRepoConfig;
-    host.workspaceUpdateRepoHooks = workspaceUpdateRepoHooks;
-    host.workspacePrepareTrustedHooksChallenge = workspacePrepareTrustedHooksChallenge;
-    host.workspaceSetTrustedHooks = workspaceSetTrustedHooks;
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({ activeRepo: "/repo-a", refreshWorkspaces });
 
@@ -207,9 +181,14 @@ describe("use-repo-settings-operations", () => {
       await harness.mount();
       await harness.getLatest().saveRepoSettings(inputFixture);
 
-      expect(workspaceUpdateRepoConfig).toHaveBeenCalledWith("/repo-a", {
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
+        trustedHooks: true,
+        hooks: {
+          preStart: ["echo pre"],
+          postComplete: ["echo post"],
+        },
         agentDefaults: {
           spec: {
             providerId: "openai",
@@ -223,29 +202,17 @@ describe("use-repo-settings-operations", () => {
           },
         },
       });
-      expect(workspaceUpdateRepoHooks).toHaveBeenCalledWith("/repo-a", {
-        preStart: ["echo pre"],
-        postComplete: ["echo post"],
-      });
-      expect(workspacePrepareTrustedHooksChallenge).toHaveBeenCalledWith("/repo-a");
-      expect(workspaceSetTrustedHooks).toHaveBeenCalledWith("/repo-a", true, {
-        nonce: "nonce-1",
-        fingerprint: "fingerprint-1",
-      });
       expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
-      host.workspaceUpdateRepoConfig = original.workspaceUpdateRepoConfig;
-      host.workspaceUpdateRepoHooks = original.workspaceUpdateRepoHooks;
-      host.workspacePrepareTrustedHooksChallenge = original.workspacePrepareTrustedHooksChallenge;
-      host.workspaceSetTrustedHooks = original.workspaceSetTrustedHooks;
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
     }
   });
 
   test("supports retry after update failure and preserves refresh invariant", async () => {
     const refreshWorkspaces = mock(async () => {});
     let shouldFail = true;
-    const workspaceUpdateRepoConfig = mock(async () => {
+    const workspaceSaveRepoSettings = mock(async () => {
       if (shouldFail) {
         shouldFail = false;
         throw new Error("write failed");
@@ -257,37 +224,11 @@ describe("use-repo-settings-operations", () => {
         configuredWorktreeBasePath: "/tmp/worktrees",
       };
     });
-    const workspaceUpdateRepoHooks = mock(async () => ({
-      path: "/repo-a",
-      isActive: true,
-      hasConfig: true,
-      configuredWorktreeBasePath: "/tmp/worktrees",
-    }));
-    const workspacePrepareTrustedHooksChallenge = mock(async () => ({
-      nonce: "nonce-1",
-      repoPath: "/repo-a",
-      fingerprint: "fingerprint-1",
-      expiresAt: "2026-02-22T08:02:00.000Z",
-      preStartCount: 1,
-      postCompleteCount: 1,
-    }));
-    const workspaceSetTrustedHooks = mock(async () => ({
-      path: "/repo-a",
-      isActive: true,
-      hasConfig: true,
-      configuredWorktreeBasePath: "/tmp/worktrees",
-    }));
 
     const original = {
-      workspaceUpdateRepoConfig: host.workspaceUpdateRepoConfig,
-      workspaceUpdateRepoHooks: host.workspaceUpdateRepoHooks,
-      workspacePrepareTrustedHooksChallenge: host.workspacePrepareTrustedHooksChallenge,
-      workspaceSetTrustedHooks: host.workspaceSetTrustedHooks,
+      workspaceSaveRepoSettings: host.workspaceSaveRepoSettings,
     };
-    host.workspaceUpdateRepoConfig = workspaceUpdateRepoConfig;
-    host.workspaceUpdateRepoHooks = workspaceUpdateRepoHooks;
-    host.workspacePrepareTrustedHooksChallenge = workspacePrepareTrustedHooksChallenge;
-    host.workspaceSetTrustedHooks = workspaceSetTrustedHooks;
+    host.workspaceSaveRepoSettings = workspaceSaveRepoSettings;
 
     const harness = createHookHarness({ activeRepo: "/repo-a", refreshWorkspaces });
 
@@ -299,17 +240,11 @@ describe("use-repo-settings-operations", () => {
       expect(refreshWorkspaces).not.toHaveBeenCalled();
 
       await harness.getLatest().saveRepoSettings(inputFixture);
-      expect(workspaceUpdateRepoConfig).toHaveBeenCalledTimes(2);
-      expect(workspaceUpdateRepoHooks).toHaveBeenCalledTimes(1);
-      expect(workspacePrepareTrustedHooksChallenge).toHaveBeenCalledTimes(1);
-      expect(workspaceSetTrustedHooks).toHaveBeenCalledTimes(1);
+      expect(workspaceSaveRepoSettings).toHaveBeenCalledTimes(2);
       expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
-      host.workspaceUpdateRepoConfig = original.workspaceUpdateRepoConfig;
-      host.workspaceUpdateRepoHooks = original.workspaceUpdateRepoHooks;
-      host.workspacePrepareTrustedHooksChallenge = original.workspacePrepareTrustedHooksChallenge;
-      host.workspaceSetTrustedHooks = original.workspaceSetTrustedHooks;
+      host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
     }
   });
 });

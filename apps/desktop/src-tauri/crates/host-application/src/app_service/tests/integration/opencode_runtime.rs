@@ -348,7 +348,7 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
     );
 
     let pre_start_cleanup_failure_hooks = HookSet {
-        pre_start: vec![format!("rm -rf \"{repo_path}\"; exit 1")],
+        pre_start: vec![format!("sh -lc 'rm -rf \"{repo_path}\"; exit 1'")],
         post_complete: Vec::new(),
     };
     service.workspace_update_repo_config(

@@ -240,7 +240,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     );
 
     let pre_start_failure_hooks = HookSet {
-        pre_start: vec!["echo pre-fail >&2; exit 1".to_string()],
+        pre_start: vec!["sh -lc 'echo pre-fail >&2; exit 1'".to_string()],
         post_complete: Vec::new(),
     };
     service.workspace_update_repo_config(
@@ -268,7 +268,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
 
     let post_complete_failure_hooks = HookSet {
         pre_start: Vec::new(),
-        post_complete: vec!["echo post-fail >&2; exit 1".to_string()],
+        post_complete: vec!["sh -lc 'echo post-fail >&2; exit 1'".to_string()],
     };
     service.workspace_update_repo_config(
         repo_path.as_str(),

@@ -21,22 +21,22 @@ impl Default for HookSet {
 }
 
 pub fn hook_set_fingerprint(hooks: &HookSet) -> String {
-    // Use explicit separators and escaped payloads to keep hashing deterministic.
-    let mut payload = String::new();
-    payload.push_str("pre_start\n");
-    for command in &hooks.pre_start {
-        payload.push_str(command);
-        payload.push('\n');
-    }
-    payload.push_str("post_complete\n");
-    for command in &hooks.post_complete {
-        payload.push_str(command);
-        payload.push('\n');
-    }
-
     let mut hasher = Sha256::new();
-    hasher.update(payload.as_bytes());
+    hasher.update(b"openducktor-hookset-fingerprint-v2");
+    update_hasher_with_hook_group(&mut hasher, b"pre_start", &hooks.pre_start);
+    update_hasher_with_hook_group(&mut hasher, b"post_complete", &hooks.post_complete);
     format!("{:x}", hasher.finalize())
+}
+
+fn update_hasher_with_hook_group(hasher: &mut Sha256, group: &[u8], commands: &[String]) {
+    hasher.update(group);
+    hasher.update([0u8]);
+    hasher.update((commands.len() as u64).to_be_bytes());
+    for command in commands {
+        let bytes = command.as_bytes();
+        hasher.update((bytes.len() as u64).to_be_bytes());
+        hasher.update(bytes);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -216,5 +216,46 @@ impl Default for GlobalConfig {
             recent_repos: Vec::new(),
             scheduler: SchedulerConfig::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{hook_set_fingerprint, HookSet};
+
+    #[test]
+    fn hook_set_fingerprint_changes_with_command_boundaries() {
+        let grouped = HookSet {
+            pre_start: vec!["echo a".to_string(), "echo b".to_string()],
+            post_complete: Vec::new(),
+        };
+        let embedded_newline = HookSet {
+            pre_start: vec!["echo a\necho b".to_string()],
+            post_complete: Vec::new(),
+        };
+
+        assert_ne!(
+            hook_set_fingerprint(&grouped),
+            hook_set_fingerprint(&embedded_newline),
+            "fingerprint must be sensitive to command boundaries"
+        );
+    }
+
+    #[test]
+    fn hook_set_fingerprint_changes_with_group_assignment() {
+        let pre_start = HookSet {
+            pre_start: vec!["echo test".to_string()],
+            post_complete: Vec::new(),
+        };
+        let post_complete = HookSet {
+            pre_start: Vec::new(),
+            post_complete: vec!["echo test".to_string()],
+        };
+
+        assert_ne!(
+            hook_set_fingerprint(&pre_start),
+            hook_set_fingerprint(&post_complete),
+            "fingerprint must include the target hook group"
+        );
     }
 }

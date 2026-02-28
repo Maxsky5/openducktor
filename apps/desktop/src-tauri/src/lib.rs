@@ -112,6 +112,16 @@ struct RepoConfigPayload {
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RepoSettingsPayload {
+    worktree_base_path: Option<String>,
+    branch_prefix: Option<String>,
+    trusted_hooks: bool,
+    hooks: Option<host_infra_system::HookSet>,
+    agent_defaults: Option<host_infra_system::AgentDefaults>,
+}
+
 fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
     result.map_err(|error| format!("{error:#}"))
 }
@@ -216,6 +226,7 @@ pub fn run() -> anyhow::Result<()> {
             workspace_add,
             workspace_select,
             workspace_update_repo_config,
+            workspace_save_repo_settings,
             workspace_update_repo_hooks,
             workspace_prepare_trusted_hooks_challenge,
             workspace_get_repo_config,

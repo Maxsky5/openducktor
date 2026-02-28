@@ -73,6 +73,7 @@ import {
   workspaceGetRepoConfig,
   workspaceList,
   workspacePrepareTrustedHooksChallenge,
+  workspaceSaveRepoSettings,
   workspaceSelect,
   workspaceSetTrustedHooks,
   workspaceUpdateRepoConfig,
@@ -262,6 +263,24 @@ export class TauriHostClient implements PlannerTools {
     },
   ): Promise<WorkspaceRecord> {
     return workspaceUpdateRepoConfig(this.invokeFn, repoPath, config);
+  }
+
+  async workspaceSaveRepoSettings(
+    repoPath: string,
+    settings: {
+      worktreeBasePath?: string;
+      branchPrefix?: string;
+      trustedHooks: boolean;
+      hooks?: { preStart?: string[]; postComplete?: string[] };
+      agentDefaults?: {
+        spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        build?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+        qa?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+      };
+    },
+  ): Promise<WorkspaceRecord> {
+    return workspaceSaveRepoSettings(this.invokeFn, repoPath, settings);
   }
 
   async workspaceUpdateRepoHooks(

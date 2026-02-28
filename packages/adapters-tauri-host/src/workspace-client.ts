@@ -49,6 +49,29 @@ export const workspaceUpdateRepoConfig = async (
   return workspaceRecordSchema.parse(payload);
 };
 
+export const workspaceSaveRepoSettings = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  settings: {
+    worktreeBasePath?: string;
+    branchPrefix?: string;
+    trustedHooks: boolean;
+    hooks?: { preStart?: string[]; postComplete?: string[] };
+    agentDefaults?: {
+      spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+      planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+      build?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+      qa?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
+    };
+  },
+): Promise<WorkspaceRecord> => {
+  const payload = await invokeFn<unknown>("workspace_save_repo_settings", {
+    repoPath,
+    settings,
+  });
+  return workspaceRecordSchema.parse(payload);
+};
+
 export const workspaceUpdateRepoHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,

@@ -110,7 +110,7 @@ impl AppService {
 
         for hook in &repo_config.hooks.pre_start {
             let (ok, _stdout, stderr) =
-                run_command_allow_failure("sh", &["-lc", hook], Some(worktree_dir.as_path()))?;
+                run_parsed_hook_command_allow_failure(hook, worktree_dir.as_path());
             if !ok {
                 let _ = self.task_transition(
                     repo_path,
@@ -402,11 +402,8 @@ impl AppService {
                 },
             );
 
-            let (ok, _stdout, stderr) = run_command_allow_failure(
-                "sh",
-                &["-lc", hook],
-                Some(Path::new(&run.worktree_path)),
-            )?;
+            let (ok, _stdout, stderr) =
+                run_parsed_hook_command_allow_failure(hook, Path::new(&run.worktree_path));
 
             if !ok {
                 self.task_transition(
@@ -477,6 +474,39 @@ impl AppService {
         );
 
         Ok(true)
+    }
+}
+
+fn run_parsed_hook_command_allow_failure(hook: &str, cwd: &Path) -> (bool, String, String) {
+    let parsed = match shell_words::split(hook) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            return (
+                false,
+                String::new(),
+                format!(
+                    "Invalid hook command syntax. Use argv tokens, or explicitly invoke a shell (for example: sh -lc '...'): {error}"
+                ),
+            );
+        }
+    };
+
+    let Some((program, args)) = parsed.split_first() else {
+        return (
+            false,
+            String::new(),
+            "Hook command is empty. Provide an executable name.".to_string(),
+        );
+    };
+
+    let argv = args.iter().map(String::as_str).collect::<Vec<_>>();
+    match run_command_allow_failure(program, argv.as_slice(), Some(cwd)) {
+        Ok(result) => result,
+        Err(error) => (
+            false,
+            String::new(),
+            format!("Failed to execute hook command: {error:#}"),
+        ),
     }
 }
 

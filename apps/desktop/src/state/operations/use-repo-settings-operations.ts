@@ -94,32 +94,23 @@ export function useRepoSettingsOperations({
       const qaDefault = toConfigDefault(input.agentDefaults.qa);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
+      const agentDefaults = {
+        ...(specDefault ? { spec: specDefault } : {}),
+        ...(plannerDefault ? { planner: plannerDefault } : {}),
+        ...(buildDefault ? { build: buildDefault } : {}),
+        ...(qaDefault ? { qa: qaDefault } : {}),
+      };
 
-      await host.workspaceUpdateRepoConfig(repo, {
+      await host.workspaceSaveRepoSettings(repo, {
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
-        agentDefaults: {
-          ...(specDefault ? { spec: specDefault } : {}),
-          ...(plannerDefault ? { planner: plannerDefault } : {}),
-          ...(buildDefault ? { build: buildDefault } : {}),
-          ...(qaDefault ? { qa: qaDefault } : {}),
+        trustedHooks: input.trustedHooks,
+        hooks: {
+          preStart: input.preStartHooks,
+          postComplete: input.postCompleteHooks,
         },
+        agentDefaults,
       });
-
-      await host.workspaceUpdateRepoHooks(repo, {
-        preStart: input.preStartHooks,
-        postComplete: input.postCompleteHooks,
-      });
-
-      if (input.trustedHooks) {
-        const challenge = await host.workspacePrepareTrustedHooksChallenge(repo);
-        await host.workspaceSetTrustedHooks(repo, true, {
-          nonce: challenge.nonce,
-          fingerprint: challenge.fingerprint,
-        });
-      } else {
-        await host.workspaceSetTrustedHooks(repo, false);
-      }
 
       await refreshWorkspaces();
     },
