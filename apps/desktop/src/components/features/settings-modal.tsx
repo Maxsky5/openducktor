@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -377,15 +378,17 @@ export function SettingsModal({
             })}
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2">
+            <Switch
+              id="trusted-hooks"
               checked={trustedHooks}
               disabled={isLoadingConfig || isSaving}
-              onChange={(event) => setTrustedHooks(event.currentTarget.checked)}
+              onCheckedChange={setTrustedHooks}
             />
-            Trust hooks for this workspace
-          </label>
+            <Label htmlFor="trusted-hooks" className="text-sm text-foreground">
+              Trust hooks for this workspace
+            </Label>
+          </div>
         </div>
 
         <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-border px-6 pb-6 pt-4">
