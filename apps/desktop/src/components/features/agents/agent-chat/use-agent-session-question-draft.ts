@@ -12,6 +12,11 @@ import {
 
 export const QUESTION_SUMMARY_TAB_ID = "__summary__";
 
+type QuestionDraftUiState = {
+  activeTabId: string;
+  draft: AgentQuestionDraftEntry[];
+};
+
 type UseQuestionDraftArgs = {
   request: AgentQuestionRequest;
 };
@@ -45,21 +50,23 @@ const EMPTY_DRAFT_ENTRY: AgentQuestionDraftEntry = {
 };
 
 export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestionDraftState => {
-  const [activeTabId, setActiveTabId] = useState<string>("0");
-  const [draft, setDraft] = useState<AgentQuestionDraftEntry[]>(() =>
-    createAgentQuestionDraft(request),
-  );
+  const [uiState, setUiState] = useState<QuestionDraftUiState>(() => ({
+    activeTabId: "0",
+    draft: createAgentQuestionDraft(request),
+  }));
   const [submitError, setSubmitErrorState] = useState<string | null>(null);
 
   useEffect(() => {
-    setActiveTabId("0");
-    setDraft(createAgentQuestionDraft(request));
+    setUiState({
+      activeTabId: "0",
+      draft: createAgentQuestionDraft(request),
+    });
     setSubmitErrorState(null);
   }, [request]);
 
   const normalizedDraft = useMemo(
-    () => normalizeAgentQuestionDraft(request, draft),
-    [request, draft],
+    () => normalizeAgentQuestionDraft(request, uiState.draft),
+    [request, uiState.draft],
   );
 
   const answeredCount = useMemo(
@@ -77,6 +84,7 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
   );
 
   const hasMultipleQuestions = request.questions.length > 1;
+  const activeTabId = uiState.activeTabId;
   const isSummaryTab = hasMultipleQuestions && activeTabId === QUESTION_SUMMARY_TAB_ID;
   const activeQuestionIndex = isSummaryTab ? -1 : Math.max(0, Number(activeTabId) || 0);
   const activeQuestion =
@@ -91,6 +99,13 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
     setSubmitErrorState(null);
   }, []);
 
+  const setActiveTabId = useCallback((tabId: string) => {
+    setUiState((current) => ({
+      ...current,
+      activeTabId: tabId,
+    }));
+  }, []);
+
   const selectOption = useCallback(
     (questionIndex: number, optionLabel: string): void => {
       const question = request.questions[questionIndex];
@@ -100,32 +115,40 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
 
       clearSubmitError();
 
-      const next = normalizeAgentQuestionDraft(request, normalizedDraft);
-      const target = next[questionIndex] ?? EMPTY_DRAFT_ENTRY;
-      const wasSelected = target.selectedOptionLabels.includes(optionLabel);
-      const nextEntry = toggleAgentQuestionOption(question, target, optionLabel);
-      const shouldAdvance =
-        !question.multiple && !wasSelected && nextEntry.selectedOptionLabels.length > 0;
+      setUiState((current) => {
+        const nextDraft = normalizeAgentQuestionDraft(request, current.draft);
+        const target = nextDraft[questionIndex] ?? EMPTY_DRAFT_ENTRY;
+        const wasSelected = target.selectedOptionLabels.includes(optionLabel);
+        const nextEntry = toggleAgentQuestionOption(question, target, optionLabel);
+        const shouldAdvance =
+          !question.multiple && !wasSelected && nextEntry.selectedOptionLabels.length > 0;
 
-      next[questionIndex] =
-        !question.multiple && nextEntry.selectedOptionLabels.length > 0
-          ? {
-              ...nextEntry,
-              useFreeText: false,
-            }
-          : nextEntry;
-      setDraft(next);
+        nextDraft[questionIndex] =
+          !question.multiple && nextEntry.selectedOptionLabels.length > 0
+            ? {
+                ...nextEntry,
+                useFreeText: false,
+              }
+            : nextEntry;
 
-      if (shouldAdvance && hasMultipleQuestions) {
+        if (!shouldAdvance || !hasMultipleQuestions) {
+          return {
+            ...current,
+            draft: nextDraft,
+          };
+        }
+
         const nextQuestionIndex = questionIndex + 1;
-        setActiveTabId(
-          nextQuestionIndex < request.questions.length
-            ? String(nextQuestionIndex)
-            : QUESTION_SUMMARY_TAB_ID,
-        );
-      }
+        return {
+          activeTabId:
+            nextQuestionIndex < request.questions.length
+              ? String(nextQuestionIndex)
+              : QUESTION_SUMMARY_TAB_ID,
+          draft: nextDraft,
+        };
+      });
     },
-    [request, normalizedDraft, hasMultipleQuestions, clearSubmitError],
+    [request, hasMultipleQuestions, clearSubmitError],
   );
 
   const toggleFreeText = useCallback(
@@ -137,16 +160,19 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
 
       clearSubmitError();
 
-      setDraft((current) => {
-        const next = normalizeAgentQuestionDraft(request, current);
-        const target = next[questionIndex] ?? EMPTY_DRAFT_ENTRY;
-        next[questionIndex] = {
+      setUiState((current) => {
+        const nextDraft = normalizeAgentQuestionDraft(request, current.draft);
+        const target = nextDraft[questionIndex] ?? EMPTY_DRAFT_ENTRY;
+        nextDraft[questionIndex] = {
           ...target,
           useFreeText: !target.useFreeText,
           selectedOptionLabels:
             !target.useFreeText && !question.multiple ? [] : target.selectedOptionLabels,
         };
-        return next;
+        return {
+          ...current,
+          draft: nextDraft,
+        };
       });
     },
     [request, clearSubmitError],
@@ -161,19 +187,22 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
 
       clearSubmitError();
 
-      setDraft((current) => {
-        const next = normalizeAgentQuestionDraft(request, current);
-        const target = next[questionIndex] ?? {
+      setUiState((current) => {
+        const nextDraft = normalizeAgentQuestionDraft(request, current.draft);
+        const target = nextDraft[questionIndex] ?? {
           ...EMPTY_DRAFT_ENTRY,
           useFreeText: true,
         };
-        next[questionIndex] = {
+        nextDraft[questionIndex] = {
           ...target,
           freeText: value,
           useFreeText: true,
           selectedOptionLabels: question.multiple ? target.selectedOptionLabels : [],
         };
-        return next;
+        return {
+          ...current,
+          draft: nextDraft,
+        };
       });
     },
     [request, clearSubmitError],
@@ -181,7 +210,10 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
 
   const resetDraft = useCallback(() => {
     clearSubmitError();
-    setDraft(createAgentQuestionDraft(request));
+    setUiState((current) => ({
+      ...current,
+      draft: createAgentQuestionDraft(request),
+    }));
   }, [request, clearSubmitError]);
 
   const buildAnswers = useCallback(

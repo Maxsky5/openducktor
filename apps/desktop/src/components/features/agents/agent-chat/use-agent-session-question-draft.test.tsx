@@ -181,6 +181,62 @@ describe("useQuestionDraft", () => {
     await harness.unmount();
   });
 
+  test("preserves free-text changes when option selection is batched in same update", async () => {
+    const harness = createHookHarness(
+      buildRequest({
+        questions: [
+          baseQuestion({
+            multiple: true,
+            options: [
+              { label: "A", description: "first" },
+              { label: "B", description: "second" },
+            ],
+          }),
+        ],
+      }),
+    );
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.toggleFreeText(0);
+      state.updateFreeText(0, "Keep this note");
+      state.selectOption(0, "A");
+    });
+
+    const latest = harness.getLatest();
+    expect(latest.normalizedDraft[0]?.freeText).toBe("Keep this note");
+    expect(latest.normalizedDraft[0]?.selectedOptionLabels).toEqual(["A"]);
+    expect(latest.buildAnswers()).toEqual([["A", "Keep this note"]]);
+
+    await harness.unmount();
+  });
+
+  test("merges multi-select options when selections happen in one batch", async () => {
+    const harness = createHookHarness(
+      buildRequest({
+        questions: [
+          baseQuestion({
+            multiple: true,
+            options: [
+              { label: "A", description: "first" },
+              { label: "B", description: "second" },
+            ],
+          }),
+        ],
+      }),
+    );
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.selectOption(0, "A");
+      state.selectOption(0, "B");
+    });
+
+    expect(harness.getLatest().normalizedDraft[0]?.selectedOptionLabels).toEqual(["A", "B"]);
+
+    await harness.unmount();
+  });
+
   test("resets active tab, draft, and submit error when request changes", async () => {
     const requestOne = buildRequest({
       requestId: "request-1",
