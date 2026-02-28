@@ -125,6 +125,37 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("falls back to state timing when direct timing fields are non-numeric", () => {
+    const part = {
+      ...createToolPart({
+        id: "tool-2b",
+        status: "completed",
+        input: {},
+        time: {
+          start: 111,
+          end: 222,
+        },
+      }),
+      time: {
+        start: "invalid",
+        end: "invalid",
+      },
+    } as unknown as Part;
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-2b",
+      partId: "tool-2b",
+      callId: "call-tool-2b",
+      tool: "todowrite",
+      status: "completed",
+      input: {},
+      startedAtMs: 111,
+      endedAtMs: 222,
+    });
+  });
+
   test("maps started tool without end timing as running and keeps title", () => {
     const part = createToolPart({
       id: "tool-3",

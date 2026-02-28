@@ -446,6 +446,35 @@ describe("event-stream", () => {
     });
   });
 
+  test("normalizes unknown session.status types as retry payload", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "external-session-1",
+          status: {
+            type: "reconnect",
+            attempt: 3,
+            message: "Reconnecting",
+            next: 500,
+          },
+        },
+      } as unknown as Event,
+    ]);
+
+    const statusEvents = emitted.filter((event) => event.type === "session_status");
+    expect(statusEvents).toHaveLength(1);
+    if (statusEvents[0]?.type !== "session_status") {
+      throw new Error("Expected session_status event");
+    }
+    expect(statusEvents[0].status).toEqual({
+      type: "retry",
+      attempt: 3,
+      message: "Reconnecting",
+      nextEpochMs: 500,
+    });
+  });
+
   test("forwards permission and question events", async () => {
     const emitted = await runEventStream([
       {

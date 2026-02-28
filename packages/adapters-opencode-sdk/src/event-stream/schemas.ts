@@ -114,17 +114,13 @@ export const parseSessionStatus = (properties: unknown): ParsedSessionStatus | u
   if (!status) {
     return undefined;
   }
+
   const type = readStringProp(status, ["type"]);
-  if (!type) {
-    return undefined;
-  }
   if (type === "busy" || type === "idle") {
     return { type };
   }
-  if (type !== "retry") {
-    return undefined;
-  }
 
+  // Keep unknown/missing status types forward-compatible by normalizing to retry.
   return {
     type: "retry",
     attempt: readNumberProp(status, ["attempt"]) ?? 0,

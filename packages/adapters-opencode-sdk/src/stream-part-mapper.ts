@@ -1,6 +1,12 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart } from "@openducktor/core";
-import { asUnknownRecord, readRecordProp, readStringProp, readUnknownProp } from "./guards";
+import {
+  asUnknownRecord,
+  readNumberProp,
+  readRecordProp,
+  readStringProp,
+  readUnknownProp,
+} from "./guards";
 
 const toDisplayText = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -73,12 +79,12 @@ const extractPartTiming = (
   endedAtMs?: number;
 } => {
   const directTime = readRecordProp(part, "time");
-  const fromDirectStart = readUnknownProp(directTime, "start");
-  const fromDirectEnd = readUnknownProp(directTime, "end");
+  const fromDirectStart = readNumberProp(directTime, ["start"]);
+  const fromDirectEnd = readNumberProp(directTime, ["end"]);
 
   const stateTime = readRecordProp(readRecordProp(part, "state"), "time");
-  const fromStateStart = readUnknownProp(stateTime, "start");
-  const fromStateEnd = readUnknownProp(stateTime, "end");
+  const fromStateStart = readNumberProp(stateTime, ["start"]);
+  const fromStateEnd = readNumberProp(stateTime, ["end"]);
 
   const startedAtMs = fromDirectStart ?? fromStateStart;
   const endedAtMs = fromDirectEnd ?? fromStateEnd;
