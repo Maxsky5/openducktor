@@ -402,7 +402,6 @@ export class OdtTaskStore {
 
     const context = await this.resolveTaskContext(input.taskId);
     const { task, tasks } = context;
-    assertNoValidationError(getSetPlanError(task));
 
     const normalizedSubtasks = normalizePlanSubtasks(input.subtasks ?? []);
     let persistedDocument: { updatedAt: string; revision: number };
@@ -417,6 +416,7 @@ export class OdtTaskStore {
         normalizedSubtasks,
       );
     } else {
+      assertNoValidationError(getSetPlanError(task));
       validatePlanSubtaskRules(task, tasks, normalizedSubtasks);
       persistedDocument = await this.persistImplementationPlan(task.id, markdown);
     }

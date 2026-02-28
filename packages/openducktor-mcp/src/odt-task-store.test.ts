@@ -162,7 +162,9 @@ class OdtStoreHarness {
         break;
       }
       case "create": {
-        const title = args[2] ?? "Untitled";
+        const titleIndex = args.indexOf("--title");
+        const title =
+          titleIndex >= 0 ? (args[titleIndex + 1] ?? "Untitled") : (args[2] ?? "Untitled");
         const typeIndex = args.indexOf("--type");
         const parentIndex = args.indexOf("--parent");
         const issueType = typeIndex >= 0 ? (args[typeIndex + 1] ?? "task") : "task";
@@ -588,6 +590,9 @@ describe("OdtTaskStore workflow mutation paths", () => {
     expect(result.createdSubtaskIds).toEqual(["epic-1-sub-1", "epic-1-sub-2"]);
     expect(harness.getCommandCalls("delete")).toHaveLength(2);
     expect(harness.getCommandCalls("create")).toHaveLength(2);
+    for (const createCall of harness.getCommandCalls("create")) {
+      expect(createCall.args).toContain("--title");
+    }
     expect(harness.getStatusUpdateCalls()).toHaveLength(1);
     expect(harness.getStatusUpdateCalls()[0]?.args).toContain("ready_for_dev");
     const metadataUpdateIndex = harness.calls.findIndex(
