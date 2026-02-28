@@ -200,6 +200,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 className="h-9 w-9 rounded-md"
                 disabled={!agentStudioReady || createSessionDisabled}
                 title="Create session"
+                aria-label="Create session"
               >
                 {isCreatingSession ? (
                   <LoaderCircle className="size-4 animate-spin" />
