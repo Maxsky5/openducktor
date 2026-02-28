@@ -98,11 +98,6 @@ export function useRepoSettingsOperations({
       await host.workspaceUpdateRepoConfig(repo, {
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
-        trustedHooks: input.trustedHooks,
-        hooks: {
-          preStart: input.preStartHooks,
-          postComplete: input.postCompleteHooks,
-        },
         agentDefaults: {
           ...(specDefault ? { spec: specDefault } : {}),
           ...(plannerDefault ? { planner: plannerDefault } : {}),
@@ -110,6 +105,21 @@ export function useRepoSettingsOperations({
           ...(qaDefault ? { qa: qaDefault } : {}),
         },
       });
+
+      await host.workspaceUpdateRepoHooks(repo, {
+        preStart: input.preStartHooks,
+        postComplete: input.postCompleteHooks,
+      });
+
+      if (input.trustedHooks) {
+        const challenge = await host.workspacePrepareTrustedHooksChallenge(repo);
+        await host.workspaceSetTrustedHooks(repo, true, {
+          nonce: challenge.nonce,
+          fingerprint: challenge.fingerprint,
+        });
+      } else {
+        await host.workspaceSetTrustedHooks(repo, false);
+      }
 
       await refreshWorkspaces();
     },

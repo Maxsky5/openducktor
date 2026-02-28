@@ -5,7 +5,8 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
 use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree, run_command_allow_failure,
+    build_branch_name, hook_set_fingerprint, pick_free_port, remove_worktree,
+    run_command_allow_failure,
 };
 use serde::Deserialize;
 use std::fs;
@@ -64,13 +65,7 @@ impl AppService {
             )
         })?;
 
-        if (!repo_config.hooks.pre_start.is_empty() || !repo_config.hooks.post_complete.is_empty())
-            && !repo_config.trusted_hooks
-        {
-            return Err(anyhow!(
-                "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
-            ));
-        }
+        validate_hook_trust(repo_path, &repo_config)?;
 
         let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
         let task = tasks
@@ -483,6 +478,27 @@ impl AppService {
 
         Ok(true)
     }
+}
+
+fn validate_hook_trust(repo_path: &str, repo_config: &host_infra_system::RepoConfig) -> Result<()> {
+    if repo_config.hooks.pre_start.is_empty() && repo_config.hooks.post_complete.is_empty() {
+        return Ok(());
+    }
+
+    if !repo_config.trusted_hooks {
+        return Err(anyhow!(
+            "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
+        ));
+    }
+
+    let current_fingerprint = hook_set_fingerprint(&repo_config.hooks);
+    if repo_config.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
+        return Err(anyhow!(
+            "Hooks changed since last approval for {repo_path}. Reconfirm trust before running hooks."
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

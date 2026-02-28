@@ -5,7 +5,8 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
 use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree, run_command, run_command_allow_failure,
+    build_branch_name, hook_set_fingerprint, pick_free_port, remove_worktree, run_command,
+    run_command_allow_failure,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -250,14 +251,7 @@ impl AppService {
                 )
             })?;
 
-            if (!repo_config.hooks.pre_start.is_empty()
-                || !repo_config.hooks.post_complete.is_empty())
-                && !repo_config.trusted_hooks
-            {
-                return Err(anyhow!(
-                    "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
-                ));
-            }
+            validate_hook_trust(repo_path, &repo_config)?;
 
             let worktree_base_path = Path::new(&worktree_base);
             fs::create_dir_all(worktree_base_path).with_context(|| {
@@ -551,6 +545,27 @@ impl AppService {
             ))
         }
     }
+}
+
+fn validate_hook_trust(repo_path: &str, repo_config: &host_infra_system::RepoConfig) -> Result<()> {
+    if repo_config.hooks.pre_start.is_empty() && repo_config.hooks.post_complete.is_empty() {
+        return Ok(());
+    }
+
+    if !repo_config.trusted_hooks {
+        return Err(anyhow!(
+            "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
+        ));
+    }
+
+    let current_fingerprint = hook_set_fingerprint(&repo_config.hooks);
+    if repo_config.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
+        return Err(anyhow!(
+            "Hooks changed since last approval for {repo_path}. Reconfirm trust before running hooks."
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

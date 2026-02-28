@@ -34,8 +34,6 @@ export const workspaceUpdateRepoConfig = async (
   config: {
     worktreeBasePath?: string;
     branchPrefix?: string;
-    trustedHooks?: boolean;
-    hooks?: { preStart?: string[]; postComplete?: string[] };
     agentDefaults?: {
       spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
       planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
@@ -47,6 +45,18 @@ export const workspaceUpdateRepoConfig = async (
   const payload = await invokeFn<unknown>("workspace_update_repo_config", {
     repoPath,
     config,
+  });
+  return workspaceRecordSchema.parse(payload);
+};
+
+export const workspaceUpdateRepoHooks = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  hooks: { preStart?: string[]; postComplete?: string[] },
+): Promise<WorkspaceRecord> => {
+  const payload = await invokeFn<unknown>("workspace_update_repo_hooks", {
+    repoPath,
+    hooks,
   });
   return workspaceRecordSchema.parse(payload);
 };
@@ -63,12 +73,33 @@ export const workspaceSetTrustedHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,
   trusted: boolean,
+  challenge?: { nonce: string; fingerprint: string },
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn<unknown>("workspace_set_trusted_hooks", {
     repoPath,
     trusted,
+    ...(challenge
+      ? {
+          challengeNonce: challenge.nonce,
+          challengeFingerprint: challenge.fingerprint,
+        }
+      : {}),
   });
   return workspaceRecordSchema.parse(payload);
+};
+
+export const workspacePrepareTrustedHooksChallenge = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+): Promise<{
+  nonce: string;
+  repoPath: string;
+  fingerprint: string;
+  expiresAt: string;
+  preStartCount: number;
+  postCompleteCount: number;
+}> => {
+  return invokeFn("workspace_prepare_trusted_hooks_challenge", { repoPath });
 };
 
 export const getTheme = async (invokeFn: InvokeFn): Promise<string> => {

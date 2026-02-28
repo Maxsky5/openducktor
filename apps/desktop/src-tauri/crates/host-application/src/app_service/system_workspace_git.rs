@@ -4,7 +4,10 @@ use host_domain::{
     BeadsCheck, GitBranch, GitCurrentBranch, GitPushSummary, GitWorktreeSummary, RuntimeCheck,
     SystemCheck, WorkspaceRecord,
 };
-use host_infra_system::{command_exists, resolve_central_beads_dir, version_command, RepoConfig};
+use host_infra_system::{
+    command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
+    RepoConfig,
+};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -161,6 +164,14 @@ impl AppService {
         self.config_store.update_repo_config(repo_path, config)
     }
 
+    pub fn workspace_update_repo_hooks(
+        &self,
+        repo_path: &str,
+        hooks: HookSet,
+    ) -> Result<WorkspaceRecord> {
+        self.config_store.update_repo_hooks(repo_path, hooks)
+    }
+
     pub fn workspace_get_repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
         self.config_store.repo_config(repo_path)
     }
@@ -176,8 +187,29 @@ impl AppService {
         &self,
         repo_path: &str,
         trusted: bool,
+        expected_fingerprint: Option<&str>,
     ) -> Result<WorkspaceRecord> {
-        self.config_store.set_repo_trust_hooks(repo_path, trusted)
+        if trusted {
+            let config = self.config_store.repo_config(repo_path)?;
+            let current_fingerprint = hook_set_fingerprint(&config.hooks);
+            if let Some(expected) = expected_fingerprint {
+                if expected != current_fingerprint {
+                    return Err(anyhow!(
+                        "Hook trust challenge is stale for {repo_path}; hooks changed before confirmation."
+                    ));
+                }
+            } else {
+                return Err(anyhow!("Hook trust confirmation requires fingerprint challenge."));
+            }
+
+            return self.config_store.set_repo_trust_hooks(
+                repo_path,
+                true,
+                Some(current_fingerprint),
+            );
+        }
+
+        self.config_store.set_repo_trust_hooks(repo_path, false, None)
     }
 
     pub fn get_theme(&self) -> Result<String> {

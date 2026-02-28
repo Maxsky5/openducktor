@@ -6,7 +6,7 @@ use host_domain::{
     GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
     TaskStore, UpdateTaskPatch,
 };
-use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
+use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
 use std::fs;
 use std::net::TcpListener;
@@ -66,6 +66,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -172,6 +173,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
                 worktree_base_path: None,
                 branch_prefix: "odt".to_string(),
                 trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
                 agent_defaults: Default::default(),
             },
@@ -237,16 +239,18 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         config_store,
     );
 
+    let pre_start_failure_hooks = HookSet {
+        pre_start: vec!["echo pre-fail >&2; exit 1".to_string()],
+        post_complete: Vec::new(),
+    };
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
-            hooks: HookSet {
-                pre_start: vec!["echo pre-fail >&2; exit 1".to_string()],
-                post_complete: Vec::new(),
-            },
+            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_failure_hooks)),
+            hooks: pre_start_failure_hooks,
             agent_defaults: Default::default(),
         },
     )?;
@@ -262,16 +266,18 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         .to_string()
         .contains("Pre-start hook failed"));
 
+    let post_complete_failure_hooks = HookSet {
+        pre_start: Vec::new(),
+        post_complete: vec!["echo post-fail >&2; exit 1".to_string()],
+    };
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
-            hooks: HookSet {
-                pre_start: Vec::new(),
-                post_complete: vec!["echo post-fail >&2; exit 1".to_string()],
-            },
+            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&post_complete_failure_hooks)),
+            hooks: post_complete_failure_hooks,
             agent_defaults: Default::default(),
         },
     )?;
@@ -330,6 +336,7 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
             worktree_base_path: None,
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -372,6 +379,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: false,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet {
                 pre_start: vec!["echo pre-hook".to_string()],
                 post_complete: Vec::new(),
@@ -420,6 +428,7 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -470,6 +479,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },

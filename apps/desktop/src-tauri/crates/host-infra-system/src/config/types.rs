@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HookSet {
     #[serde(default)]
@@ -17,6 +18,25 @@ impl Default for HookSet {
             post_complete: Vec::new(),
         }
     }
+}
+
+pub fn hook_set_fingerprint(hooks: &HookSet) -> String {
+    // Use explicit separators and escaped payloads to keep hashing deterministic.
+    let mut payload = String::new();
+    payload.push_str("pre_start\n");
+    for command in &hooks.pre_start {
+        payload.push_str(command);
+        payload.push('\n');
+    }
+    payload.push_str("post_complete\n");
+    for command in &hooks.post_complete {
+        payload.push_str(command);
+        payload.push('\n');
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(payload.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -52,6 +72,8 @@ pub struct RepoConfig {
     #[serde(default)]
     pub trusted_hooks: bool,
     #[serde(default)]
+    pub trusted_hooks_fingerprint: Option<String>,
+    #[serde(default)]
     pub hooks: HookSet,
     #[serde(default)]
     pub agent_defaults: AgentDefaults,
@@ -71,6 +93,7 @@ impl Default for RepoConfig {
             worktree_base_path: None,
             branch_prefix: default_branch_prefix(),
             trusted_hooks: false,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: AgentDefaults::default(),
         }

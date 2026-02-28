@@ -6,7 +6,7 @@ use host_domain::{
     GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
     TaskStore, UpdateTaskPatch,
 };
-use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
+use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
 use std::fs;
 use std::net::TcpListener;
@@ -196,6 +196,7 @@ fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -272,6 +273,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
             worktree_base_path: None,
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -289,6 +291,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: false,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet {
                 pre_start: vec!["echo pre-hook".to_string()],
                 post_complete: Vec::new(),
@@ -309,6 +312,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -343,16 +347,18 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
         config_store,
     );
 
+    let pre_start_cleanup_failure_hooks = HookSet {
+        pre_start: vec![format!("rm -rf \"{repo_path}\"; exit 1")],
+        post_complete: Vec::new(),
+    };
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
-            hooks: HookSet {
-                pre_start: vec![format!("rm -rf \"{repo_path}\"; exit 1")],
-                post_complete: Vec::new(),
-            },
+            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_cleanup_failure_hooks)),
+            hooks: pre_start_cleanup_failure_hooks,
             agent_defaults: Default::default(),
         },
     )?;
@@ -398,6 +404,7 @@ fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Resu
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             agent_defaults: Default::default(),
         },
@@ -615,4 +622,3 @@ fn opencode_runtime_list_surfaces_stale_cleanup_failure() -> Result<()> {
     let _ = fs::remove_dir_all(root);
     Ok(())
 }
-

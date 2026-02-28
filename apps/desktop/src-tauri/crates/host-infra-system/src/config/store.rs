@@ -1,6 +1,9 @@
 use super::migrate::{canonicalize_workspace_key, migrate_repos_to_canonical_keys};
 use super::normalize::{normalize_global_config, normalize_repo_config};
-use super::types::{default_task_metadata_namespace, GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig};
+use super::types::{
+    default_task_metadata_namespace, hook_set_fingerprint, GlobalConfig,
+    HookSet, OpencodeStartupReadinessConfig, RepoConfig,
+};
 use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
 use std::fs;
@@ -217,6 +220,46 @@ impl AppConfigStore {
         })
     }
 
+    pub fn update_repo_hooks(&self, repo_path: &str, mut hooks: HookSet) -> Result<WorkspaceRecord> {
+        let canonical_path =
+            canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
+        let mut normalized_repo = RepoConfig {
+            hooks,
+            ..RepoConfig::default()
+        };
+        normalize_repo_config(&mut normalized_repo);
+        hooks = normalized_repo.hooks;
+
+        let mut config = self.load()?;
+        let (has_config, configured_worktree_base_path) = {
+            let repo = config
+                .repos
+                .get_mut(&canonical_path)
+                .ok_or_else(|| anyhow!("Repository is not configured"))?;
+            let previous_hooks = repo.hooks.clone();
+            repo.hooks = hooks;
+            if repo.hooks != previous_hooks {
+                repo.trusted_hooks = false;
+                repo.trusted_hooks_fingerprint = None;
+            } else if repo.trusted_hooks {
+                repo.trusted_hooks_fingerprint = Some(hook_set_fingerprint(&repo.hooks));
+            }
+            (
+                has_configured_worktree(repo),
+                repo.worktree_base_path.clone(),
+            )
+        };
+        touch_recent(&mut config.recent_repos, &canonical_path);
+        self.save(&config)?;
+
+        Ok(WorkspaceRecord {
+            path: canonical_path.clone(),
+            is_active: config.active_repo.as_deref() == Some(&canonical_path),
+            has_config,
+            configured_worktree_base_path,
+        })
+    }
+
     pub fn repo_config(&self, repo_path: &str) -> Result<RepoConfig> {
         let canonical_path =
             canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
@@ -237,7 +280,12 @@ impl AppConfigStore {
         Ok(config.repos.get(&canonical_path).cloned())
     }
 
-    pub fn set_repo_trust_hooks(&self, repo_path: &str, trusted: bool) -> Result<WorkspaceRecord> {
+    pub fn set_repo_trust_hooks(
+        &self,
+        repo_path: &str,
+        trusted: bool,
+        trusted_fingerprint: Option<String>,
+    ) -> Result<WorkspaceRecord> {
         let canonical_path =
             canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
 
@@ -248,11 +296,17 @@ impl AppConfigStore {
                 .get_mut(&canonical_path)
                 .ok_or_else(|| anyhow!("Repository is not configured"))?;
             repo.trusted_hooks = trusted;
+            repo.trusted_hooks_fingerprint = if trusted {
+                trusted_fingerprint
+            } else {
+                None
+            };
             (
                 has_configured_worktree(repo),
                 repo.worktree_base_path.clone(),
             )
         };
+        touch_recent(&mut config.recent_repos, &canonical_path);
         self.save(&config)?;
 
         Ok(WorkspaceRecord {
