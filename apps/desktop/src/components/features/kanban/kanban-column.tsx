@@ -1,7 +1,16 @@
 import type { RunSummary } from "@openducktor/contracts";
 import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openducktor/core";
 import { Inbox } from "lucide-react";
-import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  memo,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   buildVirtualColumnLayout,
   findVirtualWindowRange,
@@ -20,6 +29,8 @@ const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
 const VIRTUAL_CARD_GAP_PX = 12;
 const VIRTUAL_OVERSCAN_PX = 360;
 const INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX = 900;
+type RunningTaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["activeSessions"]>;
+const EMPTY_ACTIVE_SESSIONS: RunningTaskSessions = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
@@ -54,7 +65,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
 }: {
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
-  activeSessions: AgentSessionState[] | undefined;
+  activeSessions: RunningTaskSessions | undefined;
   onMeasuredHeight: (taskId: string, height: number) => void;
 } & TaskCardHandlers): ReactElement {
   const taskWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -341,7 +352,7 @@ export function KanbanColumn({
                   key={task.id}
                   task={task}
                   runState={runStateByTaskId.get(task.id)}
-                  activeSessions={activeSessionsByTaskId.get(task.id) ?? []}
+                  activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
                   onMeasuredHeight={handleMeasuredHeight}
                   onOpenDetails={onOpenDetails}
                   onDelegate={onDelegate}
@@ -363,7 +374,7 @@ export function KanbanColumn({
                 key={task.id}
                 task={task}
                 runState={runStateByTaskId.get(task.id)}
-                activeSessions={activeSessionsByTaskId.get(task.id) ?? []}
+                activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
                 onOpenDetails={onOpenDetails}
                 onDelegate={onDelegate}
                 onPlan={onPlan}

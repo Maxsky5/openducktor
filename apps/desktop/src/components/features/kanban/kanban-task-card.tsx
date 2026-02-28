@@ -1,6 +1,6 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import { ExternalLink, PlayCircle } from "lucide-react";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import { Link } from "react-router-dom";
 import {
   IssueTypeBadge,
@@ -29,6 +29,76 @@ type KanbanTaskCardProps = {
   onHumanRequestChanges?: (taskId: string) => void;
 };
 
+const areStringArraysEqual = (left: string[], right: string[]): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
+  left.id === right.id &&
+  left.updatedAt === right.updatedAt &&
+  left.title === right.title &&
+  left.status === right.status &&
+  left.issueType === right.issueType &&
+  left.priority === right.priority &&
+  areStringArraysEqual(left.subtaskIds, right.subtaskIds) &&
+  areStringArraysEqual(left.availableActions, right.availableActions);
+
+const areRunningTaskSessionsEqual = (
+  left: RunningTaskSession[] | undefined,
+  right: RunningTaskSession[] | undefined,
+): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftSession = left[index];
+    const rightSession = right[index];
+    if (!leftSession || !rightSession) {
+      return false;
+    }
+    if (
+      leftSession.sessionId !== rightSession.sessionId ||
+      leftSession.role !== rightSession.role ||
+      leftSession.scenario !== rightSession.scenario ||
+      leftSession.status !== rightSession.status
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const areKanbanTaskCardPropsEqual = (
+  previous: KanbanTaskCardProps,
+  next: KanbanTaskCardProps,
+): boolean =>
+  areTaskCardsEquivalent(previous.task, next.task) &&
+  previous.runState === next.runState &&
+  areRunningTaskSessionsEqual(previous.activeSessions, next.activeSessions) &&
+  previous.onOpenDetails === next.onOpenDetails &&
+  previous.onDelegate === next.onDelegate &&
+  previous.onPlan === next.onPlan &&
+  previous.onBuild === next.onBuild &&
+  previous.onHumanApprove === next.onHumanApprove &&
+  previous.onHumanRequestChanges === next.onHumanRequestChanges;
+
 function toSessionHref({
   taskId,
   session,
@@ -46,27 +116,35 @@ function toSessionHref({
   return `/agents?${params.toString()}`;
 }
 
-function ActiveSessionChip({
-  taskId,
-  session,
-}: {
-  taskId: string;
-  session: RunningTaskSession;
-}): ReactElement {
-  const roleLabel = AGENT_ROLE_LABELS[session.role] ?? session.role;
-  const statusLabel = session.status === "starting" ? "Starting" : "Running";
+const ActiveSessionChip = memo(
+  function ActiveSessionChip({
+    taskId,
+    session,
+  }: {
+    taskId: string;
+    session: RunningTaskSession;
+  }): ReactElement {
+    const roleLabel = AGENT_ROLE_LABELS[session.role] ?? session.role;
+    const statusLabel = session.status === "starting" ? "Starting" : "Running";
 
-  return (
-    <Link
-      to={toSessionHref({ taskId, session })}
-      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 px-2 py-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 transition hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-100/75 dark:hover:bg-sky-900/50"
-    >
-      <PlayCircle className="size-3" />
-      {roleLabel}
-      <span className="text-[10px] font-medium text-primary/90">{statusLabel}</span>
-    </Link>
-  );
-}
+    return (
+      <Link
+        to={toSessionHref({ taskId, session })}
+        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 px-2 py-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 transition hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-100/75 dark:hover:bg-sky-900/50"
+      >
+        <PlayCircle className="size-3" />
+        {roleLabel}
+        <span className="text-[10px] font-medium text-primary/90">{statusLabel}</span>
+      </Link>
+    );
+  },
+  (previous, next) =>
+    previous.taskId === next.taskId &&
+    previous.session.sessionId === next.session.sessionId &&
+    previous.session.role === next.session.role &&
+    previous.session.scenario === next.session.scenario &&
+    previous.session.status === next.session.status,
+);
 
 function ActiveSessionsLine({
   taskId,
@@ -173,7 +251,7 @@ function TaskActions({
   );
 }
 
-export function KanbanTaskCard({
+export const KanbanTaskCard = memo(function KanbanTaskCard({
   task,
   runState,
   activeSessions = [],
@@ -238,4 +316,4 @@ export function KanbanTaskCard({
       </div>
     </article>
   );
-}
+}, areKanbanTaskCardPropsEqual);

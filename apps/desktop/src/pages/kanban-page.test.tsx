@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { isValidElement, type ReactElement, useState } from "react";
+import { isValidElement, type ReactElement, useCallback, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { createTaskCardFixture, enableReactActEnvironment } from "./agent-studio-test-utils";
@@ -100,6 +100,52 @@ mock.module("./use-session-start-modal-state", () => ({
       opencodeAgent: "build-agent",
     });
 
+    const openStartModal = useCallback((nextIntent: Record<string, unknown>) => {
+      setIntent(nextIntent);
+      setSelection({
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        opencodeAgent: "build-agent",
+      });
+    }, []);
+
+    const closeStartModal = useCallback(() => {
+      setIntent(null);
+    }, []);
+
+    const handleSelectAgent = useCallback((opencodeAgent: string) => {
+      setSelection((current) => ({
+        ...current,
+        opencodeAgent,
+      }));
+    }, []);
+
+    const handleSelectModel = useCallback((modelKey: string) => {
+      if (modelKey === "anthropic/claude-sonnet") {
+        setSelection((current) => ({
+          ...current,
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "default",
+        }));
+        return;
+      }
+      setSelection((current) => ({
+        ...current,
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+      }));
+    }, []);
+
+    const handleSelectVariant = useCallback((variant: string) => {
+      setSelection((current) => ({
+        ...current,
+        variant,
+      }));
+    }, []);
+
     return {
       intent,
       isOpen: intent !== null,
@@ -109,47 +155,11 @@ mock.module("./use-session-start-modal-state", () => ({
       modelOptions: [],
       modelGroups: [],
       variantOptions: [],
-      openStartModal: (nextIntent: Record<string, unknown>) => {
-        setIntent(nextIntent);
-        setSelection({
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "default",
-          opencodeAgent: "build-agent",
-        });
-      },
-      closeStartModal: () => {
-        setIntent(null);
-      },
-      handleSelectAgent: (opencodeAgent: string) => {
-        setSelection((current) => ({
-          ...current,
-          opencodeAgent,
-        }));
-      },
-      handleSelectModel: (modelKey: string) => {
-        if (modelKey === "anthropic/claude-sonnet") {
-          setSelection((current) => ({
-            ...current,
-            providerId: "anthropic",
-            modelId: "claude-sonnet",
-            variant: "default",
-          }));
-          return;
-        }
-        setSelection((current) => ({
-          ...current,
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "default",
-        }));
-      },
-      handleSelectVariant: (variant: string) => {
-        setSelection((current) => ({
-          ...current,
-          variant,
-        }));
-      },
+      openStartModal,
+      closeStartModal,
+      handleSelectAgent,
+      handleSelectModel,
+      handleSelectVariant,
     };
   },
 }));
@@ -415,6 +425,24 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(latestLocation).toContain("session=session-spec");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("keeps human request changes handler stable across modal state re-renders", async () => {
+    const renderer = await renderPage();
+
+    const initialOnHumanRequestChanges = latestKanbanColumnProps?.onHumanRequestChanges;
+    expect(initialOnHumanRequestChanges).toBeDefined();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    const nextOnHumanRequestChanges = latestKanbanColumnProps?.onHumanRequestChanges;
+    expect(nextOnHumanRequestChanges).toBe(initialOnHumanRequestChanges);
 
     await act(async () => {
       renderer.unmount();

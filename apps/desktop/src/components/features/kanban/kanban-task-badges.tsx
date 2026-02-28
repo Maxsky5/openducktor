@@ -9,7 +9,7 @@ import {
   PlayCircle,
   Sparkles,
 } from "lucide-react";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 
 const ISSUE_TYPE_STYLES: Record<
@@ -147,7 +147,11 @@ const runStateClassName = (value: RunSummary["state"]): string => {
   return "border-border bg-muted text-foreground";
 };
 
-export function IssueTypeBadge({ issueType }: { issueType: IssueType }): ReactElement {
+export const IssueTypeBadge = memo(function IssueTypeBadge({
+  issueType,
+}: {
+  issueType: IssueType;
+}): ReactElement {
   const style = ISSUE_TYPE_STYLES[issueType] ?? ISSUE_TYPE_STYLES.task;
   const Icon = style.icon;
   return (
@@ -159,9 +163,13 @@ export function IssueTypeBadge({ issueType }: { issueType: IssueType }): ReactEl
       {style.label}
     </Badge>
   );
-}
+});
 
-export function PriorityBadge({ priority }: { priority: number }): ReactElement {
+export const PriorityBadge = memo(function PriorityBadge({
+  priority,
+}: {
+  priority: number;
+}): ReactElement {
   const style = getPriorityStyle(priority);
   return (
     <Badge
@@ -173,9 +181,13 @@ export function PriorityBadge({ priority }: { priority: number }): ReactElement 
       {style.label}
     </Badge>
   );
-}
+});
 
-export function RunStateBadge({ runState }: { runState: RunSummary["state"] }): ReactElement {
+export const RunStateBadge = memo(function RunStateBadge({
+  runState,
+}: {
+  runState: RunSummary["state"];
+}): ReactElement {
   const Icon = runStateIcon(runState);
   return (
     <Badge
@@ -186,4 +198,4 @@ export function RunStateBadge({ runState }: { runState: RunSummary["state"] }): 
       {runStateLabel(runState)}
     </Badge>
   );
-}
+});
