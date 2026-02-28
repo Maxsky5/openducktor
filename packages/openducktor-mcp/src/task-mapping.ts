@@ -32,12 +32,14 @@ export const ensureObject = (value: unknown): JsonObject => {
   return { ...(value as JsonObject) };
 };
 
+const RevisionSchema = z.number().int().positive();
+
 const MarkdownEntrySchema = z.object({
   markdown: z.string(),
   updatedAt: z.string(),
   updatedBy: z.string(),
   sourceTool: z.string(),
-  revision: z.number(),
+  revision: RevisionSchema,
 });
 
 const QaEntrySchema = MarkdownEntrySchema.extend({
