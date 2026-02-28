@@ -5,6 +5,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type {
   AgentChatMessage,
   AgentPermissionRequest,
@@ -107,10 +108,10 @@ const baseSession: AgentSessionState = {
 };
 
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = [
-  { role: "spec", label: "Spec", icon: Sparkles },
-  { role: "planner", label: "Planner", icon: Bot },
-  { role: "build", label: "Build", icon: Wrench },
-  { role: "qa", label: "QA", icon: ShieldCheck },
+  { role: "spec", label: AGENT_ROLE_LABELS.spec, icon: Sparkles },
+  { role: "planner", label: AGENT_ROLE_LABELS.planner, icon: Bot },
+  { role: "build", label: AGENT_ROLE_LABELS.build, icon: Wrench },
+  { role: "qa", label: AGENT_ROLE_LABELS.qa, icon: ShieldCheck },
 ];
 
 export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({

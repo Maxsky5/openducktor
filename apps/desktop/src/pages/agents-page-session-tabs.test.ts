@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildLatestSessionByRoleMap,
@@ -294,12 +295,7 @@ describe("agents-page-session-tabs", () => {
         build_after_qa_rejected: "After QA Rejected",
         qa_review: "QA Review",
       },
-      roleLabelByRole: {
-        spec: "Spec",
-        planner: "Planner",
-        build: "Build",
-        qa: "QA",
-      },
+      roleLabelByRole: { ...AGENT_ROLE_LABELS },
     });
 
     expect(groups[0]?.label).toBe("Spec");
@@ -342,12 +338,7 @@ describe("agents-page-session-tabs", () => {
       hasQaFeedback: true,
       hasHumanFeedback: false,
       createSessionDisabled: false,
-      roleLabelByRole: {
-        spec: "Spec",
-        planner: "Planner",
-        build: "Build",
-        qa: "QA",
-      },
+      roleLabelByRole: { ...AGENT_ROLE_LABELS },
       scenarioLabels: {
         spec_initial: "Spec",
         planner_initial: "Planner",
@@ -375,12 +366,7 @@ describe("agents-page-session-tabs", () => {
       hasQaFeedback: false,
       hasHumanFeedback: true,
       createSessionDisabled: false,
-      roleLabelByRole: {
-        spec: "Spec",
-        planner: "Planner",
-        build: "Build",
-        qa: "QA",
-      },
+      roleLabelByRole: { ...AGENT_ROLE_LABELS },
       scenarioLabels: {
         spec_initial: "Spec",
         planner_initial: "Planner",

@@ -9,7 +9,7 @@ const noop = (): void => {};
 
 describe("KanbanTaskCard active sessions", () => {
   test("renders animated active state and session links", () => {
-    const task = createTaskCardFixture({ id: "TASK-1", title: "Build payment flow" });
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Implement payment flow" });
 
     const html = renderToStaticMarkup(
       createElement(
@@ -42,7 +42,7 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("kanban-active-session-card");
     expect(html).toContain("kanban-active-session-ray");
     expect(html).toContain("Active sessions");
-    expect(html).toContain("Build");
+    expect(html).toContain("Builder");
     expect(html).toContain("Running");
     expect(html).toContain("QA");
     expect(html).toContain("Starting");

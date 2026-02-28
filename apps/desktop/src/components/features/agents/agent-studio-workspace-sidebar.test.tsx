@@ -56,7 +56,7 @@ describe("AgentStudioWorkspaceSidebar", () => {
     expect(html).toContain("Not set");
   });
 
-  test("renders empty sidebar for Build role documents", () => {
+  test("renders empty sidebar for Builder role documents", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioWorkspaceSidebar, {
         model: {

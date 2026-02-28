@@ -1,4 +1,3 @@
-import type { AgentRole } from "@openducktor/core";
 import {
   type ReactElement,
   startTransition,
@@ -18,6 +17,7 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import {
@@ -37,13 +37,6 @@ import type {
 } from "./use-agent-studio-session-actions";
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
-
-const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Build",
-  qa: "QA",
-};
 
 type AgentStudioSessionStartModalProps = {
   request: NewSessionStartRequest;
@@ -93,7 +86,7 @@ function AgentStudioSessionStartModal({
     }
     initializedRequestKeyRef.current = requestKey;
 
-    const roleLabel = ROLE_LABEL_BY_ROLE[request.role] ?? request.role.toUpperCase();
+    const roleLabel = AGENT_ROLE_LABELS[request.role] ?? request.role.toUpperCase();
     const scenarioLabel = SCENARIO_LABELS[request.scenario] ?? request.scenario;
     const startModeLabel =
       request.startMode === "fresh"
@@ -118,7 +111,7 @@ function AgentStudioSessionStartModal({
     });
   }, [openStartModal, request]);
 
-  const fallbackRoleLabel = ROLE_LABEL_BY_ROLE[request.role] ?? request.role.toUpperCase();
+  const fallbackRoleLabel = AGENT_ROLE_LABELS[request.role] ?? request.role.toUpperCase();
   const fallbackScenarioLabel = SCENARIO_LABELS[request.scenario] ?? request.scenario;
   const fallbackStartModeLabel =
     request.startMode === "fresh"

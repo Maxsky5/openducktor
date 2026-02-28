@@ -85,6 +85,6 @@ describe("settings-modal-model", () => {
       },
     };
 
-    expect(getMissingRequiredRoleLabels(defaults)).toEqual(["Planner", "Build", "QA"]);
+    expect(getMissingRequiredRoleLabels(defaults)).toEqual(["Planner", "Builder", "QA"]);
   });
 });

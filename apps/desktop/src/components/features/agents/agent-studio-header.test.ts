@@ -34,7 +34,7 @@ const buildModel = () => ({
     },
     {
       role: "build" as const,
-      label: "Build",
+      label: "Builder",
       icon: roleIcon(2),
       state: "available" as const,
       sessionId: null,
@@ -70,7 +70,7 @@ const buildModel = () => ({
       id: "build:build_implementation_start",
       role: "build" as const,
       scenario: "build_implementation_start" as const,
-      label: "Build · Implementation Start",
+      label: "Builder · Implementation Start",
       description: "Create build session",
       disabled: false,
     },

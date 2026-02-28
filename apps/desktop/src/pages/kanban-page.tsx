@@ -9,6 +9,7 @@ import { TaskCreateModal } from "@/components/features/task-create-modal";
 import { TaskDetailsSheet } from "@/components/features/task-details-sheet";
 import { Button } from "@/components/ui/button";
 import { useAgentState, useTasksState, useWorkspaceState } from "@/state";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { firstScenario, kickoffPromptForScenario, SCENARIO_LABELS } from "./agents-page-constants";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
@@ -20,13 +21,6 @@ type KanbanSessionStartIntent = {
   scenario: AgentScenario;
   startMode: "fresh" | "reuse_latest";
   sendKickoff: boolean;
-};
-
-const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Build",
-  qa: "QA",
 };
 
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
@@ -145,7 +139,7 @@ export function KanbanPage(): ReactElement {
 
   const openSessionStartModal = useCallback(
     (intent: KanbanSessionStartIntent): void => {
-      const roleLabel = ROLE_LABEL_BY_ROLE[intent.role] ?? intent.role.toUpperCase();
+      const roleLabel = AGENT_ROLE_LABELS[intent.role] ?? intent.role.toUpperCase();
       const scenarioLabel = SCENARIO_LABELS[intent.scenario] ?? intent.scenario;
       const startModeLabel =
         intent.startMode === "fresh"
@@ -207,7 +201,7 @@ export function KanbanPage(): ReactElement {
           closeStartModal();
 
           if (startInBackground) {
-            const roleLabel = ROLE_LABEL_BY_ROLE[intent.role] ?? intent.role.toUpperCase();
+            const roleLabel = AGENT_ROLE_LABELS[intent.role] ?? intent.role.toUpperCase();
             toast.success(`Started ${roleLabel} session in background for ${intent.taskId}.`, {
               duration: 10000,
               description: (

@@ -12,16 +12,10 @@ import type {
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
-
-const DEFAULT_ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
-  spec: "Spec",
-  planner: "Planner",
-  build: "Build",
-  qa: "QA",
-};
 
 export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<AgentRole, string> => {
   return roleOptions.reduce(
@@ -29,7 +23,7 @@ export const buildRoleLabelByRole = (roleOptions: AgentRoleOption[]): Record<Age
       acc[entry.role] = entry.label;
       return acc;
     },
-    { ...DEFAULT_ROLE_LABEL_BY_ROLE },
+    { ...AGENT_ROLE_LABELS },
   );
 };
 

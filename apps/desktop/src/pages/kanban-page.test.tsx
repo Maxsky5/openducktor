@@ -250,7 +250,7 @@ describe("KanbanPage session start modal flow", () => {
     expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(latestLocation).toBe("/");
     expect(toastSuccessMock).toHaveBeenCalledWith(
-      "Started Build session in background for TASK-123.",
+      "Started Builder session in background for TASK-123.",
       expect.objectContaining({
         duration: 10000,
       }),
