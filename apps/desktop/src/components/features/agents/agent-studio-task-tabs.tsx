@@ -103,7 +103,7 @@ export function AgentStudioTaskTabs({
   const hasAnyTab = useMemo(() => tabs.length > 0, [tabs]);
 
   return (
-    <div className="bg-gray-700/70 px-2 pt-1.5 pb-0">
+    <div className="bg-studio-chrome px-2 pt-1.5 pb-0">
       <div className="flex min-w-0 items-center gap-1">
         <div className="min-w-0 flex-1 overflow-x-auto">
           <div className="inline-flex h-10 min-w-max items-center gap-1 px-2">
@@ -174,7 +174,7 @@ export function AgentStudioTaskTabs({
               size="icon"
               variant="ghost"
               aria-label="Open new task tab"
-              className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-gray-50 shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="h-10 w-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               disabled={!canOpenCreateDialog}
               onClick={() => setIsCreateDialogOpen(true)}
             >
