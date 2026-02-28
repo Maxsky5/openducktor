@@ -93,12 +93,18 @@ export const loadSessionTodos = async (input: {
       },
     });
     if (!response.ok) {
+      const responseBody = await response.text().catch(() => "");
+      console.warn(`loadSessionTodos: HTTP ${response.status}`, {
+        statusText: response.statusText,
+        body: responseBody,
+      });
       return [];
     }
 
     const payload = (await response.json().catch(() => null)) as unknown;
     return normalizeTodoList(payload);
-  } catch {
+  } catch (error) {
+    console.warn("loadSessionTodos: fetch failed", error);
     return [];
   }
 };

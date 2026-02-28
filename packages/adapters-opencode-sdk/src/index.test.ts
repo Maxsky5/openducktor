@@ -856,6 +856,81 @@ describe("OpencodeSdkAdapter", () => {
     }
   });
 
+  test("loadSessionTodos logs non-ok responses and returns empty todos", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalWarn = console.warn;
+    const warnCalls: unknown[][] = [];
+    console.warn = ((...args: unknown[]) => {
+      warnCalls.push(args);
+    }) as typeof console.warn;
+    globalThis.fetch = (async () => {
+      return new Response("upstream unavailable", {
+        status: 503,
+        statusText: "Service Unavailable",
+      });
+    }) as typeof fetch;
+
+    try {
+      const mock = makeMockClient({});
+      const adapter = new OpencodeSdkAdapter({
+        createClient: () => mock.client,
+        now: () => "2026-02-17T12:00:00Z",
+      });
+
+      const todos = await adapter.loadSessionTodos({
+        baseUrl: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+        externalSessionId: "session-opencode-1",
+      });
+
+      expect(todos).toEqual([]);
+      expect(warnCalls).toHaveLength(1);
+      expect(warnCalls[0][0]).toBe("loadSessionTodos: HTTP 503");
+      expect(warnCalls[0][1]).toEqual({
+        statusText: "Service Unavailable",
+        body: "upstream unavailable",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.warn = originalWarn;
+    }
+  });
+
+  test("loadSessionTodos logs fetch errors and returns empty todos", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalWarn = console.warn;
+    const warnCalls: unknown[][] = [];
+    console.warn = ((...args: unknown[]) => {
+      warnCalls.push(args);
+    }) as typeof console.warn;
+    const fetchError = new Error("network down");
+    globalThis.fetch = (async () => {
+      throw fetchError;
+    }) as typeof fetch;
+
+    try {
+      const mock = makeMockClient({});
+      const adapter = new OpencodeSdkAdapter({
+        createClient: () => mock.client,
+        now: () => "2026-02-17T12:00:00Z",
+      });
+
+      const todos = await adapter.loadSessionTodos({
+        baseUrl: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+        externalSessionId: "session-opencode-1",
+      });
+
+      expect(todos).toEqual([]);
+      expect(warnCalls).toHaveLength(1);
+      expect(warnCalls[0][0]).toBe("loadSessionTodos: fetch failed");
+      expect(warnCalls[0][1]).toBe(fetchError);
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.warn = originalWarn;
+    }
+  });
+
   test("listAvailableModels returns provider models and primary agents", async () => {
     const mock = makeMockClient({
       agentsResponse: [
