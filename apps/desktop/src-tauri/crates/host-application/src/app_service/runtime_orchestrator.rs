@@ -8,6 +8,7 @@ use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
 use host_infra_system::pick_free_port;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::process::Child;
 use uuid::Uuid;
 
 #[derive(Clone, Copy)]
@@ -25,6 +26,7 @@ struct RuntimePostStartPolicy<'a> {
 struct RuntimeStartInput<'a> {
     startup_scope: &'a str,
     repo_path: &'a str,
+    repo_key: String,
     task_id: &'a str,
     role: &'a str,
     working_directory: String,
@@ -144,6 +146,7 @@ impl AppService {
         self.spawn_and_register_runtime(RuntimeStartInput {
             startup_scope: "workspace_runtime",
             repo_path,
+            repo_key: repo_key.clone(),
             task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
             role: Self::WORKSPACE_RUNTIME_ROLE,
             working_directory: repo_key.clone(),
@@ -220,6 +223,7 @@ impl AppService {
         self.spawn_and_register_runtime(RuntimeStartInput {
             startup_scope: "agent_runtime",
             repo_path,
+            repo_key: repo_key.clone(),
             task_id,
             role,
             working_directory: runtime_working_directory,
@@ -227,7 +231,16 @@ impl AppService {
             cleanup_worktree_path,
             tracking_error_context: "Failed tracking spawned OpenCode agent runtime",
             startup_error_context: format!("OpenCode runtime failed to start for task {task_id}"),
-            post_start_policy: None,
+            post_start_policy: Some(RuntimePostStartPolicy {
+                existing_lookup: RuntimeExistingLookup {
+                    repo_key: repo_key.as_str(),
+                    role,
+                    task_id: Some(task_id),
+                },
+                prune_error_context: format!(
+                    "Failed pruning stale runtimes while finalizing OpenCode runtime for task {task_id}"
+                ),
+            }),
         })
     }
 
@@ -238,6 +251,7 @@ impl AppService {
         let RuntimeStartInput {
             startup_scope,
             repo_path,
+            repo_key,
             task_id,
             role,
             working_directory,
@@ -302,16 +316,15 @@ impl AppService {
                     error.report,
                     error.reason,
                 ));
-                terminate_child_process(&mut child);
-                if let Err(cleanup_error) = Self::cleanup_runtime_worktree_if_needed(
+                let startup_error = anyhow!(error).context(startup_error_context.clone());
+                if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                    &mut child,
                     cleanup_repo_path.as_deref(),
                     cleanup_worktree_path.as_deref(),
                 ) {
-                    return Err(anyhow!(
-                        "{startup_error_context}\nAlso failed to remove QA worktree: {cleanup_error}"
-                    ));
+                    return Err(Self::append_cleanup_error(startup_error, cleanup_error));
                 }
-                return Err(anyhow!(error)).with_context(|| startup_error_context);
+                return Err(startup_error);
             }
         };
         self.emit_opencode_startup_event(StartupEventPayload::ready(
@@ -330,7 +343,7 @@ impl AppService {
 
         let summary = AgentRuntimeSummary {
             runtime_id: runtime_id.clone(),
-            repo_path: repo_path.to_string(),
+            repo_path: repo_key,
             task_id: task_id.to_string(),
             role: role.to_string(),
             working_directory,
@@ -338,19 +351,45 @@ impl AppService {
             started_at: now_rfc3339(),
         };
 
-        let mut runtimes = self
-            .agent_runtimes
-            .lock()
-            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+        let mut runtimes = match self.agent_runtimes.lock() {
+            Ok(runtimes) => runtimes,
+            Err(_) => {
+                let lock_error = anyhow!("Agent runtime state lock poisoned");
+                if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                    &mut child,
+                    cleanup_repo_path.as_deref(),
+                    cleanup_worktree_path.as_deref(),
+                ) {
+                    return Err(Self::append_cleanup_error(lock_error, cleanup_error));
+                }
+                return Err(lock_error);
+            }
+        };
         if let Some(post_start_policy) = post_start_policy {
             if let Err(error) = Self::prune_stale_runtimes(&mut runtimes) {
-                terminate_child_process(&mut child);
-                return Err(error).with_context(|| post_start_policy.prune_error_context);
+                let prune_error = error.context(post_start_policy.prune_error_context);
+                if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                    &mut child,
+                    cleanup_repo_path.as_deref(),
+                    cleanup_worktree_path.as_deref(),
+                ) {
+                    return Err(Self::append_cleanup_error(prune_error, cleanup_error));
+                }
+                return Err(prune_error);
             }
             if let Some(existing) =
                 Self::find_existing_runtime(&runtimes, post_start_policy.existing_lookup)
             {
-                terminate_child_process(&mut child);
+                if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                    &mut child,
+                    cleanup_repo_path.as_deref(),
+                    cleanup_worktree_path.as_deref(),
+                ) {
+                    return Err(anyhow!(
+                        "Found existing runtime {} while finalizing {startup_scope} startup\nAlso failed to remove QA worktree: {cleanup_error}",
+                        existing.runtime_id
+                    ));
+                }
                 return Ok(existing);
             }
         }
@@ -393,6 +432,22 @@ impl AppService {
             remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
         }
         Ok(())
+    }
+
+    fn cleanup_started_runtime(
+        child: &mut Child,
+        cleanup_repo_path: Option<&str>,
+        cleanup_worktree_path: Option<&str>,
+    ) -> Result<()> {
+        terminate_child_process(child);
+        Self::cleanup_runtime_worktree_if_needed(cleanup_repo_path, cleanup_worktree_path)
+    }
+
+    fn append_cleanup_error(
+        base_error: anyhow::Error,
+        cleanup_error: anyhow::Error,
+    ) -> anyhow::Error {
+        anyhow!("{base_error}\nAlso failed to remove QA worktree: {cleanup_error}")
     }
 
     pub fn opencode_runtime_stop(&self, runtime_id: &str) -> Result<bool> {
