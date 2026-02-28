@@ -60,7 +60,7 @@ jobs:
         run: bun run build
 
   tauri-rust-quality:
-    name: Tauri Rust Quality (clippy, check, test)
+    name: Tauri Rust Quality (audit, clippy, check, test)
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -92,6 +92,12 @@ jobs:
 
       - name: Pre-fetch Rust dependencies
         run: cargo fetch --locked
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        run: cargo audit
 
       - name: Lint Rust
         run: cargo clippy --all-targets --locked -- -D warnings
