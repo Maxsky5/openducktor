@@ -125,6 +125,18 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     assert!(emitted
         .iter()
         .any(|event| matches!(event, RunEvent::RunFinished { success: true, .. })));
+    let ready_for_review_index = emitted
+        .iter()
+        .position(|event| matches!(event, RunEvent::ReadyForManualDoneConfirmation { .. }))
+        .expect("ready-for-review event should be emitted");
+    let run_finished_index = emitted
+        .iter()
+        .position(|event| matches!(event, RunEvent::RunFinished { success: true, .. }))
+        .expect("successful run-finished event should be emitted");
+    assert!(
+        ready_for_review_index < run_finished_index,
+        "ready-for-review event should be emitted before run-finished"
+    );
     drop(emitted);
 
     let _ = fs::remove_dir_all(root);
@@ -309,6 +321,18 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     assert!(emitted
         .iter()
         .any(|event| matches!(event, RunEvent::PostHookFailed { .. })));
+    let post_hook_started_index = emitted
+        .iter()
+        .position(|event| matches!(event, RunEvent::PostHookStarted { .. }))
+        .expect("post-hook-started event should be emitted");
+    let post_hook_failed_index = emitted
+        .iter()
+        .position(|event| matches!(event, RunEvent::PostHookFailed { .. }))
+        .expect("post-hook-failed event should be emitted");
+    assert!(
+        post_hook_started_index < post_hook_failed_index,
+        "post-hook-started event should be emitted before post-hook-failed"
+    );
     drop(emitted);
 
     let _ = fs::remove_dir_all(root);
