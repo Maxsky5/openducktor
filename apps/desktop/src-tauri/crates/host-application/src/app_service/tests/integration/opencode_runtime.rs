@@ -618,6 +618,88 @@ fn opencode_workspace_runtime_ensure_cleans_up_spawned_child_when_runtime_lock_i
 }
 
 #[test]
+fn opencode_runtime_start_cleans_up_qa_worktree_when_tracking_fails() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("runtime-qa-tracking-failure-cleanup");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let pid_file = root.join("spawned-runtime.pid");
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+    let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
+    let _pid_guard = set_env_var(
+        "OPENDUCKTOR_TEST_PID_FILE",
+        pid_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("qa-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let poison_service = service.clone();
+    let poison_handle = thread::spawn(move || {
+        let _lock = poison_service
+            .tracked_opencode_processes
+            .lock()
+            .expect("tracked process lock should be available for poisoning");
+        panic!("poison tracked OpenCode process lock");
+    });
+    assert!(poison_handle.join().is_err());
+
+    let error = service
+        .opencode_runtime_start(repo_path.as_str(), "task-1", "qa")
+        .expect_err("qa runtime start should fail when tracked process lock is poisoned");
+    assert!(error
+        .to_string()
+        .contains("Failed tracking spawned OpenCode agent runtime"));
+
+    if wait_for_path_exists(pid_file.as_path(), Duration::from_secs(2)) {
+        let spawned_pid = fs::read_to_string(pid_file.as_path())?
+            .trim()
+            .parse::<i32>()
+            .expect("spawned runtime pid should parse as i32");
+        assert!(wait_for_process_exit(spawned_pid, Duration::from_secs(2)));
+    }
+    assert!(
+        !worktree_base.join("qa-task-1").exists(),
+        "qa worktree should be removed when runtime tracking fails"
+    );
+    assert!(service
+        .agent_runtimes
+        .lock()
+        .expect("runtime lock poisoned")
+        .is_empty());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn opencode_runtime_stop_reports_cleanup_failure() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
