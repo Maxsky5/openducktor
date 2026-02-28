@@ -1,6 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 
-export const AGENT_ROLE_LABELS: Readonly<Record<AgentRole, string>> = Object.freeze({
+export const AGENT_ROLE_LABELS = Object.freeze({
   spec: "Spec",
   planner: "Planner",
   build: "Builder",
