@@ -56,6 +56,146 @@ pub(crate) struct OpencodeStartupEventPayload {
     alerts: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StartupEventCorrelation<'a> {
+    correlation_type: &'a str,
+    correlation_id: &'a str,
+}
+
+impl<'a> StartupEventCorrelation<'a> {
+    pub(crate) const fn new(correlation_type: &'a str, correlation_id: &'a str) -> Self {
+        Self {
+            correlation_type,
+            correlation_id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum StartupEventKind {
+    WaitBegin,
+    Ready(OpencodeStartupWaitReport),
+    Failed {
+        report: OpencodeStartupWaitReport,
+        failure_reason: &'static str,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StartupEventPayload<'a> {
+    runtime_type: &'a str,
+    repo_path: &'a str,
+    task_id: Option<&'a str>,
+    role: &'a str,
+    port: u16,
+    correlation: Option<StartupEventCorrelation<'a>>,
+    policy: Option<OpencodeStartupReadinessPolicy>,
+    kind: StartupEventKind,
+}
+
+impl<'a> StartupEventPayload<'a> {
+    pub(crate) fn wait_begin(
+        runtime_type: &'a str,
+        repo_path: &'a str,
+        task_id: Option<&'a str>,
+        role: &'a str,
+        port: u16,
+        correlation: Option<StartupEventCorrelation<'a>>,
+        policy: Option<OpencodeStartupReadinessPolicy>,
+    ) -> Self {
+        Self {
+            runtime_type,
+            repo_path,
+            task_id,
+            role,
+            port,
+            correlation,
+            policy,
+            kind: StartupEventKind::WaitBegin,
+        }
+    }
+
+    pub(crate) fn ready(
+        runtime_type: &'a str,
+        repo_path: &'a str,
+        task_id: Option<&'a str>,
+        role: &'a str,
+        port: u16,
+        correlation: Option<StartupEventCorrelation<'a>>,
+        policy: Option<OpencodeStartupReadinessPolicy>,
+        report: OpencodeStartupWaitReport,
+    ) -> Self {
+        Self {
+            runtime_type,
+            repo_path,
+            task_id,
+            role,
+            port,
+            correlation,
+            policy,
+            kind: StartupEventKind::Ready(report),
+        }
+    }
+
+    pub(crate) fn failed(
+        runtime_type: &'a str,
+        repo_path: &'a str,
+        task_id: Option<&'a str>,
+        role: &'a str,
+        port: u16,
+        correlation: Option<StartupEventCorrelation<'a>>,
+        policy: Option<OpencodeStartupReadinessPolicy>,
+        report: OpencodeStartupWaitReport,
+        failure_reason: &'static str,
+    ) -> Self {
+        Self {
+            runtime_type,
+            repo_path,
+            task_id,
+            role,
+            port,
+            correlation,
+            policy,
+            kind: StartupEventKind::Failed {
+                report,
+                failure_reason,
+            },
+        }
+    }
+
+    fn event_name(&self) -> &'static str {
+        match self.kind {
+            StartupEventKind::WaitBegin => "startup_wait_begin",
+            StartupEventKind::Ready(_) => "startup_ready",
+            StartupEventKind::Failed { .. } => "startup_failed",
+        }
+    }
+
+    fn report(&self) -> Option<OpencodeStartupWaitReport> {
+        match self.kind {
+            StartupEventKind::WaitBegin => None,
+            StartupEventKind::Ready(report) => Some(report),
+            StartupEventKind::Failed { report, .. } => Some(report),
+        }
+    }
+
+    fn failure_reason(&self) -> Option<&'static str> {
+        match self.kind {
+            StartupEventKind::WaitBegin | StartupEventKind::Ready(_) => None,
+            StartupEventKind::Failed { failure_reason, .. } => Some(failure_reason),
+        }
+    }
+
+    fn correlation_parts(&self) -> (Option<&'a str>, Option<&'a str>) {
+        self.correlation.map_or((None, None), |correlation| {
+            (
+                Some(correlation.correlation_type),
+                Some(correlation.correlation_id),
+            )
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct OpencodeStartupMetrics {
     total: u64,
@@ -275,29 +415,27 @@ impl AppService {
         self.startup_cancel_epoch.load(Ordering::SeqCst)
     }
 
-    pub(crate) fn emit_opencode_startup_event(
-        &self,
-        event: &str,
-        scope: &str,
-        repo_path: &str,
-        task_id: Option<&str>,
-        role: &str,
-        port: u16,
-        correlation_type: Option<&str>,
-        correlation_id: Option<&str>,
-        policy: Option<OpencodeStartupReadinessPolicy>,
-        report: Option<OpencodeStartupWaitReport>,
-        reason: Option<&str>,
-    ) {
+    pub(crate) fn emit_opencode_startup_event(&self, event: StartupEventPayload<'_>) {
+        let event_name = event.event_name();
+        let runtime_type = event.runtime_type;
+        let repo_path = event.repo_path;
+        let task_id = event.task_id;
+        let role = event.role;
+        let port = event.port;
+        let policy = event.policy;
+        let report = event.report();
+        let failure_reason = event.failure_reason();
+        let (correlation_type, correlation_id) = event.correlation_parts();
+
         let (metrics, alerts) = match report {
-            Some(report) if matches!(event, "startup_ready" | "startup_failed") => {
+            Some(report) if matches!(event_name, "startup_ready" | "startup_failed") => {
                 match self.startup_metrics.lock() {
-                    Ok(mut metrics) => metrics.record_terminal(event, report, reason),
+                    Ok(mut metrics) => metrics.record_terminal(event_name, report, failure_reason),
                     Err(_) => {
                         tracing::warn!(
                             target: "openducktor.opencode.startup",
-                            event,
-                            scope,
+                            event = event_name,
+                            scope = runtime_type,
                             repo_path,
                             "OpenCode startup metrics lock poisoned; continuing without metrics"
                         );
@@ -307,10 +445,10 @@ impl AppService {
             }
             _ => (OpencodeStartupMetricsSnapshot::default(), Vec::new()),
         };
-        let include_metrics = matches!(event, "startup_ready" | "startup_failed");
+        let include_metrics = matches!(event_name, "startup_ready" | "startup_failed");
         let payload = build_opencode_startup_event_payload(
-            event,
-            scope,
+            event_name,
+            runtime_type,
             repo_path,
             task_id,
             role,
@@ -319,7 +457,7 @@ impl AppService {
             correlation_id,
             policy,
             report,
-            reason,
+            failure_reason,
             include_metrics.then_some(metrics),
             alerts.clone(),
         );
@@ -329,15 +467,15 @@ impl AppService {
         let attempts = report.map(|entry| entry.attempts()).unwrap_or_default();
         tracing::info!(
             target: "openducktor.opencode.startup",
-            event,
-            scope,
+            event = event_name,
+            scope = runtime_type,
             repo_path,
             task_id = task_id.unwrap_or(""),
             role,
             port,
             correlation_type = correlation_type.unwrap_or(""),
             correlation_id = correlation_id.unwrap_or(""),
-            reason = reason.unwrap_or(""),
+            reason = failure_reason.unwrap_or(""),
             startup_ms,
             attempts,
             payload = %payload_json,
@@ -346,19 +484,86 @@ impl AppService {
             tracing::warn!(
                 target: "openducktor.opencode.startup.alert",
                 alert = %alert,
-                event,
-                scope,
+                event = event_name,
+                scope = runtime_type,
                 repo_path,
                 task_id = task_id.unwrap_or(""),
                 role,
                 port,
                 correlation_type = correlation_type.unwrap_or(""),
                 correlation_id = correlation_id.unwrap_or(""),
-                reason = reason.unwrap_or(""),
+                reason = failure_reason.unwrap_or(""),
                 startup_ms,
                 attempts,
                 "OpenCode startup threshold exceeded"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn test_startup_policy() -> OpencodeStartupReadinessPolicy {
+        OpencodeStartupReadinessPolicy {
+            timeout: Duration::from_millis(8_000),
+            connect_timeout: Duration::from_millis(250),
+            initial_retry_delay: Duration::from_millis(25),
+            max_retry_delay: Duration::from_millis(250),
+            child_state_check_interval: Duration::from_millis(100),
+        }
+    }
+
+    fn test_startup_report() -> OpencodeStartupWaitReport {
+        OpencodeStartupWaitReport::from_parts(5, Duration::from_millis(420))
+    }
+
+    #[test]
+    fn startup_event_payload_wait_begin_has_no_terminal_fields() {
+        let event = StartupEventPayload::wait_begin(
+            "agent_runtime",
+            "/tmp/repo",
+            Some("task-42"),
+            "qa",
+            4242,
+            Some(StartupEventCorrelation::new("runtime_id", "runtime-abc")),
+            Some(test_startup_policy()),
+        );
+
+        assert_eq!(event.event_name(), "startup_wait_begin");
+        assert!(event.report().is_none());
+        assert_eq!(event.failure_reason(), None);
+        assert_eq!(
+            event.correlation_parts(),
+            (Some("runtime_id"), Some("runtime-abc"))
+        );
+    }
+
+    #[test]
+    fn startup_event_payload_failed_requires_reason_with_report() {
+        let report = test_startup_report();
+        let event = StartupEventPayload::failed(
+            "agent_runtime",
+            "/tmp/repo",
+            Some("task-42"),
+            "qa",
+            4242,
+            Some(StartupEventCorrelation::new("runtime_id", "runtime-abc")),
+            Some(test_startup_policy()),
+            report,
+            "timeout",
+        );
+
+        assert_eq!(event.event_name(), "startup_failed");
+        let emitted_report = event.report().expect("failed event should carry report");
+        assert_eq!(emitted_report.startup_ms(), report.startup_ms());
+        assert_eq!(emitted_report.attempts(), report.attempts());
+        assert_eq!(event.failure_reason(), Some("timeout"));
+        assert_eq!(
+            event.correlation_parts(),
+            (Some("runtime_id"), Some("runtime-abc"))
+        );
     }
 }

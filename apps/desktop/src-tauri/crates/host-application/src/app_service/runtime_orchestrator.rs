@@ -1,6 +1,7 @@
 use super::{
     run_parsed_hook_command_allow_failure, spawn_opencode_server, terminate_child_process,
     validate_hook_trust, wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
+    StartupEventCorrelation, StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
@@ -131,19 +132,18 @@ impl AppService {
         let startup_policy = self.opencode_startup_readiness_policy();
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
-        self.emit_opencode_startup_event(
-            "startup_wait_begin",
+        self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
             "workspace_runtime",
             repo_path,
             Some(Self::WORKSPACE_RUNTIME_TASK_ID),
             Self::WORKSPACE_RUNTIME_ROLE,
             port,
-            Some("runtime_id"),
-            Some(runtime_id.as_str()),
+            Some(StartupEventCorrelation::new(
+                "runtime_id",
+                runtime_id.as_str(),
+            )),
             Some(startup_policy),
-            None,
-            None,
-        );
+        ));
         let startup_report = match wait_for_local_server_with_process(
             &mut child,
             port,
@@ -153,38 +153,39 @@ impl AppService {
         ) {
             Ok(report) => report,
             Err(error) => {
-                self.emit_opencode_startup_event(
-                    "startup_failed",
+                self.emit_opencode_startup_event(StartupEventPayload::failed(
                     "workspace_runtime",
                     repo_path,
                     Some(Self::WORKSPACE_RUNTIME_TASK_ID),
                     Self::WORKSPACE_RUNTIME_ROLE,
                     port,
-                    Some("runtime_id"),
-                    Some(runtime_id.as_str()),
+                    Some(StartupEventCorrelation::new(
+                        "runtime_id",
+                        runtime_id.as_str(),
+                    )),
                     Some(startup_policy),
-                    Some(error.report),
-                    Some(error.reason),
-                );
+                    error.report,
+                    error.reason,
+                ));
                 terminate_child_process(&mut child);
                 return Err(anyhow!(error)).with_context(|| {
                     format!("OpenCode workspace runtime failed to start for {repo_path}")
                 });
             }
         };
-        self.emit_opencode_startup_event(
-            "startup_ready",
+        self.emit_opencode_startup_event(StartupEventPayload::ready(
             "workspace_runtime",
             repo_path,
             Some(Self::WORKSPACE_RUNTIME_TASK_ID),
             Self::WORKSPACE_RUNTIME_ROLE,
             port,
-            Some("runtime_id"),
-            Some(runtime_id.as_str()),
+            Some(StartupEventCorrelation::new(
+                "runtime_id",
+                runtime_id.as_str(),
+            )),
             Some(startup_policy),
-            Some(startup_report),
-            None,
-        );
+            startup_report,
+        ));
 
         let summary = AgentRuntimeSummary {
             runtime_id: runtime_id.clone(),
@@ -362,19 +363,18 @@ impl AppService {
         let startup_policy = self.opencode_startup_readiness_policy();
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
-        self.emit_opencode_startup_event(
-            "startup_wait_begin",
+        self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
             "agent_runtime",
             repo_path,
             Some(task_id),
             role,
             port,
-            Some("runtime_id"),
-            Some(runtime_id.as_str()),
+            Some(StartupEventCorrelation::new(
+                "runtime_id",
+                runtime_id.as_str(),
+            )),
             Some(startup_policy),
-            None,
-            None,
-        );
+        ));
         let startup_report = match wait_for_local_server_with_process(
             &mut child,
             port,
@@ -384,19 +384,20 @@ impl AppService {
         ) {
             Ok(report) => report,
             Err(error) => {
-                self.emit_opencode_startup_event(
-                    "startup_failed",
+                self.emit_opencode_startup_event(StartupEventPayload::failed(
                     "agent_runtime",
                     repo_path,
                     Some(task_id),
                     role,
                     port,
-                    Some("runtime_id"),
-                    Some(runtime_id.as_str()),
+                    Some(StartupEventCorrelation::new(
+                        "runtime_id",
+                        runtime_id.as_str(),
+                    )),
                     Some(startup_policy),
-                    Some(error.report),
-                    Some(error.reason),
-                );
+                    error.report,
+                    error.reason,
+                ));
                 terminate_child_process(&mut child);
                 let startup_context =
                     format!("OpenCode runtime failed to start for task {task_id}");
@@ -415,19 +416,19 @@ impl AppService {
                 return Err(anyhow!(error)).with_context(|| startup_context);
             }
         };
-        self.emit_opencode_startup_event(
-            "startup_ready",
+        self.emit_opencode_startup_event(StartupEventPayload::ready(
             "agent_runtime",
             repo_path,
             Some(task_id),
             role,
             port,
-            Some("runtime_id"),
-            Some(runtime_id.as_str()),
+            Some(StartupEventCorrelation::new(
+                "runtime_id",
+                runtime_id.as_str(),
+            )),
             Some(startup_policy),
-            Some(startup_report),
-            None,
-        );
+            startup_report,
+        ));
 
         let summary = AgentRuntimeSummary {
             runtime_id: runtime_id.clone(),
