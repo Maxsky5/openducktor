@@ -17,9 +17,7 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
-import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { SCENARIO_LABELS } from "./agents-page-constants";
 import {
   type AgentStudioOrchestrationActionsContext,
   type AgentStudioOrchestrationComposerContext,
@@ -36,7 +34,10 @@ import type {
   NewSessionStartRequest,
 } from "./use-agent-studio-session-actions";
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
-import { useSessionStartModalState } from "./use-session-start-modal-state";
+import {
+  toSessionStartPostAction,
+  useSessionStartModalCoordinator,
+} from "./use-session-start-modal-coordinator";
 
 type AgentStudioSessionStartModalProps = {
   request: NewSessionStartRequest;
@@ -68,7 +69,7 @@ function AgentStudioSessionStartModal({
     handleSelectAgent,
     handleSelectModel,
     handleSelectVariant,
-  } = useSessionStartModalState({
+  } = useSessionStartModalCoordinator({
     activeRepo,
     repoSettings,
   });
@@ -86,13 +87,6 @@ function AgentStudioSessionStartModal({
     }
     initializedRequestKeyRef.current = requestKey;
 
-    const roleLabel = AGENT_ROLE_LABELS[request.role] ?? request.role.toUpperCase();
-    const scenarioLabel = SCENARIO_LABELS[request.scenario] ?? request.scenario;
-    const startModeLabel =
-      request.startMode === "fresh"
-        ? "Start a fresh session"
-        : "Continue latest or start a new session";
-
     openStartModal({
       source: "agent_studio",
       taskId: request.taskId,
@@ -100,31 +94,17 @@ function AgentStudioSessionStartModal({
       scenario: request.scenario,
       startMode: request.startMode,
       selectedModel: request.selectedModel,
-      postStartAction:
-        request.reason === "composer_send"
-          ? "send_message"
-          : request.reason === "scenario_kickoff"
-            ? "kickoff"
-            : "none",
-      title: `Start ${roleLabel} Session`,
-      description: `${startModeLabel} for ${scenarioLabel}.`,
+      postStartAction: toSessionStartPostAction(request.reason),
     });
   }, [openStartModal, request]);
-
-  const fallbackRoleLabel = AGENT_ROLE_LABELS[request.role] ?? request.role.toUpperCase();
-  const fallbackScenarioLabel = SCENARIO_LABELS[request.scenario] ?? request.scenario;
-  const fallbackStartModeLabel =
-    request.startMode === "fresh"
-      ? "Start a fresh session"
-      : "Continue latest or start a new session";
 
   return (
     <SessionStartModal
       model={{
         open: isOpen,
-        title: intent?.title ?? `Start ${fallbackRoleLabel} Session`,
+        title: intent?.title ?? "Start session",
         description:
-          intent?.description ?? `${fallbackStartModeLabel} for ${fallbackScenarioLabel}.`,
+          intent?.description ?? "Choose agent, model, and variant before starting this session.",
         confirmLabel: "Start session",
         selectedModelSelection: selection,
         isSelectionCatalogLoading: isCatalogLoading,
