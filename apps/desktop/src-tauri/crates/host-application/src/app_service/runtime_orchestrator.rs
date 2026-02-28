@@ -4,9 +4,7 @@ use super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
-use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree, run_command,
-};
+use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, run_command};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -14,6 +12,9 @@ use uuid::Uuid;
 
 impl AppService {
     pub fn runs_list(&self, repo_path: Option<&str>) -> Result<Vec<RunSummary>> {
+        let repo_key_filter = repo_path
+            .map(|path| self.ensure_repo_authorized(path))
+            .transpose()?;
         let runs = self
             .runs
             .lock()
@@ -22,8 +23,8 @@ impl AppService {
         let mut list = runs
             .values()
             .filter(|run| {
-                if let Some(path) = repo_path {
-                    run.repo_path == path
+                if let Some(path_key) = repo_key_filter.as_deref() {
+                    Self::repo_key(run.repo_path.as_str()) == path_key
                 } else {
                     true
                 }
@@ -39,7 +40,9 @@ impl AppService {
         &self,
         repo_path: Option<&str>,
     ) -> Result<Vec<AgentRuntimeSummary>> {
-        let repo_key_filter = repo_path.map(Self::repo_key);
+        let repo_key_filter = repo_path
+            .map(|path| self.ensure_repo_authorized(path))
+            .transpose()?;
         let mut runtimes = self
             .agent_runtimes
             .lock()

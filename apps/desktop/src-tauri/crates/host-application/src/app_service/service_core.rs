@@ -18,6 +18,7 @@ pub struct AppService {
     pub(super) runtime_check_cache: Arc<Mutex<Option<CachedRuntimeCheck>>>,
     pub(super) startup_cancel_epoch: StartupCancelEpoch,
     pub(super) startup_metrics: Arc<Mutex<OpencodeStartupMetrics>>,
+    pub(super) enforce_repo_allowlist: bool,
 }
 
 pub(crate) struct RunProcess {
@@ -62,6 +63,15 @@ impl AppService {
         config_store: AppConfigStore,
         git_port: Arc<dyn GitPort>,
     ) -> Self {
+        Self::with_git_port_allowlist(task_store, config_store, git_port, true)
+    }
+
+    fn with_git_port_allowlist(
+        task_store: Arc<dyn TaskStore>,
+        config_store: AppConfigStore,
+        git_port: Arc<dyn GitPort>,
+        enforce_repo_allowlist: bool,
+    ) -> Self {
         let opencode_process_registry_path = Self::opencode_process_registry_path(&config_store);
         let instance_pid = std::process::id();
         let service = Self {
@@ -77,6 +87,7 @@ impl AppService {
             runtime_check_cache: Arc::new(Mutex::new(None)),
             startup_cancel_epoch: Arc::new(AtomicU64::new(0)),
             startup_metrics: Arc::new(Mutex::new(OpencodeStartupMetrics::default())),
+            enforce_repo_allowlist,
         };
         if let Err(error) = service.reconcile_opencode_process_registry_on_startup() {
             eprintln!(
@@ -84,5 +95,14 @@ impl AppService {
             );
         }
         service
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_git_port_unrestricted(
+        task_store: Arc<dyn TaskStore>,
+        config_store: AppConfigStore,
+        git_port: Arc<dyn GitPort>,
+    ) -> Self {
+        Self::with_git_port_allowlist(task_store, config_store, git_port, false)
     }
 }

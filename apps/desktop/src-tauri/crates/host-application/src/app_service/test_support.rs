@@ -445,6 +445,46 @@ pub(crate) fn build_service_with_state(
     )
 }
 
+pub(crate) fn build_service_with_git_state_enforced(
+    tasks: Vec<TaskCard>,
+    branches: Vec<GitBranch>,
+    current_branch: GitCurrentBranch,
+) -> (AppService, Arc<Mutex<TaskStoreState>>, Arc<Mutex<GitState>>) {
+    let task_state = Arc::new(Mutex::new(TaskStoreState {
+        ensure_calls: Vec::new(),
+        ensure_error: None,
+        tasks,
+        list_error: None,
+        delete_calls: Vec::new(),
+        created_inputs: Vec::new(),
+        updated_patches: Vec::new(),
+        spec_get_calls: Vec::new(),
+        spec_set_calls: Vec::new(),
+        plan_get_calls: Vec::new(),
+        plan_set_calls: Vec::new(),
+        metadata_get_calls: Vec::new(),
+        qa_append_calls: Vec::new(),
+        latest_qa_report: None,
+        agent_sessions: Vec::new(),
+        upserted_sessions: Vec::new(),
+    }));
+    let git_state = Arc::new(Mutex::new(GitState {
+        calls: Vec::new(),
+        branches,
+        current_branch,
+        last_push_remote: None,
+    }));
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+        state: task_state.clone(),
+    });
+    let git_port: Arc<dyn GitPort> = Arc::new(FakeGitPort {
+        state: git_state.clone(),
+    });
+    let config_store = AppConfigStore::from_path(unique_temp_path("host-app-config-enforced"));
+    let service = AppService::with_git_port(task_store, config_store, git_port);
+    (service, task_state, git_state)
+}
+
 pub(crate) fn build_service_with_git_state(
     tasks: Vec<TaskCard>,
     branches: Vec<GitBranch>,
@@ -481,7 +521,7 @@ pub(crate) fn build_service_with_git_state(
         state: git_state.clone(),
     });
     let config_store = AppConfigStore::from_path(unique_temp_path("host-app-config"));
-    let service = AppService::with_git_port(task_store, config_store, git_port);
+    let service = AppService::with_git_port_unrestricted(task_store, config_store, git_port);
     (service, task_state, git_state)
 }
 
@@ -885,7 +925,7 @@ pub(crate) fn build_service_with_store(
     let git_port: Arc<dyn GitPort> = Arc::new(FakeGitPort {
         state: git_state.clone(),
     });
-    let service = AppService::with_git_port(task_store, config_store, git_port);
+    let service = AppService::with_git_port_unrestricted(task_store, config_store, git_port);
     (service, task_state, git_state)
 }
 
