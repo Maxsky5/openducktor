@@ -8,6 +8,7 @@ export async function createSubtask(
 ): Promise<string> {
   const args = [
     "create",
+    "--title",
     subtask.title,
     "--type",
     subtask.issueType ?? "task",
