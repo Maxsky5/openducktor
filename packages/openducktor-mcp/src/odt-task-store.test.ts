@@ -464,7 +464,7 @@ describe("OdtTaskStore workflow mutation paths", () => {
     expect(harness.getCommandCalls("delete")).toHaveLength(0);
     expect(harness.getCommandCalls("create")).toHaveLength(0);
     expect(harness.getStatusUpdateCalls()).toHaveLength(0);
-    expect(harness.getMetadataUpdateCalls()).toHaveLength(1);
+    expect(harness.getMetadataUpdateCalls()).toHaveLength(0);
   });
 
   test("setPlan replaces epic subtasks, deduplicates by title key, and stores latest-only plan", async () => {
