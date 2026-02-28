@@ -1,5 +1,12 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart } from "@openducktor/core";
+import {
+  asUnknownRecord,
+  readNumberProp,
+  readRecordProp,
+  readStringProp,
+  readUnknownProp,
+} from "./guards";
 
 const toDisplayText = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -15,7 +22,8 @@ const toDisplayText = (value: unknown): string | undefined => {
   if (Array.isArray(value) && value.length === 0) {
     return undefined;
   }
-  if (typeof value === "object" && Object.keys(value as Record<string, unknown>).length === 0) {
+  const valueRecord = asUnknownRecord(value);
+  if (valueRecord && Object.keys(valueRecord).length === 0) {
     return undefined;
   }
   try {
@@ -26,20 +34,18 @@ const toDisplayText = (value: unknown): string | undefined => {
 };
 
 const outputTextFromMcpPayload = (value: unknown): string | undefined => {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const content = (value as { content?: unknown }).content;
+  const content = readUnknownProp(value, "content");
   if (!Array.isArray(content)) {
     return undefined;
   }
 
   const textChunks = content
     .map((entry) => {
-      if (!entry || typeof entry !== "object") {
+      const entryRecord = asUnknownRecord(entry);
+      if (!entryRecord) {
         return null;
       }
-      const text = (entry as { text?: unknown }).text;
+      const text = readUnknownProp(entryRecord, "text");
       return typeof text === "string" ? text.trim() : null;
     })
     .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
@@ -54,18 +60,15 @@ const readToolOutputText = (value: unknown): string | undefined => {
 };
 
 const isToolOutputError = (value: unknown): boolean => {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const isError = (value as { isError?: unknown }).isError;
+  const isError = readUnknownProp(value, "isError");
   return isError === true;
 };
 
 const normalizeMetadata = (value: unknown): Record<string, unknown> | undefined => {
-  if (!value || typeof value !== "object") {
+  const normalized = asUnknownRecord(value);
+  if (!normalized) {
     return undefined;
   }
-  const normalized = value as Record<string, unknown>;
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
@@ -75,13 +78,13 @@ const extractPartTiming = (
   startedAtMs?: number;
   endedAtMs?: number;
 } => {
-  const direct = (part as { time?: { start?: unknown; end?: unknown } }).time;
-  const fromDirectStart = typeof direct?.start === "number" ? direct.start : undefined;
-  const fromDirectEnd = typeof direct?.end === "number" ? direct.end : undefined;
+  const directTime = readRecordProp(part, "time");
+  const fromDirectStart = readNumberProp(directTime, ["start"]);
+  const fromDirectEnd = readNumberProp(directTime, ["end"]);
 
-  const stateTime = (part as { state?: { time?: { start?: unknown; end?: unknown } } }).state?.time;
-  const fromStateStart = typeof stateTime?.start === "number" ? stateTime.start : undefined;
-  const fromStateEnd = typeof stateTime?.end === "number" ? stateTime.end : undefined;
+  const stateTime = readRecordProp(readRecordProp(part, "state"), "time");
+  const fromStateStart = readNumberProp(stateTime, ["start"]);
+  const fromStateEnd = readNumberProp(stateTime, ["end"]);
 
   const startedAtMs = fromDirectStart ?? fromStateStart;
   const endedAtMs = fromDirectEnd ?? fromStateEnd;
@@ -115,11 +118,11 @@ const normalizeToolStatus = (rawStatus: string, hasEndedTiming: boolean): ToolSt
 
 const buildToolStreamPart = (
   part: ToolPart,
+  toolState: Record<string, unknown>,
   normalizedStatus: ToolStatus,
   timing: ReturnType<typeof extractPartTiming>,
   metadata: Record<string, unknown> | undefined,
 ): ToolStreamPart => {
-  const toolState = part.state as Record<string, unknown>;
   const base: ToolStreamPart = {
     kind: "tool",
     messageId: part.messageID,
@@ -136,14 +139,14 @@ const buildToolStreamPart = (
     return base;
   }
   if (normalizedStatus === "running") {
-    const title = toDisplayText(toolState.title);
+    const title = toDisplayText(readUnknownProp(toolState, "title"));
     return {
       ...base,
       ...(title ? { title } : {}),
     };
   }
 
-  const error = toDisplayText(toolState.error);
+  const error = toDisplayText(readUnknownProp(toolState, "error"));
   if (normalizedStatus === "error") {
     return {
       ...base,
@@ -151,8 +154,9 @@ const buildToolStreamPart = (
     };
   }
 
-  const output = readToolOutputText(toolState.output);
-  if (isToolOutputError(toolState.output) || (error && error.trim().length > 0)) {
+  const outputValue = readUnknownProp(toolState, "output");
+  const output = readToolOutputText(outputValue);
+  if (isToolOutputError(outputValue) || (error && error.trim().length > 0)) {
     return {
       ...base,
       status: "error",
@@ -160,7 +164,7 @@ const buildToolStreamPart = (
     };
   }
 
-  const title = toDisplayText(toolState.title);
+  const title = toDisplayText(readUnknownProp(toolState, "title"));
   const titleField = title ? { title } : {};
   return {
     ...base,
@@ -189,15 +193,14 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         completed: Boolean(part.time?.end),
       };
     case "tool": {
+      const toolState = asUnknownRecord(part.state) ?? {};
       const timing = extractPartTiming(part);
-      const metadata = normalizeMetadata(
-        (part as { state?: { metadata?: unknown } }).state?.metadata,
-      );
+      const metadata = normalizeMetadata(readUnknownProp(toolState, "metadata"));
       const normalizedStatus = normalizeToolStatus(
-        typeof part.state.status === "string" ? part.state.status : "",
+        readStringProp(toolState, ["status"]) ?? "",
         typeof timing.endedAtMs === "number",
       );
-      return buildToolStreamPart(part, normalizedStatus, timing, metadata);
+      return buildToolStreamPart(part, toolState, normalizedStatus, timing, metadata);
     }
     case "step-start":
       return {

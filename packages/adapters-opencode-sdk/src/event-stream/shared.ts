@@ -1,6 +1,8 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
+import { asUnknownRecord, readRecordProp, readStringProp } from "../guards";
 import type { SessionInput, SessionRecord } from "../types";
+import { readEventProperties } from "./schemas";
 
 export type PendingPartDelta = {
   field: string;
@@ -24,19 +26,6 @@ export type EventStreamState = {
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
-export const readStringProp = (
-  payload: Record<string, unknown>,
-  keys: string[],
-): string | undefined => {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "string" && value.length > 0) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
 const normalizePartDeltaField = (field: string): string => {
   if (
     field === "reasoning_content" ||
@@ -51,20 +40,24 @@ const normalizePartDeltaField = (field: string): string => {
 
 export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
   const normalizedField = normalizePartDeltaField(field);
-  const partRecord = part as Record<string, unknown>;
-  const existing = partRecord[normalizedField];
+  const partRecord = asUnknownRecord(part);
+  const existing = partRecord?.[normalizedField];
   if (existing !== undefined && typeof existing !== "string") {
     return null;
   }
 
   return {
-    ...partRecord,
+    ...part,
     [normalizedField]: `${typeof existing === "string" ? existing : ""}${delta}`,
   } as Part;
 };
 
 export const isRelevantEvent = (externalSessionId: string, event: Event): boolean => {
-  const properties = event.properties as Record<string, unknown>;
+  const properties = readEventProperties(event);
+  if (!properties) {
+    return false;
+  }
+
   const directSessionId = readStringProp(properties, [
     "sessionID",
     "sessionId",
@@ -75,23 +68,19 @@ export const isRelevantEvent = (externalSessionId: string, event: Event): boolea
     return directSessionId === externalSessionId;
   }
 
-  if ("part" in properties) {
-    const part = properties.part as Record<string, unknown> | undefined;
-    if (part && typeof part === "object") {
-      const partSessionId = readStringProp(part, ["sessionID", "sessionId", "session_id"]);
-      if (partSessionId) {
-        return partSessionId === externalSessionId;
-      }
+  const part = readRecordProp(properties, "part");
+  if (part) {
+    const partSessionId = readStringProp(part, ["sessionID", "sessionId", "session_id"]);
+    if (partSessionId) {
+      return partSessionId === externalSessionId;
     }
   }
 
-  if ("info" in properties) {
-    const info = properties.info as Record<string, unknown> | undefined;
-    if (info && typeof info === "object") {
-      const infoSessionId = readStringProp(info, ["sessionID", "sessionId", "session_id"]);
-      if (infoSessionId) {
-        return infoSessionId === externalSessionId;
-      }
+  const info = readRecordProp(properties, "info");
+  if (info) {
+    const infoSessionId = readStringProp(info, ["sessionID", "sessionId", "session_id"]);
+    if (infoSessionId) {
+      return infoSessionId === externalSessionId;
     }
   }
 

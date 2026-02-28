@@ -1,4 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
+import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
 
 export const readTextFromParts = (parts: Part[]): string => {
   return parts
@@ -9,16 +10,15 @@ export const readTextFromParts = (parts: Part[]): string => {
 };
 
 export const readTextFromMessageInfo = (info: unknown): string => {
-  if (!info || typeof info !== "object") {
+  const record = asUnknownRecord(info);
+  if (!record) {
     return "";
   }
-  const record = info as Record<string, unknown>;
+
   const direct =
-    record.text ??
-    record.content ??
-    (record.message && typeof record.message === "object"
-      ? (record.message as Record<string, unknown>).text
-      : undefined);
+    readUnknownProp(record, "text") ??
+    readUnknownProp(record, "content") ??
+    readUnknownProp(readRecordProp(record, "message"), "text");
   return typeof direct === "string" ? direct.trim() : "";
 };
 
@@ -71,20 +71,14 @@ export const extractMessageTotalTokens = (
   info: unknown,
   parts: Array<Part | Record<string, unknown>>,
 ): number | undefined => {
-  const infoTokens =
-    info && typeof info === "object"
-      ? toTokenTotal((info as { tokens?: unknown }).tokens)
-      : undefined;
+  const infoTokens = toTokenTotal(readUnknownProp(info, "tokens"));
   if (typeof infoTokens === "number" && infoTokens > 0) {
     return infoTokens;
   }
 
   let maxPartTokens = 0;
   for (const part of parts) {
-    if (!part || typeof part !== "object") {
-      continue;
-    }
-    const partTokens = toTokenTotal((part as { tokens?: unknown }).tokens);
+    const partTokens = toTokenTotal(readUnknownProp(part, "tokens"));
     if (typeof partTokens === "number" && partTokens > maxPartTokens) {
       maxPartTokens = partTokens;
     }

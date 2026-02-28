@@ -1,4 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import { asUnknownRecord, readArrayProp, readRecordProp, readUnknownProp } from "./guards";
 
 const toFiniteNumber = (value: unknown): number | null => {
   if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
@@ -29,23 +30,25 @@ export const normalizeModelInput = (
 };
 
 export const resolveAssistantResponseMessageId = (payload: unknown): string | null => {
-  if (!payload || typeof payload !== "object") {
+  const payloadRecord = asUnknownRecord(payload);
+  if (!payloadRecord) {
     return null;
   }
-  const infoId = ((payload as { info?: { id?: unknown } }).info?.id ?? null) as unknown;
+  const infoId = readUnknownProp(readRecordProp(payloadRecord, "info"), "id");
   if (typeof infoId === "string" && infoId.trim().length > 0) {
     return infoId.trim();
   }
 
-  const parts = (payload as { parts?: unknown }).parts;
-  if (!Array.isArray(parts)) {
+  const parts = readArrayProp(payloadRecord, "parts");
+  if (!parts) {
     return null;
   }
   for (const part of parts) {
-    if (!part || typeof part !== "object") {
+    const partRecord = asUnknownRecord(part);
+    if (!partRecord) {
       continue;
     }
-    const messageId = (part as { messageID?: unknown }).messageID;
+    const messageId = readUnknownProp(partRecord, "messageID");
     if (typeof messageId === "string" && messageId.trim().length > 0) {
       return messageId.trim();
     }
@@ -64,55 +67,48 @@ export const toToolIdList = (payload: unknown): string[] => {
 };
 
 export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
-  if (!payload || typeof payload !== "object") {
+  const payloadRecord = asUnknownRecord(payload);
+  if (!payloadRecord) {
     return { models: [], defaultModelsByProvider: {}, agents: [] };
   }
 
-  const providers = Array.isArray((payload as { providers?: unknown }).providers)
-    ? ((payload as { providers: Array<unknown> }).providers as Array<unknown>)
-    : [];
-  const defaults =
-    typeof (payload as { default?: unknown }).default === "object" &&
-    (payload as { default?: unknown }).default !== null
-      ? ((payload as { default: Record<string, string> }).default ?? {})
-      : {};
+  const providers = readArrayProp(payloadRecord, "providers") ?? [];
+  const defaultsRaw = readRecordProp(payloadRecord, "default");
+  const defaults: Record<string, string> = {};
+  if (defaultsRaw) {
+    for (const [providerId, modelId] of Object.entries(defaultsRaw)) {
+      if (typeof modelId === "string") {
+        defaults[providerId] = modelId;
+      }
+    }
+  }
 
   const models = providers.flatMap((provider) => {
-    if (!provider || typeof provider !== "object") {
+    const providerRecord = asUnknownRecord(provider);
+    if (!providerRecord) {
       return [];
     }
-    const providerId = (provider as { id?: unknown }).id;
-    const providerName = (provider as { name?: unknown }).name;
-    const rawModels = (provider as { models?: unknown }).models;
-    if (
-      typeof providerId !== "string" ||
-      typeof providerName !== "string" ||
-      !rawModels ||
-      typeof rawModels !== "object"
-    ) {
+    const providerId = readUnknownProp(providerRecord, "id");
+    const providerName = readUnknownProp(providerRecord, "name");
+    const rawModels = readRecordProp(providerRecord, "models");
+    if (typeof providerId !== "string" || typeof providerName !== "string" || !rawModels) {
       return [];
     }
 
-    return Object.entries(rawModels as Record<string, unknown>)
+    return Object.entries(rawModels)
       .map(([modelId, rawModel]) => {
-        if (!rawModel || typeof rawModel !== "object") {
+        const modelRecord = asUnknownRecord(rawModel);
+        if (!modelRecord) {
           return null;
         }
-        const modelName = (rawModel as { name?: unknown }).name;
-        const variantsRaw = (rawModel as { variants?: unknown }).variants;
-        const limitRaw = (rawModel as { limit?: unknown }).limit;
-        const contextWindow =
-          limitRaw && typeof limitRaw === "object"
-            ? (toFiniteNumber((limitRaw as { context?: unknown }).context) ?? undefined)
-            : undefined;
-        const outputLimit =
-          limitRaw && typeof limitRaw === "object"
-            ? (toFiniteNumber((limitRaw as { output?: unknown }).output) ?? undefined)
-            : undefined;
-        const variants =
-          variantsRaw && typeof variantsRaw === "object"
-            ? Object.keys(variantsRaw as Record<string, unknown>)
-            : [];
+        const modelName = readUnknownProp(modelRecord, "name");
+        const variantsRaw = readRecordProp(modelRecord, "variants");
+        const limitRaw = readRecordProp(modelRecord, "limit");
+        const contextRaw = readUnknownProp(limitRaw, "context");
+        const outputRaw = readUnknownProp(limitRaw, "output");
+        const contextWindow = limitRaw ? (toFiniteNumber(contextRaw) ?? undefined) : undefined;
+        const outputLimit = limitRaw ? (toFiniteNumber(outputRaw) ?? undefined) : undefined;
+        const variants = variantsRaw ? Object.keys(variantsRaw) : [];
 
         return {
           id: `${providerId}/${modelId}`,
