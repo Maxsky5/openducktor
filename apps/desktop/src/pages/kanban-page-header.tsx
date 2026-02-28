@@ -1,7 +1,7 @@
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import type { KanbanPageHeaderModel } from "./use-kanban-page-models";
+import type { KanbanPageHeaderModel } from "./kanban-page-model-types";
 
 type KanbanPageHeaderProps = {
   model: KanbanPageHeaderModel;

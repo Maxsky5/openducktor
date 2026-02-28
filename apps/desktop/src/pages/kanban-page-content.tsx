@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { KanbanColumn } from "@/components/features/kanban";
-import type { KanbanPageContentModel } from "./use-kanban-page-models";
+import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 type KanbanPageContentProps = {
   model: KanbanPageContentModel;

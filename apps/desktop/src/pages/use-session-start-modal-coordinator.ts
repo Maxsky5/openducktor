@@ -1,4 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
+import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback } from "react";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
@@ -19,16 +19,20 @@ const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
 const startModeLabelFor = (startMode: SessionStartModalIntent["startMode"]): string =>
   startMode === "fresh" ? "Start a fresh session" : "Continue latest or start a new session";
 
-const titleForIntent = (intent: Pick<SessionStartModalIntent, "role">): string => {
-  const roleLabel = ROLE_LABEL_BY_ROLE[intent.role] ?? intent.role.toUpperCase();
+export const buildSessionStartModalTitle = (role: AgentRole): string => {
+  const roleLabel = ROLE_LABEL_BY_ROLE[role] ?? role.toUpperCase();
   return `Start ${roleLabel} Session`;
 };
 
-const descriptionForIntent = (
-  intent: Pick<SessionStartModalIntent, "scenario" | "startMode">,
-): string => {
-  const scenarioLabel = SCENARIO_LABELS[intent.scenario] ?? intent.scenario;
-  return `${startModeLabelFor(intent.startMode)} for ${scenarioLabel}.`;
+export const buildSessionStartModalDescription = ({
+  scenario,
+  startMode,
+}: {
+  scenario: AgentScenario;
+  startMode: SessionStartModalIntent["startMode"];
+}): string => {
+  const scenarioLabel = SCENARIO_LABELS[scenario] ?? scenario;
+  return `${startModeLabelFor(startMode)} for ${scenarioLabel}.`;
 };
 
 export const toSessionStartPostAction = (
@@ -76,8 +80,13 @@ export function useSessionStartModalCoordinator({
     (request: SessionStartModalOpenRequest): void => {
       openRawStartModal({
         ...request,
-        title: request.title ?? titleForIntent(request),
-        description: request.description ?? descriptionForIntent(request),
+        title: request.title ?? buildSessionStartModalTitle(request.role),
+        description:
+          request.description ??
+          buildSessionStartModalDescription({
+            scenario: request.scenario,
+            startMode: request.startMode,
+          }),
       });
     },
     [openRawStartModal],

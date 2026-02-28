@@ -35,6 +35,8 @@ import type {
 } from "./use-agent-studio-session-actions";
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
 import {
+  buildSessionStartModalDescription,
+  buildSessionStartModalTitle,
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "./use-session-start-modal-coordinator";
@@ -102,9 +104,13 @@ function AgentStudioSessionStartModal({
     <SessionStartModal
       model={{
         open: isOpen,
-        title: intent?.title ?? "Start session",
+        title: intent?.title ?? buildSessionStartModalTitle(request.role),
         description:
-          intent?.description ?? "Choose agent, model, and variant before starting this session.",
+          intent?.description ??
+          buildSessionStartModalDescription({
+            scenario: request.scenario,
+            startMode: request.startMode,
+          }),
         confirmLabel: "Start session",
         selectedModelSelection: selection,
         isSelectionCatalogLoading: isCatalogLoading,
