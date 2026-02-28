@@ -496,17 +496,17 @@ impl AppService {
             .find(|task| task.id == run.task_id)
             .ok_or_else(|| anyhow!("Task not found: {}", run.task_id))?;
 
-        if current_task.ai_review_enabled {
-            Ok(ReviewTransition {
+        Ok(if current_task.ai_review_enabled {
+            ReviewTransition {
                 status: TaskStatus::AiReview,
                 label: "AI review",
-            })
+            }
         } else {
-            Ok(ReviewTransition {
+            ReviewTransition {
                 status: TaskStatus::HumanReview,
                 label: "Human review",
-            })
-        }
+            }
+        })
     }
 
     fn apply_review_transition(
