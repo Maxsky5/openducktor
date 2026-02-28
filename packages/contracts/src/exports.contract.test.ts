@@ -7,6 +7,7 @@ import type {
   AgentSessionRole,
   AgentSessionScenario,
   AgentSessionStatus,
+  AgentSessionTodoPayloadRecord,
   AgentWorkflowState,
   AgentWorkflows,
   BeadsCheck,
@@ -50,6 +51,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionRoleSchema",
   "agentSessionScenarioSchema",
   "agentSessionStatusSchema",
+  "parseAgentSessionTodoPayloadEntry",
+  "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
   "defaultSpecTemplateMarkdown",
   "gitBranchSchema",
@@ -87,6 +90,7 @@ type ExportedTypeContract = {
   AgentModelDefault: AgentModelDefault;
   AgentRuntimeSummary: AgentRuntimeSummary;
   AgentSessionModelSelection: AgentSessionModelSelection;
+  AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;
   AgentSessionRole: AgentSessionRole;
   AgentSessionScenario: AgentSessionScenario;

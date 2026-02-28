@@ -35,6 +35,51 @@ describe("agent-orchestrator/support/todos", () => {
     expect(fromOutput?.[0]?.content).toBe("third");
   });
 
+  test("normalizes object and string payload variants with explicit expected output", () => {
+    const inputTodos = {
+      items: [
+        "first",
+        {
+          todoId: "todo-2",
+          title: "second",
+          status: "active",
+          priority: "LOW",
+        },
+      ],
+    } as const;
+    const outputTodos = [
+      {
+        id: "todo-3",
+        content: "third",
+        status: "finished",
+      },
+      "ignored string value",
+    ];
+
+    expect(parseTodosFromToolInput(inputTodos)).toEqual([
+      {
+        id: "todo:0",
+        content: "first",
+        status: "pending",
+        priority: "medium",
+      },
+      {
+        id: "todo-2",
+        content: "second",
+        status: "in_progress",
+        priority: "low",
+      },
+    ]);
+    expect(parseTodosFromToolOutput(JSON.stringify(outputTodos))).toEqual([
+      {
+        id: "todo-3",
+        content: "third",
+        status: "completed",
+        priority: "medium",
+      },
+    ]);
+  });
+
   test("preserves existing order when merging", () => {
     const merged = mergeTodoListPreservingOrder(
       [
