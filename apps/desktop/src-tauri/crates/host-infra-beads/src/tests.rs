@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CallKind {
@@ -449,6 +449,83 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].session_id, "obp-session-1");
     assert_eq!(sessions[0].external_session_id, "session-opencode-1");
+}
+
+#[test]
+#[ignore = "manual benchmark scaffold; run with cargo test -p host-infra-beads metadata_parsing_benchmark_scaffold -- --ignored --nocapture"]
+fn metadata_parsing_benchmark_scaffold() {
+    let markdown_payload = Value::Array(
+        (0..200)
+            .map(|index| {
+                json!({
+                    "markdown": format!("# Spec {index}\n\n{}", "detail ".repeat(32)),
+                    "updatedAt": "2026-02-17T12:34:56Z",
+                    "updatedBy": "planner-agent",
+                    "sourceTool": "set_spec",
+                    "revision": index + 1
+                })
+            })
+            .collect(),
+    );
+    let qa_payload = Value::Array(
+        (0..200)
+            .map(|index| {
+                json!({
+                    "markdown": format!("# QA {index}\n\n{}", "report ".repeat(48)),
+                    "verdict": if index % 2 == 0 { "approved" } else { "rejected" },
+                    "updatedAt": "2026-02-17T13:10:00Z",
+                    "updatedBy": "qa-agent",
+                    "sourceTool": if index % 2 == 0 { "qa_approved" } else { "qa_rejected" },
+                    "revision": index + 1
+                })
+            })
+            .collect(),
+    );
+    let session_payload = Value::Array(
+        (0..200)
+            .map(|index| {
+                json!({
+                    "sessionId": format!("obp-session-{index}"),
+                    "externalSessionId": format!("session-opencode-{index}"),
+                    "taskId": "task-1",
+                    "role": "build",
+                    "scenario": "build_default",
+                    "status": "running",
+                    "startedAt": "2026-02-18T17:20:00Z",
+                    "updatedAt": "2026-02-18T17:21:00Z",
+                    "endedAt": null,
+                    "runtimeId": "runtime-1",
+                    "runId": null,
+                    "baseUrl": "http://127.0.0.1:4173",
+                    "workingDirectory": "/repo",
+                    "selectedModel": null
+                })
+            })
+            .collect(),
+    );
+
+    let iterations = 200;
+    let started = Instant::now();
+    let mut parsed_entries = 0usize;
+
+    for _ in 0..iterations {
+        parsed_entries += parse_markdown_entries(&markdown_payload)
+            .expect("expected markdown entries")
+            .len();
+        parsed_entries += parse_qa_entries(&qa_payload)
+            .expect("expected qa entries")
+            .len();
+        parsed_entries += parse_agent_sessions(&session_payload)
+            .expect("expected session entries")
+            .len();
+    }
+
+    let expected_entries = iterations * 600;
+    assert_eq!(parsed_entries, expected_entries);
+    eprintln!(
+        "metadata parsing benchmark scaffold: parsed {parsed_entries} entries in {:?}",
+        started.elapsed()
+    );
 }
 
 #[test]

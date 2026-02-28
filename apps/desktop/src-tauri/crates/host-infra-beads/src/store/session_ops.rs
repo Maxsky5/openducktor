@@ -24,7 +24,7 @@ impl BeadsTaskStore {
         task_id: &str,
         session: AgentSessionDocument,
     ) -> Result<()> {
-        let (_issue, mut root, namespace_key, mut namespace_map) =
+        let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
         let mut sessions = namespace_map
             .get("agentSessions")
