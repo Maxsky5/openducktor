@@ -1,10 +1,10 @@
 use super::{
-    process_registry::TrackedOpencodeProcessGuard,
     qa_worktree::{prepare_qa_worktree, remove_runtime_worktree},
     spawn_opencode_server, terminate_child_process, wait_for_local_server_with_process,
     AgentRuntimeProcess, AppService, StartupEventCorrelation, StartupEventPayload,
+    TrackedOpencodeProcessGuard,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
 use host_infra_system::pick_free_port;
 use std::collections::{HashMap, HashSet};
@@ -300,8 +300,15 @@ impl AppService {
         let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {
             Ok(guard) => guard,
             Err(error) => {
-                terminate_child_process(&mut child);
-                return Err(error).context(input.tracking_error_context);
+                let tracking_error = anyhow!(error).context(input.tracking_error_context);
+                if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                    &mut child,
+                    input.cleanup_repo_path.as_deref(),
+                    input.cleanup_worktree_path.as_deref(),
+                ) {
+                    return Err(Self::append_cleanup_error(tracking_error, cleanup_error));
+                }
+                return Err(tracking_error);
             }
         };
 

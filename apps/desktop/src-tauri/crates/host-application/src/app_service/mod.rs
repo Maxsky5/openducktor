@@ -43,10 +43,11 @@ pub(crate) use opencode_runtime::{
 };
 #[cfg(test)]
 pub(crate) use process_registry::read_opencode_process_registry;
+pub(crate) use process_registry::TrackedOpencodeProcessGuard;
 #[cfg(test)]
 pub(crate) use process_registry::{
     with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
-    TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 pub(crate) use service_core::{AgentRuntimeProcess, CachedRuntimeCheck, RunProcess};
 pub use service_core::{AppService, RunEmitter};
