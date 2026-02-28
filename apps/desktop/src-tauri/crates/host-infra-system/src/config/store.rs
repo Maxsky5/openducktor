@@ -1,8 +1,8 @@
 use super::migrate::{canonicalize_workspace_key, migrate_repos_to_canonical_keys};
 use super::normalize::{normalize_global_config, normalize_repo_config};
 use super::types::{
-    default_task_metadata_namespace, hook_set_fingerprint, GlobalConfig,
-    HookSet, OpencodeStartupReadinessConfig, RepoConfig,
+    default_task_metadata_namespace, hook_set_fingerprint, GlobalConfig, HookSet,
+    OpencodeStartupReadinessConfig, RepoConfig,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
@@ -204,6 +204,11 @@ impl AppConfigStore {
             canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
 
         let mut config = self.load()?;
+        if !config.repos.contains_key(&canonical_path) {
+            return Err(anyhow!(
+                "Workspace not found in config: {repo_path}. Add/select the workspace before updating configuration."
+            ));
+        }
         config
             .repos
             .insert(canonical_path.clone(), repo_config.clone());
@@ -221,7 +226,11 @@ impl AppConfigStore {
         })
     }
 
-    pub fn update_repo_hooks(&self, repo_path: &str, mut hooks: HookSet) -> Result<WorkspaceRecord> {
+    pub fn update_repo_hooks(
+        &self,
+        repo_path: &str,
+        mut hooks: HookSet,
+    ) -> Result<WorkspaceRecord> {
         let canonical_path =
             canonicalize_workspace_key(repo_path).unwrap_or_else(|_| repo_path.to_string());
         let mut normalized_repo = RepoConfig {
@@ -297,11 +306,7 @@ impl AppConfigStore {
                 .get_mut(&canonical_path)
                 .ok_or_else(|| anyhow!("Repository is not configured"))?;
             repo.trusted_hooks = trusted;
-            repo.trusted_hooks_fingerprint = if trusted {
-                trusted_fingerprint
-            } else {
-                None
-            };
+            repo.trusted_hooks_fingerprint = if trusted { trusted_fingerprint } else { None };
             (
                 has_configured_worktree(repo),
                 repo.worktree_base_path.clone(),

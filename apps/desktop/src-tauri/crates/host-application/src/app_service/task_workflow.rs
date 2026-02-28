@@ -15,21 +15,21 @@ use std::path::Path;
 
 impl AppService {
     pub fn tasks_list(&self, repo_path: &str) -> Result<Vec<TaskCard>> {
-        self.ensure_repo_initialized(repo_path)?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         Ok(self.enrich_tasks(tasks))
     }
 
     pub fn task_create(&self, repo_path: &str, mut input: CreateTaskInput) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         if input.ai_review_enabled.is_none() {
             input.ai_review_enabled = Some(default_qa_required_for_issue_type(&input.issue_type));
         }
 
-        let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let mut existing = self.task_store.list_tasks(Path::new(&repo_path))?;
         validate_parent_relationships_for_create(&existing, &input)?;
 
-        let created = self.task_store.create_task(Path::new(repo_path), input)?;
+        let created = self.task_store.create_task(Path::new(&repo_path), input)?;
         existing.push(created.clone());
         Ok(self.enrich_task(created, &existing))
     }
@@ -40,14 +40,14 @@ impl AppService {
         task_id: &str,
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         if patch.status.is_some() {
             return Err(anyhow!(
                 "Status cannot be updated directly. Use workflow transitions."
             ));
         }
 
-        let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let mut existing = self.task_store.list_tasks(Path::new(&repo_path))?;
         let current = existing
             .iter()
             .find(|task| task.id == task_id)
@@ -56,7 +56,7 @@ impl AppService {
 
         let updated = self
             .task_store
-            .update_task(Path::new(repo_path), task_id, patch)?;
+            .update_task(Path::new(&repo_path), task_id, patch)?;
         if let Some(index) = existing.iter().position(|task| task.id == task_id) {
             existing[index] = updated.clone();
         }
@@ -64,8 +64,8 @@ impl AppService {
     }
 
     pub fn task_delete(&self, repo_path: &str, task_id: &str, delete_subtasks: bool) -> Result<()> {
-        self.ensure_repo_initialized(repo_path)?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = tasks
             .iter()
             .find(|entry| entry.id == task_id)
@@ -85,7 +85,7 @@ impl AppService {
         }
 
         self.task_store
-            .delete_task(Path::new(repo_path), task_id, delete_subtasks)
+            .delete_task(Path::new(&repo_path), task_id, delete_subtasks)
             .with_context(|| format!("Failed to delete task {task_id}"))?;
         Ok(())
     }
@@ -97,8 +97,8 @@ impl AppService {
         target_status: TaskStatus,
         _reason: Option<&str>,
     ) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
-        let mut existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let mut existing = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = existing
             .iter()
             .find(|entry| entry.id == task_id)
@@ -112,7 +112,7 @@ impl AppService {
         }
 
         let updated = self.task_store.update_task(
-            Path::new(repo_path),
+            Path::new(&repo_path),
             task_id,
             UpdateTaskPatch {
                 title: None,
@@ -164,8 +164,8 @@ impl AppService {
         task_id: &str,
         _summary: Option<&str>,
     ) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = tasks
             .iter()
             .find(|entry| entry.id == task_id)
@@ -176,7 +176,12 @@ impl AppService {
             TaskStatus::HumanReview
         };
 
-        self.task_transition(repo_path, task_id, next_status, Some("Builder completed"))
+        self.task_transition(
+            repo_path.as_str(),
+            task_id,
+            next_status,
+            Some("Builder completed"),
+        )
     }
 
     pub fn human_request_changes(
@@ -207,8 +212,8 @@ impl AppService {
         task_id: &str,
         _reason: Option<&str>,
     ) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
-        let existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let existing = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = existing
             .iter()
             .find(|entry| entry.id == task_id)
@@ -223,7 +228,7 @@ impl AppService {
         }
 
         self.task_transition(
-            repo_path,
+            repo_path.as_str(),
             task_id,
             TaskStatus::Deferred,
             Some("Deferred by user"),
@@ -231,8 +236,8 @@ impl AppService {
     }
 
     pub fn task_resume_deferred(&self, repo_path: &str, task_id: &str) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
-        let existing = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let existing = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = existing
             .iter()
             .find(|entry| entry.id == task_id)
@@ -241,7 +246,7 @@ impl AppService {
             return Err(anyhow!("Task is not deferred: {task_id}"));
         }
         self.task_transition(
-            repo_path,
+            repo_path.as_str(),
             task_id,
             TaskStatus::Open,
             Some("Deferred task resumed"),
@@ -249,9 +254,9 @@ impl AppService {
     }
 
     pub fn task_metadata_get(&self, repo_path: &str, task_id: &str) -> Result<TaskMetadata> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         self.task_store
-            .get_task_metadata(Path::new(repo_path), task_id)
+            .get_task_metadata(Path::new(&repo_path), task_id)
             .with_context(|| format!("Failed to load task metadata for {task_id}"))
     }
 
@@ -260,9 +265,9 @@ impl AppService {
     }
 
     pub fn set_spec(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "spec")?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = tasks
             .iter()
             .find(|entry| entry.id == task_id)
@@ -277,12 +282,12 @@ impl AppService {
 
         let spec = self
             .task_store
-            .set_spec(Path::new(repo_path), task_id, &markdown)
+            .set_spec(Path::new(&repo_path), task_id, &markdown)
             .with_context(|| format!("Failed to persist spec markdown for {task_id}"))?;
 
         if task.status == TaskStatus::Open {
             self.task_transition(
-                repo_path,
+                repo_path.as_str(),
                 task_id,
                 TaskStatus::SpecReady,
                 Some("Spec ready"),
@@ -298,15 +303,15 @@ impl AppService {
         task_id: &str,
         markdown: &str,
     ) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "spec")?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         if tasks.iter().all(|entry| entry.id != task_id) {
             return Err(anyhow!("Task not found: {task_id}"));
         }
 
         self.task_store
-            .set_spec(Path::new(repo_path), task_id, &markdown)
+            .set_spec(Path::new(&repo_path), task_id, &markdown)
             .with_context(|| format!("Failed to persist spec markdown for {task_id}"))
     }
 
@@ -321,9 +326,9 @@ impl AppService {
         markdown: &str,
         subtasks: Option<Vec<PlanSubtaskInput>>,
     ) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "implementation plan")?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = tasks
             .iter()
             .find(|entry| entry.id == task_id)
@@ -346,11 +351,11 @@ impl AppService {
 
         let plan = self
             .task_store
-            .set_plan(Path::new(repo_path), task_id, &markdown)
+            .set_plan(Path::new(&repo_path), task_id, &markdown)
             .with_context(|| format!("Failed to persist implementation plan for {task_id}"))?;
 
         if issue_type == IssueType::Epic {
-            let mut current_tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+            let mut current_tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
             let refreshed_task = current_tasks
                 .iter()
                 .find(|entry| entry.id == task_id)
@@ -389,7 +394,7 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
 
             for existing_subtask_id in &existing_direct_subtask_ids {
                 self.task_store
-                    .delete_task(Path::new(repo_path), existing_subtask_id, false)
+                    .delete_task(Path::new(&repo_path), existing_subtask_id, false)
                     .with_context(|| {
                         format!("Failed to delete replaced subtask {}", existing_subtask_id)
                     })?;
@@ -412,13 +417,13 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
                 validate_parent_relationships_for_create(&current_tasks, &create_input)?;
                 let created = self
                     .task_store
-                    .create_task(Path::new(repo_path), create_input)?;
+                    .create_task(Path::new(&repo_path), create_input)?;
                 current_tasks.push(created);
             }
         }
 
         self.task_transition(
-            repo_path,
+            repo_path.as_str(),
             task_id,
             TaskStatus::ReadyForDev,
             Some("Implementation plan ready"),
@@ -433,15 +438,15 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
         task_id: &str,
         markdown: &str,
     ) -> Result<SpecDocument> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "implementation plan")?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         if tasks.iter().all(|entry| entry.id != task_id) {
             return Err(anyhow!("Task not found: {task_id}"));
         }
 
         self.task_store
-            .set_plan(Path::new(repo_path), task_id, &markdown)
+            .set_plan(Path::new(&repo_path), task_id, &markdown)
             .with_context(|| format!("Failed to persist implementation plan for {task_id}"))
     }
 
@@ -461,8 +466,8 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
     }
 
     pub fn qa_approved(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = tasks
             .iter()
             .find(|entry| entry.id == task_id)
@@ -471,11 +476,16 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
         validate_transition(&task, &tasks, &task.status, &TaskStatus::HumanReview)?;
 
         self.task_store
-            .append_qa_report(Path::new(repo_path), task_id, markdown, QaVerdict::Approved)
+            .append_qa_report(
+                Path::new(&repo_path),
+                task_id,
+                markdown,
+                QaVerdict::Approved,
+            )
             .with_context(|| format!("Failed to persist QA report for {task_id}"))?;
 
         self.task_transition(
-            repo_path,
+            repo_path.as_str(),
             task_id,
             TaskStatus::HumanReview,
             Some("QA approved"),
@@ -483,8 +493,8 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
     }
 
     pub fn qa_rejected(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<TaskCard> {
-        self.ensure_repo_initialized(repo_path)?;
-        let tasks = self.task_store.list_tasks(Path::new(repo_path))?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
         let task = tasks
             .iter()
             .find(|entry| entry.id == task_id)
@@ -493,11 +503,16 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
         validate_transition(&task, &tasks, &task.status, &TaskStatus::InProgress)?;
 
         self.task_store
-            .append_qa_report(Path::new(repo_path), task_id, markdown, QaVerdict::Rejected)
+            .append_qa_report(
+                Path::new(&repo_path),
+                task_id,
+                markdown,
+                QaVerdict::Rejected,
+            )
             .with_context(|| format!("Failed to persist QA report for {task_id}"))?;
 
         self.task_transition(
-            repo_path,
+            repo_path.as_str(),
             task_id,
             TaskStatus::InProgress,
             Some("QA requested changes"),
@@ -518,12 +533,12 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
         task_id: &str,
         mut session: AgentSessionDocument,
     ) -> Result<bool> {
-        self.ensure_repo_initialized(repo_path)?;
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         if session.task_id != task_id {
             session.task_id = task_id.to_string();
         }
         self.task_store
-            .upsert_agent_session(Path::new(repo_path), task_id, session)
+            .upsert_agent_session(Path::new(&repo_path), task_id, session)
             .with_context(|| format!("Failed to persist agent session for {task_id}"))?;
         Ok(true)
     }

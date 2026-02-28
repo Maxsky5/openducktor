@@ -59,6 +59,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
@@ -237,6 +238,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
 
     let pre_start_failure_hooks = HookSet {
         pre_start: vec!["sh -lc 'echo pre-fail >&2; exit 1'".to_string()],
@@ -329,6 +331,7 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
@@ -372,6 +375,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
@@ -421,6 +425,7 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
@@ -472,6 +477,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
         },
         config_store,
     );
+    service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {

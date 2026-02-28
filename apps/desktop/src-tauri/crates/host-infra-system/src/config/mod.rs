@@ -5,8 +5,8 @@ mod types;
 
 pub use store::AppConfigStore;
 pub use types::{
-    hook_set_fingerprint, AgentDefaults, AgentModelDefault, GlobalConfig, HookSet, OpencodeStartupReadinessConfig,
-    RepoConfig, SchedulerConfig, SoftGuardrails,
+    hook_set_fingerprint, AgentDefaults, AgentModelDefault, GlobalConfig, HookSet,
+    OpencodeStartupReadinessConfig, RepoConfig, SchedulerConfig, SoftGuardrails,
 };
 
 #[cfg(test)]
@@ -219,7 +219,11 @@ mod tests {
         assert!(optional.is_none());
 
         let trust_error = store
-            .set_repo_trust_hooks(missing_repo_str.as_str(), true, Some("fingerprint".to_string()))
+            .set_repo_trust_hooks(
+                missing_repo_str.as_str(),
+                true,
+                Some("fingerprint".to_string()),
+            )
             .expect_err("set trust should fail when repo missing");
         assert!(trust_error
             .to_string()
@@ -233,6 +237,9 @@ mod tests {
         let repo = root.join("repo-main");
         fake_git_workspace(&repo);
         let repo_str = repo.to_string_lossy().to_string();
+        store
+            .add_workspace(repo_str.as_str())
+            .expect("workspace should be added before updating config");
 
         let updated = store
             .update_repo_config(
@@ -274,6 +281,21 @@ mod tests {
     }
 
     #[test]
+    fn update_repo_config_rejects_unknown_workspace() {
+        let (store, root) = test_store("update-repo-config-missing-workspace");
+        let repo = root.join("missing-repo");
+        fake_git_workspace(&repo);
+        let repo_str = repo.to_string_lossy().to_string();
+
+        let error = store
+            .update_repo_config(repo_str.as_str(), RepoConfig::default())
+            .expect_err("unknown workspace should be rejected");
+
+        assert!(error.to_string().contains("Workspace not found in config"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn update_repo_config_normalizes_blank_worktree_path() {
         let (store, root) = test_store("normalize-worktree");
         let repo = root.join("repo");
@@ -311,6 +333,9 @@ mod tests {
         let repo = root.join("repo");
         fake_git_workspace(&repo);
         let repo_str = repo.to_string_lossy().to_string();
+        store
+            .add_workspace(repo_str.as_str())
+            .expect("workspace should be added before updating config");
 
         store
             .update_repo_config(

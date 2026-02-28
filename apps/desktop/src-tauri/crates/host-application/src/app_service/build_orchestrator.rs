@@ -1,13 +1,11 @@
 use super::{
-    emit_event, spawn_opencode_server, spawn_output_forwarder, terminate_child_process,
-    run_parsed_hook_command_allow_failure, validate_hook_trust, validate_transition,
+    emit_event, run_parsed_hook_command_allow_failure, spawn_opencode_server,
+    spawn_output_forwarder, terminate_child_process, validate_hook_trust, validate_transition,
     wait_for_local_server_with_process, AppService, RunEmitter, RunProcess,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
-use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree,
-};
+use host_infra_system::{build_branch_name, pick_free_port, remove_worktree};
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -56,6 +54,9 @@ impl AppService {
         task_id: &str,
         emitter: RunEmitter,
     ) -> Result<RunSummary> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = repo_path.as_str();
+
         let repo_config = self.config_store.repo_config(repo_path)?;
 
         let worktree_base = repo_config.worktree_base_path.clone().ok_or_else(|| {

@@ -4,16 +4,28 @@ use super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
-use host_infra_system::{
-    build_branch_name, pick_free_port, remove_worktree, run_command,
-};
-use std::collections::HashMap;
+use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, run_command};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use uuid::Uuid;
 
 impl AppService {
     pub fn runs_list(&self, repo_path: Option<&str>) -> Result<Vec<RunSummary>> {
+        let repo_key_filter = repo_path
+            .map(|path| self.ensure_repo_authorized(path))
+            .transpose()?;
+        let allowlisted_repo_keys = if repo_key_filter.is_none() && self.enforce_repo_allowlist {
+            Some(
+                self.config_store
+                    .list_workspaces()?
+                    .into_iter()
+                    .map(|workspace| workspace.path)
+                    .collect::<HashSet<_>>(),
+            )
+        } else {
+            None
+        };
         let runs = self
             .runs
             .lock()
@@ -22,8 +34,11 @@ impl AppService {
         let mut list = runs
             .values()
             .filter(|run| {
-                if let Some(path) = repo_path {
-                    run.repo_path == path
+                if let Some(path_key) = repo_key_filter.as_deref() {
+                    Self::repo_key(run.repo_path.as_str()) == path_key
+                } else if let Some(allowlist) = allowlisted_repo_keys.as_ref() {
+                    let run_repo_key = Self::repo_key(run.repo_path.as_str());
+                    allowlist.contains(&run_repo_key)
                 } else {
                     true
                 }
@@ -39,7 +54,20 @@ impl AppService {
         &self,
         repo_path: Option<&str>,
     ) -> Result<Vec<AgentRuntimeSummary>> {
-        let repo_key_filter = repo_path.map(Self::repo_key);
+        let repo_key_filter = repo_path
+            .map(|path| self.ensure_repo_authorized(path))
+            .transpose()?;
+        let allowlisted_repo_keys = if repo_key_filter.is_none() && self.enforce_repo_allowlist {
+            Some(
+                self.config_store
+                    .list_workspaces()?
+                    .into_iter()
+                    .map(|workspace| workspace.path)
+                    .collect::<HashSet<_>>(),
+            )
+        } else {
+            None
+        };
         let mut runtimes = self
             .agent_runtimes
             .lock()
@@ -51,6 +79,9 @@ impl AppService {
             .filter(|runtime| {
                 if let Some(path_key) = repo_key_filter.as_deref() {
                     Self::repo_key(runtime.summary.repo_path.as_str()) == path_key
+                } else if let Some(allowlist) = allowlisted_repo_keys.as_ref() {
+                    let runtime_repo_key = Self::repo_key(runtime.summary.repo_path.as_str());
+                    allowlist.contains(&runtime_repo_key)
                 } else {
                     true
                 }
@@ -63,8 +94,8 @@ impl AppService {
     }
 
     pub fn opencode_repo_runtime_ensure(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
-        self.ensure_repo_initialized(repo_path)?;
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = repo_key.as_str();
 
         {
             let mut runtimes = self
@@ -208,8 +239,8 @@ impl AppService {
         task_id: &str,
         role: &str,
     ) -> Result<AgentRuntimeSummary> {
-        self.ensure_repo_initialized(repo_path)?;
-        let repo_key = Self::repo_key(repo_path);
+        let repo_key = self.resolve_initialized_repo_path(repo_path)?;
+        let repo_path = repo_key.as_str();
         if !matches!(role, "spec" | "planner" | "qa") {
             return Err(anyhow!(
                 "Unsupported agent runtime role: {role}. Supported: spec, planner, qa"
