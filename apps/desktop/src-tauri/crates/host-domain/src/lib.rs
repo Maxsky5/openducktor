@@ -94,37 +94,49 @@ mod tests {
             TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
         };
 
-        let _: Option<AgentRuntimeSummary> = None;
-        let _: Option<AgentSessionDocument> = None;
-        let _: Option<AgentSessionModelSelection> = None;
-        let _: Option<AgentWorkflowState> = None;
-        let _: Option<AgentWorkflows> = None;
-        let _: Option<BeadsCheck> = None;
-        let _: Option<CreateTaskInput> = None;
-        let _: Option<GitBranch> = None;
-        let _: Option<GitCurrentBranch> = None;
-        let _: Option<GitPushSummary> = None;
-        let _: Option<GitWorktreeSummary> = None;
-        let _: Option<IssueType> = None;
-        let _: Option<PlanSubtaskInput> = None;
-        let _: Option<QaReportDocument> = None;
-        let _: Option<QaVerdict> = None;
-        let _: Option<QaWorkflowVerdict> = None;
-        let _: Option<RunEvent> = None;
-        let _: Option<RunState> = None;
-        let _: Option<RunSummary> = None;
-        let _: Option<RuntimeCheck> = None;
-        let _: Option<SpecDocument> = None;
-        let _: Option<SystemCheck> = None;
-        let _: Option<TaskAction> = None;
-        let _: Option<TaskCard> = None;
-        let _: Option<TaskDocumentPresence> = None;
-        let _: Option<TaskDocumentSummary> = None;
-        let _: Option<TaskMetadata> = None;
-        let _: Option<TaskQaDocumentPresence> = None;
-        let _: Option<TaskStatus> = None;
-        let _: Option<UpdateTaskPatch> = None;
-        let _: Option<WorkspaceRecord> = None;
+        macro_rules! check_types_exported {
+            ($($t:ty),* $(,)?) => {
+                $(
+                    let _: Option<$t> = None;
+                )*
+            };
+        }
+
+        check_types_exported!(
+            AgentRuntimeSummary,
+            AgentSessionDocument,
+            AgentSessionModelSelection,
+            AgentWorkflowState,
+            AgentWorkflows,
+            BeadsCheck,
+            CreateTaskInput,
+            GitBranch,
+            GitCurrentBranch,
+            GitPushSummary,
+            GitWorktreeSummary,
+            IssueType,
+            PlanSubtaskInput,
+            QaReportDocument,
+            QaVerdict,
+            QaWorkflowVerdict,
+            RunEvent,
+            RunState,
+            RunSummary,
+            RuntimeCheck,
+            SpecDocument,
+            SystemCheck,
+            TaskAction,
+            TaskCard,
+            TaskDocumentPresence,
+            TaskDocumentSummary,
+            TaskMetadata,
+            TaskQaDocumentPresence,
+            TaskStatus,
+            UpdateTaskPatch,
+            WorkspaceRecord,
+        );
+
+        // Traits are unsized, so we validate exports via trait objects.
         let _: Option<&dyn GitPort> = None;
         let _: Option<&dyn TaskStore> = None;
     }
