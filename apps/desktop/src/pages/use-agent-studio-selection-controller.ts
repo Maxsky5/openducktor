@@ -65,7 +65,10 @@ type SessionsByTaskSortCacheEntry = {
 type SessionsByTaskSortCache = Map<string, SessionsByTaskSortCacheEntry>;
 
 const toTaskInputSignature = (taskSessions: AgentSessionState[]): string =>
-  taskSessions.map((session) => `${session.sessionId}:${session.startedAt}`).join("|");
+  taskSessions
+    .map((session) => `${session.sessionId}:${session.startedAt}`)
+    .sort()
+    .join("|");
 
 export const buildSessionsByTaskIdWithCache = (
   sessions: AgentSessionState[],

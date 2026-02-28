@@ -96,6 +96,26 @@ describe("useAgentStudioSelectionController", () => {
     ]);
   });
 
+  test("keeps cache signature stable when task sessions arrive in a different order", () => {
+    const sessionOld = createSession("task-1", "session-old", {
+      startedAt: "2026-02-22T10:00:00.000Z",
+    });
+    const sessionNew = createSession("task-1", "session-new", {
+      startedAt: "2026-02-22T11:00:00.000Z",
+    });
+
+    const first = buildSessionsByTaskIdWithCache([sessionOld, sessionNew], new Map());
+    const second = buildSessionsByTaskIdWithCache([sessionNew, sessionOld], first.nextCache);
+
+    expect(second.nextCache.get("task-1")?.inputSignature).toBe(
+      first.nextCache.get("task-1")?.inputSignature,
+    );
+    expect(second.sessionsByTaskId.get("task-1")?.map((session) => session.sessionId)).toEqual([
+      "session-new",
+      "session-old",
+    ]);
+  });
+
   test("resolves task context from selected session when task param is missing", async () => {
     const session = createSession("task-2", "session-2");
     const harness = createHookHarness(
