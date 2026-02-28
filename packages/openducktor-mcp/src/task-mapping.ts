@@ -33,10 +33,11 @@ export const ensureObject = (value: unknown): JsonObject => {
 };
 
 const RevisionSchema = z.number().int().positive();
+const UpdatedAtSchema = z.string().datetime({ offset: true });
 
 const MarkdownEntrySchema = z.object({
   markdown: z.string(),
-  updatedAt: z.string(),
+  updatedAt: UpdatedAtSchema,
   updatedBy: z.string(),
   sourceTool: z.string(),
   revision: RevisionSchema,

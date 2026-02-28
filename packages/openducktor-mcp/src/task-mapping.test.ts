@@ -158,6 +158,85 @@ describe("task mapping entry parsers", () => {
     ]);
   });
 
+  test("rejects invalid updatedAt values", () => {
+    const parsedMarkdown = parseMarkdownEntries([
+      {
+        markdown: "valid zulu",
+        updatedAt: "2026-02-28T00:00:00Z",
+        updatedBy: "agent",
+        sourceTool: "odt_set_spec",
+        revision: 1,
+      },
+      {
+        markdown: "valid offset",
+        updatedAt: "2026-02-28T00:00:00+01:00",
+        updatedBy: "agent",
+        sourceTool: "odt_set_spec",
+        revision: 2,
+      },
+      {
+        markdown: "date only",
+        updatedAt: "2026-02-28",
+        updatedBy: "agent",
+        sourceTool: "odt_set_spec",
+        revision: 3,
+      },
+      {
+        markdown: "invalid date",
+        updatedAt: "not-a-date",
+        updatedBy: "agent",
+        sourceTool: "odt_set_spec",
+        revision: 4,
+      },
+    ]);
+
+    const parsedQa = parseQaEntries([
+      {
+        markdown: "valid qa",
+        verdict: "approved",
+        updatedAt: "2026-02-28T00:00:00Z",
+        updatedBy: "qa-agent",
+        sourceTool: "odt_qa_approved",
+        revision: 1,
+      },
+      {
+        markdown: "invalid qa date",
+        verdict: "rejected",
+        updatedAt: "2026-02-28",
+        updatedBy: "qa-agent",
+        sourceTool: "odt_qa_rejected",
+        revision: 2,
+      },
+    ]);
+
+    expect(parsedMarkdown).toEqual([
+      {
+        markdown: "valid zulu",
+        updatedAt: "2026-02-28T00:00:00Z",
+        updatedBy: "agent",
+        sourceTool: "odt_set_spec",
+        revision: 1,
+      },
+      {
+        markdown: "valid offset",
+        updatedAt: "2026-02-28T00:00:00+01:00",
+        updatedBy: "agent",
+        sourceTool: "odt_set_spec",
+        revision: 2,
+      },
+    ]);
+    expect(parsedQa).toEqual([
+      {
+        markdown: "valid qa",
+        verdict: "approved",
+        updatedAt: "2026-02-28T00:00:00Z",
+        updatedBy: "qa-agent",
+        sourceTool: "odt_qa_approved",
+        revision: 1,
+      },
+    ]);
+  });
+
   test("returns an empty array for non-array metadata values", () => {
     expect(parseMarkdownEntries(undefined)).toEqual([]);
     expect(parseMarkdownEntries({})).toEqual([]);
