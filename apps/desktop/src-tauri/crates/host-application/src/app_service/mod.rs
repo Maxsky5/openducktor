@@ -18,6 +18,7 @@ use std::time::Instant;
 pub mod build_orchestrator;
 
 mod events;
+mod hook_security;
 mod opencode_runtime;
 mod process_registry;
 mod repo_init;
@@ -32,6 +33,7 @@ pub(crate) mod test_support;
 mod workflow_rules;
 
 pub(crate) use events::{emit_event, spawn_output_forwarder};
+pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
 pub(crate) use opencode_runtime::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, spawn_opencode_server, terminate_child_process,

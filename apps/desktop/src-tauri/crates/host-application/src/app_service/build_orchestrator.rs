@@ -1,12 +1,12 @@
 use super::{
     emit_event, spawn_opencode_server, spawn_output_forwarder, terminate_child_process,
-    validate_transition, wait_for_local_server_with_process, AppService, RunEmitter, RunProcess,
+    run_parsed_hook_command_allow_failure, validate_hook_trust, validate_transition,
+    wait_for_local_server_with_process, AppService, RunEmitter, RunProcess,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
 use host_infra_system::{
-    build_branch_name, hook_set_fingerprint, pick_free_port, remove_worktree,
-    run_command_allow_failure,
+    build_branch_name, pick_free_port, remove_worktree,
 };
 use serde::Deserialize;
 use std::fs;
@@ -475,60 +475,6 @@ impl AppService {
 
         Ok(true)
     }
-}
-
-fn run_parsed_hook_command_allow_failure(hook: &str, cwd: &Path) -> (bool, String, String) {
-    let parsed = match shell_words::split(hook) {
-        Ok(parsed) => parsed,
-        Err(error) => {
-            return (
-                false,
-                String::new(),
-                format!(
-                    "Invalid hook command syntax. Use argv tokens, or explicitly invoke a shell (for example: sh -lc '...'): {error}"
-                ),
-            );
-        }
-    };
-
-    let Some((program, args)) = parsed.split_first() else {
-        return (
-            false,
-            String::new(),
-            "Hook command is empty. Provide an executable name.".to_string(),
-        );
-    };
-
-    let argv = args.iter().map(String::as_str).collect::<Vec<_>>();
-    match run_command_allow_failure(program, argv.as_slice(), Some(cwd)) {
-        Ok(result) => result,
-        Err(error) => (
-            false,
-            String::new(),
-            format!("Failed to execute hook command: {error:#}"),
-        ),
-    }
-}
-
-fn validate_hook_trust(repo_path: &str, repo_config: &host_infra_system::RepoConfig) -> Result<()> {
-    if repo_config.hooks.pre_start.is_empty() && repo_config.hooks.post_complete.is_empty() {
-        return Ok(());
-    }
-
-    if !repo_config.trusted_hooks {
-        return Err(anyhow!(
-            "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
-        ));
-    }
-
-    let current_fingerprint = hook_set_fingerprint(&repo_config.hooks);
-    if repo_config.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
-        return Err(anyhow!(
-            "Hooks changed since last approval for {repo_path}. Reconfirm trust before running hooks."
-        ));
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
