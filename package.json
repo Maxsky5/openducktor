@@ -16,12 +16,14 @@
     "deps:unused:deps": "knip --workspace @openducktor/* --include dependencies",
     "deps:unused:exports": "knip --workspace @openducktor/* --include exports --no-exit-code",
     "deps:unused": "bun run deps:unused:deps && bun run deps:unused:exports",
+    "deps:audit:high": "bun run scripts/audit-high-severity-guard.ts",
     "deps:audit:hono": "bun run scripts/audit-hono-guard.ts",
     "deps:outdated": "bun outdated",
-    "deps:check": "bun run deps:audit:hono && bun run deps:unused:deps"
+    "deps:check": "bun run deps:audit:high && bun run deps:audit:hono && bun run deps:unused:deps"
   },
   "overrides": {
-    "hono": "^4.12.2"
+    "hono": "^4.12.2",
+    "rollup": "^4.59.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
