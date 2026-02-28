@@ -415,7 +415,7 @@ impl AppService {
         runtimes
             .values()
             .find(|runtime| {
-                Self::repo_key(runtime.summary.repo_path.as_str()) == lookup.repo_key
+                runtime.summary.repo_path == lookup.repo_key
                     && runtime.summary.role == lookup.role
                     && lookup
                         .task_id
