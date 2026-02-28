@@ -53,6 +53,10 @@
   --sidebar-primary: oklch(0.588 0.158 241.966);
   --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-ring: oklch(0.588 0.158 241.966);
+
+  /* agent studio chrome */
+  --studio-chrome: oklch(0.446 0.043 257.281); /* ~slate-600 */
+  --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
 }
 
 .dark {
@@ -94,6 +98,9 @@
   --sidebar-primary: oklch(0.631 0.158 241.966);
   --sidebar-primary-foreground: oklch(0.145 0.017 265.755);
   --sidebar-ring: oklch(0.631 0.158 241.966);
+
+  --studio-chrome: oklch(0.332 0.038 260.912); /* ~slate-700 */
+  --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
 }
 
 /* Expose CSS variables as Tailwind v4 color utilities (bg-*, text-*, etc.) */
@@ -126,6 +133,8 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-studio-chrome: var(--studio-chrome);
+  --color-studio-chrome-foreground: var(--studio-chrome-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
