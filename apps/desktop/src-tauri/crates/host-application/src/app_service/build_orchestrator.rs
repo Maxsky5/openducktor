@@ -47,12 +47,9 @@ impl CleanupMode {
     }
 }
 
-enum CleanupStatusTransition {
-    Blocked {
-        reason: &'static str,
-        mark_run_failed: bool,
-    },
-    ReviewReady,
+struct ReviewTransition {
+    status: TaskStatus,
+    label: &'static str,
 }
 
 enum CleanupEvent<'a> {
@@ -375,32 +372,75 @@ impl AppService {
         mode: CleanupMode,
         emitter: RunEmitter,
     ) -> Result<bool> {
-        let mut runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let mut run = runs
-            .remove(run_id)
-            .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
+        let mut run = self.take_run_for_cleanup(run_id)?;
 
         terminate_child_process(&mut run.child);
 
-        if matches!(mode, CleanupMode::Failure) {
-            self.apply_task_status_transition(
-                &mut run,
-                CleanupStatusTransition::Blocked {
-                    reason: "Run failed; worktree retained",
-                    mark_run_failed: true,
-                },
-            )?;
-            self.emit_cleanup_events(&emitter, run_id, CleanupEvent::RunFailed);
-            return Ok(true);
+        match mode {
+            CleanupMode::Failure => self.cleanup_failed_run(run_id, &mut run, &emitter),
+            CleanupMode::Success => self.cleanup_success_run(run_id, &mut run, &emitter),
+        }
+    }
+
+    fn take_run_for_cleanup(&self, run_id: &str) -> Result<RunProcess> {
+        self.runs
+            .lock()
+            .map_err(|_| anyhow!("Run state lock poisoned"))?
+            .remove(run_id)
+            .ok_or_else(|| anyhow!("Run not found: {run_id}"))
+    }
+
+    fn cleanup_failed_run(
+        &self,
+        run_id: &str,
+        run: &mut RunProcess,
+        emitter: &RunEmitter,
+    ) -> Result<bool> {
+        self.apply_blocked_transition(run, "Run failed; worktree retained", true)?;
+        self.emit_cleanup_events(emitter, run_id, CleanupEvent::RunFailed);
+        Ok(true)
+    }
+
+    fn cleanup_success_run(
+        &self,
+        run_id: &str,
+        run: &mut RunProcess,
+        emitter: &RunEmitter,
+    ) -> Result<bool> {
+        if !self.run_post_complete_hooks(run_id, run, emitter)? {
+            return Ok(false);
         }
 
+        let review_transition = self.determine_review_transition(run)?;
+        self.emit_cleanup_events(
+            emitter,
+            run_id,
+            CleanupEvent::ReadyForReview {
+                review_label: review_transition.label,
+            },
+        );
+        self.apply_review_transition(run, &review_transition)?;
+        self.cleanup_worktree(run)?;
+        self.emit_cleanup_events(
+            emitter,
+            run_id,
+            CleanupEvent::RunCompleted {
+                review_label: review_transition.label,
+            },
+        );
+        Ok(true)
+    }
+
+    fn run_post_complete_hooks(
+        &self,
+        run_id: &str,
+        run: &mut RunProcess,
+        emitter: &RunEmitter,
+    ) -> Result<bool> {
         let post_complete_hooks = run.repo_config.hooks.post_complete.clone();
         for hook in post_complete_hooks {
             self.emit_cleanup_events(
-                &emitter,
+                emitter,
                 run_id,
                 CleanupEvent::PostHookStarted {
                     hook: hook.as_str(),
@@ -411,92 +451,76 @@ impl AppService {
                 run_parsed_hook_command_allow_failure(hook.as_str(), Path::new(&run.worktree_path));
 
             if !ok {
-                self.apply_task_status_transition(
-                    &mut run,
-                    CleanupStatusTransition::Blocked {
-                        reason: "Post-complete hook failed",
-                        mark_run_failed: false,
-                    },
-                )?;
+                self.apply_blocked_transition(run, "Post-complete hook failed", false)?;
                 self.emit_cleanup_events(
-                    &emitter,
+                    emitter,
                     run_id,
                     CleanupEvent::PostHookFailed {
                         hook: hook.as_str(),
                         stderr: stderr.as_str(),
                     },
                 );
-
                 return Ok(false);
             }
         }
-
-        let review_label = self
-            .apply_task_status_transition(&mut run, CleanupStatusTransition::ReviewReady)?
-            .ok_or_else(|| anyhow!("Cleanup review transition did not return a review label"))?;
-        self.emit_cleanup_events(
-            &emitter,
-            run_id,
-            CleanupEvent::ReadyForReview { review_label },
-        );
-        self.cleanup_worktree_and_branches(&run)?;
-        self.emit_cleanup_events(
-            &emitter,
-            run_id,
-            CleanupEvent::RunCompleted { review_label },
-        );
-
         Ok(true)
     }
 
-    fn cleanup_worktree_and_branches(&self, run: &RunProcess) -> Result<()> {
+    fn cleanup_worktree(&self, run: &RunProcess) -> Result<()> {
         remove_worktree(Path::new(&run.repo_path), Path::new(&run.worktree_path))
     }
 
-    fn apply_task_status_transition(
+    fn apply_blocked_transition(
         &self,
         run: &mut RunProcess,
-        transition: CleanupStatusTransition,
-    ) -> Result<Option<&'static str>> {
-        match transition {
-            CleanupStatusTransition::Blocked {
-                reason,
-                mark_run_failed,
-            } => {
-                self.task_transition(
-                    &run.repo_path,
-                    &run.task_id,
-                    TaskStatus::Blocked,
-                    Some(reason),
-                )?;
-                if mark_run_failed {
-                    run.summary.state = RunState::Failed;
-                }
-                Ok(None)
-            }
-            CleanupStatusTransition::ReviewReady => {
-                let current_task = self
-                    .task_store
-                    .list_tasks(Path::new(&run.repo_path))?
-                    .into_iter()
-                    .find(|task| task.id == run.task_id)
-                    .ok_or_else(|| anyhow!("Task not found: {}", run.task_id))?;
-
-                let (review_status, review_label) = if current_task.ai_review_enabled {
-                    (TaskStatus::AiReview, "AI review")
-                } else {
-                    (TaskStatus::HumanReview, "Human review")
-                };
-
-                self.task_transition(
-                    &run.repo_path,
-                    &run.task_id,
-                    review_status,
-                    Some("Builder completed"),
-                )?;
-                Ok(Some(review_label))
-            }
+        reason: &'static str,
+        mark_run_failed: bool,
+    ) -> Result<()> {
+        self.task_transition(
+            &run.repo_path,
+            &run.task_id,
+            TaskStatus::Blocked,
+            Some(reason),
+        )?;
+        if mark_run_failed {
+            run.summary.state = RunState::Failed;
         }
+        Ok(())
+    }
+
+    fn determine_review_transition(&self, run: &RunProcess) -> Result<ReviewTransition> {
+        let current_task = self
+            .task_store
+            .list_tasks(Path::new(&run.repo_path))?
+            .into_iter()
+            .find(|task| task.id == run.task_id)
+            .ok_or_else(|| anyhow!("Task not found: {}", run.task_id))?;
+
+        if current_task.ai_review_enabled {
+            Ok(ReviewTransition {
+                status: TaskStatus::AiReview,
+                label: "AI review",
+            })
+        } else {
+            Ok(ReviewTransition {
+                status: TaskStatus::HumanReview,
+                label: "Human review",
+            })
+        }
+    }
+
+    fn apply_review_transition(
+        &self,
+        run: &RunProcess,
+        review_transition: &ReviewTransition,
+    ) -> Result<()> {
+        self.task_transition(
+            &run.repo_path,
+            &run.task_id,
+            review_transition.status.clone(),
+            Some("Builder completed"),
+        )?;
+        Ok(())
     }
 
     fn emit_cleanup_events(&self, emitter: &RunEmitter, run_id: &str, event: CleanupEvent<'_>) {
