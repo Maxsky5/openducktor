@@ -227,9 +227,8 @@ export const handleToolPart = (
         timestamp: event.timestamp,
       });
 
-      shouldRefreshTaskData = shouldRefreshTaskData || refreshDecision.shouldRefreshTaskData;
-      shouldRefreshSessionTodos =
-        shouldRefreshSessionTodos || refreshDecision.shouldRefreshSessionTodos;
+      shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
+      shouldRefreshSessionTodos = refreshDecision.shouldRefreshSessionTodos;
 
       return nextState;
     },
