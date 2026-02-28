@@ -27,7 +27,7 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 ### Replaceable boundaries
 
 - TS port: `AgentEnginePort` in `packages/core/src/ports/agent-engine.ts`
-- Rust trait: `TaskStore` in `apps/desktop/src-tauri/crates/host-domain/src/lib.rs`
+- Rust trait: `TaskStore` defined in `apps/desktop/src-tauri/crates/host-domain/src/store.rs` and re-exported by `apps/desktop/src-tauri/crates/host-domain/src/lib.rs`
 
 ## Commands
 

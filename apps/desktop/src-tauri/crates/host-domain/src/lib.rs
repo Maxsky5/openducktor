@@ -5,12 +5,18 @@ mod store;
 mod system;
 mod task;
 
-pub use document::*;
-pub use git::*;
-pub use runtime::*;
-pub use store::*;
-pub use system::*;
-pub use task::*;
+pub use document::{
+    AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows,
+    QaReportDocument, QaVerdict, QaWorkflowVerdict, SpecDocument, TaskDocumentPresence,
+    TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
+};
+pub use git::{GitBranch, GitCurrentBranch, GitPort, GitPushSummary, GitWorktreeSummary};
+pub use runtime::{AgentRuntimeSummary, RunEvent, RunState, RunSummary};
+pub use store::TaskStore;
+pub use system::{BeadsCheck, RuntimeCheck, SystemCheck, WorkspaceRecord};
+pub use task::{
+    CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
+};
 
 pub fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
@@ -74,5 +80,52 @@ mod tests {
         let timestamp = now_rfc3339();
         assert!(!timestamp.trim().is_empty());
         assert!(chrono::DateTime::parse_from_rfc3339(&timestamp).is_ok());
+    }
+
+    #[test]
+    fn public_api_exports_compile() {
+        use super::{
+            AgentRuntimeSummary, AgentSessionDocument, AgentSessionModelSelection,
+            AgentWorkflowState, AgentWorkflows, BeadsCheck, CreateTaskInput, GitBranch,
+            GitCurrentBranch, GitPort, GitPushSummary, GitWorktreeSummary, IssueType,
+            PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
+            RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard,
+            TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
+            TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
+        };
+
+        let _: Option<AgentRuntimeSummary> = None;
+        let _: Option<AgentSessionDocument> = None;
+        let _: Option<AgentSessionModelSelection> = None;
+        let _: Option<AgentWorkflowState> = None;
+        let _: Option<AgentWorkflows> = None;
+        let _: Option<BeadsCheck> = None;
+        let _: Option<CreateTaskInput> = None;
+        let _: Option<GitBranch> = None;
+        let _: Option<GitCurrentBranch> = None;
+        let _: Option<GitPushSummary> = None;
+        let _: Option<GitWorktreeSummary> = None;
+        let _: Option<IssueType> = None;
+        let _: Option<PlanSubtaskInput> = None;
+        let _: Option<QaReportDocument> = None;
+        let _: Option<QaVerdict> = None;
+        let _: Option<QaWorkflowVerdict> = None;
+        let _: Option<RunEvent> = None;
+        let _: Option<RunState> = None;
+        let _: Option<RunSummary> = None;
+        let _: Option<RuntimeCheck> = None;
+        let _: Option<SpecDocument> = None;
+        let _: Option<SystemCheck> = None;
+        let _: Option<TaskAction> = None;
+        let _: Option<TaskCard> = None;
+        let _: Option<TaskDocumentPresence> = None;
+        let _: Option<TaskDocumentSummary> = None;
+        let _: Option<TaskMetadata> = None;
+        let _: Option<TaskQaDocumentPresence> = None;
+        let _: Option<TaskStatus> = None;
+        let _: Option<UpdateTaskPatch> = None;
+        let _: Option<WorkspaceRecord> = None;
+        let _: Option<&dyn GitPort> = None;
+        let _: Option<&dyn TaskStore> = None;
     }
 }
