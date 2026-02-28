@@ -65,7 +65,8 @@ mod tests {
 
     #[test]
     fn run_parsed_hook_command_allow_failure_reports_empty_hook() {
-        let (ok, _stdout, stderr) = run_parsed_hook_command_allow_failure("  ", std::path::Path::new("."));
+        let (ok, _stdout, stderr) =
+            run_parsed_hook_command_allow_failure("  ", std::path::Path::new("."));
         assert!(!ok);
         assert!(stderr.contains("Hook command is empty"));
     }
