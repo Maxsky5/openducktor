@@ -527,3 +527,87 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
     let _ = fs::remove_dir_all(root);
     Ok(())
 }
+
+#[test]
+fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-run-lock-poison");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let pid_file = root.join("spawned-build.pid");
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+    let _delay_guard = set_env_var("OPENDUCKTOR_TEST_STARTUP_DELAY_MS", "800");
+    let _pid_guard = set_env_var(
+        "OPENDUCKTOR_TEST_PID_FILE",
+        pid_file.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let build_error = std::thread::scope(|scope| -> Result<anyhow::Error> {
+        let build_handle = scope.spawn(|| {
+            service.build_start(
+                repo_path.as_str(),
+                "task-1",
+                make_emitter(Arc::new(Mutex::new(Vec::new()))),
+            )
+        });
+
+        assert!(wait_for_path_exists(
+            pid_file.as_path(),
+            Duration::from_secs(2)
+        ));
+        let spawned_pid = fs::read_to_string(pid_file.as_path())?
+            .trim()
+            .parse::<i32>()
+            .expect("spawned build pid should parse as i32");
+
+        let poison_handle = scope.spawn(|| {
+            let _lock = service
+                .runs
+                .lock()
+                .expect("run lock should be available for poisoning");
+            panic!("poison run lock");
+        });
+        assert!(poison_handle.join().is_err());
+
+        let build_error = build_handle
+            .join()
+            .expect("build thread should join")
+            .expect_err("build_start should fail when run lock is poisoned");
+        assert!(wait_for_process_exit(spawned_pid, Duration::from_secs(2)));
+        Ok(build_error)
+    })?;
+    assert!(build_error.to_string().contains("Run state lock poisoned"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
