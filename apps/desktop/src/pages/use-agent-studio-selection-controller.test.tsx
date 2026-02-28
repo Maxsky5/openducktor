@@ -5,7 +5,10 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
+import {
+  buildSessionsByTaskIdWithCache,
+  useAgentStudioSelectionController,
+} from "./use-agent-studio-selection-controller";
 
 enableReactActEnvironment();
 
@@ -46,6 +49,53 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioSelectionController", () => {
+  test("reuses cached task ordering metadata for unchanged task signatures", () => {
+    const firstTaskOneOld = createSession("task-1", "session-old", {
+      startedAt: "2026-02-22T10:00:00.000Z",
+    });
+    const firstTaskOneNew = createSession("task-1", "session-new", {
+      startedAt: "2026-02-22T11:00:00.000Z",
+    });
+    const firstTaskTwo = createSession("task-2", "session-2-old", {
+      startedAt: "2026-02-22T09:00:00.000Z",
+    });
+
+    const first = buildSessionsByTaskIdWithCache(
+      [firstTaskOneOld, firstTaskOneNew, firstTaskTwo],
+      new Map(),
+    );
+
+    expect(first.sessionsByTaskId.get("task-1")?.map((session) => session.sessionId)).toEqual([
+      "session-new",
+      "session-old",
+    ]);
+
+    const secondTaskOneOld = createSession("task-1", "session-old", {
+      startedAt: "2026-02-22T10:00:00.000Z",
+      status: "running",
+    });
+    const secondTaskOneNew = createSession("task-1", "session-new", {
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "stopped",
+    });
+    const secondTaskTwoNew = createSession("task-2", "session-2-new", {
+      startedAt: "2026-02-22T12:00:00.000Z",
+    });
+
+    const second = buildSessionsByTaskIdWithCache(
+      [secondTaskOneOld, secondTaskOneNew, secondTaskTwoNew],
+      first.nextCache,
+    );
+
+    expect(second.sessionsByTaskId.get("task-1")?.map((session) => session.sessionId)).toEqual([
+      "session-new",
+      "session-old",
+    ]);
+    expect(second.sessionsByTaskId.get("task-2")?.map((session) => session.sessionId)).toEqual([
+      "session-2-new",
+    ]);
+  });
+
   test("resolves task context from selected session when task param is missing", async () => {
     const session = createSession("task-2", "session-2");
     const harness = createHookHarness(

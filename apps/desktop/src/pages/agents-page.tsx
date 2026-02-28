@@ -20,7 +20,14 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
-import { useAgentStudioOrchestrationController } from "./use-agent-studio-orchestration-controller";
+import {
+  type AgentStudioOrchestrationActionsContext,
+  type AgentStudioOrchestrationComposerContext,
+  type AgentStudioOrchestrationReadinessContext,
+  type AgentStudioOrchestrationSelectionContext,
+  type AgentStudioOrchestrationWorkspaceContext,
+  useAgentStudioOrchestrationController,
+} from "./use-agent-studio-orchestration-controller";
 import { useAgentStudioQuerySessionSync } from "./use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
@@ -28,6 +35,7 @@ import type {
   NewSessionStartDecision,
   NewSessionStartRequest,
 } from "./use-agent-studio-session-actions";
+import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 
 const ROLE_LABEL_BY_ROLE: Record<AgentRole, string> = {
@@ -168,36 +176,8 @@ export function AgentsPage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
-  const [pendingSessionStartRequest, setPendingSessionStartRequest] =
-    useState<NewSessionStartRequest | null>(null);
-  const pendingSessionStartResolverRef = useRef<
-    ((decision: NewSessionStartDecision) => void) | null
-  >(null);
-
-  const resolvePendingSessionStart = useCallback((decision: NewSessionStartDecision): void => {
-    const resolver = pendingSessionStartResolverRef.current;
-    pendingSessionStartResolverRef.current = null;
-    setPendingSessionStartRequest(null);
-    resolver?.(decision);
-  }, []);
-
-  const requestNewSessionStart = useCallback(
-    (request: NewSessionStartRequest): Promise<NewSessionStartDecision> => {
-      pendingSessionStartResolverRef.current?.(null);
-      return new Promise((resolve) => {
-        pendingSessionStartResolverRef.current = resolve;
-        setPendingSessionStartRequest(request);
-      });
-    },
-    [],
-  );
-
-  useEffect(() => {
-    return () => {
-      pendingSessionStartResolverRef.current?.(null);
-      pendingSessionStartResolverRef.current = null;
-    };
-  }, []);
+  const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
+    useAgentStudioSessionStartRequest();
 
   const {
     taskIdParam,
@@ -277,9 +257,12 @@ export function AgentsPage(): ReactElement {
           ? "Checking OpenCode and OpenDucktor MCP health..."
           : "OpenCode runtime or OpenDucktor MCP is not ready.";
 
-  const orchestration = useAgentStudioOrchestrationController({
+  const orchestrationWorkspace = {
     activeRepo,
     loadRepoSettings,
+  } satisfies AgentStudioOrchestrationWorkspaceContext;
+
+  const orchestrationSelection = {
     viewTaskId: selection.viewTaskId,
     viewRole: selection.viewRole,
     viewScenario: selection.viewScenario,
@@ -292,16 +275,25 @@ export function AgentsPage(): ReactElement {
     contextSwitchVersion,
     isLoadingTasks,
     isActiveTaskHydrated: selection.isActiveTaskHydrated,
+    onCreateTab: selection.handleCreateTab,
+    onCloseTab: selection.handleCloseTab,
+  } satisfies AgentStudioOrchestrationSelectionContext;
+
+  const orchestrationReadiness = {
     agentStudioReady,
     agentStudioBlockedReason,
     isLoadingChecks,
     refreshChecks,
+  } satisfies AgentStudioOrchestrationReadinessContext;
+
+  const orchestrationComposer = {
     input,
     setInput,
+  } satisfies AgentStudioOrchestrationComposerContext;
+
+  const orchestrationActions = {
     updateQuery,
     onContextSwitchIntent: signalContextSwitchIntent,
-    onCreateTab: selection.handleCreateTab,
-    onCloseTab: selection.handleCloseTab,
     startAgentSession,
     sendAgentMessage,
     stopAgentSession,
@@ -309,6 +301,14 @@ export function AgentsPage(): ReactElement {
     replyAgentPermission,
     answerAgentQuestion,
     requestNewSessionStart,
+  } satisfies AgentStudioOrchestrationActionsContext;
+
+  const orchestration = useAgentStudioOrchestrationController({
+    workspace: orchestrationWorkspace,
+    selection: orchestrationSelection,
+    readiness: orchestrationReadiness,
+    composer: orchestrationComposer,
+    actions: orchestrationActions,
   });
 
   return (
