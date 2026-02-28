@@ -313,13 +313,14 @@ mod tests {
     }
 
     #[test]
-    fn namespace_with_startup_warning_falls_back_and_reports_error_context() {
+    fn namespace_with_startup_warning_falls_back_and_reports_error_context() -> Result<(), String> {
         let (namespace, warning) =
             namespace_with_startup_warning(Err(anyhow!("config parse failure")));
 
         assert_eq!(namespace, FALLBACK_TASK_METADATA_NAMESPACE);
 
-        let warning = warning.expect("expected startup warning for fallback namespace");
+        let warning =
+            warning.ok_or_else(|| "expected startup warning for fallback namespace".to_string())?;
         assert!(
             warning.contains("using fallback namespace 'openducktor'"),
             "warning should mention fallback namespace: {warning}"
@@ -328,6 +329,7 @@ mod tests {
             warning.contains("config parse failure"),
             "warning should include original error context: {warning}"
         );
+        Ok(())
     }
 
     #[test]
