@@ -6,7 +6,7 @@ import type { AgentStateContextValue } from "@/types/state-slices";
 import { firstScenario, SCENARIO_LABELS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
-  buildSessionSelectionQueryUpdate,
+  applyAgentStudioSelectionQuery,
   canStartSessionForRole,
   type QueryUpdate,
   shouldTriggerContextSwitchIntent,
@@ -119,28 +119,6 @@ export function useAgentStudioSessionActions({
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
     ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
   });
-
-  const applySessionSelectionQuery = useCallback(
-    (params: {
-      taskId: string;
-      sessionId: string | undefined;
-      role: AgentRole;
-      scenario: AgentScenario;
-      clearStart?: boolean;
-    }): void => {
-      updateQuery(
-        buildSessionSelectionQueryUpdate({
-          taskId: params.taskId,
-          sessionId: params.sessionId,
-          role: params.role,
-          scenario: params.scenario,
-          clearAutostart: true,
-          ...(params.clearStart !== undefined ? { clearStart: params.clearStart } : {}),
-        }),
-      );
-    },
-    [updateQuery],
-  );
 
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting || !agentStudioReady) {
@@ -276,7 +254,7 @@ export function useAgentStudioSessionActions({
           onContextSwitchIntent?.();
         }
 
-        applySessionSelectionQuery({
+        applyAgentStudioSelectionQuery(updateQuery, {
           taskId,
           sessionId: undefined,
           role: nextRole,
@@ -301,21 +279,14 @@ export function useAgentStudioSessionActions({
         onContextSwitchIntent?.();
       }
 
-      applySessionSelectionQuery({
+      applyAgentStudioSelectionQuery(updateQuery, {
         taskId: session.taskId,
         sessionId: session.sessionId,
         role: session.role,
         scenario: session.scenario,
       });
     },
-    [
-      activeSession,
-      applySessionSelectionQuery,
-      onContextSwitchIntent,
-      role,
-      sessionsForTask,
-      taskId,
-    ],
+    [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
   );
 
   const handleSessionSelectionChange = useCallback(
@@ -340,21 +311,14 @@ export function useAgentStudioSessionActions({
         onContextSwitchIntent?.();
       }
 
-      applySessionSelectionQuery({
+      applyAgentStudioSelectionQuery(updateQuery, {
         taskId: selectedSession.taskId,
         sessionId: selectedSession.sessionId,
         role: selectedSession.role,
         scenario: selectedSession.scenario,
       });
     },
-    [
-      activeSession,
-      applySessionSelectionQuery,
-      onContextSwitchIntent,
-      role,
-      sessionsForTask,
-      taskId,
-    ],
+    [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
   );
 
   const selectedRoleAvailable = selectedTask ? canStartSessionForRole(selectedTask, role) : false;

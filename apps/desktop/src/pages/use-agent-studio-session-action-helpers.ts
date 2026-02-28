@@ -10,6 +10,14 @@ export type ReusableSessionDecision = {
   clearStart: boolean;
 };
 
+export type AgentStudioSessionSelectionQueryParams = {
+  taskId: string;
+  sessionId: string | undefined;
+  role: AgentRole;
+  scenario: AgentScenario;
+  clearStart?: boolean;
+};
+
 export const canStartSessionForRole = (task: TaskCard | null, role: AgentRole): boolean => {
   return !task || isRoleAvailableForTask(task, role);
 };
@@ -66,6 +74,26 @@ export const buildSessionSelectionQueryUpdate = (params: {
   }
 
   return update;
+};
+
+export const buildAgentStudioSelectionQueryUpdate = (
+  params: AgentStudioSessionSelectionQueryParams,
+): QueryUpdate => {
+  return buildSessionSelectionQueryUpdate({
+    taskId: params.taskId,
+    sessionId: params.sessionId,
+    role: params.role,
+    scenario: params.scenario,
+    clearAutostart: true,
+    ...(params.clearStart !== undefined ? { clearStart: params.clearStart } : {}),
+  });
+};
+
+export const applyAgentStudioSelectionQuery = (
+  updateQuery: (updates: QueryUpdate) => void,
+  params: AgentStudioSessionSelectionQueryParams,
+): void => {
+  updateQuery(buildAgentStudioSelectionQueryUpdate(params));
 };
 
 export const buildFreshStartQueryUpdate = (params: {
