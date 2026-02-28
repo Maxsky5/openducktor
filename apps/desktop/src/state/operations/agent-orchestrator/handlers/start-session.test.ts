@@ -1,78 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
-import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
 import { createStartAgentSession } from "./start-session";
-
-type FlatStartSessionDependencies = {
-  activeRepo: string | null;
-  adapter: AgentEnginePort;
-  setSessionsById: (
-    updater:
-      | Record<string, AgentSessionState>
-      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-  ) => void;
-  sessionsRef: { current: Record<string, AgentSessionState> };
-  taskRef: { current: TaskCard[] };
-  repoEpochRef: { current: number };
-  previousRepoRef: { current: string | null };
-  inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
-  attachSessionListener: (repoPath: string, sessionId: string) => void;
-  ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
-  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
-  loadSessionTodos: (
-    sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<void>;
-  loadSessionModelCatalog: (
-    sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
-  ) => Promise<void>;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  refreshTaskData: (repoPath: string) => Promise<void>;
-  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
-};
+import {
+  type FlatStartSessionDependencies,
+  toStartSessionDependencies,
+} from "./start-session.test-helpers";
 
 const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies) => {
-  return createStartAgentSession({
-    repo: {
-      activeRepo: deps.activeRepo,
-      repoEpochRef: deps.repoEpochRef,
-      previousRepoRef: deps.previousRepoRef,
-    },
-    session: {
-      setSessionsById: deps.setSessionsById,
-      sessionsRef: deps.sessionsRef,
-      inFlightStartsByRepoTaskRef: deps.inFlightStartsByRepoTaskRef,
-      loadAgentSessions: deps.loadAgentSessions,
-      persistSessionSnapshot: deps.persistSessionSnapshot,
-      attachSessionListener: deps.attachSessionListener,
-    },
-    runtime: {
-      adapter: deps.adapter,
-      ensureRuntime: deps.ensureRuntime,
-    },
-    task: {
-      taskRef: deps.taskRef,
-      loadTaskDocuments: deps.loadTaskDocuments,
-      refreshTaskData: deps.refreshTaskData,
-      sendAgentMessage: deps.sendAgentMessage,
-    },
-    model: {
-      loadRepoDefaultModel: deps.loadRepoDefaultModel,
-      loadSessionTodos: deps.loadSessionTodos,
-      loadSessionModelCatalog: deps.loadSessionModelCatalog,
-    },
-  });
+  return createStartAgentSession(toStartSessionDependencies(deps));
 };
 
 const taskFixture = createTaskCardFixture({
@@ -772,6 +711,70 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("rolls back started remote session when workspace becomes stale after listener attach", async () => {
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+    let stopCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    const originalStopSession = adapter.stopSession;
+    adapter.startSession = async () => {
+      return {
+        sessionId: "session-created",
+        externalSessionId: "external-created",
+        startedAt: "2026-02-22T08:00:10.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+    adapter.stopSession = async () => {
+      stopCalls += 1;
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef,
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {
+        previousRepoRef.current = "/tmp/other";
+      },
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
+        "Workspace changed while starting session.",
+      );
+      expect(stopCalls).toBe(1);
+    } finally {
+      adapter.startSession = originalStartSession;
+      adapter.stopSession = originalStopSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("creates a fresh session and triggers kickoff flow", async () => {
     let attachCalls = 0;
     let persistCalls = 0;
@@ -991,6 +994,139 @@ describe("agent-orchestrator/handlers/start-session", () => {
       await expect(startPromise).resolves.toBe("session-created");
     } finally {
       refreshDeferred.resolve();
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("requireModelReady waits for and applies resolved default model before completion", async () => {
+    const defaultModelDeferred = createDeferred<AgentModelSelection | null>();
+    const resolvedModel: AgentModelSelection = {
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+    let sessionsState: Record<string, AgentSessionState> = {};
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
+    };
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => ({
+      sessionId: "session-created",
+      externalSessionId: "external-created",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+    });
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById,
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => defaultModelDeferred.promise,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const startPromise = start({ taskId: "task-1", role: "build", requireModelReady: true });
+      const beforeModelReady = await withTimeout(startPromise, 20);
+      expect(beforeModelReady).toBe("timeout");
+
+      defaultModelDeferred.resolve(resolvedModel);
+      await expect(startPromise).resolves.toBe("session-created");
+      expect(sessionsState["session-created"]?.selectedModel).toEqual(resolvedModel);
+    } finally {
+      defaultModelDeferred.resolve(null);
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("requireModelReady falls back to null model when default-model loading fails", async () => {
+    const defaultModelDeferred = createDeferred<AgentModelSelection | null>();
+    let sessionsState: Record<string, AgentSessionState> = {};
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
+    };
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => ({
+      sessionId: "session-created",
+      externalSessionId: "external-created",
+      startedAt: "2026-02-22T08:00:10.000Z",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+    });
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById,
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => defaultModelDeferred.promise,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      const startPromise = start({ taskId: "task-1", role: "build", requireModelReady: true });
+      defaultModelDeferred.reject(new Error("catalog unavailable"));
+      await expect(startPromise).resolves.toBe("session-created");
+      expect(sessionsState["session-created"]?.selectedModel).toBeNull();
+    } finally {
+      defaultModelDeferred.resolve(null);
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
