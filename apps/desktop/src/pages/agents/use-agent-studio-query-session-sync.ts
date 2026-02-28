@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { useEffect } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -11,10 +11,7 @@ type UseAgentStudioQuerySessionSyncArgs = {
   selectedSessionById: AgentSessionState | null;
   taskId: string;
   activeSession: AgentSessionState | null;
-  autostart: boolean;
   roleFromQuery: AgentRole;
-  scenarioFromQuery: AgentScenario | undefined;
-  sessionStartPreference: "fresh" | "continue" | null;
   isActiveTaskHydrated: boolean;
   scheduleQueryUpdate: (updates: Record<string, string | undefined>) => void;
 };
@@ -27,10 +24,7 @@ export function useAgentStudioQuerySessionSync({
   selectedSessionById,
   taskId,
   activeSession,
-  autostart,
   roleFromQuery,
-  scenarioFromQuery,
-  sessionStartPreference,
   isActiveTaskHydrated,
   scheduleQueryUpdate,
 }: UseAgentStudioQuerySessionSyncArgs): void {
@@ -93,15 +87,7 @@ export function useAgentStudioQuerySessionSync({
     if (roleFromQuery !== activeSession.role) {
       updates.agent = activeSession.role;
     }
-    if (scenarioFromQuery !== activeSession.scenario) {
-      updates.scenario = activeSession.scenario;
-    }
-    if (autostart) {
-      updates.autostart = undefined;
-    }
-    if (sessionStartPreference) {
-      updates.start = undefined;
-    }
+
 
     if (Object.keys(updates).length === 0) {
       return;
@@ -109,12 +95,9 @@ export function useAgentStudioQuerySessionSync({
     scheduleQueryUpdate(updates);
   }, [
     activeSession,
-    autostart,
     roleFromQuery,
     scheduleQueryUpdate,
-    scenarioFromQuery,
     sessionParam,
-    sessionStartPreference,
     taskIdParam,
   ]);
 }

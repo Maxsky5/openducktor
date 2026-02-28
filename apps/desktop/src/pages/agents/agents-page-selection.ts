@@ -145,19 +145,14 @@ export const resolveAgentStudioActiveSession = ({
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
-  sessionStartPreference,
 }: {
   sessionsForTask: AgentSessionState[];
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  sessionStartPreference: "fresh" | "continue" | null;
 }): AgentSessionState | null => {
   if (sessionParam) {
     return sessionsForTask.find((entry) => entry.sessionId === sessionParam) ?? null;
-  }
-  if (sessionStartPreference === "fresh" && hasExplicitRoleParam) {
-    return null;
   }
   if (hasExplicitRoleParam) {
     return sessionsForTask.find((entry) => entry.role === roleFromQuery) ?? null;

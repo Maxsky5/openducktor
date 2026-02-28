@@ -19,7 +19,6 @@ type UseAgentStudioSessionStartSessionArgs = {
   scenario: AgentScenario;
   activeSession: AgentSessionState | null;
   sessionsForTask: AgentSessionState[];
-  sessionStartPreference: "fresh" | "continue" | null;
   selectedTask: Parameters<typeof canStartSessionForRole>[0];
   agentStudioReady: boolean;
   isActiveTaskHydrated: boolean;
@@ -39,7 +38,6 @@ export function useAgentStudioSessionStartSession({
   scenario,
   activeSession,
   sessionsForTask,
-  sessionStartPreference,
   selectedTask,
   agentStudioReady,
   isActiveTaskHydrated,
@@ -88,7 +86,6 @@ export function useAgentStudioSessionStartSession({
           taskId,
           sessionId,
           role,
-          scenario,
         });
         return sessionId;
       } finally {
@@ -118,7 +115,6 @@ export function useAgentStudioSessionStartSession({
 
       const reusableSession = resolveReusableSessionForStart({
         activeSession,
-        sessionStartPreference,
         sessionsForTask,
         role,
       });
@@ -127,8 +123,6 @@ export function useAgentStudioSessionStartSession({
           taskId: reusableSession.session.taskId,
           sessionId: reusableSession.session.sessionId,
           role: reusableSession.session.role,
-          scenario: reusableSession.session.scenario,
-          clearStart: reusableSession.clearStart,
         });
         return reusableSession.session.sessionId;
       }
@@ -138,10 +132,9 @@ export function useAgentStudioSessionStartSession({
         return inFlightSessionStart;
       }
 
-      const startMode = sessionStartPreference === "fresh" ? "fresh" : "reuse_latest";
       const startPromise = startRequestedSession({
         reason,
-        startMode,
+        startMode: "reuse_latest",
       });
 
       startingSessionByTaskRef.current.set(taskId, startPromise);
@@ -159,7 +152,6 @@ export function useAgentStudioSessionStartSession({
       isActiveTaskHydrated,
       role,
       selectedTask,
-      sessionStartPreference,
       sessionsForTask,
       startRequestedSession,
       startingSessionByTaskRef,

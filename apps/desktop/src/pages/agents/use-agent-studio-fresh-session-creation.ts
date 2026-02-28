@@ -12,7 +12,6 @@ import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-p
 import {
   buildAgentStudioSelectionQueryUpdate,
   buildCreateSessionStartKey,
-  buildFreshStartQueryUpdate,
   buildPreviousSelectionQueryUpdate,
   type QueryUpdate,
   shouldTriggerContextSwitchIntent,
@@ -61,12 +60,12 @@ export function useAgentStudioFreshSessionCreation({
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const applyFreshSessionDraftQuery = useCallback(
-    (nextRole: AgentRole, nextScenario: AgentScenario): void => {
+    (nextRole: AgentRole): void => {
       updateQuery(
-        buildFreshStartQueryUpdate({
+        buildAgentStudioSelectionQueryUpdate({
           taskId,
+          sessionId: undefined,
           role: nextRole,
-          scenario: nextScenario,
         }),
       );
     },
@@ -74,14 +73,12 @@ export function useAgentStudioFreshSessionCreation({
   );
 
   const applyFreshSessionSelectionQuery = useCallback(
-    (sessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
+    (sessionId: string, nextRole: AgentRole): void => {
       updateQuery(
         buildAgentStudioSelectionQueryUpdate({
           taskId,
           sessionId,
           role: nextRole,
-          scenario: nextScenario,
-          clearStart: true,
         }),
       );
     },
@@ -179,7 +176,7 @@ export function useAgentStudioFreshSessionCreation({
           onContextSwitchIntent?.();
         }
 
-        applyFreshSessionDraftQuery(params.nextRole, params.nextScenario);
+        applyFreshSessionDraftQuery(params.nextRole);
         const sessionId = await startFreshSessionWithFallback({
           nextRole: params.nextRole,
           nextScenario: params.nextScenario,
@@ -190,7 +187,7 @@ export function useAgentStudioFreshSessionCreation({
           return undefined;
         }
 
-        applyFreshSessionSelectionQuery(sessionId, params.nextRole, params.nextScenario);
+        applyFreshSessionSelectionQuery(sessionId, params.nextRole);
         sendFreshSessionKickoff(sessionId, params.nextRole, params.nextScenario);
         return sessionId;
       } finally {
@@ -239,7 +236,6 @@ export function useAgentStudioFreshSessionCreation({
         activeSession,
         taskId,
         role,
-        scenario,
       });
       const startPromise = runFreshSessionCreation({
         nextRole,
@@ -261,7 +257,6 @@ export function useAgentStudioFreshSessionCreation({
       isSessionWorking,
       role,
       runFreshSessionCreation,
-      scenario,
       selectedTask,
       startingSessionByTaskRef,
       taskId,

@@ -269,8 +269,6 @@ export function useAgentStudioOrchestrationController({
     taskId: viewTaskId,
     role: viewRole,
     scenario: viewScenario,
-    autostart: false,
-    sessionStartPreference: null,
     activeSession: viewActiveSession,
     sessionsForTask: viewSessionsForTask,
     selectedTask: viewSelectedTask,

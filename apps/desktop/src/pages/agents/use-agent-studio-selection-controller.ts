@@ -18,8 +18,6 @@ type UseAgentStudioSelectionControllerArgs = {
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  scenarioFromQuery: AgentScenario | undefined;
-  sessionStartPreference: "fresh" | "continue" | null;
   updateQuery: (updates: QueryUpdate) => void;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearComposerInput: () => void;
@@ -125,8 +123,6 @@ export function useAgentStudioSelectionController({
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
-  scenarioFromQuery,
-  sessionStartPreference,
   updateQuery,
   loadAgentSessions,
   clearComposerInput,
@@ -179,9 +175,8 @@ export function useAgentStudioSelectionController({
       sessionParam,
       hasExplicitRoleParam,
       roleFromQuery,
-      sessionStartPreference,
     });
-  }, [hasExplicitRoleParam, roleFromQuery, sessionStartPreference, sessionParam, sessionsForTask]);
+  }, [hasExplicitRoleParam, roleFromQuery, sessionParam, sessionsForTask]);
 
   const latestSessionByTaskId = useMemo(() => {
     const latestByTask = new Map<string, AgentSessionState>();
@@ -240,7 +235,6 @@ export function useAgentStudioSelectionController({
 
   const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
   const hasViewRoleSelection = hasExplicitRoleParam && !isViewTaskDetachedFromQuery;
-  const viewSessionStartPreference = isViewTaskDetachedFromQuery ? null : sessionStartPreference;
 
   const viewActiveSession = useMemo(() => {
     return resolveAgentStudioActiveSession({
@@ -248,12 +242,10 @@ export function useAgentStudioSelectionController({
       sessionParam: viewSessionParam,
       hasExplicitRoleParam: hasViewRoleSelection,
       roleFromQuery,
-      sessionStartPreference: viewSessionStartPreference,
     });
   }, [
     hasViewRoleSelection,
     roleFromQuery,
-    viewSessionStartPreference,
     viewSessionParam,
     viewSessionsForTask,
   ]);
@@ -266,11 +258,8 @@ export function useAgentStudioSelectionController({
 
   const viewScenarios = SCENARIOS_BY_ROLE[viewRole];
 
-  const viewScenario: AgentScenario = hasViewRoleSelection
-    ? scenarioFromQuery && viewScenarios.includes(scenarioFromQuery)
-      ? scenarioFromQuery
-      : firstScenario(viewRole)
-    : viewActiveSession?.scenario && viewScenarios.includes(viewActiveSession.scenario)
+  const viewScenario: AgentScenario =
+    viewActiveSession?.scenario && viewScenarios.includes(viewActiveSession.scenario)
       ? viewActiveSession.scenario
       : firstScenario(viewRole);
 

@@ -1,8 +1,35 @@
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentDescriptor, AgentModelCatalog } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import type { ClientFactory, McpServerStatus } from "./types";
+
+/**
+ * Plugins like oh-my-opencode can return both a display-name agent
+ * (e.g., "Atlas (Plan Executor)") and a slug alias ("atlas") as separate
+ * entries with the same mode and no distinguishing hidden/native flags.
+ * The slug is a config-level reference, not a distinct agent — drop it
+ * when a matching display-name variant exists.
+ */
+const deduplicateAgentAliases = (
+  agents: AgentDescriptor[],
+): AgentDescriptor[] => {
+  const displayNameBaseIds = new Set<string>();
+  for (const agent of agents) {
+    if (agent.name.includes(" ")) {
+      displayNameBaseIds.add((agent.name.split(" ")[0] ?? agent.name).toLowerCase());
+    }
+  }
+  if (displayNameBaseIds.size === 0) {
+    return agents;
+  }
+  return agents.filter((agent) => {
+    if (agent.name.includes(" ")) {
+      return true;
+    }
+    return !displayNameBaseIds.has(agent.name.toLowerCase());
+  });
+};
 
 export const listAvailableModels = async (
   createClient: ClientFactory,
@@ -39,7 +66,7 @@ export const listAvailableModels = async (
     }
   })();
   const baseCatalog = mapProviderListToCatalog(providerData);
-  const agents = Array.isArray(agentsData)
+  const rawAgents = Array.isArray(agentsData)
     ? agentsData
         .map((entry) => ({
           name: entry.name,
@@ -51,6 +78,8 @@ export const listAvailableModels = async (
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
     : [];
+
+  const agents = deduplicateAgentAliases(rawAgents);
 
   return {
     ...baseCatalog,

@@ -26,8 +26,6 @@ const createBaseArgs = (): HookArgs => {
     taskId: "task-1",
     role: "spec",
     scenario: "spec_initial",
-    autostart: false,
-    sessionStartPreference: null,
     activeSession: null,
     sessionsForTask: [],
     selectedTask: createTask(),
@@ -100,15 +98,15 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend uses fresh start mode when fresh preference is selected", async () => {
-    const startAgentSession = mock(async () => "session-fresh");
+  test("onSend reuses active session when one exists", async () => {
     const sendAgentMessage = mock(async () => {});
+    const startAgentSession = mock(async () => "session-new");
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      sessionStartPreference: "fresh",
-      startAgentSession,
+      activeSession: createSession({ sessionId: "session-existing" }),
       sendAgentMessage,
+      startAgentSession,
     });
 
     await harness.mount();
@@ -116,21 +114,8 @@ describe("useAgentStudioSessionActions", () => {
       await state.onSend();
     });
 
-    expect(startAgentSession).toHaveBeenCalledWith({
-      taskId: "task-1",
-      role: "spec",
-      scenario: "spec_initial",
-      selectedModel: {
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        opencodeAgent: "spec",
-      },
-      sendKickoff: false,
-      startMode: "fresh",
-      requireModelReady: true,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-fresh", "hello world");
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
 
     await harness.unmount();
   });
@@ -209,44 +194,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend ignores active session when fresh preference is selected", async () => {
-    const startAgentSession = mock(async () => "session-fresh");
-    const sendAgentMessage = mock(async () => {});
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      sessionStartPreference: "fresh",
-      activeSession: createSession({ sessionId: "session-existing" }),
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.run(async (state) => {
-      await state.onSend();
-    });
-
-    expect(startAgentSession).toHaveBeenCalledWith({
-      taskId: "task-1",
-      role: "spec",
-      scenario: "spec_initial",
-      selectedModel: {
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        opencodeAgent: "spec",
-      },
-      sendKickoff: false,
-      startMode: "fresh",
-      requireModelReady: true,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-fresh", "hello world");
-
-    await harness.unmount();
-  });
-
-  test("onSend with continue preference reuses latest role session from session list", async () => {
-    const startAgentSession = mock(async () => "session-new");
+  test("onSend reuses active session when available", async () => {
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const existingSpecSession = createSession({
@@ -257,9 +205,8 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      sessionStartPreference: "continue",
+      activeSession: existingSpecSession,
       sessionsForTask: [existingSpecSession],
-      startAgentSession,
       sendAgentMessage,
       updateQuery: (updates) => {
         updateCalls.push(updates);
@@ -271,14 +218,6 @@ describe("useAgentStudioSessionActions", () => {
       await state.onSend();
     });
 
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(updateCalls).toContainEqual({
-      task: "task-1",
-      session: "session-existing",
-      agent: "spec",
-      scenario: "spec_initial",
-      autostart: undefined,
-    });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
 
     await harness.unmount();
@@ -307,7 +246,7 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-2",
       session: "session-2",
       agent: "spec",
-      scenario: "spec_initial",
+      scenario: undefined,
       autostart: undefined,
     });
 
@@ -336,7 +275,7 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
-      scenario: "planner_initial",
+      scenario: undefined,
       autostart: undefined,
     });
 
@@ -405,9 +344,9 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: undefined,
         agent: "planner",
-        scenario: "planner_initial",
+        scenario: undefined,
         autostart: undefined,
-        start: "fresh",
+        start: undefined,
       });
       expect(startAgentSession).toHaveBeenCalledWith({
         taskId: "task-1",
@@ -433,7 +372,7 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: "session-plan",
         agent: "planner",
-        scenario: "planner_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -483,9 +422,9 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: undefined,
         agent: "spec",
-        scenario: "spec_initial",
+        scenario: undefined,
         autostart: undefined,
-        start: "fresh",
+        start: undefined,
       });
     } finally {
       deferredStart.resolve("session-spec-fresh");
@@ -658,15 +597,15 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: undefined,
         agent: "planner",
-        scenario: "planner_initial",
+        scenario: undefined,
         autostart: undefined,
-        start: "fresh",
+        start: undefined,
       });
       expect(updateCalls).toContainEqual({
         task: "task-1",
         session: "session-spec",
         agent: "spec",
-        scenario: "spec_initial",
+        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -783,67 +722,4 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("autostart flow requests modal selection with scenario_kickoff reason", async () => {
-    const requestNewSessionStart = mock(async () => ({
-      selectedModel: {
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        opencodeAgent: "spec",
-      },
-    }));
-    const startAgentSession = mock(async () => "session-autostart");
-    const sendAgentMessage = mock(async () => {});
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      autostart: true,
-      requestNewSessionStart,
-      startAgentSession,
-      sendAgentMessage,
-      input: "",
-    });
-
-    await harness.mount();
-    await harness.waitFor(() => requestNewSessionStart.mock.calls.length > 0);
-
-    expect(requestNewSessionStart).toHaveBeenCalledWith({
-      taskId: "task-1",
-      role: "spec",
-      scenario: "spec_initial",
-      startMode: "reuse_latest",
-      reason: "scenario_kickoff",
-      selectedModel: {
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        opencodeAgent: "spec",
-      },
-    });
-    expect(startAgentSession).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-
-    await harness.unmount();
-  });
-
-  test("marks autostart flow as initializing before task hydration completes", async () => {
-    const startAgentSession = mock(async () => "session-plan");
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      role: "planner",
-      scenario: "planner_initial",
-      autostart: true,
-      isActiveTaskHydrated: false,
-      activeSession: null,
-      startAgentSession,
-    });
-
-    await harness.mount();
-
-    expect(harness.getLatest().isStarting).toBe(true);
-    expect(startAgentSession).not.toHaveBeenCalled();
-
-    await harness.unmount();
-  });
 });

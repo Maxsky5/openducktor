@@ -39,6 +39,7 @@ export type SessionStartModalIntent = {
 type UseSessionStartModalStateArgs = {
   activeRepo: string | null;
   repoSettings: RepoSettingsInput | null;
+  initialCatalog?: AgentModelCatalog | null;
   loadCatalog?: (repoPath: string) => Promise<AgentModelCatalog>;
 };
 
@@ -95,14 +96,21 @@ const resolveInitialSelection = (
 export function useSessionStartModalState({
   activeRepo,
   repoSettings,
+  initialCatalog,
   loadCatalog = loadRepoOpencodeCatalog,
 }: UseSessionStartModalStateArgs): UseSessionStartModalStateResult {
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
-  const [catalog, setCatalog] = useState<AgentModelCatalog | null>(null);
+  const [catalog, setCatalog] = useState<AgentModelCatalog | null>(initialCatalog ?? null);
   const [isCatalogLoading, setIsCatalogLoading] = useState(false);
 
   useEffect(() => {
+    if (initialCatalog !== undefined) {
+      setCatalog(initialCatalog);
+      setIsCatalogLoading(false);
+      return;
+    }
+
     if (!activeRepo) {
       setCatalog(null);
       setIsCatalogLoading(false);
@@ -132,7 +140,7 @@ export function useSessionStartModalState({
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, loadCatalog]);
+  }, [activeRepo, initialCatalog, loadCatalog]);
 
   const closeStartModal = useCallback(() => {
     setIntent(null);

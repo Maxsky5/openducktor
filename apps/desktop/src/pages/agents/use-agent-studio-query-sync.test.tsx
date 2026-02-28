@@ -49,7 +49,7 @@ describe("useAgentStudioQuerySync", () => {
     const harness = createHookHarness({
       activeRepo: null,
       searchParams: new URLSearchParams(
-        "task=task-1&agent=build&scenario=build_implementation_start&autostart=1&start=fresh",
+        "task=task-1&agent=build",
       ),
       setSearchParams,
     });
@@ -58,9 +58,7 @@ describe("useAgentStudioQuerySync", () => {
     const state = harness.getLatest();
     expect(state.taskIdParam).toBe("task-1");
     expect(state.roleFromQuery).toBe("build");
-    expect(state.scenarioFromQuery).toBe("build_implementation_start");
-    expect(state.autostart).toBe(true);
-    expect(state.sessionStartPreference).toBe("fresh");
+
 
     await harness.run((latest) => {
       latest.updateQuery({ session: "session-1" });
@@ -77,9 +75,9 @@ describe("useAgentStudioQuerySync", () => {
     expect(next.get("task")).toBe("task-1");
     expect(next.get("session")).toBe("session-1");
     expect(next.get("agent")).toBe("build");
-    expect(next.get("scenario")).toBe("build_implementation_start");
-    expect(next.get("autostart")).toBe("1");
-    expect(next.get("start")).toBe("fresh");
+
+    expect(next.get("autostart")).toBeNull();
+    expect(next.get("start")).toBeNull();
     expect(options).toEqual({ replace: true });
 
     await harness.unmount();
@@ -93,7 +91,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
-      searchParams: new URLSearchParams("task=task-1&agent=spec&scenario=spec_initial"),
+      searchParams: new URLSearchParams("task=task-1&agent=spec"),
       setSearchParams,
     });
 
@@ -105,7 +103,7 @@ describe("useAgentStudioQuerySync", () => {
     await harness.update({
       activeRepo: null,
       searchParams: new URLSearchParams(
-        "task=task-2&session=session-2&agent=planner&scenario=planner_initial&autostart=1&start=continue",
+        "task=task-2&session=session-2&agent=planner",
       ),
       setSearchParams,
     });
@@ -114,9 +112,7 @@ describe("useAgentStudioQuerySync", () => {
     expect(latest.taskIdParam).toBe("task-2");
     expect(latest.sessionParam).toBe("session-2");
     expect(latest.roleFromQuery).toBe("planner");
-    expect(latest.scenarioFromQuery).toBe("planner_initial");
-    expect(latest.autostart).toBe(true);
-    expect(latest.sessionStartPreference).toBe("continue");
+
     expect(calls).toHaveLength(0);
 
     await harness.unmount();
@@ -159,7 +155,6 @@ describe("useAgentStudioQuerySync", () => {
       expect(latest.taskIdParam).toBe("task-from-context");
       expect(latest.sessionParam).toBe("session-from-context");
       expect(latest.roleFromQuery).toBe("planner");
-      expect(latest.scenarioFromQuery).toBe("planner_initial");
 
       await harness.unmount();
     } finally {
@@ -221,7 +216,7 @@ describe("useAgentStudioQuerySync", () => {
     try {
       const harness = createHookHarness({
         activeRepo: "/repo",
-        searchParams: new URLSearchParams("agent=spec&scenario=spec_initial"),
+        searchParams: new URLSearchParams("agent=spec"),
         setSearchParams: () => {},
       });
 
@@ -241,13 +236,11 @@ describe("useAgentStudioQuerySync", () => {
         taskId?: string;
         sessionId?: string;
         role?: string;
-        scenario?: string;
       };
 
       expect(parsed.taskId).toBe("task-from-cleanup");
       expect(parsed.sessionId).toBe("session-from-cleanup");
       expect(parsed.role).toBe("spec");
-      expect(parsed.scenario).toBe("spec_initial");
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,

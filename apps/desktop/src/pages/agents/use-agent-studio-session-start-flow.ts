@@ -10,7 +10,6 @@ import {
   canStartSessionForRole,
   type QueryUpdate,
 } from "./use-agent-studio-session-action-helpers";
-import { useAgentStudioSessionAutostart } from "./use-agent-studio-session-autostart";
 import { useAgentStudioSessionStartSession } from "./use-agent-studio-session-start-session";
 import type {
   NewSessionStartRequest,
@@ -23,8 +22,6 @@ type UseAgentStudioSessionStartFlowArgs = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
-  autostart: boolean;
-  sessionStartPreference: "fresh" | "continue" | null;
   activeSession: AgentSessionState | null;
   sessionsForTask: AgentSessionState[];
   selectedTask: TaskCard | null;
@@ -45,8 +42,6 @@ export function useAgentStudioSessionStartFlow({
   taskId,
   role,
   scenario,
-  autostart,
-  sessionStartPreference,
   activeSession,
   sessionsForTask,
   selectedTask,
@@ -62,14 +57,12 @@ export function useAgentStudioSessionStartFlow({
   requestNewSessionStart,
 }: UseAgentStudioSessionStartFlowArgs): {
   isStarting: boolean;
-  isAutoStartPending: boolean;
   startSession: (reason: SessionStartRequestReason) => Promise<string | undefined>;
   startScenarioKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
 } {
   const [isStarting, setIsStarting] = useState(false);
 
-  const autoStartExecutedRef = useRef(new Set<string>());
   const previousRepoForSessionRefs = useRef<string | null>(activeRepo);
   const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
 
@@ -79,7 +72,6 @@ export function useAgentStudioSessionStartFlow({
     }
 
     previousRepoForSessionRefs.current = activeRepo;
-    autoStartExecutedRef.current.clear();
     startingSessionByTaskRef.current.clear();
   }, [activeRepo]);
 
@@ -109,7 +101,6 @@ export function useAgentStudioSessionStartFlow({
     scenario,
     activeSession,
     sessionsForTask,
-    sessionStartPreference,
     selectedTask,
     agentStudioReady,
     isActiveTaskHydrated,
@@ -131,7 +122,6 @@ export function useAgentStudioSessionStartFlow({
 
     const sessionId = await startSession("scenario_kickoff");
     if (!sessionId) {
-      updateQuery({ autostart: undefined });
       return;
     }
 
@@ -144,22 +134,7 @@ export function useAgentStudioSessionStartFlow({
     sendAgentMessage,
     startSession,
     taskId,
-    updateQuery,
   ]);
-
-  const { isAutoStartPending } = useAgentStudioSessionAutostart({
-    activeRepo,
-    taskId,
-    role,
-    scenario,
-    autostart,
-    sessionStartPreference,
-    activeSessionPresent: Boolean(activeSession),
-    agentStudioReady,
-    isActiveTaskHydrated,
-    autoStartExecutedRef,
-    startScenarioKickoff,
-  });
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({
     activeRepo,
@@ -182,7 +157,6 @@ export function useAgentStudioSessionStartFlow({
 
   return {
     isStarting,
-    isAutoStartPending,
     startSession,
     startScenarioKickoff,
     handleCreateSession,

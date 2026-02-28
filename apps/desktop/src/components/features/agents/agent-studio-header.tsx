@@ -254,9 +254,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
           {workflowSteps.map((entry, index) => {
             const Icon = entry.icon;
             const isSelected = optimisticSelectedRole === entry.role;
-            const shouldSpinInProgress =
-              entry.state === "in_progress" &&
-              (sessionStatus === "running" || sessionStatus === "starting");
+            const shouldSpinInProgress = entry.state === "in_progress";
             return (
               <div key={entry.role} className="flex min-w-0 items-center gap-2">
                 <Button
