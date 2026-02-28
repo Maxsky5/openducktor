@@ -21,6 +21,7 @@ mod events;
 mod hook_security;
 mod opencode_runtime;
 mod process_registry;
+mod qa_worktree;
 mod repo_init;
 mod runtime_orchestrator;
 mod service_core;
@@ -47,6 +48,7 @@ pub(crate) use process_registry::{
     with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
     TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
+pub(crate) use qa_worktree::prepare_qa_worktree;
 pub(crate) use service_core::{AgentRuntimeProcess, CachedRuntimeCheck, RunProcess};
 pub use service_core::{AppService, RunEmitter};
 #[cfg(test)]
