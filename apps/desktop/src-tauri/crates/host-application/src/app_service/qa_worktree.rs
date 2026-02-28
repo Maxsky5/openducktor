@@ -4,13 +4,14 @@ use host_infra_system::{build_branch_name, remove_worktree, run_command, AppConf
 use std::fs;
 use std::path::Path;
 
-pub(crate) struct QaWorktreeSetup {
-    pub(crate) working_directory: String,
-    pub(crate) cleanup_repo_path: String,
-    pub(crate) cleanup_worktree_path: String,
+#[derive(Debug)]
+pub(super) struct QaWorktreeSetup {
+    pub(super) working_directory: String,
+    pub(super) cleanup_repo_path: String,
+    pub(super) cleanup_worktree_path: String,
 }
 
-pub(crate) fn prepare_qa_worktree(
+pub(super) fn prepare_qa_worktree(
     repo_path: &str,
     task_id: &str,
     task_title: &str,
@@ -87,11 +88,119 @@ pub(crate) fn prepare_qa_worktree(
     })
 }
 
-fn remove_runtime_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
+pub(super) fn remove_runtime_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
     remove_worktree(repo_path, worktree_path).with_context(|| {
         format!(
             "Failed removing QA worktree runtime {}",
             worktree_path.display()
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{prepare_qa_worktree, remove_runtime_worktree};
+    use crate::app_service::test_support::{init_git_repo, unique_temp_path};
+    use anyhow::Result;
+    use host_infra_system::{hook_set_fingerprint, AppConfigStore, HookSet, RepoConfig};
+    use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn prepare_qa_worktree_returns_setup_for_valid_config() -> Result<()> {
+        let root = unique_temp_path("qa-worktree-setup-success");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("qa-worktrees");
+
+        config_store.update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let setup = prepare_qa_worktree(repo_path.as_str(), "task-1", "Task 1", &config_store)?;
+        let qa_path = Path::new(setup.working_directory.as_str());
+        assert!(qa_path.exists());
+        assert_eq!(setup.cleanup_repo_path, repo_path);
+        assert_eq!(setup.cleanup_worktree_path, setup.working_directory);
+
+        remove_runtime_worktree(Path::new(setup.cleanup_repo_path.as_str()), qa_path)?;
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_qa_worktree_requires_worktree_base_path() -> Result<()> {
+        let root = unique_temp_path("qa-worktree-missing-base");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+
+        config_store.update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: None,
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = prepare_qa_worktree(repo_path.as_str(), "task-1", "Task 1", &config_store)
+            .expect_err("missing worktree base path should fail");
+        assert!(error.to_string().contains("QA blocked: configure repos."));
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_qa_worktree_removes_worktree_when_pre_start_hook_fails() -> Result<()> {
+        let root = unique_temp_path("qa-worktree-hook-failure");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("qa-worktrees");
+        let hooks = HookSet {
+            pre_start: vec!["sh -lc 'exit 1'".to_string()],
+            post_complete: Vec::new(),
+        };
+
+        config_store.update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: Some(hook_set_fingerprint(&hooks)),
+                hooks,
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let qa_worktree_path = worktree_base.join("qa-task-1");
+        let error = prepare_qa_worktree(repo_path.as_str(), "task-1", "Task 1", &config_store)
+            .expect_err("failing pre-start hook should fail setup");
+        assert!(error.to_string().contains("QA pre-start hook failed"));
+        assert!(
+            !qa_worktree_path.exists(),
+            "qa worktree should be removed when pre-start hook fails"
+        );
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
 }

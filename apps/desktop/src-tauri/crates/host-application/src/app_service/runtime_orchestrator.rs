@@ -1,11 +1,11 @@
 use super::{
-    prepare_qa_worktree, spawn_opencode_server, terminate_child_process,
-    wait_for_local_server_with_process, AgentRuntimeProcess, AppService,
-    StartupEventCorrelation, StartupEventPayload,
+    qa_worktree::{prepare_qa_worktree, remove_runtime_worktree},
+    spawn_opencode_server, terminate_child_process, wait_for_local_server_with_process,
+    AgentRuntimeProcess, AppService, StartupEventCorrelation, StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
-use host_infra_system::{pick_free_port, remove_worktree};
+use host_infra_system::pick_free_port;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use uuid::Uuid;
@@ -345,7 +345,7 @@ impl AppService {
                     cleanup_worktree_path.as_deref(),
                 ) {
                     if let Err(cleanup_error) =
-                        Self::remove_runtime_worktree(Path::new(repo), Path::new(worktree))
+                        remove_runtime_worktree(Path::new(repo), Path::new(worktree))
                     {
                         return Err(anyhow!(
                             "{startup_context}\nAlso failed to remove QA worktree: {cleanup_error}"
@@ -409,7 +409,7 @@ impl AppService {
             runtime.cleanup_repo_path.as_deref(),
             runtime.cleanup_worktree_path.as_deref(),
         ) {
-            Self::remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
+            remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
         }
         Ok(true)
     }
@@ -441,10 +441,9 @@ impl AppService {
                         runtime.cleanup_repo_path.as_deref(),
                         runtime.cleanup_worktree_path.as_deref(),
                     ) {
-                        if let Err(error) = Self::remove_runtime_worktree(
-                            Path::new(repo_path),
-                            Path::new(worktree_path),
-                        ) {
+                        if let Err(error) =
+                            remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))
+                        {
                             cleanup_errors.push(format!(
                                 "Failed shutting down runtime {}: {}",
                                 runtime.summary.runtime_id, error
@@ -461,15 +460,6 @@ impl AppService {
         } else {
             Err(anyhow!(cleanup_errors.join("\n")))
         }
-    }
-
-    fn remove_runtime_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
-        remove_worktree(repo_path, worktree_path).with_context(|| {
-            format!(
-                "Failed removing QA worktree runtime {}",
-                worktree_path.display()
-            )
-        })
     }
 
     pub(crate) fn prune_stale_runtimes(
@@ -494,10 +484,9 @@ impl AppService {
                     runtime.cleanup_repo_path.as_deref(),
                     runtime.cleanup_worktree_path.as_deref(),
                 ) {
-                    if let Err(error) = Self::remove_runtime_worktree(
-                        Path::new(repo_path),
-                        Path::new(worktree_path),
-                    ) {
+                    if let Err(error) =
+                        remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))
+                    {
                         cleanup_errors.push(format!(
                             "Failed pruning stale runtime {runtime_id}: {error}"
                         ));
