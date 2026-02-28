@@ -1,9 +1,79 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
+import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
 import { createStartAgentSession } from "./start-session";
+
+type FlatStartSessionDependencies = {
+  activeRepo: string | null;
+  adapter: AgentEnginePort;
+  setSessionsById: (
+    updater:
+      | Record<string, AgentSessionState>
+      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+  ) => void;
+  sessionsRef: { current: Record<string, AgentSessionState> };
+  taskRef: { current: TaskCard[] };
+  repoEpochRef: { current: number };
+  previousRepoRef: { current: string | null };
+  inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
+  attachSessionListener: (repoPath: string, sessionId: string) => void;
+  ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
+  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
+  loadSessionTodos: (
+    sessionId: string,
+    baseUrl: string,
+    workingDirectory: string,
+    externalSessionId: string,
+  ) => Promise<void>;
+  loadSessionModelCatalog: (
+    sessionId: string,
+    baseUrl: string,
+    workingDirectory: string,
+  ) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  refreshTaskData: (repoPath: string) => Promise<void>;
+  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
+  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+};
+
+const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies) => {
+  return createStartAgentSession({
+    repo: {
+      activeRepo: deps.activeRepo,
+      repoEpochRef: deps.repoEpochRef,
+      previousRepoRef: deps.previousRepoRef,
+    },
+    session: {
+      setSessionsById: deps.setSessionsById,
+      sessionsRef: deps.sessionsRef,
+      inFlightStartsByRepoTaskRef: deps.inFlightStartsByRepoTaskRef,
+      loadAgentSessions: deps.loadAgentSessions,
+      persistSessionSnapshot: deps.persistSessionSnapshot,
+      attachSessionListener: deps.attachSessionListener,
+    },
+    runtime: {
+      adapter: deps.adapter,
+      ensureRuntime: deps.ensureRuntime,
+    },
+    task: {
+      taskRef: deps.taskRef,
+      loadTaskDocuments: deps.loadTaskDocuments,
+      refreshTaskData: deps.refreshTaskData,
+      sendAgentMessage: deps.sendAgentMessage,
+    },
+    model: {
+      loadRepoDefaultModel: deps.loadRepoDefaultModel,
+      loadSessionTodos: deps.loadSessionTodos,
+      loadSessionModelCatalog: deps.loadSessionModelCatalog,
+    },
+  });
+};
 
 const taskFixture = createTaskCardFixture({
   title: "Implement feature",
@@ -15,7 +85,7 @@ const taskFixture = createTaskCardFixture({
 
 describe("agent-orchestrator/handlers/start-session", () => {
   test("throws when no active repo is selected", () => {
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: null,
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
@@ -49,7 +119,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const inFlightMap = new Map<string, Promise<string>>([
       ["/tmp/repo::task-1::build::reuse_latest", inFlight],
     ]);
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
@@ -107,7 +177,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
@@ -161,7 +231,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       return [];
     };
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
@@ -258,7 +328,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ];
     };
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
@@ -366,7 +436,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     };
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
@@ -451,7 +521,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     ];
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
@@ -499,7 +569,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       return originalStartSession(input);
     };
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
@@ -542,7 +612,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
@@ -603,7 +673,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       return [];
     };
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionsById: () => {},
@@ -664,7 +734,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
@@ -738,7 +808,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     host.agentSessionsList = async () => [];
 
     const sessionsRef = { current: {} as Record<string, never> };
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById,
@@ -816,7 +886,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},
@@ -882,7 +952,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSession({
+    const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
       setSessionsById: () => {},

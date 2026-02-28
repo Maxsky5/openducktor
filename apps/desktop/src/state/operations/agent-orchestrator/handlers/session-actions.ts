@@ -203,24 +203,34 @@ export const createAgentSessionActions = ({
   };
 
   const startAgentSession = createStartAgentSession({
-    activeRepo,
-    adapter,
-    setSessionsById,
-    sessionsRef,
-    taskRef,
-    repoEpochRef,
-    previousRepoRef,
-    inFlightStartsByRepoTaskRef,
-    attachSessionListener,
-    ensureRuntime,
-    loadTaskDocuments,
-    loadRepoDefaultModel,
-    loadSessionTodos,
-    loadSessionModelCatalog,
-    loadAgentSessions,
-    refreshTaskData,
-    persistSessionSnapshot,
-    sendAgentMessage,
+    repo: {
+      activeRepo,
+      repoEpochRef,
+      previousRepoRef,
+    },
+    session: {
+      setSessionsById,
+      sessionsRef,
+      inFlightStartsByRepoTaskRef,
+      loadAgentSessions,
+      persistSessionSnapshot,
+      attachSessionListener,
+    },
+    runtime: {
+      adapter,
+      ensureRuntime,
+    },
+    task: {
+      taskRef,
+      loadTaskDocuments,
+      refreshTaskData,
+      sendAgentMessage,
+    },
+    model: {
+      loadRepoDefaultModel,
+      loadSessionTodos,
+      loadSessionModelCatalog,
+    },
   });
 
   const stopAgentSession = async (sessionId: string): Promise<void> => {

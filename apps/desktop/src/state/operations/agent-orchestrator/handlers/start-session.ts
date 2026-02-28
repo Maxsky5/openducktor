@@ -32,22 +32,31 @@ export type StartAgentSessionInput = {
   requireModelReady?: boolean;
 };
 
-type StartSessionDependencies = {
-  activeRepo: string | null;
-  adapter: AgentEnginePort;
-  setSessionsById: (
-    updater:
-      | Record<string, AgentSessionState>
-      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-  ) => void;
-  sessionsRef: { current: Record<string, AgentSessionState> };
-  taskRef: { current: TaskCard[] };
-  repoEpochRef: { current: number };
-  previousRepoRef: { current: string | null };
+type SessionStateById = Record<string, AgentSessionState>;
+type SessionStateUpdater = SessionStateById | ((current: SessionStateById) => SessionStateById);
+
+type SessionDependencies = {
+  setSessionsById: (updater: SessionStateUpdater) => void;
+  sessionsRef: { current: SessionStateById };
   inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
   attachSessionListener: (repoPath: string, sessionId: string) => void;
+};
+
+type RuntimeDependencies = {
+  adapter: AgentEnginePort;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
+};
+
+type TaskDependencies = {
+  taskRef: { current: TaskCard[] };
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  refreshTaskData: (repoPath: string) => Promise<void>;
+  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+};
+
+type ModelDependencies = {
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
   loadSessionTodos: (
     sessionId: string,
@@ -60,13 +69,55 @@ type StartSessionDependencies = {
     baseUrl: string,
     workingDirectory: string,
   ) => Promise<void>;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  refreshTaskData: (repoPath: string) => Promise<void>;
-  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
+};
+
+type RepoDependencies = {
+  activeRepo: string | null;
+  repoEpochRef: { current: number };
+  previousRepoRef: { current: string | null };
+};
+
+type StartSessionDependencies = {
+  repo: RepoDependencies;
+  session: SessionDependencies;
+  runtime: RuntimeDependencies;
+  task: TaskDependencies;
+  model: ModelDependencies;
 };
 
 const STALE_START_ERROR = "Workspace changed while starting session.";
+type RepoStaleGuard = () => boolean;
+type SessionStartSummary = Awaited<ReturnType<AgentEnginePort["startSession"]>>;
+
+type SessionStartTags = {
+  repoPath: string;
+  taskId: string;
+  role: AgentRole;
+  scenario: AgentScenario;
+  sessionId: string;
+};
+
+type ResolvedRuntimeAndModel = {
+  task: TaskCard;
+  runtime: RuntimeInfo;
+  resolvedScenario: AgentScenario;
+  systemPrompt: string;
+  defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
+};
+
+type StartOrReuseResult =
+  | {
+      kind: "reused";
+      sessionId: string;
+    }
+  | {
+      kind: "started";
+      task: TaskCard;
+      runtime: RuntimeInfo;
+      summary: SessionStartSummary;
+      resolvedScenario: AgentScenario;
+      defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
+    };
 
 const compareBySessionRecency = (
   a: { startedAt: string; sessionId: string },
@@ -87,25 +138,555 @@ const pickLatestSession = <T extends { startedAt: string; sessionId: string }>(
   return [...sessions].sort(compareBySessionRecency)[0];
 };
 
+const createSessionStartTags = ({
+  repoPath,
+  taskId,
+  role,
+  scenario,
+  sessionId,
+}: SessionStartTags): SessionStartTags => ({
+  repoPath,
+  taskId,
+  role,
+  scenario,
+  sessionId,
+});
+
+const stopSessionOnStaleAndThrow = async ({
+  reason,
+  runtime,
+  tags,
+}: {
+  reason: string;
+  runtime: RuntimeDependencies;
+  tags: SessionStartTags;
+}): Promise<never> => {
+  await captureOrchestratorFallback(
+    reason,
+    async () => runtime.adapter.stopSession(tags.sessionId),
+    {
+      tags,
+      fallback: () => undefined,
+    },
+  );
+  throw new Error(STALE_START_ERROR);
+};
+
+const resolveStartTask = ({
+  taskId,
+  role,
+  task,
+}: {
+  taskId: string;
+  role: AgentRole;
+  task: TaskDependencies;
+}): TaskCard => {
+  const resolvedTask = task.taskRef.current.find((entry) => entry.id === taskId);
+  if (!resolvedTask) {
+    throw new Error(`Task not found: ${taskId}`);
+  }
+  if (!isRoleAvailableForTask(resolvedTask, role)) {
+    throw new Error(unavailableRoleErrorMessage(resolvedTask, role));
+  }
+  return resolvedTask;
+};
+
+const resolveRuntimeAndModel = async ({
+  repoPath,
+  taskId,
+  role,
+  scenario,
+  taskCard,
+  runtime,
+  task,
+  model,
+  isStaleRepoOperation,
+}: {
+  repoPath: string;
+  taskId: string;
+  role: AgentRole;
+  scenario: AgentScenario | undefined;
+  taskCard: TaskCard;
+  runtime: RuntimeDependencies;
+  task: TaskDependencies;
+  model: ModelDependencies;
+  isStaleRepoOperation: RepoStaleGuard;
+}): Promise<ResolvedRuntimeAndModel> => {
+  const docsPromise = task.loadTaskDocuments(repoPath, taskId);
+  const runtimePromise = runtime.ensureRuntime(repoPath, taskId, role);
+  const defaultModelSelectionPromise = model.loadRepoDefaultModel(repoPath, role);
+
+  const [docs, runtimeInfo] = await Promise.all([docsPromise, runtimePromise]);
+  throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+
+  const resolvedScenario = scenario ?? inferScenario(role, taskCard, docs);
+  throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+
+  const systemPrompt = buildAgentSystemPrompt({
+    role,
+    scenario: resolvedScenario,
+    task: {
+      taskId: taskCard.id,
+      title: taskCard.title,
+      issueType: taskCard.issueType,
+      status: taskCard.status,
+      qaRequired: taskCard.aiReviewEnabled,
+      description: taskCard.description,
+      acceptanceCriteria: taskCard.acceptanceCriteria,
+      specMarkdown: docs.specMarkdown,
+      planMarkdown: docs.planMarkdown,
+      latestQaReportMarkdown: docs.qaMarkdown,
+    },
+  });
+
+  return {
+    task: taskCard,
+    runtime: runtimeInfo,
+    resolvedScenario,
+    systemPrompt,
+    defaultModelSelectionPromise,
+  };
+};
+
+const buildInitialSession = ({
+  taskId,
+  role,
+  resolvedScenario,
+  selectedModel,
+  runtime,
+  summary,
+  systemPrompt,
+}: {
+  taskId: string;
+  role: AgentRole;
+  resolvedScenario: AgentScenario;
+  selectedModel: AgentModelSelection | null;
+  runtime: RuntimeInfo;
+  summary: SessionStartSummary;
+  systemPrompt: string;
+}): AgentSessionState => ({
+  sessionId: summary.sessionId,
+  externalSessionId: summary.externalSessionId,
+  taskId,
+  role,
+  scenario: resolvedScenario,
+  status: "idle",
+  startedAt: summary.startedAt,
+  runtimeId: runtime.runtimeId,
+  runId: runtime.runId,
+  baseUrl: runtime.baseUrl,
+  workingDirectory: runtime.workingDirectory,
+  messages: [
+    {
+      id: crypto.randomUUID(),
+      role: "system",
+      content: `Session started (${role} - ${resolvedScenario})`,
+      timestamp: summary.startedAt,
+    },
+    {
+      id: crypto.randomUUID(),
+      role: "system",
+      content: `System prompt:\n\n${systemPrompt}`,
+      timestamp: summary.startedAt,
+    },
+  ],
+  draftAssistantText: "",
+  pendingPermissions: [],
+  pendingQuestions: [],
+  todos: [],
+  modelCatalog: null,
+  selectedModel,
+  isLoadingModelCatalog: true,
+});
+
+const persistInitialSession = ({
+  initialSession,
+  session,
+  tags,
+}: {
+  initialSession: AgentSessionState;
+  session: SessionDependencies;
+  tags: SessionStartTags;
+}): void => {
+  runOrchestratorSideEffect(
+    "start-session-persist-initial-session",
+    session.persistSessionSnapshot(initialSession),
+    { tags },
+  );
+};
+
+const createOrReuseSession = async ({
+  repoPath,
+  taskId,
+  role,
+  scenario,
+  selectedModel,
+  startMode,
+  session,
+  runtime,
+  task,
+  model,
+  isStaleRepoOperation,
+}: {
+  repoPath: string;
+  taskId: string;
+  role: AgentRole;
+  scenario: AgentScenario | undefined;
+  selectedModel: AgentModelSelection | null;
+  startMode: "reuse_latest" | "fresh";
+  session: SessionDependencies;
+  runtime: RuntimeDependencies;
+  task: TaskDependencies;
+  model: ModelDependencies;
+  isStaleRepoOperation: RepoStaleGuard;
+}): Promise<StartOrReuseResult> => {
+  if (startMode === "reuse_latest") {
+    const existingSession = pickLatestSession(
+      Object.values(session.sessionsRef.current).filter(
+        (entry) => entry.taskId === taskId && entry.role === role,
+      ),
+    );
+    if (existingSession) {
+      return {
+        kind: "reused",
+        sessionId: existingSession.sessionId,
+      };
+    }
+
+    const persistedSessions = await host.agentSessionsList(repoPath, taskId);
+    throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+    const latestPersistedSession = pickLatestSession(
+      persistedSessions.filter((entry) => entry.role === role),
+    );
+    if (latestPersistedSession) {
+      if (!session.sessionsRef.current[latestPersistedSession.sessionId]) {
+        await session.loadAgentSessions(taskId, {
+          hydrateHistoryForSessionId: latestPersistedSession.sessionId,
+        });
+        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+      }
+      return {
+        kind: "reused",
+        sessionId: latestPersistedSession.sessionId,
+      };
+    }
+  }
+
+  const taskCard = resolveStartTask({ taskId, role, task });
+  const resolved = await resolveRuntimeAndModel({
+    repoPath,
+    taskId,
+    role,
+    scenario,
+    taskCard,
+    runtime,
+    task,
+    model,
+    isStaleRepoOperation,
+  });
+
+  const summary = await runtime.adapter.startSession({
+    repoPath,
+    workingDirectory: resolved.runtime.workingDirectory,
+    taskId,
+    role,
+    scenario: resolved.resolvedScenario,
+    systemPrompt: resolved.systemPrompt,
+    baseUrl: resolved.runtime.baseUrl,
+  });
+
+  const sessionTags = createSessionStartTags({
+    repoPath,
+    taskId,
+    role,
+    scenario: resolved.resolvedScenario,
+    sessionId: summary.sessionId,
+  });
+
+  if (isStaleRepoOperation()) {
+    await stopSessionOnStaleAndThrow({
+      reason: "start-session-stop-on-stale-after-start",
+      runtime,
+      tags: sessionTags,
+    });
+  }
+
+  const initialSession = buildInitialSession({
+    taskId,
+    role,
+    resolvedScenario: resolved.resolvedScenario,
+    selectedModel,
+    runtime: resolved.runtime,
+    summary,
+    systemPrompt: resolved.systemPrompt,
+  });
+
+  session.sessionsRef.current = {
+    ...session.sessionsRef.current,
+    [summary.sessionId]: initialSession,
+  };
+  session.setSessionsById((current) => {
+    if (isStaleRepoOperation()) {
+      return current;
+    }
+    return {
+      ...current,
+      [summary.sessionId]: initialSession,
+    };
+  });
+  throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+
+  persistInitialSession({
+    initialSession,
+    session,
+    tags: sessionTags,
+  });
+
+  return {
+    kind: "started",
+    task: resolved.task,
+    runtime: resolved.runtime,
+    summary,
+    resolvedScenario: resolved.resolvedScenario,
+    defaultModelSelectionPromise: resolved.defaultModelSelectionPromise,
+  };
+};
+
+const attachSessionListenerAndGuard = async ({
+  repoPath,
+  taskId,
+  role,
+  resolvedScenario,
+  summary,
+  session,
+  runtime,
+  isStaleRepoOperation,
+}: {
+  repoPath: string;
+  taskId: string;
+  role: AgentRole;
+  resolvedScenario: AgentScenario;
+  summary: SessionStartSummary;
+  session: SessionDependencies;
+  runtime: RuntimeDependencies;
+  isStaleRepoOperation: RepoStaleGuard;
+}): Promise<void> => {
+  session.attachSessionListener(repoPath, summary.sessionId);
+
+  if (!isStaleRepoOperation()) {
+    return;
+  }
+
+  await stopSessionOnStaleAndThrow({
+    reason: "start-session-stop-on-stale-after-listener-attach",
+    runtime,
+    tags: createSessionStartTags({
+      repoPath,
+      taskId,
+      role,
+      scenario: resolvedScenario,
+      sessionId: summary.sessionId,
+    }),
+  });
+};
+
+const warmSessionData = ({
+  taskId,
+  role,
+  repoPath,
+  resolvedScenario,
+  runtime,
+  summary,
+  model,
+}: {
+  taskId: string;
+  role: AgentRole;
+  repoPath: string;
+  resolvedScenario: AgentScenario;
+  runtime: RuntimeInfo;
+  summary: SessionStartSummary;
+  model: ModelDependencies;
+}): void => {
+  const tags = createSessionStartTags({
+    repoPath,
+    taskId,
+    role,
+    scenario: resolvedScenario,
+    sessionId: summary.sessionId,
+  });
+
+  runOrchestratorSideEffect(
+    "start-session-warm-session-todos",
+    model.loadSessionTodos(
+      summary.sessionId,
+      runtime.baseUrl,
+      runtime.workingDirectory,
+      summary.externalSessionId,
+    ),
+    {
+      tags: {
+        ...tags,
+        externalSessionId: summary.externalSessionId,
+      },
+    },
+  );
+
+  runOrchestratorSideEffect(
+    "start-session-warm-session-model-catalog",
+    model.loadSessionModelCatalog(summary.sessionId, runtime.baseUrl, runtime.workingDirectory),
+    { tags },
+  );
+};
+
+const applyResolvedModelSelection = ({
+  resolvedModel,
+  summary,
+  session,
+  isStaleRepoOperation,
+}: {
+  resolvedModel: AgentModelSelection | null;
+  summary: SessionStartSummary;
+  session: SessionDependencies;
+  isStaleRepoOperation: RepoStaleGuard;
+}): void => {
+  if (isStaleRepoOperation() || !resolvedModel) {
+    return;
+  }
+
+  session.setSessionsById((current) => {
+    const currentSession = current[summary.sessionId];
+    if (!currentSession || currentSession.selectedModel) {
+      return current;
+    }
+
+    const nextSession: AgentSessionState = {
+      ...currentSession,
+      selectedModel: resolvedModel,
+    };
+    const nextSessions = {
+      ...current,
+      [summary.sessionId]: nextSession,
+    };
+    session.sessionsRef.current = nextSessions;
+    return nextSessions;
+  });
+};
+
+const maybeApplyDefaultModelSelection = async ({
+  selectedModel,
+  requireModelReady,
+  defaultModelSelectionPromise,
+  repoPath,
+  taskId,
+  role,
+  resolvedScenario,
+  summary,
+  session,
+  isStaleRepoOperation,
+}: {
+  selectedModel: AgentModelSelection | null;
+  requireModelReady: boolean;
+  defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
+  repoPath: string;
+  taskId: string;
+  role: AgentRole;
+  resolvedScenario: AgentScenario;
+  summary: SessionStartSummary;
+  session: SessionDependencies;
+  isStaleRepoOperation: RepoStaleGuard;
+}): Promise<void> => {
+  if (selectedModel) {
+    return;
+  }
+
+  const tags = createSessionStartTags({
+    repoPath,
+    taskId,
+    role,
+    scenario: resolvedScenario,
+    sessionId: summary.sessionId,
+  });
+
+  if (requireModelReady) {
+    const resolvedModel = await captureOrchestratorFallback<AgentModelSelection | null>(
+      "start-session-await-default-model-selection",
+      async () => defaultModelSelectionPromise,
+      {
+        tags,
+        fallback: () => null,
+      },
+    );
+    throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+    applyResolvedModelSelection({
+      resolvedModel,
+      summary,
+      session,
+      isStaleRepoOperation,
+    });
+    return;
+  }
+
+  runOrchestratorSideEffect(
+    "start-session-apply-default-model-selection",
+    defaultModelSelectionPromise.then((defaultModelSelection) => {
+      applyResolvedModelSelection({
+        resolvedModel: defaultModelSelection,
+        summary,
+        session,
+        isStaleRepoOperation,
+      });
+    }),
+    { tags },
+  );
+};
+
+const maybeSendKickoff = async ({
+  sendKickoff,
+  repoPath,
+  taskId,
+  role,
+  resolvedScenario,
+  summary,
+  task,
+  isStaleRepoOperation,
+}: {
+  sendKickoff: boolean;
+  repoPath: string;
+  taskId: string;
+  role: AgentRole;
+  resolvedScenario: AgentScenario;
+  summary: SessionStartSummary;
+  task: TaskDependencies;
+  isStaleRepoOperation: RepoStaleGuard;
+}): Promise<void> => {
+  if (!sendKickoff) {
+    return;
+  }
+
+  throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+  await task.sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario, taskId));
+  throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
+  runOrchestratorSideEffect(
+    "start-session-refresh-task-data-after-kickoff",
+    task.refreshTaskData(repoPath),
+    {
+      tags: createSessionStartTags({
+        repoPath,
+        taskId,
+        role,
+        scenario: resolvedScenario,
+        sessionId: summary.sessionId,
+      }),
+    },
+  );
+};
+
 export const createStartAgentSession = ({
-  activeRepo,
-  adapter,
-  setSessionsById,
-  sessionsRef,
-  taskRef,
-  repoEpochRef,
-  previousRepoRef,
-  inFlightStartsByRepoTaskRef,
-  attachSessionListener,
-  ensureRuntime,
-  loadTaskDocuments,
-  loadRepoDefaultModel,
-  loadSessionTodos,
-  loadSessionModelCatalog,
-  loadAgentSessions,
-  refreshTaskData,
-  persistSessionSnapshot,
-  sendAgentMessage,
+  repo,
+  session,
+  runtime,
+  task,
+  model,
 }: StartSessionDependencies) => {
   return async ({
     taskId,
@@ -116,9 +697,9 @@ export const createStartAgentSession = ({
     startMode = "reuse_latest",
     requireModelReady = false,
   }: StartAgentSessionInput): Promise<string> => {
-    const repoPath = requireActiveRepo(activeRepo);
+    const repoPath = requireActiveRepo(repo.activeRepo);
     const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}`;
-    const existingInFlight = inFlightStartsByRepoTaskRef.current.get(inFlightKey);
+    const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
     }
@@ -126,307 +707,83 @@ export const createStartAgentSession = ({
     const startPromise = (async (): Promise<string> => {
       const isStaleRepoOperation = createRepoStaleGuard({
         repoPath,
-        repoEpochRef,
-        previousRepoRef,
+        repoEpochRef: repo.repoEpochRef,
+        previousRepoRef: repo.previousRepoRef,
       });
       throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
 
-      if (startMode === "reuse_latest") {
-        const existingSession = pickLatestSession(
-          Object.values(sessionsRef.current).filter(
-            (entry) => entry.taskId === taskId && entry.role === role,
-          ),
-        );
-        if (existingSession) {
-          return existingSession.sessionId;
-        }
-
-        const persistedSessions = await host.agentSessionsList(repoPath, taskId);
-        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-        const latestPersistedSession = pickLatestSession(
-          persistedSessions.filter((entry) => entry.role === role),
-        );
-        if (latestPersistedSession) {
-          if (!sessionsRef.current[latestPersistedSession.sessionId]) {
-            await loadAgentSessions(taskId, {
-              hydrateHistoryForSessionId: latestPersistedSession.sessionId,
-            });
-            throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-          }
-          return latestPersistedSession.sessionId;
-        }
-      }
-
-      const task = taskRef.current.find((entry) => entry.id === taskId);
-      if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
-      }
-      if (!isRoleAvailableForTask(task, role)) {
-        throw new Error(unavailableRoleErrorMessage(task, role));
-      }
-
-      const docsPromise = loadTaskDocuments(repoPath, taskId);
-      const runtimePromise = ensureRuntime(repoPath, taskId, role);
-      const defaultModelSelectionPromise = loadRepoDefaultModel(repoPath, role);
-
-      const [docs, runtime] = await Promise.all([docsPromise, runtimePromise]);
-      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      const resolvedScenario = scenario ?? inferScenario(role, task, docs);
-      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      const systemPrompt = buildAgentSystemPrompt({
-        role,
-        scenario: resolvedScenario,
-        task: {
-          taskId: task.id,
-          title: task.title,
-          issueType: task.issueType,
-          status: task.status,
-          qaRequired: task.aiReviewEnabled,
-          description: task.description,
-          acceptanceCriteria: task.acceptanceCriteria,
-          specMarkdown: docs.specMarkdown,
-          planMarkdown: docs.planMarkdown,
-          latestQaReportMarkdown: docs.qaMarkdown,
-        },
-      });
-
-      const summary = await adapter.startSession({
+      const startResult = await createOrReuseSession({
         repoPath,
-        workingDirectory: runtime.workingDirectory,
         taskId,
         role,
-        scenario: resolvedScenario,
-        systemPrompt,
-        baseUrl: runtime.baseUrl,
-      });
-      if (isStaleRepoOperation()) {
-        await captureOrchestratorFallback(
-          "start-session-stop-on-stale-after-start",
-          async () => adapter.stopSession(summary.sessionId),
-          {
-            tags: {
-              repoPath,
-              taskId,
-              role,
-              scenario: resolvedScenario,
-              sessionId: summary.sessionId,
-            },
-            fallback: () => undefined,
-          },
-        );
-        throw new Error(STALE_START_ERROR);
-      }
-
-      const initialSession: AgentSessionState = {
-        sessionId: summary.sessionId,
-        externalSessionId: summary.externalSessionId,
-        taskId,
-        role,
-        scenario: resolvedScenario,
-        status: "idle",
-        startedAt: summary.startedAt,
-        runtimeId: runtime.runtimeId,
-        runId: runtime.runId,
-        baseUrl: runtime.baseUrl,
-        workingDirectory: runtime.workingDirectory,
-        messages: [
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: `Session started (${role} - ${resolvedScenario})`,
-            timestamp: summary.startedAt,
-          },
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: `System prompt:\n\n${systemPrompt}`,
-            timestamp: summary.startedAt,
-          },
-        ],
-        draftAssistantText: "",
-        pendingPermissions: [],
-        pendingQuestions: [],
-        todos: [],
-        modelCatalog: null,
+        scenario,
         selectedModel,
-        isLoadingModelCatalog: true,
-      };
-
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [summary.sessionId]: initialSession,
-      };
-
-      setSessionsById((current) => {
-        if (isStaleRepoOperation()) {
-          return current;
-        }
-        return {
-          ...current,
-          [summary.sessionId]: initialSession,
-        };
+        startMode,
+        session,
+        runtime,
+        task,
+        model,
+        isStaleRepoOperation,
       });
-      throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-      runOrchestratorSideEffect(
-        "start-session-persist-initial-session",
-        persistSessionSnapshot(initialSession),
-        {
-          tags: {
-            repoPath,
-            taskId,
-            role,
-            scenario: resolvedScenario,
-            sessionId: summary.sessionId,
-          },
-        },
-      );
-
-      attachSessionListener(repoPath, summary.sessionId);
-
-      if (isStaleRepoOperation()) {
-        await captureOrchestratorFallback(
-          "start-session-stop-on-stale-after-listener-attach",
-          async () => adapter.stopSession(summary.sessionId),
-          {
-            tags: {
-              repoPath,
-              taskId,
-              role,
-              scenario: resolvedScenario,
-              sessionId: summary.sessionId,
-            },
-            fallback: () => undefined,
-          },
-        );
-        throw new Error(STALE_START_ERROR);
+      if (startResult.kind === "reused") {
+        return startResult.sessionId;
       }
 
-      const warmSessionData = (): void => {
-        runOrchestratorSideEffect(
-          "start-session-warm-session-todos",
-          loadSessionTodos(
-            summary.sessionId,
-            runtime.baseUrl,
-            runtime.workingDirectory,
-            summary.externalSessionId,
-          ),
-          {
-            tags: {
-              repoPath,
-              taskId,
-              role,
-              scenario: resolvedScenario,
-              sessionId: summary.sessionId,
-              externalSessionId: summary.externalSessionId,
-            },
-          },
-        );
-        runOrchestratorSideEffect(
-          "start-session-warm-session-model-catalog",
-          loadSessionModelCatalog(summary.sessionId, runtime.baseUrl, runtime.workingDirectory),
-          {
-            tags: {
-              repoPath,
-              taskId,
-              role,
-              scenario: resolvedScenario,
-              sessionId: summary.sessionId,
-            },
-          },
-        );
-      };
-      warmSessionData();
+      await attachSessionListenerAndGuard({
+        repoPath,
+        taskId,
+        role,
+        resolvedScenario: startResult.resolvedScenario,
+        summary: startResult.summary,
+        session,
+        runtime,
+        isStaleRepoOperation,
+      });
 
-      const applyResolvedModelSelection = (resolvedModel: AgentModelSelection | null): void => {
-        if (isStaleRepoOperation() || !resolvedModel) {
-          return;
-        }
+      warmSessionData({
+        taskId,
+        role,
+        repoPath,
+        resolvedScenario: startResult.resolvedScenario,
+        runtime: startResult.runtime,
+        summary: startResult.summary,
+        model,
+      });
 
-        setSessionsById((current) => {
-          const currentSession = current[summary.sessionId];
-          if (!currentSession || currentSession.selectedModel) {
-            return current;
-          }
+      await maybeApplyDefaultModelSelection({
+        selectedModel,
+        requireModelReady,
+        defaultModelSelectionPromise: startResult.defaultModelSelectionPromise,
+        repoPath,
+        taskId,
+        role,
+        resolvedScenario: startResult.resolvedScenario,
+        summary: startResult.summary,
+        session,
+        isStaleRepoOperation,
+      });
 
-          const nextSession: AgentSessionState = {
-            ...currentSession,
-            selectedModel: resolvedModel,
-          };
-          const nextSessions = {
-            ...current,
-            [summary.sessionId]: nextSession,
-          };
-          sessionsRef.current = nextSessions;
-          return nextSessions;
-        });
-      };
+      await maybeSendKickoff({
+        sendKickoff,
+        repoPath,
+        taskId: startResult.task.id,
+        role,
+        resolvedScenario: startResult.resolvedScenario,
+        summary: startResult.summary,
+        task,
+        isStaleRepoOperation,
+      });
 
-      if (!selectedModel) {
-        if (requireModelReady) {
-          const resolvedModel = await captureOrchestratorFallback<AgentModelSelection | null>(
-            "start-session-await-default-model-selection",
-            async () => defaultModelSelectionPromise,
-            {
-              tags: {
-                repoPath,
-                taskId,
-                role,
-                scenario: resolvedScenario,
-                sessionId: summary.sessionId,
-              },
-              fallback: () => null,
-            },
-          );
-          throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-          applyResolvedModelSelection(resolvedModel);
-        } else {
-          runOrchestratorSideEffect(
-            "start-session-apply-default-model-selection",
-            defaultModelSelectionPromise.then((defaultModelSelection) => {
-              applyResolvedModelSelection(defaultModelSelection);
-            }),
-            {
-              tags: {
-                repoPath,
-                taskId,
-                role,
-                scenario: resolvedScenario,
-                sessionId: summary.sessionId,
-              },
-            },
-          );
-        }
-      }
-
-      if (sendKickoff) {
-        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-        await sendAgentMessage(summary.sessionId, kickoffPrompt(role, resolvedScenario, task.id));
-        throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
-        runOrchestratorSideEffect(
-          "start-session-refresh-task-data-after-kickoff",
-          refreshTaskData(repoPath),
-          {
-            tags: {
-              repoPath,
-              taskId,
-              role,
-              scenario: resolvedScenario,
-              sessionId: summary.sessionId,
-            },
-          },
-        );
-      }
-
-      return summary.sessionId;
+      return startResult.summary.sessionId;
     })();
 
-    inFlightStartsByRepoTaskRef.current.set(inFlightKey, startPromise);
+    session.inFlightStartsByRepoTaskRef.current.set(inFlightKey, startPromise);
     try {
       return await startPromise;
     } finally {
-      const currentInFlight = inFlightStartsByRepoTaskRef.current.get(inFlightKey);
+      const currentInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
       if (currentInFlight === startPromise) {
-        inFlightStartsByRepoTaskRef.current.delete(inFlightKey);
+        session.inFlightStartsByRepoTaskRef.current.delete(inFlightKey);
       }
     }
   };
