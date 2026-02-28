@@ -59,7 +59,9 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
         variant="document"
         premiumCodeBlocks={hasLabeledCodeFence}
         fallback={
-          <p className="text-xs text-muted-foreground">Rendering markdown with syntax highlighting…</p>
+          <p className="text-xs text-muted-foreground">
+            Rendering markdown with syntax highlighting…
+          </p>
         }
       />
     ),

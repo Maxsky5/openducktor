@@ -44,10 +44,7 @@ const COMPACT_COMPONENTS: Components = {
   pre: ({ node: _node, className, ...props }) => (
     <pre
       {...props}
-      className={cn(
-        "overflow-x-auto rounded-lg border border-border bg-muted/30 p-2.5",
-        className,
-      )}
+      className={cn("overflow-x-auto rounded-lg border border-border bg-muted/30 p-2.5", className)}
     />
   ),
 };
@@ -55,13 +52,7 @@ const COMPACT_COMPONENTS: Components = {
 const DOCUMENT_COMPONENTS: Components = {
   ...SHARED_COMPONENTS,
   pre: ({ node: _node, className, ...props }) => (
-    <pre
-      {...props}
-      className={cn(
-        "overflow-x-auto",
-        className,
-      )}
-    />
+    <pre {...props} className={cn("overflow-x-auto", className)} />
   ),
 };
 

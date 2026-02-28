@@ -22,7 +22,9 @@ export function TaskComposerStepper({
           type="button"
           className={cn(
             "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
-            isTypeStep ? "border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50" : "border-emerald-200 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/40",
+            isTypeStep
+              ? "border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50"
+              : "border-emerald-200 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/40",
           )}
           onClick={() => onStepChange("type")}
         >

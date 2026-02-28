@@ -22,11 +22,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 const hostClient = createHostClient();
 
-export function ThemeProvider({
-  children,
-  defaultTheme = "light",
-  ...props
-}: ThemeProviderProps) {
+export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(defaultTheme);
 
   // Load theme from config file on mount

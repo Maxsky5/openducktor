@@ -82,7 +82,8 @@ const toArticleClassName = (
 
   return cn(
     "text-sm",
-    isUserMessage && "w-full rounded-none border-l-4 bg-card px-4 py-3 mb-4 text-foreground shadow-md",
+    isUserMessage &&
+      "w-full rounded-none border-l-4 bg-card px-4 py-3 mb-4 text-foreground shadow-md",
     isToolMessage
       ? isWorkflowToolMessage
         ? workflowToolPhase === "completed"

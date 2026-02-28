@@ -2,8 +2,7 @@ import { type CSSProperties, type ReactElement, useEffect, useState } from "reac
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
 import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 import { createMarkdownSyntaxLanguageRegistry } from "./markdown-syntax-language-registry";
@@ -119,9 +118,7 @@ export default function MarkdownSyntaxBlock({
   }
 
   return (
-    <div
-      className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}
-    >
+    <div className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}>
       <SyntaxHighlighter
         language={normalizedLanguage}
         style={isDark ? oneDark : oneLight}

@@ -129,9 +129,19 @@ export function AgentSessionQuestionCard({
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
-                    <CheckCircle2 className={cn("size-3.5", isTabActive ? "text-primary-foreground/70" : "text-emerald-500")} />
+                    <CheckCircle2
+                      className={cn(
+                        "size-3.5",
+                        isTabActive ? "text-primary-foreground/70" : "text-emerald-500",
+                      )}
+                    />
                   ) : (
-                    <Circle className={cn("size-3.5", isTabActive ? "text-primary-foreground/70" : "text-muted-foreground")} />
+                    <Circle
+                      className={cn(
+                        "size-3.5",
+                        isTabActive ? "text-primary-foreground/70" : "text-muted-foreground",
+                      )}
+                    />
                   )}
                   {question.header?.trim() || `Question ${index + 1}`}
                 </Button>

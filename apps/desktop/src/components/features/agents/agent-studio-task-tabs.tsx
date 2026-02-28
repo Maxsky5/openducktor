@@ -222,7 +222,9 @@ export function AgentStudioTaskTabs({
               onValueChange={setPendingTaskId}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">All available tasks already have an open tab.</p>
+            <p className="text-sm text-muted-foreground">
+              All available tasks already have an open tab.
+            </p>
           )}
 
           <DialogFooter>

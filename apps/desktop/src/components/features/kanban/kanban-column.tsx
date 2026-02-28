@@ -117,10 +117,7 @@ function LaneHeader({
   const theme = laneTheme(id);
   return (
     <header
-      className={cn(
-        "space-y-3 border-b border-border/80 px-4 pb-3 pt-4",
-        theme.headerSurfaceClass,
-      )}
+      className={cn("space-y-3 border-b border-border/80 px-4 pb-3 pt-4", theme.headerSurfaceClass)}
     >
       <span className={cn("block h-1.5 w-14 rounded-full", theme.headerAccentClass)} />
       <div className="flex items-center justify-between gap-2">

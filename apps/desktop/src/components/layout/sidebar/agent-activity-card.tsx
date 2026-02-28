@@ -122,14 +122,16 @@ export function AgentActivityCard({
           count={waitingForInputCount}
           icon={
             <CircleAlert
-              className={hasWaitingInput ? "size-3.5 text-amber-600" : "size-3.5 text-muted-foreground"}
+              className={
+                hasWaitingInput ? "size-3.5 text-amber-600" : "size-3.5 text-muted-foreground"
+              }
             />
           }
           iconClassName="inline-flex"
           badgeClassName={
             hasWaitingInput
               ? "rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700"
-               : "rounded-full bg-muted px-2 py-0.5 font-semibold text-muted-foreground"
+              : "rounded-full bg-muted px-2 py-0.5 font-semibold text-muted-foreground"
           }
           sessions={waitingForInputSessions}
           accentClassName={hasWaitingInput ? "text-amber-700" : "text-muted-foreground"}

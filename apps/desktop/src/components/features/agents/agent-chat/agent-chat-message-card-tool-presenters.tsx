@@ -233,7 +233,9 @@ export const RegularToolMessage = ({
         {toolIcon(meta.tool)}
       </span>
       <p className="shrink-0 font-medium text-current">{toolDisplayName(meta.tool)}</p>
-      {summaryText.length > 0 ? <p className="truncate text-muted-foreground">{summaryText}</p> : null}
+      {summaryText.length > 0 ? (
+        <p className="truncate text-muted-foreground">{summaryText}</p>
+      ) : null}
       <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
         {isActive ? <LoaderCircle className="size-3 animate-spin" /> : null}
         {!isActive && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}

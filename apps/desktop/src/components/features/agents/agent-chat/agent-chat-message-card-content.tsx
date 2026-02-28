@@ -253,7 +253,9 @@ export const MessageBody = ({
       <>
         <p className="whitespace-pre-wrap leading-6">{message.content}</p>
         {timeLabel ? (
-          <p className="mt-2 text-right text-[11px] font-medium text-muted-foreground">{timeLabel}</p>
+          <p className="mt-2 text-right text-[11px] font-medium text-muted-foreground">
+            {timeLabel}
+          </p>
         ) : null}
       </>
     );

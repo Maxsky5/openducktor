@@ -389,7 +389,11 @@ export function SettingsModal({
         </div>
 
         <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-border px-6 pb-6 pt-4">
-          {saveError ? <p className="text-sm text-rose-700 dark:text-rose-400">{saveError}</p> : <span />}
+          {saveError ? (
+            <p className="text-sm text-rose-700 dark:text-rose-400">{saveError}</p>
+          ) : (
+            <span />
+          )}
           <div className="flex items-center gap-2">
             <Button
               type="button"

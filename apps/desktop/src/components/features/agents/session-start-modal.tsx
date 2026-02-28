@@ -118,7 +118,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
             </div>
 
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor="session-start-variant">
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="session-start-variant"
+              >
                 Variant
               </label>
               <Combobox

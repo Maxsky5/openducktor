@@ -205,7 +205,9 @@ export const buildDiagnosticsPanelModel = (
           {
             label: "Status",
             value: opencodeHealth?.mcpServerStatus ?? "unavailable",
-            valueClassName: opencodeHealth?.mcpServerStatus ? "font-medium" : "text-muted-foreground",
+            valueClassName: opencodeHealth?.mcpServerStatus
+              ? "font-medium"
+              : "text-muted-foreground",
           },
           {
             label: "Tools detected",
