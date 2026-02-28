@@ -136,7 +136,7 @@ When using hardcoded colors, prefer **lighter shades for backgrounds** (e.g. `bg
   - `documents.spec` (latest-only list in V1)
   - `documents.implementationPlan` (latest-only list in V1)
   - `documents.qaReports` (append-only history)
-- Task action names are defined in `packages/contracts/src/index.ts` (`taskActionSchema`).
+- Task action names are defined in `packages/contracts/src/task-schemas.ts` (`taskActionSchema`) and re-exported by `packages/contracts/src/index.ts`.
 - Detailed workflow docs:
   - `docs/task-workflow-status-model.md`
   - `docs/task-workflow-transition-matrix.md`

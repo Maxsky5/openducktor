@@ -7,7 +7,7 @@ Frontend must only render backend-provided workflow state.
 ## Contract Changes
 
 ### 1) Add `agentWorkflows` to `TaskCard`
-Update `packages/contracts/src/index.ts`:
+Update `packages/contracts/src/task-schemas.ts` (re-exported via `packages/contracts/src/index.ts`):
 
 ```ts
 type AgentWorkflowState = {

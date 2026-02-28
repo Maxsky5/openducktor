@@ -144,6 +144,28 @@ describe("runtime schemas", () => {
     expect(parsed.agentDefaults.spec?.opencodeAgent).toBe("build");
   });
 
+  test("repo config normalizes null agent default fields and entries", () => {
+    const parsed = repoConfigSchema.parse({
+      worktreeBasePath: "/tmp/wt",
+      branchPrefix: "obp",
+      trustedHooks: true,
+      hooks: { preStart: [], postComplete: [] },
+      agentDefaults: {
+        spec: {
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: null,
+          opencodeAgent: null,
+        },
+        planner: null,
+      },
+    });
+
+    expect(parsed.agentDefaults.spec?.variant).toBeUndefined();
+    expect(parsed.agentDefaults.spec?.opencodeAgent).toBeUndefined();
+    expect(parsed.agentDefaults.planner).toBeUndefined();
+  });
+
   test("git schemas parse branch and current branch payloads", () => {
     const branch = gitBranchSchema.parse({
       name: "main",
