@@ -95,6 +95,7 @@ bun run typecheck
 bun run build
 bun run test
 bun run deps:check
+bun run deps:audit:hono
 bun run deps:unused
 bun run deps:outdated
 
@@ -114,11 +115,13 @@ cd apps/desktop/src-tauri && cargo check
 ## Dependency Hygiene
 
 - Blocking unused dependency check: `bun run deps:check`
+- Blocking targeted vulnerability check (Hono GHSA-`xh87-mx6m-69f3`): `bun run deps:audit:hono`
 - Non-blocking unused export report: `bun run deps:unused`
 - Outdated dependency report: `bun run deps:outdated`
 - Automated update PRs: `.github/dependabot.yml`
 - CI automation: `.github/workflows/dependency-hygiene.yml`
 - Review and upgrade cadence: `docs/dependency-hygiene.md`
+- MCP runtime transport and threat assumptions: `docs/mcp-runtime-security.md`
 
 ## IPC Commands (Implemented)
 
