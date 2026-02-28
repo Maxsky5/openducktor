@@ -175,16 +175,16 @@ mod tests {
     }
 
     #[test]
-    fn map_plan_subtasks_parses_valid_issue_type() {
+    fn map_plan_subtasks_parses_valid_issue_type() -> Result<(), String> {
         let subtasks = map_plan_subtasks(Some(vec![PlanSubtaskPayload {
             title: "Build API".to_string(),
             issue_type: Some("bug".to_string()),
             priority: Some(1),
             description: Some("Fix bug".to_string()),
-        }]))
-        .expect("valid issue type should parse")
-        .expect("subtasks should be present");
+        }]))?
+        .ok_or_else(|| "subtasks should be present".to_string())?;
 
         assert_eq!(subtasks[0].issue_type, Some(IssueType::Bug));
+        Ok(())
     }
 }
