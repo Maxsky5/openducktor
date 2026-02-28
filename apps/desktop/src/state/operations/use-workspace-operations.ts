@@ -52,6 +52,15 @@ export function useWorkspaceOperations({
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const activeRepoRef = useRef(activeRepo);
+  const probeGatesRef = useRef({
+    isSwitchingWorkspace,
+    isLoadingBranches,
+    isSwitchingBranch,
+  });
+
+  probeGatesRef.current.isSwitchingWorkspace = isSwitchingWorkspace;
+  probeGatesRef.current.isLoadingBranches = isLoadingBranches;
+  probeGatesRef.current.isSwitchingBranch = isSwitchingBranch;
 
   useEffect(() => {
     activeRepoRef.current = activeRepo;
@@ -181,9 +190,9 @@ export function useWorkspaceOperations({
     if (
       !shouldProbeExternalBranchChange({
         activeRepo: repoPath,
-        isSwitchingWorkspace,
-        isSwitchingBranch,
-        isLoadingBranches,
+        isSwitchingWorkspace: probeGatesRef.current.isSwitchingWorkspace,
+        isSwitchingBranch: probeGatesRef.current.isSwitchingBranch,
+        isLoadingBranches: probeGatesRef.current.isLoadingBranches,
         isSyncInFlight: branchSyncInFlightRef.current,
       })
     ) {
@@ -219,7 +228,7 @@ export function useWorkspaceOperations({
     } finally {
       branchSyncInFlightRef.current = false;
     }
-  }, [isLoadingBranches, isSwitchingBranch, isSwitchingWorkspace, refreshBranchesForRepo]);
+  }, [refreshBranchesForRepo]);
 
   useEffect(() => {
     if (!activeRepo) {

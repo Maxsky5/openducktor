@@ -15,6 +15,47 @@ const flush = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+const setGlobalProperty = (key: "window" | "document", value: unknown): void => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+  if (!descriptor || descriptor.configurable) {
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value,
+    });
+    return;
+  }
+
+  if ("writable" in descriptor && descriptor.writable) {
+    (globalThis as Record<string, unknown>)[key] = value;
+    return;
+  }
+
+  throw new Error(`Cannot override global ${key}`);
+};
+
+const mockBrowserGlobals = (windowValue: Window, documentValue: Document): (() => void) => {
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
+
+  setGlobalProperty("window", windowValue);
+  setGlobalProperty("document", documentValue);
+
+  return () => {
+    if (windowDescriptor) {
+      Object.defineProperty(globalThis, "window", windowDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
+
+    if (documentDescriptor) {
+      Object.defineProperty(globalThis, "document", documentDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "document");
+    }
+  };
+};
+
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
   let reject: ((reason?: unknown) => void) | null = null;
@@ -300,6 +341,97 @@ describe("use-workspace-operations", () => {
       await harness.unmount();
       host.gitGetCurrentBranch = original.gitGetCurrentBranch;
       host.gitGetBranches = original.gitGetBranches;
+    }
+  });
+
+  test("keeps branch probe interval/listeners mounted while branch loading and switching flags change", async () => {
+    const setActiveRepo = mock(() => {});
+    const addWindowEventListener = mock(() => {});
+    const removeWindowEventListener = mock(() => {});
+    const setIntervalMock = mock(() => 1);
+    const clearIntervalMock = mock(() => {});
+    const addDocumentEventListener = mock(() => {});
+    const removeDocumentEventListener = mock(() => {});
+    const fakeWindow = {
+      addEventListener: addWindowEventListener,
+      removeEventListener: removeWindowEventListener,
+      setInterval: setIntervalMock,
+      clearInterval: clearIntervalMock,
+    } as unknown as Window;
+    const fakeDocument = {
+      addEventListener: addDocumentEventListener,
+      removeEventListener: removeDocumentEventListener,
+      visibilityState: "visible" as const,
+    } as unknown as Document;
+    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+
+    const gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+    const gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ]);
+    const gitSwitchBranch = mock(async (_repoPath: string, branchName: string) => ({
+      name: branchName,
+      detached: false,
+    }));
+
+    const original = {
+      gitGetCurrentBranch: host.gitGetCurrentBranch,
+      gitGetBranches: host.gitGetBranches,
+      gitSwitchBranch: host.gitSwitchBranch,
+    };
+
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+    host.gitSwitchBranch = gitSwitchBranch;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+    });
+
+    try {
+      await harness.mount();
+      expect(addWindowEventListener).toHaveBeenCalledTimes(1);
+      expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(setIntervalMock).toHaveBeenCalledTimes(1);
+
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await harness.run(async (value) => {
+        await value.switchBranch("feature");
+      });
+
+      expect(addWindowEventListener).toHaveBeenCalledTimes(1);
+      expect(addDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(setIntervalMock).toHaveBeenCalledTimes(1);
+      expect(removeWindowEventListener).not.toHaveBeenCalled();
+      expect(removeDocumentEventListener).not.toHaveBeenCalled();
+      expect(clearIntervalMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      expect(removeWindowEventListener).toHaveBeenCalledTimes(1);
+      expect(removeDocumentEventListener).toHaveBeenCalledTimes(1);
+      expect(clearIntervalMock).toHaveBeenCalledTimes(1);
+
+      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      host.gitGetBranches = original.gitGetBranches;
+      host.gitSwitchBranch = original.gitSwitchBranch;
+      restoreBrowserGlobals();
     }
   });
 });
