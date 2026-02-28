@@ -49,7 +49,7 @@ export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): Rea
                 className={cn(
                   "inline-flex size-6 items-center justify-center rounded-full border transition-colors",
                   selected
-                    ? "border-sky-300 bg-sky-100 text-sky-700"
+                    ? "border-sky-300 bg-sky-100 text-sky-700 dark:border-sky-600 dark:bg-sky-900/60 dark:text-sky-300"
                     : "border-input bg-card text-transparent",
                 )}
               >
