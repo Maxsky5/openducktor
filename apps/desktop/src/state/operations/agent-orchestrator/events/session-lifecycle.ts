@@ -25,12 +25,12 @@ const toPendingPermission = (event: PermissionRequiredEvent) => ({
 });
 
 const shouldAutoRejectPermission = (
-  role: string | undefined,
+  role: AgentRole | undefined,
   event: PermissionRequiredEvent,
 ): boolean => {
   return (
-    Boolean(role) &&
-    READ_ONLY_ROLES.has(role as AgentRole) &&
+    role !== undefined &&
+    READ_ONLY_ROLES.has(role) &&
     isMutatingPermission(event.permission, event.patterns, event.metadata)
   );
 };
@@ -38,7 +38,7 @@ const shouldAutoRejectPermission = (
 const autoRejectMutatingPermission = (
   context: SessionEventContext,
   event: PermissionRequiredEvent,
-  role: string,
+  role: AgentRole,
 ): void => {
   const pendingPermission = toPendingPermission(event);
 

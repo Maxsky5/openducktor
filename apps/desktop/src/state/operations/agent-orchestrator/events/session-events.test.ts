@@ -160,6 +160,122 @@ describe("agent-orchestrator-session-events", () => {
     expect(completedMessage.meta.inputReadyAtMs).toBe(Date.parse("2026-02-22T08:00:10.000Z"));
   });
 
+  test("runs completion side effects once for duplicate completed tool events", async () => {
+    const scenarios = [
+      {
+        name: "workflow mutation tool refresh",
+        tool: "odt_set_plan",
+        output: "ok",
+        expectedRefreshTaskDataCalls: 1,
+        expectedLoadSessionTodosCalls: 0,
+      },
+      {
+        name: "todo tool refresh",
+        tool: "todowrite",
+        output: '{"todos":[]}',
+        expectedRefreshTaskDataCalls: 0,
+        expectedLoadSessionTodosCalls: 1,
+      },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+      let refreshTaskDataCalls = 0;
+      let loadSessionTodosCalls = 0;
+
+      const adapter: SessionEventAdapter = {
+        subscribeEvents: (_sessionId, handler) => {
+          handlers.push(
+            handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+          );
+          return () => {};
+        },
+        replyPermission: async () => {},
+      };
+
+      const sessionsRef: { current: Record<string, AgentSessionState> } = {
+        current: {
+          "session-1": buildSession({ role: "build" }),
+        },
+      };
+
+      const updateSession = (
+        sessionId: string,
+        updater: (current: AgentSessionState) => AgentSessionState,
+      ) => {
+        const current = sessionsRef.current[sessionId];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current = {
+          ...sessionsRef.current,
+          [sessionId]: updater(current),
+        };
+      };
+
+      attachAgentSessionListener({
+        adapter,
+        repoPath: "/tmp/repo",
+        sessionId: "session-1",
+        sessionsRef,
+        draftRawBySessionRef: { current: {} },
+        draftSourceBySessionRef: { current: {} },
+        turnStartedAtBySessionRef: { current: {} },
+        updateSession,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+        refreshTaskData: async () => {
+          refreshTaskDataCalls += 1;
+        },
+        loadSessionTodos: async () => {
+          loadSessionTodosCalls += 1;
+        },
+      });
+
+      const handleEvent = handlers[0];
+      if (!handleEvent) {
+        throw new Error("Expected session event handler to be registered");
+      }
+
+      handleEvent({
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:05.000Z",
+        part: {
+          kind: "tool",
+          messageId: "tool-msg-dup",
+          partId: "part-dup",
+          callId: "call-dup",
+          tool: scenario.tool,
+          status: "completed",
+          output: scenario.output,
+          error: "",
+        },
+      });
+
+      handleEvent({
+        type: "assistant_part",
+        sessionId: "session-1",
+        timestamp: "2026-02-22T08:00:06.000Z",
+        part: {
+          kind: "tool",
+          messageId: "tool-msg-dup",
+          partId: "part-dup",
+          callId: "call-dup",
+          tool: scenario.tool,
+          status: "completed",
+          output: scenario.output,
+          error: "",
+        },
+      });
+
+      await Promise.resolve();
+
+      expect(refreshTaskDataCalls).toBe(scenario.expectedRefreshTaskDataCalls);
+      expect(loadSessionTodosCalls).toBe(scenario.expectedLoadSessionTodosCalls);
+    }
+  });
+
   test("auto-rejects mutating permissions for read-only roles", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const replyPermission = mock(
