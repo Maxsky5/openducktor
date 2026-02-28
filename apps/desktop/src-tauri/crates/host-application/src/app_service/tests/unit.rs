@@ -1,4 +1,24 @@
-use super::*;
+use anyhow::Result;
+use host_domain::{
+    CreateTaskInput, PlanSubtaskInput, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+};
+use host_infra_system::{AppConfigStore, GlobalConfig, OpencodeStartupReadinessConfig};
+use std::fs;
+use std::net::{TcpListener, TcpStream};
+use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use crate::app_service::{
+    allows_transition, build_opencode_startup_event_payload, can_set_plan, can_set_spec_from_status,
+    derive_available_actions, normalize_required_markdown, normalize_subtask_plan_inputs,
+    terminate_child_process, validate_parent_relationships_for_create,
+    validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
+    wait_for_local_server, wait_for_local_server_with_process, AppService,
+    OpencodeStartupMetricsSnapshot, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
+};
+use crate::app_service::test_support::{FakeTaskStore, TaskStoreState, make_task, unique_temp_path};
 
 #[test]
 fn app_service_new_constructor_is_callable() -> Result<()> {
