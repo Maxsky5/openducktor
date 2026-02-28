@@ -29,6 +29,31 @@ type KanbanTaskCardProps = {
   onHumanRequestChanges?: (taskId: string) => void;
 };
 
+const areStringArraysEqual = (left: string[], right: string[]): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
+  left.id === right.id &&
+  left.updatedAt === right.updatedAt &&
+  left.title === right.title &&
+  left.status === right.status &&
+  left.issueType === right.issueType &&
+  left.priority === right.priority &&
+  areStringArraysEqual(left.subtaskIds, right.subtaskIds) &&
+  areStringArraysEqual(left.availableActions, right.availableActions);
+
 const areRunningTaskSessionsEqual = (
   left: RunningTaskSession[] | undefined,
   right: RunningTaskSession[] | undefined,
@@ -64,7 +89,7 @@ const areKanbanTaskCardPropsEqual = (
   previous: KanbanTaskCardProps,
   next: KanbanTaskCardProps,
 ): boolean =>
-  previous.task === next.task &&
+  areTaskCardsEquivalent(previous.task, next.task) &&
   previous.runState === next.runState &&
   areRunningTaskSessionsEqual(previous.activeSessions, next.activeSessions) &&
   previous.onOpenDetails === next.onOpenDetails &&

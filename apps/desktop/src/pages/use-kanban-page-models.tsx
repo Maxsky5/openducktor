@@ -39,6 +39,8 @@ export function useKanbanPageModels(): KanbanPageModels {
     sendAgentMessage,
     updateAgentSessionModel,
   });
+  const { sessionStartModal, onDelegate, onPlan, onBuild, openBuildAfterHumanRequestChanges } =
+    sessionStartFlow;
 
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
@@ -55,17 +57,17 @@ export function useKanbanPageModels(): KanbanPageModels {
     (taskId: string): void => {
       void (async () => {
         await humanRequestChangesTask(taskId);
-        sessionStartFlow.openBuildAfterHumanRequestChanges(taskId);
+        openBuildAfterHumanRequestChanges(taskId);
       })();
     },
-    [humanRequestChangesTask, sessionStartFlow],
+    [humanRequestChangesTask, openBuildAfterHumanRequestChanges],
   );
 
   const taskDialogs = useKanbanTaskDialogs({
     tasks,
-    onPlan: sessionStartFlow.onPlan,
-    onBuild: sessionStartFlow.onBuild,
-    onDelegate: sessionStartFlow.onDelegate,
+    onPlan,
+    onBuild,
+    onDelegate,
     onDefer: (taskId) => {
       void deferTask(taskId);
     },
@@ -82,9 +84,9 @@ export function useKanbanPageModels(): KanbanPageModels {
     runs,
     sessions,
     onOpenDetails: taskDialogs.onOpenDetails,
-    onDelegate: sessionStartFlow.onDelegate,
-    onPlan: sessionStartFlow.onPlan,
-    onBuild: sessionStartFlow.onBuild,
+    onDelegate,
+    onPlan,
+    onBuild,
     onHumanApprove,
     onHumanRequestChanges,
   });
@@ -99,6 +101,6 @@ export function useKanbanPageModels(): KanbanPageModels {
     content,
     taskComposer: taskDialogs.taskComposer,
     detailsSheet: taskDialogs.detailsSheet,
-    sessionStartModal: sessionStartFlow.sessionStartModal,
+    sessionStartModal,
   };
 }
