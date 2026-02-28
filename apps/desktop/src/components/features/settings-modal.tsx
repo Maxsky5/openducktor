@@ -378,17 +378,18 @@ export function SettingsModal({
             })}
           </div>
 
-          <div className="flex items-center gap-2">
+          <Label
+            htmlFor="trusted-hooks"
+            className="flex items-center gap-2 text-sm text-foreground"
+          >
             <Switch
               id="trusted-hooks"
               checked={trustedHooks}
               disabled={isLoadingConfig || isSaving}
               onCheckedChange={setTrustedHooks}
             />
-            <Label htmlFor="trusted-hooks" className="text-sm text-foreground">
-              Trust hooks for this workspace
-            </Label>
-          </div>
+            Trust hooks for this workspace
+          </Label>
         </div>
 
         <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-border px-6 pb-6 pt-4">
