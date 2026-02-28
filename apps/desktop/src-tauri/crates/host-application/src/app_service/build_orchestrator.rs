@@ -1,7 +1,8 @@
 use super::{
     emit_event, run_parsed_hook_command_allow_failure, spawn_opencode_server,
     spawn_output_forwarder, terminate_child_process, validate_hook_trust, validate_transition,
-    wait_for_local_server_with_process, AppService, RunEmitter, RunProcess, StartupEventPayload,
+    wait_for_local_server_with_process, AppService, RunEmitter, RunProcess,
+    StartupEventCorrelation, StartupEventPayload,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
@@ -164,18 +165,15 @@ impl AppService {
         let startup_policy = self.opencode_startup_readiness_policy();
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
-        self.emit_opencode_startup_event(StartupEventPayload {
-            event_name: "startup_wait_begin",
-            runtime_type: "build_runtime",
+        self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
+            "build_runtime",
             repo_path,
-            task_id: Some(task_id),
-            role: "build",
+            Some(task_id),
+            "build",
             port,
-            extra: Some(("run_id", run_id.as_str())),
-            policy: Some(startup_policy),
-            report: None,
-            failure_reason: None,
-        });
+            Some(StartupEventCorrelation::new("run_id", run_id.as_str())),
+            Some(startup_policy),
+        ));
         let startup_report = match wait_for_local_server_with_process(
             &mut child,
             port,
@@ -185,36 +183,33 @@ impl AppService {
         ) {
             Ok(report) => report,
             Err(error) => {
-                self.emit_opencode_startup_event(StartupEventPayload {
-                    event_name: "startup_failed",
-                    runtime_type: "build_runtime",
+                self.emit_opencode_startup_event(StartupEventPayload::failed(
+                    "build_runtime",
                     repo_path,
-                    task_id: Some(task_id),
-                    role: "build",
+                    Some(task_id),
+                    "build",
                     port,
-                    extra: Some(("run_id", run_id.as_str())),
-                    policy: Some(startup_policy),
-                    report: Some(error.report),
-                    failure_reason: Some(error.reason),
-                });
+                    Some(StartupEventCorrelation::new("run_id", run_id.as_str())),
+                    Some(startup_policy),
+                    error.report,
+                    error.reason,
+                ));
                 terminate_child_process(&mut child);
                 return Err(anyhow!(error)).with_context(|| {
                     format!("OpenCode build runtime failed to start for task {task_id}")
                 });
             }
         };
-        self.emit_opencode_startup_event(StartupEventPayload {
-            event_name: "startup_ready",
-            runtime_type: "build_runtime",
+        self.emit_opencode_startup_event(StartupEventPayload::ready(
+            "build_runtime",
             repo_path,
-            task_id: Some(task_id),
-            role: "build",
+            Some(task_id),
+            "build",
             port,
-            extra: Some(("run_id", run_id.as_str())),
-            policy: Some(startup_policy),
-            report: Some(startup_report),
-            failure_reason: None,
-        });
+            Some(StartupEventCorrelation::new("run_id", run_id.as_str())),
+            Some(startup_policy),
+            startup_report,
+        ));
 
         self.task_transition(
             repo_path,
