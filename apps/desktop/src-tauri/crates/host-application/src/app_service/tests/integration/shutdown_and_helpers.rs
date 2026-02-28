@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
 use crate::app_service::{
@@ -148,23 +148,11 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
 
     service.shutdown()?;
 
-    let deadline = Instant::now() + Duration::from_secs(2);
-    let mut exited = false;
-    while Instant::now() < deadline {
-        if pending_child.try_wait()?.is_some() {
-            exited = true;
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    if !exited {
-        exited = pending_child.try_wait()?.is_some();
-    }
-
     assert!(
-        exited,
+        wait_for_process_exit(pending_pid as i32, Duration::from_secs(2)),
         "pending OpenCode process should have exited during shutdown"
     );
+    let _ = pending_child.wait().context("failed waiting pending OpenCode process")?;
     assert!(service
         .tracked_opencode_processes
         .lock()

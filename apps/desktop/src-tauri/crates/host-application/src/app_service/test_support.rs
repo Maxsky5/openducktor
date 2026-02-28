@@ -806,14 +806,25 @@ pub(crate) fn wait_for_path_exists(path: &Path, timeout: Duration) -> bool {
 }
 
 pub(crate) fn process_is_alive(pid: i32) -> bool {
-    Command::new("/bin/sh")
-        .arg("-lc")
-        .arg(format!("kill -0 {pid}"))
-        .stdout(Stdio::null())
+    let output = Command::new("ps")
+        .arg("-o")
+        .arg("stat=")
+        .arg("-p")
+        .arg(pid.to_string())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .output();
+
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+
+    let stat = String::from_utf8_lossy(&output.stdout);
+    let stat = stat.trim();
+    !stat.is_empty() && !stat.starts_with('Z')
 }
 
 pub(crate) fn wait_for_process_exit(pid: i32, timeout: Duration) -> bool {

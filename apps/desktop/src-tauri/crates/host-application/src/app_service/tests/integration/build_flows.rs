@@ -78,7 +78,18 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     assert!(matches!(run.state, RunState::Running));
     assert_eq!(service.runs_list(Some(repo_path.as_str()))?.len(), 1);
 
-    std::thread::sleep(Duration::from_millis(200));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !events
+        .lock()
+        .expect("events lock poisoned")
+        .iter()
+        .any(|event| matches!(event, RunEvent::PermissionRequired { .. }))
+    {
+        if Instant::now() > deadline {
+            return Err(anyhow!("timed out waiting for permission-required event"));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
     assert!(service.build_respond(
         run.run_id.as_str(),
         BuildResponseAction::Approve,
@@ -477,4 +488,3 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
     let _ = fs::remove_dir_all(root);
     Ok(())
 }
-
