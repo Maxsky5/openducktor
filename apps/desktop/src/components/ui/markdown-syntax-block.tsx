@@ -164,11 +164,10 @@ export default function MarkdownSyntaxBlock({
     return renderPlainCodeBlock();
   }
 
-  if (isDark && !oneDarkTheme) {
+  const syntaxTheme = isDark ? oneDarkTheme : oneLight;
+  if (!syntaxTheme) {
     return renderPlainCodeBlock();
   }
-
-  const syntaxTheme: PrismTheme = isDark ? (oneDarkTheme as PrismTheme) : oneLight;
 
   return (
     <div className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}>

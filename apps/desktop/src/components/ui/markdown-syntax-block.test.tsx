@@ -95,16 +95,14 @@ describe("MarkdownSyntaxBlock", () => {
     expect(renderer.root.findAllByType("pre")).toHaveLength(1);
     expect(findSyntaxNodes(renderer)).toHaveLength(0);
 
-    await act(async () => {
-      await flushMicrotasks();
-    });
+    await act(flushMicrotasks);
 
     const nodes = findSyntaxNodes(renderer);
     expect(nodes).toHaveLength(1);
     expect(nodes[0]?.props.style).toBe(DARK_THEME);
     expect(darkThemeModuleLoadMock).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
+    act(() => {
       renderer.unmount();
     });
   });
@@ -121,7 +119,7 @@ describe("MarkdownSyntaxBlock", () => {
     expect(renderer.root.findAllByType("pre")).toHaveLength(0);
     expect(darkThemeModuleLoadMock).not.toHaveBeenCalled();
 
-    await act(async () => {
+    act(() => {
       renderer.unmount();
     });
   });
@@ -135,7 +133,7 @@ describe("MarkdownSyntaxBlock", () => {
     expect(renderer.root.findAllByType("pre")).toHaveLength(1);
     expect(findSyntaxNodes(renderer)).toHaveLength(0);
 
-    await act(async () => {
+    act(() => {
       renderer.unmount();
     });
   });
@@ -153,16 +151,14 @@ describe("MarkdownSyntaxBlock", () => {
       );
     });
 
-    await act(async () => {
-      await flushMicrotasks();
-    });
+    await act(flushMicrotasks);
 
     const nodes = findSyntaxNodes(renderer);
     expect(nodes).toHaveLength(2);
     expect(nodes[0]?.props.style).toBe(DARK_THEME);
     expect(nodes[1]?.props.style).toBe(DARK_THEME);
 
-    await act(async () => {
+    act(() => {
       renderer.unmount();
     });
   });
