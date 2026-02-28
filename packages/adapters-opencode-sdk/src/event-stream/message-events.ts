@@ -1,12 +1,25 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import {
+  asUnknownRecord,
+  readArrayProp,
+  readStringProp,
+  readUnknownProp,
+  type UnknownRecord,
+} from "../guards";
+import {
   extractMessageTotalTokens,
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../message-normalizers";
 import { mapPartToAgentStreamPart } from "../stream-part-mapper";
+import {
+  readEventInfo,
+  readEventPart,
+  readEventProperties,
+  readMessageCompletedAt,
+} from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart, readStringProp } from "./shared";
+import { applyDeltaToPart } from "./shared";
 
 const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: string): boolean => {
   const mapped = mapPartToAgentStreamPart(part);
@@ -45,19 +58,16 @@ const applyPendingDeltas = (runtime: EventStreamRuntime, partId: string, basePar
   return nextPart;
 };
 
-const readRawMessageParts = (
-  properties: Record<string, unknown>,
-  info: Record<string, unknown> | undefined,
-): unknown[] => {
-  if (Array.isArray(properties.parts)) {
-    return properties.parts as unknown[];
+const readRawMessageParts = (properties: unknown, info: unknown): unknown[] => {
+  const directParts = readArrayProp(properties, "parts");
+  if (directParts) {
+    return directParts;
   }
-  const nestedParts = info?.parts;
-  return Array.isArray(nestedParts) ? (nestedParts as unknown[]) : [];
+  return readArrayProp(info, "parts") ?? [];
 };
 
 const normalizeMessagePart = (
-  rawPartRecord: Record<string, unknown>,
+  rawPartRecord: UnknownRecord,
   messageId: string,
   externalSessionId: string,
 ): Part => {
@@ -77,10 +87,11 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     return false;
   }
 
-  const properties = event.properties as Record<string, unknown>;
-  const info = properties.info;
-  const infoRecord =
-    info && typeof info === "object" ? (info as Record<string, unknown>) : undefined;
+  const properties = readEventProperties(event);
+  if (!properties) {
+    return true;
+  }
+  const infoRecord = readEventInfo(properties);
 
   const messageId = infoRecord
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
@@ -94,10 +105,11 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   const rawParts = readRawMessageParts(properties, infoRecord);
   if (messageId && rawParts.length > 0) {
     for (const rawPart of rawParts) {
-      if (!rawPart || typeof rawPart !== "object") {
+      const rawPartRecord = asUnknownRecord(rawPart);
+      if (!rawPartRecord) {
         continue;
       }
-      const rawPartRecord = rawPart as Record<string, unknown>;
+
       const rawPartId = readStringProp(rawPartRecord, ["id"]);
       if (!rawPartId) {
         continue;
@@ -116,15 +128,13 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     }
   }
 
-  const completedAt = infoRecord
-    ? ((infoRecord as { time?: { completed?: unknown } }).time?.completed ?? null)
-    : null;
+  const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
   const shouldEmitCompletedMessage =
     messageId !== undefined &&
     role === "assistant" &&
     normalizedParts.length > 0 &&
-    (typeof completedAt === "number" || finish === "stop");
+    (completedAt !== undefined || finish === "stop");
   if (!shouldEmitCompletedMessage || !messageId) {
     return true;
   }
@@ -158,11 +168,15 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
     return false;
   }
 
-  const deltaEvent = event.properties as Record<string, unknown>;
+  const deltaEvent = readEventProperties(event);
+  if (!deltaEvent) {
+    return true;
+  }
   const partId = readStringProp(deltaEvent, ["partID", "partId", "part_id"]) ?? "";
   const messageId = readStringProp(deltaEvent, ["messageID", "messageId", "message_id"]);
   const field = readStringProp(deltaEvent, ["field"]) ?? "";
-  const delta = typeof deltaEvent.delta === "string" ? deltaEvent.delta : "";
+  const deltaValue = readUnknownProp(deltaEvent, "delta");
+  const delta = typeof deltaValue === "string" ? deltaValue : "";
 
   const knownPart = partId ? runtime.partsById.get(partId) : undefined;
   if (knownPart && field.length > 0) {
@@ -205,14 +219,20 @@ const handleMessagePartUpdatedEvent = (event: Event, runtime: EventStreamRuntime
     return false;
   }
 
-  const rawPart = (event.properties as { part?: unknown }).part;
-  if (!rawPart || typeof rawPart !== "object") {
+  const properties = readEventProperties(event);
+  const rawPartRecord = properties ? readEventPart(properties) : undefined;
+  if (!rawPartRecord) {
     return true;
   }
 
-  const current = rawPart as Part;
-  const nextPart = applyPendingDeltas(runtime, current.id, current);
-  runtime.partsById.set(nextPart.id, nextPart);
+  const partId = readStringProp(rawPartRecord, ["id"]);
+  if (!partId) {
+    return true;
+  }
+
+  const current = rawPartRecord as Part;
+  const nextPart = applyPendingDeltas(runtime, partId, current);
+  runtime.partsById.set(partId, nextPart);
   emitAssistantPart(runtime, nextPart);
   return true;
 };
@@ -222,11 +242,10 @@ const handleMessagePartRemovedEvent = (event: Event, runtime: EventStreamRuntime
     return false;
   }
 
-  const removedPartId = readStringProp(event.properties as Record<string, unknown>, [
-    "partID",
-    "partId",
-    "part_id",
-  ]);
+  const properties = readEventProperties(event);
+  const removedPartId = properties
+    ? readStringProp(properties, ["partID", "partId", "part_id"])
+    : undefined;
   if (!removedPartId) {
     return true;
   }

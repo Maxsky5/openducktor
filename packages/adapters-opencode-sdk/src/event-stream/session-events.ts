@@ -1,5 +1,13 @@
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import { normalizeTodoList } from "../todo-normalizers";
+import {
+  parsePermissionAsked,
+  parseQuestionAsked,
+  parseSessionStatus,
+  readEventProperties,
+  readSessionErrorMessage,
+  readTodoPayload,
+} from "./schemas";
 import type { EventStreamRuntime } from "./shared";
 
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
@@ -7,11 +15,12 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
     return false;
   }
 
-  const status = (
-    event.properties as {
-      status: { type: string; attempt?: number; message?: string; next?: number };
-    }
-  ).status;
+  const properties = readEventProperties(event);
+  const status = properties ? parseSessionStatus(properties) : undefined;
+  if (!status) {
+    return true;
+  }
+
   if (status.type === "busy" || status.type === "idle") {
     runtime.emit(runtime.sessionId, {
       type: "session_status",
@@ -28,12 +37,9 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
     timestamp: runtime.now(),
     status: {
       type: "retry",
-      attempt: typeof status.attempt === "number" ? status.attempt : 0,
-      message:
-        typeof status.message === "string" && status.message.length > 0
-          ? status.message
-          : "Retrying session",
-      nextEpochMs: typeof status.next === "number" ? status.next : 0,
+      attempt: status.attempt,
+      message: status.message,
+      nextEpochMs: status.nextEpochMs,
     },
   });
   return true;
@@ -44,20 +50,19 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
     return false;
   }
 
-  const properties = event.properties as {
-    id: string;
-    permission: string;
-    patterns: string[];
-    metadata?: Record<string, unknown>;
-  };
+  const properties = readEventProperties(event);
+  const parsed = properties ? parsePermissionAsked(properties) : undefined;
+  if (!parsed) {
+    return true;
+  }
   runtime.emit(runtime.sessionId, {
     type: "permission_required",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
-    requestId: properties.id,
-    permission: properties.permission,
-    patterns: properties.patterns,
-    ...(properties.metadata ? { metadata: properties.metadata } : {}),
+    requestId: parsed.requestId,
+    permission: parsed.permission,
+    patterns: parsed.patterns,
+    ...(parsed.metadata ? { metadata: parsed.metadata } : {}),
   });
   return true;
 };
@@ -67,23 +72,18 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
     return false;
   }
 
-  const properties = event.properties as {
-    id: string;
-    questions: Array<{
-      header: string;
-      question: string;
-      options: Array<{ label: string; description: string }>;
-      multiple?: boolean;
-      custom?: boolean;
-    }>;
-  };
+  const properties = readEventProperties(event);
+  const parsed = properties ? parseQuestionAsked(properties) : undefined;
+  if (!parsed) {
+    return true;
+  }
 
   runtime.emit(runtime.sessionId, {
     type: "question_required",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
-    requestId: properties.id,
-    questions: properties.questions.map((question) => ({
+    requestId: parsed.requestId,
+    questions: parsed.questions.map((question) => ({
       header: question.header,
       question: question.question,
       options: question.options,
@@ -99,13 +99,12 @@ const handleSessionErrorEvent = (event: Event, runtime: EventStreamRuntime): boo
     return false;
   }
 
-  const maybeMessage = (event.properties as { error?: { data?: { message?: unknown } } }).error
-    ?.data?.message;
+  const properties = readEventProperties(event);
   runtime.emit(runtime.sessionId, {
     type: "session_error",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
-    message: typeof maybeMessage === "string" ? maybeMessage : "Unknown session error",
+    message: properties ? readSessionErrorMessage(properties) : "Unknown session error",
   });
   return true;
 };
@@ -128,8 +127,8 @@ const handleTodoUpdatedEvent = (event: Event, runtime: EventStreamRuntime): bool
     return false;
   }
 
-  const props = event.properties as Record<string, unknown>;
-  const todos = normalizeTodoList(props.todos);
+  const properties = readEventProperties(event);
+  const todos = normalizeTodoList(readTodoPayload(properties));
   runtime.emit(runtime.sessionId, {
     type: "session_todos_updated",
     sessionId: runtime.sessionId,

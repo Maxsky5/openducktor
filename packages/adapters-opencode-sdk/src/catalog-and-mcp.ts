@@ -1,5 +1,6 @@
 import type { AgentModelCatalog } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { asUnknownRecord, readStringProp } from "./guards";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import type { ClientFactory, McpServerStatus } from "./types";
 
@@ -90,22 +91,19 @@ export const getMcpStatus = async (
     directory: input.workingDirectory,
   });
   const payload = unwrapData(response, "get mcp status");
-  if (!payload || typeof payload !== "object") {
+  const statusPayload = asUnknownRecord(payload);
+  if (!statusPayload) {
     return {};
   }
 
   const statusByServer: Record<string, McpServerStatus> = {};
-  for (const [name, rawStatus] of Object.entries(payload as Record<string, unknown>)) {
-    if (!rawStatus || typeof rawStatus !== "object") {
+  for (const [name, rawStatus] of Object.entries(statusPayload)) {
+    const status = readStringProp(rawStatus, ["status"]);
+    if (!status || status.trim().length === 0) {
       continue;
     }
-    const status = (rawStatus as { status?: unknown }).status;
-    if (typeof status !== "string" || status.trim().length === 0) {
-      continue;
-    }
-    const error = (rawStatus as { error?: unknown }).error;
-    statusByServer[name] =
-      typeof error === "string" && error.trim().length > 0 ? { status, error } : { status };
+    const error = readStringProp(rawStatus, ["error"]);
+    statusByServer[name] = error && error.trim().length > 0 ? { status, error } : { status };
   }
 
   return statusByServer;
