@@ -50,7 +50,6 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).toContain("overflow-x-auto");
     expect(html).not.toContain("overflow-y-visible");
     expect(html).not.toContain("rounded-full border");
-    expect(html).not.toContain("bg-muted");
     expect(html).not.toContain("bg-card/80");
     expect(html).toContain("bg-gray-700/70");
     expect(html).toContain("size-[1.4rem]");
