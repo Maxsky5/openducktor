@@ -1,12 +1,11 @@
-import { agentToolNameSchema } from "@openducktor/contracts";
+import { agentToolNameValues } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
   type AgentToolName,
 } from "../types/agent-orchestrator";
 
-export const ODT_WORKFLOW_TOOL_NAMES =
-  agentToolNameSchema.options satisfies readonly AgentToolName[];
+export const ODT_WORKFLOW_TOOL_NAMES = agentToolNameValues satisfies readonly AgentToolName[];
 
 const ODT_WORKFLOW_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_TOOL_NAMES);
 export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(

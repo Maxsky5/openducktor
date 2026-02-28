@@ -47,8 +47,13 @@ import type {
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "agentRoleSchema",
+  "agentRoleValues",
+  "agentScenarioSchema",
+  "agentScenarioValues",
   "agentModelDefaultSchema",
   "agentToolNameSchema",
+  "agentToolNameValues",
   "agentRuntimeSummarySchema",
   "agentSessionModelSelectionSchema",
   "agentSessionRecordSchema",

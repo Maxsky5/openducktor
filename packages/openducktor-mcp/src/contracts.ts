@@ -11,8 +11,10 @@ export type PlanSubtaskInput = {
 
 export type TaskCard = Pick<
   CanonicalTaskCard,
-  "id" | "title" | "status" | "issueType" | "aiReviewEnabled" | "parentId"
->;
+  "id" | "title" | "status" | "issueType" | "aiReviewEnabled"
+> & {
+  parentId?: string;
+};
 
 export type RawIssue = {
   id: string;

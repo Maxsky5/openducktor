@@ -1,4 +1,4 @@
-import type { AgentToolName } from "@openducktor/contracts";
+import { type AgentToolName, issueTypeSchema } from "@openducktor/contracts";
 import { z } from "zod";
 
 const PLAN_SUBTASK_PRIORITY_VALUES = [0, 1, 2, 3, 4] as const;
@@ -14,7 +14,9 @@ const PlanSubtaskPrioritySchema = z
 
 const PlanSubtaskSchema = z.object({
   title: z.string().trim().min(1),
-  issueType: z.enum(["task", "feature", "bug"]).optional(),
+  issueType: issueTypeSchema
+    .refine((value) => value !== "epic", "Epic subtasks are not allowed.")
+    .optional(),
   priority: PlanSubtaskPrioritySchema.optional(),
   description: z.string().optional(),
 });

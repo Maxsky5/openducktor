@@ -119,6 +119,6 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
     status: toTaskStatus(issue.status),
     issueType: normalizeIssueType(issue.issue_type),
     aiReviewEnabled: qaRequired,
-    parentId,
+    ...(parentId ? { parentId } : {}),
   };
 };
