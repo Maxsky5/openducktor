@@ -2,13 +2,12 @@ use super::{run_parsed_hook_command_allow_failure, validate_hook_trust};
 use anyhow::{anyhow, Context, Result};
 use host_infra_system::{build_branch_name, remove_worktree, run_command, AppConfigStore};
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path};
 
 #[derive(Debug)]
 pub(super) struct QaWorktreeSetup {
-    pub(super) working_directory: String,
-    pub(super) cleanup_repo_path: String,
-    pub(super) cleanup_worktree_path: String,
+    pub(super) repo_path: String,
+    pub(super) worktree_path: String,
 }
 
 pub(super) fn prepare_qa_worktree(
@@ -17,6 +16,8 @@ pub(super) fn prepare_qa_worktree(
     task_title: &str,
     config_store: &AppConfigStore,
 ) -> Result<QaWorktreeSetup> {
+    validate_task_id_for_worktree(task_id)?;
+
     let repo_config = config_store.repo_config(repo_path)?;
     let worktree_base = repo_config.worktree_base_path.clone().ok_or_else(|| {
         anyhow!(
@@ -82,9 +83,8 @@ pub(super) fn prepare_qa_worktree(
 
     let qa_worktree_path = qa_worktree_str.to_string();
     Ok(QaWorktreeSetup {
-        working_directory: qa_worktree_path.clone(),
-        cleanup_repo_path: repo_path.to_string(),
-        cleanup_worktree_path: qa_worktree_path,
+        repo_path: repo_path.to_string(),
+        worktree_path: qa_worktree_path,
     })
 }
 
@@ -95,6 +95,39 @@ pub(super) fn remove_runtime_worktree(repo_path: &Path, worktree_path: &Path) ->
             worktree_path.display()
         )
     })
+}
+
+fn validate_task_id_for_worktree(task_id: &str) -> Result<()> {
+    let trimmed = task_id.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Invalid task id for QA worktree: value is empty"));
+    }
+
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return Err(anyhow!(
+            "Invalid task id for QA worktree: only ASCII letters, numbers, '-' and '_' are allowed"
+        ));
+    }
+
+    // Defense in depth: reject anything that could be interpreted as path traversal.
+    let path = Path::new(trimmed);
+    if path.is_absolute() {
+        return Err(anyhow!(
+            "Invalid task id for QA worktree: absolute paths are not allowed"
+        ));
+    }
+    if !matches!(path.components().next(), Some(Component::Normal(_)))
+        || path.components().count() != 1
+    {
+        return Err(anyhow!(
+            "Invalid task id for QA worktree: path separators or traversal segments are not allowed"
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -128,12 +161,11 @@ mod tests {
         )?;
 
         let setup = prepare_qa_worktree(repo_path.as_str(), "task-1", "Task 1", &config_store)?;
-        let qa_path = Path::new(setup.working_directory.as_str());
+        let qa_path = Path::new(setup.worktree_path.as_str());
         assert!(qa_path.exists());
-        assert_eq!(setup.cleanup_repo_path, repo_path);
-        assert_eq!(setup.cleanup_worktree_path, setup.working_directory);
+        assert_eq!(setup.repo_path, repo_path);
 
-        remove_runtime_worktree(Path::new(setup.cleanup_repo_path.as_str()), qa_path)?;
+        remove_runtime_worktree(Path::new(setup.repo_path.as_str()), qa_path)?;
         let _ = fs::remove_dir_all(root);
         Ok(())
     }
@@ -199,6 +231,37 @@ mod tests {
             !qa_worktree_path.exists(),
             "qa worktree should be removed when pre-start hook fails"
         );
+
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_qa_worktree_rejects_invalid_task_id() -> Result<()> {
+        let root = unique_temp_path("qa-worktree-invalid-task-id");
+        let repo = root.join("repo");
+        init_git_repo(&repo)?;
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        let repo_path = repo.to_string_lossy().to_string();
+        let worktree_base = root.join("qa-worktrees");
+
+        config_store.update_repo_config(
+            repo_path.as_str(),
+            RepoConfig {
+                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+                branch_prefix: "odt".to_string(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                agent_defaults: Default::default(),
+            },
+        )?;
+
+        let error = prepare_qa_worktree(repo_path.as_str(), "../../tmp", "Task 1", &config_store)
+            .expect_err("task id with traversal markers should fail");
+        assert!(error
+            .to_string()
+            .contains("Invalid task id for QA worktree"));
 
         let _ = fs::remove_dir_all(root);
         Ok(())

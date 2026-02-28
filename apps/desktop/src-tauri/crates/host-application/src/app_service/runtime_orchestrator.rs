@@ -275,9 +275,9 @@ impl AppService {
             let setup =
                 prepare_qa_worktree(repo_path, task_id, task.title.as_str(), &self.config_store)?;
             (
-                setup.working_directory,
-                Some(setup.cleanup_repo_path),
-                Some(setup.cleanup_worktree_path),
+                setup.worktree_path.clone(),
+                Some(setup.repo_path),
+                Some(setup.worktree_path),
             )
         } else {
             (repo_path.to_string(), None, None)
