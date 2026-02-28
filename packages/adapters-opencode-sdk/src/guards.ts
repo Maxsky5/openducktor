@@ -84,8 +84,13 @@ export const readStringArrayProp = (source: unknown, key: string): string[] | un
   if (!values) {
     return undefined;
   }
-  if (!values.every((entry) => typeof entry === "string")) {
-    return undefined;
+
+  const stringArray: string[] = [];
+  for (const value of values) {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    stringArray.push(value);
   }
-  return values;
+  return stringArray;
 };
