@@ -1,4 +1,5 @@
 import type {} from "./bun-test";
+import type { TauriHostClient as TauriHostClientType } from "./index";
 import { TauriHostClient } from "./index";
 
 type InvokeCall = {
@@ -73,7 +74,114 @@ const createClient = (resolver: (command: string, args?: Record<string, unknown>
   return { client: new TauriHostClient(invoke), calls };
 };
 
+const assertClientType = (client: TauriHostClientType): TauriHostClientType => client;
+
 describe("TauriHostClient", () => {
+  test("exports a value and type-compatible host client", async () => {
+    const { client } = createClient((command) => {
+      if (command === "set_spec") {
+        return { updatedAt: "2026-02-20T10:00:00Z" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const typedClient = assertClientType(client);
+    const output = await typedClient.setSpec({
+      repoPath: "/repo",
+      taskId: "task-1",
+      markdown: "# Spec",
+    });
+
+    expect(output.updatedAt).toBe("2026-02-20T10:00:00Z");
+  });
+
+  test("delegated methods are writable and configurable for test doubles", async () => {
+    const { client } = createClient((command) => {
+      if (command === "tasks_list") {
+        return [makeTaskCardPayload()];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const descriptor = Object.getOwnPropertyDescriptor(client, "tasksList");
+    expect(descriptor?.writable).toBe(true);
+    expect(descriptor?.configurable).toBe(true);
+
+    const original = client.tasksList.bind(client);
+    const replacement = async (_repoPath: string) => [];
+    client.tasksList = replacement;
+
+    await expect(client.tasksList("/repo")).resolves.toEqual([]);
+
+    client.tasksList = original;
+    await expect(client.tasksList("/repo")).resolves.toHaveLength(1);
+  });
+
+  test("facade exposes every delegated API method", () => {
+    const { client } = createClient((command) => {
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const expectedMethods = [
+      "workspaceList",
+      "workspaceAdd",
+      "workspaceSelect",
+      "workspaceUpdateRepoConfig",
+      "workspaceSaveRepoSettings",
+      "workspaceUpdateRepoHooks",
+      "workspaceGetRepoConfig",
+      "workspacePrepareTrustedHooksChallenge",
+      "workspaceSetTrustedHooks",
+      "getTheme",
+      "setTheme",
+      "tasksList",
+      "taskCreate",
+      "taskUpdate",
+      "taskDelete",
+      "taskTransition",
+      "taskDefer",
+      "taskResumeDeferred",
+      "specGet",
+      "setSpec",
+      "saveSpecDocument",
+      "setPlan",
+      "savePlanDocument",
+      "planGet",
+      "qaGetReport",
+      "qaApproved",
+      "qaRejected",
+      "agentSessionsList",
+      "agentSessionUpsert",
+      "systemCheck",
+      "runtimeCheck",
+      "beadsCheck",
+      "runsList",
+      "opencodeRuntimeList",
+      "opencodeRuntimeStart",
+      "opencodeRuntimeStop",
+      "opencodeRepoRuntimeEnsure",
+      "buildStart",
+      "buildBlocked",
+      "buildResumed",
+      "buildCompleted",
+      "humanRequestChanges",
+      "humanApprove",
+      "buildRespond",
+      "buildStop",
+      "buildCleanup",
+      "gitGetBranches",
+      "gitGetCurrentBranch",
+      "gitSwitchBranch",
+      "gitCreateWorktree",
+      "gitRemoveWorktree",
+      "gitPushBranch",
+    ] as const;
+
+    for (const methodName of expectedMethods) {
+      expect(typeof client[methodName]).toBe("function");
+    }
+  });
+
   test("saveSpecDocument uses dedicated non-transition IPC route", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "spec_save_document") {

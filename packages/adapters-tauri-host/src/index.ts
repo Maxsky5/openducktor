@@ -107,9 +107,9 @@ const bindDelegates = <
     }
 
     Object.defineProperty(host, methodName, {
-      configurable: false,
+      configurable: true,
       enumerable: false,
-      writable: false,
+      writable: true,
       value: candidate.bind(client),
     });
   }
@@ -152,6 +152,8 @@ class TauriHostClientImpl implements PlannerTools {
   }
 }
 
+export type TauriHostClient = TauriHostClientApi & PlannerTools;
+
 export const TauriHostClient = TauriHostClientImpl as unknown as new (
   invokeFn: InvokeFn,
-) => TauriHostClientApi & PlannerTools;
+) => TauriHostClient;
