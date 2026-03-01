@@ -3,7 +3,17 @@ import type { JsonObject, RawIssue, TaskCard } from "./contracts";
 import { getNamespaceData, type NamespaceData } from "./metadata-docs";
 import { issueToTaskCard } from "./task-mapping";
 
-export class BdPersistence {
+export type TaskPersistencePort = {
+  metadataNamespace: string;
+  runBdJson(args: string[]): Promise<unknown>;
+  ensureInitialized(): Promise<void>;
+  showRawIssue(taskId: string): Promise<RawIssue>;
+  listTasks(): Promise<TaskCard[]>;
+  getNamespaceData(issue: RawIssue): NamespaceData;
+  writeNamespace(taskId: string, root: JsonObject, namespace: JsonObject): Promise<void>;
+};
+
+export class BdPersistence implements TaskPersistencePort {
   readonly metadataNamespace: string;
   private readonly bdClient: BdRuntimeClient;
 

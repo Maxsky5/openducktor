@@ -92,6 +92,24 @@ describe("BdPersistence", () => {
     await expect(persistence.showRawIssue("missing")).rejects.toThrow("Task not found: missing");
   });
 
+  test("showRawIssue throws when payload entry is not an object", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => [null],
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+    await expect(persistence.showRawIssue("task-1")).rejects.toThrow(
+      "Invalid issue payload for task task-1",
+    );
+  });
+
   test("listTasks maps issues to task cards and respects metadata namespace", async () => {
     const state: FakeClientState = {
       calls: [],
@@ -130,6 +148,22 @@ describe("BdPersistence", () => {
       },
     ]);
     expect(state.calls).toEqual([["list", "--all", "-n", "500"]]);
+  });
+
+  test("listTasks throws when bd payload is not an array", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => ({ invalid: true }),
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+    await expect(persistence.listTasks()).rejects.toThrow("bd list did not return an array");
   });
 
   test("writeNamespace updates metadata under namespace key", async () => {

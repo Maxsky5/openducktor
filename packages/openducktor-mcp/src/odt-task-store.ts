@@ -1,20 +1,14 @@
-import { BdPersistence } from "./bd-persistence";
+import { BdPersistence, type TaskPersistencePort } from "./bd-persistence";
 import { BdRuntimeClient, type BdRuntimeClientDeps } from "./bd-runtime-client";
 import { nowIso, type TimeProvider } from "./beads-runtime";
 import type { PlanSubtaskInput, TaskCard, TaskStatus } from "./contracts";
+import { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import { createSubtask, deleteTaskById } from "./epic-subtasks";
 import { normalizePlanSubtasks } from "./plan-subtasks";
 import type { OdtStoreOptions } from "./store-context";
-import { TaskDocumentStore } from "./task-document-store";
+import { type TaskDocumentPort, TaskDocumentStore } from "./task-document-store";
+import { TaskIndexCache } from "./task-index-cache";
 import { issueToTaskCard } from "./task-mapping";
-import {
-  buildTaskIndex,
-  normalizeTitleKey,
-  resolveTaskFromIndex,
-  type TaskIndex,
-  TaskResolutionAmbiguousError,
-  TaskResolutionNotFoundError,
-} from "./task-resolution";
 import {
   assertTransitionAllowed as assertTaskTransitionAllowed,
   refreshTaskContext,
@@ -34,7 +28,6 @@ import {
 } from "./tool-schemas";
 import {
   assertNoValidationError,
-  canReplaceEpicSubtaskStatus,
   getSetPlanError,
   getSetSpecError,
   validatePlanSubtaskRules,
@@ -44,61 +37,46 @@ export type OdtTaskStoreDeps = {
   runProcess?: BdRuntimeClientDeps["runProcess"];
   resolveBeadsDir?: BdRuntimeClientDeps["resolveBeadsDir"];
   now?: TimeProvider;
+  persistence?: TaskPersistencePort;
+  documentStore?: TaskDocumentPort;
+  taskIndexCache?: TaskIndexCache;
+  epicSubtaskReplacementService?: EpicSubtaskReplacementService;
 };
 
 export class OdtTaskStore {
   readonly repoPath: string;
   readonly metadataNamespace: string;
-  private readonly persistence: BdPersistence;
-  private readonly documentStore: TaskDocumentStore;
-  private taskIndex: TaskIndex | null;
-  private taskIndexBuildPromise: Promise<TaskIndex> | null;
+  private readonly persistence: TaskPersistencePort;
+  private readonly documentStore: TaskDocumentPort;
+  private readonly taskIndexCache: TaskIndexCache;
+  private readonly epicSubtaskReplacementService: EpicSubtaskReplacementService;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.repoPath = options.repoPath;
-    this.metadataNamespace = options.metadataNamespace;
+    this.persistence = deps.persistence ?? this.createDefaultPersistence(options, deps);
+    this.metadataNamespace = this.persistence.metadataNamespace;
+    this.documentStore =
+      deps.documentStore ?? new TaskDocumentStore(this.persistence, deps.now ?? nowIso);
+    this.taskIndexCache =
+      deps.taskIndexCache ?? new TaskIndexCache(() => this.persistence.listTasks());
+    this.epicSubtaskReplacementService =
+      deps.epicSubtaskReplacementService ??
+      new EpicSubtaskReplacementService({
+        listTasks: () => this.persistence.listTasks(),
+        createSubtask: async (parentTaskId, subtask) => this.createSubtask(parentTaskId, subtask),
+        deleteTask: async (taskId) => this.deleteTask(taskId),
+      });
+  }
+
+  private createDefaultPersistence(
+    options: OdtStoreOptions,
+    deps: OdtTaskStoreDeps,
+  ): BdPersistence {
     const bdClient = new BdRuntimeClient(this.repoPath, options.beadsDir ?? null, {
       ...(deps.runProcess ? { runProcess: deps.runProcess } : {}),
       ...(deps.resolveBeadsDir ? { resolveBeadsDir: deps.resolveBeadsDir } : {}),
     });
-    this.persistence = new BdPersistence(bdClient, this.metadataNamespace);
-    this.documentStore = new TaskDocumentStore(this.persistence, deps.now ?? nowIso);
-    this.taskIndex = null;
-    this.taskIndexBuildPromise = null;
-  }
-
-  private async refreshTaskIndex(): Promise<TaskIndex> {
-    const tasks = await this.persistence.listTasks();
-    const next = buildTaskIndex(tasks);
-    this.taskIndex = next;
-    return next;
-  }
-
-  /**
-   * Get or build cached task index for O(1) lookups.
-   * Rebuilds index when tasks change.
-   */
-  private async getOrBuildTaskIndex(): Promise<TaskIndex> {
-    if (this.taskIndex) {
-      return this.taskIndex;
-    }
-
-    if (this.taskIndexBuildPromise) {
-      return this.taskIndexBuildPromise;
-    }
-
-    this.taskIndexBuildPromise = this.refreshTaskIndex();
-    try {
-      return await this.taskIndexBuildPromise;
-    } finally {
-      this.taskIndexBuildPromise = null;
-    }
-  }
-
-  /** Invalidate task index after mutations */
-  private invalidateTaskIndex(): void {
-    this.taskIndex = null;
-    this.taskIndexBuildPromise = null;
+    return new BdPersistence(bdClient, options.metadataNamespace);
   }
 
   private async resolveTaskContext(taskId: string): Promise<TaskContext> {
@@ -130,7 +108,7 @@ export class OdtTaskStore {
       listTasks: () => this.persistence.listTasks(),
       runBdJson: (args) => this.persistence.runBdJson(args),
       showRawIssue: (id) => this.persistence.showRawIssue(id),
-      invalidateTaskIndex: () => this.invalidateTaskIndex(),
+      invalidateTaskIndex: () => this.taskIndexCache.invalidate(),
       metadataNamespace: this.metadataNamespace,
     });
   }
@@ -140,7 +118,7 @@ export class OdtTaskStore {
       parentTaskId,
       subtask,
       (args) => this.persistence.runBdJson(args),
-      () => this.invalidateTaskIndex(),
+      () => this.taskIndexCache.invalidate(),
     );
   }
 
@@ -148,85 +126,15 @@ export class OdtTaskStore {
     await deleteTaskById(
       taskId,
       (args) => this.persistence.runBdJson(args),
-      () => this.invalidateTaskIndex(),
+      () => this.taskIndexCache.invalidate(),
       deleteSubtasks,
     );
-  }
-
-  private async prepareEpicSubtaskReplacement(
-    task: TaskCard,
-    normalizedSubtasks: PlanSubtaskInput[],
-  ): Promise<{ latestTask: TaskCard; existingDirectSubtasks: TaskCard[] }> {
-    const latestTasks = await this.persistence.listTasks();
-    const latestTask = latestTasks.find((entry) => entry.id === task.id);
-    if (!latestTask) {
-      throw new Error(`Task not found: ${task.id}`);
-    }
-
-    assertNoValidationError(getSetPlanError(latestTask));
-    validatePlanSubtaskRules(latestTask, latestTasks, normalizedSubtasks);
-
-    const existingDirectSubtasks = latestTasks.filter((entry) => entry.parentId === task.id);
-    const blockedSubtasks = existingDirectSubtasks.filter(
-      (entry) => !canReplaceEpicSubtaskStatus(entry.status),
-    );
-    if (blockedSubtasks.length > 0) {
-      const blockedSummary = blockedSubtasks
-        .map((entry) => `${entry.id} (${entry.status})`)
-        .join(", ");
-      throw new Error(
-        "Cannot replace epic subtasks while active work exists. " +
-          `Move subtasks to open/spec_ready/ready_for_dev first: ${blockedSummary}`,
-      );
-    }
-
-    return { latestTask, existingDirectSubtasks };
-  }
-
-  private async applyEpicSubtaskReplacement(
-    task: TaskCard,
-    existingDirectSubtasks: TaskCard[],
-    normalizedSubtasks: PlanSubtaskInput[],
-  ): Promise<string[]> {
-    for (const existingSubtask of existingDirectSubtasks) {
-      await this.deleteTask(existingSubtask.id);
-    }
-
-    const createdSubtaskIds: string[] = [];
-    const createdTitleKeys = new Set<string>();
-    for (const subtask of normalizedSubtasks) {
-      const key = normalizeTitleKey(subtask.title);
-      if (createdTitleKeys.has(key)) {
-        continue;
-      }
-
-      const createdId = await this.createSubtask(task.id, subtask);
-      createdSubtaskIds.push(createdId);
-      createdTitleKeys.add(key);
-    }
-
-    return createdSubtaskIds;
   }
 
   async readTask(rawInput: unknown): Promise<unknown> {
     await this.persistence.ensureInitialized();
     const input = ReadTaskInputSchema.parse(rawInput);
-    const index = await this.getOrBuildTaskIndex();
-
-    let task: TaskCard;
-    try {
-      task = resolveTaskFromIndex(index, input.taskId);
-    } catch (error) {
-      const shouldRefreshIndex =
-        error instanceof TaskResolutionNotFoundError ||
-        error instanceof TaskResolutionAmbiguousError;
-      if (!shouldRefreshIndex) {
-        throw error;
-      }
-
-      const refreshedIndex = await this.refreshTaskIndex();
-      task = resolveTaskFromIndex(refreshedIndex, input.taskId);
-    }
+    const task = await this.taskIndexCache.resolveTask(input.taskId);
 
     const issue = await this.persistence.showRawIssue(task.id);
     const taskCard = issueToTaskCard(issue, this.metadataNamespace);
@@ -278,9 +186,12 @@ export class OdtTaskStore {
     let createdSubtaskIds: string[] = [];
     if (task.issueType === "epic") {
       // Epic subtask replacement must validate against a fresh snapshot, not the initial context.
-      const epicReplacement = await this.prepareEpicSubtaskReplacement(task, normalizedSubtasks);
+      const epicReplacement = await this.epicSubtaskReplacementService.prepareReplacement(
+        task,
+        normalizedSubtasks,
+      );
       persistedDocument = await this.documentStore.persistImplementationPlan(task.id, markdown);
-      createdSubtaskIds = await this.applyEpicSubtaskReplacement(
+      createdSubtaskIds = await this.epicSubtaskReplacementService.applyReplacement(
         epicReplacement.latestTask,
         epicReplacement.existingDirectSubtasks,
         normalizedSubtasks,

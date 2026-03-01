@@ -1,30 +1,67 @@
+import type { AgentToolName } from "@openducktor/contracts";
+import type { TaskPersistencePort } from "./bd-persistence";
 import type { TimeProvider } from "./beads-runtime";
-import type { JsonObject, MarkdownEntry, QaEntry, RawIssue } from "./contracts";
-import {
-  type NamespaceData,
-  parseTaskDocuments,
-  type TaskDocumentsSnapshot,
-} from "./metadata-docs";
+import type { MarkdownEntry, QaEntry, RawIssue } from "./contracts";
+import { parseTaskDocuments, type TaskDocumentsSnapshot } from "./metadata-docs";
 import { parseMarkdownEntries, parseQaEntries } from "./task-mapping";
 
 type MarkdownDocumentKey = "spec" | "implementationPlan";
+type QaVerdict = "approved" | "rejected";
 
 type PersistLatestMarkdownInput = {
   taskId: string;
   markdown: string;
   documentKey: MarkdownDocumentKey;
+};
+
+type DocumentSource = {
   updatedBy: string;
-  sourceTool: string;
+  sourceTool: AgentToolName;
 };
 
-export type TaskDocumentPersistence = {
-  metadataNamespace: string;
-  showRawIssue: (taskId: string) => Promise<RawIssue>;
-  getNamespaceData: (issue: RawIssue) => NamespaceData;
-  writeNamespace: (taskId: string, root: JsonObject, namespace: JsonObject) => Promise<void>;
+const MARKDOWN_DOCUMENT_SOURCES = {
+  spec: {
+    updatedBy: "spec-agent",
+    sourceTool: "odt_set_spec",
+  },
+  implementationPlan: {
+    updatedBy: "planner-agent",
+    sourceTool: "odt_set_plan",
+  },
+} as const satisfies Record<MarkdownDocumentKey, DocumentSource>;
+
+const QA_REPORT_SOURCES = {
+  approved: {
+    updatedBy: "qa-agent",
+    sourceTool: "odt_qa_approved",
+  },
+  rejected: {
+    updatedBy: "qa-agent",
+    sourceTool: "odt_qa_rejected",
+  },
+} as const satisfies Record<QaVerdict, DocumentSource>;
+
+const getNextRevision = (entries: Array<{ revision: number }>): number => {
+  const maxRevision = entries.reduce((max, entry) => Math.max(max, entry.revision), 0);
+  return maxRevision + 1;
 };
 
-export class TaskDocumentStore {
+export type TaskDocumentPort = {
+  parseDocs(issue: RawIssue): TaskDocumentsSnapshot;
+  persistSpec(taskId: string, markdown: string): Promise<{ updatedAt: string; revision: number }>;
+  persistImplementationPlan(
+    taskId: string,
+    markdown: string,
+  ): Promise<{ updatedAt: string; revision: number }>;
+  appendQaReport(taskId: string, markdown: string, verdict: QaVerdict): Promise<void>;
+};
+
+export type TaskDocumentPersistence = Pick<
+  TaskPersistencePort,
+  "metadataNamespace" | "showRawIssue" | "getNamespaceData" | "writeNamespace"
+>;
+
+export class TaskDocumentStore implements TaskDocumentPort {
   private readonly persistence: TaskDocumentPersistence;
   private readonly now: TimeProvider;
 
@@ -45,8 +82,6 @@ export class TaskDocumentStore {
       taskId,
       markdown,
       documentKey: "spec",
-      updatedBy: "spec-agent",
-      sourceTool: "odt_set_spec",
     });
   }
 
@@ -58,27 +93,22 @@ export class TaskDocumentStore {
       taskId,
       markdown,
       documentKey: "implementationPlan",
-      updatedBy: "planner-agent",
-      sourceTool: "odt_set_plan",
     });
   }
 
-  async appendQaReport(
-    taskId: string,
-    markdown: string,
-    verdict: "approved" | "rejected",
-  ): Promise<void> {
+  async appendQaReport(taskId: string, markdown: string, verdict: QaVerdict): Promise<void> {
     const issue = await this.persistence.showRawIssue(taskId);
     const { root, namespace, documents } = this.persistence.getNamespaceData(issue);
     const entries = parseQaEntries(documents.qaReports);
-    const nextRevision = (entries.at(-1)?.revision ?? 0) + 1;
+    const source = QA_REPORT_SOURCES[verdict];
+    const nextRevision = getNextRevision(entries);
 
     const entry: QaEntry = {
       markdown,
       verdict,
       updatedAt: this.now(),
-      updatedBy: "qa-agent",
-      sourceTool: verdict === "approved" ? "odt_qa_approved" : "odt_qa_rejected",
+      updatedBy: source.updatedBy,
+      sourceTool: source.sourceTool,
       revision: nextRevision,
     };
 
@@ -100,15 +130,15 @@ export class TaskDocumentStore {
   ): Promise<{ updatedAt: string; revision: number }> {
     const issue = await this.persistence.showRawIssue(input.taskId);
     const { root, namespace, documents } = this.persistence.getNamespaceData(issue);
-    const nextRevision =
-      (parseMarkdownEntries(documents[input.documentKey]).at(-1)?.revision ?? 0) + 1;
+    const source = MARKDOWN_DOCUMENT_SOURCES[input.documentKey];
+    const nextRevision = getNextRevision(parseMarkdownEntries(documents[input.documentKey]));
 
     const updatedAt = this.now();
     const entry: MarkdownEntry = {
       markdown: input.markdown,
       updatedAt,
-      updatedBy: input.updatedBy,
-      sourceTool: input.sourceTool,
+      updatedBy: source.updatedBy,
+      sourceTool: source.sourceTool,
       revision: nextRevision,
     };
 

@@ -115,7 +115,36 @@ describe("TaskDocumentStore", () => {
     });
   });
 
-  test("persistImplementationPlan stores latest-only entry and increments revision", async () => {
+  test("parseDocs returns empty snapshot when namespace documents are missing", () => {
+    const harness = createPersistenceHarness({
+      id: "task-1",
+      title: "Task 1",
+      status: "open",
+      issue_type: "feature",
+      metadata: {},
+    });
+
+    const documents = new TaskDocumentStore(harness.persistence, () => FIXED_NOW);
+    const snapshot = documents.parseDocs(harness.getIssue());
+
+    expect(snapshot).toEqual({
+      spec: {
+        markdown: "",
+        updatedAt: null,
+      },
+      implementationPlan: {
+        markdown: "",
+        updatedAt: null,
+      },
+      latestQaReport: {
+        markdown: "",
+        updatedAt: null,
+        verdict: null,
+      },
+    });
+  });
+
+  test("persistImplementationPlan stores latest-only entry and uses max revision + 1", async () => {
     const harness = createPersistenceHarness({
       id: "task-1",
       title: "Task 1",
@@ -128,11 +157,18 @@ describe("TaskDocumentStore", () => {
           documents: {
             implementationPlan: [
               {
-                markdown: "# old plan",
+                markdown: "# plan r4",
+                updatedAt: "2026-02-22T00:00:00.000Z",
+                updatedBy: "planner-agent",
+                sourceTool: "odt_set_plan",
+                revision: 4,
+              },
+              {
+                markdown: "# plan r2",
                 updatedAt: "2026-02-20T00:00:00.000Z",
                 updatedBy: "planner-agent",
                 sourceTool: "odt_set_plan",
-                revision: 1,
+                revision: 2,
               },
               {
                 markdown: "invalid",
@@ -148,7 +184,7 @@ describe("TaskDocumentStore", () => {
 
     expect(persisted).toEqual({
       updatedAt: FIXED_NOW,
-      revision: 2,
+      revision: 5,
     });
 
     const updatedIssue = harness.getIssue();
@@ -163,7 +199,7 @@ describe("TaskDocumentStore", () => {
               updatedAt: FIXED_NOW,
               updatedBy: "planner-agent",
               sourceTool: "odt_set_plan",
-              revision: 2,
+              revision: 5,
             },
           ],
         },
@@ -171,7 +207,7 @@ describe("TaskDocumentStore", () => {
     });
   });
 
-  test("appendQaReport appends new report and increments revision from valid entries", async () => {
+  test("appendQaReport appends new report and uses max revision + 1", async () => {
     const harness = createPersistenceHarness({
       id: "task-1",
       title: "Task 1",
@@ -184,10 +220,18 @@ describe("TaskDocumentStore", () => {
               {
                 markdown: "initial",
                 verdict: "approved",
-                updatedAt: "2026-02-20T00:00:00.000Z",
+                updatedAt: "2026-02-22T00:00:00.000Z",
                 updatedBy: "qa-agent",
                 sourceTool: "odt_qa_approved",
-                revision: 1,
+                revision: 4,
+              },
+              {
+                markdown: "older",
+                verdict: "rejected",
+                updatedAt: "2026-02-20T00:00:00.000Z",
+                updatedBy: "qa-agent",
+                sourceTool: "odt_qa_rejected",
+                revision: 2,
               },
               {
                 markdown: "invalid",
@@ -209,10 +253,18 @@ describe("TaskDocumentStore", () => {
             {
               markdown: "initial",
               verdict: "approved",
-              updatedAt: "2026-02-20T00:00:00.000Z",
+              updatedAt: "2026-02-22T00:00:00.000Z",
               updatedBy: "qa-agent",
               sourceTool: "odt_qa_approved",
-              revision: 1,
+              revision: 4,
+            },
+            {
+              markdown: "older",
+              verdict: "rejected",
+              updatedAt: "2026-02-20T00:00:00.000Z",
+              updatedBy: "qa-agent",
+              sourceTool: "odt_qa_rejected",
+              revision: 2,
             },
             {
               markdown: "needs changes",
@@ -220,7 +272,7 @@ describe("TaskDocumentStore", () => {
               updatedAt: FIXED_NOW,
               updatedBy: "qa-agent",
               sourceTool: "odt_qa_rejected",
-              revision: 2,
+              revision: 5,
             },
           ],
         },
@@ -275,5 +327,27 @@ describe("TaskDocumentStore", () => {
         },
       },
     });
+  });
+
+  test("propagates persistence write errors", async () => {
+    const persistence: TaskDocumentPersistence = {
+      metadataNamespace: "openducktor",
+      showRawIssue: async () => ({
+        id: "task-1",
+        title: "Task 1",
+        status: "open",
+        issue_type: "feature",
+        metadata: {},
+      }),
+      getNamespaceData: (rawIssue) => getNamespaceData(rawIssue, "openducktor"),
+      writeNamespace: async () => {
+        throw new Error("metadata write failed");
+      },
+    };
+    const documents = new TaskDocumentStore(persistence, () => FIXED_NOW);
+
+    await expect(documents.persistSpec("task-1", "# spec")).rejects.toThrow(
+      "metadata write failed",
+    );
   });
 });
