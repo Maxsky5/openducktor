@@ -89,3 +89,52 @@ export const gitPushBranch = async (
   });
   return gitPushSummarySchema.parse(payload);
 };
+
+export class TauriGitClient {
+  constructor(private readonly invokeFn: InvokeFn) {}
+
+  async gitGetBranches(repoPath: string): Promise<GitBranch[]> {
+    return gitGetBranches(this.invokeFn, repoPath);
+  }
+
+  async gitGetCurrentBranch(repoPath: string): Promise<GitCurrentBranch> {
+    return gitGetCurrentBranch(this.invokeFn, repoPath);
+  }
+
+  async gitSwitchBranch(
+    repoPath: string,
+    branch: string,
+    options?: { create?: boolean },
+  ): Promise<GitCurrentBranch> {
+    return gitSwitchBranch(this.invokeFn, repoPath, branch, options);
+  }
+
+  async gitCreateWorktree(
+    repoPath: string,
+    worktreePath: string,
+    branch: string,
+    options?: { createBranch?: boolean },
+  ): Promise<GitWorktreeSummary> {
+    return gitCreateWorktree(this.invokeFn, repoPath, worktreePath, branch, options);
+  }
+
+  async gitRemoveWorktree(
+    repoPath: string,
+    worktreePath: string,
+    options?: { force?: boolean },
+  ): Promise<{ ok: boolean }> {
+    return gitRemoveWorktree(this.invokeFn, repoPath, worktreePath, options);
+  }
+
+  async gitPushBranch(
+    repoPath: string,
+    branch: string,
+    options?: {
+      remote?: string;
+      setUpstream?: boolean;
+      forceWithLease?: boolean;
+    },
+  ): Promise<GitPushSummary> {
+    return gitPushBranch(this.invokeFn, repoPath, branch, options);
+  }
+}
