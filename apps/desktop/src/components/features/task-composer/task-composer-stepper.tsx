@@ -45,7 +45,10 @@ export function TaskComposerStepper({
         </button>
 
         <ChevronRight
-          className={cn("size-5", isDetailsStep ? "text-success-accent" : "text-muted-foreground/40")}
+          className={cn(
+            "size-5",
+            isDetailsStep ? "text-success-accent" : "text-muted-foreground/40",
+          )}
         />
 
         <button

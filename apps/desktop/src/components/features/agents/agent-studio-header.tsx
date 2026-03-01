@@ -72,12 +72,10 @@ export type AgentStudioHeaderModel = {
 };
 
 const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  in_progress:
-    "border-info-border bg-info-surface hover:bg-info-surface text-info-muted shadow-sm",
+  in_progress: "border-info-border bg-info-surface hover:bg-info-surface text-info-muted shadow-sm",
   done: "border-success-border bg-success-surface hover:bg-success-surface text-success-muted shadow-sm",
   available: "border-input bg-card text-foreground",
-  optional:
-    "border-warning-border bg-warning-surface text-warning-muted",
+  optional: "border-warning-border bg-warning-surface text-warning-muted",
   blocked: "border-border bg-muted text-muted-foreground",
 };
 
@@ -276,7 +274,9 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 >
                   <Icon className="size-4" />
                   {entry.label}
-                  {entry.state === "done" ? <Check className="size-3.5 text-success-accent" /> : null}
+                  {entry.state === "done" ? (
+                    <Check className="size-3.5 text-success-accent" />
+                  ) : null}
                   {entry.state === "in_progress" && shouldSpinInProgress ? (
                     <LoaderCircle className="size-3.5 animate-spin" />
                   ) : null}

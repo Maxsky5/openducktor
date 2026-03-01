@@ -18,7 +18,10 @@ export function TaskDetailsSheetHeader({
 }: TaskDetailsSheetHeaderProps): ReactElement {
   const isEpic = task.issueType === "epic";
   const aiReviewBadge = task.aiReviewEnabled ? (
-    <Badge variant="outline" className="border-success-border bg-success-surface text-success-muted">
+    <Badge
+      variant="outline"
+      className="border-success-border bg-success-surface text-success-muted"
+    >
       AI QA required
     </Badge>
   ) : (
@@ -45,7 +48,10 @@ export function TaskDetailsSheetHeader({
         <PriorityBadge priority={task.priority} />
         {aiReviewBadge}
         {isEpic ? (
-          <Badge variant="outline" className="border-pending-border bg-pending-surface text-pending-muted">
+          <Badge
+            variant="outline"
+            className="border-pending-border bg-pending-surface text-pending-muted"
+          >
             {subtasksCount} subtask{subtasksCount === 1 ? "" : "s"}
           </Badge>
         ) : null}
