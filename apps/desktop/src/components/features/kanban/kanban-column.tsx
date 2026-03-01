@@ -1,34 +1,14 @@
 import type { RunSummary } from "@openducktor/contracts";
 import type { KanbanColumn as KanbanColumnData, KanbanColumnId } from "@openducktor/core";
 import { Inbox } from "lucide-react";
-import {
-  type ComponentProps,
-  memo,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  buildVirtualColumnLayout,
-  findVirtualWindowRange,
-  getVirtualWindowEdgeOffsets,
-  resolveVirtualViewportWindow,
-  type VirtualWindowRange,
-} from "@/components/features/kanban/kanban-column-virtualization";
+import { type ComponentProps, memo, type ReactElement, useEffect, useRef } from "react";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
+import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-const VIRTUALIZATION_MIN_TASK_COUNT = 30;
-const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
-const VIRTUAL_CARD_GAP_PX = 12;
-const VIRTUAL_OVERSCAN_PX = 360;
-const INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX = 900;
 type RunningTaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["activeSessions"]>;
 const EMPTY_ACTIVE_SESSIONS: RunningTaskSessions = [];
 
@@ -171,166 +151,14 @@ export function KanbanColumn({
   onHumanRequestChanges,
 }: KanbanColumnProps): ReactElement {
   const theme = laneTheme(column.id);
-  const cardsViewportRef = useRef<HTMLDivElement | null>(null);
-  const shouldVirtualize = column.tasks.length >= VIRTUALIZATION_MIN_TASK_COUNT;
-  const [measuredCardHeightsById, setMeasuredCardHeightsById] = useState<Record<string, number>>(
-    {},
-  );
-
-  const taskHeights = useMemo(
-    () =>
-      column.tasks.map(
-        (task) => measuredCardHeightsById[task.id] ?? VIRTUAL_CARD_ESTIMATED_HEIGHT_PX,
-      ),
-    [column.tasks, measuredCardHeightsById],
-  );
-
-  const virtualLayout = useMemo(
-    () => buildVirtualColumnLayout(taskHeights, VIRTUAL_CARD_GAP_PX),
-    [taskHeights],
-  );
-
-  const [visibleRange, setVisibleRange] = useState<VirtualWindowRange>(() =>
-    findVirtualWindowRange({
-      itemOffsets: virtualLayout.itemOffsets,
-      itemHeights: taskHeights,
-      totalHeight: virtualLayout.totalHeight,
-      viewportStart: -VIRTUAL_OVERSCAN_PX,
-      viewportEnd:
-        (typeof window === "undefined" ? INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX : window.innerHeight) +
-        VIRTUAL_OVERSCAN_PX,
-    }),
-  );
-
-  const syncViewport = useCallback((): void => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const viewportElement = cardsViewportRef.current;
-    if (!viewportElement) {
-      return;
-    }
-
-    const rect = viewportElement.getBoundingClientRect();
-    const scrollContainer = viewportElement.closest(
-      "[data-main-scroll-container='true']",
-    ) as HTMLElement | null;
-    const containerRect = scrollContainer?.getBoundingClientRect();
-    const viewportHeight = scrollContainer?.clientHeight ?? window.innerHeight;
-    const { viewportStart, viewportEnd } = resolveVirtualViewportWindow({
-      laneTop: rect.top,
-      viewportTop: containerRect?.top ?? 0,
-      viewportHeight,
-    });
-    const nextRange = findVirtualWindowRange({
-      itemOffsets: virtualLayout.itemOffsets,
-      itemHeights: taskHeights,
-      totalHeight: virtualLayout.totalHeight,
-      viewportStart: viewportStart - VIRTUAL_OVERSCAN_PX,
-      viewportEnd: viewportEnd + VIRTUAL_OVERSCAN_PX,
-    });
-
-    setVisibleRange((current) => {
-      if (current.startIndex === nextRange.startIndex && current.endIndex === nextRange.endIndex) {
-        return current;
-      }
-      return nextRange;
-    });
-  }, [taskHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight]);
-
-  const { topSpacerHeight, bottomSpacerHeight } = useMemo(
-    () =>
-      getVirtualWindowEdgeOffsets({
-        range: visibleRange,
-        itemOffsets: virtualLayout.itemOffsets,
-        itemHeights: taskHeights,
-        totalHeight: virtualLayout.totalHeight,
-      }),
-    [taskHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight, visibleRange],
-  );
-
-  useEffect(() => {
-    if (!shouldVirtualize || typeof window === "undefined") {
-      return;
-    }
-
-    const rafRef: { current: number | null } = { current: null };
-
-    const scheduleViewportSync = (): void => {
-      if (rafRef.current !== null) {
-        return;
-      }
-      rafRef.current = window.requestAnimationFrame(() => {
-        rafRef.current = null;
-        syncViewport();
-      });
-    };
-
-    const scrollContainer = cardsViewportRef.current?.closest(
-      "[data-main-scroll-container='true']",
-    ) as HTMLElement | null;
-
-    scheduleViewportSync();
-    window.addEventListener("scroll", scheduleViewportSync, { passive: true });
-    window.addEventListener("resize", scheduleViewportSync);
-    scrollContainer?.addEventListener("scroll", scheduleViewportSync, { passive: true });
-
-    const viewportElement = cardsViewportRef.current;
-    const resizeObserver =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(() => {
-            scheduleViewportSync();
-          });
-
-    if (resizeObserver && viewportElement) {
-      resizeObserver.observe(viewportElement);
-    }
-
-    return () => {
-      window.removeEventListener("scroll", scheduleViewportSync);
-      window.removeEventListener("resize", scheduleViewportSync);
-      scrollContainer?.removeEventListener("scroll", scheduleViewportSync);
-      if (rafRef.current !== null) {
-        window.cancelAnimationFrame(rafRef.current);
-      }
-      resizeObserver?.disconnect();
-    };
-  }, [shouldVirtualize, syncViewport]);
-
-  useEffect(() => {
-    if (!shouldVirtualize) {
-      return;
-    }
-    const taskIds = new Set(column.tasks.map((task) => task.id));
-    setMeasuredCardHeightsById((current) => {
-      let changed = false;
-      const next: Record<string, number> = {};
-      for (const [taskId, measuredHeight] of Object.entries(current)) {
-        if (taskIds.has(taskId)) {
-          next[taskId] = measuredHeight;
-          continue;
-        }
-        changed = true;
-      }
-      return changed ? next : current;
-    });
-  }, [column.tasks, shouldVirtualize]);
-
-  const handleMeasuredHeight = useCallback((taskId: string, nextHeight: number): void => {
-    setMeasuredCardHeightsById((current) => {
-      if (current[taskId] === nextHeight) {
-        return current;
-      }
-      return { ...current, [taskId]: nextHeight };
-    });
-  }, []);
-
-  const visibleTasks = !shouldVirtualize
-    ? column.tasks
-    : visibleRange.endIndex >= visibleRange.startIndex
-      ? column.tasks.slice(visibleRange.startIndex, visibleRange.endIndex + 1)
-      : [];
+  const {
+    containerRef: cardsViewportRef,
+    renderModel,
+    onMeasuredHeight: handleMeasuredHeight,
+  } = useKanbanVirtualization({
+    tasks: column.tasks,
+  });
+  const isVirtualized = renderModel.kind === "virtualized";
 
   return (
     <section
@@ -343,11 +171,13 @@ export function KanbanColumn({
       <div ref={cardsViewportRef} className="flex-1 p-3">
         {column.tasks.length === 0 ? <LaneEmptyState id={column.id} /> : null}
 
-        {column.tasks.length > 0 && shouldVirtualize ? (
-          <>
-            {topSpacerHeight > 0 ? <div style={{ height: topSpacerHeight }} /> : null}
+        {column.tasks.length > 0 && isVirtualized ? (
+          <div style={{ minHeight: renderModel.totalHeight }}>
+            {renderModel.topSpacerHeight > 0 ? (
+              <div style={{ height: renderModel.topSpacerHeight }} />
+            ) : null}
             <div className="space-y-3">
-              {visibleTasks.map((task) => (
+              {renderModel.visibleTasks.map((task) => (
                 <MeasuredTaskCard
                   key={task.id}
                   task={task}
@@ -363,13 +193,15 @@ export function KanbanColumn({
                 />
               ))}
             </div>
-            {bottomSpacerHeight > 0 ? <div style={{ height: bottomSpacerHeight }} /> : null}
-          </>
+            {renderModel.bottomSpacerHeight > 0 ? (
+              <div style={{ height: renderModel.bottomSpacerHeight }} />
+            ) : null}
+          </div>
         ) : null}
 
-        {column.tasks.length > 0 && !shouldVirtualize ? (
+        {column.tasks.length > 0 && !isVirtualized ? (
           <div className="space-y-3">
-            {column.tasks.map((task) => (
+            {renderModel.visibleTasks.map((task) => (
               <KanbanTaskCard
                 key={task.id}
                 task={task}
