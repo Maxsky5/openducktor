@@ -63,7 +63,23 @@ type UseAgentOrchestratorOperationsResult = {
   answerAgentQuestion: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>;
 };
 
-type OrchestratorRefs = {
+type SessionStateById = Record<string, AgentSessionState>;
+type SessionStateUpdater = SessionStateById | ((current: SessionStateById) => SessionStateById);
+
+type OrchestratorMutableState = {
+  sessionsById: SessionStateById;
+  tasks: TaskCard[];
+  runs: RunSummary[];
+  previousRepo: string | null;
+  repoEpoch: number;
+  inFlightStartsByRepoTask: Map<string, Promise<string>>;
+  unsubscribersBySession: Map<string, () => void>;
+  draftRawBySession: Record<string, string>;
+  draftSourceBySession: Record<string, "delta" | "part">;
+  turnStartedAtBySession: Record<string, number>;
+};
+
+type OrchestratorRefBridges = {
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   taskRef: MutableRefObject<TaskCard[]>;
   runsRef: MutableRefObject<RunSummary[]>;
@@ -76,9 +92,18 @@ type OrchestratorRefs = {
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
 };
 
-const createMutableRef = <T>(value: T): MutableRefObject<T> => ({
-  current: value,
-});
+const createMutableBridge = <K extends keyof OrchestratorMutableState>(
+  stateRef: MutableRefObject<OrchestratorMutableState>,
+  key: K,
+): MutableRefObject<OrchestratorMutableState[K]> =>
+  ({
+    get current() {
+      return stateRef.current[key];
+    },
+    set current(value: OrchestratorMutableState[K]) {
+      stateRef.current[key] = value;
+    },
+  }) as MutableRefObject<OrchestratorMutableState[K]>;
 
 export function useAgentOrchestratorOperations({
   activeRepo,
@@ -87,45 +112,65 @@ export function useAgentOrchestratorOperations({
   refreshTaskData,
   agentEngine,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
-  const [sessionsById, setSessionsById] = useState<Record<string, AgentSessionState>>({});
-  const orchestratorRefs = useRef<OrchestratorRefs>({
-    sessionsRef: createMutableRef<Record<string, AgentSessionState>>({}),
-    taskRef: createMutableRef<TaskCard[]>(tasks),
-    runsRef: createMutableRef<RunSummary[]>(runs),
-    previousRepoRef: createMutableRef<string | null>(null),
-    repoEpochRef: createMutableRef(0),
-    inFlightStartsByRepoTaskRef: createMutableRef(new Map<string, Promise<string>>()),
-    unsubscribersRef: createMutableRef(new Map<string, () => void>()),
-    draftRawBySessionRef: createMutableRef<Record<string, string>>({}),
-    draftSourceBySessionRef: createMutableRef<Record<string, "delta" | "part">>({}),
-    turnStartedAtBySessionRef: createMutableRef<Record<string, number>>({}),
+  const [sessionsById, setSessionsById] = useState<SessionStateById>({});
+  const mutableStateRef = useRef<OrchestratorMutableState>({
+    sessionsById: {},
+    tasks,
+    runs,
+    previousRepo: null,
+    repoEpoch: 0,
+    inFlightStartsByRepoTask: new Map<string, Promise<string>>(),
+    unsubscribersBySession: new Map<string, () => void>(),
+    draftRawBySession: {},
+    draftSourceBySession: {},
+    turnStartedAtBySession: {},
   });
+  const refBridges = useMemo<OrchestratorRefBridges>(
+    () => ({
+      sessionsRef: createMutableBridge(mutableStateRef, "sessionsById"),
+      taskRef: createMutableBridge(mutableStateRef, "tasks"),
+      runsRef: createMutableBridge(mutableStateRef, "runs"),
+      previousRepoRef: createMutableBridge(mutableStateRef, "previousRepo"),
+      repoEpochRef: createMutableBridge(mutableStateRef, "repoEpoch"),
+      inFlightStartsByRepoTaskRef: createMutableBridge(mutableStateRef, "inFlightStartsByRepoTask"),
+      unsubscribersRef: createMutableBridge(mutableStateRef, "unsubscribersBySession"),
+      draftRawBySessionRef: createMutableBridge(mutableStateRef, "draftRawBySession"),
+      draftSourceBySessionRef: createMutableBridge(mutableStateRef, "draftSourceBySession"),
+      turnStartedAtBySessionRef: createMutableBridge(mutableStateRef, "turnStartedAtBySession"),
+    }),
+    [],
+  );
+
+  const commitSessions = useCallback((updater: SessionStateUpdater): void => {
+    const current = mutableStateRef.current.sessionsById;
+    const next = typeof updater === "function" ? updater(current) : updater;
+    mutableStateRef.current.sessionsById = next;
+    setSessionsById(next);
+  }, []);
 
   useEffect(() => {
-    orchestratorRefs.current.sessionsRef.current = sessionsById;
-    orchestratorRefs.current.taskRef.current = tasks;
-    orchestratorRefs.current.runsRef.current = runs;
-  }, [runs, sessionsById, tasks]);
+    mutableStateRef.current.tasks = tasks;
+    mutableStateRef.current.runs = runs;
+  }, [runs, tasks]);
 
   useEffect(() => {
-    if (orchestratorRefs.current.previousRepoRef.current === activeRepo) {
+    if (mutableStateRef.current.previousRepo === activeRepo) {
       return;
     }
-    orchestratorRefs.current.repoEpochRef.current += 1;
-    orchestratorRefs.current.previousRepoRef.current = activeRepo;
+    mutableStateRef.current.repoEpoch += 1;
+    mutableStateRef.current.previousRepo = activeRepo;
 
-    const unsubs = [...orchestratorRefs.current.unsubscribersRef.current.values()];
+    const unsubs = [...mutableStateRef.current.unsubscribersBySession.values()];
     for (const unsubscribe of unsubs) {
       unsubscribe();
     }
-    orchestratorRefs.current.unsubscribersRef.current.clear();
-    orchestratorRefs.current.draftRawBySessionRef.current = {};
-    orchestratorRefs.current.draftSourceBySessionRef.current = {};
-    orchestratorRefs.current.turnStartedAtBySessionRef.current = {};
-    orchestratorRefs.current.inFlightStartsByRepoTaskRef.current.clear();
-    orchestratorRefs.current.sessionsRef.current = {};
-    setSessionsById({});
-  }, [activeRepo]);
+    mutableStateRef.current.unsubscribersBySession.clear();
+    mutableStateRef.current.draftRawBySession = {};
+    mutableStateRef.current.draftSourceBySession = {};
+    mutableStateRef.current.turnStartedAtBySession = {};
+    mutableStateRef.current.inFlightStartsByRepoTask.clear();
+    commitSessions({});
+  }, [activeRepo, commitSessions]);
 
   const persistSessionSnapshot = useCallback(
     async (session: AgentSessionState): Promise<void> => {
@@ -148,7 +193,7 @@ export function useAgentOrchestratorOperations({
       updater: (current: AgentSessionState) => AgentSessionState,
       options?: { persist?: boolean },
     ): void => {
-      const currentSessions = orchestratorRefs.current.sessionsRef.current;
+      const currentSessions = mutableStateRef.current.sessionsById;
       const current = currentSessions[sessionId];
       if (!current) {
         return;
@@ -174,8 +219,7 @@ export function useAgentOrchestratorOperations({
         ...currentSessions,
         [sessionId]: nextSession,
       };
-      orchestratorRefs.current.sessionsRef.current = nextSessions;
-      setSessionsById(nextSessions);
+      commitSessions(nextSessions);
 
       if (options?.persist !== false) {
         runOrchestratorSideEffect(
@@ -192,7 +236,7 @@ export function useAgentOrchestratorOperations({
         );
       }
     },
-    [activeRepo, persistSessionSnapshot],
+    [activeRepo, commitSessions, persistSessionSnapshot],
   );
 
   const resolveTurnDurationMs = useCallback(
@@ -204,7 +248,7 @@ export function useAgentOrchestratorOperations({
       const parsedTimestamp = Date.parse(timestamp);
       const endedAt = Number.isNaN(parsedTimestamp) ? Date.now() : parsedTimestamp;
 
-      const startedAt = orchestratorRefs.current.turnStartedAtBySessionRef.current[sessionId];
+      const startedAt = mutableStateRef.current.turnStartedAtBySession[sessionId];
       if (typeof startedAt === "number" && endedAt >= startedAt) {
         return Math.max(0, endedAt - startedAt);
       }
@@ -223,7 +267,7 @@ export function useAgentOrchestratorOperations({
   );
 
   const clearTurnDuration = useCallback((sessionId: string): void => {
-    delete orchestratorRefs.current.turnStartedAtBySessionRef.current[sessionId];
+    delete mutableStateRef.current.turnStartedAtBySession[sessionId];
   }, []);
 
   const loadSessionModelCatalog = useCallback(
@@ -303,16 +347,24 @@ export function useAgentOrchestratorOperations({
       createLoadAgentSessions({
         activeRepo,
         adapter: agentEngine,
-        repoEpochRef: orchestratorRefs.current.repoEpochRef,
-        previousRepoRef: orchestratorRefs.current.previousRepoRef,
-        sessionsRef: orchestratorRefs.current.sessionsRef,
-        setSessionsById,
-        taskRef: orchestratorRefs.current.taskRef,
+        repoEpochRef: refBridges.repoEpochRef,
+        previousRepoRef: refBridges.previousRepoRef,
+        sessionsRef: refBridges.sessionsRef,
+        setSessionsById: commitSessions,
+        taskRef: refBridges.taskRef,
         updateSession,
         loadSessionTodos,
         loadSessionModelCatalog,
       }),
-    [activeRepo, agentEngine, loadSessionModelCatalog, loadSessionTodos, updateSession],
+    [
+      activeRepo,
+      agentEngine,
+      commitSessions,
+      loadSessionModelCatalog,
+      loadSessionTodos,
+      refBridges,
+      updateSession,
+    ],
   );
 
   const attachSessionListener = useCallback(
@@ -321,10 +373,10 @@ export function useAgentOrchestratorOperations({
         adapter: agentEngine,
         repoPath,
         sessionId,
-        sessionsRef: orchestratorRefs.current.sessionsRef,
-        draftRawBySessionRef: orchestratorRefs.current.draftRawBySessionRef,
-        draftSourceBySessionRef: orchestratorRefs.current.draftSourceBySessionRef,
-        turnStartedAtBySessionRef: orchestratorRefs.current.turnStartedAtBySessionRef,
+        sessionsRef: refBridges.sessionsRef,
+        draftRawBySessionRef: refBridges.draftRawBySessionRef,
+        draftSourceBySessionRef: refBridges.draftSourceBySessionRef,
+        turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         updateSession,
         resolveTurnDurationMs,
         clearTurnDuration,
@@ -332,12 +384,13 @@ export function useAgentOrchestratorOperations({
         loadSessionTodos,
       });
 
-      orchestratorRefs.current.unsubscribersRef.current.set(sessionId, unsubscribe);
+      mutableStateRef.current.unsubscribersBySession.set(sessionId, unsubscribe);
     },
     [
       agentEngine,
       clearTurnDuration,
       loadSessionTodos,
+      refBridges,
       refreshTaskData,
       resolveTurnDurationMs,
       updateSession,
@@ -347,10 +400,10 @@ export function useAgentOrchestratorOperations({
   const ensureRuntime = useMemo(
     () =>
       createEnsureRuntime({
-        runsRef: orchestratorRefs.current.runsRef,
+        runsRef: refBridges.runsRef,
         refreshTaskData,
       }),
-    [refreshTaskData],
+    [refBridges, refreshTaskData],
   );
 
   const sessionActions = useMemo(
@@ -358,14 +411,14 @@ export function useAgentOrchestratorOperations({
       createAgentSessionActions({
         activeRepo,
         adapter: agentEngine,
-        setSessionsById,
-        sessionsRef: orchestratorRefs.current.sessionsRef,
-        taskRef: orchestratorRefs.current.taskRef,
-        repoEpochRef: orchestratorRefs.current.repoEpochRef,
-        previousRepoRef: orchestratorRefs.current.previousRepoRef,
-        inFlightStartsByRepoTaskRef: orchestratorRefs.current.inFlightStartsByRepoTaskRef,
-        unsubscribersRef: orchestratorRefs.current.unsubscribersRef,
-        turnStartedAtBySessionRef: orchestratorRefs.current.turnStartedAtBySessionRef,
+        setSessionsById: commitSessions,
+        sessionsRef: refBridges.sessionsRef,
+        taskRef: refBridges.taskRef,
+        repoEpochRef: refBridges.repoEpochRef,
+        previousRepoRef: refBridges.previousRepoRef,
+        inFlightStartsByRepoTaskRef: refBridges.inFlightStartsByRepoTaskRef,
+        unsubscribersRef: refBridges.unsubscribersRef,
+        turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         updateSession,
         attachSessionListener,
         ensureRuntime,
@@ -383,11 +436,13 @@ export function useAgentOrchestratorOperations({
       agentEngine,
       attachSessionListener,
       clearTurnDuration,
+      commitSessions,
       ensureRuntime,
       loadAgentSessions,
       loadSessionModelCatalog,
       loadSessionTodos,
       persistSessionSnapshot,
+      refBridges,
       refreshTaskData,
       updateSession,
     ],
@@ -395,12 +450,12 @@ export function useAgentOrchestratorOperations({
 
   useEffect(() => {
     return () => {
-      const unsubs = [...orchestratorRefs.current.unsubscribersRef.current.values()];
+      const unsubs = [...mutableStateRef.current.unsubscribersBySession.values()];
       for (const unsubscribe of unsubs) {
         unsubscribe();
       }
-      orchestratorRefs.current.unsubscribersRef.current.clear();
-      orchestratorRefs.current.inFlightStartsByRepoTaskRef.current.clear();
+      mutableStateRef.current.unsubscribersBySession.clear();
+      mutableStateRef.current.inFlightStartsByRepoTask.clear();
     };
   }, []);
 
