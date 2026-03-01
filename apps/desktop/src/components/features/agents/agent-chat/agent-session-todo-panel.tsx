@@ -12,7 +12,7 @@ type AgentSessionTodoPanelProps = {
 
 const statusIcon = (status: AgentSessionTodoItem["status"]): ReactElement => {
   if (status === "completed") {
-    return <CheckCircle2 className="size-3.5 text-emerald-600" />;
+    return <CheckCircle2 className="size-3.5 text-success-accent" />;
   }
   if (status === "in_progress") {
     return <LoaderCircle className="size-3.5 animate-spin text-primary" />;

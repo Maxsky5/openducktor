@@ -87,17 +87,17 @@ const toArticleClassName = (
     isToolMessage
       ? isWorkflowToolMessage
         ? workflowToolPhase === "completed"
-          ? "rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-2 my-2 text-emerald-900 dark:text-emerald-200"
+          ? "rounded-md border border-success-border bg-success-surface px-3 py-2 my-2 text-success-surface-foreground"
           : workflowToolPhase === "failed"
             ? "rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 my-2 text-destructive-surface-foreground"
             : workflowToolPhase === "cancelled"
-              ? "rounded-md border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/50 px-3 py-2 my-2 text-orange-900 dark:text-orange-200"
+              ? "rounded-md border border-cancelled-border bg-cancelled-surface px-3 py-2 my-2 text-cancelled-surface-foreground"
               : workflowToolPhase === "executing"
-                ? "rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 px-3 py-2 my-2 text-blue-900 dark:text-blue-200"
-                : "rounded-md border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/50 px-3 py-2 my-2 text-violet-900 dark:text-violet-200"
+                ? "rounded-md border border-info-border bg-info-surface px-3 py-2 my-2 text-info-surface-foreground"
+                : "rounded-md border border-pending-border bg-pending-surface px-3 py-2 my-2 text-pending-surface-foreground"
         : "border-none bg-transparent px-0 py-0 text-foreground"
       : isSubtaskMessage
-        ? "rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 px-3 py-2 text-amber-900 dark:text-amber-200"
+        ? "rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-warning-surface-foreground"
         : isSystemPromptMessage
           ? "rounded-md border border-border bg-muted px-3 py-2 text-foreground"
           : message.role === "assistant"

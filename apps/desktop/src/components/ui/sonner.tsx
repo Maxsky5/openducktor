@@ -22,10 +22,10 @@ export function Toaster(props: ToasterProps) {
             "bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/40",
           cancelButton:
             "bg-muted text-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring/40",
-          success: "border-l-4 border-l-emerald-500 [&_[data-icon]]:text-emerald-600",
+          success: "border-l-4 border-l-success-accent [&_[data-icon]]:text-success-accent",
           error: "border-l-4 border-l-destructive-accent [&_[data-icon]]:text-destructive-accent",
-          warning: "border-l-4 border-l-amber-500 [&_[data-icon]]:text-amber-600",
-          info: "border-l-4 border-l-sky-500 [&_[data-icon]]:text-sky-600",
+          warning: "border-l-4 border-l-warning-accent [&_[data-icon]]:text-warning-accent",
+          info: "border-l-4 border-l-info-accent [&_[data-icon]]:text-info-accent",
         },
       }}
       {...props}

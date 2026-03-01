@@ -137,7 +137,7 @@ export function OpenRepositoryModal({
                       {workspaceLabelFromPath(workspace.path, { includeParent: true })}
                     </span>
                     {workspace.path === activeRepo ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-border bg-success-surface px-2 py-0.5 text-[11px] font-semibold text-success-muted">
                         <CheckCircle2 className="size-3" />
                         Active
                       </span>

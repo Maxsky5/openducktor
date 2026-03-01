@@ -103,7 +103,7 @@ export function AgentActivityCard({
   return (
     <div className="space-y-2 rounded-lg border border-border bg-muted p-3 text-xs">
       <div className="flex items-center gap-2 text-foreground">
-        <Activity className="size-3.5 text-sky-600" />
+        <Activity className="size-3.5 text-info-accent" />
         <span className="text-[11px] font-semibold uppercase tracking-wide">Agent Activity</span>
       </div>
 
@@ -111,11 +111,11 @@ export function AgentActivityCard({
         <ActivitySection
           label="Active sessions"
           count={activeSessionCount}
-          icon={<Activity className="size-3.5 text-sky-600" />}
+          icon={<Activity className="size-3.5 text-info-accent" />}
           iconClassName="inline-flex"
-          badgeClassName="rounded-full bg-sky-100 px-2 py-0.5 font-semibold text-sky-700"
+          badgeClassName="rounded-full bg-info-surface px-2 py-0.5 font-semibold text-info-muted"
           sessions={activeSessions}
-          accentClassName="text-sky-700"
+          accentClassName="text-info-muted"
         />
         <ActivitySection
           label="Needs your input"
@@ -123,18 +123,18 @@ export function AgentActivityCard({
           icon={
             <CircleAlert
               className={
-                hasWaitingInput ? "size-3.5 text-amber-600" : "size-3.5 text-muted-foreground"
+                hasWaitingInput ? "size-3.5 text-warning-accent" : "size-3.5 text-muted-foreground"
               }
             />
           }
           iconClassName="inline-flex"
           badgeClassName={
             hasWaitingInput
-              ? "rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-700"
+              ? "rounded-full bg-warning-surface px-2 py-0.5 font-semibold text-warning-muted"
               : "rounded-full bg-muted px-2 py-0.5 font-semibold text-muted-foreground"
           }
           sessions={waitingForInputSessions}
-          accentClassName={hasWaitingInput ? "text-amber-700" : "text-muted-foreground"}
+          accentClassName={hasWaitingInput ? "text-warning-muted" : "text-muted-foreground"}
         />
       </div>
     </div>

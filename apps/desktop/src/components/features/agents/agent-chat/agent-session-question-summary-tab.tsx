@@ -47,7 +47,7 @@ export const QuestionSummaryTab = ({
           >
             <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {answered ? (
-                <CheckCircle2 className="size-3 text-emerald-500" />
+                <CheckCircle2 className="size-3 text-success-accent" />
               ) : (
                 <Circle className="size-3 text-muted-foreground" />
               )}

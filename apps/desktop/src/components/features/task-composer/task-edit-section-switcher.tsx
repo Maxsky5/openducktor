@@ -75,7 +75,7 @@ export function TaskEditSectionSwitcher({
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                     isActive
                       ? "bg-primary-foreground text-primary"
-                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+                      : "bg-warning-surface text-warning-muted",
                   )}
                 >
                   Unsaved

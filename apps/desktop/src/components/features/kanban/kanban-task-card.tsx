@@ -130,7 +130,7 @@ const ActiveSessionChip = memo(
     return (
       <Link
         to={toSessionHref({ taskId, session })}
-        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 px-2 py-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 transition hover:border-sky-300 dark:hover:border-sky-700 hover:bg-sky-100/75 dark:hover:bg-sky-900/50"
+        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-info-border bg-info-surface px-2 py-1 text-[11px] font-semibold text-info-muted transition hover:border-info-border hover:bg-info-surface"
       >
         <PlayCircle className="size-3" />
         {roleLabel}
@@ -154,7 +154,7 @@ function ActiveSessionsLine({
   activeSessions: RunningTaskSession[];
 }): ReactElement {
   return (
-    <div className="space-y-1 border-t border-sky-100/80 pt-2">
+    <div className="space-y-1 border-t border-info-border pt-2">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Active sessions
       </p>
@@ -267,9 +267,9 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   return (
     <article
       className={cn(
-        "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm transition duration-150 hover:border-sky-200 hover:shadow-md",
+        "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm transition duration-150 hover:border-info-border hover:shadow-md",
         hasActiveSessions
-          ? "kanban-active-session-card border-sky-300/80 shadow-sky-200/50"
+          ? "kanban-active-session-card border-info-border shadow-info-border"
           : undefined,
       )}
     >

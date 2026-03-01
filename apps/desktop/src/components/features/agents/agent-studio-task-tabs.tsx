@@ -51,7 +51,7 @@ const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
     return <LoaderCircle className="size-3.5 animate-spin text-primary" />;
   }
   if (status === "waiting_input") {
-    return <CircleAlert className="size-3.5 text-amber-600" />;
+    return <CircleAlert className="size-3.5 text-warning-accent" />;
   }
   return <Circle className="size-3.5 fill-input text-input" />;
 };

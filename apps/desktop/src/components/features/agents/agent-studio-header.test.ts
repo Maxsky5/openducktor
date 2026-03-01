@@ -203,9 +203,9 @@ describe("AgentStudioHeader", () => {
       }),
     );
 
-    expect(html).toContain("ring-2 ring-offset-2 ring-offset-background ring-emerald-400");
-    expect(html).toContain("border-emerald-300");
-    expect(html).toContain("bg-emerald-50");
-    expect(html).toContain("text-emerald-700");
+    expect(html).toContain("ring-2 ring-offset-2 ring-offset-card ring-success-ring");
+    expect(html).toContain("border-success-border");
+    expect(html).toContain("bg-success-surface");
+    expect(html).toContain("text-success-muted");
   });
 });

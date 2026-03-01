@@ -51,14 +51,14 @@ export const buildDiagnosticsSummary = ({
   if (hasSetupIssues) {
     return {
       label: "Setup needed",
-      toneClass: "text-amber-700",
-      iconClass: "text-amber-600",
+      toneClass: "text-warning-muted",
+      iconClass: "text-warning-accent",
     };
   }
 
   return {
     label: "Healthy",
-    toneClass: "text-emerald-700",
-    iconClass: "text-emerald-600",
+    toneClass: "text-success-muted",
+    iconClass: "text-success-accent",
   };
 };

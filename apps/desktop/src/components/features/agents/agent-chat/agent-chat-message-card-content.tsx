@@ -171,7 +171,7 @@ const AssistantMessage = ({
       {footer.infoParts.length > 0 ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span
-            className="size-1.5 rounded-sm bg-amber-500"
+            className="size-1.5 rounded-sm bg-warning-accent"
             style={assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined}
           />
           <span className="min-w-0 truncate">{footer.infoParts.join(" · ")}</span>
