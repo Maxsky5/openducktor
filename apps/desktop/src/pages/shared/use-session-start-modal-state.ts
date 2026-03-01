@@ -120,7 +120,8 @@ export function useSessionStartModalState({
     let cancelled = false;
     setCatalog(null);
     setIsCatalogLoading(true);
-    void loadCatalog(activeRepo)
+    void Promise.resolve()
+      .then(() => loadCatalog(activeRepo))
       .then((nextCatalog) => {
         if (!cancelled) {
           setCatalog(nextCatalog);

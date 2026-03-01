@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { isValidElement, type ReactElement, useCallback, useState } from "react";
+import { isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -26,6 +27,30 @@ let latestLocation = "/";
 
 let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
 
+const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
+  worktreeBasePath: "",
+  branchPrefix: "codex/",
+  trustedHooks: false,
+  preStartHooks: [],
+  postCompleteHooks: [],
+  agentDefaults: {
+    spec: {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      opencodeAgent: "spec-agent",
+    },
+    planner: null,
+    build: {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      opencodeAgent: "build-agent",
+    },
+    qa: null,
+  },
+};
+
 mock.module("sonner", () => ({
   toast: {
     success: toastSuccessMock,
@@ -42,8 +67,8 @@ mock.module("@/components/features/kanban", () => ({
   TaskDetailsSheet: (): ReactElement | null => null,
 }));
 
-mock.module("@/components/features/agents", () => ({
-  SessionStartModal: ({ model }: { model: Record<string, unknown> }): ReactElement | null => {
+mock.module("./kanban-session-start-modal", () => ({
+  KanbanSessionStartModal: ({ model }: { model: Record<string, unknown> }): ReactElement | null => {
     latestSessionStartModalModel = model;
     return null;
   },
@@ -54,7 +79,7 @@ mock.module("@/state", () => ({
   useWorkspaceState: () => ({
     activeRepo: "/repo",
     isSwitchingWorkspace: false,
-    loadRepoSettings: async () => null,
+    loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
   }),
   useAgentState: () => ({
     sessions: [
@@ -91,80 +116,6 @@ mock.module("@/state", () => ({
   useChecksState: () => ({}),
   useDelegationState: () => ({}),
   useSpecState: () => ({}),
-}));
-
-mock.module("../shared/use-session-start-modal-state", () => ({
-  useSessionStartModalState: () => {
-    const [intent, setIntent] = useState<Record<string, unknown> | null>(null);
-    const [selection, setSelection] = useState({
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      opencodeAgent: "build-agent",
-    });
-
-    const openStartModal = useCallback((nextIntent: Record<string, unknown>) => {
-      setIntent(nextIntent);
-      setSelection({
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        opencodeAgent: "build-agent",
-      });
-    }, []);
-
-    const closeStartModal = useCallback(() => {
-      setIntent(null);
-    }, []);
-
-    const handleSelectAgent = useCallback((opencodeAgent: string) => {
-      setSelection((current) => ({
-        ...current,
-        opencodeAgent,
-      }));
-    }, []);
-
-    const handleSelectModel = useCallback((modelKey: string) => {
-      if (modelKey === "anthropic/claude-sonnet") {
-        setSelection((current) => ({
-          ...current,
-          providerId: "anthropic",
-          modelId: "claude-sonnet",
-          variant: "default",
-        }));
-        return;
-      }
-      setSelection((current) => ({
-        ...current,
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-      }));
-    }, []);
-
-    const handleSelectVariant = useCallback((variant: string) => {
-      setSelection((current) => ({
-        ...current,
-        variant,
-      }));
-    }, []);
-
-    return {
-      intent,
-      isOpen: intent !== null,
-      selection,
-      isCatalogLoading: false,
-      agentOptions: [],
-      modelOptions: [],
-      modelGroups: [],
-      variantOptions: [],
-      openStartModal,
-      closeStartModal,
-      handleSelectAgent,
-      handleSelectModel,
-      handleSelectVariant,
-    };
-  },
 }));
 
 const renderPage = async (): Promise<ReactTestRenderer> => {
@@ -354,9 +305,7 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     await act(async () => {
-      (latestSessionStartModalModel?.onSelectModel as (value: string) => void)(
-        "anthropic/claude-sonnet",
-      );
+      (latestSessionStartModalModel?.onSelectModel as (value: string) => void)("openai/gpt-5");
       (latestSessionStartModalModel?.onSelectAgent as (value: string) => void)("build-agent");
       (latestSessionStartModalModel?.onSelectVariant as (value: string) => void)("default");
     });
@@ -369,8 +318,8 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         selectedModel: {
-          providerId: "anthropic",
-          modelId: "claude-sonnet",
+          providerId: "openai",
+          modelId: "gpt-5",
           variant: "default",
           opencodeAgent: "build-agent",
         },
