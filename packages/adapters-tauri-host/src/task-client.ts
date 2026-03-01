@@ -40,6 +40,21 @@ export class TauriTaskClient {
     private readonly metadataCache: TaskMetadataCache,
   ) {}
 
+  private readTaskMetadata(repoPath: string, taskId: string) {
+    return this.metadataCache.get(this.invokeFn, repoPath, taskId);
+  }
+
+  private invalidateTaskMetadata(repoPath: string, taskId: string): void {
+    this.metadataCache.invalidate(repoPath, taskId);
+  }
+
+  private requireRepoPath(repoPath: string | undefined, documentType: "spec" | "plan"): string {
+    if (!repoPath) {
+      throw new Error(`repoPath is required to set ${documentType}`);
+    }
+    return repoPath;
+  }
+
   async tasksList(repoPath: string): Promise<TaskCard[]> {
     const payload = await this.invokeFn<unknown>("tasks_list", { repoPath });
     return parseArray(taskCardSchema, payload);
@@ -74,7 +89,7 @@ export class TauriTaskClient {
       taskId,
       deleteSubtasks,
     });
-    this.metadataCache.invalidate(repoPath, taskId);
+    this.invalidateTaskMetadata(repoPath, taskId);
     return payload;
   }
 
@@ -115,7 +130,7 @@ export class TauriTaskClient {
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.metadataCache.get(this.invokeFn, repoPath, taskId);
+    const payload = await this.readTaskMetadata(repoPath, taskId);
     return {
       markdown: payload.spec.markdown,
       updatedAt: payload.spec.updatedAt ?? null,
@@ -123,17 +138,15 @@ export class TauriTaskClient {
   }
 
   async setSpec(input: SetSpecInput): Promise<SetSpecOutput> {
-    if (!input.repoPath) {
-      throw new Error("repoPath is required to set spec");
-    }
+    const repoPath = this.requireRepoPath(input.repoPath, "spec");
 
     const payload = await this.invokeFn<{ updatedAt: string }>("set_spec", {
-      repoPath: input.repoPath,
+      repoPath,
       taskId: input.taskId,
       markdown: input.markdown,
     });
 
-    this.metadataCache.invalidate(input.repoPath, input.taskId);
+    this.invalidateTaskMetadata(repoPath, input.taskId);
     return { updatedAt: payload.updatedAt };
   }
 
@@ -147,17 +160,15 @@ export class TauriTaskClient {
       taskId,
       markdown,
     });
-    this.metadataCache.invalidate(repoPath, taskId);
+    this.invalidateTaskMetadata(repoPath, taskId);
     return { updatedAt: payload.updatedAt };
   }
 
   async setPlan(input: SetPlanInput): Promise<SetPlanOutput> {
-    if (!input.repoPath) {
-      throw new Error("repoPath is required to set plan");
-    }
+    const repoPath = this.requireRepoPath(input.repoPath, "plan");
 
     const payload = await this.invokeFn<{ updatedAt: string }>("set_plan", {
-      repoPath: input.repoPath,
+      repoPath,
       taskId: input.taskId,
       input: {
         markdown: input.markdown,
@@ -165,7 +176,7 @@ export class TauriTaskClient {
       },
     });
 
-    this.metadataCache.invalidate(input.repoPath, input.taskId);
+    this.invalidateTaskMetadata(repoPath, input.taskId);
     return { updatedAt: payload.updatedAt };
   }
 
@@ -179,7 +190,7 @@ export class TauriTaskClient {
       taskId,
       markdown,
     });
-    this.metadataCache.invalidate(repoPath, taskId);
+    this.invalidateTaskMetadata(repoPath, taskId);
     return { updatedAt: payload.updatedAt };
   }
 
@@ -187,7 +198,7 @@ export class TauriTaskClient {
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.metadataCache.get(this.invokeFn, repoPath, taskId);
+    const payload = await this.readTaskMetadata(repoPath, taskId);
     return {
       markdown: payload.plan.markdown,
       updatedAt: payload.plan.updatedAt ?? null,
@@ -198,7 +209,7 @@ export class TauriTaskClient {
     repoPath: string,
     taskId: string,
   ): Promise<{ markdown: string; updatedAt: string | null }> {
-    const payload = await this.metadataCache.get(this.invokeFn, repoPath, taskId);
+    const payload = await this.readTaskMetadata(repoPath, taskId);
     return {
       markdown: payload.qaReport?.markdown ?? "",
       updatedAt: payload.qaReport?.updatedAt ?? null,
@@ -211,7 +222,7 @@ export class TauriTaskClient {
       taskId,
       input: { markdown },
     });
-    this.metadataCache.invalidate(repoPath, taskId);
+    this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
   }
 
@@ -221,12 +232,12 @@ export class TauriTaskClient {
       taskId,
       input: { markdown },
     });
-    this.metadataCache.invalidate(repoPath, taskId);
+    this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
   }
 
   async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
-    const payload = await this.metadataCache.get(this.invokeFn, repoPath, taskId);
+    const payload = await this.readTaskMetadata(repoPath, taskId);
     return payload.agentSessions;
   }
 
@@ -240,6 +251,6 @@ export class TauriTaskClient {
       taskId,
       session,
     });
-    this.metadataCache.invalidate(repoPath, taskId);
+    this.invalidateTaskMetadata(repoPath, taskId);
   }
 }
