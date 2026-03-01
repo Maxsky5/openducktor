@@ -136,7 +136,6 @@ export const createLoadAgentSessions = ({
         }
         next[record.sessionId] = fromPersistedSessionRecord(record);
       }
-      sessionsRef.current = next;
       return next;
     });
 
