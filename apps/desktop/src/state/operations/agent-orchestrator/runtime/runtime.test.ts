@@ -161,11 +161,15 @@ describe("agent-orchestrator-runtime", () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     host.workspaceGetRepoConfig = async () => ({
       branchPrefix: "obp",
+      defaultTargetBranch: "main",
       trustedHooks: false,
       hooks: {
         preStart: [],
         postComplete: [],
       },
+      worktreeSetupScript: "",
+      worktreeCleanupScript: "",
+      worktreeFileCopies: [],
       agentDefaults: {
         build: {
           providerId: "openai",

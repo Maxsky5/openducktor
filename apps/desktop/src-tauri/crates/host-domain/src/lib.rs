@@ -10,7 +10,10 @@ pub use document::{
     QaReportDocument, QaVerdict, QaWorkflowVerdict, SpecDocument, TaskDocumentPresence,
     TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
 };
-pub use git::{GitBranch, GitCurrentBranch, GitPort, GitPushSummary, GitWorktreeSummary};
+pub use git::{
+    GitAheadBehind, GitBranch, GitCurrentBranch, GitFileDiff, GitFileStatus, GitPort,
+    GitPushSummary, GitWorktreeSummary,
+};
 pub use runtime::{AgentRuntimeSummary, RunEvent, RunState, RunSummary};
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, SystemCheck, WorkspaceRecord};

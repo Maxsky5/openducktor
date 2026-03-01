@@ -13,9 +13,13 @@ export const toHookText = (hooks: string[]): string => hooks.join("\n");
 export const emptyRepoSettings = (): RepoSettingsInput => ({
   worktreeBasePath: "",
   branchPrefix: DEFAULT_BRANCH_PREFIX,
+  defaultTargetBranch: "main",
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
+  worktreeSetupScript: "",
+  worktreeCleanupScript: "",
+  worktreeFileCopies: [],
   agentDefaults: {
     spec: null,
     planner: null,

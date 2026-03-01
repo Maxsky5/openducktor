@@ -16,6 +16,7 @@ import {
 } from "@/components/features/agents";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -24,6 +25,7 @@ import {
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "../shared/use-session-start-modal-coordinator";
+import { useAgentStudioDiffData } from "./use-agent-studio-diff-data";
 import {
   type AgentStudioOrchestrationActionsContext,
   type AgentStudioOrchestrationComposerContext,
@@ -277,55 +279,74 @@ export function AgentsPage(): ReactElement {
     actions: orchestrationActions,
   });
 
-  return (
-    <Tabs
-      value={orchestration.activeTabValue}
-      onValueChange={selection.handleSelectTab}
-      className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-card"
-    >
-      <AgentStudioTaskTabs
-        model={orchestration.agentStudioTaskTabsModel}
-        rightPanelToggleModel={orchestration.rightPanel.rightPanelToggleModel}
-      />
+  const diffData = useAgentStudioDiffData({
+    repoPath: activeRepo,
+    sessionWorkingDirectory: selection.viewActiveSession?.workingDirectory ?? null,
+    sessionRunId: selection.viewActiveSession?.runId ?? null,
+    defaultTargetBranch: orchestration.repoSettings?.defaultTargetBranch ?? "origin/main",
+    enablePolling:
+      selection.viewRole === "build" &&
+      Boolean(selection.viewActiveSession) &&
+      orchestration.rightPanel.isPanelOpen,
+  });
 
-      <TabsContent value={orchestration.activeTabValue} className="m-0 min-h-0 flex-1 bg-card p-0">
-        {selection.viewTaskId ? (
-          <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
-            <ResizablePanel defaultSize={63} minSize={35}>
-              <AgentChat
-                header={<AgentStudioHeader model={orchestration.agentStudioHeaderModel} />}
-                model={orchestration.agentChatModel}
-              />
-            </ResizablePanel>
-            {orchestration.rightPanel.panelKind && orchestration.rightPanel.isPanelOpen ? (
-              <>
-                <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={37} minSize={30}>
-                  <AgentStudioRightPanel
-                    model={{
-                      kind: orchestration.rightPanel.panelKind,
-                      documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
-                    }}
-                  />
-                </ResizablePanel>
-              </>
-            ) : null}
-          </ResizablePanelGroup>
-        ) : (
-          <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
-            Open a task tab to start a workspace.
-          </div>
-        )}
-      </TabsContent>
-      {pendingSessionStartRequest ? (
-        <AgentStudioSessionStartModal
-          request={pendingSessionStartRequest}
-          activeRepo={activeRepo}
-          repoSettings={orchestration.repoSettings}
-          onCancel={() => resolvePendingSessionStart(null)}
-          onConfirm={resolvePendingSessionStart}
+  return (
+    <DiffWorkerProvider>
+      <Tabs
+        value={orchestration.activeTabValue}
+        onValueChange={selection.handleSelectTab}
+        className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-card"
+      >
+        <AgentStudioTaskTabs
+          model={orchestration.agentStudioTaskTabsModel}
+          rightPanelToggleModel={orchestration.rightPanel.rightPanelToggleModel}
         />
-      ) : null}
-    </Tabs>
+
+        <TabsContent
+          value={orchestration.activeTabValue}
+          className="m-0 min-h-0 flex-1 bg-card p-0"
+        >
+          {selection.viewTaskId ? (
+            <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
+              <ResizablePanel defaultSize={63} minSize={35}>
+                <AgentChat
+                  header={<AgentStudioHeader model={orchestration.agentStudioHeaderModel} />}
+                  model={orchestration.agentChatModel}
+                />
+              </ResizablePanel>
+              {orchestration.rightPanel.panelKind && orchestration.rightPanel.isPanelOpen ? (
+                <>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={37} minSize={30}>
+                    <AgentStudioRightPanel
+                      model={{
+                        kind: orchestration.rightPanel.panelKind,
+                        documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
+                        ...(orchestration.rightPanel.panelKind === "diff"
+                          ? { diffModel: diffData }
+                          : {}),
+                      }}
+                    />
+                  </ResizablePanel>
+                </>
+              ) : null}
+            </ResizablePanelGroup>
+          ) : (
+            <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
+              Open a task tab to start a workspace.
+            </div>
+          )}
+        </TabsContent>
+        {pendingSessionStartRequest ? (
+          <AgentStudioSessionStartModal
+            request={pendingSessionStartRequest}
+            activeRepo={activeRepo}
+            repoSettings={orchestration.repoSettings}
+            onCancel={() => resolvePendingSessionStart(null)}
+            onConfirm={resolvePendingSessionStart}
+          />
+        ) : null}
+      </Tabs>
+    </DiffWorkerProvider>
   );
 }

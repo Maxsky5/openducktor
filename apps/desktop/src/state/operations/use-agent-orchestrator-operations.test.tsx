@@ -409,11 +409,15 @@ describe("use-agent-orchestrator-operations", () => {
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
         branchPrefix: "obp",
+        defaultTargetBranch: "main",
         trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
         },
+        worktreeSetupScript: "",
+        worktreeCleanupScript: "",
+        worktreeFileCopies: [],
         agentDefaults: {},
       });
       host.buildStart = async () => ({
@@ -529,11 +533,15 @@ describe("use-agent-orchestrator-operations", () => {
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
         branchPrefix: "obp",
+        defaultTargetBranch: "main",
         trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
         },
+        worktreeSetupScript: "",
+        worktreeCleanupScript: "",
+        worktreeFileCopies: [],
         agentDefaults: {},
       });
 
@@ -710,11 +718,15 @@ describe("use-agent-orchestrator-operations", () => {
       });
       host.workspaceGetRepoConfig = async () => ({
         branchPrefix: "obp",
+        defaultTargetBranch: "main",
         trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
         },
+        worktreeSetupScript: "",
+        worktreeCleanupScript: "",
+        worktreeFileCopies: [],
         agentDefaults: {},
       });
 
@@ -802,11 +814,15 @@ describe("use-agent-orchestrator-operations", () => {
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
         branchPrefix: "obp",
+        defaultTargetBranch: "main",
         trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
         },
+        worktreeSetupScript: "",
+        worktreeCleanupScript: "",
+        worktreeFileCopies: [],
         agentDefaults: {},
       });
 

@@ -1,4 +1,10 @@
 import {
+  type CommitsAheadBehind,
+  commitsAheadBehindSchema,
+  type FileDiff,
+  type FileStatus,
+  fileDiffSchema,
+  fileStatusSchema,
   type GitBranch,
   type GitCurrentBranch,
   type GitPushSummary,
@@ -22,8 +28,12 @@ export const gitGetBranches = async (
 export const gitGetCurrentBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
+  workingDir?: string,
 ): Promise<GitCurrentBranch> => {
-  const payload = await invokeFn<unknown>("git_get_current_branch", { repoPath });
+  const payload = await invokeFn<unknown>("git_get_current_branch", {
+    repoPath,
+    workingDir: workingDir ?? null,
+  });
   return gitCurrentBranchSchema.parse(payload);
 };
 
@@ -90,6 +100,46 @@ export const gitPushBranch = async (
   return gitPushSummarySchema.parse(payload);
 };
 
+export const gitGetStatus = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  workingDir?: string,
+): Promise<FileStatus[]> => {
+  const payload = await invokeFn<unknown>("git_get_status", {
+    repoPath,
+    workingDir: workingDir ?? null,
+  });
+  return parseArray(fileStatusSchema, payload);
+};
+
+export const gitGetDiff = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  targetBranch?: string,
+  workingDir?: string,
+): Promise<FileDiff[]> => {
+  const payload = await invokeFn<unknown>("git_get_diff", {
+    repoPath,
+    targetBranch: targetBranch ?? null,
+    workingDir: workingDir ?? null,
+  });
+  return parseArray(fileDiffSchema, payload);
+};
+
+export const gitCommitsAheadBehind = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  targetBranch: string,
+  workingDir?: string,
+): Promise<CommitsAheadBehind> => {
+  const payload = await invokeFn<unknown>("git_commits_ahead_behind", {
+    repoPath,
+    targetBranch,
+    workingDir: workingDir ?? null,
+  });
+  return commitsAheadBehindSchema.parse(payload);
+};
+
 export class TauriGitClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -97,8 +147,8 @@ export class TauriGitClient {
     return gitGetBranches(this.invokeFn, repoPath);
   }
 
-  async gitGetCurrentBranch(repoPath: string): Promise<GitCurrentBranch> {
-    return gitGetCurrentBranch(this.invokeFn, repoPath);
+  async gitGetCurrentBranch(repoPath: string, workingDir?: string): Promise<GitCurrentBranch> {
+    return gitGetCurrentBranch(this.invokeFn, repoPath, workingDir);
   }
 
   async gitSwitchBranch(
@@ -136,5 +186,25 @@ export class TauriGitClient {
     },
   ): Promise<GitPushSummary> {
     return gitPushBranch(this.invokeFn, repoPath, branch, options);
+  }
+
+  async gitGetStatus(repoPath: string, workingDir?: string): Promise<FileStatus[]> {
+    return gitGetStatus(this.invokeFn, repoPath, workingDir);
+  }
+
+  async gitGetDiff(
+    repoPath: string,
+    targetBranch?: string,
+    workingDir?: string,
+  ): Promise<FileDiff[]> {
+    return gitGetDiff(this.invokeFn, repoPath, targetBranch, workingDir);
+  }
+
+  async gitCommitsAheadBehind(
+    repoPath: string,
+    targetBranch: string,
+    workingDir?: string,
+  ): Promise<CommitsAheadBehind> {
+    return gitCommitsAheadBehind(this.invokeFn, repoPath, targetBranch, workingDir);
   }
 }

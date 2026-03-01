@@ -180,9 +180,7 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const requiresWorkspaceRuntime = recordsToHydrate.some(
-      (record) => record.role === "spec" || record.role === "planner",
-    );
+    const requiresWorkspaceRuntime = recordsToHydrate.length > 0;
     const workspaceRuntime = requiresWorkspaceRuntime
       ? await captureOrchestratorFallback(
           "load-sessions-ensure-workspace-runtime",
@@ -203,14 +201,10 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const baseUrl =
-        (record.role === "spec" || record.role === "planner") && workspaceRuntime
-          ? toBaseUrl(workspaceRuntime.port)
-          : record.baseUrl;
-      const workingDirectory =
-        (record.role === "spec" || record.role === "planner") && workspaceRuntime
-          ? workspaceRuntime.workingDirectory
-          : record.workingDirectory;
+      const baseUrl = workspaceRuntime ? toBaseUrl(workspaceRuntime.port) : record.baseUrl;
+      // Always use the persisted workingDirectory — it is the source of truth.
+      // Build sessions store the worktree path; other roles store repoPath.
+      const workingDirectory = record.workingDirectory;
       const existingSession = sessionsRef.current[record.sessionId];
       if (existingSession && existingSession.messages.length > 0) {
         if (isStaleRepoOperation()) {

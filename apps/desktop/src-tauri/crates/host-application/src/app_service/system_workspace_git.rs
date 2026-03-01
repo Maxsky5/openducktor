@@ -1,8 +1,8 @@
 use super::{read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck};
 use anyhow::{anyhow, Result};
 use host_domain::{
-    BeadsCheck, GitBranch, GitCurrentBranch, GitPushSummary, GitWorktreeSummary, RuntimeCheck,
-    SystemCheck, WorkspaceRecord,
+    BeadsCheck, GitAheadBehind, GitBranch, GitCurrentBranch, GitFileDiff, GitFileStatus,
+    GitPushSummary, GitWorktreeSummary, RuntimeCheck, SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
@@ -303,6 +303,31 @@ impl AppService {
             set_upstream,
             force_with_lease,
         )
+    }
+
+    pub fn git_get_status(&self, repo_path: &str) -> Result<Vec<GitFileStatus>> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        self.git_port.get_status(Path::new(&repo_path))
+    }
+
+    pub fn git_get_diff(
+        &self,
+        repo_path: &str,
+        target_branch: Option<&str>,
+    ) -> Result<Vec<GitFileDiff>> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        self.git_port
+            .get_diff(Path::new(&repo_path), target_branch)
+    }
+
+    pub fn git_commits_ahead_behind(
+        &self,
+        repo_path: &str,
+        target_branch: &str,
+    ) -> Result<GitAheadBehind> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        self.git_port
+            .commits_ahead_behind(Path::new(&repo_path), target_branch)
     }
 }
 

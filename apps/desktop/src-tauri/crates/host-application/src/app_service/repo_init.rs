@@ -8,7 +8,7 @@ impl AppService {
             .to_string()
     }
 
-    pub(super) fn ensure_repo_authorized(&self, repo_path: &str) -> Result<String> {
+    pub fn ensure_repo_authorized(&self, repo_path: &str) -> Result<String> {
         let repo_key = Self::repo_key(repo_path);
         if !self.enforce_repo_allowlist {
             return Ok(repo_key);

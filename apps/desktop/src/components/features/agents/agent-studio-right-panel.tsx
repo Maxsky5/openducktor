@@ -1,6 +1,7 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   AgentStudioWorkspaceSidebar,
   type AgentStudioWorkspaceSidebarModel,
@@ -17,6 +18,7 @@ export type AgentStudioRightPanelToggleModel = {
 export type AgentStudioRightPanelModel = {
   kind: AgentStudioRightPanelKind;
   documentsModel: AgentStudioWorkspaceSidebarModel;
+  diffModel?: AgentStudioGitPanelModel;
 };
 
 const rightPanelLabel = (kind: AgentStudioRightPanelKind): string => {
@@ -61,6 +63,10 @@ export function AgentStudioRightPanel({
     return <AgentStudioWorkspaceSidebar model={model.documentsModel} />;
   }
 
+  if (model.diffModel) {
+    return <AgentStudioGitPanel model={model.diffModel} />;
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="space-y-1 border-b border-border p-4">
@@ -70,7 +76,7 @@ export function AgentStudioRightPanel({
         </p>
       </div>
       <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-        <p className="text-sm text-muted-foreground">File diff panel is not available yet.</p>
+        <p className="text-sm text-muted-foreground">No active builder session.</p>
       </div>
     </div>
   );

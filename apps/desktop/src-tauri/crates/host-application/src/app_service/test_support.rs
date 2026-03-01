@@ -17,10 +17,10 @@ use super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitBranch,
-    GitCurrentBranch, GitPort, GitPushSummary, IssueType, PlanSubtaskInput, QaReportDocument,
-    QaVerdict, RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard,
-    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
+    GitBranch, GitCurrentBranch, GitFileDiff, GitFileStatus, GitPort, GitPushSummary, IssueType,
+    PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, SpecDocument,
+    TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -428,6 +428,29 @@ impl GitPort for FakeGitPort {
             remote: remote.to_string(),
             branch: branch.to_string(),
             output: "ok".to_string(),
+        })
+    }
+
+    fn get_status(&self, _repo_path: &Path) -> Result<Vec<GitFileStatus>> {
+        Ok(Vec::new())
+    }
+
+    fn get_diff(
+        &self,
+        _repo_path: &Path,
+        _target_branch: Option<&str>,
+    ) -> Result<Vec<GitFileDiff>> {
+        Ok(Vec::new())
+    }
+
+    fn commits_ahead_behind(
+        &self,
+        _repo_path: &Path,
+        _target_branch: &str,
+    ) -> Result<GitAheadBehind> {
+        Ok(GitAheadBehind {
+            ahead: 0,
+            behind: 0,
         })
     }
 }

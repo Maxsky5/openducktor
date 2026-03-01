@@ -48,9 +48,13 @@ describe("app-state-context-values", () => {
       loadRepoSettings: async () => ({
         worktreeBasePath: "",
         branchPrefix: "odt",
+        defaultTargetBranch: "main",
         trustedHooks: false,
         preStartHooks: [],
         postCompleteHooks: [],
+        worktreeSetupScript: "",
+        worktreeCleanupScript: "",
+        worktreeFileCopies: [],
         agentDefaults: { spec: null, planner: null, build: null, qa: null },
       }),
       saveRepoSettings: async () => {},

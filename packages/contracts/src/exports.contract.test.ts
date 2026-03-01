@@ -14,6 +14,9 @@ import type {
   AgentWorkflowState,
   AgentWorkflows,
   BeadsCheck,
+  CommitsAheadBehind,
+  FileDiff,
+  FileStatus,
   GitBranch,
   GitCurrentBranch,
   GitPushSummary,
@@ -63,7 +66,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadEntry",
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
+  "commitsAheadBehindSchema",
   "defaultSpecTemplateMarkdown",
+  "fileDiffSchema",
+  "fileStatusSchema",
   "gitBranchSchema",
   "gitCurrentBranchSchema",
   "gitPushSummarySchema",
@@ -110,6 +116,9 @@ type ExportedTypeContract = {
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;
+  CommitsAheadBehind: CommitsAheadBehind;
+  FileDiff: FileDiff;
+  FileStatus: FileStatus;
   GitBranch: GitBranch;
   GitCurrentBranch: GitCurrentBranch;
   GitPushSummary: GitPushSummary;

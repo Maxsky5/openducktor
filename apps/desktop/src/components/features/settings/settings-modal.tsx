@@ -62,9 +62,13 @@ export function SettingsModal({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [worktreeBasePath, setWorktreeBasePath] = useState("");
   const [branchPrefix, setBranchPrefix] = useState(DEFAULT_BRANCH_PREFIX);
+  const [defaultTargetBranch, setDefaultTargetBranch] = useState("main");
   const [trustedHooks, setTrustedHooks] = useState(false);
   const [preStartHooks, setPreStartHooks] = useState("");
   const [postCompleteHooks, setPostCompleteHooks] = useState("");
+  const [worktreeSetupScript, setWorktreeSetupScript] = useState("");
+  const [worktreeCleanupScript, setWorktreeCleanupScript] = useState("");
+  const [worktreeFileCopies, setWorktreeFileCopies] = useState<string[]>([]);
   const [agentDefaults, setAgentDefaults] = useState(emptyRepoSettings().agentDefaults);
 
   const updateAgentDefault = (
@@ -105,9 +109,13 @@ export function SettingsModal({
           const settings = settingsResult.value;
           setWorktreeBasePath(settings.worktreeBasePath);
           setBranchPrefix(settings.branchPrefix);
+          setDefaultTargetBranch(settings.defaultTargetBranch);
           setTrustedHooks(settings.trustedHooks);
           setPreStartHooks(toHookText(settings.preStartHooks));
           setPostCompleteHooks(toHookText(settings.postCompleteHooks));
+          setWorktreeSetupScript(settings.worktreeSetupScript);
+          setWorktreeCleanupScript(settings.worktreeCleanupScript);
+          setWorktreeFileCopies(settings.worktreeFileCopies);
           setAgentDefaults(settings.agentDefaults);
         } else {
           const defaults = emptyRepoSettings();
@@ -115,9 +123,13 @@ export function SettingsModal({
             activeWorkspace?.configuredWorktreeBasePath ?? defaults.worktreeBasePath,
           );
           setBranchPrefix(defaults.branchPrefix);
+          setDefaultTargetBranch(defaults.defaultTargetBranch);
           setTrustedHooks(defaults.trustedHooks);
           setPreStartHooks(toHookText(defaults.preStartHooks));
           setPostCompleteHooks(toHookText(defaults.postCompleteHooks));
+          setWorktreeSetupScript(defaults.worktreeSetupScript);
+          setWorktreeCleanupScript(defaults.worktreeCleanupScript);
+          setWorktreeFileCopies(defaults.worktreeFileCopies);
           setAgentDefaults(defaults.agentDefaults);
         }
 
@@ -167,9 +179,13 @@ export function SettingsModal({
       await saveRepoSettings({
         worktreeBasePath,
         branchPrefix,
+        defaultTargetBranch,
         trustedHooks,
         preStartHooks: parseHookLines(preStartHooks),
         postCompleteHooks: parseHookLines(postCompleteHooks),
+        worktreeSetupScript,
+        worktreeCleanupScript,
+        worktreeFileCopies,
         agentDefaults,
       });
 

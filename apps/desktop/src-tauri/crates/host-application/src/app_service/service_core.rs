@@ -105,4 +105,10 @@ impl AppService {
     ) -> Self {
         Self::with_git_port_allowlist(task_store, config_store, git_port, false)
     }
+
+    /// Public accessor for the git port, used by Tauri commands that need
+    /// direct git operations on worktree paths (bypassing repo initialization).
+    pub fn git_port(&self) -> &dyn GitPort {
+        self.git_port.as_ref()
+    }
 }

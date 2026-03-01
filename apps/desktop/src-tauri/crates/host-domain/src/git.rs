@@ -32,6 +32,32 @@ pub struct GitPushSummary {
     pub output: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileStatus {
+    pub path: String,
+    pub status: String,
+    pub staged: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileDiff {
+    pub file: String,
+    #[serde(rename = "type")]
+    pub diff_type: String,
+    pub additions: u32,
+    pub deletions: u32,
+    pub diff: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitAheadBehind {
+    pub ahead: u32,
+    pub behind: u32,
+}
+
 pub trait GitPort: Send + Sync {
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>>;
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch>;
@@ -57,4 +83,12 @@ pub trait GitPort: Send + Sync {
         set_upstream: bool,
         force_with_lease: bool,
     ) -> Result<GitPushSummary>;
+    fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>>;
+    fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>>;
+    fn commits_ahead_behind(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<GitAheadBehind>;
 }
+

@@ -84,6 +84,6 @@ describe("AgentStudioRightPanel", () => {
 
     expect(html).toContain("File Diff");
     expect(html).toContain("Latest builder file changes for this task session.");
-    expect(html).toContain("File diff panel is not available yet.");
+    expect(html).toContain("No active builder session.");
   });
 });
