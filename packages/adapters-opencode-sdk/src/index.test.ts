@@ -11,6 +11,7 @@ type MockSession = {
   abortCalls: unknown[];
   getCalls: unknown[];
   messagesCalls: unknown[];
+  todoCalls: unknown[];
   promptQueue: Array<{ info: { id: string; [key: string]: unknown }; parts: Part[] }>;
   messagesResponse: Array<{
     info: {
@@ -21,6 +22,7 @@ type MockSession = {
     };
     parts: Part[];
   }>;
+  todoResult: TodoMockResult;
 };
 
 type MockTool = {
@@ -44,11 +46,51 @@ type MockEventStream = {
   events: Event[];
 };
 
+type TodoMockResult =
+  | {
+      mode: "success";
+      data: unknown;
+    }
+  | {
+      mode: "api_error";
+      error: unknown;
+      status?: number;
+      statusText?: string;
+    }
+  | {
+      mode: "throw";
+      error: Error;
+    };
+
+type MakeMockClientInput = {
+  sessionId?: string;
+  streamEvents?: Event[];
+  promptQueue?: Array<{ info: { id: string; [key: string]: unknown }; parts: Part[] }>;
+  messagesResponse?: Array<{
+    info: {
+      id: string;
+      role: "user" | "assistant";
+      time: { created: number };
+      [key: string]: unknown;
+    };
+    parts: Part[];
+  }>;
+  todoResult?: TodoMockResult;
+  providerResponse?: unknown;
+  agentsResponse?: unknown;
+  toolIdsResponse?: unknown;
+  mcpStatusResponse?: unknown;
+};
+
 const makeMockClient = ({
   sessionId = "session-opencode-1",
   streamEvents = [],
   promptQueue = [],
   messagesResponse = [],
+  todoResult = {
+    mode: "success",
+    data: [],
+  },
   providerResponse = {
     providers: [
       {
@@ -76,24 +118,7 @@ const makeMockClient = ({
   agentsResponse = [],
   toolIdsResponse = [],
   mcpStatusResponse = {},
-}: {
-  sessionId?: string;
-  streamEvents?: Event[];
-  promptQueue?: Array<{ info: { id: string; [key: string]: unknown }; parts: Part[] }>;
-  messagesResponse?: Array<{
-    info: {
-      id: string;
-      role: "user" | "assistant";
-      time: { created: number };
-      [key: string]: unknown;
-    };
-    parts: Part[];
-  }>;
-  providerResponse?: unknown;
-  agentsResponse?: unknown;
-  toolIdsResponse?: unknown;
-  mcpStatusResponse?: unknown;
-}): {
+}: MakeMockClientInput): {
   client: OpencodeClient;
   session: MockSession;
   tool: MockTool;
@@ -108,8 +133,10 @@ const makeMockClient = ({
     abortCalls: [],
     getCalls: [],
     messagesCalls: [],
+    todoCalls: [],
     promptQueue: [...promptQueue],
     messagesResponse: [...messagesResponse],
+    todoResult,
   };
   const permission: MockPermission = {
     replyCalls: [],
@@ -176,6 +203,30 @@ const makeMockClient = ({
         return {
           data: session.messagesResponse,
           error: undefined,
+        };
+      },
+      todo: async (input: unknown) => {
+        session.todoCalls.push(input);
+        if (session.todoResult.mode === "throw") {
+          throw session.todoResult.error;
+        }
+        if (session.todoResult.mode === "api_error") {
+          return {
+            data: undefined,
+            error: session.todoResult.error,
+            response: {
+              status: session.todoResult.status ?? 500,
+              statusText: session.todoResult.statusText ?? "",
+            },
+          };
+        }
+        return {
+          data: session.todoResult.data,
+          error: undefined,
+          response: {
+            status: 200,
+            statusText: "OK",
+          },
         };
       },
     },
@@ -279,27 +330,33 @@ const defaultLoadSessionTodosInput = {
 };
 
 const runLoadSessionTodosWithWarningCapture = async (
-  fetchImpl: typeof fetch,
-): Promise<{ todos: AgentSessionTodoItem[]; warnCalls: unknown[][] }> => {
-  const originalFetch = globalThis.fetch;
+  mockInput: MakeMockClientInput,
+): Promise<{
+  todos: AgentSessionTodoItem[];
+  warnCalls: unknown[][];
+  session: MockSession;
+  createClientCalls: unknown[];
+}> => {
   const originalWarn = console.warn;
   const warnCalls: unknown[][] = [];
+  const createClientCalls: unknown[] = [];
   console.warn = ((...args: unknown[]) => {
     warnCalls.push(args);
   }) as typeof console.warn;
-  globalThis.fetch = fetchImpl;
 
   try {
-    const mock = makeMockClient({});
+    const mock = makeMockClient(mockInput);
     const adapter = new OpencodeSdkAdapter({
-      createClient: () => mock.client,
+      createClient: (input) => {
+        createClientCalls.push(input);
+        return mock.client;
+      },
       now: () => "2026-02-17T12:00:00Z",
     });
 
     const todos = await adapter.loadSessionTodos(defaultLoadSessionTodosInput);
-    return { todos, warnCalls };
+    return { todos, warnCalls, session: mock.session, createClientCalls };
   } finally {
-    globalThis.fetch = originalFetch;
     console.warn = originalWarn;
   }
 };
@@ -825,12 +882,10 @@ describe("OpencodeSdkAdapter", () => {
   });
 
   test("loadSessionTodos reads /session/:id/todo and normalizes entries", async () => {
-    const originalFetch = globalThis.fetch;
-    const fetchCalls: string[] = [];
-    globalThis.fetch = (async (input: string | URL | Request) => {
-      fetchCalls.push(typeof input === "string" ? input : input.toString());
-      return new Response(
-        JSON.stringify([
+    const mock = makeMockClient({
+      todoResult: {
+        mode: "success",
+        data: [
           {
             id: "todo-1",
             content: "Inspect auth flow",
@@ -843,77 +898,178 @@ describe("OpencodeSdkAdapter", () => {
             status: "unexpected_status",
             priority: "unexpected_priority",
           },
-        ]),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
-      );
-    }) as typeof fetch;
+        ],
+      },
+    });
+    const createClientCalls: unknown[] = [];
+    const adapter = new OpencodeSdkAdapter({
+      createClient: (input) => {
+        createClientCalls.push(input);
+        return mock.client;
+      },
+      now: () => "2026-02-17T12:00:00Z",
+    });
 
-    try {
-      const mock = makeMockClient({});
-      const adapter = new OpencodeSdkAdapter({
-        createClient: () => mock.client,
-        now: () => "2026-02-17T12:00:00Z",
-      });
+    const todos = await adapter.loadSessionTodos({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "/repo",
+      externalSessionId: "session-opencode-1",
+    });
 
-      const todos = await adapter.loadSessionTodos({
+    expect(mock.session.todoCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+      },
+    ]);
+    expect(createClientCalls).toEqual([
+      {
         baseUrl: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
-        externalSessionId: "session-opencode-1",
-      });
-
-      expect(fetchCalls).toEqual([
-        "http://127.0.0.1:12345/session/session-opencode-1/todo?directory=%2Frepo",
-      ]);
-      expect(todos).toEqual([
-        {
-          id: "todo-1",
-          content: "Inspect auth flow",
-          status: "in_progress",
-          priority: "high",
-        },
-        {
-          id: "todo-2",
-          content: "Write spec",
-          status: "pending",
-          priority: "medium",
-        },
-      ]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      },
+    ]);
+    expect(todos).toEqual([
+      {
+        id: "todo-1",
+        content: "Inspect auth flow",
+        status: "in_progress",
+        priority: "high",
+      },
+      {
+        id: "todo-2",
+        content: "Write spec",
+        status: "pending",
+        priority: "medium",
+      },
+    ]);
   });
 
-  test("loadSessionTodos logs non-ok responses and returns empty todos", async () => {
-    const { todos, warnCalls } = await runLoadSessionTodosWithWarningCapture(async () => {
-      return new Response("upstream unavailable", {
-        status: 503,
-        statusText: "Service Unavailable",
+  test("loadSessionTodos logs client errors and returns empty todos", async () => {
+    const { todos, warnCalls, session, createClientCalls } =
+      await runLoadSessionTodosWithWarningCapture({
+        todoResult: {
+          mode: "api_error",
+          error: {
+            message: "Service Unavailable",
+          },
+          status: 503,
+          statusText: "Service Unavailable",
+        },
       });
-    });
 
     expect(todos).toEqual([]);
     expect(warnCalls).toHaveLength(1);
-    expect(warnCalls[0][0]).toBe("loadSessionTodos: HTTP 503");
+    expect(warnCalls[0][0]).toBe("loadSessionTodos: request failed");
     expect(warnCalls[0][1]).toEqual({
+      message: "Service Unavailable",
+      status: 503,
       statusText: "Service Unavailable",
     });
+    expect(session.todoCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+      },
+    ]);
+    expect(createClientCalls).toEqual([
+      {
+        baseUrl: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+    ]);
   });
 
-  test("loadSessionTodos logs fetch errors and returns empty todos", async () => {
-    const fetchError = new Error("network down");
-    const { todos, warnCalls } = await runLoadSessionTodosWithWarningCapture(async () => {
-      throw fetchError;
-    });
+  test("loadSessionTodos logs thrown request errors and returns empty todos", async () => {
+    const requestError = new Error("network down");
+    const { todos, warnCalls, session, createClientCalls } =
+      await runLoadSessionTodosWithWarningCapture({
+        todoResult: {
+          mode: "throw",
+          error: requestError,
+        },
+      });
 
     expect(todos).toEqual([]);
     expect(warnCalls).toHaveLength(1);
-    expect(warnCalls[0][0]).toBe("loadSessionTodos: fetch failed");
-    expect(warnCalls[0][1]).toBe(fetchError);
+    expect(warnCalls[0][0]).toBe("loadSessionTodos: request failed");
+    expect(warnCalls[0][1]).toEqual({
+      message: "network down",
+    });
+    expect(session.todoCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+      },
+    ]);
+    expect(createClientCalls).toEqual([
+      {
+        baseUrl: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+    ]);
+  });
+
+  test("loadSessionTodos omits directory when workingDirectory is blank", async () => {
+    const mock = makeMockClient({
+      todoResult: {
+        mode: "success",
+        data: [],
+      },
+    });
+    const createClientCalls: unknown[] = [];
+    const adapter = new OpencodeSdkAdapter({
+      createClient: (input) => {
+        createClientCalls.push(input);
+        return mock.client;
+      },
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const todos = await adapter.loadSessionTodos({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "   ",
+      externalSessionId: "session-opencode-1",
+    });
+
+    expect(todos).toEqual([]);
+    expect(mock.session.todoCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+      },
+    ]);
+    expect(createClientCalls).toEqual([
+      {
+        baseUrl: "http://127.0.0.1:12345",
+        workingDirectory: "   ",
+      },
+    ]);
+  });
+
+  test("loadSessionTodos trims workingDirectory before forwarding directory", async () => {
+    const mock = makeMockClient({
+      todoResult: {
+        mode: "success",
+        data: [],
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const todos = await adapter.loadSessionTodos({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "  /repo  ",
+      externalSessionId: "session-opencode-1",
+    });
+
+    expect(todos).toEqual([]);
+    expect(mock.session.todoCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+      },
+    ]);
   });
 
   test("listAvailableModels returns provider models and primary agents", async () => {

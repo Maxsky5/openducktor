@@ -144,7 +144,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
-    return loadSessionTodos(input);
+    return loadSessionTodos(this.createClient, input);
   }
 
   async listAvailableModels(input: {
