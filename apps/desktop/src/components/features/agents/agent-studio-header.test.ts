@@ -24,6 +24,7 @@ const buildModel = () => ({
       icon: roleIcon(0),
       state: "in_progress" as const,
       sessionId: "spec-session",
+      hasRunningSession: true,
     },
     {
       role: "planner" as const,
@@ -31,6 +32,7 @@ const buildModel = () => ({
       icon: roleIcon(1),
       state: "done" as const,
       sessionId: "planner-session",
+      hasRunningSession: false,
     },
     {
       role: "build" as const,
@@ -38,6 +40,7 @@ const buildModel = () => ({
       icon: roleIcon(2),
       state: "available" as const,
       sessionId: null,
+      hasRunningSession: false,
     },
     {
       role: "qa" as const,
@@ -45,6 +48,7 @@ const buildModel = () => ({
       icon: roleIcon(3),
       state: "optional" as const,
       sessionId: null,
+      hasRunningSession: false,
     },
   ],
   onWorkflowStepSelect: () => {},
@@ -160,6 +164,7 @@ describe("AgentStudioHeader", () => {
               icon: roleIcon(0),
               state: "in_progress" as const,
               sessionId: "spec-session",
+              hasRunningSession: true,
             },
             {
               role: "planner" as const,
@@ -167,6 +172,7 @@ describe("AgentStudioHeader", () => {
               icon: roleIcon(1),
               state: "blocked" as const,
               sessionId: null,
+              hasRunningSession: false,
             },
           ],
         },
@@ -190,6 +196,7 @@ describe("AgentStudioHeader", () => {
               icon: roleIcon(1),
               state: "done" as const,
               sessionId: "planner-session",
+              hasRunningSession: false,
             },
           ],
         },

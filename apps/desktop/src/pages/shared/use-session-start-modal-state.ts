@@ -5,12 +5,12 @@ import type {
   AgentScenario,
 } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import {
-  resolveAgentAccentColor,
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
-} from "@/components/features/agents";
+} from "@/components/features/agents/catalog-select-options";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { loadRepoOpencodeCatalog } from "@/state/operations";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -120,7 +120,8 @@ export function useSessionStartModalState({
     let cancelled = false;
     setCatalog(null);
     setIsCatalogLoading(true);
-    void loadCatalog(activeRepo)
+    void Promise.resolve()
+      .then(() => loadCatalog(activeRepo))
       .then((nextCatalog) => {
         if (!cancelled) {
           setCatalog(nextCatalog);
