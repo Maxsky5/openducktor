@@ -189,14 +189,18 @@ export const ODT_REGISTERED_TOOL_NAMES = Object.keys(
 ) as RegisteredToolName[];
 
 const registerTools = (server: McpServer, store: OdtTaskStore): void => {
-  for (const toolName of ODT_REGISTERED_TOOL_NAMES) {
+  const registerOneTool = <Name extends RegisteredToolName>(toolName: Name): void => {
     const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
-    const tool: RegisteredTool<typeof toolName> = {
+    const tool: RegisteredTool<Name> = {
       name: toolName,
       description: spec.description,
-      execute: spec.execute as RegisteredTool<typeof toolName>["execute"],
+      execute: spec.execute,
     };
     registerOdtTool(server, store, tool);
+  };
+
+  for (const toolName of ODT_REGISTERED_TOOL_NAMES) {
+    registerOneTool(toolName);
   }
 };
 
