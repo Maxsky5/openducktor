@@ -1,7 +1,7 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
-import { firstScenario, isRole, isScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
+import { isRole } from "./agents-page-constants";
 import { toContextStorageKey } from "./agents-page-utils";
 
 type QueryUpdate = Record<string, string | undefined>;
@@ -9,7 +9,6 @@ type QueryUpdate = Record<string, string | undefined>;
 type PersistedAgentStudioContext = {
   taskId?: string;
   role?: AgentRole;
-  scenario?: AgentScenario;
   sessionId?: string;
 };
 
@@ -28,25 +27,17 @@ type AgentStudioNavigationState = {
   taskId: string;
   sessionId: string | null;
   role: AgentRole | null;
-  scenario: AgentScenario | null;
-  autostart: boolean;
-  startPreference: "fresh" | "continue" | null;
 };
 
 const parseNavigationStateFromSearchParams = (
   searchParams: URLSearchParams,
 ): AgentStudioNavigationState => {
   const roleValue = readOptionalString(searchParams.get("agent")) ?? null;
-  const scenarioValue = readOptionalString(searchParams.get("scenario")) ?? null;
-  const startValue = readOptionalString(searchParams.get("start")) ?? null;
 
   return {
     taskId: readOptionalString(searchParams.get("task")) ?? "",
     sessionId: readOptionalString(searchParams.get("session")) ?? null,
     role: isRole(roleValue) ? roleValue : null,
-    scenario: isScenario(scenarioValue) ? scenarioValue : null,
-    autostart: searchParams.get("autostart") === "1",
-    startPreference: startValue === "fresh" || startValue === "continue" ? startValue : null,
   };
 };
 
@@ -55,7 +46,7 @@ const buildSearchParamsFromNavigationState = (
   navigation: AgentStudioNavigationState,
 ): URLSearchParams => {
   const next = new URLSearchParams(searchParams);
-  const managedKeys = ["task", "session", "agent", "scenario", "autostart", "start"];
+  const managedKeys = ["task", "session", "agent", "autostart", "start"];
   for (const key of managedKeys) {
     next.delete(key);
   }
@@ -68,15 +59,6 @@ const buildSearchParamsFromNavigationState = (
   }
   if (navigation.role) {
     next.set("agent", navigation.role);
-  }
-  if (navigation.scenario) {
-    next.set("scenario", navigation.scenario);
-  }
-  if (navigation.autostart) {
-    next.set("autostart", "1");
-  }
-  if (navigation.startPreference) {
-    next.set("start", navigation.startPreference);
   }
 
   return next;
@@ -111,33 +93,6 @@ const toNavigationStateFromQueryUpdates = (
       if (role !== next.role) {
         next = { ...next, role };
       }
-      continue;
-    }
-
-    if (key === "scenario") {
-      const scenarioValue = readOptionalString(value) ?? null;
-      const scenario = isScenario(scenarioValue) ? scenarioValue : null;
-      if (scenario !== next.scenario) {
-        next = { ...next, scenario };
-      }
-      continue;
-    }
-
-    if (key === "autostart") {
-      const autostart = value === "1";
-      if (autostart !== next.autostart) {
-        next = { ...next, autostart };
-      }
-      continue;
-    }
-
-    if (key === "start") {
-      const startValue = readOptionalString(value) ?? null;
-      const startPreference =
-        startValue === "fresh" || startValue === "continue" ? startValue : null;
-      if (startPreference !== next.startPreference) {
-        next = { ...next, startPreference };
-      }
     }
   }
 
@@ -149,12 +104,7 @@ const isSameNavigationState = (
   right: AgentStudioNavigationState,
 ): boolean => {
   return (
-    left.taskId === right.taskId &&
-    left.sessionId === right.sessionId &&
-    left.role === right.role &&
-    left.scenario === right.scenario &&
-    left.autostart === right.autostart &&
-    left.startPreference === right.startPreference
+    left.taskId === right.taskId && left.sessionId === right.sessionId && left.role === right.role
   );
 };
 
@@ -173,14 +123,11 @@ const parsePersistedContext = (raw: string): PersistedAgentStudioContext | null 
   const taskId = readOptionalString(parsed.taskId);
   const roleValue = readOptionalString(parsed.role) ?? null;
   const role = isRole(roleValue) ? roleValue : undefined;
-  const scenarioValue = readOptionalString(parsed.scenario) ?? null;
-  const scenario = isScenario(scenarioValue) ? scenarioValue : undefined;
   const sessionId = readOptionalString(parsed.sessionId);
 
   return {
     ...(taskId ? { taskId } : {}),
     ...(role ? { role } : {}),
-    ...(scenario ? { scenario } : {}),
     ...(sessionId ? { sessionId } : {}),
   };
 };
@@ -200,9 +147,6 @@ export function useAgentStudioQuerySync({
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  scenarioFromQuery: AgentScenario | undefined;
-  autostart: boolean;
-  sessionStartPreference: "fresh" | "continue" | null;
   updateQuery: (updates: QueryUpdate) => void;
 } {
   const restoredContextRepoRef = useRef<string | null>(null);
@@ -285,25 +229,12 @@ export function useAgentStudioQuerySync({
       }
 
       const role = current.role ?? persisted.role ?? null;
-      const scenario = (() => {
-        if (current.scenario) {
-          return current.scenario;
-        }
-        if (!persisted.scenario) {
-          return null;
-        }
-        if (!role) {
-          return persisted.scenario;
-        }
-        return SCENARIOS_BY_ROLE[role].includes(persisted.scenario) ? persisted.scenario : null;
-      })();
 
       return {
         ...current,
         taskId: current.taskId || persisted.taskId || "",
         sessionId: current.sessionId ?? persisted.sessionId ?? null,
         role,
-        scenario,
       };
     });
   }, [activeRepo]);
@@ -313,11 +244,9 @@ export function useAgentStudioQuerySync({
       return;
     }
     const roleForContext = navigation.role ?? "spec";
-    const scenarioForContext = navigation.scenario ?? firstScenario(roleForContext);
     const payload = {
       taskId: navigation.taskId || undefined,
       role: roleForContext,
-      scenario: scenarioForContext,
       sessionId: navigation.sessionId || undefined,
     };
     const serializedPayload = JSON.stringify(payload);
@@ -355,7 +284,6 @@ export function useAgentStudioQuerySync({
     activeRepo,
     flushPendingContextPersist,
     navigation.role,
-    navigation.scenario,
     navigation.sessionId,
     navigation.taskId,
   ]);
@@ -400,9 +328,6 @@ export function useAgentStudioQuerySync({
     sessionParam: navigation.sessionId,
     hasExplicitRoleParam,
     roleFromQuery,
-    scenarioFromQuery: navigation.scenario ?? undefined,
-    autostart: navigation.autostart,
-    sessionStartPreference: navigation.startPreference,
     updateQuery,
   };
 }

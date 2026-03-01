@@ -140,7 +140,6 @@ describe("agents-page-selection", () => {
       sessionParam: "session-from-other-task",
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
-      sessionStartPreference: null,
     });
 
     expect(resolved).toBeNull();
@@ -163,7 +162,6 @@ describe("agents-page-selection", () => {
       sessionParam: null,
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
-      sessionStartPreference: null,
     });
 
     expect(resolved?.sessionId).toBe("planner-1");

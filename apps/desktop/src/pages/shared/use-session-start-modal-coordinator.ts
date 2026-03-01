@@ -1,4 +1,4 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback } from "react";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -52,6 +52,7 @@ export type SessionStartModalOpenRequest = Omit<
 type UseSessionStartModalCoordinatorArgs = {
   activeRepo: string | null;
   repoSettings: RepoSettingsInput | null;
+  initialCatalog?: AgentModelCatalog | null;
 };
 
 type UseSessionStartModalCoordinatorResult = Omit<
@@ -64,10 +65,12 @@ type UseSessionStartModalCoordinatorResult = Omit<
 export function useSessionStartModalCoordinator({
   activeRepo,
   repoSettings,
+  initialCatalog,
 }: UseSessionStartModalCoordinatorArgs): UseSessionStartModalCoordinatorResult {
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
     activeRepo,
     repoSettings,
+    ...(initialCatalog !== undefined ? { initialCatalog } : {}),
   });
 
   const openStartModal = useCallback(

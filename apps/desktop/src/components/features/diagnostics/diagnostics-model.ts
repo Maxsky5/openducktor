@@ -43,8 +43,8 @@ export const buildDiagnosticsSummary = ({
   if (hasCriticalIssues) {
     return {
       label: "Critical issue",
-      toneClass: "text-rose-700",
-      iconClass: "text-rose-600",
+      toneClass: "text-destructive-muted",
+      iconClass: "text-destructive-accent",
     };
   }
 

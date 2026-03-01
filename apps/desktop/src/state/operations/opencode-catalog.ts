@@ -253,12 +253,28 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
     };
   };
 
-  const loadRepoOpencodeCatalog = async (repoPath: string): Promise<AgentModelCatalog> => {
+  const catalogCache = new Map<string, AgentModelCatalog>();
+
+  const fetchCatalog = async (repoPath: string): Promise<AgentModelCatalog> => {
     const runtime = await deps.ensureRuntime(repoPath);
     return deps.listAvailableModels({
       baseUrl: toBaseUrl(runtime.port),
       workingDirectory: runtime.workingDirectory,
     });
+  };
+
+  const loadRepoOpencodeCatalog = async (repoPath: string): Promise<AgentModelCatalog> => {
+    const cached = catalogCache.get(repoPath);
+    if (cached) {
+      void fetchCatalog(repoPath)
+        .then((fresh) => catalogCache.set(repoPath, fresh))
+        .catch(() => {});
+      return cached;
+    }
+
+    const catalog = await fetchCatalog(repoPath);
+    catalogCache.set(repoPath, catalog);
+    return catalog;
   };
 
   const checkRepoOpencodeHealth = async (repoPath: string): Promise<RepoOpencodeHealthCheck> => {

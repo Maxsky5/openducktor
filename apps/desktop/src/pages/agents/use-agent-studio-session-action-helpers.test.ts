@@ -3,16 +3,14 @@ import { createAgentSessionFixture } from "./agent-studio-test-utils";
 import {
   applyAgentStudioSelectionQuery,
   buildAgentStudioSelectionQueryUpdate,
-  buildAutoStartKey,
   buildCreateSessionStartKey,
-  buildFreshStartQueryUpdate,
   buildPreviousSelectionQueryUpdate,
   resolveReusableSessionForStart,
   shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
 
 describe("use-agent-studio-session-action-helpers", () => {
-  test("resolveReusableSessionForStart prefers active session when fresh is not requested", () => {
+  test("resolveReusableSessionForStart returns active session when present", () => {
     const activeSession = createAgentSessionFixture({
       sessionId: "session-active",
       role: "spec",
@@ -21,66 +19,37 @@ describe("use-agent-studio-session-action-helpers", () => {
 
     const decision = resolveReusableSessionForStart({
       activeSession,
-      sessionStartPreference: null,
       sessionsForTask: [],
       role: "spec",
     });
 
     expect(decision).toEqual({
       session: activeSession,
-      clearStart: true,
     });
   });
 
-  test("resolveReusableSessionForStart uses latest role session for continue preference", () => {
-    const plannerSession = createAgentSessionFixture({
-      sessionId: "session-plan",
-      role: "planner",
-      scenario: "planner_initial",
-    });
-
+  test("resolveReusableSessionForStart returns null when no active session", () => {
     const decision = resolveReusableSessionForStart({
       activeSession: null,
-      sessionStartPreference: "continue",
-      sessionsForTask: [plannerSession],
+      sessionsForTask: [],
       role: "planner",
     });
 
-    expect(decision).toEqual({
-      session: plannerSession,
-      clearStart: false,
-    });
+    expect(decision).toBeNull();
   });
 
-  test("buildAgentStudioSelectionQueryUpdate clears autostart and optionally clears start", () => {
+  test("buildAgentStudioSelectionQueryUpdate clears autostart and start", () => {
     expect(
       buildAgentStudioSelectionQueryUpdate({
         taskId: "task-1",
         sessionId: "session-1",
         role: "spec",
-        scenario: "spec_initial",
       }),
     ).toEqual({
       task: "task-1",
       session: "session-1",
       agent: "spec",
-      scenario: "spec_initial",
-      autostart: undefined,
-    });
-
-    expect(
-      buildAgentStudioSelectionQueryUpdate({
-        taskId: "task-1",
-        sessionId: "session-2",
-        role: "planner",
-        scenario: "planner_initial",
-        clearStart: true,
-      }),
-    ).toEqual({
-      task: "task-1",
-      session: "session-2",
-      agent: "planner",
-      scenario: "planner_initial",
+      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
@@ -97,7 +66,6 @@ describe("use-agent-studio-session-action-helpers", () => {
         taskId: "task-1",
         sessionId: "session-1",
         role: "build",
-        scenario: "build_implementation_start",
       },
     );
 
@@ -106,13 +74,14 @@ describe("use-agent-studio-session-action-helpers", () => {
         task: "task-1",
         session: "session-1",
         agent: "build",
-        scenario: "build_implementation_start",
+        scenario: undefined,
         autostart: undefined,
+        start: undefined,
       },
     ]);
   });
 
-  test("buildFreshStartQueryUpdate and buildPreviousSelectionQueryUpdate keep query contracts", () => {
+  test("buildPreviousSelectionQueryUpdate keeps query contracts", () => {
     const activeSession = createAgentSessionFixture({
       taskId: "task-existing",
       sessionId: "session-existing",
@@ -121,38 +90,22 @@ describe("use-agent-studio-session-action-helpers", () => {
     });
 
     expect(
-      buildFreshStartQueryUpdate({
-        taskId: "task-1",
-        role: "planner",
-        scenario: "planner_initial",
-      }),
-    ).toEqual({
-      task: "task-1",
-      session: undefined,
-      agent: "planner",
-      scenario: "planner_initial",
-      autostart: undefined,
-      start: "fresh",
-    });
-
-    expect(
       buildPreviousSelectionQueryUpdate({
         activeSession,
         taskId: "task-fallback",
         role: "spec",
-        scenario: "spec_initial",
       }),
     ).toEqual({
       task: "task-existing",
       session: "session-existing",
       agent: "spec",
-      scenario: "spec_initial",
+      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
   });
 
-  test("buildCreateSessionStartKey, buildAutoStartKey and shouldTriggerContextSwitchIntent", () => {
+  test("buildCreateSessionStartKey and shouldTriggerContextSwitchIntent", () => {
     expect(
       buildCreateSessionStartKey({
         taskId: "task-1",
@@ -160,24 +113,6 @@ describe("use-agent-studio-session-action-helpers", () => {
         scenario: "qa_review",
       }),
     ).toBe("task-1:qa:qa_review");
-
-    expect(
-      buildAutoStartKey({
-        activeRepo: "/repo",
-        taskId: "task-1",
-        role: "spec",
-        scenario: "spec_initial",
-      }),
-    ).toBe("/repo:task-1:spec:spec_initial");
-
-    expect(
-      buildAutoStartKey({
-        activeRepo: null,
-        taskId: "task-1",
-        role: "spec",
-        scenario: "spec_initial",
-      }),
-    ).toBeNull();
 
     expect(
       shouldTriggerContextSwitchIntent({

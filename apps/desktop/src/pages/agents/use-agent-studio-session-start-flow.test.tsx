@@ -23,8 +23,6 @@ const createBaseArgs = (): HookArgs => ({
   taskId: "task-1",
   role: "spec",
   scenario: "spec_initial",
-  autostart: false,
-  sessionStartPreference: null,
   activeSession: null,
   sessionsForTask: [],
   selectedTask: createTask(),
@@ -71,54 +69,10 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-active",
       agent: "spec",
-      scenario: "spec_initial",
+      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
-
-    await harness.unmount();
-  });
-
-  test("autostart runs once per repo and re-arms after repo switch", async () => {
-    let startCounter = 0;
-    const startAgentSession = mock(async () => {
-      startCounter += 1;
-      return `session-${startCounter}`;
-    });
-    const sendAgentMessage = mock(async () => {});
-
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      autostart: true,
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    await harness.mount();
-    await harness.waitFor(() => startAgentSession.mock.calls.length > 0);
-
-    expect(startAgentSession).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-
-    await harness.update({
-      ...createBaseArgs(),
-      autostart: true,
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    expect(startAgentSession).toHaveBeenCalledTimes(1);
-
-    await harness.update({
-      ...createBaseArgs(),
-      activeRepo: "/repo-2",
-      autostart: true,
-      startAgentSession,
-      sendAgentMessage,
-    });
-
-    await harness.waitFor(() => startAgentSession.mock.calls.length > 1);
-    expect(startAgentSession).toHaveBeenCalledTimes(2);
 
     await harness.unmount();
   });
@@ -163,15 +117,15 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
-      scenario: "planner_initial",
+      scenario: undefined,
       autostart: undefined,
-      start: "fresh",
+      start: undefined,
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
       session: "session-spec",
       agent: "spec",
-      scenario: "spec_initial",
+      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });

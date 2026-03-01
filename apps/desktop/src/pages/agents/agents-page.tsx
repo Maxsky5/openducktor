@@ -158,20 +158,12 @@ export function AgentsPage(): ReactElement {
   const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
     useAgentStudioSessionStartRequest();
 
-  const {
-    taskIdParam,
-    sessionParam,
-    hasExplicitRoleParam,
-    roleFromQuery,
-    scenarioFromQuery,
-    autostart,
-    sessionStartPreference,
-    updateQuery,
-  } = useAgentStudioQuerySync({
-    activeRepo,
-    searchParams,
-    setSearchParams,
-  });
+  const { taskIdParam, sessionParam, hasExplicitRoleParam, roleFromQuery, updateQuery } =
+    useAgentStudioQuerySync({
+      activeRepo,
+      searchParams,
+      setSearchParams,
+    });
 
   const scheduleQueryUpdate = useCallback(
     (updates: Record<string, string | undefined>): void => {
@@ -199,8 +191,6 @@ export function AgentsPage(): ReactElement {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    scenarioFromQuery,
-    sessionStartPreference,
     updateQuery,
     loadAgentSessions,
     clearComposerInput,
@@ -215,10 +205,7 @@ export function AgentsPage(): ReactElement {
     selectedSessionById: selection.selectedSessionById,
     taskId: selection.taskId,
     activeSession: selection.activeSession,
-    autostart,
     roleFromQuery,
-    scenarioFromQuery,
-    sessionStartPreference,
     isActiveTaskHydrated: selection.isActiveTaskHydrated,
     scheduleQueryUpdate,
   });

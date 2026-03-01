@@ -36,10 +36,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   selectedSessionById: null,
   taskId: "task-1",
   activeSession: null,
-  autostart: false,
   roleFromQuery: "spec",
-  scenarioFromQuery: "spec_initial",
-  sessionStartPreference: null,
   isActiveTaskHydrated: true,
   scheduleQueryUpdate: () => {},
   ...overrides,
@@ -139,10 +136,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         sessionParam: null,
         taskId: "task-1",
         activeSession,
-        autostart: true,
         roleFromQuery: "spec",
-        scenarioFromQuery: "spec_initial",
-        sessionStartPreference: "continue",
         scheduleQueryUpdate,
       }),
     );
@@ -155,9 +149,6 @@ describe("useAgentStudioQuerySessionSync", () => {
         {
           session: "session-1",
           agent: "planner",
-          scenario: "planner_initial",
-          autostart: undefined,
-          start: undefined,
         },
       ]);
     } finally {

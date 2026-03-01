@@ -182,7 +182,7 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("border-rose-200");
+    expect(html).toContain("border-destructive-border");
     expect(html).not.toContain("border-emerald-200");
   });
 
@@ -212,7 +212,7 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("border-orange-200");
-    expect(html).not.toContain("border-rose-200");
+    expect(html).not.toContain("border-destructive-border");
   });
 
   test("renders system prompt as expandable card", () => {

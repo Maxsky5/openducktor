@@ -166,7 +166,7 @@ export function TaskCreateModal({
 
               <div className="flex items-center gap-2">
                 {controller.footerError ? (
-                  <p className="text-sm text-rose-600">{controller.footerError}</p>
+                  <p className="text-sm text-destructive-muted">{controller.footerError}</p>
                 ) : null}
                 <Button
                   type="button"

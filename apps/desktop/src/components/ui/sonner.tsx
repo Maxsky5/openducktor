@@ -23,7 +23,7 @@ export function Toaster(props: ToasterProps) {
           cancelButton:
             "bg-muted text-foreground hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring/40",
           success: "border-l-4 border-l-emerald-500 [&_[data-icon]]:text-emerald-600",
-          error: "border-l-4 border-l-rose-500 [&_[data-icon]]:text-rose-600",
+          error: "border-l-4 border-l-destructive-accent [&_[data-icon]]:text-destructive-accent",
           warning: "border-l-4 border-l-amber-500 [&_[data-icon]]:text-amber-600",
           info: "border-l-4 border-l-sky-500 [&_[data-icon]]:text-sky-600",
         },

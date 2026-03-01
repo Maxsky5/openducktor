@@ -36,6 +36,11 @@
   /* destructive = rose-600 */
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
+  --destructive-surface: oklch(0.969 0.015 12.422); /* ~rose-50 */
+  --destructive-surface-foreground: oklch(0.258 0.092 16.935); /* ~rose-900 */
+  --destructive-border: oklch(0.835 0.065 13.793); /* ~rose-200 */
+  --destructive-muted: oklch(0.505 0.175 15.216); /* ~rose-700 */
+  --destructive-accent: oklch(0.586 0.237 15.439); /* ~rose-500 */
 
   /* chrome */
   --border: oklch(0.929 0.013 255.508); /* ~slate-200 */
@@ -83,6 +88,11 @@
 
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.968 0.007 247.896);
+  --destructive-surface: oklch(0.203 0.054 13.58 / 0.5); /* ~rose-950/50 */
+  --destructive-surface-foreground: oklch(0.835 0.065 13.793); /* ~rose-200 */
+  --destructive-border: oklch(0.396 0.141 13.233); /* ~rose-800 */
+  --destructive-muted: oklch(0.636 0.166 16.439); /* ~rose-400 */
+  --destructive-accent: oklch(0.586 0.237 15.439); /* ~rose-500 */
 
   --border: oklch(0.332 0.038 260.912); /* ~slate-700 */
   --input: oklch(0.332 0.038 260.912);
@@ -120,6 +130,11 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-surface-foreground: var(--destructive-surface-foreground);
+  --color-destructive-border: var(--destructive-border);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-destructive-accent: var(--destructive-accent);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

@@ -3,7 +3,7 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { useCallback, useEffect, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
-import { firstScenario, SCENARIO_LABELS } from "./agents-page-constants";
+import { SCENARIO_LABELS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
   applyAgentStudioSelectionQuery,
@@ -25,8 +25,6 @@ type UseAgentStudioSessionActionsArgs = {
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
-  autostart: boolean;
-  sessionStartPreference: "fresh" | "continue" | null;
   activeSession: AgentSessionState | null;
   sessionsForTask: AgentSessionState[];
   selectedTask: TaskCard | null;
@@ -49,8 +47,6 @@ export function useAgentStudioSessionActions({
   taskId,
   role,
   scenario,
-  autostart,
-  sessionStartPreference,
   activeSession,
   sessionsForTask,
   selectedTask,
@@ -92,33 +88,26 @@ export function useAgentStudioSessionActions({
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
 
-  const {
-    isStarting,
-    isAutoStartPending,
-    startSession,
-    startScenarioKickoff,
-    handleCreateSession,
-  } = useAgentStudioSessionStartFlow({
-    activeRepo,
-    taskId,
-    role,
-    scenario,
-    autostart,
-    sessionStartPreference,
-    activeSession,
-    sessionsForTask,
-    selectedTask,
-    agentStudioReady,
-    isActiveTaskHydrated,
-    isSessionWorking,
-    selectionForNewSession,
-    startAgentSession,
-    sendAgentMessage,
-    updateAgentSessionModel,
-    updateQuery,
-    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-    ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
-  });
+  const { isStarting, startSession, startScenarioKickoff, handleCreateSession } =
+    useAgentStudioSessionStartFlow({
+      activeRepo,
+      taskId,
+      role,
+      scenario,
+      activeSession,
+      sessionsForTask,
+      selectedTask,
+      agentStudioReady,
+      isActiveTaskHydrated,
+      isSessionWorking,
+      selectionForNewSession,
+      startAgentSession,
+      sendAgentMessage,
+      updateAgentSessionModel,
+      updateQuery,
+      ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
+      ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
+    });
 
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting || !agentStudioReady) {
@@ -136,7 +125,7 @@ export function useAgentStudioSessionActions({
       return;
     }
 
-    let targetSessionId = sessionStartPreference === "fresh" ? undefined : activeSession?.sessionId;
+    let targetSessionId = activeSession?.sessionId;
     if (!targetSessionId) {
       targetSessionId = await startSession("composer_send");
     }
@@ -161,7 +150,6 @@ export function useAgentStudioSessionActions({
     role,
     selectedTask,
     sendAgentMessage,
-    sessionStartPreference,
     setInput,
     startSession,
     taskId,
@@ -258,7 +246,6 @@ export function useAgentStudioSessionActions({
           taskId,
           sessionId: undefined,
           role: nextRole,
-          scenario: firstScenario(nextRole),
         });
         return;
       }
@@ -283,7 +270,6 @@ export function useAgentStudioSessionActions({
         taskId: session.taskId,
         sessionId: session.sessionId,
         role: session.role,
-        scenario: session.scenario,
       });
     },
     [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
@@ -315,7 +301,6 @@ export function useAgentStudioSessionActions({
         taskId: selectedSession.taskId,
         sessionId: selectedSession.sessionId,
         role: selectedSession.role,
-        scenario: selectedSession.scenario,
       });
     },
     [activeSession, onContextSwitchIntent, role, sessionsForTask, taskId, updateQuery],
@@ -337,7 +322,7 @@ export function useAgentStudioSessionActions({
   const canStopSession = Boolean(activeSession && isSessionWorking);
 
   return {
-    isStarting: isStarting || isAutoStartPending,
+    isStarting,
     isSending,
     isSubmittingQuestionByRequestId,
     isSessionWorking,

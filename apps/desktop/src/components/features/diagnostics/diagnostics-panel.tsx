@@ -77,7 +77,10 @@ export function DiagnosticsPanel(): ReactElement {
           </Button>
         </div>
         {model.criticalReasons.length > 0 ? (
-          <p className="truncate px-0.5 text-[11px] text-rose-700" title={model.criticalReasons[0]}>
+          <p
+            className="truncate px-0.5 text-[11px] text-destructive-muted"
+            title={model.criticalReasons[0]}
+          >
             {model.criticalReasons[0]}
           </p>
         ) : null}

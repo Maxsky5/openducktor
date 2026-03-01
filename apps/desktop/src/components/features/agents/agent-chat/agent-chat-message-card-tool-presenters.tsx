@@ -115,7 +115,7 @@ export const WorkflowToolMessage = ({
           className={cn(
             "text-xs font-semibold",
             isFailure
-              ? "text-rose-900 dark:text-rose-200"
+              ? "text-destructive-surface-foreground"
               : isCancelled
                 ? "text-orange-900 dark:text-orange-200"
                 : isSuccessfulCompletion
@@ -215,7 +215,7 @@ export const RegularToolMessage = ({
         "flex min-h-6 items-center gap-2 text-xs",
         hasExpandableDetails ? "cursor-pointer" : "",
         lifecyclePhase === "failed"
-          ? "text-rose-700 dark:text-rose-300"
+          ? "text-destructive-muted"
           : lifecyclePhase === "cancelled"
             ? "text-orange-700 dark:text-orange-300"
             : "text-foreground",
@@ -224,7 +224,7 @@ export const RegularToolMessage = ({
       <span
         className={cn(
           lifecyclePhase === "failed"
-            ? "text-rose-500"
+            ? "text-destructive-accent"
             : lifecyclePhase === "cancelled"
               ? "text-orange-500"
               : "text-muted-foreground",
@@ -271,11 +271,11 @@ export const RegularToolMessage = ({
               </details>
             ) : null}
             {hasError && meta.error ? (
-              <details className="rounded border border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/40">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-rose-700 dark:text-rose-300">
+              <details className="rounded border border-destructive-border bg-destructive-surface">
+                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-destructive-muted">
                   Error
                 </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-rose-700 dark:text-rose-300">
+                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-destructive-muted">
                   {formatRawJsonLikeText(meta.error)}
                 </pre>
               </details>
