@@ -1016,8 +1016,12 @@ describe("OpencodeSdkAdapter", () => {
         data: [],
       },
     });
+    const createClientCalls: unknown[] = [];
     const adapter = new OpencodeSdkAdapter({
-      createClient: () => mock.client,
+      createClient: (input) => {
+        createClientCalls.push(input);
+        return mock.client;
+      },
       now: () => "2026-02-17T12:00:00Z",
     });
 
@@ -1031,6 +1035,39 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.todoCalls).toEqual([
       {
         sessionID: "session-opencode-1",
+      },
+    ]);
+    expect(createClientCalls).toEqual([
+      {
+        baseUrl: "http://127.0.0.1:12345",
+        workingDirectory: "   ",
+      },
+    ]);
+  });
+
+  test("loadSessionTodos trims workingDirectory before forwarding directory", async () => {
+    const mock = makeMockClient({
+      todoResult: {
+        mode: "success",
+        data: [],
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const todos = await adapter.loadSessionTodos({
+      baseUrl: "http://127.0.0.1:12345",
+      workingDirectory: "  /repo  ",
+      externalSessionId: "session-opencode-1",
+    });
+
+    expect(todos).toEqual([]);
+    expect(mock.session.todoCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
       },
     ]);
   });

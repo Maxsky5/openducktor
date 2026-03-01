@@ -140,13 +140,14 @@ export const loadSessionTodos = async (
   },
 ): Promise<AgentSessionTodoItem[]> => {
   try {
+    const trimmedWorkingDirectory = input.workingDirectory.trim();
     const client = createClient({
       baseUrl: input.baseUrl,
       workingDirectory: input.workingDirectory,
     });
     const response = await client.session.todo({
       sessionID: input.externalSessionId,
-      ...(input.workingDirectory.trim().length > 0 ? { directory: input.workingDirectory } : {}),
+      ...(trimmedWorkingDirectory.length > 0 ? { directory: trimmedWorkingDirectory } : {}),
     });
     if (response.data === undefined || response.data === null) {
       const normalizedError = normalizeTodoRequestFailure(
