@@ -1,4 +1,4 @@
-import { lazy, memo, type ReactElement, Suspense, useDeferredValue } from "react";
+import { lazy, memo, type ReactElement, Suspense, useDeferredValue, useMemo } from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -25,28 +25,31 @@ const PremiumMarkdownRenderer = memo(function PremiumMarkdownRenderer({
 }: MarkdownPremiumRendererProps): ReactElement {
   const deferredMarkdown = useDeferredValue(markdown);
 
-  const enhancedComponents: Components = {
-    ...components,
-    code: ({ node: _node, className, children, ...props }) => {
-      const languageMatch = LANGUAGE_CLASS_PATTERN.exec(className ?? "");
-      const rawCode = String(children);
-      const code = rawCode.endsWith("\n") ? rawCode.slice(0, -1) : rawCode;
+  const enhancedComponents = useMemo<Components>(
+    () => ({
+      ...components,
+      code: ({ node: _node, className, children, ...props }) => {
+        const languageMatch = LANGUAGE_CLASS_PATTERN.exec(className ?? "");
+        const rawCode = String(children);
+        const code = rawCode.endsWith("\n") ? rawCode.slice(0, -1) : rawCode;
 
-      if (!languageMatch?.[1]) {
+        if (!languageMatch?.[1]) {
+          return (
+            <code {...props} className={className}>
+              {children}
+            </code>
+          );
+        }
+
         return (
-          <code {...props} className={className}>
-            {children}
-          </code>
+          <Suspense fallback={fallback ?? createPlainCodeFallback(code)}>
+            <MarkdownSyntaxBlock language={languageMatch[1]} code={code} />
+          </Suspense>
         );
-      }
-
-      return (
-        <Suspense fallback={fallback ?? createPlainCodeFallback(code)}>
-          <MarkdownSyntaxBlock language={languageMatch[1]} code={code} />
-        </Suspense>
-      );
-    },
-  };
+      },
+    }),
+    [components, fallback],
+  );
 
   return (
     <Markdown
