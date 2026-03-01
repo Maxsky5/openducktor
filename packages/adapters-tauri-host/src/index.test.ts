@@ -122,6 +122,8 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
+    // Keep this explicit: importing internal method-group constants from index.ts
+    // would make this facade-surface assertion tautological.
     const expectedMethods = [
       "workspaceList",
       "workspaceAdd",
