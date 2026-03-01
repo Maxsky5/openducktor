@@ -73,24 +73,34 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
   return next;
 };
 
-type RegisteredTool = {
-  name: keyof typeof ODT_TOOL_SCHEMAS;
+type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
+type ToolInputByName<Name extends RegisteredToolName> = ReturnType<
+  (typeof ODT_TOOL_SCHEMAS)[Name]["parse"]
+>;
+
+type RegisteredTool<Name extends RegisteredToolName = RegisteredToolName> = {
+  name: Name;
   description: string;
-  execute: (store: OdtTaskStore, input: unknown) => Promise<unknown>;
+  execute(store: OdtTaskStore, input: ToolInputByName<Name>): Promise<unknown>;
 };
 
-type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
-
-type RegisteredToolSpec = {
-  description: string;
-  execute: (store: OdtTaskStore, input: unknown) => Promise<unknown>;
+type RegisteredToolSpecs = {
+  [Name in RegisteredToolName]: {
+    description: string;
+    execute(store: OdtTaskStore, input: ToolInputByName<Name>): Promise<unknown>;
+  };
 };
 
 const isSchemaLike = (value: unknown): value is ZodRawShapeCompat[string] => {
   if (!value || typeof value !== "object") {
     return false;
   }
-  return typeof (value as { parse?: unknown }).parse === "function";
+  const candidate = value as { parse?: unknown; _def?: unknown; _zod?: unknown };
+  return (
+    typeof candidate.parse === "function" ||
+    candidate._def !== undefined ||
+    candidate._zod !== undefined
+  );
 };
 
 const isRegisterToolInputSchema = (value: unknown): value is ZodRawShapeCompat => {
@@ -109,10 +119,10 @@ const assertRegisterToolInputSchema: (
   }
 };
 
-export const registerOdtTool = (
+export const registerOdtTool = <Name extends RegisteredToolName>(
   server: McpServer,
   store: OdtTaskStore,
-  tool: RegisteredTool,
+  tool: RegisteredTool<Name>,
 ): void => {
   const schema = ODT_TOOL_SCHEMAS[tool.name];
   const inputSchema: unknown = schema.shape;
@@ -126,7 +136,8 @@ export const registerOdtTool = (
     },
     async (input: unknown) => {
       try {
-        const result = await tool.execute(store, input);
+        const parsedInput = schema.parse(input) as ToolInputByName<Name>;
+        const result = await tool.execute(store, parsedInput);
         return toToolResult(result);
       } catch (error) {
         return toToolError(error);
@@ -135,7 +146,7 @@ export const registerOdtTool = (
   );
 };
 
-export const ODT_REGISTERED_TOOL_SPECS: Readonly<Record<RegisteredToolName, RegisteredToolSpec>> = {
+export const ODT_REGISTERED_TOOL_SPECS: Readonly<RegisteredToolSpecs> = {
   odt_read_task: {
     description:
       "Read one OpenDucktor task with its current status and agent documents (spec/plan/latest QA).",
@@ -180,10 +191,10 @@ export const ODT_REGISTERED_TOOL_NAMES = Object.keys(
 const registerTools = (server: McpServer, store: OdtTaskStore): void => {
   for (const toolName of ODT_REGISTERED_TOOL_NAMES) {
     const spec = ODT_REGISTERED_TOOL_SPECS[toolName];
-    const tool: RegisteredTool = {
+    const tool: RegisteredTool<typeof toolName> = {
       name: toolName,
       description: spec.description,
-      execute: spec.execute,
+      execute: spec.execute as RegisteredTool<typeof toolName>["execute"],
     };
     registerOdtTool(server, store, tool);
   }

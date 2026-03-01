@@ -40,6 +40,114 @@ describe("registerOdtTool", () => {
     expect(fakeServer._registeredTools).toEqual(["odt_read_task"]);
   });
 
+  test("registers MCP input schema using tool shape entries", () => {
+    let capturedConfig = null;
+
+    const fakeServer = {
+      registerTool(_name, config, _handler) {
+        capturedConfig = config;
+      },
+    };
+
+    registerOdtTool(
+      fakeServer,
+      {},
+      {
+        name: "odt_read_task",
+        description: "Read task",
+        execute: async () => ({ ok: true }),
+      },
+    );
+
+    expect(capturedConfig).not.toBeNull();
+    expect(Object.keys(capturedConfig.inputSchema)).toEqual(
+      Object.keys(ODT_TOOL_SCHEMAS.odt_read_task.shape),
+    );
+    expect(typeof capturedConfig.inputSchema.taskId.parse).toBe("function");
+  });
+
+  test("rejects invalid input schema shape before registering tool", () => {
+    const originalSchema = ODT_TOOL_SCHEMAS.odt_read_task;
+
+    ODT_TOOL_SCHEMAS.odt_read_task = {
+      shape: { taskId: {} },
+      parse: (input) => input,
+    };
+
+    try {
+      const fakeServer = {
+        registerTool() {},
+      };
+
+      expect(() =>
+        registerOdtTool(
+          fakeServer,
+          {},
+          {
+            name: "odt_read_task",
+            description: "Read task",
+            execute: async () => ({ ok: true }),
+          },
+        ),
+      ).toThrow("Invalid MCP input schema for tool 'odt_read_task'.");
+    } finally {
+      ODT_TOOL_SCHEMAS.odt_read_task = originalSchema;
+    }
+  });
+
+  test("returns tool error envelope when execution throws", async () => {
+    let capturedHandler = null;
+
+    const fakeServer = {
+      registerTool(_name, _config, handler) {
+        capturedHandler = handler;
+      },
+    };
+
+    registerOdtTool(
+      fakeServer,
+      {},
+      {
+        name: "odt_read_task",
+        description: "Read task",
+        execute: async () => {
+          throw new Error("Task exploded");
+        },
+      },
+    );
+
+    const result = await capturedHandler({ taskId: "task-1" });
+    expect(result).toEqual({
+      content: [{ type: "text", text: "Task exploded" }],
+      isError: true,
+    });
+  });
+
+  test("returns tool error envelope when input fails schema parsing", async () => {
+    let capturedHandler = null;
+
+    const fakeServer = {
+      registerTool(_name, _config, handler) {
+        capturedHandler = handler;
+      },
+    };
+
+    registerOdtTool(
+      fakeServer,
+      {},
+      {
+        name: "odt_read_task",
+        description: "Read task",
+        execute: async () => ({ ok: true }),
+      },
+    );
+
+    const result = await capturedHandler({});
+    expect(result.isError).toBe(true);
+    expect(result.content[0].type).toBe("text");
+    expect(result.content[0].text).toContain("taskId");
+  });
+
   test("keeps registered tools in sync with MCP schema keys", () => {
     const schemaToolNames = Object.keys(ODT_TOOL_SCHEMAS);
     expect(ODT_REGISTERED_TOOL_NAMES).toEqual(schemaToolNames);
