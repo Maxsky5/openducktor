@@ -5,12 +5,12 @@ import type {
   AgentScenario,
 } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import {
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents/catalog-select-options";
-import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { loadRepoOpencodeCatalog } from "@/state/operations";
 import type { RepoSettingsInput } from "@/types/state-slices";
