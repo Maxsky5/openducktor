@@ -22,6 +22,63 @@ import type { ClientFactory, SessionRecord } from "./types";
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
+type TodoRequestFailure = {
+  message: string;
+  status?: number;
+  statusText?: string;
+  code?: string;
+};
+
+const readUnknownProp = (value: unknown, key: string): unknown => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  return (value as Record<string, unknown>)[key];
+};
+
+const readStringProp = (value: unknown, key: string): string | undefined => {
+  const candidate = readUnknownProp(value, key);
+  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
+};
+
+const readNumberProp = (value: unknown, key: string): number | undefined => {
+  const candidate = readUnknownProp(value, key);
+  return typeof candidate === "number" ? candidate : undefined;
+};
+
+const normalizeTodoRequestFailure = (
+  error: unknown,
+  response?: { status?: unknown; statusText?: unknown },
+): TodoRequestFailure => {
+  const errorMessage =
+    (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
+    readStringProp(error, "message") ??
+    readStringProp(readUnknownProp(error, "data"), "message") ??
+    "OpenCode request failed: load session todos";
+  const errorStatus = readNumberProp(error, "status");
+  const errorStatusText = readStringProp(error, "statusText");
+  const errorCodeRaw = readUnknownProp(error, "code");
+  const errorCode =
+    typeof errorCodeRaw === "string" || typeof errorCodeRaw === "number"
+      ? String(errorCodeRaw)
+      : undefined;
+
+  return {
+    message: errorMessage,
+    ...(typeof errorStatus === "number"
+      ? { status: errorStatus }
+      : typeof response?.status === "number"
+        ? { status: response.status }
+        : {}),
+    ...(errorStatusText
+      ? { statusText: errorStatusText }
+      : typeof response?.statusText === "string" && response.statusText.trim().length > 0
+        ? { statusText: response.statusText }
+        : {}),
+    ...(errorCode ? { code: errorCode } : {}),
+  };
+};
+
 export const loadSessionHistory = async (
   createClient: ClientFactory,
   now: () => string,
@@ -89,12 +146,21 @@ export const loadSessionTodos = async (
     });
     const response = await client.session.todo({
       sessionID: input.externalSessionId,
-      directory: input.workingDirectory,
+      ...(input.workingDirectory.trim().length > 0 ? { directory: input.workingDirectory } : {}),
     });
-    const payload = unwrapData(response, "load session todos");
+    if (response.data === undefined || response.data === null) {
+      const normalizedError = normalizeTodoRequestFailure(
+        response.error,
+        (response as { response?: { status?: unknown; statusText?: unknown } }).response,
+      );
+      console.warn("loadSessionTodos: request failed", normalizedError);
+      return [];
+    }
+    const payload = response.data;
     return normalizeTodoList(payload);
   } catch (error) {
-    console.warn("loadSessionTodos: request failed", error);
+    const normalizedError = normalizeTodoRequestFailure(error);
+    console.warn("loadSessionTodos: request failed", normalizedError);
     return [];
   }
 };
