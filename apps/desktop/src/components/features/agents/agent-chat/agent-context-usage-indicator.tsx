@@ -11,7 +11,7 @@ type AgentContextUsageIndicatorProps = {
 
 const usageColorClasses = (usagePercent: number): { text: string; bar: string } => {
   if (usagePercent >= 90) {
-    return { text: "text-rose-700 dark:text-rose-300", bar: "bg-rose-500" };
+    return { text: "text-destructive-muted", bar: "bg-destructive-accent" };
   }
   if (usagePercent >= 75) {
     return { text: "text-amber-700 dark:text-amber-300", bar: "bg-amber-500" };

@@ -88,16 +88,9 @@ export function useAgentStudioQuerySessionSync({
       updates.agent = activeSession.role;
     }
 
-
     if (Object.keys(updates).length === 0) {
       return;
     }
     scheduleQueryUpdate(updates);
-  }, [
-    activeSession,
-    roleFromQuery,
-    scheduleQueryUpdate,
-    sessionParam,
-    taskIdParam,
-  ]);
+  }, [activeSession, roleFromQuery, scheduleQueryUpdate, sessionParam, taskIdParam]);
 }

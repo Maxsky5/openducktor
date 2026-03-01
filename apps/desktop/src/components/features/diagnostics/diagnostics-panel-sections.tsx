@@ -25,7 +25,7 @@ const renderSection = ({
           {section.errors.map((error, index) => (
             <p
               key={`${section.title}-${error}-${index}`}
-              className="flex items-start gap-1 text-rose-700"
+              className="flex items-start gap-1 text-destructive-muted"
             >
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
               <span>{error}</span>

@@ -721,5 +721,4 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.unmount();
   });
-
 });

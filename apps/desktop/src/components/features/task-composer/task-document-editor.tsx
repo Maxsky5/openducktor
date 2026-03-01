@@ -141,8 +141,8 @@ export function TaskDocumentEditor({
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
-          <p className="text-sm text-rose-700">{error}</p>
+        <div className="rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2">
+          <p className="text-sm text-destructive-muted">{error}</p>
           <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetryLoad}>
             Retry
           </Button>

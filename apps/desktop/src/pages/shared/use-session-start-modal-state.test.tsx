@@ -86,7 +86,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo",
   repoSettings: createRepoSettings(),
-  loadCatalog: async () => CATALOG,
+  initialCatalog: CATALOG,
   ...overrides,
 });
 
@@ -108,7 +108,6 @@ describe("useSessionStartModalState", () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
-    await harness.waitFor((state) => state.isCatalogLoading === false);
 
     await harness.run(() => {
       harness.getLatest().openStartModal({
@@ -122,7 +121,6 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    await harness.waitFor((state) => state.selection?.modelId === "claude-sonnet");
     expect(harness.getLatest().selection).toEqual({
       providerId: "anthropic",
       modelId: "claude-sonnet",
@@ -148,7 +146,6 @@ describe("useSessionStartModalState", () => {
     );
 
     await harness.mount();
-    await harness.waitFor((state) => state.isCatalogLoading === false);
 
     await harness.run(() => {
       harness.getLatest().openStartModal({
@@ -162,7 +159,6 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
     expect(harness.getLatest().selection).toEqual({
       providerId: "openai",
       modelId: "gpt-5",
@@ -177,7 +173,6 @@ describe("useSessionStartModalState", () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
-    await harness.waitFor((state) => state.isCatalogLoading === false);
 
     await harness.run(() => {
       harness.getLatest().openStartModal({
@@ -191,13 +186,13 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
+    expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
 
     await harness.run(() => {
-      const state = harness.getLatest();
-      state.handleSelectModel("anthropic/claude-sonnet");
+      harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
     });
-    await harness.waitFor((state) => state.selection?.modelId === "claude-sonnet");
+
+    expect(harness.getLatest().selection?.modelId).toBe("claude-sonnet");
 
     await harness.run(() => {
       harness.getLatest().closeStartModal();
@@ -215,7 +210,6 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
     expect(harness.getLatest().selection).toEqual({
       providerId: "openai",
       modelId: "gpt-5",
@@ -230,7 +224,6 @@ describe("useSessionStartModalState", () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
-    await harness.waitFor((state) => state.isCatalogLoading === false);
 
     await harness.run(() => {
       harness.getLatest().openStartModal({
@@ -244,7 +237,6 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
     expect(harness.getLatest().selection).toEqual({
       providerId: "openai",
       modelId: "gpt-5",
@@ -259,7 +251,6 @@ describe("useSessionStartModalState", () => {
     const harness = createHookHarness(createBaseProps());
 
     await harness.mount();
-    await harness.waitFor((state) => state.isCatalogLoading === false);
 
     await harness.run(() => {
       harness.getLatest().openStartModal({
@@ -279,7 +270,6 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    await harness.waitFor((state) => state.selection?.modelId === "claude-sonnet");
     expect(harness.getLatest().selection).toEqual({
       providerId: "anthropic",
       modelId: "claude-sonnet",

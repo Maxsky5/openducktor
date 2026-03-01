@@ -22,7 +22,6 @@ type UseAgentStudioFreshSessionCreationArgs = {
   activeRepo: string | null;
   taskId: string;
   role: AgentRole;
-  scenario: AgentScenario;
   activeSession: AgentSessionState | null;
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
@@ -43,7 +42,6 @@ export function useAgentStudioFreshSessionCreation({
   activeRepo,
   taskId,
   role,
-  scenario,
   activeSession,
   selectedTask,
   agentStudioReady,

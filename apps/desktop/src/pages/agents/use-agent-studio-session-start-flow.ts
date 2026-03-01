@@ -126,21 +126,12 @@ export function useAgentStudioSessionStartFlow({
     }
 
     await sendAgentMessage(sessionId, kickoffPromptForScenario(role, scenario, taskId));
-  }, [
-    agentStudioReady,
-    role,
-    scenario,
-    selectedTask,
-    sendAgentMessage,
-    startSession,
-    taskId,
-  ]);
+  }, [agentStudioReady, role, scenario, selectedTask, sendAgentMessage, startSession, taskId]);
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({
     activeRepo,
     taskId,
     role,
-    scenario,
     activeSession,
     selectedTask,
     agentStudioReady,

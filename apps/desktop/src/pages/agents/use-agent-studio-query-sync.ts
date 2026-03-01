@@ -61,7 +61,6 @@ const buildSearchParamsFromNavigationState = (
     next.set("agent", navigation.role);
   }
 
-
   return next;
 };
 
@@ -94,12 +93,7 @@ const toNavigationStateFromQueryUpdates = (
       if (role !== next.role) {
         next = { ...next, role };
       }
-      continue;
     }
-
-
-
-
   }
 
   return next;
@@ -110,9 +104,7 @@ const isSameNavigationState = (
   right: AgentStudioNavigationState,
 ): boolean => {
   return (
-    left.taskId === right.taskId &&
-    left.sessionId === right.sessionId &&
-    left.role === right.role
+    left.taskId === right.taskId && left.sessionId === right.sessionId && left.role === right.role
   );
 };
 

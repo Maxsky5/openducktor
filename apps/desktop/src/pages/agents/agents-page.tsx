@@ -158,17 +158,12 @@ export function AgentsPage(): ReactElement {
   const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
     useAgentStudioSessionStartRequest();
 
-  const {
-    taskIdParam,
-    sessionParam,
-    hasExplicitRoleParam,
-    roleFromQuery,
-    updateQuery,
-  } = useAgentStudioQuerySync({
-    activeRepo,
-    searchParams,
-    setSearchParams,
-  });
+  const { taskIdParam, sessionParam, hasExplicitRoleParam, roleFromQuery, updateQuery } =
+    useAgentStudioQuerySync({
+      activeRepo,
+      searchParams,
+      setSearchParams,
+    });
 
   const scheduleQueryUpdate = useCallback(
     (updates: Record<string, string | undefined>): void => {

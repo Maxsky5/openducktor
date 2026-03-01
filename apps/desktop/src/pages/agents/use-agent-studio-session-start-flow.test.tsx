@@ -77,7 +77,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-
   test("handleCreateSession restores previous query when fresh start fails", async () => {
     const startAgentSession = mock(async () => {
       throw new Error("start failed");

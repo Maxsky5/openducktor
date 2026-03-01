@@ -48,9 +48,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const harness = createHookHarness({
       activeRepo: null,
-      searchParams: new URLSearchParams(
-        "task=task-1&agent=build",
-      ),
+      searchParams: new URLSearchParams("task=task-1&agent=build"),
       setSearchParams,
     });
 
@@ -58,7 +56,6 @@ describe("useAgentStudioQuerySync", () => {
     const state = harness.getLatest();
     expect(state.taskIdParam).toBe("task-1");
     expect(state.roleFromQuery).toBe("build");
-
 
     await harness.run((latest) => {
       latest.updateQuery({ session: "session-1" });
@@ -102,9 +99,7 @@ describe("useAgentStudioQuerySync", () => {
 
     await harness.update({
       activeRepo: null,
-      searchParams: new URLSearchParams(
-        "task=task-2&session=session-2&agent=planner",
-      ),
+      searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
       setSearchParams,
     });
 

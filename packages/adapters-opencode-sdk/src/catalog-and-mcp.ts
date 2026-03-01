@@ -9,25 +9,35 @@ import type { ClientFactory, McpServerStatus } from "./types";
  * (e.g., "Atlas (Plan Executor)") and a slug alias ("atlas") as separate
  * entries with the same mode and no distinguishing hidden/native flags.
  * The slug is a config-level reference, not a distinct agent — drop it
- * when a matching display-name variant exists.
+ * when a matching display-name variant exists with the same mode and no
+ * conflicting description.
  */
-const deduplicateAgentAliases = (
-  agents: AgentDescriptor[],
-): AgentDescriptor[] => {
-  const displayNameBaseIds = new Set<string>();
+const deduplicateAgentAliases = (agents: AgentDescriptor[]): AgentDescriptor[] => {
+  const displayNameEntries = new Map<string, AgentDescriptor>();
   for (const agent of agents) {
     if (agent.name.includes(" ")) {
-      displayNameBaseIds.add((agent.name.split(" ")[0] ?? agent.name).toLowerCase());
+      const baseId = (agent.name.split(" ")[0] ?? agent.name).toLowerCase();
+      displayNameEntries.set(baseId, agent);
     }
   }
-  if (displayNameBaseIds.size === 0) {
+  if (displayNameEntries.size === 0) {
     return agents;
   }
   return agents.filter((agent) => {
     if (agent.name.includes(" ")) {
       return true;
     }
-    return !displayNameBaseIds.has(agent.name.toLowerCase());
+    const displayVariant = displayNameEntries.get(agent.name.toLowerCase());
+    if (!displayVariant) {
+      return true;
+    }
+    if (agent.mode !== displayVariant.mode) {
+      return true;
+    }
+    if (agent.description && agent.description !== displayVariant.description) {
+      return true;
+    }
+    return false;
   });
 };
 

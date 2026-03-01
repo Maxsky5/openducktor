@@ -88,30 +88,26 @@ export function useAgentStudioSessionActions({
     Boolean(activeSession) &&
     (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
 
-  const {
-    isStarting,
-    startSession,
-    startScenarioKickoff,
-    handleCreateSession,
-  } = useAgentStudioSessionStartFlow({
-    activeRepo,
-    taskId,
-    role,
-    scenario,
-    activeSession,
-    sessionsForTask,
-    selectedTask,
-    agentStudioReady,
-    isActiveTaskHydrated,
-    isSessionWorking,
-    selectionForNewSession,
-    startAgentSession,
-    sendAgentMessage,
-    updateAgentSessionModel,
-    updateQuery,
-    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
-    ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
-  });
+  const { isStarting, startSession, startScenarioKickoff, handleCreateSession } =
+    useAgentStudioSessionStartFlow({
+      activeRepo,
+      taskId,
+      role,
+      scenario,
+      activeSession,
+      sessionsForTask,
+      selectedTask,
+      agentStudioReady,
+      isActiveTaskHydrated,
+      isSessionWorking,
+      selectionForNewSession,
+      startAgentSession,
+      sendAgentMessage,
+      updateAgentSessionModel,
+      updateQuery,
+      ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
+      ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
+    });
 
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting || !agentStudioReady) {

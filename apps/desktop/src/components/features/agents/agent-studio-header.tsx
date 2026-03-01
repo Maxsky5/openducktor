@@ -31,6 +31,7 @@ type AgentWorkflowStep = {
   icon: AgentRoleOption["icon"];
   state: AgentWorkflowStepState;
   sessionId: string | null;
+  hasRunningSession: boolean;
 };
 
 type AgentStudioSessionSelectorModel = {
@@ -128,7 +129,6 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   const {
     taskTitle,
     taskId,
-    sessionStatus,
     selectedRole,
     workflowSteps,
     onWorkflowStepSelect,
@@ -254,7 +254,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
           {workflowSteps.map((entry, index) => {
             const Icon = entry.icon;
             const isSelected = optimisticSelectedRole === entry.role;
-            const shouldSpinInProgress = entry.state === "in_progress";
+            const shouldSpinInProgress = entry.state === "in_progress" && entry.hasRunningSession;
             return (
               <div key={entry.role} className="flex min-w-0 items-center gap-2">
                 <Button

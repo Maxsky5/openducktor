@@ -66,13 +66,18 @@ export const buildAgentStudioHeaderModel = (args: {
   taskId: args.selectedTask?.id ?? null,
   sessionStatus: args.activeSession?.status ?? null,
   selectedRole: args.selectedRole,
-  workflowSteps: args.roleOptions.map((entry) => ({
-    role: entry.role,
-    label: entry.label,
-    icon: entry.icon,
-    state: args.workflowStateByRole[entry.role],
-    sessionId: args.latestSessionByRole[entry.role]?.sessionId ?? null,
-  })),
+  workflowSteps: args.roleOptions.map((entry) => {
+    const latestSession = args.latestSessionByRole[entry.role];
+    return {
+      role: entry.role,
+      label: entry.label,
+      icon: entry.icon,
+      state: args.workflowStateByRole[entry.role],
+      sessionId: latestSession?.sessionId ?? null,
+      hasRunningSession:
+        latestSession?.status === "running" || latestSession?.status === "starting",
+    };
+  }),
   onWorkflowStepSelect: args.onWorkflowStepSelect,
   sessionSelector: {
     value: args.sessionSelectorValue,

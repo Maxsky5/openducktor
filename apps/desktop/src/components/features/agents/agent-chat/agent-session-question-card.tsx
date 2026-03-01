@@ -138,7 +138,7 @@ export function AgentSessionQuestionCard({
         ) : null}
 
         {submitError ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300">
+          <p className="rounded-md border border-destructive-border bg-destructive-surface px-2 py-1.5 text-xs text-destructive-muted">
             {submitError}
           </p>
         ) : null}

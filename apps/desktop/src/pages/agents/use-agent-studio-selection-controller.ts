@@ -243,12 +243,7 @@ export function useAgentStudioSelectionController({
       hasExplicitRoleParam: hasViewRoleSelection,
       roleFromQuery,
     });
-  }, [
-    hasViewRoleSelection,
-    roleFromQuery,
-    viewSessionParam,
-    viewSessionsForTask,
-  ]);
+  }, [hasViewRoleSelection, roleFromQuery, viewSessionParam, viewSessionsForTask]);
 
   const viewRole: AgentRole = hasViewRoleSelection
     ? roleFromQuery

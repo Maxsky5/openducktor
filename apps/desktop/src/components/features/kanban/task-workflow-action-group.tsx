@@ -141,7 +141,9 @@ export function TaskWorkflowActionGroup({
                   size="sm"
                   className={cn(
                     "h-8 w-full justify-start",
-                    action.destructive ? "text-rose-700 hover:bg-rose-50 hover:text-rose-800" : "",
+                    action.destructive
+                      ? "text-destructive-muted hover:bg-destructive-surface hover:text-destructive-surface-foreground"
+                      : "",
                   )}
                   disabled={action.disabled}
                   onClick={() => {
