@@ -13,26 +13,45 @@ const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
 const VIRTUAL_CARD_GAP_PX = 12;
 const VIRTUAL_OVERSCAN_PX = 360;
 const INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX = 900;
+const EMPTY_RANGE: VirtualWindowRange = { startIndex: 0, endIndex: -1 };
 
 type UseKanbanVirtualizationArgs = {
   tasks: KanbanColumnData["tasks"];
 };
 
-type UseKanbanVirtualizationResult = {
-  containerRef: { current: HTMLDivElement | null };
-  shouldVirtualize: boolean;
+type KanbanVirtualizedRenderModel = {
+  kind: "virtualized";
   totalHeight: number;
   topSpacerHeight: number;
   bottomSpacerHeight: number;
   visibleTasks: KanbanColumnData["tasks"];
+};
+
+type KanbanSimpleRenderModel = {
+  kind: "simple";
+  visibleTasks: KanbanColumnData["tasks"];
+};
+
+export type KanbanVirtualizationRenderModel =
+  | KanbanSimpleRenderModel
+  | KanbanVirtualizedRenderModel;
+
+type UseKanbanVirtualizationResult = {
+  containerRef: { current: HTMLDivElement | null };
+  renderModel: KanbanVirtualizationRenderModel;
   onMeasuredHeight: (taskId: string, height: number) => void;
+};
+
+type VirtualLayoutSnapshot = {
+  itemOffsets: number[];
+  itemHeights: number[];
+  totalHeight: number;
 };
 
 export function useKanbanVirtualization({
   tasks,
 }: UseKanbanVirtualizationArgs): UseKanbanVirtualizationResult {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const itemHeightsRef = useRef<Record<string, number>>({});
   const [measuredHeightsByTaskId, setMeasuredHeightsByTaskId] = useState<Record<string, number>>(
     {},
   );
@@ -53,6 +72,19 @@ export function useKanbanVirtualization({
     [itemHeights],
   );
 
+  const layoutRef = useRef<VirtualLayoutSnapshot>({
+    itemOffsets: virtualLayout.itemOffsets,
+    itemHeights,
+    totalHeight: virtualLayout.totalHeight,
+  });
+  useEffect(() => {
+    layoutRef.current = {
+      itemOffsets: virtualLayout.itemOffsets,
+      itemHeights,
+      totalHeight: virtualLayout.totalHeight,
+    };
+  }, [itemHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight]);
+
   const [visibleRange, setVisibleRange] = useState<VirtualWindowRange>(() =>
     findVirtualWindowRange({
       itemOffsets: virtualLayout.itemOffsets,
@@ -65,54 +97,51 @@ export function useKanbanVirtualization({
     }),
   );
 
-  const syncViewport = useCallback((): void => {
-    if (!shouldVirtualize || typeof window === "undefined") {
-      return;
-    }
-
-    const viewportElement = containerRef.current;
-    if (!viewportElement) {
-      return;
-    }
-
-    const rect = viewportElement.getBoundingClientRect();
-    const scrollContainer = viewportElement.closest(
-      "[data-main-scroll-container='true']",
-    ) as HTMLElement | null;
-    const containerRect = scrollContainer?.getBoundingClientRect();
-    const viewportHeight = scrollContainer?.clientHeight ?? window.innerHeight;
-    const { viewportStart, viewportEnd } = resolveVirtualViewportWindow({
-      laneTop: rect.top,
-      viewportTop: containerRect?.top ?? 0,
-      viewportHeight,
-    });
-
-    const nextRange = findVirtualWindowRange({
-      itemOffsets: virtualLayout.itemOffsets,
-      itemHeights,
-      totalHeight: virtualLayout.totalHeight,
-      viewportStart: viewportStart - VIRTUAL_OVERSCAN_PX,
-      viewportEnd: viewportEnd + VIRTUAL_OVERSCAN_PX,
-    });
-
-    setVisibleRange((current) => {
-      if (current.startIndex === nextRange.startIndex && current.endIndex === nextRange.endIndex) {
-        return current;
+  const syncViewportRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncViewportRef.current = () => {
+      if (!shouldVirtualize || typeof window === "undefined") {
+        return;
       }
-      return nextRange;
-    });
-  }, [itemHeights, shouldVirtualize, virtualLayout.itemOffsets, virtualLayout.totalHeight]);
 
-  const { topSpacerHeight, bottomSpacerHeight } = useMemo(
-    () =>
-      getVirtualWindowEdgeOffsets({
-        range: visibleRange,
-        itemOffsets: virtualLayout.itemOffsets,
-        itemHeights,
-        totalHeight: virtualLayout.totalHeight,
-      }),
-    [itemHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight, visibleRange],
-  );
+      const viewportElement = containerRef.current;
+      if (!viewportElement) {
+        return;
+      }
+
+      const { itemOffsets, itemHeights: latestItemHeights, totalHeight } = layoutRef.current;
+      const rect = viewportElement.getBoundingClientRect();
+      const scrollContainer = viewportElement.closest(
+        "[data-main-scroll-container='true']",
+      ) as HTMLElement | null;
+      const containerRect = scrollContainer?.getBoundingClientRect();
+      const viewportHeight = scrollContainer?.clientHeight ?? window.innerHeight;
+      const { viewportStart, viewportEnd } = resolveVirtualViewportWindow({
+        laneTop: rect.top,
+        viewportTop: containerRect?.top ?? 0,
+        viewportHeight,
+      });
+
+      const nextRange = findVirtualWindowRange({
+        itemOffsets,
+        itemHeights: latestItemHeights,
+        totalHeight,
+        viewportStart: viewportStart - VIRTUAL_OVERSCAN_PX,
+        viewportEnd: viewportEnd + VIRTUAL_OVERSCAN_PX,
+      });
+
+      setVisibleRange((current) => {
+        if (
+          current.startIndex === nextRange.startIndex &&
+          current.endIndex === nextRange.endIndex
+        ) {
+          return current;
+        }
+
+        return nextRange;
+      });
+    };
+  }, [shouldVirtualize]);
 
   useEffect(() => {
     if (!shouldVirtualize || typeof window === "undefined") {
@@ -128,7 +157,7 @@ export function useKanbanVirtualization({
 
       rafRef.current = window.requestAnimationFrame(() => {
         rafRef.current = null;
-        syncViewport();
+        syncViewportRef.current();
       });
     };
 
@@ -162,11 +191,19 @@ export function useKanbanVirtualization({
       }
       resizeObserver?.disconnect();
     };
-  }, [shouldVirtualize, syncViewport]);
+  }, [shouldVirtualize]);
 
   useEffect(() => {
-    itemHeightsRef.current = measuredHeightsByTaskId;
-  }, [measuredHeightsByTaskId]);
+    if (shouldVirtualize) {
+      return;
+    }
+
+    setVisibleRange((current) =>
+      current.startIndex === EMPTY_RANGE.startIndex && current.endIndex === EMPTY_RANGE.endIndex
+        ? current
+        : EMPTY_RANGE,
+    );
+  }, [shouldVirtualize]);
 
   useEffect(() => {
     const taskIds = new Set(tasks.map((task) => task.id));
@@ -182,12 +219,7 @@ export function useKanbanVirtualization({
         next[taskId] = measuredHeight;
       }
 
-      if (!changed) {
-        return current;
-      }
-
-      itemHeightsRef.current = next;
-      return next;
+      return changed ? next : current;
     });
   }, [tasks]);
 
@@ -201,9 +233,7 @@ export function useKanbanVirtualization({
         return current;
       }
 
-      const next = { ...current, [taskId]: nextHeight };
-      itemHeightsRef.current = next;
-      return next;
+      return { ...current, [taskId]: nextHeight };
     });
   }, []);
 
@@ -219,13 +249,45 @@ export function useKanbanVirtualization({
     return tasks.slice(visibleRange.startIndex, visibleRange.endIndex + 1);
   }, [shouldVirtualize, tasks, visibleRange]);
 
+  const virtualSpacerOffsets = useMemo(() => {
+    if (!shouldVirtualize) {
+      return { topSpacerHeight: 0, bottomSpacerHeight: 0 };
+    }
+
+    return getVirtualWindowEdgeOffsets({
+      range: visibleRange,
+      itemOffsets: virtualLayout.itemOffsets,
+      itemHeights,
+      totalHeight: virtualLayout.totalHeight,
+    });
+  }, [
+    shouldVirtualize,
+    itemHeights,
+    virtualLayout.itemOffsets,
+    virtualLayout.totalHeight,
+    visibleRange,
+  ]);
+
+  const renderModel = useMemo<KanbanVirtualizationRenderModel>(() => {
+    if (!shouldVirtualize) {
+      return {
+        kind: "simple",
+        visibleTasks: tasks,
+      };
+    }
+
+    return {
+      kind: "virtualized",
+      totalHeight: virtualLayout.totalHeight,
+      topSpacerHeight: virtualSpacerOffsets.topSpacerHeight,
+      bottomSpacerHeight: virtualSpacerOffsets.bottomSpacerHeight,
+      visibleTasks,
+    };
+  }, [shouldVirtualize, tasks, virtualLayout.totalHeight, virtualSpacerOffsets, visibleTasks]);
+
   return {
     containerRef,
-    shouldVirtualize,
-    totalHeight: virtualLayout.totalHeight,
-    topSpacerHeight,
-    bottomSpacerHeight,
-    visibleTasks,
+    renderModel,
     onMeasuredHeight,
   };
 }

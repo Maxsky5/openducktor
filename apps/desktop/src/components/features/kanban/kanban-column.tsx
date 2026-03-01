@@ -153,15 +153,12 @@ export function KanbanColumn({
   const theme = laneTheme(column.id);
   const {
     containerRef: cardsViewportRef,
-    shouldVirtualize,
-    totalHeight,
-    topSpacerHeight,
-    bottomSpacerHeight,
-    visibleTasks,
+    renderModel,
     onMeasuredHeight: handleMeasuredHeight,
   } = useKanbanVirtualization({
     tasks: column.tasks,
   });
+  const isVirtualized = renderModel.kind === "virtualized";
 
   return (
     <section
@@ -174,11 +171,13 @@ export function KanbanColumn({
       <div ref={cardsViewportRef} className="flex-1 p-3">
         {column.tasks.length === 0 ? <LaneEmptyState id={column.id} /> : null}
 
-        {column.tasks.length > 0 && shouldVirtualize ? (
-          <div style={{ minHeight: totalHeight }}>
-            {topSpacerHeight > 0 ? <div style={{ height: topSpacerHeight }} /> : null}
+        {column.tasks.length > 0 && isVirtualized ? (
+          <div style={{ minHeight: renderModel.totalHeight }}>
+            {renderModel.topSpacerHeight > 0 ? (
+              <div style={{ height: renderModel.topSpacerHeight }} />
+            ) : null}
             <div className="space-y-3">
-              {visibleTasks.map((task) => (
+              {renderModel.visibleTasks.map((task) => (
                 <MeasuredTaskCard
                   key={task.id}
                   task={task}
@@ -194,13 +193,15 @@ export function KanbanColumn({
                 />
               ))}
             </div>
-            {bottomSpacerHeight > 0 ? <div style={{ height: bottomSpacerHeight }} /> : null}
+            {renderModel.bottomSpacerHeight > 0 ? (
+              <div style={{ height: renderModel.bottomSpacerHeight }} />
+            ) : null}
           </div>
         ) : null}
 
-        {column.tasks.length > 0 && !shouldVirtualize ? (
+        {column.tasks.length > 0 && !isVirtualized ? (
           <div className="space-y-3">
-            {column.tasks.map((task) => (
+            {renderModel.visibleTasks.map((task) => (
               <KanbanTaskCard
                 key={task.id}
                 task={task}
