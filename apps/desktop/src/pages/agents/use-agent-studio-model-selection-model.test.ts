@@ -214,13 +214,32 @@ describe("use-agent-studio-model-selection-model", () => {
     });
   });
 
-  test("returns null when latest tokenized assistant message has no usable context window", () => {
+  test("falls back to an older assistant message when the latest tokenized one has no usable context window", () => {
     const lookup = toModelDescriptorByKey(CATALOG);
     const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 12,
         contextWindow: 10_000,
       }),
+      createAssistantMessage({
+        totalTokens: 34,
+      }),
+    ];
+
+    expect(
+      extractLatestContextUsage({
+        messages,
+        modelDescriptorByKey: lookup,
+      }),
+    ).toEqual({
+      totalTokens: 12,
+      contextWindow: 10_000,
+    });
+  });
+
+  test("returns null when no assistant message has a usable context window", () => {
+    const lookup = toModelDescriptorByKey(CATALOG);
+    const messages: AgentChatMessage[] = [
       createAssistantMessage({
         totalTokens: 34,
       }),

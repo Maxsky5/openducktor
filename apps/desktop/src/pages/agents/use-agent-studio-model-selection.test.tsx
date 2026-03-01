@@ -180,6 +180,42 @@ describe("useAgentStudioModelSelection", () => {
     await harness.unmount();
   });
 
+  test("keeps repo defaults selectable when composer catalog is unavailable", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        repoSettings: createRepoSettings({
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          opencodeAgent: "build-agent",
+        }),
+        loadCatalog: async () => {
+          throw new Error("catalog unavailable");
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        opencodeAgent: "build-agent",
+      });
+      expect(harness.getLatest().selectionForNewSession).toEqual({
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        opencodeAgent: "build-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("publishes agent colors from composer catalog before a session is started", async () => {
     const harness = createHookHarness(createBaseProps());
 
@@ -445,6 +481,79 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
+  test("does not reuse stale repo defaults while waiting for the next repo settings", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        activeRepo: "/repo-a",
+        repoSettings: createRepoSettings({
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          opencodeAgent: "build-agent",
+        }),
+        loadCatalog: async () => {
+          throw new Error("catalog unavailable");
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.isSelectionCatalogLoading === false &&
+          state.selectedModelSelection?.modelId === "gpt-5",
+      );
+
+      await harness.update(
+        createBaseProps({
+          activeRepo: "/repo-b",
+          repoSettings: createRepoSettings({
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            opencodeAgent: "build-agent",
+          }),
+          loadCatalog: async () => {
+            throw new Error("catalog unavailable");
+          },
+        }),
+      );
+
+      await harness.waitFor(
+        (state) =>
+          state.isSelectionCatalogLoading === false &&
+          state.selectedModelSelection === null &&
+          state.selectionForNewSession === null,
+      );
+
+      await harness.update(
+        createBaseProps({
+          activeRepo: "/repo-b",
+          repoSettings: createRepoSettings({
+            providerId: "anthropic",
+            modelId: "claude-opus",
+            variant: "extended",
+            opencodeAgent: "planner-agent",
+          }),
+          loadCatalog: async () => {
+            throw new Error("catalog unavailable");
+          },
+        }),
+      );
+
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-opus");
+      expect(harness.getLatest().selectionForNewSession).toEqual({
+        providerId: "anthropic",
+        modelId: "claude-opus",
+        variant: "extended",
+        opencodeAgent: "planner-agent",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("derives context usage from latest assistant message with descriptor fallback", async () => {
     const activeSession = createActiveSession({
       messages: [
@@ -521,6 +630,40 @@ describe("useAgentStudioModelSelection", () => {
       expect(harness.getLatest().activeSessionContextUsage).toEqual({
         totalTokens: 33,
         contextWindow: 100_000,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses an older assistant message for context usage when the latest tokenized one is incomplete", async () => {
+    const activeSession = createActiveSession({
+      selectedModel: {
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+      },
+      messages: [
+        createAssistantMessage({
+          totalTokens: 11,
+          contextWindow: 25_000,
+        }),
+        createAssistantMessage({
+          totalTokens: 22,
+        }),
+      ],
+    });
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 11,
+        contextWindow: 25_000,
       });
     } finally {
       await harness.unmount();

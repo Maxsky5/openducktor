@@ -65,8 +65,12 @@ export function useAgentStudioModelSelection({
   loadCatalog = loadRepoOpencodeCatalog,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
   const previousActiveRepoRef = useRef<string | null>(activeRepo);
+  const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
+  const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
   const [composerCatalog, setComposerCatalog] = useState<AgentModelCatalog | null>(null);
   const [isLoadingComposerCatalog, setIsLoadingComposerCatalog] = useState(false);
+  const [isAwaitingRepoSettingsForActiveRepo, setIsAwaitingRepoSettingsForActiveRepo] =
+    useState(false);
   const [draftSelectionByRole, setDraftSelectionByRole] =
     useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
   const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
@@ -81,6 +85,25 @@ export function useAgentStudioModelSelection({
     setDraftSelectionByRole(emptyDraftSelections());
     setDraftSelectionTouchedByRole(emptyDraftSelectionTouchedByRole());
   }, [activeRepo]);
+
+  useEffect(() => {
+    if (previousRepoForDefaultsRef.current !== activeRepo) {
+      previousRepoForDefaultsRef.current = activeRepo;
+      previousRepoSettingsRef.current = repoSettings;
+      setIsAwaitingRepoSettingsForActiveRepo(Boolean(activeRepo));
+      return;
+    }
+
+    if (!isAwaitingRepoSettingsForActiveRepo) {
+      previousRepoSettingsRef.current = repoSettings;
+      return;
+    }
+
+    if (previousRepoSettingsRef.current !== repoSettings) {
+      previousRepoSettingsRef.current = repoSettings;
+      setIsAwaitingRepoSettingsForActiveRepo(false);
+    }
+  }, [activeRepo, isAwaitingRepoSettingsForActiveRepo, repoSettings]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -181,10 +204,10 @@ export function useAgentStudioModelSelection({
       return roleDefaultSelection;
     }
     if (!composerCatalog) {
-      return null;
+      return isAwaitingRepoSettingsForActiveRepo ? null : roleDefaultSelection;
     }
     return normalizeSelectionForCatalog(composerCatalog, roleDefaultSelection);
-  }, [activeSession, composerCatalog, roleDefaultSelection]);
+  }, [activeSession, composerCatalog, isAwaitingRepoSettingsForActiveRepo, roleDefaultSelection]);
   const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
   const isSelectionCatalogLoading = activeSession
     ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog

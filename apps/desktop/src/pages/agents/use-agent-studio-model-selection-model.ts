@@ -123,7 +123,7 @@ export const extractLatestContextUsage = ({
     const contextWindow =
       message.meta.contextWindow ?? modelDescriptor?.contextWindow ?? fallbackContextWindow;
     if (typeof contextWindow !== "number" || contextWindow <= 0) {
-      return null;
+      continue;
     }
     const outputLimit = message.meta.outputLimit ?? modelDescriptor?.outputLimit;
 
