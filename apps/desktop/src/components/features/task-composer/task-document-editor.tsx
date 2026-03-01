@@ -133,7 +133,7 @@ export function TaskDocumentEditor({
           <span>{lineCount.toLocaleString()} lines</span>
           <span>Last saved: {updatedAt ? humanDate(updatedAt) : "Not saved yet"}</span>
           {hasUnsavedChanges ? (
-            <span className="font-medium text-amber-700">Unsaved changes</span>
+            <span className="font-medium text-warning-muted">Unsaved changes</span>
           ) : (
             <span>All changes saved</span>
           )}

@@ -236,7 +236,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       return (
         <div className="flex items-center gap-2 rounded-md border border-dashed border-input bg-card px-3 py-2 text-xs text-muted-foreground">
           <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
-          <Brain className="size-3.5 text-violet-600" />
+          <Brain className="size-3.5 text-pending-accent" />
           Agent is thinking...
         </div>
       );

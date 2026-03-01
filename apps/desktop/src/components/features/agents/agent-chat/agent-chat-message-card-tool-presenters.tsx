@@ -104,8 +104,8 @@ export const WorkflowToolMessage = ({
   const statusLabel =
     lifecyclePhase === "queued" ? "QUEUED" : lifecyclePhase === "executing" ? "RUNNING" : null;
   const statusClassName = isExecuting
-    ? "border-blue-300/70 dark:border-blue-700/70 bg-blue-100/80 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200"
-    : "border-violet-300/70 dark:border-violet-700/70 bg-violet-100/80 dark:bg-violet-900/40 text-violet-800 dark:text-violet-200";
+    ? "border-info-border bg-info-surface text-info-surface-foreground"
+    : "border-pending-border bg-pending-surface text-pending-surface-foreground";
 
   return (
     <div className="space-y-2">
@@ -117,12 +117,12 @@ export const WorkflowToolMessage = ({
             isFailure
               ? "text-destructive-surface-foreground"
               : isCancelled
-                ? "text-orange-900 dark:text-orange-200"
+                ? "text-cancelled-surface-foreground"
                 : isSuccessfulCompletion
-                  ? "text-emerald-900 dark:text-emerald-200"
+                  ? "text-success-surface-foreground"
                   : isExecuting
-                    ? "text-blue-900 dark:text-blue-200"
-                    : "text-violet-900 dark:text-violet-200",
+                    ? "text-info-surface-foreground"
+                    : "text-pending-surface-foreground",
           )}
         >
           {toolDisplayName(meta.tool)}
@@ -217,7 +217,7 @@ export const RegularToolMessage = ({
         lifecyclePhase === "failed"
           ? "text-destructive-muted"
           : lifecyclePhase === "cancelled"
-            ? "text-orange-700 dark:text-orange-300"
+            ? "text-cancelled-muted"
             : "text-foreground",
       )}
     >
@@ -226,7 +226,7 @@ export const RegularToolMessage = ({
           lifecyclePhase === "failed"
             ? "text-destructive-accent"
             : lifecyclePhase === "cancelled"
-              ? "text-orange-500"
+              ? "text-cancelled-accent"
               : "text-muted-foreground",
         )}
       >

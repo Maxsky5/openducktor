@@ -9,7 +9,7 @@ export function WorkspaceSummaryCard(): ReactElement {
   return (
     <div className="space-y-2 rounded-lg border border-border bg-muted p-3 text-xs text-muted-foreground">
       <div className="flex items-center gap-2">
-        <Sparkles className="size-3 text-sky-500" />
+        <Sparkles className="size-3 text-info-accent" />
         <span>Workspace</span>
       </div>
       {activeRepo ? (

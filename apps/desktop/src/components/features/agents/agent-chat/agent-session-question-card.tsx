@@ -85,7 +85,7 @@ export function AgentSessionQuestionCard({
                     <CheckCircle2
                       className={cn(
                         "size-3.5",
-                        isTabActive ? "text-primary-foreground/70" : "text-emerald-500",
+                        isTabActive ? "text-primary-foreground/70" : "text-success-accent",
                       )}
                     />
                   ) : (

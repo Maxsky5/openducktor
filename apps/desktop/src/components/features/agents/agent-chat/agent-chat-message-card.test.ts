@@ -121,8 +121,8 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("animate-spin");
-    expect(html).toContain("border-blue-200");
-    expect(html).not.toContain("border-violet-200");
+    expect(html).toContain("border-info-border");
+    expect(html).not.toContain("border-pending-border");
     expect(html).toContain("RUNNING");
     expect(html).toContain("build_completed");
   });
@@ -152,8 +152,8 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).not.toContain("animate-spin");
-    expect(html).toContain("border-violet-200");
-    expect(html).not.toContain("border-blue-200");
+    expect(html).toContain("border-pending-border");
+    expect(html).not.toContain("border-info-border");
     expect(html).toContain("QUEUED");
     expect(html).not.toContain("RUNNING");
   });
@@ -183,7 +183,7 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).toContain("border-destructive-border");
-    expect(html).not.toContain("border-emerald-200");
+    expect(html).not.toContain("border-success-border");
   });
 
   test("renders cancelled workflow tools with orange styling", () => {
@@ -211,7 +211,7 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("border-orange-200");
+    expect(html).toContain("border-cancelled-border");
     expect(html).not.toContain("border-destructive-border");
   });
 

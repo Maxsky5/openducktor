@@ -219,7 +219,7 @@ export function SettingsModal({
 
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-6 py-4">
           {!activeRepo ? (
-            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3 text-sm text-amber-800 dark:text-amber-300">
+            <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
               Select or add a workspace first, then save settings for that repository.
             </div>
           ) : null}
@@ -286,7 +286,7 @@ export function SettingsModal({
               </p>
             ) : null}
             {catalogError ? (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+              <p className="text-xs text-warning-muted">
                 Failed to load OpenCode values: {catalogError}
               </p>
             ) : null}

@@ -14,9 +14,9 @@ const usageColorClasses = (usagePercent: number): { text: string; bar: string } 
     return { text: "text-destructive-muted", bar: "bg-destructive-accent" };
   }
   if (usagePercent >= 75) {
-    return { text: "text-amber-700 dark:text-amber-300", bar: "bg-amber-500" };
+    return { text: "text-warning-muted", bar: "bg-warning-accent" };
   }
-  return { text: "text-emerald-700 dark:text-emerald-300", bar: "bg-emerald-500" };
+  return { text: "text-success-muted", bar: "bg-success-accent" };
 };
 
 export function AgentContextUsageIndicator({

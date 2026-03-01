@@ -7,8 +7,8 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     label: "Feature",
     description: "User-facing capability or workflow improvement.",
     icon: Sparkles,
-    accentClass: "border-sky-300 bg-sky-50/90 dark:border-sky-700 dark:bg-sky-950/50",
-    iconClass: "bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300",
+    accentClass: "border-info-border bg-info-surface",
+    iconClass: "bg-info-surface text-info-muted",
     supportsParent: true,
   },
   {
@@ -34,8 +34,8 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     label: "Epic",
     description: "Large initiative that contains multiple subtasks.",
     icon: Layers3,
-    accentClass: "border-violet-300 bg-violet-50/90 dark:border-violet-700 dark:bg-violet-950/50",
-    iconClass: "bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300",
+    accentClass: "border-pending-border bg-pending-surface",
+    iconClass: "bg-pending-surface text-pending-muted",
     supportsParent: false,
   },
 ];

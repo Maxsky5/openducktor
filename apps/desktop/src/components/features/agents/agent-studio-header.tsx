@@ -73,27 +73,27 @@ export type AgentStudioHeaderModel = {
 
 const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
   in_progress:
-    "border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-50 dark:hover:bg-sky-950/50 text-sky-700 dark:text-sky-300 shadow-sm",
-  done: "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 shadow-sm",
+    "border-info-border bg-info-surface hover:bg-info-surface text-info-muted shadow-sm",
+  done: "border-success-border bg-success-surface hover:bg-success-surface text-success-muted shadow-sm",
   available: "border-input bg-card text-foreground",
   optional:
-    "border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300",
+    "border-warning-border bg-warning-surface text-warning-muted",
   blocked: "border-border bg-muted text-muted-foreground",
 };
 
 const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  done: "text-emerald-400",
-  in_progress: "text-sky-400",
+  done: "text-success-accent",
+  in_progress: "text-info-accent",
   available: "text-muted-foreground/40",
-  optional: "text-amber-400",
+  optional: "text-warning-accent",
   blocked: "text-muted-foreground/20",
 };
 
 const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  done: "ring-2 ring-offset-2 ring-offset-background ring-emerald-400",
-  in_progress: "ring-2 ring-offset-2 ring-offset-background ring-sky-400",
+  done: "ring-2 ring-offset-2 ring-offset-background ring-success-accent",
+  in_progress: "ring-2 ring-offset-2 ring-offset-background ring-info-accent",
   available: "ring-2 ring-offset-2 ring-offset-background ring-ring",
-  optional: "ring-2 ring-offset-2 ring-offset-background ring-amber-400",
+  optional: "ring-2 ring-offset-2 ring-offset-background ring-warning-accent",
   blocked: "ring-2 ring-offset-2 ring-offset-background ring-input",
 };
 
@@ -276,7 +276,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 >
                   <Icon className="size-4" />
                   {entry.label}
-                  {entry.state === "done" ? <Check className="size-3.5 text-emerald-600" /> : null}
+                  {entry.state === "done" ? <Check className="size-3.5 text-success-accent" /> : null}
                   {entry.state === "in_progress" && shouldSpinInProgress ? (
                     <LoaderCircle className="size-3.5 animate-spin" />
                   ) : null}
