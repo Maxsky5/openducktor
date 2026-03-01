@@ -25,6 +25,22 @@ export const toRoleDefaultSelection = (
   };
 };
 
+const resolvePreferredSelectionForCatalog = ({
+  catalog,
+  primarySelection,
+  secondarySelection,
+}: {
+  catalog: AgentModelCatalog | null;
+  primarySelection: AgentModelSelection | null;
+  secondarySelection: AgentModelSelection | null;
+}): AgentModelSelection | null => {
+  const preferredBase =
+    primarySelection ?? secondarySelection ?? pickDefaultSelectionForCatalog(catalog);
+  return (
+    normalizeSelectionForCatalog(catalog, preferredBase) ?? pickDefaultSelectionForCatalog(catalog)
+  );
+};
+
 export const resolveDraftSelection = ({
   catalog,
   existingSelection,
@@ -34,11 +50,11 @@ export const resolveDraftSelection = ({
   existingSelection: AgentModelSelection | null;
   roleDefaultSelection: AgentModelSelection | null;
 }): AgentModelSelection | null => {
-  const preferredBase =
-    existingSelection ?? roleDefaultSelection ?? pickDefaultSelectionForCatalog(catalog);
-  return (
-    normalizeSelectionForCatalog(catalog, preferredBase) ?? pickDefaultSelectionForCatalog(catalog)
-  );
+  return resolvePreferredSelectionForCatalog({
+    catalog,
+    primarySelection: existingSelection,
+    secondarySelection: roleDefaultSelection,
+  });
 };
 
 export const resolveSessionSelection = ({
@@ -50,11 +66,11 @@ export const resolveSessionSelection = ({
   selectedModel: AgentModelSelection | null;
   roleDefaultSelection: AgentModelSelection | null;
 }): AgentModelSelection | null => {
-  const preferredBase =
-    selectedModel ?? roleDefaultSelection ?? pickDefaultSelectionForCatalog(catalog);
-  return (
-    normalizeSelectionForCatalog(catalog, preferredBase) ?? pickDefaultSelectionForCatalog(catalog)
-  );
+  return resolvePreferredSelectionForCatalog({
+    catalog,
+    primarySelection: selectedModel,
+    secondarySelection: roleDefaultSelection,
+  });
 };
 
 export const toModelDescriptorKey = (providerId: string, modelId: string): string => {

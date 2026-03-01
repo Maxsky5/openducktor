@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveAgentAccentColor,
   toModelGroupsByProvider,
@@ -49,6 +49,13 @@ export type AgentStudioModelSelectionState = {
   handleSelectVariant: (variant: string) => void;
 };
 
+const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
+  spec: false,
+  planner: false,
+  build: false,
+  qa: false,
+});
+
 export function useAgentStudioModelSelection({
   activeRepo,
   activeSession,
@@ -57,10 +64,23 @@ export function useAgentStudioModelSelection({
   updateAgentSessionModel,
   loadCatalog = loadRepoOpencodeCatalog,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
+  const previousActiveRepoRef = useRef<string | null>(activeRepo);
   const [composerCatalog, setComposerCatalog] = useState<AgentModelCatalog | null>(null);
   const [isLoadingComposerCatalog, setIsLoadingComposerCatalog] = useState(false);
   const [draftSelectionByRole, setDraftSelectionByRole] =
     useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
+  const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
+    Record<AgentRole, boolean>
+  >(emptyDraftSelectionTouchedByRole);
+
+  useEffect(() => {
+    if (previousActiveRepoRef.current === activeRepo) {
+      return;
+    }
+    previousActiveRepoRef.current = activeRepo;
+    setDraftSelectionByRole(emptyDraftSelections());
+    setDraftSelectionTouchedByRole(emptyDraftSelectionTouchedByRole());
+  }, [activeRepo]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -96,16 +116,38 @@ export function useAgentStudioModelSelection({
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
     return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
   }, [repoSettings?.agentDefaults, role]);
+  const isDraftSelectionTouched = draftSelectionTouchedByRole[role];
 
   useEffect(() => {
     if (activeSession) {
+      return;
+    }
+    if (!composerCatalog) {
+      setDraftSelectionByRole((current) => {
+        if (current[role] === null) {
+          return current;
+        }
+        return {
+          ...current,
+          [role]: null,
+        };
+      });
+      setDraftSelectionTouchedByRole((current) => {
+        if (!current[role]) {
+          return current;
+        }
+        return {
+          ...current,
+          [role]: false,
+        };
+      });
       return;
     }
     setDraftSelectionByRole((current) => {
       const existing = current[role];
       const normalized = resolveDraftSelection({
         catalog: composerCatalog,
-        existingSelection: existing,
+        existingSelection: isDraftSelectionTouched ? existing : null,
         roleDefaultSelection,
       });
       if (isSameSelection(existing, normalized)) {
@@ -116,7 +158,7 @@ export function useAgentStudioModelSelection({
         [role]: normalized,
       };
     });
-  }, [activeSession, composerCatalog, role, roleDefaultSelection]);
+  }, [activeSession, composerCatalog, isDraftSelectionTouched, role, roleDefaultSelection]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -134,6 +176,15 @@ export function useAgentStudioModelSelection({
   }, [activeSession, roleDefaultSelection, updateAgentSessionModel]);
 
   const draftSelection = draftSelectionByRole[role];
+  const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
+    if (activeSession) {
+      return roleDefaultSelection;
+    }
+    if (!composerCatalog) {
+      return null;
+    }
+    return normalizeSelectionForCatalog(composerCatalog, roleDefaultSelection);
+  }, [activeSession, composerCatalog, roleDefaultSelection]);
   const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
   const isSelectionCatalogLoading = activeSession
     ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog
@@ -146,10 +197,15 @@ export function useAgentStudioModelSelection({
     () =>
       activeSession?.selectedModel ??
       draftSelection ??
-      roleDefaultSelection ??
+      roleDefaultSelectionForComposer ??
       fallbackCatalogSelection ??
       null,
-    [activeSession?.selectedModel, draftSelection, fallbackCatalogSelection, roleDefaultSelection],
+    [
+      activeSession?.selectedModel,
+      draftSelection,
+      fallbackCatalogSelection,
+      roleDefaultSelectionForComposer,
+    ],
   );
 
   const applySelection = useCallback(
@@ -162,6 +218,10 @@ export function useAgentStudioModelSelection({
         ...current,
         [role]: selection,
       }));
+      setDraftSelectionTouchedByRole((current) => ({
+        ...current,
+        [role]: true,
+      }));
     },
     [activeSession, role, updateAgentSessionModel],
   );
@@ -169,11 +229,11 @@ export function useAgentStudioModelSelection({
   const selectionForNewSession = useMemo(
     () =>
       draftSelection ??
-      roleDefaultSelection ??
+      roleDefaultSelectionForComposer ??
       normalizeSelectionForCatalog(selectionCatalog, fallbackCatalogSelection) ??
       fallbackCatalogSelection ??
       null,
-    [draftSelection, fallbackCatalogSelection, roleDefaultSelection, selectionCatalog],
+    [draftSelection, fallbackCatalogSelection, roleDefaultSelectionForComposer, selectionCatalog],
   );
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
