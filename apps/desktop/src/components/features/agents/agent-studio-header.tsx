@@ -82,19 +82,19 @@ const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", stri
 };
 
 const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  done: "text-success-accent",
-  in_progress: "text-info-accent",
+  done: "text-success-ring",
+  in_progress: "text-info-ring",
   available: "text-muted-foreground/40",
-  optional: "text-warning-accent",
+  optional: "text-warning-ring",
   blocked: "text-muted-foreground/20",
 };
 
 const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", string> = {
-  done: "ring-2 ring-offset-2 ring-offset-background ring-success-accent",
-  in_progress: "ring-2 ring-offset-2 ring-offset-background ring-info-accent",
-  available: "ring-2 ring-offset-2 ring-offset-background ring-ring",
-  optional: "ring-2 ring-offset-2 ring-offset-background ring-warning-accent",
-  blocked: "ring-2 ring-offset-2 ring-offset-background ring-input",
+  done: "ring-2 ring-offset-2 ring-offset-card ring-success-ring",
+  in_progress: "ring-2 ring-offset-2 ring-offset-card ring-info-ring",
+  available: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",
+  optional: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
+  blocked: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
 };
 
 const workflowStepClassName = (state: AgentWorkflowStep["state"]): string =>
