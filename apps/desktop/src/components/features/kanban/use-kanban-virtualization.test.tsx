@@ -237,4 +237,33 @@ describe("useKanbanVirtualization", () => {
       mockWindow.restore();
     }
   });
+
+  test("recomputes viewport when measured heights change without scroll events", async () => {
+    const mockWindow = installMockWindow();
+    const harness = createHarness({ tasks: createTasks(30) });
+    const getBoundingClientRect = mock(() => ({ top: 120 }));
+
+    try {
+      await harness.mount();
+
+      await harness.run(() => {
+        harness.getLatest().containerRef.current = {
+          getBoundingClientRect,
+          closest: () => null,
+        } as unknown as HTMLDivElement;
+      });
+
+      const callsBeforeMeasure = getBoundingClientRect.mock.calls.length;
+
+      await harness.run(() => {
+        harness.getLatest().onMeasuredHeight("task-0", 320);
+      });
+
+      expect(getBoundingClientRect.mock.calls.length).toBeGreaterThan(callsBeforeMeasure);
+      expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+      mockWindow.restore();
+    }
+  });
 });

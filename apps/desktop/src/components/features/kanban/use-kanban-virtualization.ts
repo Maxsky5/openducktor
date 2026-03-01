@@ -71,6 +71,10 @@ export function useKanbanVirtualization({
     () => buildVirtualColumnLayout(itemHeights, VIRTUAL_CARD_GAP_PX),
     [itemHeights],
   );
+  const virtualLayoutSyncToken = useMemo(
+    () => `${tasks.length}:${virtualLayout.totalHeight}:${itemHeights.join(",")}`,
+    [itemHeights, tasks.length, virtualLayout.totalHeight],
+  );
 
   const layoutRef = useRef<VirtualLayoutSnapshot>({
     itemOffsets: virtualLayout.itemOffsets,
@@ -204,6 +208,18 @@ export function useKanbanVirtualization({
         : EMPTY_RANGE,
     );
   }, [shouldVirtualize]);
+
+  useEffect(() => {
+    if (!shouldVirtualize) {
+      return;
+    }
+
+    if (virtualLayoutSyncToken.length === 0) {
+      return;
+    }
+
+    syncViewportRef.current();
+  }, [shouldVirtualize, virtualLayoutSyncToken]);
 
   useEffect(() => {
     const taskIds = new Set(tasks.map((task) => task.id));
