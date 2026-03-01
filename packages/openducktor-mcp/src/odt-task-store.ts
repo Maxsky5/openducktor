@@ -1,7 +1,7 @@
 import { BdPersistence, type TaskPersistencePort } from "./bd-persistence";
 import { BdRuntimeClient, type BdRuntimeClientDeps } from "./bd-runtime-client";
 import { nowIso, type TimeProvider } from "./beads-runtime";
-import type { PlanSubtaskInput, TaskCard, TaskStatus } from "./contracts";
+import type { TaskCard, TaskStatus } from "./contracts";
 import { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
 import { createSubtask, deleteTaskById } from "./epic-subtasks";
 import { normalizePlanSubtasks } from "./plan-subtasks";
@@ -63,8 +63,20 @@ export class OdtTaskStore {
       deps.epicSubtaskReplacementService ??
       new EpicSubtaskReplacementService({
         listTasks: () => this.persistence.listTasks(),
-        createSubtask: async (parentTaskId, subtask) => this.createSubtask(parentTaskId, subtask),
-        deleteTask: async (taskId) => this.deleteTask(taskId),
+        createSubtask: async (parentTaskId, subtask) =>
+          createSubtask(
+            parentTaskId,
+            subtask,
+            (args) => this.persistence.runBdJson(args),
+            () => this.taskIndexCache.invalidate(),
+          ),
+        deleteTask: async (taskId) =>
+          deleteTaskById(
+            taskId,
+            (args) => this.persistence.runBdJson(args),
+            () => this.taskIndexCache.invalidate(),
+            false,
+          ),
       });
   }
 
@@ -111,24 +123,6 @@ export class OdtTaskStore {
       invalidateTaskIndex: () => this.taskIndexCache.invalidate(),
       metadataNamespace: this.metadataNamespace,
     });
-  }
-
-  private async createSubtask(parentTaskId: string, subtask: PlanSubtaskInput): Promise<string> {
-    return createSubtask(
-      parentTaskId,
-      subtask,
-      (args) => this.persistence.runBdJson(args),
-      () => this.taskIndexCache.invalidate(),
-    );
-  }
-
-  private async deleteTask(taskId: string, deleteSubtasks = false): Promise<void> {
-    await deleteTaskById(
-      taskId,
-      (args) => this.persistence.runBdJson(args),
-      () => this.taskIndexCache.invalidate(),
-      deleteSubtasks,
-    );
   }
 
   async readTask(rawInput: unknown): Promise<unknown> {
