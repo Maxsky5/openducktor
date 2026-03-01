@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { ODT_TOOL_SCHEMAS, type OdtStoreContext, OdtTaskStore, resolveStoreContext } from "./lib";
 
 type ToolResult = {
@@ -85,40 +86,47 @@ type RegisteredToolSpec = {
   execute: (store: OdtTaskStore, input: unknown) => Promise<unknown>;
 };
 
-type ToolInputSchema = {
-  shape: Record<string, unknown>;
-  parse: (input: unknown) => unknown;
+const isSchemaLike = (value: unknown): value is ZodRawShapeCompat[string] => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  return typeof (value as { parse?: unknown }).parse === "function";
 };
 
-type RegisterToolCall = (
-  this: McpServer,
-  name: string,
-  config: {
-    description: string;
-    inputSchema: unknown;
-  },
-  handler: (input: unknown) => Promise<ToolResult>,
-) => void;
+const isRegisterToolInputSchema = (value: unknown): value is ZodRawShapeCompat => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  return Object.values(value as Record<string, unknown>).every((entry) => isSchemaLike(entry));
+};
+
+const assertRegisterToolInputSchema: (
+  toolName: RegisteredToolName,
+  value: unknown,
+) => asserts value is ZodRawShapeCompat = (toolName, value) => {
+  if (!isRegisterToolInputSchema(value)) {
+    throw new TypeError(`Invalid MCP input schema for tool '${toolName}'.`);
+  }
+};
 
 export const registerOdtTool = (
   server: McpServer,
   store: OdtTaskStore,
   tool: RegisteredTool,
 ): void => {
-  const schema = ODT_TOOL_SCHEMAS[tool.name] as unknown as ToolInputSchema;
-  const registerTool = server.registerTool as unknown as RegisterToolCall;
+  const schema = ODT_TOOL_SCHEMAS[tool.name];
+  const inputSchema: unknown = schema.shape;
+  assertRegisterToolInputSchema(tool.name, inputSchema);
 
-  registerTool.call(
-    server,
+  server.registerTool(
     tool.name,
     {
       description: tool.description,
-      inputSchema: schema.shape,
+      inputSchema,
     },
     async (input: unknown) => {
       try {
-        const parsed = schema.parse(input);
-        const result = await tool.execute(store, parsed);
+        const result = await tool.execute(store, input);
         return toToolResult(result);
       } catch (error) {
         return toToolError(error);
