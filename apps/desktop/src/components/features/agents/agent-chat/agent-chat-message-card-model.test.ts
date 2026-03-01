@@ -4,17 +4,25 @@ import {
   assistantRoleFromMessage,
   buildToolSummary,
   formatRawJsonLikeText,
+  formatTime,
   getAssistantFooterData,
   getToolDuration,
   getToolLifecyclePhase,
+  hasNonEmptyInput,
+  hasNonEmptyText,
+  isToolMessageCancelled,
+  isToolMessageFailure,
   questionToolDetails,
   roleLabel,
+  SYSTEM_PROMPT_PREFIX,
   stripToolPrefix,
+  toolDisplayName,
+  toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
 
-const createToolMeta = (
-  overrides: Partial<Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>> = {},
-): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }> => ({
+type ToolMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
+
+const createToolMeta = (overrides: Partial<ToolMeta> = {}): ToolMeta => ({
   kind: "tool",
   partId: "part-1",
   callId: "call-1",
@@ -23,201 +31,601 @@ const createToolMeta = (
   ...overrides,
 });
 
+const createMessage = (overrides: Partial<AgentChatMessage> = {}): AgentChatMessage => ({
+  id: "msg-1",
+  role: "assistant",
+  content: "hello",
+  timestamp: "2026-02-22T10:00:00.000Z",
+  ...overrides,
+});
+
 describe("agent-chat-message-card-model", () => {
-  test("formats JSON-like output when valid JSON", () => {
-    expect(formatRawJsonLikeText('{"a":1}')).toContain('"a": 1');
-    expect(formatRawJsonLikeText("not-json")).toBe("not-json");
+  test("exports system prompt prefix constant", () => {
+    expect(SYSTEM_PROMPT_PREFIX).toBe("System prompt:\n\n");
   });
 
-  test("maps assistant role labels using metadata or session fallback", () => {
-    const assistantMessage: AgentChatMessage = {
-      id: "msg-1",
-      role: "assistant",
-      content: "Hello",
-      timestamp: "2026-02-22T10:00:00.000Z",
-      meta: {
-        kind: "assistant",
-        agentRole: "planner",
-      },
-    };
-
-    expect(assistantRoleFromMessage(assistantMessage, "spec")).toBe("planner");
-    expect(roleLabel("assistant", "build", assistantMessage)).toBe("Planner");
-
-    const noMetaMessage: AgentChatMessage = {
-      id: assistantMessage.id,
-      role: assistantMessage.role,
-      content: assistantMessage.content,
-      timestamp: assistantMessage.timestamp,
-    };
-    expect(assistantRoleFromMessage(noMetaMessage, "qa")).toBe("qa");
-    expect(roleLabel("assistant", "qa", noMetaMessage)).toBe("QA");
-  });
-
-  test("builds todo summaries from structured todo output", () => {
-    const summary = buildToolSummary(
-      createToolMeta({
-        tool: "todowrite",
-        output: JSON.stringify({ todos: [{ id: "1" }, { id: "2" }] }),
-      }),
-      "",
-    );
-
-    expect(summary).toBe("2 todos");
-  });
-
-  test("builds search summaries from input patterns", () => {
-    const summary = buildToolSummary(
-      createToolMeta({
-        tool: "grep",
-        input: { pattern: "agent", path: "apps/desktop/src" },
-      }),
-      "",
-    );
-
-    expect(summary).toBe("agent in apps/desktop/src");
-  });
-
-  test("builds question details from output answers", () => {
-    const details = questionToolDetails(
-      createToolMeta({
-        tool: "question",
-        input: {
-          questions: [{ question: "Choose role" }],
-        },
-        output: JSON.stringify({ answers: [["planner"]] }),
-      }),
-    );
-
-    expect(details).toEqual([{ prompt: "Choose role", answers: ["planner"] }]);
-  });
-
-  test("derives lifecycle phases from status, payload and errors", () => {
-    expect(
-      getToolLifecyclePhase(
-        createToolMeta({
-          status: "pending",
-          input: {},
-        }),
-      ),
-    ).toBe("queued");
-
-    expect(
-      getToolLifecyclePhase(
-        createToolMeta({
-          status: "pending",
-          input: { taskId: "fairnest-123" },
-        }),
-      ),
-    ).toBe("executing");
-
-    expect(
-      getToolLifecyclePhase(
-        createToolMeta({
-          status: "running",
-        }),
-      ),
-    ).toBe("executing");
-
-    expect(
-      getToolLifecyclePhase(
-        createToolMeta({
-          status: "completed",
-        }),
-      ),
-    ).toBe("completed");
-
-    expect(
-      getToolLifecyclePhase(
-        createToolMeta({
-          tool: "odt_set_plan",
-          status: "completed",
-          output: "MCP error -32602: Input validation error",
-        }),
-      ),
-    ).toBe("failed");
-
-    expect(
-      getToolLifecyclePhase(
-        createToolMeta({
-          status: "error",
-          error: "Tool call cancelled by user",
-        }),
-      ),
-    ).toBe("cancelled");
-  });
-
-  test("computes duration from input-ready timestamp and ignores queue time", () => {
-    const withInputReady = getToolDuration(
-      createToolMeta({
-        status: "completed",
-        inputReadyAtMs: 130,
-        observedStartedAtMs: 100,
-        observedEndedAtMs: 260,
-        startedAtMs: 100,
-        endedAtMs: 150,
-      }),
-      "2026-02-22T10:00:00.000Z",
-    );
-    expect(withInputReady).toBe(130);
-
-    const queued = getToolDuration(
-      createToolMeta({
-        status: "pending",
-        input: {},
-      }),
-      "2026-02-22T10:00:00.000Z",
-    );
-    expect(queued).toBeNull();
-
-    const executing = getToolDuration(
-      createToolMeta({
-        status: "pending",
-        input: { taskId: "fairnest-111" },
-        inputReadyAtMs: 100,
-        observedEndedAtMs: 260,
-      }),
-      "2026-02-22T10:00:00.000Z",
-    );
-    expect(executing).toBeNull();
-
-    const withFallback = getToolDuration(
-      createToolMeta({
-        status: "completed",
-        startedAtMs: 100,
-        endedAtMs: 160,
-      }),
-      "2026-02-22T10:00:00.000Z",
-    );
-    expect(withFallback).toBe(60);
-  });
-
-  test("returns assistant footer labels from assistant metadata", () => {
-    const message: AgentChatMessage = {
-      id: "assistant-1",
-      role: "assistant",
-      content: "Done",
-      timestamp: "2026-02-22T10:00:00.000Z",
-      meta: {
-        kind: "assistant",
-        agentRole: "build",
-        modelId: "gpt-5",
-        opencodeAgent: "builder",
-      },
-    };
-
-    const footer = getAssistantFooterData(message, {
-      providerId: "openai",
-      modelId: "gpt-4",
-      opencodeAgent: "fallback",
+  describe("formatting helpers", () => {
+    test("formats time and returns empty string for invalid timestamps", () => {
+      const timestamp = "2026-02-22T10:00:00.000Z";
+      const expected = new Intl.DateTimeFormat("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }).format(new Date(timestamp));
+      expect(formatTime(timestamp)).toBe(expected);
+      expect(formatTime("not-a-date")).toBe("");
     });
 
-    expect(footer.infoParts).toEqual(["builder", "gpt-5"]);
+    test("formats raw JSON-like text and preserves non-JSON text", () => {
+      expect(formatRawJsonLikeText("   ")).toBe("");
+      expect(formatRawJsonLikeText('{"a":1}')).toContain('"a": 1');
+      expect(formatRawJsonLikeText("[1,2]")).toContain("2");
+      expect(formatRawJsonLikeText("{broken")).toBe("{broken");
+      expect(formatRawJsonLikeText("not-json")).toBe("not-json");
+    });
+
+    test("strips tool prefixes and lifecycle prefixes", () => {
+      expect(stripToolPrefix("read_task", "Tool read_task completed: loaded")).toBe("loaded");
+      expect(stripToolPrefix("bash", "queued: npm test")).toBe("npm test");
+      expect(stripToolPrefix("bash", "cancelled: interrupted by user")).toBe("interrupted by user");
+      expect(stripToolPrefix("tool.with+regex", "Tool tool.with+regex running: ok")).toBe("ok");
+    });
+
+    test("converts markdown blocks to single line", () => {
+      expect(toSingleLineMarkdown("line 1\n\n line 2   \nline 3")).toBe("line 1 line 2 line 3");
+    });
+
+    test("maps odt tool names to display names", () => {
+      expect(toolDisplayName("odt_set_plan")).toBe("set_plan");
+      expect(toolDisplayName("openducktor_odt_set_plan")).toBe("set_plan");
+      expect(toolDisplayName("bash")).toBe("bash");
+    });
   });
 
-  test("strips tool prefix and status from tool content", () => {
-    expect(stripToolPrefix("read_task", "Tool read_task completed: loaded")).toBe("loaded");
-    expect(stripToolPrefix("bash", "queued: npm test")).toBe("npm test");
-    expect(stripToolPrefix("bash", "cancelled: interrupted by user")).toBe("interrupted by user");
+  describe("role and input helpers", () => {
+    test("maps assistant role labels using metadata and session fallback", () => {
+      const assistantMessage = createMessage({
+        meta: {
+          kind: "assistant",
+          agentRole: "planner",
+        },
+      });
+
+      expect(assistantRoleFromMessage(assistantMessage, "spec")).toBe("planner");
+      expect(roleLabel("assistant", "build", assistantMessage)).toBe("Planner");
+
+      const noMetaMessage = createMessage();
+      expect(assistantRoleFromMessage(noMetaMessage, "qa")).toBe("qa");
+      expect(roleLabel("assistant", "qa", noMetaMessage)).toBe("QA");
+      expect(roleLabel("assistant", null, noMetaMessage)).toBe("Assistant");
+    });
+
+    test("returns non-assistant role labels", () => {
+      const message = createMessage({ role: "system" });
+      expect(roleLabel("thinking", null, message)).toBe("Thinking");
+      expect(roleLabel("tool", null, message)).toBe("Activity");
+      expect(roleLabel("system", null, message)).toBe("System");
+    });
+
+    test("detects meaningful input values recursively", () => {
+      expect(hasNonEmptyInput(undefined)).toBe(false);
+      expect(hasNonEmptyInput({})).toBe(false);
+      expect(hasNonEmptyInput({ a: "   ", b: { c: [] } })).toBe(false);
+      expect(hasNonEmptyInput({ a: 0 })).toBe(true);
+      expect(hasNonEmptyInput({ a: false })).toBe(true);
+      expect(hasNonEmptyInput({ a: ["", "  ", { b: "ok" }] })).toBe(true);
+    });
+
+    test("detects non-empty text values", () => {
+      expect(hasNonEmptyText(" hello ")).toBe(true);
+      expect(hasNonEmptyText("   ")).toBe(false);
+      expect(hasNonEmptyText(123)).toBe(false);
+      expect(hasNonEmptyText(undefined)).toBe(false);
+    });
+  });
+
+  describe("tool lifecycle helpers", () => {
+    test("detects tool failures", () => {
+      expect(isToolMessageFailure(createToolMeta({ status: "error" }))).toBe(true);
+
+      expect(
+        isToolMessageFailure(
+          createToolMeta({
+            tool: "odt_set_plan",
+            status: "completed",
+            output: "MCP error -32602: Input validation error",
+          }),
+        ),
+      ).toBe(true);
+
+      expect(
+        isToolMessageFailure(
+          createToolMeta({
+            tool: "read",
+            status: "completed",
+            output: "MCP error -32602: ignored for non-mutation",
+          }),
+        ),
+      ).toBe(false);
+
+      expect(
+        isToolMessageFailure(
+          createToolMeta({
+            tool: "odt_set_plan",
+            status: "completed",
+            output: "Success",
+          }),
+        ),
+      ).toBe(false);
+    });
+
+    test("detects cancelled tool messages from error and output", () => {
+      expect(
+        isToolMessageCancelled(
+          createToolMeta({
+            status: "running",
+            error: "cancelled",
+          }),
+        ),
+      ).toBe(false);
+
+      expect(
+        isToolMessageCancelled(
+          createToolMeta({
+            status: "error",
+            error: "Execution aborted by user",
+          }),
+        ),
+      ).toBe(true);
+
+      expect(
+        isToolMessageCancelled(
+          createToolMeta({
+            status: "error",
+            output: "Request interrupted before completion",
+          }),
+        ),
+      ).toBe(true);
+    });
+
+    test("derives lifecycle phases from status, payload and errors", () => {
+      expect(getToolLifecyclePhase(createToolMeta({ status: "pending", input: {} }))).toBe(
+        "queued",
+      );
+      expect(
+        getToolLifecyclePhase(createToolMeta({ status: "pending", input: { taskId: "t1" } })),
+      ).toBe("executing");
+      expect(getToolLifecyclePhase(createToolMeta({ status: "running" }))).toBe("executing");
+      expect(getToolLifecyclePhase(createToolMeta({ status: "completed" }))).toBe("completed");
+      expect(
+        getToolLifecyclePhase(
+          createToolMeta({
+            tool: "odt_set_spec",
+            status: "completed",
+            output: "MCP error 400",
+          }),
+        ),
+      ).toBe("failed");
+      expect(
+        getToolLifecyclePhase(
+          createToolMeta({
+            status: "error",
+            error: "Tool call cancelled by user",
+          }),
+        ),
+      ).toBe("cancelled");
+      expect(getToolLifecyclePhase(createToolMeta({ status: "error", error: "boom" }))).toBe(
+        "failed",
+      );
+    });
+  });
+
+  describe("question tool parsing", () => {
+    test("returns empty details for non-question tools and empty question payloads", () => {
+      expect(questionToolDetails(createToolMeta({ tool: "read" }))).toEqual([]);
+      expect(questionToolDetails(createToolMeta({ tool: "question", output: "{broken" }))).toEqual(
+        [],
+      );
+      expect(questionToolDetails(createToolMeta({ tool: "question", metadata: {} }))).toEqual([]);
+    });
+
+    test("prefers input questions over metadata and output questions", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "QUESTION",
+          input: {
+            questions: [{ question: "Choose role", answers: ["planner"] }],
+          },
+          metadata: {
+            questions: [{ question: "Ignored metadata question" }],
+          },
+          output: JSON.stringify({
+            questions: [{ question: "Ignored output question" }],
+            answers: [["build"]],
+          }),
+        }),
+      );
+      expect(details).toEqual([{ prompt: "Choose role", answers: ["planner"] }]);
+    });
+
+    test("uses metadata questions and normalizes object answer groups", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "my_question",
+          metadata: {
+            questions: [{ title: "Environment?" }],
+            answers: {
+              first: [" staging ", " "],
+              second: "prod",
+            },
+          },
+        }),
+      );
+
+      expect(details).toEqual([{ prompt: "Environment?", answers: ["staging"] }]);
+    });
+
+    test("uses output questions and nested response answer groups", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "question",
+          output: JSON.stringify({
+            questions: [{ header: "Pick first" }, { label: "Pick second" }],
+            response: [{ value: "alpha" }, { value: ["beta", "  "] }],
+          }),
+        }),
+      );
+
+      expect(details).toEqual([
+        { prompt: "Pick first", answers: ["alpha"] },
+        { prompt: "Pick second", answers: ["beta"] },
+      ]);
+    });
+
+    test("falls back to metadata answer groups when output answers are absent", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "question",
+          metadata: {
+            questions: [{ question: "Approve?" }],
+            answers: [["yes"]],
+          },
+        }),
+      );
+
+      expect(details).toEqual([{ prompt: "Approve?", answers: ["yes"] }]);
+    });
+
+    test("returns prompts with empty answers when no answer groups exist", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "question",
+          input: {
+            questions: [{ question: "Anything else?" }],
+          },
+        }),
+      );
+      expect(details).toEqual([{ prompt: "Anything else?", answers: [] }]);
+    });
+  });
+
+  describe("tool summary builder", () => {
+    test("builds todo summaries from output and input data", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "todowrite",
+            output: JSON.stringify({ todos: [{ id: "1" }, { id: "2" }] }),
+          }),
+          "",
+        ),
+      ).toBe("2 todos");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "custom_todoread",
+            output: "{broken",
+            input: { items: [{ id: "a" }] },
+          }),
+          "",
+        ),
+      ).toBe("1 todo");
+    });
+
+    test("builds todo status summaries when counts are unavailable", () => {
+      expect(
+        buildToolSummary(createToolMeta({ tool: "todowrite", status: "pending", input: {} }), ""),
+      ).toBe("updating todos");
+      expect(buildToolSummary(createToolMeta({ tool: "todowrite", status: "running" }), "")).toBe(
+        "updating todos",
+      );
+      expect(buildToolSummary(createToolMeta({ tool: "todowrite", status: "completed" }), "")).toBe(
+        "todos updated",
+      );
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "todowrite",
+            status: "error",
+            error: "cancelled by user",
+          }),
+          "",
+        ),
+      ).toBe("todos update cancelled");
+    });
+
+    test("builds task summaries from metadata and session id", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "task",
+            metadata: { summary: [{ id: 1 }, { id: 2 }] },
+          }),
+          "",
+        ),
+      ).toBe("2 subagent tool steps");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "task",
+            metadata: { sessionId: "1234567890abcdef" },
+          }),
+          "",
+        ),
+      ).toBe("Subagent session 12345678");
+    });
+
+    test("prefers explicit error text and title with compaction", () => {
+      const longError = "x".repeat(260);
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            status: "error",
+            error: longError,
+          }),
+          "",
+        ).length,
+      ).toBe(223);
+
+      const longTitle = "t".repeat(200);
+      expect(buildToolSummary(createToolMeta({ title: longTitle }), "").length).toBe(163);
+    });
+
+    test("builds search and path summaries", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "glob",
+            input: { pattern: "**/*.ts", path: "apps/desktop/src" },
+          }),
+          "",
+        ),
+      ).toBe("**/*.ts in apps/desktop/src");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "grep",
+            input: { pattern: "agent", path: "." },
+          }),
+          "",
+        ),
+      ).toBe("agent");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "read",
+            input: { filePath: "docs/task-workflow.md" },
+          }),
+          "",
+        ),
+      ).toBe("docs/task-workflow.md");
+    });
+
+    test("uses bash command summaries", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "bash",
+            input: { command: "bun run test --filter @openducktor/desktop" },
+          }),
+          "",
+        ),
+      ).toContain("bun run test");
+    });
+
+    test("builds summaries from structured output and falls back to content", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "delegate",
+            output: JSON.stringify([{ id: "a" }, { id: "b" }]),
+          }),
+          "",
+        ),
+      ).toBe("2 subagent results");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "subtask",
+            output: JSON.stringify({ message: "done ".repeat(80) }),
+          }),
+          "",
+        ).length,
+      ).toBe(163);
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "read",
+            output: "large content that should be ignored",
+          }),
+          "Tool read completed: fetched README",
+        ),
+      ).toBe("fetched README");
+
+      expect(buildToolSummary(createToolMeta({ tool: "read", output: "" }), "")).toBe("");
+    });
+  });
+
+  describe("tool duration", () => {
+    test("returns null for queued and executing phases", () => {
+      expect(
+        getToolDuration(
+          createToolMeta({ status: "pending", input: {} }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBeNull();
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "running",
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBeNull();
+    });
+
+    test("computes duration from input-ready timestamp and completion timestamp", () => {
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            inputReadyAtMs: 130,
+            observedEndedAtMs: 260,
+            startedAtMs: 100,
+            endedAtMs: 150,
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBe(130);
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            inputReadyAtMs: 10,
+          }),
+          "1970-01-01T00:00:00.040Z",
+        ),
+      ).toBe(30);
+    });
+
+    test("falls back to observed and started/ended timestamps", () => {
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            inputReadyAtMs: 500,
+            observedStartedAtMs: 100,
+            observedEndedAtMs: 300,
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBe(200);
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            observedStartedAtMs: 20,
+          }),
+          "1970-01-01T00:00:00.080Z",
+        ),
+      ).toBe(60);
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            startedAtMs: 100,
+            endedAtMs: 160,
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBe(60);
+    });
+
+    test("returns null when duration cannot be derived", () => {
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            startedAtMs: 200,
+            endedAtMs: 100,
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBeNull();
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+          }),
+          "not-a-date",
+        ),
+      ).toBeNull();
+    });
+  });
+
+  describe("assistant footer", () => {
+    test("returns metadata labels for assistant messages", () => {
+      const footer = getAssistantFooterData(
+        createMessage({
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            modelId: "gpt-5",
+            opencodeAgent: "builder",
+          },
+        }),
+        {
+          providerId: "openai",
+          modelId: "gpt-4",
+          opencodeAgent: "fallback",
+        },
+      );
+      expect(footer.infoParts).toEqual(["builder", "gpt-5"]);
+    });
+
+    test("falls back to session model labels when assistant metadata is absent", () => {
+      const footer = getAssistantFooterData(createMessage(), {
+        providerId: "openai",
+        modelId: "gpt-4o-mini",
+        opencodeAgent: "planner-agent",
+      });
+      expect(footer.infoParts).toEqual(["planner-agent", "gpt-4o-mini"]);
+    });
+
+    test("returns empty parts for non-assistant messages and blank metadata", () => {
+      const nonAssistant = getAssistantFooterData(createMessage({ role: "tool" }), {
+        providerId: "openai",
+        modelId: "gpt-4o-mini",
+        opencodeAgent: "planner-agent",
+      });
+      expect(nonAssistant.infoParts).toEqual([]);
+
+      const blankMeta = getAssistantFooterData(
+        createMessage({
+          meta: {
+            kind: "assistant",
+            agentRole: "spec",
+            modelId: "   ",
+            opencodeAgent: " ",
+          },
+        }),
+        {
+          providerId: "openai",
+          modelId: "fallback-model",
+          opencodeAgent: "fallback-agent",
+        },
+      );
+      expect(blankMeta.infoParts).toEqual([]);
+    });
   });
 });
