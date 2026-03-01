@@ -43,21 +43,21 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
 
   return (
     <AppRuntimeProvider>
-      <ChecksStateProvider
-        checkRepoOpencodeHealth={opencodeCatalogOperations.checkRepoOpencodeHealth}
-      >
-        <TasksStateProvider>
-          <WorkspaceStateProvider>
-            <DelegationStateProvider>
-              <SpecStateProvider>
-                <AgentStudioStateProvider agentEngine={agentEngine}>
+      <SpecStateProvider>
+        <ChecksStateProvider
+          checkRepoOpencodeHealth={opencodeCatalogOperations.checkRepoOpencodeHealth}
+        >
+          <TasksStateProvider>
+            <AgentStudioStateProvider agentEngine={agentEngine}>
+              <DelegationStateProvider>
+                <WorkspaceStateProvider>
                   <AppLifecycleStateProvider>{children}</AppLifecycleStateProvider>
-                </AgentStudioStateProvider>
-              </SpecStateProvider>
-            </DelegationStateProvider>
-          </WorkspaceStateProvider>
-        </TasksStateProvider>
-      </ChecksStateProvider>
+                </WorkspaceStateProvider>
+              </DelegationStateProvider>
+            </AgentStudioStateProvider>
+          </TasksStateProvider>
+        </ChecksStateProvider>
+      </SpecStateProvider>
     </AppRuntimeProvider>
   );
 }
