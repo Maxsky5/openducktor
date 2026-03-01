@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveAgentAccentColor,
   toModelGroupsByProvider,
@@ -16,6 +16,14 @@ import {
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
 } from "./agents-page-utils";
+import {
+  type AgentStudioContextUsage,
+  extractLatestContextUsage,
+  resolveDraftSelection,
+  resolveSessionSelection,
+  toModelDescriptorByKey,
+  toRoleDefaultSelection,
+} from "./use-agent-studio-model-selection-model";
 
 type UseAgentStudioModelSelectionArgs = {
   activeRepo: string | null;
@@ -25,12 +33,6 @@ type UseAgentStudioModelSelectionArgs = {
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   loadCatalog?: (repoPath: string) => Promise<AgentModelCatalog>;
 };
-
-type AgentStudioContextUsage = {
-  totalTokens: number;
-  contextWindow: number;
-  outputLimit?: number;
-} | null;
 
 export type AgentStudioModelSelectionState = {
   selectionForNewSession: AgentModelSelection | null;
@@ -47,9 +49,12 @@ export type AgentStudioModelSelectionState = {
   handleSelectVariant: (variant: string) => void;
 };
 
-const toModelDescriptorKey = (providerId: string, modelId: string): string => {
-  return `${providerId}::${modelId}`;
-};
+const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
+  spec: false,
+  planner: false,
+  build: false,
+  qa: false,
+});
 
 export function useAgentStudioModelSelection({
   activeRepo,
@@ -59,10 +64,46 @@ export function useAgentStudioModelSelection({
   updateAgentSessionModel,
   loadCatalog = loadRepoOpencodeCatalog,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
+  const previousActiveRepoRef = useRef<string | null>(activeRepo);
+  const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
+  const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
   const [composerCatalog, setComposerCatalog] = useState<AgentModelCatalog | null>(null);
   const [isLoadingComposerCatalog, setIsLoadingComposerCatalog] = useState(false);
+  const [isAwaitingRepoSettingsForActiveRepo, setIsAwaitingRepoSettingsForActiveRepo] =
+    useState(false);
   const [draftSelectionByRole, setDraftSelectionByRole] =
     useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
+  const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
+    Record<AgentRole, boolean>
+  >(emptyDraftSelectionTouchedByRole);
+
+  useEffect(() => {
+    if (previousActiveRepoRef.current === activeRepo) {
+      return;
+    }
+    previousActiveRepoRef.current = activeRepo;
+    setDraftSelectionByRole(emptyDraftSelections());
+    setDraftSelectionTouchedByRole(emptyDraftSelectionTouchedByRole());
+  }, [activeRepo]);
+
+  useEffect(() => {
+    if (previousRepoForDefaultsRef.current !== activeRepo) {
+      previousRepoForDefaultsRef.current = activeRepo;
+      previousRepoSettingsRef.current = repoSettings;
+      setIsAwaitingRepoSettingsForActiveRepo(Boolean(activeRepo));
+      return;
+    }
+
+    if (!isAwaitingRepoSettingsForActiveRepo) {
+      previousRepoSettingsRef.current = repoSettings;
+      return;
+    }
+
+    if (previousRepoSettingsRef.current !== repoSettings) {
+      previousRepoSettingsRef.current = repoSettings;
+      setIsAwaitingRepoSettingsForActiveRepo(false);
+    }
+  }, [activeRepo, isAwaitingRepoSettingsForActiveRepo, repoSettings]);
 
   useEffect(() => {
     if (!activeRepo) {
@@ -96,29 +137,42 @@ export function useAgentStudioModelSelection({
   }, [activeRepo, loadCatalog]);
 
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    const roleDefault = repoSettings?.agentDefaults[role];
-    if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
-      return null;
-    }
-    return {
-      providerId: roleDefault.providerId,
-      modelId: roleDefault.modelId,
-      ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-      ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
-    };
+    return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
   }, [repoSettings?.agentDefaults, role]);
+  const isDraftSelectionTouched = draftSelectionTouchedByRole[role];
 
   useEffect(() => {
     if (activeSession) {
       return;
     }
+    if (!composerCatalog) {
+      setDraftSelectionByRole((current) => {
+        if (current[role] === null) {
+          return current;
+        }
+        return {
+          ...current,
+          [role]: null,
+        };
+      });
+      setDraftSelectionTouchedByRole((current) => {
+        if (!current[role]) {
+          return current;
+        }
+        return {
+          ...current,
+          [role]: false,
+        };
+      });
+      return;
+    }
     setDraftSelectionByRole((current) => {
       const existing = current[role];
-      const preferredBase =
-        existing ?? roleDefaultSelection ?? pickDefaultSelectionForCatalog(composerCatalog);
-      const normalized =
-        normalizeSelectionForCatalog(composerCatalog, preferredBase) ??
-        pickDefaultSelectionForCatalog(composerCatalog);
+      const normalized = resolveDraftSelection({
+        catalog: composerCatalog,
+        existingSelection: isDraftSelectionTouched ? existing : null,
+        roleDefaultSelection,
+      });
       if (isSameSelection(existing, normalized)) {
         return current;
       }
@@ -127,19 +181,17 @@ export function useAgentStudioModelSelection({
         [role]: normalized,
       };
     });
-  }, [activeSession, composerCatalog, role, roleDefaultSelection]);
+  }, [activeSession, composerCatalog, isDraftSelectionTouched, role, roleDefaultSelection]);
 
   useEffect(() => {
     if (!activeSession) {
       return;
     }
-    const preferredSelection =
-      normalizeSelectionForCatalog(
-        activeSession.modelCatalog,
-        activeSession.selectedModel ??
-          roleDefaultSelection ??
-          pickDefaultSelectionForCatalog(activeSession.modelCatalog),
-      ) ?? pickDefaultSelectionForCatalog(activeSession.modelCatalog);
+    const preferredSelection = resolveSessionSelection({
+      catalog: activeSession.modelCatalog,
+      selectedModel: activeSession.selectedModel,
+      roleDefaultSelection,
+    });
     if (!preferredSelection || isSameSelection(activeSession.selectedModel, preferredSelection)) {
       return;
     }
@@ -147,6 +199,15 @@ export function useAgentStudioModelSelection({
   }, [activeSession, roleDefaultSelection, updateAgentSessionModel]);
 
   const draftSelection = draftSelectionByRole[role];
+  const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
+    if (activeSession) {
+      return roleDefaultSelection;
+    }
+    if (!composerCatalog) {
+      return isAwaitingRepoSettingsForActiveRepo ? null : roleDefaultSelection;
+    }
+    return normalizeSelectionForCatalog(composerCatalog, roleDefaultSelection);
+  }, [activeSession, composerCatalog, isAwaitingRepoSettingsForActiveRepo, roleDefaultSelection]);
   const selectionCatalog = activeSession?.modelCatalog ?? composerCatalog;
   const isSelectionCatalogLoading = activeSession
     ? activeSession.isLoadingModelCatalog && !activeSession.modelCatalog && !composerCatalog
@@ -159,10 +220,15 @@ export function useAgentStudioModelSelection({
     () =>
       activeSession?.selectedModel ??
       draftSelection ??
-      roleDefaultSelection ??
+      roleDefaultSelectionForComposer ??
       fallbackCatalogSelection ??
       null,
-    [activeSession?.selectedModel, draftSelection, fallbackCatalogSelection, roleDefaultSelection],
+    [
+      activeSession?.selectedModel,
+      draftSelection,
+      fallbackCatalogSelection,
+      roleDefaultSelectionForComposer,
+    ],
   );
 
   const applySelection = useCallback(
@@ -175,6 +241,10 @@ export function useAgentStudioModelSelection({
         ...current,
         [role]: selection,
       }));
+      setDraftSelectionTouchedByRole((current) => ({
+        ...current,
+        [role]: true,
+      }));
     },
     [activeSession, role, updateAgentSessionModel],
   );
@@ -182,11 +252,11 @@ export function useAgentStudioModelSelection({
   const selectionForNewSession = useMemo(
     () =>
       draftSelection ??
-      roleDefaultSelection ??
+      roleDefaultSelectionForComposer ??
       normalizeSelectionForCatalog(selectionCatalog, fallbackCatalogSelection) ??
       fallbackCatalogSelection ??
       null,
-    [draftSelection, fallbackCatalogSelection, roleDefaultSelection, selectionCatalog],
+    [draftSelection, fallbackCatalogSelection, roleDefaultSelectionForComposer, selectionCatalog],
   );
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
@@ -281,56 +351,17 @@ export function useAgentStudioModelSelection({
   const activeSessionMessages = activeSession?.messages;
   const activeSessionModelCatalog = activeSession?.modelCatalog;
   const activeSessionModelDescriptorByKey = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof activeSessionModelCatalog>["models"][number]>();
-    if (!activeSessionModelCatalog) {
-      return map;
-    }
-
-    for (const descriptor of activeSessionModelCatalog.models) {
-      map.set(toModelDescriptorKey(descriptor.providerId, descriptor.modelId), descriptor);
-    }
-
-    return map;
+    return toModelDescriptorByKey(activeSessionModelCatalog ?? null);
   }, [activeSessionModelCatalog]);
 
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
-    if (!activeSessionMessages) {
-      return null;
-    }
-
-    for (let index = activeSessionMessages.length - 1; index >= 0; index -= 1) {
-      const message = activeSessionMessages[index];
-      if (!message || message.role !== "assistant" || message.meta?.kind !== "assistant") {
-        continue;
-      }
-      const totalTokens = message.meta.totalTokens;
-      if (typeof totalTokens !== "number" || totalTokens <= 0) {
-        continue;
-      }
-
-      const metaProviderId = message.meta.providerId;
-      const metaModelId = message.meta.modelId;
-      const modelDescriptor =
-        typeof metaProviderId === "string" && typeof metaModelId === "string"
-          ? activeSessionModelDescriptorByKey.get(toModelDescriptorKey(metaProviderId, metaModelId))
-          : undefined;
-      const contextWindow =
-        message.meta.contextWindow ??
-        modelDescriptor?.contextWindow ??
-        selectedModelEntry?.contextWindow;
-      if (typeof contextWindow !== "number" || contextWindow <= 0) {
-        return null;
-      }
-      const outputLimit = message.meta.outputLimit ?? modelDescriptor?.outputLimit;
-
-      return {
-        totalTokens,
-        contextWindow,
-        ...(typeof outputLimit === "number" ? { outputLimit } : {}),
-      };
-    }
-
-    return null;
+    return extractLatestContextUsage({
+      messages: activeSessionMessages,
+      modelDescriptorByKey: activeSessionModelDescriptorByKey,
+      ...(typeof selectedModelEntry?.contextWindow === "number"
+        ? { fallbackContextWindow: selectedModelEntry.contextWindow }
+        : {}),
+    });
   }, [activeSessionMessages, activeSessionModelDescriptorByKey, selectedModelEntry?.contextWindow]);
 
   const handleSelectAgent = useCallback(
