@@ -16,6 +16,14 @@ import {
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
 } from "./agents-page-utils";
+import {
+  type AgentStudioContextUsage,
+  extractLatestContextUsage,
+  resolveDraftSelection,
+  resolveSessionSelection,
+  toModelDescriptorByKey,
+  toRoleDefaultSelection,
+} from "./use-agent-studio-model-selection-model";
 
 type UseAgentStudioModelSelectionArgs = {
   activeRepo: string | null;
@@ -25,12 +33,6 @@ type UseAgentStudioModelSelectionArgs = {
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
   loadCatalog?: (repoPath: string) => Promise<AgentModelCatalog>;
 };
-
-type AgentStudioContextUsage = {
-  totalTokens: number;
-  contextWindow: number;
-  outputLimit?: number;
-} | null;
 
 export type AgentStudioModelSelectionState = {
   selectionForNewSession: AgentModelSelection | null;
@@ -45,10 +47,6 @@ export type AgentStudioModelSelectionState = {
   handleSelectAgent: (opencodeAgent: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
-};
-
-const toModelDescriptorKey = (providerId: string, modelId: string): string => {
-  return `${providerId}::${modelId}`;
 };
 
 export function useAgentStudioModelSelection({
@@ -96,16 +94,7 @@ export function useAgentStudioModelSelection({
   }, [activeRepo, loadCatalog]);
 
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    const roleDefault = repoSettings?.agentDefaults[role];
-    if (!roleDefault || !roleDefault.providerId || !roleDefault.modelId) {
-      return null;
-    }
-    return {
-      providerId: roleDefault.providerId,
-      modelId: roleDefault.modelId,
-      ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-      ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
-    };
+    return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
   }, [repoSettings?.agentDefaults, role]);
 
   useEffect(() => {
@@ -114,11 +103,11 @@ export function useAgentStudioModelSelection({
     }
     setDraftSelectionByRole((current) => {
       const existing = current[role];
-      const preferredBase =
-        existing ?? roleDefaultSelection ?? pickDefaultSelectionForCatalog(composerCatalog);
-      const normalized =
-        normalizeSelectionForCatalog(composerCatalog, preferredBase) ??
-        pickDefaultSelectionForCatalog(composerCatalog);
+      const normalized = resolveDraftSelection({
+        catalog: composerCatalog,
+        existingSelection: existing,
+        roleDefaultSelection,
+      });
       if (isSameSelection(existing, normalized)) {
         return current;
       }
@@ -133,13 +122,11 @@ export function useAgentStudioModelSelection({
     if (!activeSession) {
       return;
     }
-    const preferredSelection =
-      normalizeSelectionForCatalog(
-        activeSession.modelCatalog,
-        activeSession.selectedModel ??
-          roleDefaultSelection ??
-          pickDefaultSelectionForCatalog(activeSession.modelCatalog),
-      ) ?? pickDefaultSelectionForCatalog(activeSession.modelCatalog);
+    const preferredSelection = resolveSessionSelection({
+      catalog: activeSession.modelCatalog,
+      selectedModel: activeSession.selectedModel,
+      roleDefaultSelection,
+    });
     if (!preferredSelection || isSameSelection(activeSession.selectedModel, preferredSelection)) {
       return;
     }
@@ -281,56 +268,17 @@ export function useAgentStudioModelSelection({
   const activeSessionMessages = activeSession?.messages;
   const activeSessionModelCatalog = activeSession?.modelCatalog;
   const activeSessionModelDescriptorByKey = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof activeSessionModelCatalog>["models"][number]>();
-    if (!activeSessionModelCatalog) {
-      return map;
-    }
-
-    for (const descriptor of activeSessionModelCatalog.models) {
-      map.set(toModelDescriptorKey(descriptor.providerId, descriptor.modelId), descriptor);
-    }
-
-    return map;
+    return toModelDescriptorByKey(activeSessionModelCatalog ?? null);
   }, [activeSessionModelCatalog]);
 
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
-    if (!activeSessionMessages) {
-      return null;
-    }
-
-    for (let index = activeSessionMessages.length - 1; index >= 0; index -= 1) {
-      const message = activeSessionMessages[index];
-      if (!message || message.role !== "assistant" || message.meta?.kind !== "assistant") {
-        continue;
-      }
-      const totalTokens = message.meta.totalTokens;
-      if (typeof totalTokens !== "number" || totalTokens <= 0) {
-        continue;
-      }
-
-      const metaProviderId = message.meta.providerId;
-      const metaModelId = message.meta.modelId;
-      const modelDescriptor =
-        typeof metaProviderId === "string" && typeof metaModelId === "string"
-          ? activeSessionModelDescriptorByKey.get(toModelDescriptorKey(metaProviderId, metaModelId))
-          : undefined;
-      const contextWindow =
-        message.meta.contextWindow ??
-        modelDescriptor?.contextWindow ??
-        selectedModelEntry?.contextWindow;
-      if (typeof contextWindow !== "number" || contextWindow <= 0) {
-        return null;
-      }
-      const outputLimit = message.meta.outputLimit ?? modelDescriptor?.outputLimit;
-
-      return {
-        totalTokens,
-        contextWindow,
-        ...(typeof outputLimit === "number" ? { outputLimit } : {}),
-      };
-    }
-
-    return null;
+    return extractLatestContextUsage({
+      messages: activeSessionMessages,
+      modelDescriptorByKey: activeSessionModelDescriptorByKey,
+      ...(typeof selectedModelEntry?.contextWindow === "number"
+        ? { fallbackContextWindow: selectedModelEntry.contextWindow }
+        : {}),
+    });
   }, [activeSessionMessages, activeSessionModelDescriptorByKey, selectedModelEntry?.contextWindow]);
 
   const handleSelectAgent = useCallback(
