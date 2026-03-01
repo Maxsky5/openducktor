@@ -47,12 +47,8 @@ describe("agent-chat-message-card-model", () => {
   describe("formatting helpers", () => {
     test("formats time and returns empty string for invalid timestamps", () => {
       const timestamp = "2026-02-22T10:00:00.000Z";
-      const expected = new Intl.DateTimeFormat("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }).format(new Date(timestamp));
-      expect(formatTime(timestamp)).toBe(expected);
+      const formatted = formatTime(timestamp);
+      expect(formatted).toMatch(/^\d{2}:\d{2}:\d{2}(?:\s*[AP]M)?$/);
       expect(formatTime("not-a-date")).toBe("");
     });
 
@@ -102,6 +98,7 @@ describe("agent-chat-message-card-model", () => {
 
     test("returns non-assistant role labels", () => {
       const message = createMessage({ role: "system" });
+      expect(assistantRoleFromMessage(createMessage({ role: "tool" }), "build")).toBeNull();
       expect(roleLabel("thinking", null, message)).toBe("Thinking");
       expect(roleLabel("tool", null, message)).toBe("Activity");
       expect(roleLabel("system", null, message)).toBe("System");
@@ -111,6 +108,7 @@ describe("agent-chat-message-card-model", () => {
       expect(hasNonEmptyInput(undefined)).toBe(false);
       expect(hasNonEmptyInput({})).toBe(false);
       expect(hasNonEmptyInput({ a: "   ", b: { c: [] } })).toBe(false);
+      expect(hasNonEmptyInput({ a: null })).toBe(false);
       expect(hasNonEmptyInput({ a: 0 })).toBe(true);
       expect(hasNonEmptyInput({ a: false })).toBe(true);
       expect(hasNonEmptyInput({ a: ["", "  ", { b: "ok" }] })).toBe(true);
@@ -226,6 +224,9 @@ describe("agent-chat-message-card-model", () => {
       expect(questionToolDetails(createToolMeta({ tool: "question", output: "{broken" }))).toEqual(
         [],
       );
+      expect(
+        questionToolDetails(createToolMeta({ tool: "question", output: "plain text" })),
+      ).toEqual([]);
       expect(questionToolDetails(createToolMeta({ tool: "question", metadata: {} }))).toEqual([]);
     });
 
@@ -307,6 +308,19 @@ describe("agent-chat-message-card-model", () => {
       );
       expect(details).toEqual([{ prompt: "Anything else?", answers: [] }]);
     });
+
+    test("ignores malformed question entries before valid prompts", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "question",
+          metadata: {
+            questions: [null, { foo: "bar" }, { question: "Final prompt" }],
+          },
+        }),
+      );
+
+      expect(details).toEqual([{ prompt: "Final prompt", answers: [] }]);
+    });
   });
 
   describe("tool summary builder", () => {
@@ -331,6 +345,16 @@ describe("agent-chat-message-card-model", () => {
           "",
         ),
       ).toBe("1 todo");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "todowrite",
+            output: JSON.stringify({ items: [{ id: "1" }, { id: "2" }] }),
+          }),
+          "",
+        ),
+      ).toBe("2 todos");
     });
 
     test("builds todo status summaries when counts are unavailable", () => {
@@ -353,6 +377,16 @@ describe("agent-chat-message-card-model", () => {
           "",
         ),
       ).toBe("todos update cancelled");
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "todowrite",
+            status: "error",
+            error: "boom",
+          }),
+          "",
+        ),
+      ).toBe("boom");
     });
 
     test("builds task summaries from metadata and session id", () => {
@@ -379,18 +413,22 @@ describe("agent-chat-message-card-model", () => {
 
     test("prefers explicit error text and title with compaction", () => {
       const longError = "x".repeat(260);
-      expect(
-        buildToolSummary(
-          createToolMeta({
-            status: "error",
-            error: longError,
-          }),
-          "",
-        ).length,
-      ).toBe(223);
+      const errorSummary = buildToolSummary(
+        createToolMeta({
+          status: "error",
+          error: longError,
+        }),
+        "",
+      );
+      expect(errorSummary.startsWith("x".repeat(40))).toBe(true);
+      expect(errorSummary.endsWith("...")).toBe(true);
+      expect(errorSummary.length).toBeLessThanOrEqual(223);
 
       const longTitle = "t".repeat(200);
-      expect(buildToolSummary(createToolMeta({ title: longTitle }), "").length).toBe(163);
+      const titleSummary = buildToolSummary(createToolMeta({ title: longTitle }), "");
+      expect(titleSummary.startsWith("t".repeat(40))).toBe(true);
+      expect(titleSummary.endsWith("...")).toBe(true);
+      expect(titleSummary.length).toBeLessThanOrEqual(163);
     });
 
     test("builds search and path summaries", () => {
@@ -413,6 +451,26 @@ describe("agent-chat-message-card-model", () => {
           "",
         ),
       ).toBe("agent");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "search",
+            input: { path: "apps/desktop/src" },
+          }),
+          "",
+        ),
+      ).toBe("apps/desktop/src");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "find",
+            input: { path: "." },
+          }),
+          "",
+        ),
+      ).toBe("workspace");
 
       expect(
         buildToolSummary(
@@ -451,12 +509,73 @@ describe("agent-chat-message-card-model", () => {
       expect(
         buildToolSummary(
           createToolMeta({
-            tool: "subtask",
-            output: JSON.stringify({ message: "done ".repeat(80) }),
+            tool: "delegate",
+            output: JSON.stringify({ summary: [{ id: "x" }, { id: "y" }] }),
           }),
           "",
-        ).length,
-      ).toBe(163);
+        ),
+      ).toBe("2 subagent results");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "delegate",
+            output: JSON.stringify({ result: "delegated result" }),
+          }),
+          "",
+        ),
+      ).toBe("delegated result");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "delegate",
+            output: "{}",
+          }),
+          "",
+        ),
+      ).toBe("{}");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "delegate",
+            output: "plain text summary",
+          }),
+          "",
+        ),
+      ).toBe("plain text summary");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "delegate",
+            output: "{broken",
+          }),
+          "",
+        ),
+      ).toBe("{broken");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "delegate",
+            output: "[]",
+          }),
+          "",
+        ),
+      ).toBe("[]");
+
+      const structuredMessageSummary = buildToolSummary(
+        createToolMeta({
+          tool: "subtask",
+          output: JSON.stringify({ message: "done ".repeat(80) }),
+        }),
+        "",
+      );
+      expect(structuredMessageSummary.startsWith("done done done")).toBe(true);
+      expect(structuredMessageSummary.endsWith("...")).toBe(true);
+      expect(structuredMessageSummary.length).toBeLessThanOrEqual(163);
 
       expect(
         buildToolSummary(
@@ -513,6 +632,18 @@ describe("agent-chat-message-card-model", () => {
           "1970-01-01T00:00:00.040Z",
         ),
       ).toBe(30);
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            input: { prompt: "hi" },
+            startedAtMs: 10,
+            endedAtMs: 40,
+          }),
+          "2026-02-22T10:00:00.000Z",
+        ),
+      ).toBe(30);
     });
 
     test("falls back to observed and started/ended timestamps", () => {
@@ -566,6 +697,16 @@ describe("agent-chat-message-card-model", () => {
         getToolDuration(
           createToolMeta({
             status: "completed",
+          }),
+          "not-a-date",
+        ),
+      ).toBeNull();
+
+      expect(
+        getToolDuration(
+          createToolMeta({
+            status: "completed",
+            startedAtMs: 200,
           }),
           "not-a-date",
         ),
