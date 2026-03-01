@@ -1,6 +1,6 @@
 mod build_cleanup;
-mod build_run_control;
-mod build_start;
+mod build_lifecycle;
+mod build_runtime_setup;
 
 use serde::Deserialize;
 
