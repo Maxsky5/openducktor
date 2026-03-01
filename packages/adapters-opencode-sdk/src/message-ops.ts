@@ -74,35 +74,27 @@ export const loadSessionHistory = async (
   return mapped;
 };
 
-export const loadSessionTodos = async (input: {
-  baseUrl: string;
-  workingDirectory: string;
-  externalSessionId: string;
-}): Promise<AgentSessionTodoItem[]> => {
+export const loadSessionTodos = async (
+  createClient: ClientFactory,
+  input: {
+    baseUrl: string;
+    workingDirectory: string;
+    externalSessionId: string;
+  },
+): Promise<AgentSessionTodoItem[]> => {
   try {
-    const baseUrl = input.baseUrl.replace(/\/+$/, "");
-    const url = new URL(`${baseUrl}/session/${encodeURIComponent(input.externalSessionId)}/todo`);
-    if (input.workingDirectory.trim().length > 0) {
-      url.searchParams.set("directory", input.workingDirectory);
-    }
-
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+    const client = createClient({
+      baseUrl: input.baseUrl,
+      workingDirectory: input.workingDirectory,
     });
-    if (!response.ok) {
-      console.warn(`loadSessionTodos: HTTP ${response.status}`, {
-        statusText: response.statusText,
-      });
-      return [];
-    }
-
-    const payload = (await response.json().catch(() => null)) as unknown;
+    const response = await client.session.todo({
+      sessionID: input.externalSessionId,
+      directory: input.workingDirectory,
+    });
+    const payload = unwrapData(response, "load session todos");
     return normalizeTodoList(payload);
   } catch (error) {
-    console.warn("loadSessionTodos: fetch failed", error);
+    console.warn("loadSessionTodos: request failed", error);
     return [];
   }
 };
