@@ -16,8 +16,8 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     label: "Bug",
     description: "Unexpected behavior, regression, or production defect.",
     icon: Bug,
-    accentClass: "border-rose-300 bg-rose-50/90 dark:border-rose-700 dark:bg-rose-950/50",
-    iconClass: "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300",
+    accentClass: "border-destructive-border bg-destructive-surface",
+    iconClass: "bg-destructive-surface text-destructive-muted",
     supportsParent: true,
   },
   {
