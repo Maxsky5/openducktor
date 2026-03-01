@@ -12,7 +12,7 @@ import {
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
-import type { TaskMetadataCache } from "./task-metadata-cache";
+import type { ParsedTaskMetadata, TaskMetadataCache } from "./task-metadata-cache";
 
 export type SetSpecInput = {
   taskId: string;
@@ -40,7 +40,7 @@ export class TauriTaskClient {
     private readonly metadataCache: TaskMetadataCache,
   ) {}
 
-  private readTaskMetadata(repoPath: string, taskId: string) {
+  private readTaskMetadata(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
     return this.metadataCache.get(this.invokeFn, repoPath, taskId);
   }
 
