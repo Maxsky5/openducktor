@@ -1,8 +1,10 @@
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { buildTasksStateValue } from "../app-state-context-values";
 import {
-  TaskOperationsContext,
-  type TaskOperationsContextValue,
+  TaskControlContext,
+  type TaskControlContextValue,
+  TaskDataContext,
+  type TaskDataContextValue,
   TasksStateContext,
   useActiveRepoContext,
   useChecksOperationsContext,
@@ -65,20 +67,28 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     ],
   );
 
-  const taskOperationsValue = useMemo<TaskOperationsContextValue>(
+  const taskDataValue = useMemo<TaskDataContextValue>(
     () => ({
       tasks,
       runs,
+    }),
+    [runs, tasks],
+  );
+
+  const taskControlValue = useMemo<TaskControlContextValue>(
+    () => ({
       refreshTaskData,
       clearTaskData,
       setIsLoadingTasks,
     }),
-    [clearTaskData, refreshTaskData, runs, setIsLoadingTasks, tasks],
+    [clearTaskData, refreshTaskData, setIsLoadingTasks],
   );
 
   return (
-    <TaskOperationsContext.Provider value={taskOperationsValue}>
-      <TasksStateContext.Provider value={tasksStateValue}>{children}</TasksStateContext.Provider>
-    </TaskOperationsContext.Provider>
+    <TaskDataContext.Provider value={taskDataValue}>
+      <TaskControlContext.Provider value={taskControlValue}>
+        <TasksStateContext.Provider value={tasksStateValue}>{children}</TasksStateContext.Provider>
+      </TaskControlContext.Provider>
+    </TaskDataContext.Provider>
   );
 }

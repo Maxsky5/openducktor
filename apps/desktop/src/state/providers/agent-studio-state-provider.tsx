@@ -4,7 +4,8 @@ import { buildAgentStateValue } from "../app-state-context-values";
 import {
   AgentStateContext,
   useActiveRepoContext,
-  useTaskOperationsContext,
+  useTaskControlContext,
+  useTaskDataContext,
 } from "../app-state-contexts";
 import { useAgentOrchestratorOperations } from "../operations";
 
@@ -17,7 +18,8 @@ export function AgentStudioStateProvider({
   children,
 }: AgentStudioStateProviderProps): ReactElement {
   const { activeRepo } = useActiveRepoContext();
-  const { tasks, runs, refreshTaskData } = useTaskOperationsContext();
+  const { tasks, runs } = useTaskDataContext();
+  const { refreshTaskData } = useTaskControlContext();
   const {
     sessions,
     loadAgentSessions,

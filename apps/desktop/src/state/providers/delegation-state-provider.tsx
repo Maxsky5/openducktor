@@ -6,13 +6,13 @@ import {
   type DelegationEventsContextValue,
   DelegationStateContext,
   useActiveRepoContext,
-  useTaskOperationsContext,
+  useTaskControlContext,
 } from "../app-state-contexts";
 import { useDelegationOperations } from "../operations";
 
 export function DelegationStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeRepo } = useActiveRepoContext();
-  const { refreshTaskData } = useTaskOperationsContext();
+  const { refreshTaskData } = useTaskControlContext();
   const [events, setEvents] = useState<RunEvent[]>([]);
   const { delegateTask, delegateRespond, delegateStop, delegateCleanup } = useDelegationOperations({
     activeRepo,

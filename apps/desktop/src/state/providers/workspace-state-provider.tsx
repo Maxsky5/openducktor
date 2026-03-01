@@ -3,7 +3,7 @@ import { buildWorkspaceStateValue, findActiveWorkspace } from "../app-state-cont
 import {
   useActiveRepoContext,
   useChecksOperationsContext,
-  useTaskOperationsContext,
+  useTaskControlContext,
   WorkspaceOperationsContext,
   type WorkspaceOperationsContextValue,
   WorkspaceStateContext,
@@ -12,7 +12,7 @@ import { useRepoSettingsOperations, useWorkspaceOperations } from "../operations
 
 export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeRepo, setActiveRepo } = useActiveRepoContext();
-  const { clearTaskData } = useTaskOperationsContext();
+  const { clearTaskData } = useTaskControlContext();
   const { clearActiveBeadsCheck } = useChecksOperationsContext();
 
   const {

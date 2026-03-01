@@ -3,7 +3,7 @@ import {
   useActiveRepoContext,
   useChecksOperationsContext,
   useDelegationEventsContext,
-  useTaskOperationsContext,
+  useTaskControlContext,
   useWorkspaceOperationsContext,
 } from "../app-state-contexts";
 import { useAppLifecycle } from "../lifecycle/use-app-lifecycle";
@@ -22,7 +22,7 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
     hasCachedBeadsCheck,
     hasCachedRepoOpencodeHealth,
   } = useChecksOperationsContext();
-  const { refreshTaskData, clearTaskData, setIsLoadingTasks } = useTaskOperationsContext();
+  const { refreshTaskData, clearTaskData, setIsLoadingTasks } = useTaskControlContext();
   const { setEvents } = useDelegationEventsContext();
 
   useAppLifecycle({

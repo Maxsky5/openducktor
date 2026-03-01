@@ -1,4 +1,10 @@
-import type { BeadsCheck, RunEvent, RunSummary, TaskCard } from "@openducktor/contracts";
+import type {
+  BeadsCheck,
+  RunEvent,
+  RunSummary,
+  RuntimeCheck,
+  TaskCard,
+} from "@openducktor/contracts";
 import { type Context, createContext, type Dispatch, type SetStateAction, useContext } from "react";
 import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
 import type {
@@ -23,7 +29,7 @@ export type ActiveRepoContextValue = {
 };
 
 export type ChecksOperationsContextValue = {
-  refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
+  refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
   refreshRepoOpencodeHealthForRepo: (
     repoPath: string,
@@ -37,9 +43,12 @@ export type ChecksOperationsContextValue = {
   hasCachedRepoOpencodeHealth: (repoPath: string) => boolean;
 };
 
-export type TaskOperationsContextValue = {
+export type TaskDataContextValue = {
   tasks: TaskCard[];
   runs: RunSummary[];
+};
+
+export type TaskControlContextValue = {
   refreshTaskData: (repoPath: string) => Promise<void>;
   clearTaskData: () => void;
   setIsLoadingTasks: (value: boolean) => void;
@@ -57,7 +66,8 @@ export type DelegationEventsContextValue = {
 
 export const ActiveRepoContext = createContext<ActiveRepoContextValue | null>(null);
 export const ChecksOperationsContext = createContext<ChecksOperationsContextValue | null>(null);
-export const TaskOperationsContext = createContext<TaskOperationsContextValue | null>(null);
+export const TaskDataContext = createContext<TaskDataContextValue | null>(null);
+export const TaskControlContext = createContext<TaskControlContextValue | null>(null);
 export const WorkspaceOperationsContext = createContext<WorkspaceOperationsContextValue | null>(
   null,
 );
@@ -77,8 +87,11 @@ export const useActiveRepoContext = (): ActiveRepoContextValue =>
 export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
   useRequiredContext(ChecksOperationsContext, "useChecksOperationsContext");
 
-export const useTaskOperationsContext = (): TaskOperationsContextValue =>
-  useRequiredContext(TaskOperationsContext, "useTaskOperationsContext");
+export const useTaskDataContext = (): TaskDataContextValue =>
+  useRequiredContext(TaskDataContext, "useTaskDataContext");
+
+export const useTaskControlContext = (): TaskControlContextValue =>
+  useRequiredContext(TaskControlContext, "useTaskControlContext");
 
 export const useWorkspaceOperationsContext = (): WorkspaceOperationsContextValue =>
   useRequiredContext(WorkspaceOperationsContext, "useWorkspaceOperationsContext");
