@@ -1,66 +1,17 @@
-use super::{
+use super::super::{
     emit_event, run_parsed_hook_command_allow_failure, spawn_opencode_server,
     spawn_output_forwarder, terminate_child_process, validate_hook_trust, validate_transition,
-    wait_for_local_server_with_process, AppService, RunEmitter, RunProcess,
-    StartupEventCorrelation, StartupEventPayload,
+    wait_for_local_server_with_process, AppService, OpencodeStartupReadinessPolicy,
+    OpencodeStartupWaitReport, RunEmitter, RunProcess, StartupEventCorrelation,
+    StartupEventPayload, TrackedOpencodeProcessGuard,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
 use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, RepoConfig};
-use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdout};
 use uuid::Uuid;
-
-/// Action responded by user during build/run (for approve/deny/message flow).
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BuildResponseAction {
-    Approve,
-    Deny,
-    Message,
-}
-
-impl BuildResponseAction {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            BuildResponseAction::Approve => "approve",
-            BuildResponseAction::Deny => "deny",
-            BuildResponseAction::Message => "message",
-        }
-    }
-}
-
-/// Cleanup mode after build/run completion.
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CleanupMode {
-    Success,
-    Failure,
-}
-
-impl CleanupMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            CleanupMode::Success => "success",
-            CleanupMode::Failure => "failure",
-        }
-    }
-}
-
-struct ReviewTransition {
-    status: TaskStatus,
-    label: &'static str,
-}
-
-enum CleanupEvent<'a> {
-    RunFailed,
-    PostHookStarted { hook: &'a str },
-    PostHookFailed { hook: &'a str, stderr: &'a str },
-    ReadyForReview { review_label: &'a str },
-    RunCompleted { review_label: &'a str },
-}
 
 struct BuildPrerequisites {
     repo_path: String,
@@ -75,7 +26,7 @@ struct PreparedBuildWorktree {
 
 struct SpawnedBuildAgent {
     child: Child,
-    opencode_process_guard: super::process_registry::TrackedOpencodeProcessGuard,
+    opencode_process_guard: TrackedOpencodeProcessGuard,
     port: u16,
 }
 
@@ -322,7 +273,7 @@ impl AppService {
         task_id: &str,
         run_id: &str,
         port: u16,
-        startup_policy: super::OpencodeStartupReadinessPolicy,
+        startup_policy: OpencodeStartupReadinessPolicy,
     ) {
         self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
             "build_runtime",
@@ -341,8 +292,8 @@ impl AppService {
         task_id: &str,
         run_id: &str,
         port: u16,
-        startup_policy: super::OpencodeStartupReadinessPolicy,
-        startup_report: super::OpencodeStartupWaitReport,
+        startup_policy: OpencodeStartupReadinessPolicy,
+        startup_report: OpencodeStartupWaitReport,
         reason: &'static str,
     ) {
         self.emit_opencode_startup_event(StartupEventPayload::failed(
@@ -364,8 +315,8 @@ impl AppService {
         task_id: &str,
         run_id: &str,
         port: u16,
-        startup_policy: super::OpencodeStartupReadinessPolicy,
-        startup_report: super::OpencodeStartupWaitReport,
+        startup_policy: OpencodeStartupReadinessPolicy,
+        startup_report: OpencodeStartupWaitReport,
     ) {
         self.emit_opencode_startup_event(StartupEventPayload::ready(
             "build_runtime",
@@ -505,320 +456,5 @@ impl AppService {
             spawned_agent,
             emitter,
         )
-    }
-
-    pub fn build_respond(
-        &self,
-        run_id: &str,
-        action: BuildResponseAction,
-        payload: Option<&str>,
-        emitter: RunEmitter,
-    ) -> Result<bool> {
-        let mut runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let run = runs
-            .get_mut(run_id)
-            .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
-
-        match action {
-            BuildResponseAction::Approve => {
-                if payload
-                    .map(|entry| entry.contains("git push"))
-                    .unwrap_or(false)
-                {
-                    run.summary.last_message =
-                        Some("Approved sensitive command: git push".to_string());
-                } else {
-                    run.summary.last_message = Some("Approval received".to_string());
-                }
-                run.summary.state = RunState::Running;
-            }
-            BuildResponseAction::Deny => {
-                run.summary.last_message = Some("Command denied by user".to_string());
-                run.summary.state = RunState::Blocked;
-                let _ = self.task_transition(
-                    &run.repo_path,
-                    &run.task_id,
-                    TaskStatus::Blocked,
-                    Some("User denied command"),
-                );
-            }
-            BuildResponseAction::Message => {
-                run.summary.last_message = payload.map(|entry| entry.to_string());
-            }
-        }
-
-        emit_event(
-            &emitter,
-            RunEvent::AgentThought {
-                run_id: run_id.to_string(),
-                message: run
-                    .summary
-                    .last_message
-                    .clone()
-                    .unwrap_or_else(|| "User response applied".to_string()),
-                timestamp: now_rfc3339(),
-            },
-        );
-
-        Ok(true)
-    }
-
-    pub fn build_stop(&self, run_id: &str, emitter: RunEmitter) -> Result<bool> {
-        let mut runs = self
-            .runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?;
-        let run = runs
-            .get_mut(run_id)
-            .ok_or_else(|| anyhow!("Run not found: {run_id}"))?;
-
-        terminate_child_process(&mut run.child);
-        run.summary.state = RunState::Stopped;
-        run.summary.last_message = Some("Run stopped by user".to_string());
-
-        emit_event(
-            &emitter,
-            RunEvent::RunFinished {
-                run_id: run_id.to_string(),
-                message: "Run stopped".to_string(),
-                timestamp: now_rfc3339(),
-                success: false,
-            },
-        );
-
-        Ok(true)
-    }
-
-    pub fn build_cleanup(
-        &self,
-        run_id: &str,
-        mode: CleanupMode,
-        emitter: RunEmitter,
-    ) -> Result<bool> {
-        let mut run = self.take_run_for_cleanup(run_id)?;
-
-        terminate_child_process(&mut run.child);
-
-        match mode {
-            CleanupMode::Failure => self.cleanup_failed_run(run_id, &mut run, &emitter),
-            CleanupMode::Success => self.cleanup_success_run(run_id, &mut run, &emitter),
-        }
-    }
-
-    fn take_run_for_cleanup(&self, run_id: &str) -> Result<RunProcess> {
-        self.runs
-            .lock()
-            .map_err(|_| anyhow!("Run state lock poisoned"))?
-            .remove(run_id)
-            .ok_or_else(|| anyhow!("Run not found: {run_id}"))
-    }
-
-    fn cleanup_failed_run(
-        &self,
-        run_id: &str,
-        run: &mut RunProcess,
-        emitter: &RunEmitter,
-    ) -> Result<bool> {
-        self.apply_blocked_transition(run, "Run failed; worktree retained", true)?;
-        self.emit_cleanup_events(emitter, run_id, CleanupEvent::RunFailed);
-        Ok(true)
-    }
-
-    fn cleanup_success_run(
-        &self,
-        run_id: &str,
-        run: &mut RunProcess,
-        emitter: &RunEmitter,
-    ) -> Result<bool> {
-        if !self.run_post_complete_hooks(run_id, run, emitter)? {
-            return Ok(false);
-        }
-
-        let review_transition = self.determine_review_transition(run)?;
-        self.emit_cleanup_events(
-            emitter,
-            run_id,
-            CleanupEvent::ReadyForReview {
-                review_label: review_transition.label,
-            },
-        );
-        self.apply_review_transition(run, &review_transition)?;
-        self.cleanup_worktree(run)?;
-        self.emit_cleanup_events(
-            emitter,
-            run_id,
-            CleanupEvent::RunCompleted {
-                review_label: review_transition.label,
-            },
-        );
-        Ok(true)
-    }
-
-    fn run_post_complete_hooks(
-        &self,
-        run_id: &str,
-        run: &mut RunProcess,
-        emitter: &RunEmitter,
-    ) -> Result<bool> {
-        let post_complete_hooks = run.repo_config.hooks.post_complete.clone();
-        for hook in post_complete_hooks {
-            self.emit_cleanup_events(
-                emitter,
-                run_id,
-                CleanupEvent::PostHookStarted {
-                    hook: hook.as_str(),
-                },
-            );
-
-            let (ok, _stdout, stderr) =
-                run_parsed_hook_command_allow_failure(hook.as_str(), Path::new(&run.worktree_path));
-
-            if !ok {
-                self.apply_blocked_transition(run, "Post-complete hook failed", false)?;
-                self.emit_cleanup_events(
-                    emitter,
-                    run_id,
-                    CleanupEvent::PostHookFailed {
-                        hook: hook.as_str(),
-                        stderr: stderr.as_str(),
-                    },
-                );
-                return Ok(false);
-            }
-        }
-        Ok(true)
-    }
-
-    fn cleanup_worktree(&self, run: &RunProcess) -> Result<()> {
-        remove_worktree(Path::new(&run.repo_path), Path::new(&run.worktree_path))
-    }
-
-    fn apply_blocked_transition(
-        &self,
-        run: &mut RunProcess,
-        reason: &'static str,
-        mark_run_failed: bool,
-    ) -> Result<()> {
-        self.task_transition(
-            &run.repo_path,
-            &run.task_id,
-            TaskStatus::Blocked,
-            Some(reason),
-        )?;
-        if mark_run_failed {
-            run.summary.state = RunState::Failed;
-        }
-        Ok(())
-    }
-
-    fn determine_review_transition(&self, run: &RunProcess) -> Result<ReviewTransition> {
-        let current_task = self
-            .task_store
-            .list_tasks(Path::new(&run.repo_path))?
-            .into_iter()
-            .find(|task| task.id == run.task_id)
-            .ok_or_else(|| anyhow!("Task not found: {}", run.task_id))?;
-
-        Ok(if current_task.ai_review_enabled {
-            ReviewTransition {
-                status: TaskStatus::AiReview,
-                label: "AI review",
-            }
-        } else {
-            ReviewTransition {
-                status: TaskStatus::HumanReview,
-                label: "Human review",
-            }
-        })
-    }
-
-    fn apply_review_transition(
-        &self,
-        run: &RunProcess,
-        review_transition: &ReviewTransition,
-    ) -> Result<()> {
-        self.task_transition(
-            &run.repo_path,
-            &run.task_id,
-            review_transition.status.clone(),
-            Some("Builder completed"),
-        )?;
-        Ok(())
-    }
-
-    fn emit_cleanup_events(&self, emitter: &RunEmitter, run_id: &str, event: CleanupEvent<'_>) {
-        let event = match event {
-            CleanupEvent::RunFailed => RunEvent::RunFinished {
-                run_id: run_id.to_string(),
-                message: "Run marked as failed; worktree retained".to_string(),
-                timestamp: now_rfc3339(),
-                success: false,
-            },
-            CleanupEvent::PostHookStarted { hook } => RunEvent::PostHookStarted {
-                run_id: run_id.to_string(),
-                message: format!("Running post-complete hook: {hook}"),
-                timestamp: now_rfc3339(),
-            },
-            CleanupEvent::PostHookFailed { hook, stderr } => RunEvent::PostHookFailed {
-                run_id: run_id.to_string(),
-                message: format!("Post-complete hook failed: {hook}\n{stderr}"),
-                timestamp: now_rfc3339(),
-            },
-            CleanupEvent::ReadyForReview { review_label } => {
-                RunEvent::ReadyForManualDoneConfirmation {
-                    run_id: run_id.to_string(),
-                    message: format!(
-                        "Post-complete hooks passed. Transitioning to {review_label}."
-                    ),
-                    timestamp: now_rfc3339(),
-                }
-            }
-            CleanupEvent::RunCompleted { review_label } => RunEvent::RunFinished {
-                run_id: run_id.to_string(),
-                message: format!("Run completed; moved to {review_label}; worktree removed"),
-                timestamp: now_rfc3339(),
-                success: true,
-            },
-        };
-        emit_event(emitter, event);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::app_service::build_orchestrator::BuildResponseAction;
-    use crate::app_service::test_support::{build_service_with_state, make_emitter};
-    use std::sync::{Arc, Mutex};
-
-    #[test]
-    fn module_build_stop_reports_missing_run() {
-        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
-        let events = Arc::new(Mutex::new(Vec::new()));
-
-        let error = service
-            .build_stop("missing-run", make_emitter(events))
-            .expect_err("stopping unknown run should fail");
-
-        assert!(error.to_string().contains("Run not found: missing-run"));
-    }
-
-    #[test]
-    fn module_build_respond_reports_missing_run() {
-        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
-        let events = Arc::new(Mutex::new(Vec::new()));
-
-        let error = service
-            .build_respond(
-                "missing-run",
-                BuildResponseAction::Approve,
-                None,
-                make_emitter(events),
-            )
-            .expect_err("responding to unknown run should fail");
-
-        assert!(error.to_string().contains("Run not found: missing-run"));
     }
 }
