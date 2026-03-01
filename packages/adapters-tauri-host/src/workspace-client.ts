@@ -7,6 +7,50 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
 
+export type AgentDefaultConfig = {
+  providerId: string;
+  modelId: string;
+  variant?: string;
+  opencodeAgent?: string;
+};
+
+export type WorkspaceAgentDefaults = {
+  spec?: AgentDefaultConfig;
+  planner?: AgentDefaultConfig;
+  build?: AgentDefaultConfig;
+  qa?: AgentDefaultConfig;
+};
+
+export type WorkspaceRepoConfigInput = {
+  worktreeBasePath?: string;
+  branchPrefix?: string;
+  agentDefaults?: WorkspaceAgentDefaults;
+};
+
+export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {
+  trustedHooks: boolean;
+  hooks?: WorkspaceRepoHooksInput;
+};
+
+export type WorkspaceRepoHooksInput = {
+  preStart?: string[];
+  postComplete?: string[];
+};
+
+export type TrustedHooksChallenge = {
+  nonce: string;
+  repoPath: string;
+  fingerprint: string;
+  expiresAt: string;
+  preStartCount: number;
+  postCompleteCount: number;
+};
+
+export type TrustedHooksProof = {
+  nonce: string;
+  fingerprint: string;
+};
+
 export const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
   const payload = await invokeFn<unknown>("workspace_list");
   return parseArray(workspaceRecordSchema, payload);
@@ -31,16 +75,7 @@ export const workspaceSelect = async (
 export const workspaceUpdateRepoConfig = async (
   invokeFn: InvokeFn,
   repoPath: string,
-  config: {
-    worktreeBasePath?: string;
-    branchPrefix?: string;
-    agentDefaults?: {
-      spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-      planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-      build?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-      qa?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-    };
-  },
+  config: WorkspaceRepoConfigInput,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn<unknown>("workspace_update_repo_config", {
     repoPath,
@@ -52,18 +87,7 @@ export const workspaceUpdateRepoConfig = async (
 export const workspaceSaveRepoSettings = async (
   invokeFn: InvokeFn,
   repoPath: string,
-  settings: {
-    worktreeBasePath?: string;
-    branchPrefix?: string;
-    trustedHooks: boolean;
-    hooks?: { preStart?: string[]; postComplete?: string[] };
-    agentDefaults?: {
-      spec?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-      planner?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-      build?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-      qa?: { providerId: string; modelId: string; variant?: string; opencodeAgent?: string };
-    };
-  },
+  settings: WorkspaceRepoSettingsInput,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn<unknown>("workspace_save_repo_settings", {
     repoPath,
@@ -75,7 +99,7 @@ export const workspaceSaveRepoSettings = async (
 export const workspaceUpdateRepoHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,
-  hooks: { preStart?: string[]; postComplete?: string[] },
+  hooks: WorkspaceRepoHooksInput,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn<unknown>("workspace_update_repo_hooks", {
     repoPath,
@@ -96,7 +120,7 @@ export const workspaceSetTrustedHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,
   trusted: boolean,
-  challenge?: { nonce: string; fingerprint: string },
+  challenge?: TrustedHooksProof,
 ): Promise<WorkspaceRecord> => {
   const payload = await invokeFn<unknown>("workspace_set_trusted_hooks", {
     repoPath,
@@ -114,14 +138,7 @@ export const workspaceSetTrustedHooks = async (
 export const workspacePrepareTrustedHooksChallenge = async (
   invokeFn: InvokeFn,
   repoPath: string,
-): Promise<{
-  nonce: string;
-  repoPath: string;
-  fingerprint: string;
-  expiresAt: string;
-  preStartCount: number;
-  postCompleteCount: number;
-}> => {
+): Promise<TrustedHooksChallenge> => {
   return invokeFn("workspace_prepare_trusted_hooks_challenge", { repoPath });
 };
 
@@ -132,3 +149,64 @@ export const getTheme = async (invokeFn: InvokeFn): Promise<string> => {
 export const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
   await invokeFn<void>("set_theme", { theme });
 };
+
+export class TauriWorkspaceClient {
+  constructor(private readonly invokeFn: InvokeFn) {}
+
+  async workspaceList(): Promise<WorkspaceRecord[]> {
+    return workspaceList(this.invokeFn);
+  }
+
+  async workspaceAdd(repoPath: string): Promise<WorkspaceRecord> {
+    return workspaceAdd(this.invokeFn, repoPath);
+  }
+
+  async workspaceSelect(repoPath: string): Promise<WorkspaceRecord> {
+    return workspaceSelect(this.invokeFn, repoPath);
+  }
+
+  async workspaceUpdateRepoConfig(
+    repoPath: string,
+    config: WorkspaceRepoConfigInput,
+  ): Promise<WorkspaceRecord> {
+    return workspaceUpdateRepoConfig(this.invokeFn, repoPath, config);
+  }
+
+  async workspaceSaveRepoSettings(
+    repoPath: string,
+    settings: WorkspaceRepoSettingsInput,
+  ): Promise<WorkspaceRecord> {
+    return workspaceSaveRepoSettings(this.invokeFn, repoPath, settings);
+  }
+
+  async workspaceUpdateRepoHooks(
+    repoPath: string,
+    hooks: WorkspaceRepoHooksInput,
+  ): Promise<WorkspaceRecord> {
+    return workspaceUpdateRepoHooks(this.invokeFn, repoPath, hooks);
+  }
+
+  async workspaceGetRepoConfig(repoPath: string): Promise<RepoConfig> {
+    return workspaceGetRepoConfig(this.invokeFn, repoPath);
+  }
+
+  async workspacePrepareTrustedHooksChallenge(repoPath: string): Promise<TrustedHooksChallenge> {
+    return workspacePrepareTrustedHooksChallenge(this.invokeFn, repoPath);
+  }
+
+  async workspaceSetTrustedHooks(
+    repoPath: string,
+    trusted: boolean,
+    challenge?: TrustedHooksProof,
+  ): Promise<WorkspaceRecord> {
+    return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted, challenge);
+  }
+
+  async getTheme(): Promise<string> {
+    return getTheme(this.invokeFn);
+  }
+
+  async setTheme(theme: string): Promise<void> {
+    return setTheme(this.invokeFn, theme);
+  }
+}

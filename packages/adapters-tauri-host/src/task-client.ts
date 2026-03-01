@@ -14,6 +14,26 @@ import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
 
+export type SetSpecInput = {
+  taskId: string;
+  markdown: string;
+  repoPath?: string;
+};
+
+export type PlanSubtaskInput = {
+  title: string;
+  issueType?: "task" | "feature" | "bug";
+  priority?: number;
+  description?: string;
+};
+
+export type SetPlanInput = {
+  taskId: string;
+  markdown: string;
+  subtasks?: PlanSubtaskInput[];
+  repoPath?: string;
+};
+
 export const tasksList = async (invokeFn: InvokeFn, repoPath: string): Promise<TaskCard[]> => {
   const payload = await invokeFn<unknown>("tasks_list", { repoPath });
   return parseArray(taskCardSchema, payload);
@@ -122,11 +142,7 @@ export const specGet = async (
 export const setSpec = async (
   invokeFn: InvokeFn,
   metadataCache: TaskMetadataCache,
-  input: {
-    taskId: string;
-    markdown: string;
-    repoPath?: string;
-  },
+  input: SetSpecInput,
 ): Promise<SetSpecOutput> => {
   if (!input.repoPath) {
     throw new Error("repoPath is required to set spec");
@@ -161,17 +177,7 @@ export const saveSpecDocument = async (
 export const setPlan = async (
   invokeFn: InvokeFn,
   metadataCache: TaskMetadataCache,
-  input: {
-    taskId: string;
-    markdown: string;
-    subtasks?: Array<{
-      title: string;
-      issueType?: "task" | "feature" | "bug";
-      priority?: number;
-      description?: string;
-    }>;
-    repoPath?: string;
-  },
+  input: SetPlanInput,
 ): Promise<SetPlanOutput> => {
   if (!input.repoPath) {
     throw new Error("repoPath is required to set plan");
@@ -288,3 +294,112 @@ export const agentSessionUpsert = async (
   });
   metadataCache.invalidate(repoPath, taskId);
 };
+
+export class TauriTaskClient {
+  constructor(
+    private readonly invokeFn: InvokeFn,
+    private readonly metadataCache: TaskMetadataCache,
+  ) {}
+
+  async tasksList(repoPath: string): Promise<TaskCard[]> {
+    return tasksList(this.invokeFn, repoPath);
+  }
+
+  async taskCreate(repoPath: string, input: TaskCreateInput): Promise<TaskCard> {
+    return taskCreate(this.invokeFn, repoPath, input);
+  }
+
+  async taskUpdate(repoPath: string, taskId: string, patch: TaskUpdatePatch): Promise<TaskCard> {
+    return taskUpdate(this.invokeFn, repoPath, taskId, patch);
+  }
+
+  async taskDelete(
+    repoPath: string,
+    taskId: string,
+    deleteSubtasks = false,
+  ): Promise<{ ok: boolean }> {
+    return taskDelete(this.invokeFn, this.metadataCache, repoPath, taskId, deleteSubtasks);
+  }
+
+  async taskTransition(
+    repoPath: string,
+    taskId: string,
+    status: TaskStatus,
+    reason?: string,
+  ): Promise<TaskCard> {
+    return taskTransition(this.invokeFn, repoPath, taskId, status, reason);
+  }
+
+  async taskDefer(repoPath: string, taskId: string, reason?: string): Promise<TaskCard> {
+    return taskDefer(this.invokeFn, repoPath, taskId, reason);
+  }
+
+  async taskResumeDeferred(repoPath: string, taskId: string): Promise<TaskCard> {
+    return taskResumeDeferred(this.invokeFn, repoPath, taskId);
+  }
+
+  async specGet(
+    repoPath: string,
+    taskId: string,
+  ): Promise<{ markdown: string; updatedAt: string | null }> {
+    return specGet(this.metadataCache, this.invokeFn, repoPath, taskId);
+  }
+
+  async setSpec(input: SetSpecInput): Promise<SetSpecOutput> {
+    return setSpec(this.invokeFn, this.metadataCache, input);
+  }
+
+  async saveSpecDocument(
+    repoPath: string,
+    taskId: string,
+    markdown: string,
+  ): Promise<SetSpecOutput> {
+    return saveSpecDocument(this.invokeFn, this.metadataCache, repoPath, taskId, markdown);
+  }
+
+  async setPlan(input: SetPlanInput): Promise<SetPlanOutput> {
+    return setPlan(this.invokeFn, this.metadataCache, input);
+  }
+
+  async savePlanDocument(
+    repoPath: string,
+    taskId: string,
+    markdown: string,
+  ): Promise<SetPlanOutput> {
+    return savePlanDocument(this.invokeFn, this.metadataCache, repoPath, taskId, markdown);
+  }
+
+  async planGet(
+    repoPath: string,
+    taskId: string,
+  ): Promise<{ markdown: string; updatedAt: string | null }> {
+    return planGet(this.metadataCache, this.invokeFn, repoPath, taskId);
+  }
+
+  async qaGetReport(
+    repoPath: string,
+    taskId: string,
+  ): Promise<{ markdown: string; updatedAt: string | null }> {
+    return qaGetReport(this.metadataCache, this.invokeFn, repoPath, taskId);
+  }
+
+  async qaApproved(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
+    return qaApproved(this.invokeFn, this.metadataCache, repoPath, taskId, markdown);
+  }
+
+  async qaRejected(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
+    return qaRejected(this.invokeFn, this.metadataCache, repoPath, taskId, markdown);
+  }
+
+  async agentSessionsList(repoPath: string, taskId: string): Promise<AgentSessionRecord[]> {
+    return agentSessionsList(this.metadataCache, this.invokeFn, repoPath, taskId);
+  }
+
+  async agentSessionUpsert(
+    repoPath: string,
+    taskId: string,
+    session: AgentSessionRecord,
+  ): Promise<void> {
+    return agentSessionUpsert(this.invokeFn, this.metadataCache, repoPath, taskId, session);
+  }
+}
