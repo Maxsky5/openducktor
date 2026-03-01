@@ -74,6 +74,7 @@ describe("tauri CSP contract", () => {
     const scriptSrc = toSourceList(devCsp["script-src"]);
     expect(scriptSrc).toContain("'self'");
     expect(scriptSrc).toContain("'unsafe-eval'");
+    expect(scriptSrc).toContain("'unsafe-inline'");
 
     const connectSrc = toSourceList(devCsp["connect-src"]);
     expect(connectSrc).toContain("ipc:");

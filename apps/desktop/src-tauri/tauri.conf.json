@@ -37,7 +37,7 @@
         "frame-ancestors": ["'none'"],
         "object-src": ["'none'"],
         "form-action": ["'self'"],
-        "script-src": ["'self'", "'unsafe-eval'"],
+        "script-src": ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "img-src": ["'self'", "data:"],
         "connect-src": [
