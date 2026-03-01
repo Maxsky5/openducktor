@@ -104,3 +104,4 @@ Concrete adapters today:
 - `docs/task-workflow-actions.md`
 - `docs/task-workflow-transition-matrix.md`
 - `docs/mcp-runtime-security.md`
+- `docs/desktop-csp-hardening.md`
