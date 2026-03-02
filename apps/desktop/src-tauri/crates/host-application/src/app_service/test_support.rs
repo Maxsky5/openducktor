@@ -18,9 +18,11 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
-    GitBranch, GitCurrentBranch, GitFileDiff, GitFileStatus, GitPort, GitPushSummary, IssueType,
-    PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, SpecDocument,
-    TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitFileDiff,
+    GitFileStatus, GitPort, GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult,
+    IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
+    SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -329,6 +331,16 @@ pub(crate) enum GitCall {
         set_upstream: bool,
         force_with_lease: bool,
     },
+    CommitAll {
+        repo_path: String,
+        working_dir: Option<String>,
+        message: String,
+    },
+    RebaseBranch {
+        repo_path: String,
+        working_dir: Option<String>,
+        target_branch: String,
+    },
 }
 
 #[derive(Debug)]
@@ -337,6 +349,8 @@ pub(crate) struct GitState {
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
     pub(crate) last_push_remote: Option<String>,
+    pub(crate) commit_all_result: GitCommitAllResult,
+    pub(crate) rebase_branch_result: GitRebaseBranchResult,
 }
 
 #[derive(Clone)]
@@ -431,6 +445,34 @@ impl GitPort for FakeGitPort {
         })
     }
 
+    fn commit_all(
+        &self,
+        repo_path: &Path,
+        request: GitCommitAllRequest,
+    ) -> Result<GitCommitAllResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::CommitAll {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+            message: request.message,
+        });
+        Ok(state.commit_all_result.clone())
+    }
+
+    fn rebase_branch(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseBranchRequest,
+    ) -> Result<GitRebaseBranchResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::RebaseBranch {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+            target_branch: request.target_branch,
+        });
+        Ok(state.rebase_branch_result.clone())
+    }
+
     fn get_status(&self, _repo_path: &Path) -> Result<Vec<GitFileStatus>> {
         Ok(Vec::new())
     }
@@ -496,6 +538,13 @@ pub(crate) fn build_service_with_git_state_enforced(
         branches,
         current_branch,
         last_push_remote: None,
+        commit_all_result: GitCommitAllResult::Committed {
+            commit_hash: "deadbeef".to_string(),
+            output: "ok".to_string(),
+        },
+        rebase_branch_result: GitRebaseBranchResult::Rebased {
+            output: "rebase completed".to_string(),
+        },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: task_state.clone(),
@@ -536,6 +585,13 @@ pub(crate) fn build_service_with_git_state(
         branches,
         current_branch,
         last_push_remote: None,
+        commit_all_result: GitCommitAllResult::Committed {
+            commit_hash: "deadbeef".to_string(),
+            output: "ok".to_string(),
+        },
+        rebase_branch_result: GitRebaseBranchResult::Rebased {
+            output: "rebase completed".to_string(),
+        },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: task_state.clone(),
@@ -941,6 +997,13 @@ pub(crate) fn build_service_with_store(
         branches,
         current_branch,
         last_push_remote: None,
+        commit_all_result: GitCommitAllResult::Committed {
+            commit_hash: "deadbeef".to_string(),
+            output: "ok".to_string(),
+        },
+        rebase_branch_result: GitRebaseBranchResult::Rebased {
+            output: "rebase completed".to_string(),
+        },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: task_state.clone(),

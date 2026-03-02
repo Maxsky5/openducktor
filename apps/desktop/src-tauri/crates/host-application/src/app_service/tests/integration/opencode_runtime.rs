@@ -196,6 +196,7 @@ fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -309,6 +310,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
         RepoConfig {
             worktree_base_path: None,
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -327,6 +329,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet {
@@ -348,6 +351,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -394,6 +398,7 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_cleanup_failure_hooks)),
             hooks: pre_start_cleanup_failure_hooks,
@@ -442,6 +447,7 @@ fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Resu
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -654,6 +660,7 @@ fn opencode_runtime_start_cleans_up_qa_worktree_when_tracking_fails() -> Result<
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),

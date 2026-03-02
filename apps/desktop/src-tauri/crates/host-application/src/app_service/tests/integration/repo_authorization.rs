@@ -122,6 +122,7 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
             RepoConfig {
                 worktree_base_path: Some("/tmp/wt".to_string()),
                 branch_prefix: "odt".to_string(),
+                default_target_branch: "origin/main".to_string(),
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),

@@ -95,6 +95,7 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.clone()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),

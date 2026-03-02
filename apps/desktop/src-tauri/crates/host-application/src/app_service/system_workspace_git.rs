@@ -1,8 +1,9 @@
 use super::{read_opencode_version, resolve_opencode_binary_path, AppService, CachedRuntimeCheck};
 use anyhow::{anyhow, Result};
 use host_domain::{
-    BeadsCheck, GitAheadBehind, GitBranch, GitCurrentBranch, GitFileDiff, GitFileStatus,
-    GitPushSummary, GitWorktreeSummary, RuntimeCheck, SystemCheck, WorkspaceRecord,
+    BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
+    GitCurrentBranch, GitFileDiff, GitFileStatus, GitPushSummary, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitWorktreeSummary, RuntimeCheck, SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
@@ -305,6 +306,46 @@ impl AppService {
         )
     }
 
+    pub fn git_commit_all(
+        &self,
+        repo_path: &str,
+        request: GitCommitAllRequest,
+    ) -> Result<GitCommitAllResult> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let message = request.message.trim();
+        if message.is_empty() {
+            return Err(anyhow!("commit message cannot be empty"));
+        }
+
+        self.git_port.commit_all(
+            Path::new(&repo_path),
+            GitCommitAllRequest {
+                working_dir: request.working_dir,
+                message: message.to_string(),
+            },
+        )
+    }
+
+    pub fn git_rebase_branch(
+        &self,
+        repo_path: &str,
+        request: GitRebaseBranchRequest,
+    ) -> Result<GitRebaseBranchResult> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let target_branch = request.target_branch.trim();
+        if target_branch.is_empty() {
+            return Err(anyhow!("target branch cannot be empty"));
+        }
+
+        self.git_port.rebase_branch(
+            Path::new(&repo_path),
+            GitRebaseBranchRequest {
+                working_dir: request.working_dir,
+                target_branch: target_branch.to_string(),
+            },
+        )
+    }
+
     pub fn git_get_status(&self, repo_path: &str) -> Result<Vec<GitFileStatus>> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         self.git_port.get_status(Path::new(&repo_path))
@@ -316,8 +357,7 @@ impl AppService {
         target_branch: Option<&str>,
     ) -> Result<Vec<GitFileDiff>> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
-        self.git_port
-            .get_diff(Path::new(&repo_path), target_branch)
+        self.git_port.get_diff(Path::new(&repo_path), target_branch)
     }
 
     pub fn git_commits_ahead_behind(
