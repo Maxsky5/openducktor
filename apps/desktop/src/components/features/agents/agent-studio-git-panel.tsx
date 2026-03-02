@@ -9,7 +9,6 @@ import {
   FileText,
   FileX,
   FolderGit2,
-  GitBranch,
   MessageSquare,
   RefreshCw,
   Send,
@@ -21,15 +20,25 @@ import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewe
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { DiffDataState } from "@/pages/agents/use-agent-studio-diff-data";
+import type { DiffDataState, DiffScope } from "@/pages/agents/use-agent-studio-diff-data";
 import type { InlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type AgentStudioGitPanelModel = DiffDataState & {
+  isCommitting?: boolean;
+  isPushing?: boolean;
+  isRebasing?: boolean;
+  commitError?: string | null;
+  pushError?: string | null;
+  rebaseError?: string | null;
+  commitAll?: (message: string) => Promise<void>;
+  pushBranch?: () => Promise<void>;
+  rebaseOntoTarget?: () => Promise<void>;
   onSendReview?: (message: string) => void;
 };
 
@@ -66,30 +75,111 @@ function GitInfoHeader({
   worktreePath,
   targetBranch,
   commitsAheadBehind,
+  diffScope,
+  hasUncommittedFiles,
   isLoading,
+  isCommitting,
+  isPushing,
+  isRebasing,
+  commitError,
+  pushError,
+  rebaseError,
+  commitAll,
+  pushBranch,
+  rebaseOntoTarget,
+  setDiffScope,
   onRefresh,
 }: Pick<
-  DiffDataState,
-  "branch" | "worktreePath" | "targetBranch" | "commitsAheadBehind" | "isLoading"
-> & { onRefresh: () => void }): ReactElement {
+  AgentStudioGitPanelModel,
+  | "branch"
+  | "worktreePath"
+  | "targetBranch"
+  | "commitsAheadBehind"
+  | "diffScope"
+  | "isLoading"
+  | "isCommitting"
+  | "isPushing"
+  | "isRebasing"
+  | "commitError"
+  | "pushError"
+  | "rebaseError"
+  | "setDiffScope"
+> & {
+  hasUncommittedFiles: boolean;
+  commitAll: ((message: string) => Promise<void>) | null;
+  pushBranch: (() => Promise<void>) | null;
+  rebaseOntoTarget: (() => Promise<void>) | null;
+  onRefresh: () => void;
+}): ReactElement {
+  const [commitMessage, setCommitMessage] = useState("");
+
+  const trimmedTargetBranch = targetBranch.trim();
+  const isDetachedHead = branch == null || branch.trim().length === 0;
+  const hasTargetBranch = trimmedTargetBranch.length > 0;
+  const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
+  const canRefresh = !isLoading && !isAnyActionInFlight;
+  const canRebase =
+    !isDetachedHead && hasTargetBranch && !isAnyActionInFlight && rebaseOntoTarget != null;
+  const canPush = !isDetachedHead && !isAnyActionInFlight && pushBranch != null;
+  const canCommit =
+    commitAll != null &&
+    !isAnyActionInFlight &&
+    hasUncommittedFiles &&
+    commitMessage.trim().length > 0;
+
+  const handleScopeChange = (scope: DiffScope): void => {
+    if (diffScope === scope) {
+      return;
+    }
+    setDiffScope(scope);
+  };
+
+  const handleCommitSubmit = async (): Promise<void> => {
+    if (!canCommit || commitAll == null) {
+      return;
+    }
+    await commitAll(commitMessage);
+    setCommitMessage("");
+  };
+
   return (
     <div className="space-y-2 border-b border-border p-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <GitBranch className="size-3.5 text-muted-foreground" />
-          <span className="truncate font-mono text-xs">{branch ?? "—"}</span>
-        </div>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7"
-          onClick={onRefresh}
-          disabled={isLoading}
-          title="Refresh"
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <div
+          className="flex min-w-0 items-center gap-3"
+          data-testid="agent-studio-git-branch-context-row"
         >
-          <RefreshCw className={cn("size-3.5", isLoading ? "animate-spin" : "")} />
-        </Button>
+          <div className="inline-flex items-center gap-1.5">
+            <span className="font-medium text-foreground">Current</span>
+            <span className="truncate font-mono" data-testid="agent-studio-git-current-branch">
+              {branch ?? "Detached HEAD"}
+            </span>
+          </div>
+          <div className="inline-flex items-center gap-1.5">
+            <span className="font-medium text-foreground">Target</span>
+            <span className="truncate font-mono" data-testid="agent-studio-git-target-branch">
+              {hasTargetBranch ? targetBranch : "Not configured"}
+            </span>
+          </div>
+        </div>
+        {commitsAheadBehind ? (
+          <div className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted px-2 py-1">
+            <span
+              className="inline-flex items-center gap-0.5 text-green-400"
+              data-testid="agent-studio-git-ahead-count"
+            >
+              <ArrowUp className="size-3" />
+              {commitsAheadBehind.ahead}
+            </span>
+            <span
+              className="inline-flex items-center gap-0.5 text-red-400"
+              data-testid="agent-studio-git-behind-count"
+            >
+              <ArrowDown className="size-3" />
+              {commitsAheadBehind.behind}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       {worktreePath ? (
@@ -103,21 +193,108 @@ function GitInfoHeader({
         </Tooltip>
       ) : null}
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>vs {targetBranch}</span>
-        {commitsAheadBehind ? (
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-0.5 text-green-400">
-              <ArrowUp className="size-3" />
-              {commitsAheadBehind.ahead}
-            </span>
-            <span className="inline-flex items-center gap-0.5 text-red-400">
-              <ArrowDown className="size-3" />
-              {commitsAheadBehind.behind}
-            </span>
-          </div>
-        ) : null}
+      <div className="flex flex-wrap items-center gap-2" data-testid="agent-studio-git-action-row">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1.5 text-xs"
+          onClick={onRefresh}
+          disabled={!canRefresh}
+          data-testid="agent-studio-git-refresh-button"
+        >
+          <RefreshCw className={cn("size-3.5", isLoading ? "animate-spin" : "")} />
+          Refresh
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => void rebaseOntoTarget?.()}
+          disabled={!canRebase}
+          data-testid="agent-studio-git-rebase-button"
+        >
+          {isRebasing ? "Rebasing..." : "Rebase onto target"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => void pushBranch?.()}
+          disabled={!canPush}
+          data-testid="agent-studio-git-push-button"
+        >
+          {isPushing ? "Pushing..." : "Push"}
+        </Button>
       </div>
+
+      <div className="inline-flex h-8 items-center rounded-md border border-border bg-muted p-1">
+        <button
+          type="button"
+          className={cn(
+            "rounded-sm px-2 py-1 text-xs transition-colors",
+            diffScope === "target" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+          )}
+          onClick={() => handleScopeChange("target")}
+          data-testid="agent-studio-git-diff-scope-target"
+        >
+          Target branch
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "rounded-sm px-2 py-1 text-xs transition-colors",
+            diffScope === "uncommitted"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground",
+          )}
+          onClick={() => handleScopeChange("uncommitted")}
+          data-testid="agent-studio-git-diff-scope-uncommitted"
+        >
+          Uncommitted
+        </button>
+      </div>
+
+      <div
+        className="space-y-2 rounded-md border border-border bg-card p-2"
+        data-testid="agent-studio-git-commit-form"
+      >
+        <Textarea
+          value={commitMessage}
+          onChange={(event) => setCommitMessage(event.currentTarget.value)}
+          placeholder="Write commit message"
+          className="min-h-20"
+          disabled={isAnyActionInFlight || commitAll == null}
+          data-testid="agent-studio-git-commit-message-input"
+        />
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => void handleCommitSubmit()}
+          disabled={!canCommit}
+          data-testid="agent-studio-git-commit-submit-button"
+        >
+          {isCommitting ? "Committing..." : "Commit all"}
+        </Button>
+      </div>
+
+      {commitError ? (
+        <p className="text-xs text-destructive" data-testid="agent-studio-git-commit-error">
+          {commitError}
+        </p>
+      ) : null}
+      {rebaseError ? (
+        <p className="text-xs text-destructive" data-testid="agent-studio-git-rebase-error">
+          {rebaseError}
+        </p>
+      ) : null}
+      {pushError ? (
+        <p className="text-xs text-destructive" data-testid="agent-studio-git-push-error">
+          {pushError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -260,6 +437,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 }): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
+  const hasUncommittedFiles = model.fileStatuses.length > 0;
 
   // Stable callback (rerender-functional-setstate)
   const toggleFile = useCallback((filePath: string) => {
@@ -294,8 +472,20 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           branch={model.branch}
           worktreePath={model.worktreePath}
           targetBranch={model.targetBranch}
+          diffScope={model.diffScope}
+          hasUncommittedFiles={hasUncommittedFiles}
           commitsAheadBehind={model.commitsAheadBehind}
           isLoading={model.isLoading}
+          isCommitting={model.isCommitting ?? false}
+          isPushing={model.isPushing ?? false}
+          isRebasing={model.isRebasing ?? false}
+          commitError={model.commitError ?? null}
+          pushError={model.pushError ?? null}
+          rebaseError={model.rebaseError ?? null}
+          commitAll={model.commitAll ?? null}
+          pushBranch={model.pushBranch ?? null}
+          rebaseOntoTarget={model.rebaseOntoTarget ?? null}
+          setDiffScope={model.setDiffScope}
           onRefresh={model.refresh}
         />
 

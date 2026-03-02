@@ -24,3 +24,5 @@
 - Added a dedicated `useAgentStudioGitActions` hook with independent action flags (`isCommitting`, `isPushing`, `isRebasing`) and operation-scoped errors (`commitError`, `pushError`, `rebaseError`).
 - Successful mutating actions now clear stale action errors and call diff refresh so the right panel does not display stale git state after commit/push/rebase.
 - Added desktop hook tests for scope routing and isolated failure state behavior (`use-agent-studio-diff-data.test.tsx`, `use-agent-studio-git-actions.test.tsx`).
+
+- Task 11 Git panel now exposes explicit branch context labels (`Current`, `Target`), deterministic `data-testid` hooks, diff-scope segmented controls, and commit-all form validation wired to Task-10 action state.

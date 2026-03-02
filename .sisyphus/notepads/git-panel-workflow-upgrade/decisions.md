@@ -15,3 +15,5 @@
 - Kept Task 10 scoped to hook/state/page wiring only (no git panel UI redesign), with new action state exposed through the existing diff model shape merge in `agents-page.tsx`.
 - Used per-action loading/error slices instead of a shared busy/error state so rebase failure can be surfaced without marking push/commit as failed or loading.
 - On successful mutating actions, clear all action errors before refresh to remove stale cross-action failure messages while preserving operation-specific errors on failure.
+
+- Used `fileStatuses.length > 0` as the commit-all eligibility signal for Task 11 so commit submit availability tracks uncommitted/staged changes without introducing new backend/UI contracts.

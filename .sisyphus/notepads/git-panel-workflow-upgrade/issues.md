@@ -10,3 +10,5 @@
 - Rust LSP diagnostics remained unavailable in this environment (`rust-analyzer` missing), so command-layer validation for Task 8 was verified via AST symbol checks and `cargo test -p host-application`.
 - `rust-analyzer` is still unavailable in this environment for Task 9, so verification relied on command helper tests plus `cargo test -p host-application`.
 - Full desktop test output is noisy with expected React test renderer warnings and intentional error-path logs from existing suites; pass/fail confirmation should rely on package exit lines (`Exited with code 0`) rather than searching for `error:` in raw output.
+
+- Full `bun run --filter @openducktor/desktop test` remained noisy/long-running in this environment and repeatedly hit tool timeout despite extended limits; focused panel test file passed and changed-file diagnostics are clean.
