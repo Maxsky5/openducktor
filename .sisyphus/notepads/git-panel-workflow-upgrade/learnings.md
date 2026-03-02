@@ -12,3 +12,5 @@
 - Added `GitCommitAll` and `GitRebaseBranch` request/result schemas in contracts with explicit discriminated outcome unions and tests for happy-path + edge outcomes.
 - Host-domain `GitPort` now includes typed `commit_all` and `rebase_branch` methods that take request DTOs instead of primitive argument sprawl.
 - Domain outcomes for commit/rebase now model no-op and conflict states as first-class variants (`NoChanges`, `UpToDate`, `Conflicts`) to avoid downstream string parsing.
+- Adapter host facade now exposes `gitCommitAll` and `gitRebaseBranch` in `TauriHostClient` and routes through `git_commit_all` / `git_rebase_branch`.
+- Working directory handling for new git adapter methods follows existing convention: send `workingDir` as `null` when undefined.

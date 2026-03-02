@@ -6,3 +6,6 @@
 - Kept Task 2 scoped strictly to shared contracts: no host/adapter/frontend behavior changes yet, only schema/types + runtime schema tests + export contract updates.
 - Mirrored Task 2 contract semantics in host-domain with DTO names and discriminated outcomes (`committed|no_changes`, `rebased|up_to_date|conflicts`) to keep cross-layer intent stable.
 - Kept domain contracts transport-agnostic by modeling outcomes as enums/DTOs only, with no git CLI output parsing rules in `host-domain`.
+
+- Kept adapter git method signatures positional with optional trailing `workingDir` to match existing git client style and avoid changing caller shape.
+- Used contract request/response schema parsing for command outputs in `git-client` to keep adapter surface typed and transport-safe.

@@ -6,12 +6,18 @@ import {
   fileDiffSchema,
   fileStatusSchema,
   type GitBranch,
+  type GitCommitAllRequest,
+  type GitCommitAllResult,
   type GitCurrentBranch,
   type GitPushSummary,
+  type GitRebaseBranchRequest,
+  type GitRebaseBranchResult,
   type GitWorktreeSummary,
   gitBranchSchema,
+  gitCommitAllResultSchema,
   gitCurrentBranchSchema,
   gitPushSummarySchema,
+  gitRebaseBranchResultSchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -140,6 +146,44 @@ export const gitCommitsAheadBehind = async (
   return commitsAheadBehindSchema.parse(payload);
 };
 
+export const gitCommitAll = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  message: string,
+  workingDir?: string,
+): Promise<GitCommitAllResult> => {
+  const request: GitCommitAllRequest = {
+    repoPath,
+    message,
+    workingDir,
+  };
+  const payload = await invokeFn<unknown>("git_commit_all", {
+    repoPath: request.repoPath,
+    workingDir: request.workingDir ?? null,
+    message: request.message,
+  });
+  return gitCommitAllResultSchema.parse(payload);
+};
+
+export const gitRebaseBranch = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  targetBranch: string,
+  workingDir?: string,
+): Promise<GitRebaseBranchResult> => {
+  const request: GitRebaseBranchRequest = {
+    repoPath,
+    targetBranch,
+    workingDir,
+  };
+  const payload = await invokeFn<unknown>("git_rebase_branch", {
+    repoPath: request.repoPath,
+    targetBranch: request.targetBranch,
+    workingDir: request.workingDir ?? null,
+  });
+  return gitRebaseBranchResultSchema.parse(payload);
+};
+
 export class TauriGitClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -206,5 +250,21 @@ export class TauriGitClient {
     workingDir?: string,
   ): Promise<CommitsAheadBehind> {
     return gitCommitsAheadBehind(this.invokeFn, repoPath, targetBranch, workingDir);
+  }
+
+  async gitCommitAll(
+    repoPath: string,
+    message: string,
+    workingDir?: string,
+  ): Promise<GitCommitAllResult> {
+    return gitCommitAll(this.invokeFn, repoPath, message, workingDir);
+  }
+
+  async gitRebaseBranch(
+    repoPath: string,
+    targetBranch: string,
+    workingDir?: string,
+  ): Promise<GitRebaseBranchResult> {
+    return gitRebaseBranch(this.invokeFn, repoPath, targetBranch, workingDir);
   }
 }

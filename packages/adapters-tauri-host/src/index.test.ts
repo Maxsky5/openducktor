@@ -111,10 +111,12 @@ describe("TauriHostClient", () => {
     const replacement = async (_repoPath: string) => [];
     client.tasksList = replacement;
 
-    await expect(client.tasksList("/repo")).resolves.toEqual([]);
+    const rewritten = await client.tasksList("/repo");
+    expect(rewritten).toEqual([]);
 
     client.tasksList = original;
-    await expect(client.tasksList("/repo")).resolves.toHaveLength(1);
+    const rewrittenAfterReplace = await client.tasksList("/repo");
+    expect(rewrittenAfterReplace).toHaveLength(1);
   });
 
   test("facade exposes every delegated API method", () => {
@@ -177,6 +179,8 @@ describe("TauriHostClient", () => {
       "gitCreateWorktree",
       "gitRemoveWorktree",
       "gitPushBranch",
+      "gitCommitAll",
+      "gitRebaseBranch",
     ] as const;
 
     for (const methodName of expectedMethods) {
@@ -403,6 +407,12 @@ describe("TauriHostClient", () => {
       if (command === "git_create_worktree") {
         return { branch: "feature/task-1", worktreePath: "/tmp/wt/task-1" };
       }
+      if (command === "git_commit_all") {
+        return { outcome: "no_changes", output: "nothing to commit" };
+      }
+      if (command === "git_rebase_branch") {
+        return { outcome: "rebased", output: "rebased onto origin/main" };
+      }
       if (command === "git_remove_worktree") {
         return { ok: true };
       }
@@ -419,6 +429,8 @@ describe("TauriHostClient", () => {
       createBranch: true,
     });
     const removed = await client.gitRemoveWorktree("/repo", "/tmp/wt/task-1", { force: true });
+    const committed = await client.gitCommitAll("/repo", "Build all changes");
+    const rebased = await client.gitRebaseBranch("/repo", "origin/main", "/tmp/wt/task-1");
     const pushed = await client.gitPushBranch("/repo", "feature/task-1", {
       remote: "origin",
       setUpstream: true,
@@ -430,6 +442,8 @@ describe("TauriHostClient", () => {
     expect(switched.name).toBe("main");
     expect(worktree.worktreePath).toBe("/tmp/wt/task-1");
     expect(removed.ok).toBe(true);
+    expect(committed.outcome).toBe("no_changes");
+    expect(rebased.outcome).toBe("rebased");
     expect(pushed.remote).toBe("origin");
 
     expect(calls.map((entry) => entry.command)).toEqual([
@@ -438,6 +452,8 @@ describe("TauriHostClient", () => {
       "git_switch_branch",
       "git_create_worktree",
       "git_remove_worktree",
+      "git_commit_all",
+      "git_rebase_branch",
       "git_push_branch",
     ]);
     expect(calls[2].args).toEqual({
@@ -451,7 +467,22 @@ describe("TauriHostClient", () => {
       branch: "feature/task-1",
       createBranch: true,
     });
+    expect(calls[4].args).toEqual({
+      repoPath: "/repo",
+      worktreePath: "/tmp/wt/task-1",
+      force: true,
+    });
     expect(calls[5].args).toEqual({
+      repoPath: "/repo",
+      message: "Build all changes",
+      workingDir: null,
+    });
+    expect(calls[6].args).toEqual({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[7].args).toEqual({
       repoPath: "/repo",
       branch: "feature/task-1",
       remote: "origin",

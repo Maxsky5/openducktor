@@ -79,6 +79,8 @@ const GIT_METHODS = [
   "gitCreateWorktree",
   "gitRemoveWorktree",
   "gitPushBranch",
+  "gitCommitAll",
+  "gitRebaseBranch",
   "gitGetStatus",
   "gitGetDiff",
   "gitCommitsAheadBehind",
