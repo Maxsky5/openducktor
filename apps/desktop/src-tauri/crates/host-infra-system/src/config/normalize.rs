@@ -44,6 +44,17 @@ fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
     }
 }
 
+fn canonicalize_default_target_branch(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return default_target_branch();
+    }
+    if trimmed.contains('/') {
+        return trimmed.to_string();
+    }
+    format!("origin/{trimmed}")
+}
+
 pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     repo.worktree_base_path = normalize_optional_non_empty(repo.worktree_base_path.take());
     let branch_prefix = repo.branch_prefix.trim();
@@ -52,12 +63,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     } else {
         branch_prefix.to_string()
     };
-    let target_branch = repo.default_target_branch.trim();
-    repo.default_target_branch = if target_branch.is_empty() {
-        default_target_branch()
-    } else {
-        target_branch.to_string()
-    };
+    repo.default_target_branch = canonicalize_default_target_branch(&repo.default_target_branch);
     normalize_hook_commands(&mut repo.hooks.pre_start);
     normalize_hook_commands(&mut repo.hooks.post_complete);
     let current_fingerprint = hook_set_fingerprint(&repo.hooks);

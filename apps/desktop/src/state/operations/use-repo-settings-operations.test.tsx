@@ -144,7 +144,7 @@ describe("use-repo-settings-operations", () => {
       expect(loaded).toEqual({
         worktreeBasePath: "",
         branchPrefix: "codex/",
-        defaultTargetBranch: "main",
+        defaultTargetBranch: "origin/main",
         trustedHooks: false,
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
@@ -192,7 +192,7 @@ describe("use-repo-settings-operations", () => {
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
-        defaultTargetBranch: "develop",
+        defaultTargetBranch: "origin/develop",
         trustedHooks: true,
         hooks: {
           preStart: ["echo pre"],

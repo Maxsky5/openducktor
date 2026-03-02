@@ -1,3 +1,4 @@
+import { DEFAULT_TARGET_BRANCH } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export const DEFAULT_BRANCH_PREFIX = "obp";
@@ -13,7 +14,7 @@ export const toHookText = (hooks: string[]): string => hooks.join("\n");
 export const emptyRepoSettings = (): RepoSettingsInput => ({
   worktreeBasePath: "",
   branchPrefix: DEFAULT_BRANCH_PREFIX,
-  defaultTargetBranch: "main",
+  defaultTargetBranch: DEFAULT_TARGET_BRANCH,
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],

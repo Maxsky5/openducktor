@@ -333,6 +333,35 @@ mod tests {
     }
 
     #[test]
+    fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
+        let (store, root) = test_store("canonical-target-branch");
+        let repo = root.join("repo");
+        fs::create_dir_all(repo.join(".git")).expect("repo");
+        let repo_str = repo.to_string_lossy().to_string();
+
+        store.add_workspace(&repo_str).expect("add workspace");
+        store
+            .update_repo_config(
+                &repo_str,
+                RepoConfig {
+                    worktree_base_path: None,
+                    branch_prefix: "duck".to_string(),
+                    default_target_branch: "main".to_string(),
+                    trusted_hooks: false,
+                    trusted_hooks_fingerprint: None,
+                    hooks: Default::default(),
+                    agent_defaults: Default::default(),
+                },
+            )
+            .expect("update config");
+
+        let loaded = store.repo_config(&repo_str).expect("load repo config");
+        assert_eq!(loaded.default_target_branch, "origin/main");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn update_repo_hooks_revokes_trust_when_commands_change() {
         let (store, root) = test_store("hooks-revoke-trust");
         let repo = root.join("repo");

@@ -34,6 +34,19 @@ pub struct GitPushSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitPullRequest {
+    pub working_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitPullResult {
+    Pulled { output: String },
+    UpToDate { output: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitFileStatus {
     pub path: String,
     pub status: String,
@@ -56,6 +69,41 @@ pub struct GitFileDiff {
 pub struct GitAheadBehind {
     pub ahead: u32,
     pub behind: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GitDiffScope {
+    Target,
+    Uncommitted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatusSnapshot {
+    pub effective_working_dir: String,
+    pub target_branch: String,
+    pub diff_scope: GitDiffScope,
+    pub observed_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitUpstreamAheadBehind {
+    Tracking { ahead: u32, behind: u32 },
+    Untracked { ahead: u32 },
+    Error { message: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatus {
+    pub current_branch: GitCurrentBranch,
+    pub file_statuses: Vec<GitFileStatus>,
+    pub file_diffs: Vec<GitFileDiff>,
+    pub target_ahead_behind: GitAheadBehind,
+    pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub snapshot: GitWorktreeStatusSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -126,8 +174,10 @@ pub trait GitPort: Send + Sync {
         set_upstream: bool,
         force_with_lease: bool,
     ) -> Result<GitPushSummary>;
+    fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult>;
     fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>>;
     fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>>;
+    fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>>;
     fn commits_ahead_behind(&self, repo_path: &Path, target_branch: &str)
         -> Result<GitAheadBehind>;
     fn commit_all(
@@ -144,7 +194,7 @@ pub trait GitPort: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::{GitCommitAllResult, GitRebaseBranchResult};
+    use super::{GitCommitAllResult, GitPullResult, GitRebaseBranchResult};
 
     #[test]
     fn git_commit_all_no_changes_is_first_class_variant() {
@@ -186,6 +236,20 @@ mod tests {
             GitRebaseBranchResult::Conflicts {
                 conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
                 output: "rebase stopped due to conflicts".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_pull_up_to_date_is_first_class_variant() {
+        let result = GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitPullResult::UpToDate {
+                output: "Already up to date.".to_string(),
             }
         );
     }

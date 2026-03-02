@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
 import { requireActiveRepo } from "./task-operations-model";
@@ -72,7 +73,7 @@ export function useRepoSettingsOperations({
     return {
       worktreeBasePath: config.worktreeBasePath ?? "",
       branchPrefix: config.branchPrefix,
-      defaultTargetBranch: config.defaultTargetBranch ?? "main",
+      defaultTargetBranch: normalizeCanonicalTargetBranch(config.defaultTargetBranch),
       trustedHooks: config.trustedHooks,
       preStartHooks: config.hooks.preStart,
       postCompleteHooks: config.hooks.postComplete,
@@ -98,7 +99,7 @@ export function useRepoSettingsOperations({
       const qaDefault = toConfigDefault(input.agentDefaults.qa);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
-      const normalizedTargetBranch = input.defaultTargetBranch.trim() || "main";
+      const normalizedTargetBranch = normalizeCanonicalTargetBranch(input.defaultTargetBranch);
       const agentDefaults = {
         ...(specDefault ? { spec: specDefault } : {}),
         ...(plannerDefault ? { planner: plannerDefault } : {}),

@@ -1,8 +1,9 @@
 import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
 
-const POLL_INTERVAL_MS = 5_000;
+const POLL_INTERVAL_MS = 15_000;
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ export type DiffDataState = {
   diffScope: DiffScope;
   /** Commits ahead/behind the target branch. */
   commitsAheadBehind: CommitsAheadBehind | null;
+  upstreamAheadBehind?: CommitsAheadBehind | null;
   /** Changed files with diff content. */
   fileDiffs: FileDiff[];
   /** File status from `git status`. */
@@ -55,6 +57,7 @@ type DiffBatchState = {
   fileDiffs: FileDiff[];
   fileStatuses: FileStatus[];
   commitsAheadBehind: CommitsAheadBehind | null;
+  upstreamAheadBehind: CommitsAheadBehind | null;
   isLoading: boolean;
   error: string | null;
 };
@@ -68,6 +71,7 @@ const INITIAL_STATE: DiffBatchState = {
   fileDiffs: EMPTY_DIFFS,
   fileStatuses: EMPTY_STATUSES,
   commitsAheadBehind: null,
+  upstreamAheadBehind: null,
   isLoading: false,
   error: null,
 };
@@ -103,7 +107,7 @@ export function useAgentStudioDiffData({
   const versionRef = useRef(0);
 
   // Derive stable primitives
-  const targetBranch = defaultTargetBranch || "origin/main";
+  const targetBranch = normalizeCanonicalTargetBranch(defaultTargetBranch);
 
   // If session.workingDirectory is different from repoPath, use it directly.
   // Otherwise, fall back to a resolved worktree path from the runs list.
@@ -160,14 +164,9 @@ export function useAgentStudioDiffData({
 
     try {
       const target = targetBranchRef.current;
-      const diffTarget = diffScopeRef.current === "target" ? target : undefined;
+      const scope = diffScopeRef.current;
       const wd = workingDirRef.current ?? undefined;
-      const [branchResult, statusResult, diffResult, aheadBehindResult] = await Promise.allSettled([
-        host.gitGetCurrentBranch(path, wd),
-        host.gitGetStatus(path, wd),
-        host.gitGetDiff(path, diffTarget, wd),
-        host.gitCommitsAheadBehind(path, target, wd),
-      ]);
+      const snapshot = await host.gitGetWorktreeStatus(path, target, scope, wd);
 
       // Stale response guard
       if (versionRef.current !== version) {
@@ -176,22 +175,26 @@ export function useAgentStudioDiffData({
 
       // Batch all updates into a single setState with structural equality check
       setState((prev) => {
-        const nextBranch =
-          branchResult.status === "fulfilled" ? (branchResult.value.name ?? null) : prev.branch;
-        const nextStatuses =
-          statusResult.status === "fulfilled" ? statusResult.value : prev.fileStatuses;
-        const nextDiffs = diffResult.status === "fulfilled" ? diffResult.value : prev.fileDiffs;
-        const nextAheadBehind =
-          aheadBehindResult.status === "fulfilled"
-            ? aheadBehindResult.value
-            : prev.commitsAheadBehind;
-
-        const allFailed =
-          statusResult.status === "rejected" &&
-          diffResult.status === "rejected" &&
-          aheadBehindResult.status === "rejected";
-
-        const nextError = allFailed ? String(statusResult.reason) : null;
+        const nextBranch = snapshot.currentBranch.name ?? null;
+        const nextStatuses = snapshot.fileStatuses;
+        const nextDiffs = snapshot.fileDiffs;
+        const nextAheadBehind = snapshot.targetAheadBehind;
+        const nextUpstreamAheadBehind =
+          snapshot.upstreamAheadBehind.outcome === "tracking"
+            ? {
+                ahead: snapshot.upstreamAheadBehind.ahead,
+                behind: snapshot.upstreamAheadBehind.behind,
+              }
+            : snapshot.upstreamAheadBehind.outcome === "untracked"
+              ? {
+                  ahead: snapshot.upstreamAheadBehind.ahead,
+                  behind: 0,
+                }
+              : null;
+        const nextError =
+          snapshot.upstreamAheadBehind.outcome === "error"
+            ? `Upstream status unavailable: ${snapshot.upstreamAheadBehind.message}`
+            : null;
 
         // Structural equality: skip re-render if nothing changed (prevents flickering)
         if (
@@ -199,6 +202,7 @@ export function useAgentStudioDiffData({
           arraysEqual(prev.fileDiffs, nextDiffs) &&
           arraysEqual(prev.fileStatuses, nextStatuses) &&
           aheadBehindEqual(prev.commitsAheadBehind, nextAheadBehind) &&
+          aheadBehindEqual(prev.upstreamAheadBehind, nextUpstreamAheadBehind) &&
           prev.error === nextError &&
           !prev.isLoading
         ) {
@@ -210,6 +214,7 @@ export function useAgentStudioDiffData({
           fileDiffs: nextDiffs,
           fileStatuses: nextStatuses,
           commitsAheadBehind: nextAheadBehind,
+          upstreamAheadBehind: nextUpstreamAheadBehind,
           isLoading: false,
           error: nextError,
         };
@@ -257,6 +262,7 @@ export function useAgentStudioDiffData({
       targetBranch,
       diffScope,
       commitsAheadBehind: state.commitsAheadBehind,
+      upstreamAheadBehind: state.upstreamAheadBehind,
       fileDiffs: state.fileDiffs,
       fileStatuses: state.fileStatuses,
       isLoading: state.isLoading,

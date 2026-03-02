@@ -2,6 +2,7 @@ import type { FileDiff } from "@openducktor/contracts";
 import {
   AlignJustify,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   ChevronDown,
   ChevronRight,
@@ -9,10 +10,12 @@ import {
   FileText,
   FileX,
   FolderGit2,
+  GitBranch,
   MessageSquare,
   RefreshCw,
   Send,
   SplitSquareHorizontal,
+  Target,
 } from "lucide-react";
 import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
@@ -39,6 +42,7 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   commitAll?: (message: string) => Promise<void>;
   pushBranch?: () => Promise<void>;
   rebaseOntoTarget?: () => Promise<void>;
+  pullFromUpstream?: () => Promise<void>;
   onSendReview?: (message: string) => void;
 };
 
@@ -68,71 +72,355 @@ const selectDraftCount = (s: InlineCommentDraftStore): number => s.getDraftCount
 const selectFormatBatch = (s: InlineCommentDraftStore): (() => string) => s.formatBatchMessage;
 const selectClearAll = (s: InlineCommentDraftStore): (() => void) => s.clearAll;
 
+const DIFF_SCOPE_OPTIONS: Array<{
+  scope: DiffScope;
+  label: string;
+  testId: string;
+}> = [
+  {
+    scope: "uncommitted",
+    label: "Uncommitted changes",
+    testId: "agent-studio-git-diff-scope-uncommitted",
+  },
+  {
+    scope: "target",
+    label: "Compare to target",
+    testId: "agent-studio-git-diff-scope-target",
+  },
+];
+
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 function GitInfoHeader({
   branch,
-  worktreePath,
   targetBranch,
   commitsAheadBehind,
+  upstreamAheadBehind,
   diffScope,
-  hasUncommittedFiles,
+  uncommittedFileCount,
   isLoading,
   isCommitting,
   isPushing,
   isRebasing,
-  commitError,
   pushError,
   rebaseError,
-  commitAll,
   pushBranch,
   rebaseOntoTarget,
+  pullFromUpstream,
   setDiffScope,
   onRefresh,
 }: Pick<
   AgentStudioGitPanelModel,
   | "branch"
-  | "worktreePath"
   | "targetBranch"
   | "commitsAheadBehind"
+  | "upstreamAheadBehind"
   | "diffScope"
   | "isLoading"
   | "isCommitting"
   | "isPushing"
   | "isRebasing"
-  | "commitError"
   | "pushError"
   | "rebaseError"
   | "setDiffScope"
 > & {
-  hasUncommittedFiles: boolean;
-  commitAll: ((message: string) => Promise<void>) | null;
+  uncommittedFileCount: number;
   pushBranch: (() => Promise<void>) | null;
   rebaseOntoTarget: (() => Promise<void>) | null;
+  pullFromUpstream: (() => Promise<void>) | null;
   onRefresh: () => void;
 }): ReactElement {
-  const [commitMessage, setCommitMessage] = useState("");
-
   const trimmedTargetBranch = targetBranch.trim();
   const isDetachedHead = branch == null || branch.trim().length === 0;
+  const currentBranchLabel = isDetachedHead ? "Detached HEAD" : branch;
   const hasTargetBranch = trimmedTargetBranch.length > 0;
+  const targetBranchLabel = hasTargetBranch ? targetBranch : "No comparison target";
+  const rebaseBehindCount = commitsAheadBehind?.behind ?? null;
+  const pushAheadCount = upstreamAheadBehind?.ahead ?? null;
+  const pushBehindCount = upstreamAheadBehind?.behind ?? null;
+  const hasUncommittedFiles = uncommittedFileCount > 0;
+  const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
   const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
+  const pushBlockedByBehind = hasUpstreamBehind;
   const canRefresh = !isLoading && !isAnyActionInFlight;
   const canRebase =
     !isDetachedHead && hasTargetBranch && !isAnyActionInFlight && rebaseOntoTarget != null;
-  const canPush = !isDetachedHead && !isAnyActionInFlight && pushBranch != null;
-  const canCommit =
-    commitAll != null &&
+  const canPull =
+    !isDetachedHead &&
+    hasUpstreamBehind &&
+    !hasUncommittedFiles &&
     !isAnyActionInFlight &&
-    hasUncommittedFiles &&
-    commitMessage.trim().length > 0;
+    pullFromUpstream != null;
+  const canPush =
+    !isDetachedHead && !pushBlockedByBehind && !isAnyActionInFlight && pushBranch != null;
 
-  const handleScopeChange = (scope: DiffScope): void => {
+  const handleScopeChange = (scope: string): void => {
+    if (scope !== "target" && scope !== "uncommitted") {
+      return;
+    }
     if (diffScope === scope) {
       return;
     }
     setDiffScope(scope);
   };
+
+  return (
+    <div className="space-y-3 border-b border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+          Branch context
+        </span>
+        <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
+          {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"} changed
+        </Badge>
+      </div>
+
+      <div
+        className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
+        data-testid="agent-studio-git-branch-context-row"
+      >
+        <div className="rounded-lg border border-border bg-card px-3 py-2">
+          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            Current branch
+          </p>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5">
+            <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+            <span
+              className="truncate font-mono text-xs text-foreground"
+              data-testid="agent-studio-git-current-branch"
+            >
+              {currentBranchLabel}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center" aria-hidden="true">
+          <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
+            <ArrowRight className="size-3.5" />
+          </span>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card px-3 py-2">
+          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            Comparison target
+          </p>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5">
+            <Target className="size-3.5 shrink-0 text-muted-foreground" />
+            <span
+              className="truncate font-mono text-xs text-foreground"
+              data-testid="agent-studio-git-target-branch"
+            >
+              {targetBranchLabel}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="flex items-center justify-between gap-2 border-y border-border py-1"
+        data-testid="agent-studio-git-action-row"
+      >
+        <div className="inline-flex items-center gap-0.5 px-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
+                onClick={onRefresh}
+                disabled={!canRefresh}
+                data-testid="agent-studio-git-refresh-button"
+              >
+                <RefreshCw className={cn("size-3.5", isLoading ? "animate-spin" : "")} />
+                <span className="sr-only">Refresh</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>{isLoading ? "Refreshing" : "Refresh changes"}</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
+                onClick={() => void rebaseOntoTarget?.()}
+                disabled={!canRebase}
+                data-testid="agent-studio-git-rebase-button"
+              >
+                <Target className="size-3.5" />
+                {rebaseBehindCount != null && rebaseBehindCount > 0 ? (
+                  <span
+                    className="pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums text-rose-600 dark:text-rose-400"
+                    data-testid="agent-studio-git-behind-count"
+                  >
+                    {rebaseBehindCount}
+                  </span>
+                ) : null}
+                <span className="sr-only">Rebase onto target</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>
+                {isRebasing
+                  ? "Rebasing"
+                  : rebaseBehindCount != null && rebaseBehindCount > 0
+                    ? `Rebase onto target (${rebaseBehindCount} behind)`
+                    : "Rebase onto target"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
+                  onClick={() => void pullFromUpstream?.()}
+                  disabled={!canPull}
+                  data-testid="agent-studio-git-pull-button"
+                >
+                  <ArrowDown className="size-3.5" />
+                  {pushBehindCount != null && pushBehindCount > 0 ? (
+                    <span
+                      className="pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums text-rose-600 dark:text-rose-400"
+                      data-testid="agent-studio-git-upstream-behind-count"
+                    >
+                      {pushBehindCount}
+                    </span>
+                  ) : null}
+                  <span className="sr-only">Pull from upstream</span>
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>
+                {isRebasing
+                  ? "Pulling"
+                  : hasUncommittedFiles
+                    ? "Commit or stash changes before pulling"
+                    : pushBehindCount != null && pushBehindCount > 0
+                      ? `Pull (${pushBehindCount} behind)`
+                      : "Pull"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
+                onClick={() => void pushBranch?.()}
+                disabled={!canPush}
+                data-testid="agent-studio-git-push-button"
+              >
+                <ArrowUp className="size-3.5" />
+                {pushAheadCount != null && pushAheadCount > 0 ? (
+                  <span
+                    className="pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
+                    data-testid="agent-studio-git-ahead-count"
+                  >
+                    {pushAheadCount}
+                  </span>
+                ) : null}
+                <span className="sr-only">Push branch</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>
+                {isPushing
+                  ? "Pushing"
+                  : pushBlockedByBehind && hasUncommittedFiles
+                    ? "Commit or stash changes, then pull before pushing"
+                    : pushBlockedByBehind
+                      ? "Pull before pushing"
+                      : pushAheadCount != null && pushAheadCount > 0
+                        ? `Push branch (${pushAheadCount} ahead)`
+                        : "Push branch"}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          Diff scope
+        </p>
+        <div
+          className="inline-flex h-9 w-full items-center rounded-md border border-border bg-muted p-1"
+          role="tablist"
+          aria-label="Git diff scope"
+        >
+          {DIFF_SCOPE_OPTIONS.map((option) => {
+            const isActive = diffScope === option.scope;
+            return (
+              <button
+                key={option.scope}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={cn(
+                  "inline-flex h-7 flex-1 items-center justify-center rounded-sm px-3 text-xs transition-colors",
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                )}
+                onClick={() => handleScopeChange(option.scope)}
+                data-testid={option.testId}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {rebaseError ? (
+        <p className="text-xs text-destructive" data-testid="agent-studio-git-rebase-error">
+          {rebaseError}
+        </p>
+      ) : null}
+      {pushError ? (
+        <p className="text-xs text-destructive" data-testid="agent-studio-git-push-error">
+          {pushError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CommitComposer({
+  hasUncommittedFiles,
+  uncommittedFileCount,
+  isCommitting,
+  isPushing,
+  isRebasing,
+  commitError,
+  commitAll,
+}: {
+  hasUncommittedFiles: boolean;
+  uncommittedFileCount: number;
+  isCommitting: boolean;
+  isPushing: boolean;
+  isRebasing: boolean;
+  commitError: string | null;
+  commitAll: ((message: string) => Promise<void>) | null;
+}): ReactElement {
+  const [commitMessage, setCommitMessage] = useState("");
+  const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
+  const canWrite = commitAll != null && !isAnyActionInFlight;
+  const canCommit = canWrite && hasUncommittedFiles && commitMessage.trim().length > 0;
 
   const handleCommitSubmit = async (): Promise<void> => {
     if (!canCommit || commitAll == null) {
@@ -143,139 +431,48 @@ function GitInfoHeader({
   };
 
   return (
-    <div className="space-y-2 border-b border-border p-3">
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <div
-          className="flex min-w-0 items-center gap-3"
-          data-testid="agent-studio-git-branch-context-row"
-        >
-          <div className="inline-flex items-center gap-1.5">
-            <span className="font-medium text-foreground">Current</span>
-            <span className="truncate font-mono" data-testid="agent-studio-git-current-branch">
-              {branch ?? "Detached HEAD"}
-            </span>
-          </div>
-          <div className="inline-flex items-center gap-1.5">
-            <span className="font-medium text-foreground">Target</span>
-            <span className="truncate font-mono" data-testid="agent-studio-git-target-branch">
-              {hasTargetBranch ? targetBranch : "Not configured"}
-            </span>
-          </div>
+    <div
+      className="space-y-3 border-t border-sidebar-border bg-sidebar p-3"
+      data-testid="agent-studio-git-commit-form"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-sidebar-foreground">Commit all changes</p>
+          <p className="text-[11px] text-sidebar-foreground/70">
+            One message for every uncommitted file in this workspace.
+          </p>
         </div>
-        {commitsAheadBehind ? (
-          <div className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted px-2 py-1">
-            <span
-              className="inline-flex items-center gap-0.5 text-green-400"
-              data-testid="agent-studio-git-ahead-count"
-            >
-              <ArrowUp className="size-3" />
-              {commitsAheadBehind.ahead}
-            </span>
-            <span
-              className="inline-flex items-center gap-0.5 text-red-400"
-              data-testid="agent-studio-git-behind-count"
-            >
-              <ArrowDown className="size-3" />
-              {commitsAheadBehind.behind}
-            </span>
-          </div>
-        ) : null}
+        <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
+          {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"}
+        </Badge>
       </div>
 
-      {worktreePath ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <p className="truncate text-xs text-muted-foreground">{worktreePath}</p>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-xs">
-            <p className="font-mono text-xs">{worktreePath}</p>
-          </TooltipContent>
-        </Tooltip>
-      ) : null}
+      <Textarea
+        value={commitMessage}
+        onChange={(event) => setCommitMessage(event.currentTarget.value)}
+        placeholder={
+          hasUncommittedFiles ? "Describe what changed and why" : "No uncommitted files to commit"
+        }
+        className="min-h-20 resize-none border-input"
+        disabled={!canWrite}
+        data-testid="agent-studio-git-commit-message-input"
+      />
 
-      <div className="flex flex-wrap items-center gap-2" data-testid="agent-studio-git-action-row">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-sidebar-foreground/70">
+          {hasUncommittedFiles
+            ? "This action commits all listed changes in one go."
+            : "Make a change first, then write a commit message."}
+        </p>
         <Button
           type="button"
           size="sm"
-          variant="outline"
-          className="h-7 gap-1.5 text-xs"
-          onClick={onRefresh}
-          disabled={!canRefresh}
-          data-testid="agent-studio-git-refresh-button"
-        >
-          <RefreshCw className={cn("size-3.5", isLoading ? "animate-spin" : "")} />
-          Refresh
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs"
-          onClick={() => void rebaseOntoTarget?.()}
-          disabled={!canRebase}
-          data-testid="agent-studio-git-rebase-button"
-        >
-          {isRebasing ? "Rebasing..." : "Rebase onto target"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={() => void pushBranch?.()}
-          disabled={!canPush}
-          data-testid="agent-studio-git-push-button"
-        >
-          {isPushing ? "Pushing..." : "Push"}
-        </Button>
-      </div>
-
-      <div className="inline-flex h-8 items-center rounded-md border border-border bg-muted p-1">
-        <button
-          type="button"
-          className={cn(
-            "rounded-sm px-2 py-1 text-xs transition-colors",
-            diffScope === "target" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
-          )}
-          onClick={() => handleScopeChange("target")}
-          data-testid="agent-studio-git-diff-scope-target"
-        >
-          Target branch
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "rounded-sm px-2 py-1 text-xs transition-colors",
-            diffScope === "uncommitted"
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground",
-          )}
-          onClick={() => handleScopeChange("uncommitted")}
-          data-testid="agent-studio-git-diff-scope-uncommitted"
-        >
-          Uncommitted
-        </button>
-      </div>
-
-      <div
-        className="space-y-2 rounded-md border border-border bg-card p-2"
-        data-testid="agent-studio-git-commit-form"
-      >
-        <Textarea
-          value={commitMessage}
-          onChange={(event) => setCommitMessage(event.currentTarget.value)}
-          placeholder="Write commit message"
-          className="min-h-20"
-          disabled={isAnyActionInFlight || commitAll == null}
-          data-testid="agent-studio-git-commit-message-input"
-        />
-        <Button
-          type="button"
-          size="sm"
-          className="h-8 text-xs"
+          className="h-8 gap-1.5 text-xs"
           onClick={() => void handleCommitSubmit()}
           disabled={!canCommit}
           data-testid="agent-studio-git-commit-submit-button"
         >
+          <Send className="size-3.5" />
           {isCommitting ? "Committing..." : "Commit all"}
         </Button>
       </div>
@@ -283,16 +480,6 @@ function GitInfoHeader({
       {commitError ? (
         <p className="text-xs text-destructive" data-testid="agent-studio-git-commit-error">
           {commitError}
-        </p>
-      ) : null}
-      {rebaseError ? (
-        <p className="text-xs text-destructive" data-testid="agent-studio-git-rebase-error">
-          {rebaseError}
-        </p>
-      ) : null}
-      {pushError ? (
-        <p className="text-xs text-destructive" data-testid="agent-studio-git-push-error">
-          {pushError}
         </p>
       ) : null}
     </div>
@@ -437,7 +624,8 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 }): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
-  const hasUncommittedFiles = model.fileStatuses.length > 0;
+  const uncommittedFileCount = model.fileStatuses.length;
+  const hasUncommittedFiles = uncommittedFileCount > 0;
 
   // Stable callback (rerender-functional-setstate)
   const toggleFile = useCallback((filePath: string) => {
@@ -470,21 +658,20 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <GitInfoHeader
           branch={model.branch}
-          worktreePath={model.worktreePath}
           targetBranch={model.targetBranch}
           diffScope={model.diffScope}
-          hasUncommittedFiles={hasUncommittedFiles}
+          uncommittedFileCount={uncommittedFileCount}
           commitsAheadBehind={model.commitsAheadBehind}
+          upstreamAheadBehind={model.upstreamAheadBehind ?? null}
           isLoading={model.isLoading}
           isCommitting={model.isCommitting ?? false}
           isPushing={model.isPushing ?? false}
           isRebasing={model.isRebasing ?? false}
-          commitError={model.commitError ?? null}
           pushError={model.pushError ?? null}
           rebaseError={model.rebaseError ?? null}
-          commitAll={model.commitAll ?? null}
           pushBranch={model.pushBranch ?? null}
           rebaseOntoTarget={model.rebaseOntoTarget ?? null}
+          pullFromUpstream={model.pullFromUpstream ?? null}
           setDiffScope={model.setDiffScope}
           onRefresh={model.refresh}
         />
@@ -570,6 +757,16 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
         </ScrollArea>
 
         {model.onSendReview != null ? <ReviewActions onSendReview={model.onSendReview} /> : null}
+
+        <CommitComposer
+          hasUncommittedFiles={hasUncommittedFiles}
+          uncommittedFileCount={uncommittedFileCount}
+          isCommitting={model.isCommitting ?? false}
+          isPushing={model.isPushing ?? false}
+          isRebasing={model.isRebasing ?? false}
+          commitError={model.commitError ?? null}
+          commitAll={model.commitAll ?? null}
+        />
       </div>
     </TooltipProvider>
   );

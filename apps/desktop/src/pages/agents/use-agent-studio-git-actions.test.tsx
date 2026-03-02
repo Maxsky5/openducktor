@@ -8,14 +8,29 @@ import {
 enableReactActEnvironment();
 
 const gitCommitAllMock = mock(async () => ({ outcome: "committed", commitHash: "abc123" }));
-const gitPushBranchMock = mock(async () => ({ pushed: true }));
+const gitPushBranchMock = mock(async () => ({
+  remote: "origin",
+  branch: "feature/task-10",
+  output: "done",
+}));
+const gitPullBranchMock = mock(async () => ({ outcome: "pulled", output: "updated" }));
 const gitRebaseBranchMock = mock(async () => ({ outcome: "rebased" }));
+const toastSuccessMock = mock(() => {});
+const toastErrorMock = mock(() => {});
 
 mock.module("@/state/operations/host", () => ({
   host: {
     gitCommitAll: gitCommitAllMock,
     gitPushBranch: gitPushBranchMock,
+    gitPullBranch: gitPullBranchMock,
     gitRebaseBranch: gitRebaseBranchMock,
+  },
+}));
+
+mock.module("sonner", () => ({
+  toast: {
+    success: toastSuccessMock,
+    error: toastErrorMock,
   },
 }));
 
@@ -45,9 +60,17 @@ beforeAll(async () => {
 beforeEach(() => {
   gitCommitAllMock.mockClear();
   gitPushBranchMock.mockClear();
+  gitPullBranchMock.mockClear();
   gitRebaseBranchMock.mockClear();
+  toastSuccessMock.mockClear();
+  toastErrorMock.mockClear();
   gitCommitAllMock.mockImplementation(async () => ({ outcome: "committed", commitHash: "abc123" }));
-  gitPushBranchMock.mockImplementation(async () => ({ pushed: true }));
+  gitPushBranchMock.mockImplementation(async () => ({
+    remote: "origin",
+    branch: "feature/task-10",
+    output: "done",
+  }));
+  gitPullBranchMock.mockImplementation(async () => ({ outcome: "pulled", output: "updated" }));
   gitRebaseBranchMock.mockImplementation(async () => ({ outcome: "rebased" }));
 });
 
@@ -91,7 +114,7 @@ describe("useAgentStudioGitActions", () => {
 
   test("tracks push action lifecycle and validates missing branch errors", async () => {
     const refreshDiffData = mock(async () => {});
-    const pushDeferred = createDeferred<{ pushed: boolean }>();
+    const pushDeferred = createDeferred<{ remote: string; branch: string; output: string }>();
     const harness = createHookHarness(
       createBaseArgs({
         branch: null,
@@ -129,10 +152,14 @@ describe("useAgentStudioGitActions", () => {
       expect(pushHarness.getLatest().isCommitting).toBe(false);
       expect(pushHarness.getLatest().isRebasing).toBe(false);
 
-      pushDeferred.resolve({ pushed: true });
+      pushDeferred.resolve({ remote: "origin", branch: "feature/task-10", output: "done" });
       await pushHarness.waitFor((state) => state.isPushing === false);
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
       expect(pushHarness.getLatest().pushError).toBeNull();
+      expect(toastSuccessMock).toHaveBeenCalledWith("Pushed feature/task-10", {
+        description: "Remote: origin",
+      });
+      expect(toastErrorMock).toHaveBeenCalledTimes(0);
     } finally {
       await pushHarness.unmount();
     }
@@ -141,7 +168,12 @@ describe("useAgentStudioGitActions", () => {
   test("tracks rebase action transition and clears error boundaries", async () => {
     const rebaseDeferred = createDeferred<{ outcome: string }>();
     const refreshDiffData = mock(async () => {});
-    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
 
     gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
 
@@ -166,11 +198,95 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  test("canonicalizes short rebase target branch names", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        targetBranch: "main",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (state) => {
+        await state.rebaseOntoTarget();
+      });
+
+      expect(gitRebaseBranchMock).toHaveBeenCalledWith("/repo", "origin/main", undefined);
+      expect(harness.getLatest().rebaseError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("pulls from upstream using dedicated pull endpoint", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (state) => {
+        await state.pullFromUpstream();
+      });
+
+      expect(gitPullBranchMock).toHaveBeenCalledWith("/repo", undefined);
+      expect(gitRebaseBranchMock).toHaveBeenCalledTimes(0);
+      expect(toastSuccessMock).toHaveBeenCalledWith("Pulled from upstream");
+      expect(harness.getLatest().rebaseError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reports clear pull error when branch is unavailable", async () => {
+    const harness = createHookHarness(createBaseArgs({ branch: null }));
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (state) => {
+        await state.pullFromUpstream();
+      });
+
+      expect(gitPullBranchMock).toHaveBeenCalledTimes(0);
+      expect(harness.getLatest().rebaseError).toBe(
+        "Cannot pull because current branch is unavailable.",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows up-to-date toast when pull reports no upstream commits", async () => {
+    gitPullBranchMock.mockImplementationOnce(async () => ({
+      outcome: "up_to_date",
+      output: "Already up to date.",
+    }));
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.pullFromUpstream();
+      });
+
+      expect(toastSuccessMock).toHaveBeenCalledWith("Already up to date");
+      expect(harness.getLatest().rebaseError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps failure state isolated when rebase fails", async () => {
     const rebaseDeferred = createDeferred<{ outcome: string }>();
     gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
     const refreshDiffData = mock(async () => {});
-    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
 
     let rebasePromise: Promise<void> | null = null;
 
@@ -211,7 +327,12 @@ describe("useAgentStudioGitActions", () => {
       throw new Error("Rebase failed due to conflicts");
     });
     const refreshDiffData = mock(async () => {});
-    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+        workingDir: "/tmp/worktree/task-10",
+      }),
+    );
 
     try {
       await harness.mount();
@@ -227,13 +348,44 @@ describe("useAgentStudioGitActions", () => {
       });
       await harness.waitFor((state) => state.isPushing === false);
 
-      expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "feature/task-10");
+      expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "feature/task-10", {
+        setUpstream: true,
+        workingDir: "/tmp/worktree/task-10",
+      });
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(toastSuccessMock).toHaveBeenCalledWith("Pushed feature/task-10", {
+        description: "Remote: origin",
+      });
 
       const state = harness.getLatest();
       expect(state.rebaseError).toBeNull();
       expect(state.pushError).toBeNull();
       expect(state.commitError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reports push failure through state and toast", async () => {
+    gitPushBranchMock.mockImplementationOnce(async () => {
+      throw new Error("Remote rejected update");
+    });
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.pushBranch();
+      });
+
+      await harness.waitFor((state) => state.isPushing === false);
+      expect(harness.getLatest().pushError).toContain("Remote rejected update");
+      expect(refreshDiffData).toHaveBeenCalledTimes(0);
+      expect(toastSuccessMock).toHaveBeenCalledTimes(0);
+      expect(toastErrorMock).toHaveBeenCalledWith("Push failed", {
+        description: "Remote rejected update",
+      });
     } finally {
       await harness.unmount();
     }

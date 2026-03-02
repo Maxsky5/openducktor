@@ -19,10 +19,10 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
     GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitFileDiff,
-    GitFileStatus, GitPort, GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult,
-    IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitPushSummary, GitRebaseBranchRequest,
+    GitRebaseBranchResult, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent,
+    RunState, RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata,
+    TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -331,6 +331,10 @@ pub(crate) enum GitCall {
         set_upstream: bool,
         force_with_lease: bool,
     },
+    PullBranch {
+        repo_path: String,
+        working_dir: Option<String>,
+    },
     CommitAll {
         repo_path: String,
         working_dir: Option<String>,
@@ -349,6 +353,7 @@ pub(crate) struct GitState {
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
     pub(crate) last_push_remote: Option<String>,
+    pub(crate) pull_branch_result: GitPullResult,
     pub(crate) commit_all_result: GitCommitAllResult,
     pub(crate) rebase_branch_result: GitRebaseBranchResult,
 }
@@ -445,6 +450,15 @@ impl GitPort for FakeGitPort {
         })
     }
 
+    fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::PullBranch {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+        });
+        Ok(state.pull_branch_result.clone())
+    }
+
     fn commit_all(
         &self,
         repo_path: &Path,
@@ -483,6 +497,15 @@ impl GitPort for FakeGitPort {
         _target_branch: Option<&str>,
     ) -> Result<Vec<GitFileDiff>> {
         Ok(Vec::new())
+    }
+
+    fn resolve_upstream_target(&self, _repo_path: &Path) -> Result<Option<String>> {
+        let state = self.state.lock().expect("git state lock poisoned");
+        Ok(state
+            .current_branch
+            .name
+            .as_ref()
+            .map(|name| format!("refs/remotes/origin/{name}")))
     }
 
     fn commits_ahead_behind(
@@ -538,6 +561,9 @@ pub(crate) fn build_service_with_git_state_enforced(
         branches,
         current_branch,
         last_push_remote: None,
+        pull_branch_result: GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        },
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),
             output: "ok".to_string(),
@@ -585,6 +611,9 @@ pub(crate) fn build_service_with_git_state(
         branches,
         current_branch,
         last_push_remote: None,
+        pull_branch_result: GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        },
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),
             output: "ok".to_string(),
@@ -997,6 +1026,9 @@ pub(crate) fn build_service_with_store(
         branches,
         current_branch,
         last_push_remote: None,
+        pull_branch_result: GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        },
         commit_all_result: GitCommitAllResult::Committed {
             commit_hash: "deadbeef".to_string(),
             output: "ok".to_string(),

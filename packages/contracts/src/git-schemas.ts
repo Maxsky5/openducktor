@@ -34,6 +34,24 @@ export const gitPushSummarySchema = z.object({
 });
 export type GitPushSummary = z.infer<typeof gitPushSummarySchema>;
 
+export const gitPullBranchRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type GitPullBranchRequest = z.infer<typeof gitPullBranchRequestSchema>;
+
+export const gitPullBranchResultSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("pulled"),
+    output: z.string(),
+  }),
+  z.object({
+    outcome: z.literal("up_to_date"),
+    output: z.string(),
+  }),
+]);
+export type GitPullBranchResult = z.infer<typeof gitPullBranchResultSchema>;
+
 /** A single file diff entry from `GET /session/:id/diff`. */
 export const fileDiffSchema = z.object({
   file: z.string(),
@@ -59,6 +77,44 @@ export const commitsAheadBehindSchema = z.object({
   behind: z.number(),
 });
 export type CommitsAheadBehind = z.infer<typeof commitsAheadBehindSchema>;
+
+export const gitDiffScopeSchema = z.enum(["target", "uncommitted"]);
+export type GitDiffScope = z.infer<typeof gitDiffScopeSchema>;
+
+export const gitUpstreamAheadBehindSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("tracking"),
+    ahead: z.number(),
+    behind: z.number(),
+  }),
+  z.object({
+    outcome: z.literal("untracked"),
+    ahead: z.number(),
+  }),
+  z.object({
+    outcome: z.literal("error"),
+    message: z.string(),
+  }),
+]);
+export type GitUpstreamAheadBehind = z.infer<typeof gitUpstreamAheadBehindSchema>;
+
+export const gitWorktreeStatusSnapshotSchema = z.object({
+  effectiveWorkingDir: z.string(),
+  targetBranch: z.string(),
+  diffScope: gitDiffScopeSchema,
+  observedAtMs: z.number(),
+});
+export type GitWorktreeStatusSnapshot = z.infer<typeof gitWorktreeStatusSnapshotSchema>;
+
+export const gitWorktreeStatusSchema = z.object({
+  currentBranch: gitCurrentBranchSchema,
+  fileStatuses: z.array(fileStatusSchema),
+  fileDiffs: z.array(fileDiffSchema),
+  targetAheadBehind: commitsAheadBehindSchema,
+  upstreamAheadBehind: gitUpstreamAheadBehindSchema,
+  snapshot: gitWorktreeStatusSnapshotSchema,
+});
+export type GitWorktreeStatus = z.infer<typeof gitWorktreeStatusSchema>;
 
 export const gitCommitAllRequestSchema = z.object({
   repoPath: z.string(),

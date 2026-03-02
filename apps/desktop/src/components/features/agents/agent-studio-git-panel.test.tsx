@@ -56,6 +56,7 @@ const baseModel = (
   commitAll: async () => {},
   pushBranch: async () => {},
   rebaseOntoTarget: async () => {},
+  pullFromUpstream: async () => {},
   ...overrides,
 });
 
@@ -68,7 +69,19 @@ const findByTestId = (
   root: TestRenderer.ReactTestInstance,
   testId: string,
 ): TestRenderer.ReactTestInstance => {
-  return root.find((node) => node.props["data-testid"] === testId);
+  const matches = root.findAll(
+    (node) => node.props["data-testid"] === testId && typeof node.type === "string",
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected exactly one host element for data-testid=${testId}, got ${matches.length}`,
+    );
+  }
+  const match = matches[0];
+  if (!match) {
+    throw new Error(`Missing host element for data-testid=${testId}`);
+  }
+  return match;
 };
 
 const ensureRenderer = (
@@ -84,6 +97,16 @@ const getRoot = (
   renderer: TestRenderer.ReactTestRenderer | null,
 ): TestRenderer.ReactTestInstance => {
   return ensureRenderer(renderer).root;
+};
+
+const hasVisibleText = (root: TestRenderer.ReactTestInstance, text: string): boolean => {
+  return (
+    root.findAll(
+      (node) =>
+        typeof node.type === "string" &&
+        node.children.some((child) => typeof child === "string" && child.includes(text)),
+    ).length > 0
+  );
 };
 
 describe("AgentStudioGitPanel", () => {
@@ -125,9 +148,17 @@ describe("AgentStudioGitPanel", () => {
 
     expect(findByTestId(root, "agent-studio-git-refresh-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-rebase-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-pull-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-commit-message-input")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-commit-submit-button")).toBeTruthy();
+    expect(
+      findByTestId(root, "agent-studio-git-diff-scope-uncommitted").children.join(""),
+    ).toContain("Uncommitted changes");
+    expect(findByTestId(root, "agent-studio-git-diff-scope-target").children.join("")).toContain(
+      "Compare to target",
+    );
+    expect(hasVisibleText(root, "/tmp/worktree")).toBe(false);
 
     await act(async () => {
       findByTestId(root, "agent-studio-git-refresh-button").props.onClick();
@@ -301,6 +332,7 @@ describe("AgentStudioGitPanel", () => {
     const commitAll = mock(async () => {});
     const pushBranch = mock(async () => {});
     const rebaseOntoTarget = mock(async () => {});
+    const pullFromUpstream = mock(async () => {});
 
     let renderer: TestRenderer.ReactTestRenderer | null = null;
     await act(async () => {
@@ -311,6 +343,7 @@ describe("AgentStudioGitPanel", () => {
             commitAll,
             pushBranch,
             rebaseOntoTarget,
+            pullFromUpstream,
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
           }),
         }),
@@ -323,9 +356,11 @@ describe("AgentStudioGitPanel", () => {
     const commitInput = findByTestId(root, "agent-studio-git-commit-message-input");
     const commitSubmit = findByTestId(root, "agent-studio-git-commit-submit-button");
     const rebaseButton = findByTestId(root, "agent-studio-git-rebase-button");
+    const pullButton = findByTestId(root, "agent-studio-git-pull-button");
     const pushButton = findByTestId(root, "agent-studio-git-push-button");
 
     expect(Boolean(rebaseButton.props.disabled)).toBe(true);
+    expect(Boolean(pullButton.props.disabled)).toBe(true);
     expect(Boolean(pushButton.props.disabled)).toBe(true);
     expect(Boolean(Boolean(refreshButton.props.disabled))).toBe(false);
 
@@ -349,6 +384,7 @@ describe("AgentStudioGitPanel", () => {
             commitAll,
             pushBranch,
             rebaseOntoTarget,
+            pullFromUpstream,
           }),
         }),
       );
@@ -358,6 +394,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(commitInput.props.disabled)).toBe(true);
     expect(Boolean(commitSubmit.props.disabled)).toBe(true);
     expect(Boolean(rebaseButton.props.disabled)).toBe(true);
+    expect(Boolean(pullButton.props.disabled)).toBe(true);
     expect(Boolean(pushButton.props.disabled)).toBe(true);
     expect(Boolean(refreshButton.props.disabled)).toBe(true);
 
@@ -373,6 +410,7 @@ describe("AgentStudioGitPanel", () => {
             commitAll,
             pushBranch,
             rebaseOntoTarget,
+            pullFromUpstream,
           }),
         }),
       );
@@ -380,6 +418,75 @@ describe("AgentStudioGitPanel", () => {
     });
 
     expect(Boolean(refreshButton.props.disabled)).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("shows upstream behind count in pull action and blocks push while behind", async () => {
+    const pushBranch = mock(async () => {});
+    const pullFromUpstream = mock(async () => {});
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            upstreamAheadBehind: { ahead: 4, behind: 3 },
+            fileStatuses: [],
+            pushBranch,
+            pullFromUpstream,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(
+      findByTestId(root, "agent-studio-git-upstream-behind-count").children.join(""),
+    ).toContain("3");
+    expect(hasVisibleText(root, "Pull (3 behind)")).toBe(true);
+    expect(hasVisibleText(root, "Pull before pushing")).toBe(true);
+    expect(Boolean(findByTestId(root, "agent-studio-git-push-button").props.disabled)).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("disables pull with uncommitted changes and explains why", async () => {
+    const pullFromUpstream = mock(async () => {});
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            upstreamAheadBehind: { ahead: 0, behind: 2 },
+            fileStatuses: [{ path: "src/dirty.ts", staged: false, status: "M" }],
+            pullFromUpstream,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(findByTestId(root, "agent-studio-git-pull-tooltip-trigger")).toBeTruthy();
+    const pullButton = findByTestId(root, "agent-studio-git-pull-button");
+    const pushButton = findByTestId(root, "agent-studio-git-push-button");
+    expect(Boolean(pullButton.props.disabled)).toBe(true);
+    expect(pullButton.props.className).toContain("disabled:pointer-events-auto");
+    expect(pullButton.props.className).toContain("disabled:cursor-not-allowed");
+    expect(Boolean(pushButton.props.disabled)).toBe(true);
+    expect(pushButton.props.className).toContain("disabled:pointer-events-auto");
+    expect(pushButton.props.className).toContain("disabled:cursor-not-allowed");
+    expect(hasVisibleText(root, "Commit or stash changes before pulling")).toBe(true);
+    expect(hasVisibleText(root, "Commit or stash changes, then pull before pushing")).toBe(true);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

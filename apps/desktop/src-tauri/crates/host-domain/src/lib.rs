@@ -12,8 +12,9 @@ pub use document::{
 };
 pub use git::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-    GitFileDiff, GitFileStatus, GitPort, GitPushSummary, GitRebaseBranchRequest,
-    GitRebaseBranchResult, GitWorktreeSummary,
+    GitDiffScope, GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult,
+    GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
+    GitWorktreeStatus, GitWorktreeStatusSnapshot, GitWorktreeSummary,
 };
 pub use runtime::{AgentRuntimeSummary, RunEvent, RunState, RunSummary};
 pub use store::TaskStore;
@@ -91,12 +92,14 @@ mod tests {
         use super::{
             AgentRuntimeSummary, AgentSessionDocument, AgentSessionModelSelection,
             AgentWorkflowState, AgentWorkflows, BeadsCheck, CreateTaskInput, GitBranch,
-            GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitPort, GitPushSummary,
-            GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeSummary, IssueType,
-            PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
-            RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard,
-            TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
-            TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
+            GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitPort,
+            GitPullRequest, GitPullResult, GitPushSummary, GitRebaseBranchRequest,
+            GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
+            GitWorktreeStatusSnapshot, GitWorktreeSummary, IssueType, PlanSubtaskInput,
+            QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary,
+            RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard, TaskDocumentPresence,
+            TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore,
+            UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -119,9 +122,15 @@ mod tests {
             GitCommitAllRequest,
             GitCommitAllResult,
             GitCurrentBranch,
+            GitDiffScope,
+            GitPullRequest,
+            GitPullResult,
             GitPushSummary,
             GitRebaseBranchRequest,
             GitRebaseBranchResult,
+            GitUpstreamAheadBehind,
+            GitWorktreeStatus,
+            GitWorktreeStatusSnapshot,
             GitWorktreeSummary,
             IssueType,
             PlanSubtaskInput,

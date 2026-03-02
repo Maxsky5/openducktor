@@ -21,9 +21,15 @@ import type {
   GitCommitAllRequest,
   GitCommitAllResult,
   GitCurrentBranch,
+  GitDiffScope,
+  GitPullBranchRequest,
+  GitPullBranchResult,
   GitPushSummary,
   GitRebaseBranchRequest,
   GitRebaseBranchResult,
+  GitUpstreamAheadBehind,
+  GitWorktreeStatus,
+  GitWorktreeStatusSnapshot,
   GitWorktreeSummary,
   GlobalConfig,
   IssueType,
@@ -73,12 +79,18 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
   "commitsAheadBehindSchema",
+  "gitDiffScopeSchema",
+  "gitPullBranchRequestSchema",
+  "gitPullBranchResultSchema",
   "defaultSpecTemplateMarkdown",
   "fileDiffSchema",
   "fileStatusSchema",
   "gitBranchSchema",
   "gitCurrentBranchSchema",
   "gitPushSummarySchema",
+  "gitUpstreamAheadBehindSchema",
+  "gitWorktreeStatusSchema",
+  "gitWorktreeStatusSnapshotSchema",
   "gitWorktreeSummarySchema",
   "globalConfigSchema",
   "issueTypeSchema",
@@ -131,9 +143,15 @@ type ExportedTypeContract = {
   FileStatus: FileStatus;
   GitBranch: GitBranch;
   GitCurrentBranch: GitCurrentBranch;
+  GitDiffScope: GitDiffScope;
+  GitPullBranchRequest: GitPullBranchRequest;
+  GitPullBranchResult: GitPullBranchResult;
   GitPushSummary: GitPushSummary;
   GitRebaseBranchRequest: GitRebaseBranchRequest;
   GitRebaseBranchResult: GitRebaseBranchResult;
+  GitUpstreamAheadBehind: GitUpstreamAheadBehind;
+  GitWorktreeStatus: GitWorktreeStatus;
+  GitWorktreeStatusSnapshot: GitWorktreeStatusSnapshot;
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
   IssueType: IssueType;

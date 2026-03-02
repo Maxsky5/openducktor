@@ -3,6 +3,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::State;
 
@@ -62,6 +63,16 @@ fn resolve_working_dir(repo_path: &str, working_dir: Option<&str>) -> Result<Str
             ))
         }
         _ => Ok(canonical_repo.to_string_lossy().to_string()),
+    }
+}
+
+fn parse_diff_scope(diff_scope: Option<&str>) -> Result<host_domain::GitDiffScope, String> {
+    match diff_scope.unwrap_or("target") {
+        "target" => Ok(host_domain::GitDiffScope::Target),
+        "uncommitted" => Ok(host_domain::GitDiffScope::Uncommitted),
+        value => Err(format!(
+            "diffScope must be either 'target' or 'uncommitted', got: {value}"
+        )),
     }
 }
 
@@ -143,12 +154,20 @@ pub async fn git_push_branch(
     state: State<'_, AppState>,
     repo_path: String,
     branch: String,
+    working_dir: Option<String>,
     remote: Option<String>,
     set_upstream: Option<bool>,
     force_with_lease: Option<bool>,
 ) -> Result<host_domain::GitPushSummary, String> {
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+
     as_error(state.service.git_push_branch(
         &repo_path,
+        Some(effective.as_str()),
         remote.as_deref(),
         &branch,
         set_upstream.unwrap_or(false),
@@ -216,6 +235,81 @@ pub async fn git_commits_ahead_behind(
 }
 
 #[tauri::command]
+pub async fn git_get_worktree_status(
+    state: State<'_, AppState>,
+    repo_path: String,
+    target_branch: String,
+    diff_scope: Option<String>,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitWorktreeStatus, String> {
+    let trimmed_target = target_branch.trim();
+    if trimmed_target.is_empty() {
+        return Err("targetBranch is required".to_string());
+    }
+    let scope = parse_diff_scope(diff_scope.as_deref())?;
+
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+    let repo = Path::new(&effective);
+
+    let current_branch = as_error(state.service.git_port().get_current_branch(repo))?;
+    let file_statuses = as_error(state.service.git_port().get_status(repo))?;
+    let file_diffs = as_error(state.service.git_port().get_diff(
+        repo,
+        match &scope {
+            host_domain::GitDiffScope::Target => Some(trimmed_target),
+            host_domain::GitDiffScope::Uncommitted => None,
+        },
+    ))?;
+    let target_ahead_behind =
+        as_error(state.service.git_port().commits_ahead_behind(repo, trimmed_target))?;
+    let upstream_ahead_behind = match state.service.git_port().resolve_upstream_target(repo) {
+        Ok(Some(upstream_target)) => {
+            match state
+                .service
+                .git_port()
+                .commits_ahead_behind(repo, upstream_target.as_str())
+            {
+                Ok(counts) => host_domain::GitUpstreamAheadBehind::Tracking {
+                    ahead: counts.ahead,
+                    behind: counts.behind,
+                },
+                Err(error) => host_domain::GitUpstreamAheadBehind::Error {
+                    message: format!("{error:#}"),
+                },
+            }
+        }
+        Ok(None) => host_domain::GitUpstreamAheadBehind::Untracked {
+            ahead: target_ahead_behind.ahead,
+        },
+        Err(error) => host_domain::GitUpstreamAheadBehind::Error {
+            message: format!("{error:#}"),
+        },
+    };
+    let observed_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    Ok(host_domain::GitWorktreeStatus {
+        current_branch,
+        file_statuses,
+        file_diffs,
+        target_ahead_behind,
+        upstream_ahead_behind,
+        snapshot: host_domain::GitWorktreeStatusSnapshot {
+            effective_working_dir: effective,
+            target_branch: trimmed_target.to_string(),
+            diff_scope: scope,
+            observed_at_ms,
+        },
+    })
+}
+
+#[tauri::command]
 pub async fn git_commit_all(
     state: State<'_, AppState>,
     repo_path: String,
@@ -237,6 +331,26 @@ pub async fn git_commit_all(
         host_domain::GitCommitAllRequest {
             working_dir: Some(effective),
             message: message.trim().to_string(),
+        },
+    ))
+}
+
+#[tauri::command]
+pub async fn git_pull_branch(
+    state: State<'_, AppState>,
+    repo_path: String,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitPullResult, String> {
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+
+    as_error(state.service.git_pull_branch(
+        &repo_path,
+        host_domain::GitPullRequest {
+            working_dir: Some(effective),
         },
     ))
 }

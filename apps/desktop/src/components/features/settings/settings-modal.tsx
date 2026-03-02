@@ -38,6 +38,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { errorMessage } from "@/lib/errors";
+import { DEFAULT_TARGET_BRANCH } from "@/lib/target-branch";
 import { cn } from "@/lib/utils";
 import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-repo-settings";
 import { useWorkspaceState } from "@/state";
@@ -62,7 +63,7 @@ export function SettingsModal({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [worktreeBasePath, setWorktreeBasePath] = useState("");
   const [branchPrefix, setBranchPrefix] = useState(DEFAULT_BRANCH_PREFIX);
-  const [defaultTargetBranch, setDefaultTargetBranch] = useState("main");
+  const [defaultTargetBranch, setDefaultTargetBranch] = useState(DEFAULT_TARGET_BRANCH);
   const [trustedHooks, setTrustedHooks] = useState(false);
   const [preStartHooks, setPreStartHooks] = useState("");
   const [postCompleteHooks, setPostCompleteHooks] = useState("");

@@ -9,15 +9,21 @@ import {
   type GitCommitAllRequest,
   type GitCommitAllResult,
   type GitCurrentBranch,
+  type GitPullBranchRequest,
+  type GitPullBranchResult,
   type GitPushSummary,
   type GitRebaseBranchRequest,
   type GitRebaseBranchResult,
+  type GitWorktreeStatus,
   type GitWorktreeSummary,
   gitBranchSchema,
   gitCommitAllResultSchema,
   gitCurrentBranchSchema,
+  gitDiffScopeSchema,
+  gitPullBranchResultSchema,
   gitPushSummarySchema,
   gitRebaseBranchResultSchema,
+  gitWorktreeStatusSchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -94,6 +100,7 @@ export const gitPushBranch = async (
     remote?: string;
     setUpstream?: boolean;
     forceWithLease?: boolean;
+    workingDir?: string;
   },
 ): Promise<GitPushSummary> => {
   const payload = await invokeFn<unknown>("git_push_branch", {
@@ -102,8 +109,25 @@ export const gitPushBranch = async (
     remote: options?.remote,
     setUpstream: options?.setUpstream ?? false,
     forceWithLease: options?.forceWithLease ?? false,
+    workingDir: options?.workingDir ?? null,
   });
   return gitPushSummarySchema.parse(payload);
+};
+
+export const gitPullBranch = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  workingDir?: string,
+): Promise<GitPullBranchResult> => {
+  const request: GitPullBranchRequest = {
+    repoPath,
+    workingDir,
+  };
+  const payload = await invokeFn<unknown>("git_pull_branch", {
+    repoPath: request.repoPath,
+    workingDir: request.workingDir ?? null,
+  });
+  return gitPullBranchResultSchema.parse(payload);
 };
 
 export const gitGetStatus = async (
@@ -144,6 +168,22 @@ export const gitCommitsAheadBehind = async (
     workingDir: workingDir ?? null,
   });
   return commitsAheadBehindSchema.parse(payload);
+};
+
+export const gitGetWorktreeStatus = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  targetBranch: string,
+  diffScope?: "target" | "uncommitted",
+  workingDir?: string,
+): Promise<GitWorktreeStatus> => {
+  const payload = await invokeFn<unknown>("git_get_worktree_status", {
+    repoPath,
+    targetBranch,
+    diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
+    workingDir: workingDir ?? null,
+  });
+  return gitWorktreeStatusSchema.parse(payload);
 };
 
 export const gitCommitAll = async (
@@ -227,9 +267,14 @@ export class TauriGitClient {
       remote?: string;
       setUpstream?: boolean;
       forceWithLease?: boolean;
+      workingDir?: string;
     },
   ): Promise<GitPushSummary> {
     return gitPushBranch(this.invokeFn, repoPath, branch, options);
+  }
+
+  async gitPullBranch(repoPath: string, workingDir?: string): Promise<GitPullBranchResult> {
+    return gitPullBranch(this.invokeFn, repoPath, workingDir);
   }
 
   async gitGetStatus(repoPath: string, workingDir?: string): Promise<FileStatus[]> {
@@ -250,6 +295,15 @@ export class TauriGitClient {
     workingDir?: string,
   ): Promise<CommitsAheadBehind> {
     return gitCommitsAheadBehind(this.invokeFn, repoPath, targetBranch, workingDir);
+  }
+
+  async gitGetWorktreeStatus(
+    repoPath: string,
+    targetBranch: string,
+    diffScope?: "target" | "uncommitted",
+    workingDir?: string,
+  ): Promise<GitWorktreeStatus> {
+    return gitGetWorktreeStatus(this.invokeFn, repoPath, targetBranch, diffScope, workingDir);
   }
 
   async gitCommitAll(

@@ -2,8 +2,9 @@ use super::{read_opencode_version, resolve_opencode_binary_path, AppService, Cac
 use anyhow::{anyhow, Result};
 use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
-    GitCurrentBranch, GitFileDiff, GitFileStatus, GitPushSummary, GitRebaseBranchRequest,
-    GitRebaseBranchResult, GitWorktreeSummary, RuntimeCheck, SystemCheck, WorkspaceRecord,
+    GitCurrentBranch, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushSummary,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeSummary, RuntimeCheck, SystemCheck,
+    WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
@@ -13,6 +14,14 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+
+fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String {
+    working_dir
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(repo_path)
+        .to_string()
+}
 
 impl AppService {
     pub fn runtime_check(&self) -> Result<RuntimeCheck> {
@@ -287,23 +296,37 @@ impl AppService {
     pub fn git_push_branch(
         &self,
         repo_path: &str,
+        working_dir: Option<&str>,
         remote: Option<&str>,
         branch: &str,
         set_upstream: bool,
         force_with_lease: bool,
     ) -> Result<GitPushSummary> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let execution_path = resolve_execution_path(repo_path.as_str(), working_dir);
         let remote = remote
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or("origin");
         self.git_port.push_branch(
-            Path::new(&repo_path),
+            Path::new(&execution_path),
             remote,
             branch,
             set_upstream,
             force_with_lease,
         )
+    }
+
+    pub fn git_pull_branch(
+        &self,
+        repo_path: &str,
+        request: GitPullRequest,
+    ) -> Result<GitPullResult> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let execution_path =
+            resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
+        self.git_port
+            .pull_branch(Path::new(&execution_path), request)
     }
 
     pub fn git_commit_all(
@@ -312,13 +335,15 @@ impl AppService {
         request: GitCommitAllRequest,
     ) -> Result<GitCommitAllResult> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let execution_path =
+            resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
         let message = request.message.trim();
         if message.is_empty() {
             return Err(anyhow!("commit message cannot be empty"));
         }
 
         self.git_port.commit_all(
-            Path::new(&repo_path),
+            Path::new(&execution_path),
             GitCommitAllRequest {
                 working_dir: request.working_dir,
                 message: message.to_string(),
@@ -332,13 +357,15 @@ impl AppService {
         request: GitRebaseBranchRequest,
     ) -> Result<GitRebaseBranchResult> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let execution_path =
+            resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
         let target_branch = request.target_branch.trim();
         if target_branch.is_empty() {
             return Err(anyhow!("target branch cannot be empty"));
         }
 
         self.git_port.rebase_branch(
-            Path::new(&repo_path),
+            Path::new(&execution_path),
             GitRebaseBranchRequest {
                 working_dir: request.working_dir,
                 target_branch: target_branch.to_string(),
@@ -397,6 +424,7 @@ mod tests {
         let summary = service
             .git_push_branch(
                 "/tmp/odt-repo-module",
+                None,
                 Some("   "),
                 "feature/x",
                 false,
