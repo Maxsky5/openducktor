@@ -28,3 +28,5 @@
 - Task 11 Git panel now exposes explicit branch context labels (`Current`, `Target`), deterministic `data-testid` hooks, diff-scope segmented controls, and commit-all form validation wired to Task-10 action state.
 - Task 12 wiring is safer when the right-panel model is built through a single helper that maps `panelKind` to a discriminated model shape; this removes ad-hoc spread logic in `agents-page.tsx` and keeps diff/doc panel contract explicit.
 - Converting `AgentStudioRightPanelModel` to a discriminated union (`documents` vs `diff`) guarantees at compile time that diff panels always receive the enhanced git model fields (including `diffScope` and git action callbacks).
+
+#TR|- Task 13 regression test work validated commit/rebase/push flow behavior in `agent-studio-git-panel.test.tsx` and `use-agent-studio-git-actions.test.tsx`, including per-action loading/error handling and diff refresh semantics.
