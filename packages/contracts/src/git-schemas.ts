@@ -59,3 +59,47 @@ export const commitsAheadBehindSchema = z.object({
   behind: z.number(),
 });
 export type CommitsAheadBehind = z.infer<typeof commitsAheadBehindSchema>;
+
+export const gitCommitAllRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  message: z.string().trim().min(1),
+});
+export type GitCommitAllRequest = z.infer<typeof gitCommitAllRequestSchema>;
+
+export const gitCommitAllResultSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("committed"),
+    commitHash: z.string(),
+    output: z.string(),
+  }),
+  z.object({
+    outcome: z.literal("no_changes"),
+    output: z.string(),
+  }),
+]);
+export type GitCommitAllResult = z.infer<typeof gitCommitAllResultSchema>;
+
+export const gitRebaseBranchRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  targetBranch: z.string(),
+});
+export type GitRebaseBranchRequest = z.infer<typeof gitRebaseBranchRequestSchema>;
+
+export const gitRebaseBranchResultSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("rebased"),
+    output: z.string(),
+  }),
+  z.object({
+    outcome: z.literal("up_to_date"),
+    output: z.string(),
+  }),
+  z.object({
+    outcome: z.literal("conflicts"),
+    conflictedFiles: z.array(z.string()),
+    output: z.string(),
+  }),
+]);
+export type GitRebaseBranchResult = z.infer<typeof gitRebaseBranchResultSchema>;

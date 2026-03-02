@@ -18,8 +18,12 @@ import type {
   FileDiff,
   FileStatus,
   GitBranch,
+  GitCommitAllRequest,
+  GitCommitAllResult,
   GitCurrentBranch,
   GitPushSummary,
+  GitRebaseBranchRequest,
+  GitRebaseBranchResult,
   GitWorktreeSummary,
   GlobalConfig,
   IssueType,
@@ -66,6 +70,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadEntry",
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
+  "gitCommitAllRequestSchema",
+  "gitCommitAllResultSchema",
   "commitsAheadBehindSchema",
   "defaultSpecTemplateMarkdown",
   "fileDiffSchema",
@@ -81,6 +87,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoAgentDefaultsSchema",
   "repoConfigSchema",
   "repoHooksSchema",
+  "gitRebaseBranchRequestSchema",
+  "gitRebaseBranchResultSchema",
   "runEventSchema",
   "runStateSchema",
   "runSummarySchema",
@@ -117,11 +125,15 @@ type ExportedTypeContract = {
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;
   CommitsAheadBehind: CommitsAheadBehind;
+  GitCommitAllRequest: GitCommitAllRequest;
+  GitCommitAllResult: GitCommitAllResult;
   FileDiff: FileDiff;
   FileStatus: FileStatus;
   GitBranch: GitBranch;
   GitCurrentBranch: GitCurrentBranch;
   GitPushSummary: GitPushSummary;
+  GitRebaseBranchRequest: GitRebaseBranchRequest;
+  GitRebaseBranchResult: GitRebaseBranchResult;
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
   IssueType: IssueType;

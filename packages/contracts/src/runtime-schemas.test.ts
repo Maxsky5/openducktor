@@ -3,8 +3,12 @@ import {
   agentRuntimeSummarySchema,
   agentSessionRecordSchema,
   gitBranchSchema,
+  gitCommitAllRequestSchema,
+  gitCommitAllResultSchema,
   gitCurrentBranchSchema,
   gitPushSummarySchema,
+  gitRebaseBranchRequestSchema,
+  gitRebaseBranchResultSchema,
   gitWorktreeSummarySchema,
   repoConfigSchema,
   runEventSchema,
@@ -181,6 +185,65 @@ describe("runtime schemas", () => {
     expect(branch.isCurrent).toBe(true);
     expect(current.name).toBeUndefined();
     expect(current.detached).toBe(true);
+  });
+
+  test("git commit-all request and result payloads parse for success and no-op", () => {
+    const commitRequest = gitCommitAllRequestSchema.parse({
+      repoPath: "/repo",
+      workingDir: null,
+      message: "Build all changes",
+    });
+    const commitCommitted = gitCommitAllResultSchema.parse({
+      outcome: "committed",
+      commitHash: "abc123",
+      output: "1 file changed",
+    });
+    const commitNoChanges = gitCommitAllResultSchema.parse({
+      outcome: "no_changes",
+      output: "nothing to commit",
+    });
+
+    expect(commitRequest.repoPath).toBe("/repo");
+    expect(commitRequest.workingDir).toBeUndefined();
+    expect(commitRequest.message).toBe("Build all changes");
+    expect(commitCommitted.outcome).toBe("committed");
+    expect(commitNoChanges.outcome).toBe("no_changes");
+  });
+
+  test("git rebase branch request and result payloads parse for all outcomes", () => {
+    const rebaseRequest = gitRebaseBranchRequestSchema.parse({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      workingDir: "/tmp/worktree",
+    });
+    const rebaseRebased = gitRebaseBranchResultSchema.parse({
+      outcome: "rebased",
+      output: "rebased",
+    });
+    const rebaseUpToDate = gitRebaseBranchResultSchema.parse({
+      outcome: "up_to_date",
+      output: "up to date",
+    });
+    const rebaseConflicts = gitRebaseBranchResultSchema.parse({
+      outcome: "conflicts",
+      conflictedFiles: ["src/index.ts", "src/main.ts"],
+      output: "failed with conflicts",
+    });
+
+    expect(rebaseRequest.targetBranch).toBe("origin/main");
+    expect(rebaseRequest.workingDir).toBe("/tmp/worktree");
+    expect(rebaseRebased.outcome).toBe("rebased");
+    expect(rebaseUpToDate.outcome).toBe("up_to_date");
+    expect(rebaseConflicts.outcome).toBe("conflicts");
+  });
+
+  test("git rebase branch result rejects conflicts without file list", () => {
+    expect(() =>
+      gitRebaseBranchResultSchema.parse({
+        outcome: "conflicts",
+        output: "failed",
+      }),
+    ).toThrow();
   });
 
   test("git schemas parse worktree and push payloads", () => {
