@@ -182,3 +182,55 @@ pub async fn git_commits_ahead_behind(
             .commits_ahead_behind(Path::new(&effective), &target_branch),
     )
 }
+
+#[tauri::command]
+pub async fn git_commit_all(
+    state: State<'_, AppState>,
+    repo_path: String,
+    message: String,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitCommitAllResult, String> {
+    if message.trim().is_empty() {
+        return Err("message is required".to_string());
+    }
+
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+
+    as_error(state.service.git_commit_all(
+        &repo_path,
+        host_domain::GitCommitAllRequest {
+            working_dir: Some(effective),
+            message: message.trim().to_string(),
+        },
+    ))
+}
+
+#[tauri::command]
+pub async fn git_rebase_branch(
+    state: State<'_, AppState>,
+    repo_path: String,
+    target_branch: String,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitRebaseBranchResult, String> {
+    if target_branch.trim().is_empty() {
+        return Err("targetBranch is required".to_string());
+    }
+
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+
+    as_error(state.service.git_rebase_branch(
+        &repo_path,
+        host_domain::GitRebaseBranchRequest {
+            working_dir: Some(effective),
+            target_branch: target_branch.trim().to_string(),
+        },
+    ))
+}

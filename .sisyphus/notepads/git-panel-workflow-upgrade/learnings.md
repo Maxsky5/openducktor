@@ -14,3 +14,6 @@
 - Domain outcomes for commit/rebase now model no-op and conflict states as first-class variants (`NoChanges`, `UpToDate`, `Conflicts`) to avoid downstream string parsing.
 - Adapter host facade now exposes `gitCommitAll` and `gitRebaseBranch` in `TauriHostClient` and routes through `git_commit_all` / `git_rebase_branch`.
 - Working directory handling for new git adapter methods follows existing convention: send `workingDir` as `null` when undefined.
+- Tauri git commands for mutable operations now follow the same safety chain as read operations: authorize `repo_path` first, then resolve and validate `working_dir` via `resolve_working_dir`.
+- New command-layer input guards enforce non-empty operation fields (`message`, `targetBranch`) before forwarding to app-service.
+- `git_commit_all` and `git_rebase_branch` are now registered in `tauri::generate_handler!`, matching the snake_case invoke names used by the Tauri host adapter.

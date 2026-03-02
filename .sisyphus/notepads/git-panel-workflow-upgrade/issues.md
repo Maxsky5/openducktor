@@ -7,3 +7,4 @@
 - Rust LSP diagnostics could not run in this environment because `rust-analyzer` is not installed in the active toolchain (`stable-aarch64-apple-darwin`), so validation relied on crate tests.
 
 - Adapter test initially failed on IPC call-order assertion for new git methods; resolved by aligning assertion order with call sequence.
+- Rust LSP diagnostics remained unavailable in this environment (`rust-analyzer` missing), so command-layer validation for Task 8 was verified via AST symbol checks and `cargo test -p host-application`.

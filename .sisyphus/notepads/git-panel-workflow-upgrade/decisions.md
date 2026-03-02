@@ -9,3 +9,5 @@
 
 - Kept adapter git method signatures positional with optional trailing `workingDir` to match existing git client style and avoid changing caller shape.
 - Used contract request/response schema parsing for command outputs in `git-client` to keep adapter surface typed and transport-safe.
+- Kept commit/rebase command input shape flat in Tauri (`repoPath`, optional `workingDir`, plus operation field) to match existing invoke conventions and avoid introducing nested payload DTOs in command signatures.
+- Forwarded resolved working directory into app-service request DTOs for commit/rebase so downstream git port executes against the validated effective path.

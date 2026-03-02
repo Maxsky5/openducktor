@@ -250,6 +250,8 @@ pub fn run() -> anyhow::Result<()> {
             git_get_status,
             git_get_diff,
             git_commits_ahead_behind,
+            git_commit_all,
+            git_rebase_branch,
             tasks_list,
             task_create,
             task_update,
