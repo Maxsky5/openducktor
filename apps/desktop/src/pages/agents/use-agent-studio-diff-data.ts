@@ -13,6 +13,7 @@ export type DiffDataState = {
   worktreePath: string | null;
   /** Target branch for ahead/behind comparison. */
   targetBranch: string;
+  diffScope: DiffScope;
   /** Commits ahead/behind the target branch. */
   commitsAheadBehind: CommitsAheadBehind | null;
   /** Changed files with diff content. */
@@ -29,7 +30,10 @@ export type DiffDataState = {
   selectedFile: string | null;
   /** Select a file to view its diff. */
   setSelectedFile: (path: string | null) => void;
+  setDiffScope: (scope: DiffScope) => void;
 };
+
+export type DiffScope = "target" | "uncommitted";
 
 export type UseAgentStudioDiffDataInput = {
   /** Configured repo path (must be in Tauri workspace allowlist). */
@@ -93,6 +97,7 @@ export function useAgentStudioDiffData({
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const [state, setState] = useState<DiffBatchState>(INITIAL_STATE);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [diffScope, setDiffScope] = useState<DiffScope>("target");
   const [resolvedWorktreePath, setResolvedWorktreePath] = useState<string | null>(null);
 
   const versionRef = useRef(0);
@@ -134,6 +139,8 @@ export function useAgentStudioDiffData({
   repoPathRef.current = repoPath;
   const targetBranchRef = useRef(targetBranch);
   targetBranchRef.current = targetBranch;
+  const diffScopeRef = useRef(diffScope);
+  diffScopeRef.current = diffScope;
   // Use the resolved worktree path as the actual working directory for git commands
   const workingDirRef = useRef(worktreePath);
   workingDirRef.current = worktreePath;
@@ -153,11 +160,12 @@ export function useAgentStudioDiffData({
 
     try {
       const target = targetBranchRef.current;
+      const diffTarget = diffScopeRef.current === "target" ? target : undefined;
       const wd = workingDirRef.current ?? undefined;
       const [branchResult, statusResult, diffResult, aheadBehindResult] = await Promise.allSettled([
         host.gitGetCurrentBranch(path, wd),
         host.gitGetStatus(path, wd),
-        host.gitGetDiff(path, target, wd),
+        host.gitGetDiff(path, diffTarget, wd),
         host.gitCommitsAheadBehind(path, target, wd),
       ]);
 
@@ -216,7 +224,7 @@ export function useAgentStudioDiffData({
   // Initial load when repo path or session working directory changes.
   // sessionWorkingDirectory can arrive late (sessions load asynchronously after page navigation),
   // so we must re-fetch when it becomes available.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: worktreePath is an intentional trigger — loadData reads it via ref, but the effect must re-fire when the worktree path resolves (async from runs list or session hydration)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: worktreePath and diffScope are intentional triggers — loadData reads them via refs, but the effect must re-fire when worktree/scope changes.
   useEffect(() => {
     if (repoPath) {
       void loadData(true);
@@ -224,7 +232,7 @@ export function useAgentStudioDiffData({
       setState(INITIAL_STATE);
       setSelectedFile(null);
     }
-  }, [repoPath, worktreePath, loadData]);
+  }, [repoPath, worktreePath, diffScope, loadData]);
 
   // Polling — stable interval since loadData doesn't change
   useEffect(() => {
@@ -247,6 +255,7 @@ export function useAgentStudioDiffData({
       branch: state.branch,
       worktreePath,
       targetBranch,
+      diffScope,
       commitsAheadBehind: state.commitsAheadBehind,
       fileDiffs: state.fileDiffs,
       fileStatuses: state.fileStatuses,
@@ -255,7 +264,8 @@ export function useAgentStudioDiffData({
       refresh: () => loadData(true),
       selectedFile,
       setSelectedFile,
+      setDiffScope,
     }),
-    [worktreePath, targetBranch, state, loadData, selectedFile],
+    [worktreePath, targetBranch, diffScope, state, loadData, selectedFile],
   );
 }

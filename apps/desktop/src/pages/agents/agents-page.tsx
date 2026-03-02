@@ -3,6 +3,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -26,6 +27,7 @@ import {
   useSessionStartModalCoordinator,
 } from "../shared/use-session-start-modal-coordinator";
 import { useAgentStudioDiffData } from "./use-agent-studio-diff-data";
+import { useAgentStudioGitActions } from "./use-agent-studio-git-actions";
 import {
   type AgentStudioOrchestrationActionsContext,
   type AgentStudioOrchestrationComposerContext,
@@ -289,6 +291,20 @@ export function AgentsPage(): ReactElement {
       Boolean(selection.viewActiveSession) &&
       orchestration.rightPanel.isPanelOpen,
   });
+  const gitActions = useAgentStudioGitActions({
+    repoPath: activeRepo,
+    workingDir: diffData.worktreePath,
+    branch: diffData.branch,
+    targetBranch: diffData.targetBranch,
+    refreshDiffData: diffData.refresh,
+  });
+  const diffModel = useMemo(
+    () => ({
+      ...diffData,
+      ...gitActions,
+    }),
+    [diffData, gitActions],
+  );
 
   return (
     <DiffWorkerProvider>
@@ -322,9 +338,7 @@ export function AgentsPage(): ReactElement {
                       model={{
                         kind: orchestration.rightPanel.panelKind,
                         documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
-                        ...(orchestration.rightPanel.panelKind === "diff"
-                          ? { diffModel: diffData }
-                          : {}),
+                        ...(orchestration.rightPanel.panelKind === "diff" ? { diffModel } : {}),
                       }}
                     />
                   </ResizablePanel>

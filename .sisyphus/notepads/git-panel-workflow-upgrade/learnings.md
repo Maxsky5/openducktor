@@ -19,3 +19,8 @@
 - `git_commit_all` and `git_rebase_branch` are now registered in `tauri::generate_handler!`, matching the snake_case invoke names used by the Tauri host adapter.
 - `resolve_working_dir` now canonicalizes `repo_path` and `working_dir`, allows repo root directly, and otherwise permits only canonical paths listed by `git -C <repo> worktree list --porcelain`.
 - Added `commands/git.rs` tests that assert repo-root acceptance, registered worktree acceptance, and rejection of an unrelated external git repo.
+- Added frontend `diffScope` state (`target` | `uncommitted`) to the Agent Studio diff hook and routed `gitGetDiff` target argument by scope (`target` -> configured branch, `uncommitted` -> `undefined`).
+- Kept the existing diff anti-race pattern intact by preserving version-guard refs and re-triggering load on `diffScope` changes without coupling polling to mutating actions.
+- Added a dedicated `useAgentStudioGitActions` hook with independent action flags (`isCommitting`, `isPushing`, `isRebasing`) and operation-scoped errors (`commitError`, `pushError`, `rebaseError`).
+- Successful mutating actions now clear stale action errors and call diff refresh so the right panel does not display stale git state after commit/push/rebase.
+- Added desktop hook tests for scope routing and isolated failure state behavior (`use-agent-studio-diff-data.test.tsx`, `use-agent-studio-git-actions.test.tsx`).

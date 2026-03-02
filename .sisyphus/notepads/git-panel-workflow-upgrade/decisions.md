@@ -12,3 +12,6 @@
 - Kept commit/rebase command input shape flat in Tauri (`repoPath`, optional `workingDir`, plus operation field) to match existing invoke conventions and avoid introducing nested payload DTOs in command signatures.
 - Forwarded resolved working directory into app-service request DTOs for commit/rebase so downstream git port executes against the validated effective path.
 - Kept `ensure_repo_authorized` unchanged and hardened only `resolve_working_dir` by enforcing canonical membership in the authorized repo root/worktree set derived from git porcelain output.
+- Kept Task 10 scoped to hook/state/page wiring only (no git panel UI redesign), with new action state exposed through the existing diff model shape merge in `agents-page.tsx`.
+- Used per-action loading/error slices instead of a shared busy/error state so rebase failure can be surfaced without marking push/commit as failed or loading.
+- On successful mutating actions, clear all action errors before refresh to remove stale cross-action failure messages while preserving operation-specific errors on failure.
