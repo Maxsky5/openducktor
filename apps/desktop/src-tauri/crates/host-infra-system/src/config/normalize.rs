@@ -1,6 +1,7 @@
 use super::types::{
-    default_branch_prefix, default_task_metadata_namespace, hook_set_fingerprint,
-    AgentModelDefault, GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig,
+    default_branch_prefix, default_target_branch, default_task_metadata_namespace,
+    hook_set_fingerprint, AgentModelDefault, GlobalConfig, OpencodeStartupReadinessConfig,
+    RepoConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -50,6 +51,12 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
         default_branch_prefix()
     } else {
         branch_prefix.to_string()
+    };
+    let target_branch = repo.default_target_branch.trim();
+    repo.default_target_branch = if target_branch.is_empty() {
+        default_target_branch()
+    } else {
+        target_branch.to_string()
     };
     normalize_hook_commands(&mut repo.hooks.pre_start);
     normalize_hook_commands(&mut repo.hooks.post_complete);

@@ -69,6 +69,8 @@ pub struct RepoConfig {
     pub worktree_base_path: Option<String>,
     #[serde(default = "default_branch_prefix")]
     pub branch_prefix: String,
+    #[serde(default = "default_target_branch")]
+    pub default_target_branch: String,
     #[serde(default)]
     pub trusted_hooks: bool,
     #[serde(default)]
@@ -83,6 +85,10 @@ pub(super) fn default_branch_prefix() -> String {
     "obp".to_string()
 }
 
+pub(super) fn default_target_branch() -> String {
+    "origin/main".to_string()
+}
+
 pub(super) fn default_task_metadata_namespace() -> String {
     "openducktor".to_string()
 }
@@ -92,6 +98,7 @@ impl Default for RepoConfig {
         Self {
             worktree_base_path: None,
             branch_prefix: default_branch_prefix(),
+            default_target_branch: default_target_branch(),
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -221,7 +228,7 @@ impl Default for GlobalConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{hook_set_fingerprint, HookSet};
+    use super::{hook_set_fingerprint, HookSet, RepoConfig};
 
     #[test]
     fn hook_set_fingerprint_changes_with_command_boundaries() {
@@ -257,5 +264,11 @@ mod tests {
             hook_set_fingerprint(&post_complete),
             "fingerprint must include the target hook group"
         );
+    }
+
+    #[test]
+    fn repo_config_default_target_branch_is_origin_main() {
+        let config = RepoConfig::default();
+        assert_eq!(config.default_target_branch, "origin/main");
     }
 }

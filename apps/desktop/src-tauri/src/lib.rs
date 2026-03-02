@@ -118,6 +118,7 @@ struct BuildCompletePayload {
 struct RepoConfigPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
+    default_target_branch: Option<String>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
@@ -126,6 +127,7 @@ struct RepoConfigPayload {
 struct RepoSettingsPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
+    default_target_branch: Option<String>,
     trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
@@ -402,6 +404,30 @@ mod tests {
         assert!(
             error.to_string().contains("expected a sequence"),
             "deserialization error should preserve serde type detail: {error}"
+        );
+    }
+
+    #[test]
+    fn repo_payloads_deserialize_default_target_branch_field() {
+        let config_payload = json!({
+            "defaultTargetBranch": "origin/release"
+        });
+        let parsed_config = serde_json::from_value::<RepoConfigPayload>(config_payload)
+            .expect("repo config payload should deserialize");
+        assert_eq!(
+            parsed_config.default_target_branch.as_deref(),
+            Some("origin/release")
+        );
+
+        let settings_payload = json!({
+            "trustedHooks": false,
+            "defaultTargetBranch": "origin/develop"
+        });
+        let parsed_settings = serde_json::from_value::<RepoSettingsPayload>(settings_payload)
+            .expect("repo settings payload should deserialize");
+        assert_eq!(
+            parsed_settings.default_target_branch.as_deref(),
+            Some("origin/develop")
         );
     }
 

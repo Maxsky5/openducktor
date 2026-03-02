@@ -140,6 +140,7 @@ mod tests {
                 RepoConfig {
                     worktree_base_path: Some("/tmp/worktrees".to_string()),
                     branch_prefix: "duck".to_string(),
+                    default_target_branch: "origin/main".to_string(),
                     trusted_hooks: true,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
@@ -247,6 +248,7 @@ mod tests {
                 RepoConfig {
                     worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                     branch_prefix: "duck".to_string(),
+                    default_target_branch: "origin/release".to_string(),
                     trusted_hooks: false,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
@@ -272,6 +274,7 @@ mod tests {
             .repo_config(repo_str.as_str())
             .expect("repo config should exist");
         assert!(repo_config.trusted_hooks);
+        assert_eq!(repo_config.default_target_branch, "origin/release");
 
         let optional = store
             .repo_config_optional(repo_str.as_str())
@@ -309,6 +312,7 @@ mod tests {
                 RepoConfig {
                     worktree_base_path: Some("   ".to_string()),
                     branch_prefix: "duck".to_string(),
+                    default_target_branch: "   ".to_string(),
                     trusted_hooks: false,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
@@ -323,6 +327,7 @@ mod tests {
         let loaded = store.repo_config(&repo_str).expect("load repo config");
         assert!(loaded.worktree_base_path.is_none());
         assert_eq!(loaded.branch_prefix, "duck");
+        assert_eq!(loaded.default_target_branch, "origin/main");
 
         let _ = fs::remove_dir_all(root);
     }
@@ -343,6 +348,7 @@ mod tests {
                 RepoConfig {
                     worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                     branch_prefix: "duck".to_string(),
+                    default_target_branch: "origin/main".to_string(),
                     trusted_hooks: false,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
@@ -428,6 +434,7 @@ mod tests {
             json!({
                 "worktreeBasePath": "",
                 "branchPrefix": "   ",
+                "defaultTargetBranch": "   ",
                 "trustedHooks": false,
                 "hooks": {
                     "preStart": ["  echo pre  ", "   "],
@@ -473,6 +480,7 @@ mod tests {
             .expect("repo config");
         assert!(repo_config.worktree_base_path.is_none());
         assert_eq!(repo_config.branch_prefix, "obp");
+        assert_eq!(repo_config.default_target_branch, "origin/main");
         assert_eq!(repo_config.hooks.pre_start, vec!["echo pre".to_string()]);
         assert_eq!(
             repo_config.hooks.post_complete,
