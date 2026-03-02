@@ -138,9 +138,11 @@ function GitInfoHeader({
   const currentBranchLabel = isDetachedHead ? "Detached HEAD" : branch;
   const hasTargetBranch = trimmedTargetBranch.length > 0;
   const targetBranchLabel = hasTargetBranch ? targetBranch : "No comparison target";
+  const targetAheadCount = commitsAheadBehind?.ahead ?? null;
   const rebaseBehindCount = commitsAheadBehind?.behind ?? null;
   const pushAheadCount = upstreamAheadBehind?.ahead ?? null;
   const pushBehindCount = upstreamAheadBehind?.behind ?? null;
+  const hasTargetAhead = targetAheadCount != null && targetAheadCount > 0;
   const hasUncommittedFiles = uncommittedFileCount > 0;
   const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
   const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
@@ -197,10 +199,18 @@ function GitInfoHeader({
           </div>
         </div>
 
-        <div className="flex items-center justify-center" aria-hidden="true">
+        <div className="relative flex items-center justify-center" aria-hidden="true">
           <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
             <ArrowRight className="size-3.5" />
           </span>
+          {hasTargetAhead ? (
+            <span
+              className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
+              data-testid="agent-studio-git-target-ahead-count"
+            >
+              {targetAheadCount}
+            </span>
+          ) : null}
         </div>
 
         <div className="rounded-lg border border-border bg-card px-3 py-2">
@@ -762,15 +772,17 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 
         {model.onSendReview != null ? <ReviewActions onSendReview={model.onSendReview} /> : null}
 
-        <CommitComposer
-          hasUncommittedFiles={hasUncommittedFiles}
-          uncommittedFileCount={uncommittedFileCount}
-          isCommitting={model.isCommitting ?? false}
-          isPushing={model.isPushing ?? false}
-          isRebasing={model.isRebasing ?? false}
-          commitError={model.commitError ?? null}
-          commitAll={model.commitAll ?? null}
-        />
+        {model.diffScope === "uncommitted" ? (
+          <CommitComposer
+            hasUncommittedFiles={hasUncommittedFiles}
+            uncommittedFileCount={uncommittedFileCount}
+            isCommitting={model.isCommitting ?? false}
+            isPushing={model.isPushing ?? false}
+            isRebasing={model.isRebasing ?? false}
+            commitError={model.commitError ?? null}
+            commitAll={model.commitAll ?? null}
+          />
+        ) : null}
       </div>
     </TooltipProvider>
   );

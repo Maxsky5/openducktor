@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AgentStudioRightPanelKind,
   AgentStudioRightPanelModel,
@@ -7,6 +7,7 @@ import type {
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
+import { toRightPanelStorageKey } from "./agents-page-selection";
 
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
@@ -31,8 +32,41 @@ const PANEL_KIND_BY_ROLE: Record<AgentRole, AgentStudioRightPanelKind> = {
 const DEFAULT_OPEN_BY_ROLE: Record<AgentRole, boolean> = {
   spec: true,
   planner: true,
-  build: false,
+  build: true,
   qa: true,
+};
+
+const RIGHT_PANEL_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
+
+const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> => ({
+  ...DEFAULT_OPEN_BY_ROLE,
+});
+
+const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
+  if (typeof globalThis.localStorage === "undefined") {
+    return cloneDefaultOpenByRole();
+  }
+
+  const raw = globalThis.localStorage.getItem(toRightPanelStorageKey());
+  if (!raw) {
+    return cloneDefaultOpenByRole();
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    const next = cloneDefaultOpenByRole();
+    if (parsed && typeof parsed === "object") {
+      for (const role of RIGHT_PANEL_ROLES) {
+        const value = (parsed as Record<AgentRole, unknown>)[role];
+        if (typeof value === "boolean") {
+          next[role] = value;
+        }
+      }
+    }
+    return next;
+  } catch {
+    return cloneDefaultOpenByRole();
+  }
 };
 
 export const isRightPanelKindAvailable = (
@@ -80,8 +114,21 @@ export function useAgentStudioRightPanel({
   hasDiffPanel = false,
   hasTaskContext = true,
 }: UseAgentStudioRightPanelInput): UseAgentStudioRightPanelState {
-  const [isOpenByRole, setIsOpenByRole] =
-    useState<Record<AgentRole, boolean>>(DEFAULT_OPEN_BY_ROLE);
+  const [isOpenByRole, setIsOpenByRole] = useState<Record<AgentRole, boolean>>(() => {
+    if (typeof globalThis.localStorage === "undefined") {
+      return cloneDefaultOpenByRole();
+    }
+
+    return readPersistedOpenByRole();
+  });
+
+  useEffect(() => {
+    if (typeof globalThis.localStorage === "undefined") {
+      return;
+    }
+
+    globalThis.localStorage.setItem(toRightPanelStorageKey(), JSON.stringify(isOpenByRole));
+  }, [isOpenByRole]);
 
   const panelKindForRole = PANEL_KIND_BY_ROLE[role];
   const panelAvailable =

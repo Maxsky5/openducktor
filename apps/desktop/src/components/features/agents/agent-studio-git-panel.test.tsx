@@ -84,6 +84,10 @@ const findByTestId = (
   return match;
 };
 
+const countByTestId = (root: TestRenderer.ReactTestInstance, testId: string): number =>
+  root.findAll((node) => node.props["data-testid"] === testId && typeof node.type === "string")
+    .length;
+
 const ensureRenderer = (
   renderer: TestRenderer.ReactTestRenderer | null,
 ): TestRenderer.ReactTestRenderer => {
@@ -150,8 +154,13 @@ describe("AgentStudioGitPanel", () => {
     expect(findByTestId(root, "agent-studio-git-rebase-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-pull-button")).toBeTruthy();
     expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();
-    expect(findByTestId(root, "agent-studio-git-commit-message-input")).toBeTruthy();
-    expect(findByTestId(root, "agent-studio-git-commit-submit-button")).toBeTruthy();
+    expect(countByTestId(root, "agent-studio-git-target-status-row")).toBe(0);
+    const targetAheadCount = findByTestId(root, "agent-studio-git-target-ahead-count");
+    expect(targetAheadCount.children.join("")).toBe("2");
+    expect(targetAheadCount.props.className).toContain("text-emerald-600");
+    expect(targetAheadCount.props.className).toContain("dark:text-emerald-400");
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-commit-submit-button")).toBe(0);
     expect(
       findByTestId(root, "agent-studio-git-diff-scope-uncommitted").children.join(""),
     ).toContain("Uncommitted changes");
@@ -184,6 +193,7 @@ describe("AgentStudioGitPanel", () => {
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
+            diffScope: "uncommitted",
             fileStatuses: [],
             commitAll,
           }),
@@ -214,6 +224,7 @@ describe("AgentStudioGitPanel", () => {
           model: baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
             isPushing: true,
+            diffScope: "uncommitted",
             commitAll,
           }),
         }),
@@ -227,6 +238,7 @@ describe("AgentStudioGitPanel", () => {
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+            diffScope: "uncommitted",
             commitAll,
           }),
         }),
@@ -262,6 +274,7 @@ describe("AgentStudioGitPanel", () => {
       renderer = TestRenderer.create(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
+            diffScope: "target",
             setDiffScope,
             commitAll,
             refresh,
@@ -276,24 +289,43 @@ describe("AgentStudioGitPanel", () => {
     const root = getRoot(renderer);
     const targetButton = findByTestId(root, "agent-studio-git-diff-scope-target");
     const uncommittedButton = findByTestId(root, "agent-studio-git-diff-scope-uncommitted");
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-commit-submit-button")).toBe(0);
+
+    await act(async () => {
+      uncommittedButton.props.onClick();
+      await flush();
+    });
+    expect(setDiffScope).toHaveBeenCalledTimes(1);
+    expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            setDiffScope,
+            commitAll,
+            refresh,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+            commitError: "",
+          }),
+        }),
+      );
+      await flush();
+    });
+
     const messageInput = findByTestId(root, "agent-studio-git-commit-message-input");
     const submitButton = findByTestId(root, "agent-studio-git-commit-submit-button");
 
     expect(Boolean(submitButton.props.disabled)).toBe(true);
 
     await act(async () => {
-      uncommittedButton.props.onClick();
-      await flush();
-    });
-    expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
-    expect(Boolean(targetButton.props.disabled)).toBe(false);
-
-    await act(async () => {
       targetButton.props.onClick();
       await flush();
     });
-    expect(setDiffScope).toHaveBeenCalledTimes(1);
-    expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+    expect(setDiffScope).toHaveBeenCalledTimes(2);
+    expect(setDiffScope).toHaveBeenLastCalledWith("target");
 
     await act(async () => {
       messageInput.props.onChange({ currentTarget: { value: "   " } });
@@ -340,6 +372,7 @@ describe("AgentStudioGitPanel", () => {
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
+            diffScope: "uncommitted",
             commitAll,
             pushBranch,
             rebaseOntoTarget,
@@ -379,6 +412,7 @@ describe("AgentStudioGitPanel", () => {
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
+            diffScope: "uncommitted",
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
             isCommitting: true,
             commitAll,
@@ -403,6 +437,7 @@ describe("AgentStudioGitPanel", () => {
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             branch: null,
+            diffScope: "uncommitted",
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
             isCommitting: true,
             isPushing: true,

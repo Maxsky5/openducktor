@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { toRightPanelStorageKey } from "./agents-page-selection";
 import {
   buildAgentStudioRightPanelModel,
   useAgentStudioRightPanel,
@@ -15,6 +16,46 @@ type HookArgs = Parameters<typeof useAgentStudioRightPanel>[0];
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioRightPanel, initialProps);
+
+const createMemoryStorage = (): Storage => {
+  const data = new Map<string, string>();
+  return {
+    get length(): number {
+      return data.size;
+    },
+    clear(): void {
+      data.clear();
+    },
+    getItem(key: string): string | null {
+      return data.has(key) ? (data.get(key) ?? null) : null;
+    },
+    key(index: number): string | null {
+      return Array.from(data.keys())[index] ?? null;
+    },
+    removeItem(key: string): void {
+      data.delete(key);
+    },
+    setItem(key: string, value: string): void {
+      data.set(key, value);
+    },
+  };
+};
+
+const originalLocalStorage = globalThis.localStorage;
+
+beforeEach(() => {
+  Object.defineProperty(globalThis, "localStorage", {
+    value: createMemoryStorage(),
+    configurable: true,
+  });
+});
+
+afterEach(() => {
+  Object.defineProperty(globalThis, "localStorage", {
+    value: originalLocalStorage,
+    configurable: true,
+  });
+});
 
 const documentsModel = {
   activeDocument: null,
@@ -160,12 +201,12 @@ describe("useAgentStudioRightPanel", () => {
 
     await harness.mount();
     expect(harness.getLatest().panelKind).toBe("diff");
-    expect(harness.getLatest().isPanelOpen).toBe(false);
+    expect(harness.getLatest().isPanelOpen).toBe(true);
 
     await harness.run((state) => {
       state.rightPanelToggleModel?.onToggle();
     });
-    expect(harness.getLatest().isPanelOpen).toBe(true);
+    expect(harness.getLatest().isPanelOpen).toBe(false);
 
     await harness.update({
       role: "spec",
@@ -181,8 +222,41 @@ describe("useAgentStudioRightPanel", () => {
       hasDiffPanel: true,
     });
     expect(harness.getLatest().panelKind).toBe("diff");
-    expect(harness.getLatest().isPanelOpen).toBe(true);
+    expect(harness.getLatest().isPanelOpen).toBe(false);
 
     await harness.unmount();
+  });
+
+  test("persists build panel state globally and restores across sessions", async () => {
+    const harness = createHookHarness({
+      role: "build",
+      hasDocumentPanel: false,
+      hasDiffPanel: true,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().isPanelOpen).toBe(true);
+
+    await harness.run((state) => {
+      state.rightPanelToggleModel?.onToggle();
+    });
+    expect(harness.getLatest().isPanelOpen).toBe(false);
+
+    await harness.unmount();
+
+    const persistedRaw = globalThis.localStorage.getItem(toRightPanelStorageKey());
+    expect(persistedRaw).not.toBeNull();
+    const persisted = JSON.parse(persistedRaw ?? "{}");
+    expect(persisted.build).toBe(false);
+
+    const secondHarness = createHookHarness({
+      role: "build",
+      hasDocumentPanel: false,
+      hasDiffPanel: true,
+    });
+
+    await secondHarness.mount();
+    expect(secondHarness.getLatest().isPanelOpen).toBe(false);
+    await secondHarness.unmount();
   });
 });
