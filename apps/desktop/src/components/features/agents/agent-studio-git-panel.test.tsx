@@ -71,6 +71,21 @@ const findByTestId = (
   return root.find((node) => node.props["data-testid"] === testId);
 };
 
+const ensureRenderer = (
+  renderer: TestRenderer.ReactTestRenderer | null,
+): TestRenderer.ReactTestRenderer => {
+  if (!renderer) {
+    throw new Error("AgentStudioGitPanel renderer is not initialized");
+  }
+  return renderer;
+};
+
+const getRoot = (
+  renderer: TestRenderer.ReactTestRenderer | null,
+): TestRenderer.ReactTestInstance => {
+  return ensureRenderer(renderer).root;
+};
+
 describe("AgentStudioGitPanel", () => {
   beforeAll(async () => {
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
@@ -92,8 +107,7 @@ describe("AgentStudioGitPanel", () => {
   test("renders branch context labels and git action controls", async () => {
     const refresh = mock(() => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
-
-    let renderer: TestRenderer.ReactTestRenderer;
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
     await act(async () => {
       renderer = TestRenderer.create(
         createElement(AgentStudioGitPanel, { model: baseModel({ refresh, setDiffScope }) }),
@@ -101,7 +115,7 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    const root = renderer!.root;
+    const root = getRoot(renderer);
     expect(findByTestId(root, "agent-studio-git-current-branch").children.join("")).toContain(
       "feature/task-11",
     );
@@ -125,7 +139,7 @@ describe("AgentStudioGitPanel", () => {
     expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
 
     await act(async () => {
-      renderer!.unmount();
+      ensureRenderer(renderer).unmount();
       await flush();
     });
   });
@@ -133,7 +147,7 @@ describe("AgentStudioGitPanel", () => {
   test("enforces disabled safety states for rebase and commit controls", async () => {
     const commitAll = mock(async (_message: string) => {});
 
-    let renderer: TestRenderer.ReactTestRenderer;
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
     await act(async () => {
       renderer = TestRenderer.create(
         createElement(AgentStudioGitPanel, {
@@ -147,7 +161,7 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
 
-    const root = renderer!.root;
+    const root = getRoot(renderer);
     expect(Boolean(findByTestId(root, "agent-studio-git-rebase-button").props.disabled)).toBe(true);
     expect(
       Boolean(findByTestId(root, "agent-studio-git-commit-submit-button").props.disabled),
@@ -164,7 +178,7 @@ describe("AgentStudioGitPanel", () => {
     ).toBe(true);
 
     await act(async () => {
-      renderer!.update(
+      ensureRenderer(renderer).update(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
@@ -178,7 +192,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(findByTestId(root, "agent-studio-git-rebase-button").props.disabled)).toBe(true);
 
     await act(async () => {
-      renderer!.update(
+      ensureRenderer(renderer).update(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
@@ -196,13 +210,179 @@ describe("AgentStudioGitPanel", () => {
     ).toBe(false);
 
     await act(async () => {
-      findByTestId(root, "agent-studio-git-commit-submit-button").props.onClick();
+      await findByTestId(root, "agent-studio-git-commit-submit-button").props.onClick();
       await flush();
     });
     expect(commitAll).toHaveBeenCalledWith("feat: commit all files");
 
     await act(async () => {
-      renderer!.unmount();
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("switches diff scope and validates commit-all message input", async () => {
+    const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
+    const commitAll = mock(async (_message: string) => {});
+    const refresh = mock(() => {});
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            setDiffScope,
+            commitAll,
+            refresh,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+            commitError: "",
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const targetButton = findByTestId(root, "agent-studio-git-diff-scope-target");
+    const uncommittedButton = findByTestId(root, "agent-studio-git-diff-scope-uncommitted");
+    const messageInput = findByTestId(root, "agent-studio-git-commit-message-input");
+    const submitButton = findByTestId(root, "agent-studio-git-commit-submit-button");
+
+    expect(Boolean(submitButton.props.disabled)).toBe(true);
+
+    await act(async () => {
+      uncommittedButton.props.onClick();
+      await flush();
+    });
+    expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+    expect(Boolean(targetButton.props.disabled)).toBe(false);
+
+    await act(async () => {
+      targetButton.props.onClick();
+      await flush();
+    });
+    expect(setDiffScope).toHaveBeenCalledTimes(1);
+    expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+
+    await act(async () => {
+      messageInput.props.onChange({ currentTarget: { value: "   " } });
+      await flush();
+    });
+    expect(Boolean(submitButton.props.disabled)).toBe(true);
+
+    await act(async () => {
+      messageInput.props.onChange({ currentTarget: { value: "  chore: tidy git flow  " } });
+      await flush();
+    });
+    const messageInputAfterTyping = findByTestId(root, "agent-studio-git-commit-message-input");
+    expect(messageInputAfterTyping.props.value).toBe("  chore: tidy git flow  ");
+
+    const submitButtonAfterTyping = findByTestId(root, "agent-studio-git-commit-submit-button");
+    expect(Boolean(submitButtonAfterTyping.props.disabled)).toBe(false);
+
+    await act(async () => {
+      submitButtonAfterTyping.props.onClick();
+      await flush();
+    });
+    expect(commitAll).toHaveBeenCalledWith("  chore: tidy git flow  ");
+    const commitInputAfterSubmit = findByTestId(root, "agent-studio-git-commit-message-input");
+    expect(commitInputAfterSubmit.props.value).toBe("");
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-commit-submit-button").props.disabled),
+    ).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("disables commit/push/rebase controls during detached branch and action in-flight", async () => {
+    const commitAll = mock(async () => {});
+    const pushBranch = mock(async () => {});
+    const rebaseOntoTarget = mock(async () => {});
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            branch: null,
+            commitAll,
+            pushBranch,
+            rebaseOntoTarget,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const refreshButton = findByTestId(root, "agent-studio-git-refresh-button");
+    const commitInput = findByTestId(root, "agent-studio-git-commit-message-input");
+    const commitSubmit = findByTestId(root, "agent-studio-git-commit-submit-button");
+    const rebaseButton = findByTestId(root, "agent-studio-git-rebase-button");
+    const pushButton = findByTestId(root, "agent-studio-git-push-button");
+
+    expect(Boolean(rebaseButton.props.disabled)).toBe(true);
+    expect(Boolean(pushButton.props.disabled)).toBe(true);
+    expect(Boolean(Boolean(refreshButton.props.disabled))).toBe(false);
+
+    await act(async () => {
+      commitInput.props.onChange({ currentTarget: { value: "fix: handle detached head" } });
+      await flush();
+    });
+    await act(async () => {
+      commitSubmit.props.onClick();
+      await flush();
+    });
+    expect(commitAll).toHaveBeenCalledWith("fix: handle detached head");
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            branch: null,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+            isCommitting: true,
+            commitAll,
+            pushBranch,
+            rebaseOntoTarget,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    expect(Boolean(commitInput.props.disabled)).toBe(true);
+    expect(Boolean(commitSubmit.props.disabled)).toBe(true);
+    expect(Boolean(rebaseButton.props.disabled)).toBe(true);
+    expect(Boolean(pushButton.props.disabled)).toBe(true);
+    expect(Boolean(refreshButton.props.disabled)).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            branch: null,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+            isCommitting: true,
+            isPushing: true,
+            isRebasing: true,
+            commitAll,
+            pushBranch,
+            rebaseOntoTarget,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    expect(Boolean(refreshButton.props.disabled)).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
       await flush();
     });
   });

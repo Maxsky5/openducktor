@@ -52,6 +52,120 @@ beforeEach(() => {
 });
 
 describe("useAgentStudioGitActions", () => {
+  test("tracks commit action lifecycle and rejects blank commit messages", async () => {
+    const refreshDiffData = mock(async () => {});
+    const commitDeferred = createDeferred<{ outcome: string; commitHash: string }>();
+    const harness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+      }),
+    );
+
+    gitCommitAllMock.mockImplementationOnce(async () => commitDeferred.promise);
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => state.commitAll("   "));
+      expect(harness.getLatest().commitError).toBe("Commit message cannot be empty.");
+      expect(gitCommitAllMock).toHaveBeenCalledTimes(0);
+
+      await harness.run((state) => {
+        void state.commitAll("  refine build flow  ");
+      });
+
+      await harness.waitFor((state) => state.isCommitting === true);
+      expect(harness.getLatest().isCommitting).toBe(true);
+      expect(harness.getLatest().isPushing).toBe(false);
+      expect(harness.getLatest().isRebasing).toBe(false);
+
+      commitDeferred.resolve({ outcome: "committed", commitHash: "abc123" });
+
+      await harness.waitFor((state) => state.isCommitting === false);
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().commitError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("tracks push action lifecycle and validates missing branch errors", async () => {
+    const refreshDiffData = mock(async () => {});
+    const pushDeferred = createDeferred<{ pushed: boolean }>();
+    const harness = createHookHarness(
+      createBaseArgs({
+        branch: null,
+        refreshDiffData,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => state.pushBranch());
+      expect(harness.getLatest().pushError).toBe(
+        "Cannot push because current branch is unavailable.",
+      );
+      expect(gitPushBranchMock).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+
+    const pushHarness = createHookHarness(
+      createBaseArgs({
+        refreshDiffData,
+      }),
+    );
+    gitPushBranchMock.mockImplementationOnce(async () => pushDeferred.promise);
+
+    try {
+      await pushHarness.mount();
+
+      await pushHarness.run((state) => {
+        void state.pushBranch();
+      });
+      await pushHarness.waitFor((state) => state.isPushing === true);
+      expect(pushHarness.getLatest().isPushing).toBe(true);
+      expect(pushHarness.getLatest().isCommitting).toBe(false);
+      expect(pushHarness.getLatest().isRebasing).toBe(false);
+
+      pushDeferred.resolve({ pushed: true });
+      await pushHarness.waitFor((state) => state.isPushing === false);
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(pushHarness.getLatest().pushError).toBeNull();
+    } finally {
+      await pushHarness.unmount();
+    }
+  });
+
+  test("tracks rebase action transition and clears error boundaries", async () => {
+    const rebaseDeferred = createDeferred<{ outcome: string }>();
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+    gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
+
+    try {
+      await harness.mount();
+
+      await harness.run((state) => {
+        void state.rebaseOntoTarget();
+      });
+
+      await harness.waitFor((state) => state.isRebasing === true);
+      expect(harness.getLatest().isRebasing).toBe(true);
+      expect(harness.getLatest().isCommitting).toBe(false);
+      expect(harness.getLatest().isPushing).toBe(false);
+
+      rebaseDeferred.resolve({ outcome: "rebased" });
+      await harness.waitFor((state) => state.isRebasing === false);
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().rebaseError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps failure state isolated when rebase fails", async () => {
     const rebaseDeferred = createDeferred<{ outcome: string }>();
     gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);
