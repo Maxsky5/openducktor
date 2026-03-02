@@ -1,9 +1,14 @@
-import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
+import type {
+  CommitsAheadBehind,
+  FileDiff,
+  FileStatus,
+  GitWorktreeStatus,
+} from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
 
-const POLL_INTERVAL_MS = 15_000;
+const POLL_INTERVAL_MS = 30_000;
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -53,42 +58,150 @@ export type UseAgentStudioDiffDataInput = {
 // ─── Batched internal state ────────────────────────────────────────────────────
 
 type DiffBatchState = {
+  byScope: Record<DiffScope, ScopeSnapshot>;
+  loadedByScope: Record<DiffScope, boolean>;
+  isLoading: boolean;
+};
+
+type ScopeSnapshot = {
   branch: string | null;
   fileDiffs: FileDiff[];
   fileStatuses: FileStatus[];
   commitsAheadBehind: CommitsAheadBehind | null;
   upstreamAheadBehind: CommitsAheadBehind | null;
-  isLoading: boolean;
   error: string | null;
+};
+
+type LoadDataContext = {
+  repoPath: string | null;
+  targetBranch: string;
+  workingDir: string | null;
+  scope: DiffScope;
 };
 
 /** Stable empty arrays hoisted outside the component (rerender-memo-with-default-value). */
 const EMPTY_DIFFS: FileDiff[] = [];
 const EMPTY_STATUSES: FileStatus[] = [];
 
-const INITIAL_STATE: DiffBatchState = {
+const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   branch: null,
   fileDiffs: EMPTY_DIFFS,
   fileStatuses: EMPTY_STATUSES,
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
-  isLoading: false,
   error: null,
 };
 
+const createInitialState = (): DiffBatchState => ({
+  byScope: {
+    target: EMPTY_SCOPE_SNAPSHOT,
+    uncommitted: EMPTY_SCOPE_SNAPSHOT,
+  },
+  loadedByScope: {
+    target: false,
+    uncommitted: false,
+  },
+  isLoading: false,
+});
+
+const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
+
 // ─── Structural equality helpers ───────────────────────────────────────────────
 
-const arraysEqual = <T>(a: T[], b: T[]): boolean => {
+const arraysEqual = <T>(a: T[], b: T[], areItemsEqual: (left: T, right: T) => boolean): boolean => {
   if (a === b) return true;
   if (a.length !== b.length) return false;
-  return a.every((item, i) => item === b[i]);
+
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (left === undefined || right === undefined) {
+      return false;
+    }
+    if (!areItemsEqual(left, right)) {
+      return false;
+    }
+  }
+
+  return true;
 };
+
+const fileDiffEqual = (left: FileDiff, right: FileDiff): boolean =>
+  left.file === right.file &&
+  left.type === right.type &&
+  left.additions === right.additions &&
+  left.deletions === right.deletions &&
+  left.diff === right.diff;
+
+const fileStatusEqual = (left: FileStatus, right: FileStatus): boolean =>
+  left.path === right.path && left.status === right.status && left.staged === right.staged;
 
 const aheadBehindEqual = (a: CommitsAheadBehind | null, b: CommitsAheadBehind | null): boolean => {
   if (a === b) return true;
   if (!a || !b) return false;
   return a.ahead === b.ahead && a.behind === b.behind;
 };
+
+const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean =>
+  left.branch === right.branch &&
+  arraysEqual(left.fileDiffs, right.fileDiffs, fileDiffEqual) &&
+  arraysEqual(left.fileStatuses, right.fileStatuses, fileStatusEqual) &&
+  aheadBehindEqual(left.commitsAheadBehind, right.commitsAheadBehind) &&
+  aheadBehindEqual(left.upstreamAheadBehind, right.upstreamAheadBehind) &&
+  left.error === right.error;
+
+const toUpstreamAndError = (
+  upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"],
+): {
+  upstreamAheadBehind: CommitsAheadBehind | null;
+  error: string | null;
+} => {
+  if (upstreamAheadBehind.outcome === "tracking") {
+    return {
+      upstreamAheadBehind: {
+        ahead: upstreamAheadBehind.ahead,
+        behind: upstreamAheadBehind.behind,
+      },
+      error: null,
+    };
+  }
+
+  if (upstreamAheadBehind.outcome === "untracked") {
+    return {
+      upstreamAheadBehind: {
+        ahead: upstreamAheadBehind.ahead,
+        behind: 0,
+      },
+      error: null,
+    };
+  }
+
+  return {
+    upstreamAheadBehind: null,
+    error: `Upstream status unavailable: ${upstreamAheadBehind.message}`,
+  };
+};
+
+const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
+  const { upstreamAheadBehind, error } = toUpstreamAndError(snapshot.upstreamAheadBehind);
+  return {
+    branch: snapshot.currentBranch.name ?? null,
+    fileDiffs: snapshot.fileDiffs,
+    fileStatuses: snapshot.fileStatuses,
+    commitsAheadBehind: snapshot.targetAheadBehind,
+    upstreamAheadBehind,
+    error,
+  };
+};
+
+const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): ScopeSnapshot => ({
+  ...base,
+  branch: source.branch,
+  fileStatuses: source.fileStatuses,
+  commitsAheadBehind: source.commitsAheadBehind,
+  upstreamAheadBehind: source.upstreamAheadBehind,
+  error: source.error,
+});
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -99,12 +212,16 @@ export function useAgentStudioDiffData({
   defaultTargetBranch,
   enablePolling,
 }: UseAgentStudioDiffDataInput): DiffDataState {
-  const [state, setState] = useState<DiffBatchState>(INITIAL_STATE);
+  const [state, setState] = useState<DiffBatchState>(createInitialState);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
   const [resolvedWorktreePath, setResolvedWorktreePath] = useState<string | null>(null);
 
-  const versionRef = useRef(0);
+  const versionByScopeRef = useRef<Record<DiffScope, number>>({
+    target: 0,
+    uncommitted: 0,
+  });
+  const inFlightScopesRef = useRef<Set<DiffScope>>(new Set());
 
   // Derive stable primitives
   const targetBranch = normalizeCanonicalTargetBranch(defaultTargetBranch);
@@ -149,95 +266,147 @@ export function useAgentStudioDiffData({
   const workingDirRef = useRef(worktreePath);
   workingDirRef.current = worktreePath;
 
-  const loadData = useCallback(async (showLoading = false) => {
-    const path = repoPathRef.current;
+  const loadData = useCallback(async (showLoading = false, context?: LoadDataContext) => {
+    const path = context?.repoPath ?? repoPathRef.current;
     if (!path) {
       return;
     }
 
-    const version = ++versionRef.current;
+    const scope = context?.scope ?? diffScopeRef.current;
+    if (inFlightScopesRef.current.has(scope)) {
+      return;
+    }
+
+    inFlightScopesRef.current.add(scope);
+    const version = ++versionByScopeRef.current[scope];
 
     // Only show loading indicator on initial load / manual refresh — NOT on polling
     if (showLoading) {
-      setState((prev) => (prev.isLoading ? prev : { ...prev, isLoading: true, error: null }));
+      setState((prev) => (prev.isLoading ? prev : { ...prev, isLoading: true }));
     }
 
     try {
-      const target = targetBranchRef.current;
-      const scope = diffScopeRef.current;
-      const wd = workingDirRef.current ?? undefined;
+      const target = context?.targetBranch ?? targetBranchRef.current;
+      const wd = context?.workingDir ?? workingDirRef.current ?? undefined;
       const snapshot = await host.gitGetWorktreeStatus(path, target, scope, wd);
 
       // Stale response guard
-      if (versionRef.current !== version) {
+      if (versionByScopeRef.current[scope] !== version) {
         return;
       }
 
-      // Batch all updates into a single setState with structural equality check
       setState((prev) => {
-        const nextBranch = snapshot.currentBranch.name ?? null;
-        const nextStatuses = snapshot.fileStatuses;
-        const nextDiffs = snapshot.fileDiffs;
-        const nextAheadBehind = snapshot.targetAheadBehind;
-        const nextUpstreamAheadBehind =
-          snapshot.upstreamAheadBehind.outcome === "tracking"
-            ? {
-                ahead: snapshot.upstreamAheadBehind.ahead,
-                behind: snapshot.upstreamAheadBehind.behind,
-              }
-            : snapshot.upstreamAheadBehind.outcome === "untracked"
-              ? {
-                  ahead: snapshot.upstreamAheadBehind.ahead,
-                  behind: 0,
-                }
-              : null;
-        const nextError =
-          snapshot.upstreamAheadBehind.outcome === "error"
-            ? `Upstream status unavailable: ${snapshot.upstreamAheadBehind.message}`
-            : null;
+        const nextFetchedScopeSnapshot = toScopeSnapshot(snapshot);
+        const previousFetchedScopeSnapshot = prev.byScope[scope];
+        let didChange = false;
+        const nextByScope: Record<DiffScope, ScopeSnapshot> = {
+          ...prev.byScope,
+        };
 
-        // Structural equality: skip re-render if nothing changed (prevents flickering)
-        if (
-          prev.branch === nextBranch &&
-          arraysEqual(prev.fileDiffs, nextDiffs) &&
-          arraysEqual(prev.fileStatuses, nextStatuses) &&
-          aheadBehindEqual(prev.commitsAheadBehind, nextAheadBehind) &&
-          aheadBehindEqual(prev.upstreamAheadBehind, nextUpstreamAheadBehind) &&
-          prev.error === nextError &&
-          !prev.isLoading
-        ) {
+        if (!scopeSnapshotEqual(previousFetchedScopeSnapshot, nextFetchedScopeSnapshot)) {
+          nextByScope[scope] = nextFetchedScopeSnapshot;
+          didChange = true;
+        }
+
+        let nextLoadedByScope = prev.loadedByScope;
+        if (!prev.loadedByScope[scope]) {
+          nextLoadedByScope = {
+            ...prev.loadedByScope,
+            [scope]: true,
+          };
+          didChange = true;
+        }
+
+        for (const otherScope of ALL_SCOPES) {
+          if (otherScope === scope) {
+            continue;
+          }
+
+          const previousOtherScopeSnapshot = nextByScope[otherScope];
+          const nextOtherScopeSnapshot = mergeSharedSnapshotFields(
+            previousOtherScopeSnapshot,
+            nextFetchedScopeSnapshot,
+          );
+
+          if (!scopeSnapshotEqual(previousOtherScopeSnapshot, nextOtherScopeSnapshot)) {
+            nextByScope[otherScope] = nextOtherScopeSnapshot;
+            didChange = true;
+          }
+        }
+
+        if (!didChange && !prev.isLoading) {
           return prev;
         }
 
         return {
-          branch: nextBranch,
-          fileDiffs: nextDiffs,
-          fileStatuses: nextStatuses,
-          commitsAheadBehind: nextAheadBehind,
-          upstreamAheadBehind: nextUpstreamAheadBehind,
+          byScope: nextByScope,
+          loadedByScope: nextLoadedByScope,
           isLoading: false,
-          error: nextError,
         };
       });
     } catch (err) {
-      if (versionRef.current === version) {
-        setState((prev) => ({ ...prev, isLoading: false, error: String(err) }));
-      }
-    }
-  }, []); // No deps — uses refs
+      if (versionByScopeRef.current[scope] === version) {
+        setState((prev) => {
+          const previousScopeSnapshot = prev.byScope[scope];
+          const nextScopeSnapshot: ScopeSnapshot = {
+            ...previousScopeSnapshot,
+            error: String(err),
+          };
 
-  // Initial load when repo path or session working directory changes.
-  // sessionWorkingDirectory can arrive late (sessions load asynchronously after page navigation),
-  // so we must re-fetch when it becomes available.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: worktreePath and diffScope are intentional triggers — loadData reads them via refs, but the effect must re-fire when worktree/scope changes.
+          let nextLoadedByScope = prev.loadedByScope;
+          if (!prev.loadedByScope[scope]) {
+            nextLoadedByScope = {
+              ...prev.loadedByScope,
+              [scope]: true,
+            };
+          }
+
+          const snapshotsEqual = scopeSnapshotEqual(previousScopeSnapshot, nextScopeSnapshot);
+          const loadedByScopeUnchanged = nextLoadedByScope === prev.loadedByScope;
+          if (snapshotsEqual && loadedByScopeUnchanged && !prev.isLoading) {
+            return prev;
+          }
+
+          return {
+            byScope: {
+              ...prev.byScope,
+              [scope]: nextScopeSnapshot,
+            },
+            loadedByScope: nextLoadedByScope,
+            isLoading: false,
+          };
+        });
+      }
+    } finally {
+      inFlightScopesRef.current.delete(scope);
+    }
+  }, []);
+
   useEffect(() => {
     if (repoPath) {
-      void loadData(true);
+      void loadData(true, {
+        repoPath,
+        targetBranch,
+        workingDir: worktreePath,
+        scope: diffScopeRef.current,
+      });
     } else {
-      setState(INITIAL_STATE);
+      setState(createInitialState());
       setSelectedFile(null);
     }
-  }, [repoPath, worktreePath, diffScope, loadData]);
+  }, [repoPath, worktreePath, targetBranch, loadData]);
+
+  useEffect(() => {
+    if (!repoPath) {
+      return;
+    }
+
+    if (state.loadedByScope[diffScope]) {
+      return;
+    }
+
+    void loadData(true, { repoPath, targetBranch, workingDir: worktreePath, scope: diffScope });
+  }, [repoPath, worktreePath, targetBranch, diffScope, state.loadedByScope, loadData]);
 
   // Polling — stable interval since loadData doesn't change
   useEffect(() => {
@@ -245,33 +414,49 @@ export function useAgentStudioDiffData({
       return;
     }
 
-    const intervalId = window.setInterval(() => {
-      void loadData();
+    const intervalId = globalThis.setInterval(() => {
+      const polledScope = diffScopeRef.current;
+      void loadData(false, {
+        repoPath,
+        targetBranch: targetBranchRef.current,
+        workingDir: workingDirRef.current,
+        scope: polledScope,
+      });
     }, POLL_INTERVAL_MS);
 
     return () => {
-      window.clearInterval(intervalId);
+      globalThis.clearInterval(intervalId);
     };
   }, [enablePolling, repoPath, loadData]);
+
+  const activeScopeState = state.byScope[diffScope];
 
   // Memoize return value to prevent parent re-renders (rerender-memo-with-default-value)
   return useMemo<DiffDataState>(
     () => ({
-      branch: state.branch,
+      branch: activeScopeState.branch,
       worktreePath,
       targetBranch,
       diffScope,
-      commitsAheadBehind: state.commitsAheadBehind,
-      upstreamAheadBehind: state.upstreamAheadBehind,
-      fileDiffs: state.fileDiffs,
-      fileStatuses: state.fileStatuses,
+      commitsAheadBehind: activeScopeState.commitsAheadBehind,
+      upstreamAheadBehind: activeScopeState.upstreamAheadBehind,
+      fileDiffs: activeScopeState.fileDiffs,
+      fileStatuses: activeScopeState.fileStatuses,
       isLoading: state.isLoading,
-      error: state.error,
+      error: activeScopeState.error,
       refresh: () => loadData(true),
       selectedFile,
       setSelectedFile,
       setDiffScope,
     }),
-    [worktreePath, targetBranch, diffScope, state, loadData, selectedFile],
+    [
+      worktreePath,
+      targetBranch,
+      diffScope,
+      state.isLoading,
+      activeScopeState,
+      loadData,
+      selectedFile,
+    ],
   );
 }

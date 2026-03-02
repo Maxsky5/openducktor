@@ -110,6 +110,6 @@ describe("AgentStudioRightPanel", () => {
     expect(html).toContain("Current");
     expect(html).toContain("Target");
     expect(html).toContain("origin/main");
-    expect(html).toContain("Commit all");
+    expect(html).not.toContain("Commit all");
   });
 });

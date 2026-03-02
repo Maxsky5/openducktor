@@ -106,7 +106,7 @@ beforeEach(() => {
 });
 
 describe("useAgentStudioDiffData", () => {
-  test("routes consolidated worktree-status by selected diff scope", async () => {
+  test("loads active scope and reuses cache when switching back to loaded tabs", async () => {
     const harness = createHookHarness(createBaseArgs());
 
     try {
@@ -122,6 +122,7 @@ describe("useAgentStudioDiffData", () => {
         undefined,
       );
       expect(harness.getLatest().upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
+      expect(harness.getLatest().fileDiffs.length).toBe(1);
 
       await harness.run((state) => {
         state.setDiffScope("uncommitted");
@@ -134,13 +135,40 @@ describe("useAgentStudioDiffData", () => {
         "uncommitted",
         undefined,
       );
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+      expect(harness.getLatest().fileDiffs).toEqual([]);
 
       await harness.run((state) => {
         state.setDiffScope("target");
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      await harness.waitFor(() => harness.getLatest().diffScope === "target");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+      expect(harness.getLatest().fileDiffs.length).toBe(1);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => harness.getLatest().diffScope === "uncommitted");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("manual refresh updates active scope without extra background scope call", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        3,
+        2,
         "/repo",
         "origin/main",
         "target",
@@ -148,6 +176,155 @@ describe("useAgentStudioDiffData", () => {
       );
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("refresh syncs shared branch/upstream fields for cached inactive scope", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor((state) => state.diffScope === "target");
+
+      gitGetWorktreeStatusMock.mockImplementation(
+        async (
+          _repoPath: string,
+          targetBranch: string,
+          diffScope?: "target" | "uncommitted",
+          workingDir?: string,
+        ): Promise<GitWorktreeStatus> => ({
+          currentBranch: { name: "feature/task-11", detached: false },
+          fileStatuses: [{ path: "src/updated.ts", status: "M", staged: false }],
+          fileDiffs:
+            (diffScope ?? "target") === "target"
+              ? [
+                  {
+                    file: "src/updated.ts",
+                    type: "modified",
+                    additions: 4,
+                    deletions: 1,
+                    diff: "@@ -1 +1 @@",
+                  },
+                ]
+              : [],
+          targetAheadBehind: { ahead: 2, behind: 1 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 5, behind: 2 },
+          snapshot: {
+            effectiveWorkingDir: workingDir ?? "/repo",
+            targetBranch,
+            diffScope: diffScope ?? "target",
+            observedAtMs: 1731000000001,
+          },
+        }),
+      );
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+      await harness.waitFor((state) => state.branch === "feature/task-11");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor((state) => state.diffScope === "uncommitted");
+
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
+      expect(harness.getLatest().branch).toBe("feature/task-11");
+      expect(harness.getLatest().upstreamAheadBehind).toEqual({ ahead: 5, behind: 2 });
+      expect(harness.getLatest().fileDiffs).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("polling schedules one periodic request for the active scope", async () => {
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    let intervalCallback: (() => void) | null = null;
+
+    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
+      if (typeof callback !== "function") {
+        throw new Error("Expected polling callback function");
+      }
+      intervalCallback = () => {
+        callback();
+      };
+      return 1;
+    });
+    const clearIntervalMock = mock((_intervalId: number) => {});
+
+    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
+    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      expect(setIntervalMock).toHaveBeenCalledTimes(1);
+      expect(setIntervalMock.mock.calls[0]?.[1]).toBe(30_000);
+      const runTick = (): void => {
+        if (intervalCallback == null) {
+          throw new Error("Polling callback was not registered");
+        }
+        intervalCallback();
+      };
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo",
+        "origin/main",
+        "target",
+        undefined,
+      );
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        3,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 4);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        4,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+    } finally {
+      await harness.unmount();
+      expect(clearIntervalMock).toHaveBeenCalledTimes(1);
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
     }
   });
 
