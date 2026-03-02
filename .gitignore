@@ -18,3 +18,5 @@ apps/desktop/src-tauri/crates/*/target
 # Keep the Tauri app workspace lockfile in VCS for reproducible builds.
 !apps/desktop/src-tauri/Cargo.lock
 apps/desktop/src-tauri/crates/*/Cargo.lock
+
+.sisyphus
