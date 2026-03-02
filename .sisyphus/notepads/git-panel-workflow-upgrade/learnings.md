@@ -17,3 +17,5 @@
 - Tauri git commands for mutable operations now follow the same safety chain as read operations: authorize `repo_path` first, then resolve and validate `working_dir` via `resolve_working_dir`.
 - New command-layer input guards enforce non-empty operation fields (`message`, `targetBranch`) before forwarding to app-service.
 - `git_commit_all` and `git_rebase_branch` are now registered in `tauri::generate_handler!`, matching the snake_case invoke names used by the Tauri host adapter.
+- `resolve_working_dir` now canonicalizes `repo_path` and `working_dir`, allows repo root directly, and otherwise permits only canonical paths listed by `git -C <repo> worktree list --porcelain`.
+- Added `commands/git.rs` tests that assert repo-root acceptance, registered worktree acceptance, and rejection of an unrelated external git repo.

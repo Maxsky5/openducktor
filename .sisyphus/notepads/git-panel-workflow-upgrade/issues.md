@@ -8,3 +8,4 @@
 
 - Adapter test initially failed on IPC call-order assertion for new git methods; resolved by aligning assertion order with call sequence.
 - Rust LSP diagnostics remained unavailable in this environment (`rust-analyzer` missing), so command-layer validation for Task 8 was verified via AST symbol checks and `cargo test -p host-application`.
+- `rust-analyzer` is still unavailable in this environment for Task 9, so verification relied on command helper tests plus `cargo test -p host-application`.
