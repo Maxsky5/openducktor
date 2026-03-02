@@ -1,35 +1,67 @@
 use crate::{as_error, AppState};
-use std::path::Path;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 use tauri::State;
 
-/// Validates that a `working_dir` is actually a git worktree (its `.git` is a
-/// file pointing to the parent repo, not a directory). This prevents callers
-/// from using arbitrary paths to bypass the workspace allowlist.
-fn validate_worktree(working_dir: &str) -> Result<(), String> {
-    let git_path = Path::new(working_dir).join(".git");
-    if git_path.is_file() {
-        // .git is a file → valid worktree (content is "gitdir: <path>")
-        return Ok(());
+fn canonicalize_for_validation(path: &str, field: &str) -> Result<PathBuf, String> {
+    fs::canonicalize(path).map_err(|_| format!("{field} does not exist or is not accessible: {path}"))
+}
+
+fn list_authorized_worktrees(repo_path: &Path) -> Result<Vec<PathBuf>, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("list")
+        .arg("--porcelain")
+        .output()
+        .map_err(|e| format!("failed to enumerate authorized worktrees: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let reason = stderr.trim();
+        return Err(if reason.is_empty() {
+            "failed to enumerate authorized worktrees".to_string()
+        } else {
+            format!("failed to enumerate authorized worktrees: {reason}")
+        });
     }
-    if git_path.is_dir() {
-        // .git is a directory → this is a regular repo root, allow it too
-        return Ok(());
-    }
-    Err(format!(
-        "working_dir is not a valid git repository or worktree: {working_dir}"
-    ))
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("worktree "))
+        .filter_map(|path| fs::canonicalize(path).ok())
+        .collect())
 }
 
 /// Resolve the effective path for a git operation. If `working_dir` is
 /// provided, it is validated as a git worktree/repo and used instead of
 /// `repo_path`. The caller must have already authorized `repo_path`.
 fn resolve_working_dir(repo_path: &str, working_dir: Option<&str>) -> Result<String, String> {
+    let canonical_repo = canonicalize_for_validation(repo_path, "repo_path")?;
+
     match working_dir {
         Some(wd) if !wd.is_empty() && wd != repo_path => {
-            validate_worktree(wd)?;
-            Ok(wd.to_string())
+            let canonical_working_dir = canonicalize_for_validation(wd, "working_dir")?;
+
+            if canonical_working_dir == canonical_repo {
+                return Ok(canonical_working_dir.to_string_lossy().to_string());
+            }
+
+            let worktrees = list_authorized_worktrees(canonical_repo.as_path())?;
+            if worktrees.iter().any(|worktree| worktree == &canonical_working_dir) {
+                return Ok(canonical_working_dir.to_string_lossy().to_string());
+            }
+
+            Err(format!(
+                "working_dir is not within authorized repository or linked worktrees: {wd}"
+            ))
         }
-        _ => Ok(repo_path.to_string()),
+        _ => Ok(canonical_repo.to_string_lossy().to_string()),
     }
 }
 
@@ -233,4 +265,119 @@ pub async fn git_rebase_branch(
             target_branch: target_branch.trim().to_string(),
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_working_dir;
+    use std::{
+        env, fs,
+        path::{Path, PathBuf},
+        process::Command,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn unique_test_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        let dir = env::temp_dir().join(format!("openducktor-{prefix}-{nanos}"));
+        fs::create_dir_all(&dir).expect("failed to create test directory");
+        dir
+    }
+
+    fn run_git(args: &[&str], cwd: &Path) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .expect("failed to run git command");
+        assert!(status.success(), "git command failed: {:?}", args);
+    }
+
+    fn init_repo(path: &Path) {
+        fs::create_dir_all(path).expect("failed to create repo directory");
+        run_git(&["init"], path);
+        fs::write(path.join("README.md"), "init\n").expect("failed to write seed file");
+        run_git(&["add", "."], path);
+        run_git(
+            &[
+                "-c",
+                "user.name=OpenDucktor Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "init",
+            ],
+            path,
+        );
+    }
+
+    #[test]
+    fn resolve_working_dir_accepts_repo_root() {
+        let root = unique_test_dir("git-root");
+        let repo = root.join("repo");
+        init_repo(&repo);
+
+        let resolved = resolve_working_dir(
+            repo.to_string_lossy().as_ref(),
+            Some(repo.to_string_lossy().as_ref()),
+        )
+        .expect("repo root should be accepted");
+        let expected = fs::canonicalize(&repo)
+            .expect("repo should be canonicalizable")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
+
+        fs::remove_dir_all(&root).expect("failed to remove test directory");
+    }
+
+    #[test]
+    fn resolve_working_dir_accepts_registered_worktree() {
+        let root = unique_test_dir("git-worktree");
+        let repo = root.join("repo");
+        let worktree = root.join("repo-wt");
+        init_repo(&repo);
+
+        let repo_str = repo.to_string_lossy().to_string();
+        let worktree_str = worktree.to_string_lossy().to_string();
+        run_git(
+            &["-C", repo_str.as_str(), "worktree", "add", "-b", "feature/test", worktree_str.as_str()],
+            &repo,
+        );
+
+        let resolved = resolve_working_dir(repo_str.as_str(), Some(worktree_str.as_str()))
+            .expect("registered worktree should be accepted");
+        let expected = fs::canonicalize(&worktree)
+            .expect("worktree should be canonicalizable")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
+
+        fs::remove_dir_all(&root).expect("failed to remove test directory");
+    }
+
+    #[test]
+    fn resolve_working_dir_rejects_unrelated_external_repo() {
+        let root = unique_test_dir("git-external");
+        let authorized_repo = root.join("authorized");
+        let external_repo = root.join("external");
+        init_repo(&authorized_repo);
+        init_repo(&external_repo);
+
+        let error = resolve_working_dir(
+            authorized_repo.to_string_lossy().as_ref(),
+            Some(external_repo.to_string_lossy().as_ref()),
+        )
+        .expect_err("unrelated external repo must be rejected");
+        assert!(
+            error.contains("not within authorized repository or linked worktrees"),
+            "unexpected error: {error}"
+        );
+
+        fs::remove_dir_all(&root).expect("failed to remove test directory");
+    }
 }
