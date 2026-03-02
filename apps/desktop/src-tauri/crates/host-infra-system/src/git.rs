@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    GitAheadBehind, GitBranch, GitCurrentBranch, GitFileDiff, GitFileStatus, GitPort,
-    GitPushSummary,
+    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
+    GitFileDiff, GitFileStatus, GitPort, GitPushSummary, GitRebaseBranchRequest,
+    GitRebaseBranchResult,
 };
 use std::path::Path;
 
@@ -188,16 +189,12 @@ impl GitPort for GitCliPort {
         Ok(parse_status_porcelain(&output))
     }
 
-    fn get_diff(
-        &self,
-        repo_path: &Path,
-        target_branch: Option<&str>,
-    ) -> Result<Vec<GitFileDiff>> {
+    fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>> {
         self.ensure_repository(repo_path)?;
 
         let diff_spec = target_branch
-        .map(|b| b.trim().to_string())
-        .unwrap_or_default();
+            .map(|b| b.trim().to_string())
+            .unwrap_or_default();
 
         // Get numstat for additions/deletions counts
         let numstat_args: Vec<&str> = if diff_spec.is_empty() {
@@ -233,8 +230,8 @@ impl GitPort for GitCliPort {
         self.ensure_repository(repo_path)?;
         let target = normalize_non_empty(target_branch, "target branch")?;
         let range = format!("{target}...HEAD");
-        let (ok, stdout, _stderr) =
-            self.run_git_allow_failure(repo_path, &["rev-list", "--count", "--left-right", &range])?;
+        let (ok, stdout, _stderr) = self
+            .run_git_allow_failure(repo_path, &["rev-list", "--count", "--left-right", &range])?;
 
         if !ok {
             return Ok(GitAheadBehind {
@@ -244,6 +241,95 @@ impl GitPort for GitCliPort {
         }
 
         parse_ahead_behind(&stdout)
+    }
+
+    fn commit_all(
+        &self,
+        repo_path: &Path,
+        request: GitCommitAllRequest,
+    ) -> Result<GitCommitAllResult> {
+        self.ensure_repository(repo_path)?;
+        let message = normalize_non_empty(request.message.as_str(), "commit message")?;
+
+        let (add_ok, add_stdout, add_stderr) =
+            self.run_git_allow_failure(repo_path, &["add", "-A"])?;
+        if !add_ok {
+            return Err(anyhow!(
+                "git add -A failed: {}",
+                combine_output(add_stdout, add_stderr)
+            ));
+        }
+
+        let (commit_ok, commit_stdout, commit_stderr) =
+            self.run_git_allow_failure(repo_path, &["commit", "-m", message.as_str()])?;
+        let output = combine_output(commit_stdout, commit_stderr);
+        if commit_ok {
+            let commit_hash = self.run_git(repo_path, &["rev-parse", "HEAD"])?;
+            return Ok(GitCommitAllResult::Committed {
+                commit_hash,
+                output,
+            });
+        }
+
+        let normalized = output.to_lowercase();
+        if normalized.contains("nothing to commit")
+            || normalized.contains("nothing added to commit")
+        {
+            return Ok(GitCommitAllResult::NoChanges { output });
+        }
+
+        Err(anyhow!("git commit-all failed: {}", output))
+    }
+
+    fn rebase_branch(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseBranchRequest,
+    ) -> Result<GitRebaseBranchResult> {
+        self.ensure_repository(repo_path)?;
+        let target_branch = normalize_non_empty(request.target_branch.as_str(), "target branch")?;
+
+        let current = self.get_current_branch(repo_path)?;
+        if current.detached {
+            return Err(anyhow!("Cannot rebase while detached"));
+        }
+
+        if !self.get_status(repo_path)?.is_empty() {
+            return Err(anyhow!("Cannot rebase with uncommitted changes"));
+        }
+
+        let (rebase_ok, rebase_stdout, rebase_stderr) =
+            self.run_git_allow_failure(repo_path, &["rebase", target_branch.as_str()])?;
+        let output = combine_output(rebase_stdout, rebase_stderr);
+        if rebase_ok {
+            if output.to_lowercase().contains("up to date") {
+                return Ok(GitRebaseBranchResult::UpToDate { output });
+            }
+
+            return Ok(GitRebaseBranchResult::Rebased { output });
+        }
+
+        let (_, conflicted_stdout, _conflicted_stderr) =
+            self.run_git_allow_failure(repo_path, &["diff", "--name-only", "--diff-filter=U"])?;
+        let conflicted_files = conflicted_stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+
+        if !conflicted_files.is_empty() || output.to_lowercase().contains("conflict") {
+            return Ok(GitRebaseBranchResult::Conflicts {
+                conflicted_files,
+                output,
+            });
+        }
+
+        if output.to_lowercase().contains("is up to date") {
+            return Ok(GitRebaseBranchResult::UpToDate { output });
+        }
+
+        Err(anyhow!("git rebase failed: {}", output))
     }
 }
 
@@ -466,6 +552,9 @@ fn parse_ahead_behind(output: &str) -> Result<GitAheadBehind> {
 mod tests {
     use super::{combine_output, parse_branch_rows, GitCliPort};
     use host_domain::GitPort;
+    use host_domain::{
+        GitCommitAllRequest, GitCommitAllResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::{Command, Output, Stdio};
@@ -608,6 +697,207 @@ mod tests {
             .expect("detached branch state should resolve");
         assert!(detached.name.is_none());
         assert!(detached.detached);
+    }
+
+    #[test]
+    fn commit_all_commits_all_changes_with_message() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("commit-all-success");
+        let git = GitCliPort::new();
+
+        fs::write(repo.path.join("change.txt"), "change\n").expect("change file should write");
+        let result = git
+            .commit_all(
+                &repo.path,
+                GitCommitAllRequest {
+                    working_dir: None,
+                    message: "add change file".to_string(),
+                },
+            )
+            .expect("commit-all should succeed");
+
+        let latest = match result {
+            GitCommitAllResult::Committed {
+                commit_hash,
+                output,
+            } => {
+                assert!(!commit_hash.is_empty());
+                assert!(!output.is_empty());
+                commit_hash
+            }
+            other => panic!("expected committed result, got {other:?}"),
+        };
+
+        let repo_head = run_git_ok(&repo.path, &["rev-parse", "HEAD"]);
+        assert_eq!(latest, repo_head);
+        assert!(git
+            .get_status(&repo.path)
+            .expect("status should check out")
+            .is_empty());
+    }
+
+    #[test]
+    fn commit_all_returns_no_changes_without_modifications() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("commit-all-no-changes");
+        let git = GitCliPort::new();
+
+        let result = git
+            .commit_all(
+                &repo.path,
+                GitCommitAllRequest {
+                    working_dir: None,
+                    message: "nothing new".to_string(),
+                },
+            )
+            .expect("empty working tree should return typed no-changes result");
+
+        match result {
+            GitCommitAllResult::NoChanges { output } => {
+                assert!(output.to_lowercase().contains("nothing"));
+            }
+            other => panic!("expected no-changes result, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rebase_branch_rewrites_branch_onto_target() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("rebase-success");
+        let git = GitCliPort::new();
+
+        git.switch_branch(&repo.path, "feature/rebase-success", true)
+            .expect("feature branch should be created");
+        fs::write(repo.path.join("feature.txt"), "feature\n").expect("feature file should write");
+        run_git_ok(&repo.path, &["add", "feature.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "feature commit"]);
+
+        git.switch_branch(&repo.path, "main", false)
+            .expect("return to main");
+        fs::write(repo.path.join("main.txt"), "main\n").expect("main file should write");
+        run_git_ok(&repo.path, &["add", "main.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "main commit"]);
+
+        git.switch_branch(&repo.path, "feature/rebase-success", false)
+            .expect("return to feature branch");
+        let result = git
+            .rebase_branch(
+                &repo.path,
+                GitRebaseBranchRequest {
+                    working_dir: None,
+                    target_branch: "main".to_string(),
+                },
+            )
+            .expect("rebase onto target should succeed");
+
+        match result {
+            GitRebaseBranchResult::Rebased { output } => {
+                assert!(!output.is_empty());
+            }
+            other => panic!("expected rebased result, got {other:?}"),
+        }
+
+        let log = run_git_ok(&repo.path, &["log", "--oneline", "-3"]);
+        assert!(log.contains("main commit"));
+        assert!(log.contains("feature commit"));
+    }
+
+    #[test]
+    fn rebase_branch_reports_up_to_date_when_target_is_current_base() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("rebase-up-to-date");
+        let git = GitCliPort::new();
+        let result = git
+            .rebase_branch(
+                &repo.path,
+                GitRebaseBranchRequest {
+                    working_dir: None,
+                    target_branch: "main".to_string(),
+                },
+            )
+            .expect("rebase should report up-to-date outcome");
+
+        match result {
+            GitRebaseBranchResult::UpToDate { output } => {
+                assert!(output.to_lowercase().contains("up to date"));
+            }
+            GitRebaseBranchResult::Rebased { output } => {
+                assert!(output.to_lowercase().contains("up to date") || output.is_empty());
+            }
+            other => panic!("expected up-to-date or rebased-no-op result, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rebase_branch_reports_conflicts_when_merge_conflicts_occur() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("rebase-conflict");
+        let git = GitCliPort::new();
+
+        fs::write(repo.path.join("shared.txt"), "initial\n").expect("base file should write");
+        run_git_ok(&repo.path, &["add", "shared.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "shared base"]);
+
+        git.switch_branch(&repo.path, "feature/rebase-conflict", true)
+            .expect("feature branch should be created");
+        fs::write(repo.path.join("shared.txt"), "feature value\n")
+            .expect("feature change should write");
+        run_git_ok(&repo.path, &["add", "shared.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "feature change"]);
+
+        git.switch_branch(&repo.path, "main", false)
+            .expect("return to main");
+        fs::write(repo.path.join("shared.txt"), "main value\n").expect("main change should write");
+        run_git_ok(&repo.path, &["add", "shared.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "main change"]);
+
+        git.switch_branch(&repo.path, "feature/rebase-conflict", false)
+            .expect("return to feature branch");
+
+        let result = git
+            .rebase_branch(
+                &repo.path,
+                GitRebaseBranchRequest {
+                    working_dir: None,
+                    target_branch: "main".to_string(),
+                },
+            )
+            .expect("conflict should be surfaced as typed conflict result");
+
+        match result {
+            GitRebaseBranchResult::Conflicts {
+                conflicted_files,
+                output,
+            } => {
+                assert!(
+                    !conflicted_files.is_empty(),
+                    "conflict result should include conflicted files"
+                );
+                assert!(conflicted_files.iter().any(|file| file == "shared.txt"));
+                assert!(
+                    output.to_lowercase().contains("conflict")
+                        || output.to_lowercase().contains("could not apply")
+                );
+            }
+            other => panic!("expected conflicts result, got {other:?}"),
+        }
+
+        run_git_ok(&repo.path, &["rebase", "--abort"]);
     }
 
     #[test]
