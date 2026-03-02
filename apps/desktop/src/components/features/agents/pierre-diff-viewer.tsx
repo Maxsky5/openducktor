@@ -1,5 +1,6 @@
-import { PatchDiff } from "@pierre/diffs/react";
-import { memo, type ReactElement } from "react";
+import { getSingularPatch } from "@pierre/diffs";
+import { PatchDiff, useWorkerPool } from "@pierre/diffs/react";
+import { type CSSProperties, memo, type ReactElement, useEffect, useMemo } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -16,6 +17,44 @@ export type PierreDiffViewerProps = {
   /** CSS class applied to the wrapper. */
   className?: string;
 };
+
+type PierreDiffPreloaderProps = {
+  patch: string;
+};
+
+const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
+const DIFF_WRAPPER_STYLE = {
+  "--diffs-font-size": "12px",
+  "--diffs-line-height": "1.5",
+  "--diffs-tab-size": 2,
+} as CSSProperties;
+
+export const PierreDiffPreloader = memo(function PierreDiffPreloader({
+  patch,
+}: PierreDiffPreloaderProps): null {
+  const workerPool = useWorkerPool();
+  const fileDiff = useMemo(() => getSingularPatch(patch), [patch]);
+  const preloadRenderer = useMemo(
+    () => ({
+      onHighlightSuccess: (_diff: unknown, _result: unknown, _options: unknown) => undefined,
+      onHighlightError: (_error: unknown) => undefined,
+    }),
+    [],
+  );
+
+  useEffect(() => {
+    if (workerPool == null || patch.trim().length === 0) {
+      return;
+    }
+    if (workerPool.getDiffResultCache(fileDiff) != null) {
+      return;
+    }
+
+    workerPool.highlightDiffAST(preloadRenderer, fileDiff);
+  }, [fileDiff, patch, preloadRenderer, workerPool]);
+
+  return null;
+});
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
@@ -34,32 +73,25 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   className,
 }: PierreDiffViewerProps): ReactElement {
   const { theme } = useTheme();
+  const lineDiffType: "word-alt" | "none" = diffStyle === "split" ? "word-alt" : "none";
+  const options = useMemo(
+    () => ({
+      theme: DIFF_THEME,
+      themeType: theme,
+      diffStyle,
+      diffIndicators: "bars" as const,
+      hunkSeparators: "line-info" as const,
+      lineDiffType,
+      overflow: "wrap" as const,
+      disableFileHeader: true,
+      enableLineSelection,
+    }),
+    [diffStyle, enableLineSelection, lineDiffType, theme],
+  );
 
   return (
-    <div
-      className={className}
-      style={
-        {
-          "--diffs-font-size": "12px",
-          "--diffs-line-height": "1.5",
-          "--diffs-tab-size": 2,
-        } as React.CSSProperties
-      }
-    >
-      <PatchDiff
-        patch={patch}
-        options={{
-          theme: { dark: "pierre-dark", light: "pierre-light" },
-          themeType: theme,
-          diffStyle,
-          diffIndicators: "bars",
-          hunkSeparators: "line-info",
-          lineDiffType: diffStyle === "split" ? "word-alt" : "none",
-          overflow: "wrap",
-          disableFileHeader: true,
-          enableLineSelection,
-        }}
-      />
+    <div className={className} style={DIFF_WRAPPER_STYLE}>
+      <PatchDiff patch={patch} options={options} />
     </div>
   );
 });

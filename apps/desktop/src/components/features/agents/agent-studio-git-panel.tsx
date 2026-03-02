@@ -19,7 +19,10 @@ import {
 } from "lucide-react";
 import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
-import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
+import {
+  PierreDiffPreloader,
+  PierreDiffViewer,
+} from "@/components/features/agents/pierre-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -506,6 +509,7 @@ function FileDiffEntry({
 
   return (
     <div>
+      {diff.diff && diff.diff.trim().length > 0 ? <PierreDiffPreloader patch={diff.diff} /> : null}
       <button
         type="button"
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted/50 transition-colors cursor-pointer"
