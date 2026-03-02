@@ -1,3 +1,4 @@
+// @ts-expect-error
 import { describe, expect, test } from "bun:test";
 import {
   agentRuntimeSummarySchema,
@@ -106,7 +107,9 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.type).toBe("permission_required");
-    expect(parsed.command).toBeUndefined();
+    expect(
+      "command" in parsed ? (parsed as { command?: unknown }).command : undefined,
+    ).toBeUndefined();
   });
 
   test("repo config accepts null worktree base path", () => {
@@ -210,6 +213,22 @@ describe("runtime schemas", () => {
     expect(commitNoChanges.outcome).toBe("no_changes");
   });
 
+  test("git commit-all result rejects unknown outcome and malformed committed payloads", () => {
+    expect(() =>
+      gitCommitAllResultSchema.parse({
+        outcome: "failed",
+        output: "commit failed",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitCommitAllResultSchema.parse({
+        outcome: "committed",
+        output: "did not include hash",
+      }),
+    ).toThrow();
+  });
+
   test("git rebase branch request and result payloads parse for all outcomes", () => {
     const rebaseRequest = gitRebaseBranchRequestSchema.parse({
       repoPath: "/repo",
@@ -235,6 +254,21 @@ describe("runtime schemas", () => {
     expect(rebaseRebased.outcome).toBe("rebased");
     expect(rebaseUpToDate.outcome).toBe("up_to_date");
     expect(rebaseConflicts.outcome).toBe("conflicts");
+  });
+
+  test("git rebase branch result rejects unknown and malformed payloads", () => {
+    expect(() =>
+      gitRebaseBranchResultSchema.parse({
+        outcome: "invalid",
+        output: "unknown",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitRebaseBranchResultSchema.parse({
+        outcome: "rebased",
+      }),
+    ).toThrow();
   });
 
   test("git rebase branch result rejects conflicts without file list", () => {

@@ -179,6 +179,9 @@ describe("TauriHostClient", () => {
       "gitCreateWorktree",
       "gitRemoveWorktree",
       "gitPushBranch",
+      "gitGetStatus",
+      "gitGetDiff",
+      "gitCommitsAheadBehind",
       "gitCommitAll",
       "gitRebaseBranch",
     ] as const;
@@ -489,6 +492,21 @@ describe("TauriHostClient", () => {
       setUpstream: true,
       forceWithLease: true,
     });
+  });
+
+  test("git commit-all and rebase parse and reject malformed host payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_commit_all") {
+        return { outcome: "committed" };
+      }
+      if (command === "git_rebase_branch") {
+        return { outcome: "conflicts", conflictedFiles: ["src/index.ts"] };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.gitCommitAll("/repo", "Build all changes")).rejects.toThrow();
+    await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
   });
 
   test("build and human workflow commands use expected IPC routes", async () => {
