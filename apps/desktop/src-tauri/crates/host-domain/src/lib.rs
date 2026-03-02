@@ -11,8 +11,9 @@ pub use document::{
     TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
 };
 pub use git::{
-    GitAheadBehind, GitBranch, GitCurrentBranch, GitFileDiff, GitFileStatus, GitPort,
-    GitPushSummary, GitWorktreeSummary,
+    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
+    GitFileDiff, GitFileStatus, GitPort, GitPushSummary, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitWorktreeSummary,
 };
 pub use runtime::{AgentRuntimeSummary, RunEvent, RunState, RunSummary};
 pub use store::TaskStore;
@@ -90,7 +91,8 @@ mod tests {
         use super::{
             AgentRuntimeSummary, AgentSessionDocument, AgentSessionModelSelection,
             AgentWorkflowState, AgentWorkflows, BeadsCheck, CreateTaskInput, GitBranch,
-            GitCurrentBranch, GitPort, GitPushSummary, GitWorktreeSummary, IssueType,
+            GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitPort, GitPushSummary,
+            GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeSummary, IssueType,
             PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
             RunSummary, RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard,
             TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
@@ -114,8 +116,12 @@ mod tests {
             BeadsCheck,
             CreateTaskInput,
             GitBranch,
+            GitCommitAllRequest,
+            GitCommitAllResult,
             GitCurrentBranch,
             GitPushSummary,
+            GitRebaseBranchRequest,
+            GitRebaseBranchResult,
             GitWorktreeSummary,
             IssueType,
             PlanSubtaskInput,

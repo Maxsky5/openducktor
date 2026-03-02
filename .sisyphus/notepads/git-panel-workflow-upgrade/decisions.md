@@ -4,3 +4,5 @@
 - Kept field naming as `defaultTargetBranch` in Tauri JSON payloads and `default_target_branch` in Rust structs via existing `#[serde(rename_all = "camelCase")]` conventions.
 - Implemented normalization in host infra config layer (not command layer) so both save paths and legacy config loading share one source of truth.
 - Kept Task 2 scoped strictly to shared contracts: no host/adapter/frontend behavior changes yet, only schema/types + runtime schema tests + export contract updates.
+- Mirrored Task 2 contract semantics in host-domain with DTO names and discriminated outcomes (`committed|no_changes`, `rebased|up_to_date|conflicts`) to keep cross-layer intent stable.
+- Kept domain contracts transport-agnostic by modeling outcomes as enums/DTOs only, with no git CLI output parsing rules in `host-domain`.

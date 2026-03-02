@@ -10,3 +10,5 @@
 - Normalization now trims `default_target_branch` and coerces blank/whitespace values to `origin/main` at the Rust config normalization layer.
 - Host infra config tests now explicitly cover persistence of a non-empty target branch and normalization of blank target branch values.
 - Added `GitCommitAll` and `GitRebaseBranch` request/result schemas in contracts with explicit discriminated outcome unions and tests for happy-path + edge outcomes.
+- Host-domain `GitPort` now includes typed `commit_all` and `rebase_branch` methods that take request DTOs instead of primitive argument sprawl.
+- Domain outcomes for commit/rebase now model no-op and conflict states as first-class variants (`NoChanges`, `UpToDate`, `Conflicts`) to avoid downstream string parsing.

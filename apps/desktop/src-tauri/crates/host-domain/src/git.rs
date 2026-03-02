@@ -58,6 +58,49 @@ pub struct GitAheadBehind {
     pub behind: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitAllRequest {
+    pub working_dir: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitCommitAllResult {
+    Committed {
+        #[serde(rename = "commitHash")]
+        commit_hash: String,
+        output: String,
+    },
+    NoChanges {
+        output: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRebaseBranchRequest {
+    pub working_dir: Option<String>,
+    pub target_branch: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitRebaseBranchResult {
+    Rebased {
+        output: String,
+    },
+    UpToDate {
+        output: String,
+    },
+    Conflicts {
+        #[serde(rename = "conflictedFiles")]
+        conflicted_files: Vec<String>,
+        output: String,
+    },
+}
+
 pub trait GitPort: Send + Sync {
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>>;
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch>;
@@ -85,10 +128,65 @@ pub trait GitPort: Send + Sync {
     ) -> Result<GitPushSummary>;
     fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>>;
     fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>>;
-    fn commits_ahead_behind(
+    fn commits_ahead_behind(&self, repo_path: &Path, target_branch: &str)
+        -> Result<GitAheadBehind>;
+    fn commit_all(
         &self,
         repo_path: &Path,
-        target_branch: &str,
-    ) -> Result<GitAheadBehind>;
+        request: GitCommitAllRequest,
+    ) -> Result<GitCommitAllResult>;
+    fn rebase_branch(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseBranchRequest,
+    ) -> Result<GitRebaseBranchResult>;
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{GitCommitAllResult, GitRebaseBranchResult};
+
+    #[test]
+    fn git_commit_all_no_changes_is_first_class_variant() {
+        let result = GitCommitAllResult::NoChanges {
+            output: "nothing to commit".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitCommitAllResult::NoChanges {
+                output: "nothing to commit".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_rebase_up_to_date_is_first_class_variant() {
+        let result = GitRebaseBranchResult::UpToDate {
+            output: "already up to date".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitRebaseBranchResult::UpToDate {
+                output: "already up to date".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_rebase_conflicts_keeps_conflicted_files() {
+        let result = GitRebaseBranchResult::Conflicts {
+            conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+            output: "rebase stopped due to conflicts".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitRebaseBranchResult::Conflicts {
+                conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+                output: "rebase stopped due to conflicts".to_string(),
+            }
+        );
+    }
+}
