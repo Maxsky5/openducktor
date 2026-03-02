@@ -15,11 +15,16 @@ export type AgentStudioRightPanelToggleModel = {
   onToggle: () => void;
 };
 
-export type AgentStudioRightPanelModel = {
-  kind: AgentStudioRightPanelKind;
-  documentsModel: AgentStudioWorkspaceSidebarModel;
-  diffModel?: AgentStudioGitPanelModel;
-};
+export type AgentStudioRightPanelModel =
+  | {
+      kind: "documents";
+      documentsModel: AgentStudioWorkspaceSidebarModel;
+    }
+  | {
+      kind: "diff";
+      documentsModel: AgentStudioWorkspaceSidebarModel;
+      diffModel: AgentStudioGitPanelModel;
+    };
 
 const rightPanelLabel = (kind: AgentStudioRightPanelKind): string => {
   if (kind === "documents") {
@@ -63,21 +68,5 @@ export function AgentStudioRightPanel({
     return <AgentStudioWorkspaceSidebar model={model.documentsModel} />;
   }
 
-  if (model.diffModel) {
-    return <AgentStudioGitPanel model={model.diffModel} />;
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="space-y-1 border-b border-border p-4">
-        <h2 className="text-lg font-semibold leading-none tracking-tight">File Diff</h2>
-        <p className="text-sm text-muted-foreground">
-          Latest builder file changes for this task session.
-        </p>
-      </div>
-      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-        <p className="text-sm text-muted-foreground">No active builder session.</p>
-      </div>
-    </div>
-  );
+  return <AgentStudioGitPanel model={model.diffModel} />;
 }

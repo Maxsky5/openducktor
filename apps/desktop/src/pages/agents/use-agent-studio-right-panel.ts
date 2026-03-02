@@ -2,8 +2,11 @@ import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import type {
   AgentStudioRightPanelKind,
+  AgentStudioRightPanelModel,
   AgentStudioRightPanelToggleModel,
+  AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
+import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
@@ -40,6 +43,35 @@ export const isRightPanelKindAvailable = (
     return availability.hasDocumentPanel;
   }
   return availability.hasDiffPanel;
+};
+
+type BuildAgentStudioRightPanelModelInput = {
+  panelKind: AgentStudioRightPanelKind | null;
+  documentsModel: AgentStudioWorkspaceSidebarModel;
+  diffModel: AgentStudioGitPanelModel;
+};
+
+export const buildAgentStudioRightPanelModel = ({
+  panelKind,
+  documentsModel,
+  diffModel,
+}: BuildAgentStudioRightPanelModelInput): AgentStudioRightPanelModel | null => {
+  if (!panelKind) {
+    return null;
+  }
+
+  if (panelKind === "documents") {
+    return {
+      kind: "documents",
+      documentsModel,
+    };
+  }
+
+  return {
+    kind: "diff",
+    documentsModel,
+    diffModel,
+  };
 };
 
 export function useAgentStudioRightPanel({

@@ -17,3 +17,5 @@
 - On successful mutating actions, clear all action errors before refresh to remove stale cross-action failure messages while preserving operation-specific errors on failure.
 
 - Used `fileStatuses.length > 0` as the commit-all eligibility signal for Task 11 so commit submit availability tracks uncommitted/staged changes without introducing new backend/UI contracts.
+- Kept `hasDiffPanel: viewRole === "build"` and role-to-panel mapping unchanged; only model plumbing was refactored so build remains diff-owner and non-build roles remain document-only.
+- Chose helper-based model assembly in `use-agent-studio-right-panel.ts` and consumed it from `agents-page.tsx` to avoid broad orchestration-controller API changes while still enforcing enhanced diff model wiring.

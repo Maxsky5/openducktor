@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   AgentStudioRightPanel,
   AgentStudioRightPanelToggleButton,
@@ -12,6 +13,31 @@ const emptyDoc = {
   isLoading: false,
   error: null,
   loaded: true,
+};
+
+const diffModel: AgentStudioGitPanelModel = {
+  branch: "feature/task-12",
+  worktreePath: "/tmp/worktree/task-12",
+  targetBranch: "origin/main",
+  diffScope: "target",
+  commitsAheadBehind: null,
+  fileDiffs: [],
+  fileStatuses: [],
+  isLoading: false,
+  error: null,
+  refresh: () => {},
+  selectedFile: null,
+  setSelectedFile: () => {},
+  setDiffScope: () => {},
+  isCommitting: false,
+  isPushing: false,
+  isRebasing: false,
+  commitError: null,
+  pushError: null,
+  rebaseError: null,
+  commitAll: async () => {},
+  pushBranch: async () => {},
+  rebaseOntoTarget: async () => {},
 };
 
 describe("AgentStudioRightPanelToggleButton", () => {
@@ -70,20 +96,20 @@ describe("AgentStudioRightPanel", () => {
     expect(html).toContain("Spec");
   });
 
-  test("renders diff placeholder when diff panel kind is selected", () => {
+  test("renders enhanced git panel model when diff panel kind is selected", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioRightPanel, {
         model: {
           kind: "diff",
-          documentsModel: {
-            activeDocument: null,
-          },
+          documentsModel: { activeDocument: null },
+          diffModel,
         },
       }),
     );
 
-    expect(html).toContain("File Diff");
-    expect(html).toContain("Latest builder file changes for this task session.");
-    expect(html).toContain("No active builder session.");
+    expect(html).toContain("Current");
+    expect(html).toContain("Target");
+    expect(html).toContain("origin/main");
+    expect(html).toContain("Commit all");
   });
 });

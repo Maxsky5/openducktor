@@ -38,6 +38,7 @@ import {
 } from "./use-agent-studio-orchestration-controller";
 import { useAgentStudioQuerySessionSync } from "./use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
+import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel";
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
 import type {
   NewSessionStartDecision,
@@ -305,6 +306,15 @@ export function AgentsPage(): ReactElement {
     }),
     [diffData, gitActions],
   );
+  const rightPanelModel = useMemo(
+    () =>
+      buildAgentStudioRightPanelModel({
+        panelKind: orchestration.rightPanel.panelKind,
+        documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
+        diffModel,
+      }),
+    [diffModel, orchestration.agentStudioWorkspaceSidebarModel, orchestration.rightPanel.panelKind],
+  );
 
   return (
     <DiffWorkerProvider>
@@ -334,13 +344,7 @@ export function AgentsPage(): ReactElement {
                 <>
                   <ResizableHandle withHandle />
                   <ResizablePanel defaultSize={37} minSize={30}>
-                    <AgentStudioRightPanel
-                      model={{
-                        kind: orchestration.rightPanel.panelKind,
-                        documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
-                        ...(orchestration.rightPanel.panelKind === "diff" ? { diffModel } : {}),
-                      }}
-                    />
+                    {rightPanelModel ? <AgentStudioRightPanel model={rightPanelModel} /> : null}
                   </ResizablePanel>
                 </>
               ) : null}

@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentStudioGitPanelModel } from "@/components/features/agents/agent-studio-git-panel";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
+import {
+  buildAgentStudioRightPanelModel,
+  useAgentStudioRightPanel,
+} from "./use-agent-studio-right-panel";
 
 enableReactActEnvironment();
 
@@ -12,7 +16,66 @@ type HookArgs = Parameters<typeof useAgentStudioRightPanel>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioRightPanel, initialProps);
 
+const documentsModel = {
+  activeDocument: null,
+};
+
+const diffModel: AgentStudioGitPanelModel = {
+  branch: "feature/task-12",
+  worktreePath: "/tmp/worktree/task-12",
+  targetBranch: "origin/main",
+  diffScope: "target",
+  commitsAheadBehind: null,
+  fileDiffs: [],
+  fileStatuses: [],
+  isLoading: false,
+  error: null,
+  refresh: () => {},
+  selectedFile: null,
+  setSelectedFile: () => {},
+  setDiffScope: () => {},
+  isCommitting: false,
+  isPushing: false,
+  isRebasing: false,
+  commitError: null,
+  pushError: null,
+  rebaseError: null,
+  commitAll: async () => {},
+  pushBranch: async () => {},
+  rebaseOntoTarget: async () => {},
+};
+
 describe("useAgentStudioRightPanel", () => {
+  test("builds enhanced diff panel model when panel kind is diff", () => {
+    const model = buildAgentStudioRightPanelModel({
+      panelKind: "diff",
+      documentsModel,
+      diffModel,
+    });
+
+    expect(model).not.toBeNull();
+    expect(model?.kind).toBe("diff");
+    if (model?.kind === "diff") {
+      expect(model.diffModel.diffScope).toBe("target");
+      expect(model.diffModel.commitAll).toBe(diffModel.commitAll);
+      expect(model.diffModel.rebaseOntoTarget).toBe(diffModel.rebaseOntoTarget);
+      expect(model.diffModel.pushBranch).toBe(diffModel.pushBranch);
+    }
+  });
+
+  test("builds documents panel model for non-build panel kind", () => {
+    const model = buildAgentStudioRightPanelModel({
+      panelKind: "documents",
+      documentsModel,
+      diffModel,
+    });
+
+    expect(model).toEqual({
+      kind: "documents",
+      documentsModel,
+    });
+  });
+
   test("returns documents panel open by default for spec role when available", async () => {
     const harness = createHookHarness({
       role: "spec",

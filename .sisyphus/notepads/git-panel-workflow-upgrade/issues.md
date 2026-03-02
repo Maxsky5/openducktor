@@ -12,3 +12,4 @@
 - Full desktop test output is noisy with expected React test renderer warnings and intentional error-path logs from existing suites; pass/fail confirmation should rely on package exit lines (`Exited with code 0`) rather than searching for `error:` in raw output.
 
 - Full `bun run --filter @openducktor/desktop test` remained noisy/long-running in this environment and repeatedly hit tool timeout despite extended limits; focused panel test file passed and changed-file diagnostics are clean.
+- A full desktop package test run for Task 12 again exceeded the tool timeout in this environment; focused right-panel/orchestration tests passed and package-level `typecheck` + `build` succeeded.
