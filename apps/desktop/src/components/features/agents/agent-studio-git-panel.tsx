@@ -170,8 +170,8 @@ function GitInfoHeader({
   };
 
   return (
-    <div className="space-y-3 border-b border-border p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-0 border-b border-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-3 px-3 mb-2">
         <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
           Branch context
         </span>
@@ -181,7 +181,7 @@ function GitInfoHeader({
       </div>
 
       <div
-        className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
+        className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center px-3 mb-2"
         data-testid="agent-studio-git-branch-context-row"
       >
         <div className="rounded-lg border border-border bg-card px-3 py-2">
@@ -367,11 +367,8 @@ function GitInfoHeader({
       </div>
 
       <div className="space-y-1">
-        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-          Diff scope
-        </p>
         <div
-          className="inline-flex h-9 w-full items-center rounded-md border border-border bg-muted p-1"
+          className="inline-flex h-9 w-full items-center bg-muted p-1"
           role="tablist"
           aria-label="Git diff scope"
         >
@@ -384,7 +381,7 @@ function GitInfoHeader({
                 role="tab"
                 aria-selected={isActive}
                 className={cn(
-                  "inline-flex h-7 flex-1 items-center justify-center rounded-sm px-3 text-xs transition-colors",
+                  "inline-flex h-7 flex-1 items-center justify-center rounded-sm px-3 text-xs transition-colors cursor-pointer",
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
