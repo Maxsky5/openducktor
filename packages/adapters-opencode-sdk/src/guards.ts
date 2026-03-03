@@ -1,8 +1,8 @@
-export type UnknownRecord = Record<string, unknown>;
+import { isUnknownRecord as isCoreUnknownRecord, type UnknownRecord } from "@openducktor/core";
 
-export const isUnknownRecord = (value: unknown): value is UnknownRecord => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-};
+export type { UnknownRecord };
+
+export const isUnknownRecord = isCoreUnknownRecord;
 
 export const asUnknownRecord = (value: unknown): UnknownRecord | undefined => {
   return isUnknownRecord(value) ? value : undefined;

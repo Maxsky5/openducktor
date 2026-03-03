@@ -1,4 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
+import { type AgentRole, isRecord } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
 import { isRole } from "./agents-page-constants";
@@ -11,9 +11,6 @@ type PersistedAgentStudioContext = {
   role?: AgentRole;
   sessionId?: string;
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readOptionalString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {

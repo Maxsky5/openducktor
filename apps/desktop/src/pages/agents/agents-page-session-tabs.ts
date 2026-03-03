@@ -1,5 +1,5 @@
 import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import { type AgentRole, type AgentScenario, isRecord } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
@@ -46,9 +46,6 @@ const normalizeTaskTabs = (entries: unknown): string[] => {
     ),
   );
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 export const buildLatestSessionByTaskMap = (
   sessions: AgentSessionState[],
