@@ -4,6 +4,7 @@ import {
   isOdtWorkflowMutationToolName,
   isOdtWorkflowToolName,
   normalizeOdtWorkflowToolName,
+  resolveOdtWorkflowToolNameForAuthorization,
   toOdtWorkflowToolDisplayName,
 } from "./odt-workflow-tools";
 
@@ -29,19 +30,31 @@ describe("odt workflow tools", () => {
     expect(isOdtWorkflowMutationToolName("odt_read_task")).toBe(false);
   });
 
-  test("builds role-scoped selection with plain and namespaced aliases", () => {
+  test("resolves trusted workflow tool ids for authorization with exact case-sensitive matching", () => {
+    expect(resolveOdtWorkflowToolNameForAuthorization("odt_set_spec")).toBe("odt_set_spec");
+    expect(resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_spec")).toBe(
+      "odt_set_spec",
+    );
+    expect(resolveOdtWorkflowToolNameForAuthorization("OpenDucktor_ODT_SET_SPEC")).toBeNull();
+    expect(resolveOdtWorkflowToolNameForAuthorization("odt_SET_SPEC")).toBeNull();
+    expect(resolveOdtWorkflowToolNameForAuthorization("customprefix_odt_set_spec")).toBeNull();
+  });
+
+  test("builds role-scoped selection with canonical defaults", () => {
     const selection = buildRoleScopedOdtToolSelection("spec");
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
-    expect(selection.openducktor_odt_set_spec).toBe(true);
-    expect(selection.openducktor_odt_build_completed).toBe(false);
+    expect(selection.openducktor_odt_set_spec).toBeUndefined();
+    expect(selection.openducktor_odt_build_completed).toBeUndefined();
   });
 
   test("applies only trusted runtime aliases to role-scoped selection", () => {
     const selection = buildRoleScopedOdtToolSelection("qa", {
+      includeCanonicalDefaults: false,
       runtimeToolIds: [
         "openducktor_odt_qa_approved",
+        "OpenDucktor_ODT_QA_REJECTED",
         " customprefix_odt_set_spec ",
         " odt_read_task ",
         "glob",
@@ -49,6 +62,7 @@ describe("odt workflow tools", () => {
     });
     expect(selection.openducktor_odt_qa_approved).toBe(true);
     expect(selection.odt_read_task).toBe(true);
+    expect(selection.OpenDucktor_ODT_QA_REJECTED).toBeUndefined();
     expect(selection.customprefix_odt_set_spec).toBeUndefined();
     expect(selection.glob).toBeUndefined();
   });

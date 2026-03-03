@@ -37,6 +37,33 @@ export const normalizeOdtWorkflowToolName = (toolName: string): AgentToolName | 
   return null;
 };
 
+export const resolveOdtWorkflowToolNameForAuthorization = (
+  toolId: string,
+  options?: { trustedMcpToolPrefixes?: readonly string[] },
+): AgentToolName | null => {
+  const trimmedToolId = toolId.trim();
+  if (trimmedToolId.length === 0) {
+    return null;
+  }
+
+  if (ODT_WORKFLOW_TOOL_SET.has(trimmedToolId as AgentToolName)) {
+    return trimmedToolId as AgentToolName;
+  }
+
+  const trustedMcpToolPrefixes = options?.trustedMcpToolPrefixes ?? ODT_MCP_TOOL_PREFIXES;
+  for (const prefix of trustedMcpToolPrefixes) {
+    if (!trimmedToolId.startsWith(prefix)) {
+      continue;
+    }
+    const candidate = trimmedToolId.slice(prefix.length);
+    return ODT_WORKFLOW_TOOL_SET.has(candidate as AgentToolName)
+      ? (candidate as AgentToolName)
+      : null;
+  }
+
+  return null;
+};
+
 export const isOdtWorkflowToolName = (toolName: string): boolean => {
   return normalizeOdtWorkflowToolName(toolName) !== null;
 };
@@ -53,21 +80,29 @@ export const toOdtWorkflowToolDisplayName = (toolName: string): string => {
 
 export const buildRoleScopedOdtToolSelection = (
   role: AgentRole,
-  options?: { runtimeToolIds?: readonly string[] },
+  options?: {
+    runtimeToolIds?: readonly string[];
+    includeCanonicalDefaults?: boolean;
+    trustedMcpToolPrefixes?: readonly string[];
+  },
 ): Record<string, boolean> => {
   const allowed = new Set(AGENT_ROLE_TOOL_POLICY[role]);
   const selection: Record<string, boolean> = {};
+  const includeCanonicalDefaults = options?.includeCanonicalDefaults ?? true;
 
-  for (const workflowTool of ODT_WORKFLOW_TOOL_NAMES) {
-    const enabled = allowed.has(workflowTool);
-    selection[workflowTool] = enabled;
-    for (const prefix of ODT_MCP_TOOL_PREFIXES) {
-      selection[`${prefix}${workflowTool}`] = enabled;
+  if (includeCanonicalDefaults) {
+    for (const workflowTool of ODT_WORKFLOW_TOOL_NAMES) {
+      selection[workflowTool] = allowed.has(workflowTool);
     }
   }
 
   for (const toolId of options?.runtimeToolIds ?? []) {
-    const normalizedTool = normalizeOdtWorkflowToolName(toolId);
+    const normalizedTool = resolveOdtWorkflowToolNameForAuthorization(
+      toolId,
+      options?.trustedMcpToolPrefixes
+        ? { trustedMcpToolPrefixes: options.trustedMcpToolPrefixes }
+        : undefined,
+    );
     if (!normalizedTool) {
       continue;
     }
