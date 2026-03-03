@@ -25,6 +25,11 @@ mock.module("@/components/ui/tooltip", async () => {
   };
 });
 
+mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
+  PierreDiffPreloader: () => null,
+  PierreDiffViewer: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+}));
+
 type AgentStudioGitPanelComponent =
   typeof import("./agent-studio-git-panel")["AgentStudioGitPanel"];
 type AgentStudioGitPanelModel = import("./agent-studio-git-panel").AgentStudioGitPanelModel;
