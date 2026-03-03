@@ -3,6 +3,7 @@ import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   assistantRoleFromMessage,
   buildToolSummary,
+  extractFileEditData,
   formatRawJsonLikeText,
   formatTime,
   getAssistantFooterData,
@@ -10,6 +11,7 @@ import {
   getToolLifecyclePhase,
   hasNonEmptyInput,
   hasNonEmptyText,
+  isFileEditTool,
   isToolMessageCancelled,
   isToolMessageFailure,
   questionToolDetails,
@@ -767,6 +769,72 @@ describe("agent-chat-message-card-model", () => {
         },
       );
       expect(blankMeta.infoParts).toEqual([]);
+    });
+  });
+
+  describe("file edit helpers", () => {
+    test("detects file edit tools case-insensitively", () => {
+      expect(isFileEditTool("edit")).toBe(true);
+      expect(isFileEditTool("Apply_Patch")).toBe(true);
+      expect(isFileEditTool("write")).toBe(true);
+      expect(isFileEditTool("read")).toBe(false);
+    });
+
+    test("extracts file edit data from input path and metadata diff", () => {
+      const data = extractFileEditData(
+        createToolMeta({
+          input: { filePath: "src/app.ts" },
+          metadata: {
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n+line",
+          },
+        }),
+      );
+
+      expect(data).toEqual({
+        filePath: "src/app.ts",
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n+line",
+        additions: 2,
+        deletions: 1,
+      });
+    });
+
+    test("extracts apply_patch file path and output fallback path", () => {
+      const fromPatch = extractFileEditData(
+        createToolMeta({
+          input: {
+            patch: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+          },
+        }),
+      );
+      expect(fromPatch).toEqual({
+        filePath: "src/patch.ts",
+        diff: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+        additions: 1,
+        deletions: 1,
+      });
+
+      const fromOutput = extractFileEditData(
+        createToolMeta({
+          output: "Updated the following files: M src/output.ts\n@@ -1 +1 @@\n-old\n+new",
+        }),
+      );
+      expect(fromOutput).toEqual({
+        filePath: "src/output.ts",
+        diff: "Updated the following files: M src/output.ts\n@@ -1 +1 @@\n-old\n+new",
+        additions: 1,
+        deletions: 1,
+      });
+    });
+
+    test("returns null when no file path can be extracted", () => {
+      expect(
+        extractFileEditData(
+          createToolMeta({
+            input: { filePath: "   " },
+            output: "tool output without file markers",
+          }),
+        ),
+      ).toBeNull();
     });
   });
 });
