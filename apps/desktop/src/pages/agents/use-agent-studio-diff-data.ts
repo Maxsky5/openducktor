@@ -5,6 +5,7 @@ import type {
   GitWorktreeStatus,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { errorMessage } from "@/lib/errors";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
 
@@ -75,11 +76,25 @@ type ScopeSnapshot = {
   diffHash: string | null;
 };
 
-type ResolvedWorktreeState = {
-  repoPath: string;
-  runId: string;
-  path: string | null;
-};
+type WorktreeResolutionState =
+  | { status: "idle" }
+  | {
+      status: "resolving";
+      repoPath: string;
+      runId: string;
+    }
+  | {
+      status: "resolved";
+      repoPath: string;
+      runId: string;
+      path: string | null;
+    }
+  | {
+      status: "failed";
+      repoPath: string;
+      runId: string;
+      error: string;
+    };
 
 type LoadDataContext = {
   repoPath: string | null;
@@ -117,6 +132,16 @@ const createInitialState = (): DiffBatchState => ({
 });
 
 const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
+const IDLE_WORKTREE_RESOLUTION_STATE: WorktreeResolutionState = { status: "idle" };
+
+const buildWorktreeResolutionError = (runId: string, reason?: string): string => {
+  const baseMessage = `Failed to resolve run worktree path for session ${runId}`;
+  if (reason == null || reason.trim().length === 0) {
+    return baseMessage;
+  }
+
+  return `${baseMessage}: ${reason}`;
+};
 
 // ─── Structural equality helpers ───────────────────────────────────────────────
 
@@ -258,9 +283,10 @@ export function useAgentStudioDiffData({
   const [state, setState] = useState<DiffBatchState>(createInitialState);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
-  const [resolvedWorktreeState, setResolvedWorktreeState] = useState<ResolvedWorktreeState | null>(
-    null,
+  const [worktreeResolutionState, setWorktreeResolutionState] = useState<WorktreeResolutionState>(
+    IDLE_WORKTREE_RESOLUTION_STATE,
   );
+  const [worktreeResolutionRetryToken, setWorktreeResolutionRetryToken] = useState(0);
 
   const versionByScopeRef = useRef<Record<DiffScope, number>>({
     target: 0,
@@ -278,73 +304,151 @@ export function useAgentStudioDiffData({
   const targetBranch = normalizeCanonicalTargetBranch(defaultTargetBranch);
 
   // If session.workingDirectory is different from repoPath, use it directly.
-  // Otherwise, fall back to a resolved worktree path from the runs list.
+  // Otherwise, resolve the correct worktree path from RunSummary before polling git data.
   const directWorktreePath =
     sessionWorkingDirectory && sessionWorkingDirectory !== repoPath
       ? sessionWorkingDirectory
       : null;
-  const resolvedWorktreePath =
-    resolvedWorktreeState != null &&
-    resolvedWorktreeState.repoPath === repoPath &&
-    resolvedWorktreeState.runId === sessionRunId
-      ? resolvedWorktreeState.path
-      : null;
+  const shouldResolveWorktreeFromRunSummary =
+    directWorktreePath === null && repoPath != null && sessionRunId != null;
+  const worktreeResolutionRepoPath = shouldResolveWorktreeFromRunSummary ? repoPath : null;
+  const worktreeResolutionRunId = shouldResolveWorktreeFromRunSummary ? sessionRunId : null;
+  const hasResolvedWorktreeForCurrentContext =
+    worktreeResolutionRepoPath != null &&
+    worktreeResolutionRunId != null &&
+    worktreeResolutionState.status === "resolved" &&
+    worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
+    worktreeResolutionState.runId === worktreeResolutionRunId;
+  const resolvedWorktreePath = hasResolvedWorktreeForCurrentContext
+    ? worktreeResolutionState.path
+    : null;
   const worktreePath = directWorktreePath ?? resolvedWorktreePath;
+  const shouldBlockDiffLoading =
+    worktreeResolutionRepoPath != null &&
+    worktreeResolutionRunId != null &&
+    !hasResolvedWorktreeForCurrentContext;
+  const isWorktreeResolutionResolving =
+    worktreeResolutionRepoPath != null &&
+    worktreeResolutionRunId != null &&
+    worktreeResolutionState.status === "resolving" &&
+    worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
+    worktreeResolutionState.runId === worktreeResolutionRunId;
+  const worktreeResolutionError =
+    worktreeResolutionRepoPath != null &&
+    worktreeResolutionRunId != null &&
+    worktreeResolutionState.status === "failed" &&
+    worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
+    worktreeResolutionState.runId === worktreeResolutionRunId
+      ? worktreeResolutionState.error
+      : null;
+  const worktreeResolutionRequestKey =
+    worktreeResolutionRepoPath != null && worktreeResolutionRunId != null
+      ? `${worktreeResolutionRepoPath}::${worktreeResolutionRunId}::${worktreeResolutionRetryToken}`
+      : null;
 
   // Resolve worktree path from RunSummary when session.workingDirectory === repoPath.
   // The Rust backend always stores the correct worktreePath in RunSummary, even if
   // the session's workingDirectory was set to repoPath at creation time.
   useEffect(() => {
-    if (directWorktreePath || !repoPath || !sessionRunId) {
-      setResolvedWorktreeState(null);
+    if (!worktreeResolutionRequestKey || !worktreeResolutionRepoPath || !worktreeResolutionRunId) {
+      setWorktreeResolutionState((previous) =>
+        previous.status === "idle" ? previous : IDLE_WORKTREE_RESOLUTION_STATE,
+      );
       return;
     }
 
     let isCurrent = true;
+    setWorktreeResolutionState((previous) => {
+      if (
+        previous.status === "resolving" &&
+        previous.repoPath === worktreeResolutionRepoPath &&
+        previous.runId === worktreeResolutionRunId
+      ) {
+        return previous;
+      }
+
+      return {
+        status: "resolving",
+        repoPath: worktreeResolutionRepoPath,
+        runId: worktreeResolutionRunId,
+      };
+    });
+
     void host
-      .runsList(repoPath)
+      .runsList(worktreeResolutionRepoPath)
       .then((runs) => {
         if (!isCurrent) {
           return;
         }
 
-        const matchingRun = runs.find((run) => run.runId === sessionRunId);
-        const nextPath =
-          matchingRun && matchingRun.worktreePath !== repoPath ? matchingRun.worktreePath : null;
+        const matchingRun = runs.find((run) => run.runId === worktreeResolutionRunId);
+        if (!matchingRun) {
+          const missingRunError = buildWorktreeResolutionError(
+            worktreeResolutionRunId,
+            "Run not found in runs list response.",
+          );
+          setWorktreeResolutionState((previous) => {
+            if (
+              previous.status === "failed" &&
+              previous.repoPath === worktreeResolutionRepoPath &&
+              previous.runId === worktreeResolutionRunId &&
+              previous.error === missingRunError
+            ) {
+              return previous;
+            }
 
-        setResolvedWorktreeState((previous) => {
+            return {
+              status: "failed",
+              repoPath: worktreeResolutionRepoPath,
+              runId: worktreeResolutionRunId,
+              error: missingRunError,
+            };
+          });
+          return;
+        }
+
+        const nextPath =
+          matchingRun.worktreePath !== worktreeResolutionRepoPath ? matchingRun.worktreePath : null;
+
+        setWorktreeResolutionState((previous) => {
           if (
-            previous != null &&
-            previous.repoPath === repoPath &&
-            previous.runId === sessionRunId &&
+            previous.status === "resolved" &&
+            previous.repoPath === worktreeResolutionRepoPath &&
+            previous.runId === worktreeResolutionRunId &&
             previous.path === nextPath
           ) {
             return previous;
           }
 
           return {
-            repoPath,
-            runId: sessionRunId,
+            status: "resolved",
+            repoPath: worktreeResolutionRepoPath,
+            runId: worktreeResolutionRunId,
             path: nextPath,
           };
         });
       })
-      .catch(() => {
+      .catch((cause) => {
         if (!isCurrent) {
           return;
         }
 
-        setResolvedWorktreeState({
-          repoPath,
-          runId: sessionRunId,
-          path: null,
+        const resolutionError = buildWorktreeResolutionError(
+          worktreeResolutionRunId,
+          errorMessage(cause),
+        );
+        setWorktreeResolutionState({
+          status: "failed",
+          repoPath: worktreeResolutionRepoPath,
+          runId: worktreeResolutionRunId,
+          error: resolutionError,
         });
       });
 
     return () => {
       isCurrent = false;
     };
-  }, [directWorktreePath, repoPath, sessionRunId]);
+  }, [worktreeResolutionRepoPath, worktreeResolutionRequestKey, worktreeResolutionRunId]);
 
   // Stable refs for use in callbacks (advanced-event-handler-refs)
   const repoPathRef = useRef(repoPath);
@@ -502,12 +606,14 @@ export function useAgentStudioDiffData({
   }, []);
 
   useEffect(() => {
-    const contextKey = `${repoPath ?? ""}::${targetBranch}::${worktreePath ?? ""}`;
+    const contextKey = `${repoPath ?? ""}::${targetBranch}::${worktreePath ?? ""}::${
+      worktreeResolutionRunId ?? ""
+    }`;
     const hasContextChanged =
       requestContextKeyRef.current !== null && requestContextKeyRef.current !== contextKey;
     requestContextKeyRef.current = contextKey;
 
-    if (repoPath) {
+    if (repoPath && !shouldBlockDiffLoading) {
       if (hasContextChanged) {
         versionByScopeRef.current.target += 1;
         versionByScopeRef.current.uncommitted += 1;
@@ -525,21 +631,43 @@ export function useAgentStudioDiffData({
         workingDir: worktreePath,
         scope: diffScopeRef.current,
       });
-    } else {
-      versionByScopeRef.current.target += 1;
-      versionByScopeRef.current.uncommitted += 1;
-      inFlightScopeRequestRef.current.target = null;
-      inFlightScopeRequestRef.current.uncommitted = null;
-      requestSequenceRef.current = 0;
-      latestSharedSequenceRef.current = 0;
-      requestContextKeyRef.current = null;
-      setState(createInitialState());
-      setSelectedFile(null);
+      return;
     }
-  }, [repoPath, worktreePath, targetBranch, loadData]);
+
+    if (repoPath) {
+      if (hasContextChanged) {
+        versionByScopeRef.current.target += 1;
+        versionByScopeRef.current.uncommitted += 1;
+        inFlightScopeRequestRef.current.target = null;
+        inFlightScopeRequestRef.current.uncommitted = null;
+        requestSequenceRef.current = 0;
+        latestSharedSequenceRef.current = 0;
+        setState(createInitialState());
+        setSelectedFile(null);
+      }
+      return;
+    }
+
+    versionByScopeRef.current.target += 1;
+    versionByScopeRef.current.uncommitted += 1;
+    inFlightScopeRequestRef.current.target = null;
+    inFlightScopeRequestRef.current.uncommitted = null;
+    requestSequenceRef.current = 0;
+    latestSharedSequenceRef.current = 0;
+    requestContextKeyRef.current = null;
+    setState(createInitialState());
+    setSelectedFile(null);
+  }, [
+    repoPath,
+    worktreePath,
+    targetBranch,
+    worktreeResolutionRunId,
+    shouldBlockDiffLoading,
+    loadData,
+  ]);
 
   useEffect(() => {
-    if (!repoPath) {
+    if (!repoPath || shouldBlockDiffLoading) {
       return;
     }
 
@@ -548,11 +676,19 @@ export function useAgentStudioDiffData({
     }
 
     void loadData(true, { repoPath, targetBranch, workingDir: worktreePath, scope: diffScope });
-  }, [repoPath, worktreePath, targetBranch, diffScope, state.loadedByScope, loadData]);
+  }, [
+    repoPath,
+    worktreePath,
+    targetBranch,
+    diffScope,
+    state.loadedByScope,
+    shouldBlockDiffLoading,
+    loadData,
+  ]);
 
   // Polling — stable interval since loadData doesn't change
   useEffect(() => {
-    if (!enablePolling || !repoPath) {
+    if (!enablePolling || !repoPath || shouldBlockDiffLoading) {
       return;
     }
 
@@ -569,9 +705,23 @@ export function useAgentStudioDiffData({
     return () => {
       globalThis.clearInterval(intervalId);
     };
-  }, [enablePolling, repoPath, loadData]);
+  }, [enablePolling, repoPath, shouldBlockDiffLoading, loadData]);
 
   const activeScopeState = state.byScope[diffScope];
+  const displayError = worktreeResolutionError ?? activeScopeState.error;
+  const isLoading = state.isLoading || isWorktreeResolutionResolving;
+  const refresh = useCallback((): void => {
+    if (worktreeResolutionError != null) {
+      setWorktreeResolutionRetryToken((previous) => previous + 1);
+      return;
+    }
+
+    if (shouldBlockDiffLoading) {
+      return;
+    }
+
+    void loadData(true);
+  }, [loadData, shouldBlockDiffLoading, worktreeResolutionError]);
 
   // Memoize return value to prevent parent re-renders (rerender-memo-with-default-value)
   return useMemo<DiffDataState>(
@@ -584,9 +734,9 @@ export function useAgentStudioDiffData({
       upstreamAheadBehind: activeScopeState.upstreamAheadBehind,
       fileDiffs: activeScopeState.fileDiffs,
       fileStatuses: activeScopeState.fileStatuses,
-      isLoading: state.isLoading,
-      error: activeScopeState.error,
-      refresh: () => loadData(true),
+      isLoading,
+      error: displayError,
+      refresh,
       selectedFile,
       setSelectedFile,
       setDiffScope,
@@ -595,9 +745,10 @@ export function useAgentStudioDiffData({
       worktreePath,
       targetBranch,
       diffScope,
-      state.isLoading,
+      isLoading,
+      displayError,
       activeScopeState,
-      loadData,
+      refresh,
       selectedFile,
     ],
   );

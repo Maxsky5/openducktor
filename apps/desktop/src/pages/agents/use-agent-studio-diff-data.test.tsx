@@ -823,7 +823,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.mount();
       await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
 
-      runsListMock.mockImplementation(async () => []);
+      runsListMock.mockImplementation(async () => [{ runId: "run-2", worktreePath: "/repo" }]);
       await harness.update({
         ...createBaseArgs(),
         sessionRunId: "run-2",
@@ -831,6 +831,73 @@ describe("useAgentStudioDiffData", () => {
 
       await harness.waitFor((state) => state.worktreePath === null);
       expect(harness.getLatest().worktreePath).toBeNull();
+      expect(harness.getLatest().error).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("blocks diff loading and reports actionable error when worktree resolution fails", async () => {
+    runsListMock.mockImplementation(async () => {
+      throw new Error("runs_list unavailable");
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionRunId: "run-1",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) =>
+        (state.error ?? "").includes("Failed to resolve run worktree path for session run-1"),
+      );
+
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().worktreePath).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refresh retries failed worktree resolution before loading diff data", async () => {
+    let resolveAttempt = 0;
+    runsListMock.mockImplementation(async () => {
+      resolveAttempt += 1;
+      if (resolveAttempt === 1) {
+        throw new Error("runs_list unavailable");
+      }
+
+      return [{ runId: "run-1", worktreePath: "/repo/.worktrees/run-1" }];
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionRunId: "run-1",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) =>
+        (state.error ?? "").includes("Failed to resolve run worktree path for session run-1"),
+      );
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
+
+      await harness.run((state) => {
+        state.refresh();
+      });
+
+      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(runsListMock).toHaveBeenCalledTimes(2);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        1,
+        "/repo",
+        "origin/main",
+        "target",
+        "/repo/.worktrees/run-1",
+      );
+      expect(harness.getLatest().error).toBeNull();
     } finally {
       await harness.unmount();
     }
