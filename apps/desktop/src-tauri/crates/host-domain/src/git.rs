@@ -41,8 +41,17 @@ pub struct GitPullRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum GitPullResult {
-    Pulled { output: String },
-    UpToDate { output: String },
+    Pulled {
+        output: String,
+    },
+    UpToDate {
+        output: String,
+    },
+    Conflicts {
+        #[serde(rename = "conflictedFiles")]
+        conflicted_files: Vec<String>,
+        output: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -250,6 +259,22 @@ mod tests {
             result,
             GitPullResult::UpToDate {
                 output: "Already up to date.".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_pull_conflicts_keeps_conflicted_files() {
+        let result = GitPullResult::Conflicts {
+            conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+            output: "pull stopped due to conflicts".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitPullResult::Conflicts {
+                conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+                output: "pull stopped due to conflicts".to_string(),
             }
         );
     }

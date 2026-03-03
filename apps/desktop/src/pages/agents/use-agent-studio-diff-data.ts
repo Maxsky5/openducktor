@@ -229,10 +229,13 @@ export function useAgentStudioDiffData({
     target: 0,
     uncommitted: 0,
   });
+  const requestSequenceRef = useRef(0);
+  const latestSharedSequenceRef = useRef(0);
   const inFlightScopeRequestRef = useRef<Record<DiffScope, string | null>>({
     target: null,
     uncommitted: null,
   });
+  const requestContextKeyRef = useRef<string | null>(null);
 
   // Derive stable primitives
   const targetBranch = normalizeCanonicalTargetBranch(defaultTargetBranch);
@@ -334,6 +337,7 @@ export function useAgentStudioDiffData({
 
     inFlightScopeRequestRef.current[scope] = requestKey;
     const version = ++versionByScopeRef.current[scope];
+    const requestSequence = ++requestSequenceRef.current;
 
     // Only show loading indicator on initial load / manual refresh — NOT on polling
     if (showLoading) {
@@ -379,20 +383,23 @@ export function useAgentStudioDiffData({
           didChange = true;
         }
 
-        for (const otherScope of ALL_SCOPES) {
-          if (otherScope === scope) {
-            continue;
-          }
+        if (requestSequence >= latestSharedSequenceRef.current) {
+          latestSharedSequenceRef.current = requestSequence;
+          for (const otherScope of ALL_SCOPES) {
+            if (otherScope === scope) {
+              continue;
+            }
 
-          const previousOtherScopeSnapshot = nextByScope[otherScope];
-          const nextOtherScopeSnapshot = mergeSharedSnapshotFields(
-            previousOtherScopeSnapshot,
-            nextFetchedScopeSnapshot,
-          );
+            const previousOtherScopeSnapshot = nextByScope[otherScope];
+            const nextOtherScopeSnapshot = mergeSharedSnapshotFields(
+              previousOtherScopeSnapshot,
+              nextFetchedScopeSnapshot,
+            );
 
-          if (!scopeSnapshotEqual(previousOtherScopeSnapshot, nextOtherScopeSnapshot)) {
-            nextByScope[otherScope] = nextOtherScopeSnapshot;
-            didChange = true;
+            if (!scopeSnapshotEqual(previousOtherScopeSnapshot, nextOtherScopeSnapshot)) {
+              nextByScope[otherScope] = nextOtherScopeSnapshot;
+              didChange = true;
+            }
           }
         }
 
@@ -455,7 +462,23 @@ export function useAgentStudioDiffData({
   }, []);
 
   useEffect(() => {
+    const contextKey = `${repoPath ?? ""}::${targetBranch}::${worktreePath ?? ""}`;
+    const hasContextChanged =
+      requestContextKeyRef.current !== null && requestContextKeyRef.current !== contextKey;
+    requestContextKeyRef.current = contextKey;
+
     if (repoPath) {
+      if (hasContextChanged) {
+        versionByScopeRef.current.target += 1;
+        versionByScopeRef.current.uncommitted += 1;
+        inFlightScopeRequestRef.current.target = null;
+        inFlightScopeRequestRef.current.uncommitted = null;
+        requestSequenceRef.current = 0;
+        latestSharedSequenceRef.current = 0;
+        setState(createInitialState());
+        setSelectedFile(null);
+      }
+
       void loadData(true, {
         repoPath,
         targetBranch,
@@ -467,6 +490,9 @@ export function useAgentStudioDiffData({
       versionByScopeRef.current.uncommitted += 1;
       inFlightScopeRequestRef.current.target = null;
       inFlightScopeRequestRef.current.uncommitted = null;
+      requestSequenceRef.current = 0;
+      latestSharedSequenceRef.current = 0;
+      requestContextKeyRef.current = null;
       setState(createInitialState());
       setSelectedFile(null);
     }

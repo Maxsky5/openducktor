@@ -277,6 +277,34 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  test("reports pull conflicts with actionable file list", async () => {
+    gitPullBranchMock.mockImplementationOnce(async () => ({
+      outcome: "conflicts",
+      conflictedFiles: ["src/main.ts", "src/lib.ts"],
+      output: "Automatic merge failed; fix conflicts and then commit the result.",
+    }));
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await state.pullFromUpstream();
+      });
+
+      expect(toastSuccessMock).toHaveBeenCalledTimes(0);
+      expect(toastErrorMock).toHaveBeenCalledWith("Pull requires conflict resolution", {
+        description: "Pull stopped due to conflicts in: src/main.ts, src/lib.ts.",
+      });
+      expect(harness.getLatest().rebaseError).toBe(
+        "Pull stopped due to conflicts in: src/main.ts, src/lib.ts.",
+      );
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps failure state isolated when rebase fails", async () => {
     const rebaseDeferred = createDeferred<{ outcome: string }>();
     gitRebaseBranchMock.mockImplementationOnce(() => rebaseDeferred.promise);

@@ -49,6 +49,11 @@ export const gitPullBranchResultSchema = z.discriminatedUnion("outcome", [
     outcome: z.literal("up_to_date"),
     output: z.string(),
   }),
+  z.object({
+    outcome: z.literal("conflicts"),
+    conflictedFiles: z.array(z.string()),
+    output: z.string(),
+  }),
 ]);
 export type GitPullBranchResult = z.infer<typeof gitPullBranchResultSchema>;
 

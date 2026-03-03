@@ -565,6 +565,27 @@ describe("TauriHostClient", () => {
     await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
   });
 
+  test("git pull parses typed conflicts outcome", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_pull_branch") {
+        return {
+          outcome: "conflicts",
+          conflictedFiles: ["src/index.ts"],
+          output: "Automatic merge failed; fix conflicts and then commit the result.",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.gitPullBranch("/repo");
+
+    expect(result).toEqual({
+      outcome: "conflicts",
+      conflictedFiles: ["src/index.ts"],
+      output: "Automatic merge failed; fix conflicts and then commit the result.",
+    });
+  });
+
   test("build and human workflow commands use expected IPC routes", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "build_blocked") {

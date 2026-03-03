@@ -35,6 +35,17 @@ impl GitCliPort {
     ) -> Result<(bool, String, String)> {
         run_command_allow_failure_with_env("git", args, Some(repo_path), &GIT_NON_INTERACTIVE_ENV)
     }
+
+    fn conflicted_files(&self, repo_path: &Path) -> Result<Vec<String>> {
+        let (_, conflicted_stdout, _) =
+            self.run_git_allow_failure(repo_path, &["diff", "--name-only", "--diff-filter=U"])?;
+        Ok(conflicted_stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>())
+    }
 }
 
 impl GitPort for GitCliPort {
@@ -231,6 +242,15 @@ impl GitPort for GitCliPort {
             } else {
                 output
             };
+
+            let conflicted_files = self.conflicted_files(repo_path)?;
+            if !conflicted_files.is_empty() {
+                return Ok(GitPullResult::Conflicts {
+                    conflicted_files,
+                    output: detail,
+                });
+            }
+
             return Err(anyhow!("git pull failed: {}", detail));
         }
 
@@ -425,14 +445,7 @@ impl GitPort for GitCliPort {
             return Ok(GitRebaseBranchResult::Rebased { output });
         }
 
-        let (_, conflicted_stdout, _conflicted_stderr) =
-            self.run_git_allow_failure(repo_path, &["diff", "--name-only", "--diff-filter=U"])?;
-        let conflicted_files = conflicted_stdout
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(ToString::to_string)
-            .collect::<Vec<_>>();
+        let conflicted_files = self.conflicted_files(repo_path)?;
 
         if !conflicted_files.is_empty() {
             return Ok(GitRebaseBranchResult::Conflicts {
@@ -628,11 +641,7 @@ fn split_diff_by_file(full_diff: &str) -> Vec<(String, String)> {
             current_diff.clear();
 
             // Extract file path from "diff --git a/path b/path"
-            let file = line
-                .strip_prefix("diff --git a/")
-                .and_then(|rest| rest.split(" b/").last())
-                .unwrap_or("")
-                .to_string();
+            let file = parse_diff_git_new_path(line).unwrap_or_default();
             current_file = Some(file);
             current_diff.push_str(line);
             current_diff.push('\n');
@@ -647,6 +656,41 @@ fn split_diff_by_file(full_diff: &str) -> Vec<(String, String)> {
     }
 
     results
+}
+
+fn parse_diff_git_new_path(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("diff --git ")?;
+    let (_old_path, remaining) = parse_diff_git_header_token(rest)?;
+    let (new_path, _tail) = parse_diff_git_header_token(remaining)?;
+    new_path.strip_prefix("b/").map(ToString::to_string)
+}
+
+fn parse_diff_git_header_token(input: &str) -> Option<(String, &str)> {
+    let input = input.trim_start();
+    if input.is_empty() {
+        return None;
+    }
+
+    if let Some(quoted) = input.strip_prefix('"') {
+        let mut escaped = false;
+        for (index, ch) in quoted.char_indices() {
+            if ch == '"' && !escaped {
+                let token = quoted[..index].to_string();
+                let remaining = &quoted[index + 1..];
+                return Some((token, remaining));
+            }
+
+            if ch == '\\' && !escaped {
+                escaped = true;
+            } else {
+                escaped = false;
+            }
+        }
+        return None;
+    }
+
+    let token_end = input.find(' ').unwrap_or(input.len());
+    Some((input[..token_end].to_string(), &input[token_end..]))
 }
 
 fn infer_diff_type(diff: &str) -> String {
@@ -1267,6 +1311,9 @@ mod tests {
             GitPullResult::Pulled { .. } => {
                 panic!("expected up-to-date outcome when upstream has no new commits");
             }
+            GitPullResult::Conflicts { .. } => {
+                panic!("expected up-to-date outcome when upstream has no new commits");
+            }
         }
     }
 
@@ -1332,6 +1379,82 @@ mod tests {
             pulled_file.exists(),
             "rebased pull should include upstream commit changes"
         );
+    }
+
+    #[test]
+    fn pull_branch_returns_conflicts_when_rebase_encounters_conflicts() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("pull-diverged-conflicts");
+        let remote = setup_bare_remote("pull-diverged-conflicts-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        fs::write(repo.path.join("conflict.txt"), "local\n")
+            .expect("local conflict file should write");
+        run_git_ok(&repo.path, &["add", "conflict.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "local conflict change"]);
+
+        let clone_root = TempPath::new("pull-diverged-conflicts-clone");
+        let clone_repo = clone_root.path.join("repo");
+        run_git_ok(
+            &clone_root.path,
+            &[
+                "clone",
+                remote_path.as_str(),
+                clone_repo.to_string_lossy().as_ref(),
+            ],
+        );
+        run_git_ok(
+            &clone_repo,
+            &["config", "user.email", "tests@openducktor.local"],
+        );
+        run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+        fs::write(clone_repo.join("conflict.txt"), "upstream\n")
+            .expect("upstream conflict file should write");
+        run_git_ok(&clone_repo, &["add", "conflict.txt"]);
+        run_git_ok(&clone_repo, &["commit", "-m", "upstream conflict change"]);
+        run_git_ok(&clone_repo, &["push", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        let result = git
+            .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+            .expect("diverged pull with conflicts should return typed conflict result");
+
+        match result {
+            GitPullResult::Conflicts {
+                conflicted_files,
+                output,
+            } => {
+                assert!(
+                    conflicted_files.iter().any(|path| path == "conflict.txt"),
+                    "conflict list should include conflict.txt"
+                );
+                assert!(
+                    !output.trim().is_empty(),
+                    "conflict outcome should include actionable output"
+                );
+            }
+            GitPullResult::Pulled { .. } | GitPullResult::UpToDate { .. } => {
+                panic!("expected pull conflicts outcome for diverged conflicting histories");
+            }
+        }
+    }
+
+    #[test]
+    fn split_diff_by_file_parses_quoted_paths_with_b_slash_segment() {
+        let full_diff = "diff --git \"a/src/space b/path.ts\" \"b/src/space b/path.ts\"\nindex 123..456 100644\n--- \"a/src/space b/path.ts\"\n+++ \"b/src/space b/path.ts\"\n@@ -1 +1 @@\n-old\n+new\n";
+
+        let split = super::split_diff_by_file(full_diff);
+        assert_eq!(split.len(), 1);
+        assert_eq!(split[0].0, "src/space b/path.ts");
+        assert!(split[0].1.contains("@@ -1 +1 @@"));
     }
 
     #[test]

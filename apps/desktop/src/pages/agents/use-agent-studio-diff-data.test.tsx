@@ -339,6 +339,56 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("reloads inactive scope after repository context changes", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      repoPath: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor((state) => state.diffScope === "target");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+
+      await harness.update({
+        ...createBaseArgs(),
+        repoPath: "/repo-b",
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        3,
+        "/repo-b",
+        "origin/main",
+        "target",
+        undefined,
+      );
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 4);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        4,
+        "/repo-b",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not drop same-scope reload when context changes during in-flight request", async () => {
     const firstRequest = createDeferred<GitWorktreeStatus>();
     const secondRequest = createDeferred<GitWorktreeStatus>();
@@ -514,6 +564,97 @@ describe("useAgentStudioDiffData", () => {
       expect(harness.getLatest().branch).toBeNull();
       expect(harness.getLatest().fileDiffs).toEqual([]);
       expect(harness.getLatest().fileStatuses).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps newer shared fields when older response resolves from another scope", async () => {
+    const targetRequest = createDeferred<GitWorktreeStatus>();
+    const uncommittedRequest = createDeferred<GitWorktreeStatus>();
+    const queue = [targetRequest, uncommittedRequest];
+
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        const deferred = queue.shift();
+        if (!deferred) {
+          throw new Error("No deferred response left");
+        }
+
+        return deferred.promise.then((snapshot) => ({
+          ...snapshot,
+          snapshot: {
+            ...snapshot.snapshot,
+            targetBranch,
+            diffScope: diffScope ?? snapshot.snapshot.diffScope,
+            effectiveWorkingDir: workingDir ?? snapshot.snapshot.effectiveWorkingDir,
+          },
+        }));
+      },
+    );
+
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      uncommittedRequest.resolve({
+        currentBranch: { name: "feature/newer", detached: false },
+        fileStatuses: [{ path: "src/newer.ts", status: "M", staged: false }],
+        fileDiffs: [],
+        targetAheadBehind: { ahead: 2, behind: 1 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 4, behind: 1 },
+        snapshot: {
+          effectiveWorkingDir: "/repo",
+          targetBranch: "origin/main",
+          diffScope: "uncommitted",
+          observedAtMs: 1731000004000,
+        },
+      });
+      await harness.waitFor((state) => state.branch === "feature/newer");
+
+      targetRequest.resolve({
+        currentBranch: { name: "feature/older", detached: false },
+        fileStatuses: [{ path: "src/older.ts", status: "M", staged: false }],
+        fileDiffs: [
+          {
+            file: "src/older.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 0,
+            diff: "@@ -1 +1 @@",
+          },
+        ],
+        targetAheadBehind: { ahead: 0, behind: 0 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+        snapshot: {
+          effectiveWorkingDir: "/repo",
+          targetBranch: "origin/main",
+          diffScope: "target",
+          observedAtMs: 1731000003000,
+        },
+      });
+
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      const latest = harness.getLatest();
+      expect(latest.diffScope).toBe("uncommitted");
+      expect(latest.branch).toBe("feature/newer");
+      expect(latest.fileStatuses[0]?.path).toBe("src/newer.ts");
+      expect(latest.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
     } finally {
       await harness.unmount();
     }

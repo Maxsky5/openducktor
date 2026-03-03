@@ -299,11 +299,17 @@ describe("runtime schemas", () => {
       outcome: "up_to_date",
       output: "Already up to date.",
     });
+    const conflictsResult = gitPullBranchResultSchema.parse({
+      outcome: "conflicts",
+      conflictedFiles: ["src/main.ts"],
+      output: "Automatic merge failed; fix conflicts and then commit the result.",
+    });
 
     expect(pullRequest.repoPath).toBe("/repo");
     expect(pullRequest.workingDir).toBeUndefined();
     expect(pullResult.outcome).toBe("pulled");
     expect(upToDateResult.outcome).toBe("up_to_date");
+    expect(conflictsResult.outcome).toBe("conflicts");
   });
 
   test("git pull branch result rejects unknown and malformed payloads", () => {
@@ -317,6 +323,13 @@ describe("runtime schemas", () => {
     expect(() =>
       gitPullBranchResultSchema.parse({
         outcome: "pulled",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitPullBranchResultSchema.parse({
+        outcome: "conflicts",
+        output: "needs files",
       }),
     ).toThrow();
   });

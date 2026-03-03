@@ -181,6 +181,18 @@ export function useAgentStudioGitActions({
     setRebaseError(null);
     try {
       const result = await host.gitPullBranch(repoPath, workingDir ?? undefined);
+
+      if (result.outcome === "conflicts") {
+        const message =
+          result.conflictedFiles.length > 0
+            ? `Pull stopped due to conflicts in: ${result.conflictedFiles.join(", ")}.`
+            : "Pull stopped due to conflicts.";
+        setRebaseError(message);
+        toast.error("Pull requires conflict resolution", { description: message });
+        await refreshDiffData();
+        return;
+      }
+
       clearActionErrors();
       toast.success(
         result.outcome === "up_to_date" ? "Already up to date" : "Pulled from upstream",
