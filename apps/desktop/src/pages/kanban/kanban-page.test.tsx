@@ -228,8 +228,18 @@ describe("KanbanPage session start modal flow", () => {
       | undefined;
     const toastDescription = toastCall?.[1]?.description;
     expect(isValidElement(toastDescription)).toBe(true);
-    if (isValidElement<{ className?: string }>(toastDescription)) {
-      expect(toastDescription.props.className).toContain("cursor-pointer");
+    if (isValidElement(toastDescription)) {
+      let toastDescriptionRenderer!: ReactTestRenderer;
+      await act(async () => {
+        toastDescriptionRenderer = create(toastDescription);
+      });
+
+      const actionButton = toastDescriptionRenderer.root.findByType("button");
+      expect(actionButton.props.className).toContain("cursor-pointer");
+
+      await act(async () => {
+        toastDescriptionRenderer.unmount();
+      });
     }
 
     await act(async () => {

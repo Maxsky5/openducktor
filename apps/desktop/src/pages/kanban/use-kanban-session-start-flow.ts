@@ -10,6 +10,7 @@ import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-sl
 import { firstScenario, kickoffPromptForScenario } from "../agents/agents-page-constants";
 import { useSessionStartModalCoordinator } from "../shared/use-session-start-modal-coordinator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
+import { buildSessionStartedToastDescription } from "./session-started-toast-action";
 
 type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
@@ -171,14 +172,10 @@ export function useKanbanSessionStartFlow({
             const roleLabel = AGENT_ROLE_LABELS[intent.role] ?? intent.role.toUpperCase();
             toast.success(`Started ${roleLabel} session in background for ${intent.taskId}.`, {
               duration: 10000,
-              description: (
-                <button
-                  type="button"
-                  className="w-fit cursor-pointer p-0 text-sm font-medium text-foreground underline underline-offset-2"
-                  onClick={() => openSessionInAgentStudio(intent, sessionId)}
-                >
-                  Open in Agent Studio
-                </button>
+              description: buildSessionStartedToastDescription(
+                intent,
+                sessionId,
+                openSessionInAgentStudio,
               ),
             });
           } else {
