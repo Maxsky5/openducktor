@@ -11,19 +11,15 @@ import TestRenderer, { act } from "react-test-renderer";
 const TEST_RENDERER_DEPRECATION_WARNING = "react-test-renderer is deprecated";
 const originalConsoleError = console.error;
 
-mock.module("@/components/ui/tooltip", async () => {
-  const React = await import("react");
-  return {
-    TooltipProvider: ({ children }: { children: React.ReactNode }) =>
-      createElement(React.Fragment, null, children),
-    Tooltip: ({ children }: { children: React.ReactNode }) =>
-      createElement(React.Fragment, null, children),
-    TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
-      createElement(React.Fragment, null, children),
-    TooltipContent: ({ children }: { children: React.ReactNode }) =>
-      createElement("div", null, children),
-  };
-});
+mock.module("@/components/ui/tooltip", () => ({
+  TooltipProvider: ({ children }: { children: React.ReactNode }) =>
+    createElement("div", null, children),
+  Tooltip: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
+    createElement("div", null, children),
+  TooltipContent: ({ children }: { children: React.ReactNode }) =>
+    createElement("div", null, children),
+}));
 
 mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
   PierreDiffPreloader: () => null,

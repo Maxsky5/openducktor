@@ -1,8 +1,13 @@
 const REACT_TEST_RENDERER_DEPRECATION = "react-test-renderer is deprecated";
 const ORCHESTRATOR_WARN_PREFIX = "[agent-orchestrator]";
+const MULTIPLE_RENDERER_CONTEXT_WARNING =
+  "Detected multiple renderers concurrently rendering the same context provider";
 
 const isReactTestRendererDeprecation = (value: unknown): boolean =>
   typeof value === "string" && value.includes(REACT_TEST_RENDERER_DEPRECATION);
+
+const isMultipleRendererContextWarning = (value: unknown): boolean =>
+  typeof value === "string" && value.includes(MULTIPLE_RENDERER_CONTEXT_WARNING);
 
 const isExpectedOrchestratorWarning = (args: unknown[]): boolean => {
   const [firstArg] = args;
@@ -14,7 +19,11 @@ const isExpectedOrchestratorWarning = (args: unknown[]): boolean => {
 
 const shouldSuppressConsoleMessage = (args: unknown[]): boolean => {
   const [firstArg] = args;
-  return isReactTestRendererDeprecation(firstArg) || isExpectedOrchestratorWarning(args);
+  return (
+    isReactTestRendererDeprecation(firstArg) ||
+    isMultipleRendererContextWarning(firstArg) ||
+    isExpectedOrchestratorWarning(args)
+  );
 };
 
 const originalConsoleError = console.error;

@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --preload ./src/test-utils/bun-test-preload.ts --pass-with-no-tests --dots",
+    "test": "bun test --pass-with-no-tests",
     "lint": "biome check src"
   },
   "dependencies": {
