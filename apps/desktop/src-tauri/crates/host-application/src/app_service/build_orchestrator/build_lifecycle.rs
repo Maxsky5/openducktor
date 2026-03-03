@@ -196,7 +196,7 @@ impl AppService {
             _opencode_process_guard: Some(opencode_process_guard),
             repo_path: prerequisites.repo_path,
             task_id,
-            worktree_path: worktree_path.clone(),
+            worktree_path,
             repo_config: prerequisites.repo_config,
         };
 
@@ -236,11 +236,13 @@ impl AppService {
             .ok_or_else(|| anyhow!("Invalid worktree path"))
             .map(|path| path.to_string())
             .or_else(|error| Self::abort_started_build(&mut spawned_agent, error))?;
+        let run_id_string = run_id.to_string();
+        let task_id_string = task_id.to_string();
 
         let summary = RunSummary {
-            run_id: run_id.to_string(),
+            run_id: run_id_string.clone(),
             repo_path: prerequisites.repo_path.clone(),
-            task_id: task_id.to_string(),
+            task_id: task_id_string.clone(),
             branch: prerequisites.branch.clone(),
             worktree_path: worktree_path.clone(),
             port: spawned_agent.port,
@@ -250,10 +252,10 @@ impl AppService {
         };
 
         self.register_build_run(BuildRunRegistration {
-            run_id: run_id.to_string(),
+            run_id: run_id_string,
             summary,
             prerequisites,
-            task_id: task_id.to_string(),
+            task_id: task_id_string,
             worktree_path,
             spawned_agent,
             emitter,

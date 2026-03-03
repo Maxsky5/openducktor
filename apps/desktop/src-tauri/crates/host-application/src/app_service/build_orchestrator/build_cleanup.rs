@@ -93,8 +93,8 @@ impl AppService {
         run: &mut RunProcess,
         emitter: &RunEmitter,
     ) -> Result<bool> {
-        let post_complete_hooks = run.repo_config.hooks.post_complete.clone();
-        for hook in post_complete_hooks {
+        for hook_index in 0..run.repo_config.hooks.post_complete.len() {
+            let hook = run.repo_config.hooks.post_complete[hook_index].clone();
             self.emit_cleanup_events(
                 emitter,
                 run_id,
