@@ -5,7 +5,7 @@ use super::{
     TrackedOpencodeProcessGuard,
 };
 use anyhow::{anyhow, Result};
-use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary, RuntimeRole};
+use host_domain::{now_rfc3339, AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeRole};
 use host_infra_system::pick_free_port;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -190,10 +190,11 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        role: RuntimeRole,
+        role: AgentRuntimeRole,
     ) -> Result<AgentRuntimeSummary> {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
+        let runtime_role = RuntimeRole::from(role);
         let prerequisites = match self.resolve_runtime_prerequisites(repo_path, task_id, role)? {
             RuntimePrerequisiteResolution::Existing(existing) => return Ok(existing),
             RuntimePrerequisiteResolution::Ready(prerequisites) => prerequisites,
@@ -204,7 +205,7 @@ impl AppService {
             repo_path,
             repo_key: repo_key.clone(),
             task_id,
-            role,
+            role: runtime_role,
             working_directory: prerequisites.working_directory,
             cleanup_repo_path: prerequisites.cleanup_repo_path,
             cleanup_worktree_path: prerequisites.cleanup_worktree_path,
@@ -213,7 +214,7 @@ impl AppService {
             post_start_policy: Some(RuntimePostStartPolicy {
                 existing_lookup: RuntimeExistingLookup {
                     repo_key: repo_key.as_str(),
-                    role,
+                    role: runtime_role,
                     task_id: Some(task_id),
                 },
                 prune_error_context: format!(
@@ -227,18 +228,8 @@ impl AppService {
         &self,
         repo_key: &str,
         task_id: &str,
-        role: RuntimeRole,
+        role: AgentRuntimeRole,
     ) -> Result<RuntimePrerequisiteResolution> {
-        match role {
-            RuntimeRole::Workspace => {
-                return Err(anyhow!(
-                    "Unsupported agent runtime role: {}. Supported: spec, planner, qa",
-                    role
-                ));
-            }
-            RuntimeRole::Spec | RuntimeRole::Planner | RuntimeRole::Qa => {}
-        }
-
         let tasks = self.task_store.list_tasks(Path::new(repo_key))?;
         let task = tasks
             .iter()
@@ -256,7 +247,7 @@ impl AppService {
                 &runtimes,
                 RuntimeExistingLookup {
                     repo_key,
-                    role,
+                    role: role.into(),
                     task_id: Some(task_id),
                 },
             ) {
@@ -265,7 +256,7 @@ impl AppService {
         }
 
         let prerequisites = match role {
-            RuntimeRole::Qa => {
+            AgentRuntimeRole::Qa => {
                 let setup = prepare_qa_worktree(
                     repo_key,
                     task_id,
@@ -278,12 +269,11 @@ impl AppService {
                     cleanup_worktree_path: Some(setup.worktree_path),
                 }
             }
-            RuntimeRole::Spec | RuntimeRole::Planner => RuntimePrerequisites {
+            AgentRuntimeRole::Spec | AgentRuntimeRole::Planner => RuntimePrerequisites {
                 working_directory: repo_key.to_string(),
                 cleanup_repo_path: None,
                 cleanup_worktree_path: None,
             },
-            RuntimeRole::Workspace => unreachable!("workspace role is rejected above"),
         };
 
         Ok(RuntimePrerequisiteResolution::Ready(prerequisites))

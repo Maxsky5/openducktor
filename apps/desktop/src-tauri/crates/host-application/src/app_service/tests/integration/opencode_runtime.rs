@@ -2,9 +2,9 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    RuntimeRole, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeRole, AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch,
+    GitCurrentBranch, GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, RuntimeRole, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -205,23 +205,17 @@ fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
     )?;
 
     let spec_runtime =
-        service.opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Spec)?;
+        service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)?;
     assert_eq!(spec_runtime.role, RuntimeRole::Spec);
     assert!(service.opencode_runtime_stop(spec_runtime.runtime_id.as_str())?);
 
-    let qa_runtime = service.opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Qa)?;
+    let qa_runtime =
+        service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)?;
     assert_eq!(qa_runtime.role, RuntimeRole::Qa);
     let qa_worktree = PathBuf::from(qa_runtime.working_directory.clone());
     assert!(qa_worktree.exists());
     assert!(service.opencode_runtime_stop(qa_runtime.runtime_id.as_str())?);
     assert!(!qa_worktree.exists());
-
-    let bad_role = service
-        .opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Workspace)
-        .expect_err("unsupported role should fail");
-    assert!(bad_role
-        .to_string()
-        .contains("Unsupported agent runtime role"));
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -251,8 +245,11 @@ fn opencode_runtime_start_persists_canonical_repo_path_in_summary() -> Result<()
         config_store,
     );
     let repo_path_with_suffix = format!("{}/.", repo.to_string_lossy());
-    let runtime =
-        service.opencode_runtime_start(repo_path_with_suffix.as_str(), "task-1", RuntimeRole::Spec)?;
+    let runtime = service.opencode_runtime_start(
+        repo_path_with_suffix.as_str(),
+        "task-1",
+        AgentRuntimeRole::Spec,
+    )?;
 
     let expected_repo_key = fs::canonicalize(&repo)?.to_string_lossy().to_string();
     assert_eq!(runtime.repo_path, expected_repo_key);
@@ -280,7 +277,7 @@ fn opencode_runtime_start_reports_missing_task() -> Result<()> {
 
     let repo_path = repo.to_string_lossy().to_string();
     let error = service
-        .opencode_runtime_start(repo_path.as_str(), "missing-task", RuntimeRole::Spec)
+        .opencode_runtime_start(repo_path.as_str(), "missing-task", AgentRuntimeRole::Spec)
         .expect_err("missing task should fail");
     assert!(error.to_string().contains("Task not found: missing-task"));
     let _ = fs::remove_dir_all(root);
@@ -319,7 +316,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
         },
     )?;
     let missing_base_error = service
-        .opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Qa)
+        .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
         .expect_err("qa runtime should require worktree base path");
     assert!(missing_base_error
         .to_string()
@@ -341,7 +338,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
         },
     )?;
     let trust_error = service
-        .opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Qa)
+        .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
         .expect_err("qa runtime should reject untrusted hooks");
     assert!(trust_error
         .to_string()
@@ -361,7 +358,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
     )?;
     fs::create_dir_all(worktree_base.join("qa-task-1"))?;
     let existing_path_error = service
-        .opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Qa)
+        .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
         .expect_err("existing qa worktree should fail");
     assert!(existing_path_error
         .to_string()
@@ -408,7 +405,7 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
     )?;
 
     let error = service
-        .opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Qa)
+        .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
         .expect_err("cleanup failure should be surfaced when pre-start hook fails");
     let message = error.to_string();
     assert!(message.contains("QA pre-start hook failed"));
@@ -457,7 +454,7 @@ fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Resu
     )?;
 
     let error = service
-        .opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Qa)
+        .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
         .expect_err("startup cleanup failure should be surfaced");
     let message = error.to_string();
     assert!(message.contains("OpenCode runtime failed to start for task task-1"));
@@ -491,8 +488,10 @@ fn opencode_runtime_start_reuses_existing_runtime_for_same_task_and_role() -> Re
     );
     let repo_path = repo.to_string_lossy().to_string();
 
-    let first = service.opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Spec)?;
-    let second = service.opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Spec)?;
+    let first =
+        service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)?;
+    let second =
+        service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)?;
     assert_eq!(first.runtime_id, second.runtime_id);
     assert!(service.opencode_runtime_stop(first.runtime_id.as_str())?);
     let _ = fs::remove_dir_all(root);
@@ -526,9 +525,13 @@ fn opencode_runtime_start_deduplicates_concurrent_same_task_and_role() -> Result
 
     let (first, second) = thread::scope(|scope| {
         let first_start =
-            scope.spawn(|| service.opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Spec));
+            scope.spawn(|| {
+                service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)
+            });
         let second_start =
-            scope.spawn(|| service.opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Spec));
+            scope.spawn(|| {
+                service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)
+            });
         (
             first_start
                 .join()
@@ -680,7 +683,7 @@ fn opencode_runtime_start_cleans_up_qa_worktree_when_tracking_fails() -> Result<
     assert!(poison_handle.join().is_err());
 
     let error = service
-        .opencode_runtime_start(repo_path.as_str(), "task-1", RuntimeRole::Qa)
+        .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
         .expect_err("qa runtime start should fail when tracked process lock is poisoned");
     assert!(error
         .to_string()

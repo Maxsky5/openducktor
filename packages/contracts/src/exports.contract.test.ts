@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type {
   AgentModelDefault,
   AgentRole,
+  AgentRuntimeStartRole,
   AgentRuntimeSummary,
+  AgentRuntimeSummaryRole,
   AgentScenario,
   AgentSessionModelSelection,
   AgentSessionRecord,
@@ -67,7 +69,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentModelDefaultSchema",
   "agentToolNameSchema",
   "agentToolNameValues",
+  "agentRuntimeStartRoleSchema",
   "agentRuntimeSummarySchema",
+  "agentRuntimeSummaryRoleSchema",
   "agentSessionModelSelectionSchema",
   "agentSessionRecordSchema",
   "agentSessionRoleSchema",
@@ -125,7 +129,9 @@ type ExportedTypeContract = {
   AgentRole: AgentRole;
   AgentModelDefault: AgentModelDefault;
   AgentScenario: AgentScenario;
+  AgentRuntimeStartRole: AgentRuntimeStartRole;
   AgentRuntimeSummary: AgentRuntimeSummary;
+  AgentRuntimeSummaryRole: AgentRuntimeSummaryRole;
   AgentSessionModelSelection: AgentSessionModelSelection;
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;

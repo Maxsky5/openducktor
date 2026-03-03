@@ -1,5 +1,5 @@
 use crate::{as_error, extend_runtime_errors_with_startup, run_service_blocking, AppState};
-use host_domain::{AgentRuntimeSummary, BeadsCheck, RuntimeCheck, RuntimeRole, SystemCheck};
+use host_domain::{AgentRuntimeRole, AgentRuntimeSummary, BeadsCheck, RuntimeCheck, SystemCheck};
 use tauri::State;
 
 #[tauri::command]
@@ -47,7 +47,7 @@ pub async fn opencode_runtime_start(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
-    role: RuntimeRole,
+    role: AgentRuntimeRole,
 ) -> Result<AgentRuntimeSummary, String> {
     let service = state.service.clone();
     let result = run_service_blocking("opencode_runtime_start", move || {
@@ -81,4 +81,49 @@ pub async fn opencode_repo_runtime_ensure(
     })
     .await;
     as_error(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AgentRuntimeRole;
+    use serde::Deserialize;
+    use serde_json::json;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct OpencodeRuntimeStartPayload {
+        repo_path: String,
+        task_id: String,
+        role: AgentRuntimeRole,
+    }
+
+    #[test]
+    fn opencode_runtime_start_payload_accepts_spec_role() {
+        let payload = json!({
+            "repoPath": "/repo",
+            "taskId": "task-1",
+            "role": "spec",
+        });
+        let parsed: OpencodeRuntimeStartPayload =
+            serde_json::from_value(payload).expect("payload should deserialize");
+        assert_eq!(parsed.repo_path, "/repo");
+        assert_eq!(parsed.task_id, "task-1");
+        assert_eq!(parsed.role, AgentRuntimeRole::Spec);
+    }
+
+    #[test]
+    fn opencode_runtime_start_payload_rejects_workspace_role() {
+        let payload = json!({
+            "repoPath": "/repo",
+            "taskId": "task-1",
+            "role": "workspace",
+        });
+        let error = serde_json::from_value::<OpencodeRuntimeStartPayload>(payload)
+            .expect_err("workspace role should be rejected at command boundary");
+        let message = error.to_string();
+        assert!(message.contains("unknown variant `workspace`"));
+        assert!(message.contains("spec"));
+        assert!(message.contains("planner"));
+        assert!(message.contains("qa"));
+    }
 }

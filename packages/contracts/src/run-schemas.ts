@@ -52,13 +52,17 @@ export const runSummarySchema = z.object({
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
-const agentRuntimeRoleSchema = z.enum(["workspace", "spec", "planner", "qa"]);
+export const agentRuntimeSummaryRoleSchema = z.enum(["workspace", "spec", "planner", "qa"]);
+export type AgentRuntimeSummaryRole = z.infer<typeof agentRuntimeSummaryRoleSchema>;
+
+export const agentRuntimeStartRoleSchema = z.enum(["spec", "planner", "qa"]);
+export type AgentRuntimeStartRole = z.infer<typeof agentRuntimeStartRoleSchema>;
 
 export const agentRuntimeSummarySchema = z.object({
   runtimeId: z.string(),
   repoPath: z.string(),
   taskId: z.string(),
-  role: agentRuntimeRoleSchema,
+  role: agentRuntimeSummaryRoleSchema,
   workingDirectory: z.string(),
   port: z.number().int().positive(),
   startedAt: z.string(),

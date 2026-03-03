@@ -1,6 +1,8 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
 import {
+  agentRuntimeStartRoleSchema,
+  agentRuntimeSummaryRoleSchema,
   agentRuntimeSummarySchema,
   agentSessionRecordSchema,
   gitBranchSchema,
@@ -409,6 +411,12 @@ describe("runtime schemas", () => {
 
     expect(parsed.runtimeId).toBe("runtime-1");
     expect(parsed.port).toBe(4100);
+  });
+
+  test("agent runtime role schemas enforce summary vs start boundaries", () => {
+    expect(agentRuntimeSummaryRoleSchema.parse("workspace")).toBe("workspace");
+    expect(agentRuntimeStartRoleSchema.parse("spec")).toBe("spec");
+    expect(() => agentRuntimeStartRoleSchema.parse("workspace")).toThrow();
   });
 
   test("agent session record parses persisted history payload", () => {
