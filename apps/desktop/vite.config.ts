@@ -56,6 +56,15 @@ const MARKDOWN_SUPPORT_PACKAGES = new Set([
   "vfile-message",
   "zwitch",
 ]);
+const MARKDOWN_PACKAGE_PREFIXES = [
+  "remark-",
+  "rehype-",
+  "mdast-",
+  "micromark",
+  "hast-",
+  "unist-",
+  "vfile",
+];
 const VIRTUAL_VENDOR_PACKAGES = new Set(["@tanstack/react-virtual", "@tanstack/virtual-core"]);
 const KEEP_NATIVE_SPLITS = [
   "@shikijs/",
@@ -76,20 +85,14 @@ function getNodeModulePackageName(id: string): string | undefined {
 
   const packagePath = normalizedId.slice(markerIndex + marker.length);
   const packageSegments = packagePath.split("/");
-  if (packageSegments.length === 0) {
-    return undefined;
-  }
-
   if (packageSegments[0]?.startsWith("@")) {
-    const scope = packageSegments[0];
-    const packageName = packageSegments[1];
-    if (!scope || !packageName) {
+    if (packageSegments.length < 2 || !packageSegments[1]) {
       return undefined;
     }
-    return `${scope}/${packageName}`;
+    return `${packageSegments[0]}/${packageSegments[1]}`;
   }
 
-  return packageSegments[0];
+  return packageSegments[0] || undefined;
 }
 
 function getVendorChunkName(id: string): string | undefined {
@@ -125,13 +128,7 @@ function getVendorChunkName(id: string): string | undefined {
   if (
     MARKDOWN_VENDOR_PACKAGES.has(packageName) ||
     MARKDOWN_SUPPORT_PACKAGES.has(packageName) ||
-    packageName.startsWith("remark-") ||
-    packageName.startsWith("rehype-") ||
-    packageName.startsWith("mdast-") ||
-    packageName.startsWith("micromark") ||
-    packageName.startsWith("hast-") ||
-    packageName.startsWith("unist-") ||
-    packageName.startsWith("vfile")
+    MARKDOWN_PACKAGE_PREFIXES.some((prefix) => packageName.startsWith(prefix))
   ) {
     return "vendor-markdown";
   }
