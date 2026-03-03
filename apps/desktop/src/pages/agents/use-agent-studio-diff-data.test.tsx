@@ -70,14 +70,14 @@ const createDeferred = <T,>() => {
 };
 
 const hashTestPayload = (value: unknown): string => {
-  const json = JSON.stringify(value);
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < json.length; index += 1) {
-    hash ^= json.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
+  const payload = new TextEncoder().encode(JSON.stringify(value));
+  let hash = 0xcbf29ce484222325n;
+  for (const byte of payload) {
+    hash ^= BigInt(byte);
+    hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn;
   }
 
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return hash.toString(16).padStart(16, "0");
 };
 
 const withSnapshotHashes = (
@@ -374,6 +374,105 @@ describe("useAgentStudioDiffData", () => {
     } finally {
       await harness.unmount();
       expect(clearIntervalMock).toHaveBeenCalledTimes(1);
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    }
+  });
+
+  test("polling persists hash metadata changes even when derived shared fields stay equal", async () => {
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    let intervalCallback: (() => void) | null = null;
+    let callCount = 0;
+
+    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
+      if (typeof callback !== "function") {
+        throw new Error("Expected polling callback function");
+      }
+      intervalCallback = () => {
+        callback();
+      };
+      return 1;
+    });
+    const clearIntervalMock = mock((_intervalId: number) => {});
+
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        callCount += 1;
+        const upstream: GitWorktreeStatus["upstreamAheadBehind"] =
+          callCount === 1
+            ? { outcome: "untracked", ahead: 1 }
+            : { outcome: "tracking", ahead: 1, behind: 0 };
+
+        return withSnapshotHashes({
+          currentBranch: { name: "feature/task-10", detached: false },
+          fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+          fileDiffs:
+            (diffScope ?? "target") === "target"
+              ? [
+                  {
+                    file: "src/main.ts",
+                    type: "modified",
+                    additions: 1,
+                    deletions: 0,
+                    diff: "@@ -1 +1 @@",
+                  },
+                ]
+              : [],
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: upstream,
+          snapshot: {
+            effectiveWorkingDir: workingDir ?? "/repo",
+            targetBranch,
+            diffScope: diffScope ?? "target",
+            observedAtMs: 1731000000000 + callCount,
+          },
+        });
+      },
+    );
+
+    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
+    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    const runTick = (): void => {
+      if (intervalCallback == null) {
+        throw new Error("Polling callback was not registered");
+      }
+      intervalCallback();
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      const firstState = harness.getLatest();
+      expect(firstState.upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      const secondState = harness.getLatest();
+      expect(secondState.upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
+      expect(secondState).not.toBe(firstState);
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      const thirdState = harness.getLatest();
+      expect(thirdState).toBe(secondState);
+    } finally {
+      await harness.unmount();
       globalThis.setInterval = originalSetInterval;
       globalThis.clearInterval = originalClearInterval;
     }

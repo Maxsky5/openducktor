@@ -154,6 +154,11 @@ const aheadBehindEqual = (a: CommitsAheadBehind | null, b: CommitsAheadBehind | 
   return a.ahead === b.ahead && a.behind === b.behind;
 };
 
+const hashMetadataEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean =>
+  left.hashVersion === right.hashVersion &&
+  left.statusHash === right.statusHash &&
+  left.diffHash === right.diffHash;
+
 const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean =>
   (() => {
     const canUseHashShortCircuit =
@@ -178,7 +183,8 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
       arraysEqual(left.fileStatuses, right.fileStatuses, fileStatusEqual) &&
       aheadBehindEqual(left.commitsAheadBehind, right.commitsAheadBehind) &&
       aheadBehindEqual(left.upstreamAheadBehind, right.upstreamAheadBehind) &&
-      left.error === right.error
+      left.error === right.error &&
+      hashMetadataEqual(left, right)
     );
   })();
 

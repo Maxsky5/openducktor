@@ -148,7 +148,6 @@ fn hash_optional_str(hasher: &mut Fnv1a64Hasher, value: Option<&str>) {
         }
     }
 }
-
 fn hash_upstream_ahead_behind(
     hasher: &mut Fnv1a64Hasher,
     upstream_ahead_behind: &host_domain::GitUpstreamAheadBehind,
