@@ -458,6 +458,134 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("keeps composer model stable for thread-only updates", async () => {
+    const session = createSession("session-1", "external-1");
+    const baseProps = createHookArgs({
+      core: {
+        activeSession: session,
+        sessionsForTask: [session],
+      },
+      composer: {
+        input: "draft",
+      },
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialState = harness.getLatest();
+    const initialThreadModel = initialState.agentChatModel.thread;
+    const initialComposerModel = initialState.agentChatModel.composer;
+
+    await harness.run((state) => {
+      state.agentChatModel.thread.onToggleTodoPanel();
+    });
+
+    const nextState = harness.getLatest();
+    expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
+    expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(nextState.agentChatModel.thread.todoPanelCollapsed).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("updates thread model for pending request maps without rebuilding composer", async () => {
+    const session = createSession("session-1", "external-1");
+    const baseProps = createHookArgs({
+      core: {
+        activeSession: session,
+        sessionsForTask: [session],
+      },
+      composer: {
+        input: "draft",
+      },
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialState = harness.getLatest();
+    const initialThreadModel = initialState.agentChatModel.thread;
+    const initialComposerModel = initialState.agentChatModel.composer;
+
+    const permissionUpdateProps = {
+      ...baseProps,
+      permissions: {
+        ...baseProps.permissions,
+        isSubmittingPermissionByRequestId: {
+          "perm-1": true,
+        },
+      },
+    };
+    await harness.update(permissionUpdateProps);
+
+    const permissionState = harness.getLatest();
+    const permissionThreadModel = permissionState.agentChatModel.thread;
+    expect(permissionThreadModel).not.toBe(initialThreadModel);
+    expect(permissionState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(permissionThreadModel.isSubmittingPermissionByRequestId["perm-1"]).toBe(true);
+
+    await harness.update({
+      ...permissionUpdateProps,
+      sessionActions: {
+        ...permissionUpdateProps.sessionActions,
+        isSubmittingQuestionByRequestId: {
+          "q-1": true,
+        },
+      },
+    });
+
+    const questionState = harness.getLatest();
+    expect(questionState.agentChatModel.thread).not.toBe(permissionThreadModel);
+    expect(questionState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(questionState.agentChatModel.thread.isSubmittingQuestionByRequestId["q-1"]).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("keeps composer model stable when active session reference changes with same session id", async () => {
+    const initialSession = createSession("session-1", "external-1", {
+      role: "spec",
+      status: "running",
+      isLoadingModelCatalog: false,
+    });
+    const baseProps = createHookArgs({
+      core: {
+        activeSession: initialSession,
+        sessionsForTask: [initialSession],
+      },
+      composer: {
+        input: "draft",
+      },
+      sessionActions: {
+        isSessionWorking: true,
+      },
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialComposerModel = harness.getLatest().agentChatModel.composer;
+
+    const sameSessionIdNewRef = createSession("session-1", "external-1", {
+      role: "spec",
+      status: "running",
+      isLoadingModelCatalog: false,
+    });
+    await harness.update(
+      createHookArgs({
+        ...baseProps,
+        core: {
+          ...baseProps.core,
+          activeSession: sameSessionIdNewRef,
+          sessionsForTask: [sameSessionIdNewRef],
+        },
+      }),
+    );
+
+    const nextComposerModel = harness.getLatest().agentChatModel.composer;
+    expect(nextComposerModel).toBe(initialComposerModel);
+
+    await harness.unmount();
+  });
+
   test("treats unavailable selected role as read-only and hides kickoff action", async () => {
     const unavailablePlannerTask = createTaskCardFixture({
       status: "open",

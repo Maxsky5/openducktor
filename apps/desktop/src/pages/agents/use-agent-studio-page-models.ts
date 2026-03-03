@@ -23,6 +23,20 @@ import {
   buildWorkflowModelContext,
   toChatContextUsage,
 } from "./use-agent-studio-page-model-builders";
+import type {
+  AgentStudioComposerInteractionContext,
+  AgentStudioComposerLayoutContext,
+  AgentStudioComposerReadinessContext,
+  AgentStudioComposerSelectionContext,
+  AgentStudioComposerSessionContext,
+  AgentStudioThreadKickoffContext,
+  AgentStudioThreadPermissionsContext,
+  AgentStudioThreadQuestionsContext,
+  AgentStudioThreadReadinessContext,
+  AgentStudioThreadScrollContext,
+  AgentStudioThreadSessionContext,
+  AgentStudioThreadTodoPanelContext,
+} from "./use-agent-studio-page-submodel-contracts";
 import {
   useAgentStudioComposerModel,
   useAgentStudioHeaderModel,
@@ -67,12 +81,7 @@ type AgentStudioSessionActionsContext = {
   stopAgentSession: (sessionId: string) => Promise<void>;
 };
 
-type AgentStudioReadinessContext = {
-  agentStudioReady: boolean;
-  agentStudioBlockedReason: string;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-};
+type AgentStudioReadinessContext = AgentStudioThreadReadinessContext;
 
 type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
@@ -88,11 +97,7 @@ type AgentStudioModelSelectionContext = {
   activeSessionContextUsage: AgentStudioSessionContextUsage;
 };
 
-type AgentStudioPermissionContext = {
-  isSubmittingPermissionByRequestId: Record<string, boolean>;
-  permissionReplyErrorByRequestId: Record<string, string>;
-  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
-};
+type AgentStudioPermissionContext = AgentStudioThreadPermissionsContext;
 
 type AgentStudioComposerContext = {
   input: string;
@@ -271,63 +276,187 @@ export function useAgentStudioPageModels({
     }));
   }, [activeSessionId]);
 
+  const threadSessionContext = useMemo<AgentStudioThreadSessionContext>(
+    () => ({
+      threadSession,
+      taskId: core.taskId,
+      activeSessionAgentColors: modelSelection.activeSessionAgentColors,
+    }),
+    [core.taskId, modelSelection.activeSessionAgentColors, threadSession],
+  );
+
+  const threadReadinessContext = useMemo<AgentStudioThreadReadinessContext>(
+    () => ({
+      agentStudioReady: readiness.agentStudioReady,
+      agentStudioBlockedReason: readiness.agentStudioBlockedReason,
+      isLoadingChecks: readiness.isLoadingChecks,
+      refreshChecks: readiness.refreshChecks,
+    }),
+    [
+      readiness.agentStudioBlockedReason,
+      readiness.agentStudioReady,
+      readiness.isLoadingChecks,
+      readiness.refreshChecks,
+    ],
+  );
+
+  const threadKickoffContext = useMemo<AgentStudioThreadKickoffContext>(
+    () => ({
+      canKickoffNewSession: sessionActions.canKickoffNewSession,
+      selectedRoleAvailable,
+      kickoffLabel: sessionActions.kickoffLabel,
+      startScenarioKickoff: sessionActions.startScenarioKickoff,
+      isStarting: sessionActions.isStarting,
+      isSending: sessionActions.isSending,
+    }),
+    [
+      selectedRoleAvailable,
+      sessionActions.canKickoffNewSession,
+      sessionActions.isSending,
+      sessionActions.isStarting,
+      sessionActions.kickoffLabel,
+      sessionActions.startScenarioKickoff,
+    ],
+  );
+
+  const threadQuestionContext = useMemo<AgentStudioThreadQuestionsContext>(
+    () => ({
+      isSubmittingQuestionByRequestId: sessionActions.isSubmittingQuestionByRequestId,
+      onSubmitQuestionAnswers: sessionActions.onSubmitQuestionAnswers,
+    }),
+    [sessionActions.isSubmittingQuestionByRequestId, sessionActions.onSubmitQuestionAnswers],
+  );
+
+  const threadPermissionContext = useMemo<AgentStudioThreadPermissionsContext>(
+    () => ({
+      isSubmittingPermissionByRequestId: permissions.isSubmittingPermissionByRequestId,
+      permissionReplyErrorByRequestId: permissions.permissionReplyErrorByRequestId,
+      onReplyPermission: permissions.onReplyPermission,
+    }),
+    [
+      permissions.isSubmittingPermissionByRequestId,
+      permissions.onReplyPermission,
+      permissions.permissionReplyErrorByRequestId,
+    ],
+  );
+
+  const threadTodoPanelContext = useMemo<AgentStudioThreadTodoPanelContext>(
+    () => ({
+      todoPanelCollapsed: activeTodoPanelCollapsed,
+      onToggleTodoPanel: handleToggleTodoPanel,
+      todoPanelBottomOffset,
+    }),
+    [activeTodoPanelCollapsed, handleToggleTodoPanel, todoPanelBottomOffset],
+  );
+
+  const threadScrollContext = useMemo<AgentStudioThreadScrollContext>(
+    () => ({
+      isPinnedToBottom,
+      messagesContainerRef,
+      onMessagesScroll: handleMessagesScroll,
+    }),
+    [handleMessagesScroll, isPinnedToBottom, messagesContainerRef],
+  );
+
   const agentChatThreadModel = useAgentStudioThreadModel({
-    threadSession,
-    taskId: core.taskId,
-    agentStudioReady: readiness.agentStudioReady,
-    agentStudioBlockedReason: readiness.agentStudioBlockedReason,
-    isLoadingChecks: readiness.isLoadingChecks,
-    refreshChecks: readiness.refreshChecks,
-    canKickoffNewSession: sessionActions.canKickoffNewSession,
-    selectedRoleAvailable,
-    kickoffLabel: sessionActions.kickoffLabel,
-    startScenarioKickoff: sessionActions.startScenarioKickoff,
-    isStarting: sessionActions.isStarting,
-    isSending: sessionActions.isSending,
-    activeSessionAgentColors: modelSelection.activeSessionAgentColors,
-    isSubmittingQuestionByRequestId: sessionActions.isSubmittingQuestionByRequestId,
-    onSubmitQuestionAnswers: sessionActions.onSubmitQuestionAnswers,
-    isSubmittingPermissionByRequestId: permissions.isSubmittingPermissionByRequestId,
-    permissionReplyErrorByRequestId: permissions.permissionReplyErrorByRequestId,
-    onReplyPermission: permissions.onReplyPermission,
-    todoPanelCollapsed: activeTodoPanelCollapsed,
-    onToggleTodoPanel: handleToggleTodoPanel,
-    todoPanelBottomOffset,
-    isPinnedToBottom,
-    messagesContainerRef,
-    onMessagesScroll: handleMessagesScroll,
+    session: threadSessionContext,
+    readiness: threadReadinessContext,
+    kickoff: threadKickoffContext,
+    questions: threadQuestionContext,
+    permissions: threadPermissionContext,
+    todoPanel: threadTodoPanelContext,
+    scroll: threadScrollContext,
   });
 
+  const composerSessionContext = useMemo<AgentStudioComposerSessionContext>(
+    () => ({
+      taskId: core.taskId,
+      activeSession: core.activeSession,
+      isSessionWorking: sessionActions.isSessionWorking,
+      canStopSession: sessionActions.canStopSession,
+      stopAgentSession: sessionActions.stopAgentSession,
+    }),
+    [
+      core.activeSession,
+      core.taskId,
+      sessionActions.canStopSession,
+      sessionActions.isSessionWorking,
+      sessionActions.stopAgentSession,
+    ],
+  );
+
+  const composerReadinessContext = useMemo<AgentStudioComposerReadinessContext>(
+    () => ({
+      agentStudioReady: readiness.agentStudioReady,
+      workflow: {
+        selectedRoleAvailable,
+        selectedRoleReadOnlyReason,
+      },
+    }),
+    [readiness.agentStudioReady, selectedRoleAvailable, selectedRoleReadOnlyReason],
+  );
+
+  const composerInteractionContext = useMemo<AgentStudioComposerInteractionContext>(
+    () => ({
+      input: composer.input,
+      setInput: composer.setInput,
+      onSend: sessionActions.onSend,
+      isSending: sessionActions.isSending,
+      isStarting: sessionActions.isStarting,
+      chatContextUsage,
+    }),
+    [
+      chatContextUsage,
+      composer.input,
+      composer.setInput,
+      sessionActions.isSending,
+      sessionActions.isStarting,
+      sessionActions.onSend,
+    ],
+  );
+
+  const composerSelectionContext = useMemo<AgentStudioComposerSelectionContext>(
+    () => ({
+      selectedModelSelection: modelSelection.selectedModelSelection,
+      isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
+      agentOptions: modelSelection.agentOptions,
+      modelOptions: modelSelection.modelOptions,
+      modelGroups: modelSelection.modelGroups,
+      variantOptions: modelSelection.variantOptions,
+      onSelectAgent: modelSelection.onSelectAgent,
+      onSelectModel: modelSelection.onSelectModel,
+      onSelectVariant: modelSelection.onSelectVariant,
+      activeSessionAgentColors: modelSelection.activeSessionAgentColors,
+    }),
+    [
+      modelSelection.activeSessionAgentColors,
+      modelSelection.agentOptions,
+      modelSelection.isSelectionCatalogLoading,
+      modelSelection.modelGroups,
+      modelSelection.modelOptions,
+      modelSelection.onSelectAgent,
+      modelSelection.onSelectModel,
+      modelSelection.onSelectVariant,
+      modelSelection.selectedModelSelection,
+      modelSelection.variantOptions,
+    ],
+  );
+
+  const composerLayoutContext = useMemo<AgentStudioComposerLayoutContext>(
+    () => ({
+      composerFormRef,
+      composerTextareaRef,
+      resizeComposerTextarea,
+    }),
+    [composerFormRef, composerTextareaRef, resizeComposerTextarea],
+  );
+
   const agentChatComposerModel = useAgentStudioComposerModel({
-    taskId: core.taskId,
-    activeSession: core.activeSession,
-    agentStudioReady: readiness.agentStudioReady,
-    workflow: {
-      selectedRoleAvailable,
-      selectedRoleReadOnlyReason,
-    },
-    input: composer.input,
-    setInput: composer.setInput,
-    onSend: sessionActions.onSend,
-    isSending: sessionActions.isSending,
-    isStarting: sessionActions.isStarting,
-    isSessionWorking: sessionActions.isSessionWorking,
-    selectedModelSelection: modelSelection.selectedModelSelection,
-    isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
-    agentOptions: modelSelection.agentOptions,
-    modelOptions: modelSelection.modelOptions,
-    modelGroups: modelSelection.modelGroups,
-    variantOptions: modelSelection.variantOptions,
-    onSelectAgent: modelSelection.onSelectAgent,
-    onSelectModel: modelSelection.onSelectModel,
-    onSelectVariant: modelSelection.onSelectVariant,
-    activeSessionAgentColors: modelSelection.activeSessionAgentColors,
-    chatContextUsage,
-    canStopSession: sessionActions.canStopSession,
-    stopAgentSession: sessionActions.stopAgentSession,
-    composerFormRef,
-    composerTextareaRef,
-    resizeComposerTextarea,
+    session: composerSessionContext,
+    readiness: composerReadinessContext,
+    interaction: composerInteractionContext,
+    selection: composerSelectionContext,
+    layout: composerLayoutContext,
   });
 
   const agentChatModel = useMemo(
