@@ -782,6 +782,7 @@ mod tests {
             .manage(AppState {
                 service,
                 hook_trust_challenges: Mutex::new(HashMap::new()),
+                hook_trust_dialog_test_response: Mutex::new(None),
             })
             .invoke_handler(tauri::generate_handler![git_get_worktree_status])
             .build(mock_context(noop_assets()))

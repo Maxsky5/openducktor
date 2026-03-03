@@ -5,6 +5,8 @@ use crate::{
 use host_infra_system::{hook_set_fingerprint, HookSet, RepoConfig};
 use std::path::Path;
 use std::time::SystemTime;
+#[cfg(test)]
+use tauri::Manager;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use uuid::Uuid;
@@ -330,6 +332,24 @@ async fn confirm_hook_trust_dialog<R: tauri::Runtime>(
     repo_path: &str,
     hooks: &HookSet,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    {
+        let test_response = {
+            let state = app.state::<AppState>();
+            let response = state
+                .hook_trust_dialog_test_response
+                .lock()
+                .map_err(|_| "Hook trust dialog test response lock poisoned".to_string())?;
+            *response
+        };
+        if let Some(confirmed) = test_response {
+            if !confirmed {
+                return Err("Hook trust confirmation was cancelled by the user.".to_string());
+            }
+            return Ok(());
+        }
+    }
+
     let dialog_message = format!(
         "Approve trusted hooks for this workspace?\n\nRepository:\n{repo}\n\nPre-start hooks:\n{pre}\n\nPost-complete hooks:\n{post}\n\nTrusted hooks can execute shell commands on this machine.",
         repo = repo_path,
@@ -450,6 +470,14 @@ mod tests {
     }
 
     fn setup_workspace_command_fixture(prefix: &str, hooks: HookSet) -> WorkspaceCommandFixture {
+        setup_workspace_command_fixture_with_dialog_response(prefix, hooks, None)
+    }
+
+    fn setup_workspace_command_fixture_with_dialog_response(
+        prefix: &str,
+        hooks: HookSet,
+        dialog_response: Option<bool>,
+    ) -> WorkspaceCommandFixture {
         let root = unique_test_dir(prefix);
         let repo = root.join("repo");
         fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
@@ -476,6 +504,7 @@ mod tests {
             .manage(AppState {
                 service: service.clone(),
                 hook_trust_challenges: Mutex::new(HashMap::new()),
+                hook_trust_dialog_test_response: Mutex::new(dialog_response),
             })
             .invoke_handler(tauri::generate_handler![workspace_set_trusted_hooks])
             .build(mock_context(noop_assets()))
@@ -693,6 +722,49 @@ mod tests {
         assert!(
             replay_error.contains("missing or expired"),
             "unexpected replay error: {replay_error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_accepts_valid_challenge_and_persists_trust() -> Result<(), String>
+    {
+        let hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: vec!["echo post".to_string()],
+        };
+        let fixture = setup_workspace_command_fixture_with_dialog_response(
+            "trusted-hooks-happy-path",
+            hooks.clone(),
+            Some(true),
+        );
+        let nonce = "nonce-trust-success".to_string();
+        let fingerprint = hook_set_fingerprint(&hooks);
+        insert_challenge(
+            &fixture,
+            nonce.as_str(),
+            HookTrustChallenge {
+                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
+                fingerprint: fingerprint.clone(),
+                expires_at: SystemTime::now()
+                    .checked_add(Duration::from_secs(60))
+                    .ok_or_else(|| "future time should be valid".to_string())?,
+            },
+        )?;
+
+        let updated =
+            run_workspace_set_trusted_hooks(&fixture, true, Some(nonce), Some(fingerprint.clone()))
+                .expect("valid challenge should trust hooks");
+        assert_eq!(updated.path, canonical_repo_key(fixture.repo_path.as_str()));
+
+        let repo_config = fixture
+            .service
+            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .map_err(|error| error.to_string())?;
+        assert!(repo_config.trusted_hooks);
+        assert_eq!(
+            repo_config.trusted_hooks_fingerprint.as_deref(),
+            Some(fingerprint.as_str())
         );
         Ok(())
     }
