@@ -70,6 +70,9 @@ type ScopeSnapshot = {
   commitsAheadBehind: CommitsAheadBehind | null;
   upstreamAheadBehind: CommitsAheadBehind | null;
   error: string | null;
+  hashVersion: number | null;
+  statusHash: string | null;
+  diffHash: string | null;
 };
 
 type ResolvedWorktreeState = {
@@ -96,6 +99,9 @@ const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
   error: null,
+  hashVersion: null,
+  statusHash: null,
+  diffHash: null,
 };
 
 const createInitialState = (): DiffBatchState => ({
@@ -148,13 +154,39 @@ const aheadBehindEqual = (a: CommitsAheadBehind | null, b: CommitsAheadBehind | 
   return a.ahead === b.ahead && a.behind === b.behind;
 };
 
+const hashMetadataEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean =>
+  left.hashVersion === right.hashVersion &&
+  left.statusHash === right.statusHash &&
+  left.diffHash === right.diffHash;
+
 const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean =>
-  left.branch === right.branch &&
-  arraysEqual(left.fileDiffs, right.fileDiffs, fileDiffEqual) &&
-  arraysEqual(left.fileStatuses, right.fileStatuses, fileStatusEqual) &&
-  aheadBehindEqual(left.commitsAheadBehind, right.commitsAheadBehind) &&
-  aheadBehindEqual(left.upstreamAheadBehind, right.upstreamAheadBehind) &&
-  left.error === right.error;
+  (() => {
+    const canUseHashShortCircuit =
+      left.hashVersion !== null &&
+      right.hashVersion !== null &&
+      left.hashVersion === right.hashVersion &&
+      left.statusHash !== null &&
+      right.statusHash !== null &&
+      left.diffHash !== null &&
+      right.diffHash !== null;
+
+    if (canUseHashShortCircuit) {
+      const hashesMatch = left.statusHash === right.statusHash && left.diffHash === right.diffHash;
+      if (hashesMatch && left.error === right.error) {
+        return true;
+      }
+    }
+
+    return (
+      left.branch === right.branch &&
+      arraysEqual(left.fileDiffs, right.fileDiffs, fileDiffEqual) &&
+      arraysEqual(left.fileStatuses, right.fileStatuses, fileStatusEqual) &&
+      aheadBehindEqual(left.commitsAheadBehind, right.commitsAheadBehind) &&
+      aheadBehindEqual(left.upstreamAheadBehind, right.upstreamAheadBehind) &&
+      left.error === right.error &&
+      hashMetadataEqual(left, right)
+    );
+  })();
 
 const toUpstreamAndError = (
   upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"],
@@ -197,6 +229,9 @@ const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
     commitsAheadBehind: snapshot.targetAheadBehind,
     upstreamAheadBehind,
     error,
+    hashVersion: snapshot.snapshot.hashVersion,
+    statusHash: snapshot.snapshot.statusHash,
+    diffHash: snapshot.snapshot.diffHash,
   };
 };
 
@@ -207,6 +242,8 @@ const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): 
   commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
   error: source.error,
+  hashVersion: source.hashVersion,
+  statusHash: source.statusHash,
 });
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
@@ -428,6 +465,9 @@ export function useAgentStudioDiffData({
           const nextScopeSnapshot: ScopeSnapshot = {
             ...previousScopeSnapshot,
             error: String(err),
+            hashVersion: null,
+            statusHash: null,
+            diffHash: null,
           };
 
           let nextLoadedByScope = prev.loadedByScope;

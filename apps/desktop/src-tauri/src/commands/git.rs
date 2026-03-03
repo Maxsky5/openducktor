@@ -7,6 +7,10 @@ use std::{
 };
 use tauri::State;
 
+const GIT_WORKTREE_HASH_VERSION: u32 = 1;
+const FNV1A_64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+const FNV1A_64_PRIME: u64 = 0x100000001b3;
+
 fn canonicalize_for_validation(path: &str, field: &str) -> Result<PathBuf, String> {
     fs::canonicalize(path)
         .map_err(|_| format!("{field} does not exist or is not accessible: {path}"))
@@ -88,12 +92,136 @@ fn require_target_branch(target_branch: &str) -> Result<&str, String> {
     Ok(trimmed_target)
 }
 
-fn build_worktree_status_with_snapshot(
-    status_data: host_domain::GitWorktreeStatusData,
+struct Fnv1a64Hasher {
+    state: u64,
+}
+
+impl Fnv1a64Hasher {
+    fn new() -> Self {
+        Self {
+            state: FNV1A_64_OFFSET_BASIS,
+        }
+    }
+
+    fn update_byte(&mut self, byte: u8) {
+        self.state ^= u64::from(byte);
+        self.state = self.state.wrapping_mul(FNV1A_64_PRIME);
+    }
+
+    fn update_bytes(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.update_byte(*byte);
+        }
+    }
+
+    fn update_bool(&mut self, value: bool) {
+        self.update_byte(u8::from(value));
+    }
+
+    fn update_u32(&mut self, value: u32) {
+        self.update_bytes(&value.to_le_bytes());
+    }
+
+    fn update_u64(&mut self, value: u64) {
+        self.update_bytes(&value.to_le_bytes());
+    }
+
+    fn update_str(&mut self, value: &str) {
+        self.update_u64(value.len() as u64);
+        self.update_bytes(value.as_bytes());
+    }
+
+    fn finish_hex(self) -> String {
+        format!("{:016x}", self.state)
+    }
+}
+
+fn hash_optional_str(hasher: &mut Fnv1a64Hasher, value: Option<&str>) {
+    match value {
+        Some(value) => {
+            hasher.update_byte(1);
+            hasher.update_str(value);
+        }
+        None => {
+            hasher.update_byte(0);
+        }
+    }
+}
+fn hash_upstream_ahead_behind(
+    hasher: &mut Fnv1a64Hasher,
+    upstream_ahead_behind: &host_domain::GitUpstreamAheadBehind,
+) {
+    match upstream_ahead_behind {
+        host_domain::GitUpstreamAheadBehind::Tracking { ahead, behind } => {
+            hasher.update_str("tracking");
+            hasher.update_u32(*ahead);
+            hasher.update_u32(*behind);
+        }
+        host_domain::GitUpstreamAheadBehind::Untracked { ahead } => {
+            hasher.update_str("untracked");
+            hasher.update_u32(*ahead);
+        }
+        host_domain::GitUpstreamAheadBehind::Error { message } => {
+            hasher.update_str("error");
+            hasher.update_str(message);
+        }
+    }
+}
+
+fn hash_worktree_status_payload(
+    current_branch: &host_domain::GitCurrentBranch,
+    file_statuses: &[host_domain::GitFileStatus],
+    target_ahead_behind: &host_domain::GitAheadBehind,
+    upstream_ahead_behind: &host_domain::GitUpstreamAheadBehind,
+) -> String {
+    let mut hasher = Fnv1a64Hasher::new();
+
+    hash_optional_str(&mut hasher, current_branch.name.as_deref());
+    hasher.update_bool(current_branch.detached);
+
+    hasher.update_u64(file_statuses.len() as u64);
+    for status in file_statuses {
+        hasher.update_str(&status.path);
+        hasher.update_str(&status.status);
+        hasher.update_bool(status.staged);
+    }
+
+    hasher.update_u32(target_ahead_behind.ahead);
+    hasher.update_u32(target_ahead_behind.behind);
+
+    hash_upstream_ahead_behind(&mut hasher, upstream_ahead_behind);
+
+    hasher.finish_hex()
+}
+
+fn hash_worktree_diff_payload(file_diffs: &[host_domain::GitFileDiff]) -> String {
+    let mut hasher = Fnv1a64Hasher::new();
+    hasher.update_u64(file_diffs.len() as u64);
+
+    for diff in file_diffs {
+        hasher.update_str(&diff.file);
+        hasher.update_str(&diff.diff_type);
+        hasher.update_u32(diff.additions);
+        hasher.update_u32(diff.deletions);
+        hasher.update_str(&diff.diff);
+    }
+
+    hasher.finish_hex()
+}
+
+struct WorktreeSnapshotMetadata {
     effective_working_dir: String,
     target_branch: String,
     diff_scope: host_domain::GitDiffScope,
     observed_at_ms: u64,
+    hash_version: u32,
+    status_hash: String,
+    diff_hash: String,
+}
+
+fn build_worktree_status_with_snapshot(
+    status_data: host_domain::GitWorktreeStatusData,
+    snapshot_metadata: WorktreeSnapshotMetadata,
 ) -> host_domain::GitWorktreeStatus {
     host_domain::GitWorktreeStatus {
         current_branch: status_data.current_branch,
@@ -102,10 +230,13 @@ fn build_worktree_status_with_snapshot(
         target_ahead_behind: status_data.target_ahead_behind,
         upstream_ahead_behind: status_data.upstream_ahead_behind,
         snapshot: host_domain::GitWorktreeStatusSnapshot {
-            effective_working_dir,
-            target_branch,
-            diff_scope,
-            observed_at_ms,
+            effective_working_dir: snapshot_metadata.effective_working_dir,
+            target_branch: snapshot_metadata.target_branch,
+            diff_scope: snapshot_metadata.diff_scope,
+            observed_at_ms: snapshot_metadata.observed_at_ms,
+            hash_version: snapshot_metadata.hash_version,
+            status_hash: snapshot_metadata.status_hash,
+            diff_hash: snapshot_metadata.diff_hash,
         },
     }
 }
@@ -289,13 +420,25 @@ pub async fn git_get_worktree_status(
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
+    let status_hash = hash_worktree_status_payload(
+        &worktree_status.current_branch,
+        worktree_status.file_statuses.as_slice(),
+        &worktree_status.target_ahead_behind,
+        &worktree_status.upstream_ahead_behind,
+    );
+    let diff_hash = hash_worktree_diff_payload(worktree_status.file_diffs.as_slice());
 
     Ok(build_worktree_status_with_snapshot(
         worktree_status,
-        effective,
-        trimmed_target.to_string(),
-        scope,
-        observed_at_ms,
+        WorktreeSnapshotMetadata {
+            effective_working_dir: effective,
+            target_branch: trimmed_target.to_string(),
+            diff_scope: scope,
+            observed_at_ms,
+            hash_version: GIT_WORKTREE_HASH_VERSION,
+            status_hash,
+            diff_hash,
+        },
     ))
 }
 
@@ -375,7 +518,8 @@ pub async fn git_rebase_branch(
 mod tests {
     use super::{
         build_worktree_status_with_snapshot, parse_diff_scope, require_target_branch,
-        resolve_working_dir,
+        hash_worktree_diff_payload, hash_worktree_status_payload, resolve_working_dir,
+        WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
     };
     use host_domain::{
         GitAheadBehind, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
@@ -553,16 +697,18 @@ mod tests {
 
         let built = build_worktree_status_with_snapshot(
             status_data,
-            "/tmp/openducktor-worktree".to_string(),
-            "origin/main".to_string(),
-            GitDiffScope::Target,
-            42,
+            WorktreeSnapshotMetadata {
+                effective_working_dir: "/tmp/openducktor-worktree".to_string(),
+                target_branch: "origin/main".to_string(),
+                diff_scope: GitDiffScope::Target,
+                observed_at_ms: 42,
+                hash_version: GIT_WORKTREE_HASH_VERSION,
+                status_hash: "0123456789abcdef".to_string(),
+                diff_hash: "fedcba9876543210".to_string(),
+            },
         );
 
-        assert_eq!(
-            built.current_branch.name.as_deref(),
-            Some("feature/snapshot")
-        );
+        assert_eq!(built.current_branch.name.as_deref(), Some("feature/snapshot"));
         assert_eq!(built.file_statuses.len(), 1);
         assert_eq!(built.file_diffs.len(), 1);
         assert_eq!(built.target_ahead_behind.ahead, 2);
@@ -580,5 +726,107 @@ mod tests {
         assert_eq!(built.snapshot.target_branch, "origin/main");
         assert_eq!(built.snapshot.diff_scope, GitDiffScope::Target);
         assert_eq!(built.snapshot.observed_at_ms, 42);
+        assert_eq!(built.snapshot.hash_version, GIT_WORKTREE_HASH_VERSION);
+        assert_eq!(built.snapshot.status_hash, "0123456789abcdef");
+        assert_eq!(built.snapshot.diff_hash, "fedcba9876543210");
+    }
+
+    #[test]
+    fn status_hash_changes_when_status_payload_changes() {
+        let current_branch = GitCurrentBranch {
+            name: Some("feature/task-1".to_string()),
+            detached: false,
+        };
+        let file_statuses = vec![GitFileStatus {
+            path: "src/main.rs".to_string(),
+            status: "M".to_string(),
+            staged: false,
+        }];
+        let target_ahead_behind = GitAheadBehind {
+            ahead: 1,
+            behind: 0,
+        };
+        let baseline_upstream = GitUpstreamAheadBehind::Tracking {
+            ahead: 1,
+            behind: 0,
+        };
+        let changed_upstream = GitUpstreamAheadBehind::Tracking {
+            ahead: 2,
+            behind: 0,
+        };
+
+        let baseline_hash = hash_worktree_status_payload(
+            &current_branch,
+            file_statuses.as_slice(),
+            &target_ahead_behind,
+            &baseline_upstream,
+        );
+        let changed_hash = hash_worktree_status_payload(
+            &current_branch,
+            file_statuses.as_slice(),
+            &target_ahead_behind,
+            &changed_upstream,
+        );
+
+        assert_ne!(baseline_hash, changed_hash);
+    }
+
+    #[test]
+    fn status_hash_is_stable_for_identical_payload() {
+        let current_branch = GitCurrentBranch {
+            name: Some("feature/task-1".to_string()),
+            detached: false,
+        };
+        let file_statuses = vec![GitFileStatus {
+            path: "src/main.rs".to_string(),
+            status: "M".to_string(),
+            staged: false,
+        }];
+        let target_ahead_behind = GitAheadBehind {
+            ahead: 1,
+            behind: 0,
+        };
+        let upstream = GitUpstreamAheadBehind::Tracking {
+            ahead: 1,
+            behind: 0,
+        };
+
+        let first_hash = hash_worktree_status_payload(
+            &current_branch,
+            file_statuses.as_slice(),
+            &target_ahead_behind,
+            &upstream,
+        );
+        let second_hash = hash_worktree_status_payload(
+            &current_branch,
+            file_statuses.as_slice(),
+            &target_ahead_behind,
+            &upstream,
+        );
+
+        assert_eq!(first_hash, second_hash);
+    }
+
+    #[test]
+    fn diff_hash_changes_when_diff_payload_changes() {
+        let baseline_diff = vec![GitFileDiff {
+            file: "src/main.rs".to_string(),
+            diff_type: "modified".to_string(),
+            additions: 1,
+            deletions: 0,
+            diff: "@@ -1 +1 @@".to_string(),
+        }];
+        let changed_diff = vec![GitFileDiff {
+            file: "src/main.rs".to_string(),
+            diff_type: "modified".to_string(),
+            additions: 2,
+            deletions: 1,
+            diff: "@@ -1 +1,2 @@".to_string(),
+        }];
+
+        let baseline_hash = hash_worktree_diff_payload(baseline_diff.as_slice());
+        let changed_hash = hash_worktree_diff_payload(changed_diff.as_slice());
+
+        assert_ne!(baseline_hash, changed_hash);
     }
 }

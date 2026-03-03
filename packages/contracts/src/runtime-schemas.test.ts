@@ -363,6 +363,9 @@ describe("runtime schemas", () => {
       targetBranch: "origin/main",
       diffScope: scope,
       observedAtMs: 1731000000000,
+      hashVersion: 1,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
     });
     const status = gitWorktreeStatusSchema.parse({
       currentBranch: { name: "feature/task-1", detached: false },
@@ -384,6 +387,32 @@ describe("runtime schemas", () => {
     expect(status.snapshot.diffScope).toBe("target");
     expect(status.upstreamAheadBehind.outcome).toBe("tracking");
     expect(status.targetAheadBehind.behind).toBe(3);
+  });
+
+  test("git worktree status snapshot schema rejects malformed hash metadata", () => {
+    expect(() =>
+      gitWorktreeStatusSnapshotSchema.parse({
+        effectiveWorkingDir: "/repo",
+        targetBranch: "origin/main",
+        diffScope: "target",
+        observedAtMs: 1731000000000,
+        hashVersion: 1,
+        statusHash: "status-hash",
+        diffHash: "fedcba9876543210",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitWorktreeStatusSnapshotSchema.parse({
+        effectiveWorkingDir: "/repo",
+        targetBranch: "origin/main",
+        diffScope: "target",
+        observedAtMs: 1731000000000,
+        hashVersion: 1,
+        statusHash: "0123456789abcdef",
+        diffHash: "xyz",
+      }),
+    ).toThrow();
   });
 
   test("git upstream schema parses untracked outcome", () => {

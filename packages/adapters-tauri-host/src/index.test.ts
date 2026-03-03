@@ -447,6 +447,9 @@ describe("TauriHostClient", () => {
             targetBranch: "origin/main",
             diffScope: "target",
             observedAtMs: 1731000000000,
+            hashVersion: 1,
+            statusHash: "0123456789abcdef",
+            diffHash: "fedcba9876543210",
           },
         };
       }
@@ -563,6 +566,42 @@ describe("TauriHostClient", () => {
     await expect(client.gitCommitAll("/repo", "Build all changes")).rejects.toThrow();
     await expect(client.gitPullBranch("/repo")).rejects.toThrow();
     await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
+  });
+
+  test("git worktree status rejects malformed hash metadata payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_get_worktree_status") {
+        return {
+          currentBranch: { name: "feature/task-1", detached: false },
+          fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 2,
+              deletions: 1,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/tmp/wt/task-1",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000000000,
+            hashVersion: 1,
+            statusHash: "status-hash",
+            diffHash: "fedcba9876543210",
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.gitGetWorktreeStatus("/repo", "origin/main", "target", "/tmp/wt/task-1"),
+    ).rejects.toThrow();
   });
 
   test("git pull parses typed conflicts outcome", async () => {
