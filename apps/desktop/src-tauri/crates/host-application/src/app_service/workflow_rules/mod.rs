@@ -2,7 +2,7 @@ mod transitions;
 mod validators;
 
 pub(crate) use transitions::{
-    allows_transition, can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
+    can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
     default_qa_required_for_issue_type, derive_agent_workflows, is_open_state,
 };
 pub(crate) use validators::{
@@ -10,6 +10,9 @@ pub(crate) use validators::{
     normalize_title_key, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_plan_subtask_rules, validate_transition,
 };
+
+#[cfg(test)]
+pub(crate) use transitions::allows_transition;
 
 #[cfg(test)]
 mod tests;
