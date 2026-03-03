@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentRuntimeSummary } from "@openducktor/contracts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 
-const runtimeSummary = {
+const runtimeSummary: AgentRuntimeSummary = {
   runtimeId: "runtime-1",
   repoPath: "/repo",
   taskId: "repo-main",
