@@ -1,4 +1,4 @@
-import { TauriHostClient } from "@openducktor/adapters-tauri-host";
+import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
 import { isTauriRuntime } from "@/lib/runtime";
 
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
@@ -16,10 +16,10 @@ const notAvailable = async <T>(): Promise<T> => {
 
 export const createHostClient = (): TauriHostClient => {
   if (!isTauriRuntime()) {
-    return new TauriHostClient(notAvailable);
+    return createTauriHostClient(notAvailable);
   }
 
-  return new TauriHostClient(async <T>(command: string, args?: Record<string, unknown>) => {
+  return createTauriHostClient(async <T>(command: string, args?: Record<string, unknown>) => {
     const api = await getTauriCoreModule();
     return api.invoke<T>(command, args);
   });

@@ -161,6 +161,14 @@ class TauriHostClientImpl implements PlannerTools {
 
 export type TauriHostClient = TauriHostClientApi & PlannerTools;
 
-export const TauriHostClient = TauriHostClientImpl as unknown as new (
-  invokeFn: InvokeFn,
-) => TauriHostClient;
+/**
+ * Creates a TauriHostClient instance.
+ * Uses unknown intermediate to assert interface conformance.
+ */
+export function createTauriHostClient(invokeFn: InvokeFn): TauriHostClient {
+  const instance = new TauriHostClientImpl(invokeFn);
+  return instance as unknown as TauriHostClient;
+}
+
+/** @deprecated Use createTauriHostClient() */
+export const TauriHostClient = createTauriHostClient;
