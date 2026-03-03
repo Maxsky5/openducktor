@@ -108,7 +108,10 @@ describe("agent-chat-thread virtualization helpers", () => {
     const session = buildSession({ messages });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
-    const previousSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+    const previousSignature = buildAgentChatVirtualRowsSignature(
+      session,
+      resolveMessageIdentityToken,
+    );
     messages.push(buildMessage("assistant", "Message 2", { id: "message-2" }));
     const nextSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
 
@@ -120,7 +123,10 @@ describe("agent-chat-thread virtualization helpers", () => {
     const session = buildSession({ messages });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
-    const previousSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+    const previousSignature = buildAgentChatVirtualRowsSignature(
+      session,
+      resolveMessageIdentityToken,
+    );
     messages[0] = buildMessage("assistant", "Message 1 updated", { id: "message-1" });
     const nextSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
 
@@ -141,7 +147,10 @@ describe("agent-chat-thread virtualization helpers", () => {
     ];
     const session = buildSession({ messages });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
-    const previousSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+    const previousSignature = buildAgentChatVirtualRowsSignature(
+      session,
+      resolveMessageIdentityToken,
+    );
 
     const assistantMessage = messages[0];
     if (!assistantMessage) {
