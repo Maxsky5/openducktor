@@ -126,7 +126,16 @@ impl GitCliPort {
 
     pub(super) fn resolve_upstream_target_impl(&self, repo_path: &Path) -> Result<Option<String>> {
         self.ensure_repository(repo_path)?;
-        let branch = match self.get_current_branch_impl(repo_path)?.name {
+        let current_branch = self.get_current_branch_unchecked(repo_path)?;
+        self.resolve_upstream_target_for_branch_impl(repo_path, current_branch.name.as_deref())
+    }
+
+    pub(super) fn resolve_upstream_target_for_branch_impl(
+        &self,
+        repo_path: &Path,
+        branch_name: Option<&str>,
+    ) -> Result<Option<String>> {
+        let branch = match branch_name {
             Some(name) => name,
             None => return Ok(None),
         };

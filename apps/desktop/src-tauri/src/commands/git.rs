@@ -253,56 +253,22 @@ pub async fn git_get_worktree_status(
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
     let repo = Path::new(&effective);
-
-    let current_branch = as_error(state.service.git_port().get_current_branch(repo))?;
-    let file_statuses = as_error(state.service.git_port().get_status(repo))?;
-    let file_diffs = as_error(state.service.git_port().get_diff(
+    let worktree_status = as_error(state.service.git_port().get_worktree_status(
         repo,
-        match &scope {
-            host_domain::GitDiffScope::Target => Some(trimmed_target),
-            host_domain::GitDiffScope::Uncommitted => None,
-        },
+        trimmed_target,
+        scope.clone(),
     ))?;
-    let target_ahead_behind = as_error(
-        state
-            .service
-            .git_port()
-            .commits_ahead_behind(repo, trimmed_target),
-    )?;
-    let upstream_ahead_behind = match state.service.git_port().resolve_upstream_target(repo) {
-        Ok(Some(upstream_target)) => {
-            match state
-                .service
-                .git_port()
-                .commits_ahead_behind(repo, upstream_target.as_str())
-            {
-                Ok(counts) => host_domain::GitUpstreamAheadBehind::Tracking {
-                    ahead: counts.ahead,
-                    behind: counts.behind,
-                },
-                Err(error) => host_domain::GitUpstreamAheadBehind::Error {
-                    message: format!("{error:#}"),
-                },
-            }
-        }
-        Ok(None) => host_domain::GitUpstreamAheadBehind::Untracked {
-            ahead: target_ahead_behind.ahead,
-        },
-        Err(error) => host_domain::GitUpstreamAheadBehind::Error {
-            message: format!("{error:#}"),
-        },
-    };
     let observed_at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
 
     Ok(host_domain::GitWorktreeStatus {
-        current_branch,
-        file_statuses,
-        file_diffs,
-        target_ahead_behind,
-        upstream_ahead_behind,
+        current_branch: worktree_status.current_branch,
+        file_statuses: worktree_status.file_statuses,
+        file_diffs: worktree_status.file_diffs,
+        target_ahead_behind: worktree_status.target_ahead_behind,
+        upstream_ahead_behind: worktree_status.upstream_ahead_behind,
         snapshot: host_domain::GitWorktreeStatusSnapshot {
             effective_working_dir: effective,
             target_branch: trimmed_target.to_string(),

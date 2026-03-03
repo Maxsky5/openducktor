@@ -117,6 +117,16 @@ pub struct GitWorktreeStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatusData {
+    pub current_branch: GitCurrentBranch,
+    pub file_statuses: Vec<GitFileStatus>,
+    pub file_diffs: Vec<GitFileDiff>,
+    pub target_ahead_behind: GitAheadBehind,
+    pub upstream_ahead_behind: GitUpstreamAheadBehind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitCommitAllRequest {
     pub working_dir: Option<String>,
     pub message: String,
@@ -186,6 +196,12 @@ pub trait GitPort: Send + Sync {
     fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult>;
     fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>>;
     fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>>;
+    fn get_worktree_status(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusData>;
     fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>>;
     fn commits_ahead_behind(&self, repo_path: &Path, target_branch: &str)
         -> Result<GitAheadBehind>;

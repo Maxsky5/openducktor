@@ -1,4 +1,4 @@
-use host_domain::GitPort;
+use host_domain::{GitDiffScope, GitPort, GitUpstreamAheadBehind};
 
 use super::super::GitCliPort;
 use super::support::{git_available, run_git_ok, setup_bare_remote, setup_repo};
@@ -102,5 +102,77 @@ fn get_diff_rejects_option_like_target_and_does_not_write_output_file() {
     assert!(
         !output_path.exists(),
         "option-like target must not create an output file"
+    );
+}
+
+#[test]
+fn get_worktree_status_returns_tracking_counts_when_upstream_exists() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-tracking");
+    let remote = setup_bare_remote("worktree-status-tracking-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    fs::write(repo.path.join("tracking.txt"), "ahead\n").expect("tracking file should write");
+    run_git_ok(&repo.path, &["add", "tracking.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "ahead of origin"]);
+
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "origin/main", GitDiffScope::Target)
+        .expect("composite worktree status should resolve");
+
+    assert_eq!(status.current_branch.name.as_deref(), Some("main"));
+    assert_eq!(status.target_ahead_behind.ahead, 1);
+    assert_eq!(status.target_ahead_behind.behind, 0);
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Tracking {
+            ahead: 1,
+            behind: 0,
+        }
+    );
+}
+
+#[test]
+fn get_worktree_status_reports_untracked_when_upstream_is_missing() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-untracked");
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("composite worktree status should resolve");
+
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Untracked { ahead: 0 }
+    );
+}
+
+#[test]
+fn get_worktree_status_requires_non_empty_target_branch() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-empty-target");
+    let git = GitCliPort::new();
+    let error = git
+        .get_worktree_status(&repo.path, "   ", GitDiffScope::Target)
+        .expect_err("empty target branch should return error");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("target branch"),
+        "error should preserve target branch context, got: {message}"
     );
 }
