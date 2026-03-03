@@ -26,6 +26,7 @@ pub(super) struct RuntimeStartInput<'a> {
     repo_key: String,
     task_id: &'a str,
     role: RuntimeRole,
+    startup_policy: super::OpencodeStartupReadinessPolicy,
     working_directory: String,
     cleanup_target: Option<super::RuntimeCleanupTarget>,
     tracking_error_context: &'static str,
@@ -49,6 +50,8 @@ pub(super) struct SpawnedRuntimeServer {
     child: Child,
     opencode_process_guard: super::TrackedOpencodeProcessGuard,
 }
+
+pub(super) const STARTUP_CONFIG_INVALID_REASON: &str = "startup_config_invalid";
 
 impl AppService {
     pub fn runs_list(&self, repo_path: Option<&str>) -> Result<Vec<RunSummary>> {
@@ -113,16 +116,27 @@ impl AppService {
             }
         }
 
+        let startup_error_context =
+            format!("OpenCode workspace runtime failed to start for {repo_path}");
+        let startup_policy = self.resolve_runtime_startup_policy(
+            "workspace_runtime",
+            repo_path,
+            Self::WORKSPACE_RUNTIME_TASK_ID,
+            Self::WORKSPACE_RUNTIME_ROLE,
+            startup_error_context.as_str(),
+        )?;
+
         self.spawn_and_register_runtime(RuntimeStartInput {
             startup_scope: "workspace_runtime",
             repo_path,
             repo_key: repo_key.clone(),
             task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
             role: Self::WORKSPACE_RUNTIME_ROLE,
+            startup_policy,
             working_directory: repo_key.clone(),
             cleanup_target: None,
             tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
-            startup_error_context: format!("OpenCode workspace runtime failed to start for {repo_path}"),
+            startup_error_context,
             post_start_policy: Some(RuntimePostStartPolicy {
                 existing_lookup: RuntimeExistingLookup {
                     repo_key: repo_key.as_str(),
@@ -145,6 +159,14 @@ impl AppService {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
         let runtime_role = RuntimeRole::from(role);
+        let startup_error_context = format!("OpenCode runtime failed to start for task {task_id}");
+        let startup_policy = self.resolve_runtime_startup_policy(
+            "agent_runtime",
+            repo_path,
+            task_id,
+            runtime_role,
+            startup_error_context.as_str(),
+        )?;
         let prerequisites = match self.resolve_runtime_prerequisites(repo_path, task_id, role)? {
             RuntimePrerequisiteResolution::Existing(existing) => return Ok(existing),
             RuntimePrerequisiteResolution::Ready(prerequisites) => prerequisites,
@@ -156,10 +178,11 @@ impl AppService {
             repo_key: repo_key.clone(),
             task_id,
             role: runtime_role,
+            startup_policy,
             working_directory: prerequisites.working_directory,
             cleanup_target: prerequisites.cleanup_target,
             tracking_error_context: "Failed tracking spawned OpenCode agent runtime",
-            startup_error_context: format!("OpenCode runtime failed to start for task {task_id}"),
+            startup_error_context,
             post_start_policy: Some(RuntimePostStartPolicy {
                 existing_lookup: RuntimeExistingLookup {
                     repo_key: repo_key.as_str(),

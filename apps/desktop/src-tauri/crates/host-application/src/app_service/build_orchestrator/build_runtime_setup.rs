@@ -157,6 +157,7 @@ impl AppService {
         prepared_worktree: &PreparedBuildWorktree,
         task_id: &str,
         run_id: &str,
+        startup_policy: OpencodeStartupReadinessPolicy,
     ) -> Result<SpawnedBuildAgent> {
         let mut spawned_agent = self.spawn_build_agent_process(prerequisites, prepared_worktree)?;
         if let Err(error) = self.wait_for_build_agent_readiness(
@@ -164,6 +165,7 @@ impl AppService {
             prerequisites.repo_path.as_str(),
             task_id,
             run_id,
+            startup_policy,
         ) {
             terminate_child_process(&mut spawned_agent.child);
             return Err(error);
@@ -204,12 +206,8 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
         run_id: &str,
+        startup_policy: OpencodeStartupReadinessPolicy,
     ) -> Result<()> {
-        let startup_policy = self
-            .opencode_startup_readiness_policy()
-            .with_context(|| {
-                format!("OpenCode build runtime failed before readiness wait for task {task_id}")
-            })?;
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
         self.emit_build_runtime_wait_begin(

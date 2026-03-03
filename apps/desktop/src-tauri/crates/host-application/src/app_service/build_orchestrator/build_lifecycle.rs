@@ -1,12 +1,16 @@
 use super::super::{
-    emit_event, spawn_output_forwarder, terminate_child_process, AppService, RunEmitter, RunProcess,
+    emit_event, spawn_output_forwarder, terminate_child_process, AppService,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter, RunProcess,
+    StartupEventCorrelation, StartupEventPayload,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree, SpawnedBuildAgent};
 use super::BuildResponseAction;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
 use std::process::{ChildStderr, ChildStdout};
 use uuid::Uuid;
+
+const STARTUP_CONFIG_INVALID_REASON: &str = "startup_config_invalid";
 
 struct BuildRunRegistration {
     run_id: String,
@@ -27,12 +31,18 @@ impl AppService {
     ) -> Result<RunSummary> {
         let run_id = format!("run-{}", Uuid::new_v4().simple());
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
+        let startup_policy = self.resolve_build_startup_policy(
+            prerequisites.repo_path.as_str(),
+            task_id,
+            run_id.as_str(),
+        )?;
         let prepared_worktree = self.prepare_build_worktree(&prerequisites, task_id)?;
         let spawned_agent = self.spawn_and_wait_for_agent(
             &prerequisites,
             &prepared_worktree,
             task_id,
             run_id.as_str(),
+            startup_policy,
         )?;
 
         self.initiate_build_mode(
@@ -128,6 +138,34 @@ impl AppService {
         );
 
         Ok(true)
+    }
+
+    pub(crate) fn resolve_build_startup_policy(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        run_id: &str,
+    ) -> Result<OpencodeStartupReadinessPolicy> {
+        self.opencode_startup_readiness_policy()
+            .map_err(|error| {
+                self.emit_opencode_startup_event(StartupEventPayload::failed(
+                    "build_runtime",
+                    repo_path,
+                    Some(task_id),
+                    "build",
+                    0,
+                    Some(StartupEventCorrelation::new("run_id", run_id)),
+                    None,
+                    OpencodeStartupWaitReport::zero(),
+                    STARTUP_CONFIG_INVALID_REASON,
+                ));
+                error
+            })
+            .with_context(|| {
+                format!(
+                    "OpenCode build runtime failed before worktree preparation for task {task_id}"
+                )
+            })
     }
 
     fn abort_started_build<T>(

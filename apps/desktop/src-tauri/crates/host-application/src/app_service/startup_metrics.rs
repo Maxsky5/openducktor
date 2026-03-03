@@ -413,6 +413,15 @@ impl AppService {
         self.startup_cancel_epoch.load(Ordering::SeqCst)
     }
 
+    #[cfg(test)]
+    pub(crate) fn startup_metrics_snapshot(&self) -> Result<OpencodeStartupMetricsSnapshot> {
+        let metrics = self
+            .startup_metrics
+            .lock()
+            .map_err(|_| anyhow!("OpenCode startup metrics lock poisoned"))?;
+        Ok(metrics.snapshot())
+    }
+
     pub(crate) fn emit_opencode_startup_event(&self, event: StartupEventPayload<'_>) {
         let event_name = event.event_name();
         let runtime_type = event.runtime_type;
