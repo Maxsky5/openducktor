@@ -17,6 +17,7 @@ export {
   pickDefaultModel,
 } from "./models";
 export {
+  defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
   toPersistedSessionRecord,

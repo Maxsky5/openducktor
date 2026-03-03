@@ -229,17 +229,17 @@ fn assert_beads_env(call: &RecordedCall) {
 fn make_session(session_id: &str, started_at: &str, status: &str) -> AgentSessionDocument {
     AgentSessionDocument {
         session_id: session_id.to_string(),
-        external_session_id: format!("external-{session_id}"),
-        task_id: "task-1".to_string(),
+        external_session_id: Some(format!("external-{session_id}")),
+        task_id: Some("task-1".to_string()),
         role: "build".to_string(),
-        scenario: "build_default".to_string(),
-        status: status.to_string(),
+        scenario: Some("build_default".to_string()),
+        status: Some(status.to_string()),
         started_at: started_at.to_string(),
-        updated_at: started_at.to_string(),
+        updated_at: Some(started_at.to_string()),
         ended_at: None,
         runtime_id: Some("runtime-1".to_string()),
         run_id: None,
-        base_url: "http://127.0.0.1:4173".to_string(),
+        base_url: Some("http://127.0.0.1:4173".to_string()),
         working_directory: "/repo".to_string(),
         selected_model: None,
     }
@@ -448,7 +448,10 @@ fn markdown_and_qa_entry_parsers_filter_invalid_entries() {
     .expect("agent sessions");
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].session_id, "obp-session-1");
-    assert_eq!(sessions[0].external_session_id, "session-opencode-1");
+    assert_eq!(
+        sessions[0].external_session_id.as_deref(),
+        Some("session-opencode-1")
+    );
 }
 
 #[test]
@@ -1581,7 +1584,7 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
     let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
 
     let mut updated = make_session("session-1", "2026-02-20T12:00:00Z", "running");
-    updated.updated_at = "2026-02-20T12:01:00Z".to_string();
+    updated.updated_at = Some("2026-02-20T12:01:00Z".to_string());
     store.upsert_agent_session(repo.path(), "task-1", updated)?;
 
     let calls = runner.take_calls();
@@ -1594,7 +1597,9 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
         .iter()
         .find(|entry| entry["sessionId"] == Value::String("session-1".to_string()))
         .expect("session-1 missing");
-    assert_eq!(session_1["status"], Value::String("running".to_string()));
+    assert!(session_1.get("status").is_none());
+    assert!(session_1.get("scenario").is_none());
+    assert!(session_1.get("baseUrl").is_none());
     Ok(())
 }
 

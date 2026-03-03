@@ -21,19 +21,30 @@ export const agentSessionModelSelectionSchema = z.object({
 });
 export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelectionSchema>;
 
+const optionalStringFromNullable = z.preprocess(
+  (value) => (value === null ? undefined : value),
+  z.string().optional(),
+);
+
 export const agentSessionRecordSchema = z.object({
   sessionId: z.string(),
-  externalSessionId: z.string(),
-  taskId: z.string(),
+  externalSessionId: optionalStringFromNullable,
+  taskId: optionalStringFromNullable,
   role: agentSessionRoleSchema,
-  scenario: agentSessionScenarioSchema,
-  status: agentSessionStatusSchema,
+  scenario: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    agentSessionScenarioSchema.optional(),
+  ),
+  status: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    agentSessionStatusSchema.optional(),
+  ),
   startedAt: z.string(),
-  updatedAt: z.string(),
-  endedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-  runtimeId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-  runId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-  baseUrl: z.string(),
+  updatedAt: optionalStringFromNullable,
+  endedAt: optionalStringFromNullable,
+  runtimeId: optionalStringFromNullable,
+  runId: optionalStringFromNullable,
+  baseUrl: optionalStringFromNullable,
   workingDirectory: z.string(),
   selectedModel: z.preprocess(
     (value) => (value === null ? undefined : value),

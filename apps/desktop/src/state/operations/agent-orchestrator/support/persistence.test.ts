@@ -28,18 +28,18 @@ const recordFixture: AgentSessionRecord = {
 
 describe("agent-orchestrator/support/persistence", () => {
   test("normalizes persisted running status to stopped", () => {
-    const hydrated = fromPersistedSessionRecord(recordFixture);
+    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
   });
 
   test("persists session with endedAt for terminal states", () => {
     const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture),
+      ...fromPersistedSessionRecord(recordFixture, "task-1"),
       status: "error",
     };
     const persisted = toPersistedSessionRecord(session, "2026-02-22T08:10:00.000Z");
-    expect(persisted.endedAt).toBe("2026-02-22T08:10:00.000Z");
+    expect(persisted.endedAt).toBeUndefined();
   });
 
   test("maps empty history to empty chat messages", () => {
