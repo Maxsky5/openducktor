@@ -118,6 +118,40 @@ const hasVisibleText = (root: TestRenderer.ReactTestInstance, text: string): boo
   );
 };
 
+const getNodeText = (node: TestRenderer.ReactTestInstance): string => {
+  return (node.children as unknown[])
+    .map((child) => {
+      if (typeof child === "string" || typeof child === "number") {
+        return String(child);
+      }
+      if (child != null && typeof child === "object" && "children" in child) {
+        return getNodeText(child as TestRenderer.ReactTestInstance);
+      }
+      return "";
+    })
+    .join("");
+};
+
+const findButtonByText = (
+  root: TestRenderer.ReactTestInstance,
+  text: string,
+): TestRenderer.ReactTestInstance => {
+  const matches = root.findAll(
+    (node) => node.type === "button" && getNodeText(node).includes(text),
+  );
+  if (matches.length === 0) {
+    throw new Error(`No button found containing text: ${text}`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`Expected one button for text: ${text}, found ${matches.length}`);
+  }
+  const match = matches.at(0);
+  if (!match) {
+    throw new Error(`No button found containing text: ${text}`);
+  }
+  return match;
+};
+
 describe("AgentStudioGitPanel", () => {
   beforeAll(async () => {
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
@@ -527,6 +561,63 @@ describe("AgentStudioGitPanel", () => {
     expect(pushButton.props.className).toContain("disabled:cursor-not-allowed");
     expect(hasVisibleText(root, "Commit or stash changes before pulling")).toBe(true);
     expect(hasVisibleText(root, "Commit or stash changes, then pull before pushing")).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("renders expanded file diff rows and mounts mocked diff viewer", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "target",
+            fileDiffs: [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            fileStatuses: [
+              {
+                path: "src/main.ts",
+                staged: false,
+                status: "M",
+              },
+            ],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const fileRowButton = findButtonByText(root, "src/main.ts");
+
+    const rootText = getNodeText(root);
+    expect(rootText).toContain("1 changed file");
+    expect(rootText).toContain("+1");
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
+
+    await act(async () => {
+      fileRowButton.props.onClick();
+      await flush();
+    });
+
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(1);
+
+    await act(async () => {
+      findButtonByText(root, "src/main.ts").props.onClick();
+      await flush();
+    });
+
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
