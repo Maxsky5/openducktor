@@ -105,11 +105,9 @@ type AgentStudioPageModelsDocumentsContext = Pick<
   "specDoc" | "planDoc" | "qaDoc"
 >;
 
-type AgentStudioPageModelsSessionActionsContext = ReturnType<
-  typeof useAgentStudioSessionActions
-> & {
-  stopAgentSession: AgentStateContextValue["stopAgentSession"];
-};
+type AgentStudioPageModelsSessionActionsContext = Parameters<
+  typeof useAgentStudioPageModels
+>[0]["sessionActions"];
 
 type AgentStudioPageModelsModelSelectionContext = Pick<
   ReturnType<typeof useAgentStudioModelSelection>,
