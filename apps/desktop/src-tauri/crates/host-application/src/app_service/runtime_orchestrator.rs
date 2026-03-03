@@ -1,62 +1,53 @@
-use super::{
-    qa_worktree::{prepare_qa_worktree, remove_runtime_worktree},
-    spawn_opencode_server, terminate_child_process, wait_for_local_server_with_process,
-    AgentRuntimeProcess, AppService, StartupEventCorrelation, StartupEventPayload,
-    TrackedOpencodeProcessGuard,
-};
+mod prerequisites;
+mod registry;
+mod startup;
+
+use super::AppService;
 use anyhow::{anyhow, Result};
-use host_domain::{
-    now_rfc3339, AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeRole,
-    TASK_METADATA_NAMESPACE,
-};
-use host_infra_system::pick_free_port;
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use host_domain::{AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeRole};
+use std::collections::HashSet;
 use std::process::Child;
-use uuid::Uuid;
 
 #[derive(Clone, Copy)]
-struct RuntimeExistingLookup<'a> {
+pub(super) struct RuntimeExistingLookup<'a> {
     repo_key: &'a str,
     role: RuntimeRole,
     task_id: Option<&'a str>,
 }
 
-struct RuntimePostStartPolicy<'a> {
+pub(super) struct RuntimePostStartPolicy<'a> {
     existing_lookup: RuntimeExistingLookup<'a>,
     prune_error_context: String,
 }
 
-struct RuntimeStartInput<'a> {
+pub(super) struct RuntimeStartInput<'a> {
     startup_scope: &'a str,
     repo_path: &'a str,
     repo_key: String,
     task_id: &'a str,
     role: RuntimeRole,
     working_directory: String,
-    cleanup_repo_path: Option<String>,
-    cleanup_worktree_path: Option<String>,
+    cleanup_target: Option<super::RuntimeCleanupTarget>,
     tracking_error_context: &'static str,
     startup_error_context: String,
     post_start_policy: Option<RuntimePostStartPolicy<'a>>,
 }
 
-enum RuntimePrerequisiteResolution {
+pub(super) enum RuntimePrerequisiteResolution {
     Existing(AgentRuntimeSummary),
     Ready(RuntimePrerequisites),
 }
 
-struct RuntimePrerequisites {
+pub(super) struct RuntimePrerequisites {
     working_directory: String,
-    cleanup_repo_path: Option<String>,
-    cleanup_worktree_path: Option<String>,
+    cleanup_target: Option<super::RuntimeCleanupTarget>,
 }
 
-struct SpawnedRuntimeServer {
+pub(super) struct SpawnedRuntimeServer {
     runtime_id: String,
     port: u16,
     child: Child,
-    opencode_process_guard: TrackedOpencodeProcessGuard,
+    opencode_process_guard: super::TrackedOpencodeProcessGuard,
 }
 
 impl AppService {
@@ -99,49 +90,6 @@ impl AppService {
         Ok(list)
     }
 
-    pub fn opencode_runtime_list(
-        &self,
-        repo_path: Option<&str>,
-    ) -> Result<Vec<AgentRuntimeSummary>> {
-        let repo_key_filter = repo_path
-            .map(|path| self.ensure_repo_authorized(path))
-            .transpose()?;
-        let allowlisted_repo_keys = if repo_key_filter.is_none() && self.enforce_repo_allowlist {
-            Some(
-                self.config_store
-                    .list_workspaces()?
-                    .into_iter()
-                    .map(|workspace| workspace.path)
-                    .collect::<HashSet<_>>(),
-            )
-        } else {
-            None
-        };
-        let mut runtimes = self
-            .agent_runtimes
-            .lock()
-            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-        Self::prune_stale_runtimes(&mut runtimes)?;
-
-        let mut list = runtimes
-            .values()
-            .filter(|runtime| {
-                if let Some(path_key) = repo_key_filter.as_deref() {
-                    Self::repo_key(runtime.summary.repo_path.as_str()) == path_key
-                } else if let Some(allowlist) = allowlisted_repo_keys.as_ref() {
-                    let runtime_repo_key = Self::repo_key(runtime.summary.repo_path.as_str());
-                    allowlist.contains(&runtime_repo_key)
-                } else {
-                    true
-                }
-            })
-            .map(|runtime| runtime.summary.clone())
-            .collect::<Vec<_>>();
-
-        list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
-        Ok(list)
-    }
-
     pub fn opencode_repo_runtime_ensure(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
@@ -172,8 +120,7 @@ impl AppService {
             task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
             role: Self::WORKSPACE_RUNTIME_ROLE,
             working_directory: repo_key.clone(),
-            cleanup_repo_path: None,
-            cleanup_worktree_path: None,
+            cleanup_target: None,
             tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
             startup_error_context: format!("OpenCode workspace runtime failed to start for {repo_path}"),
             post_start_policy: Some(RuntimePostStartPolicy {
@@ -210,8 +157,7 @@ impl AppService {
             task_id,
             role: runtime_role,
             working_directory: prerequisites.working_directory,
-            cleanup_repo_path: prerequisites.cleanup_repo_path,
-            cleanup_worktree_path: prerequisites.cleanup_worktree_path,
+            cleanup_target: prerequisites.cleanup_target,
             tracking_error_context: "Failed tracking spawned OpenCode agent runtime",
             startup_error_context: format!("OpenCode runtime failed to start for task {task_id}"),
             post_start_policy: Some(RuntimePostStartPolicy {
@@ -227,397 +173,12 @@ impl AppService {
         })
     }
 
-    fn resolve_runtime_prerequisites(
-        &self,
-        repo_key: &str,
-        task_id: &str,
-        role: AgentRuntimeRole,
-    ) -> Result<RuntimePrerequisiteResolution> {
-        let tasks = self.task_store.list_tasks(Path::new(repo_key))?;
-        let task = tasks
-            .iter()
-            .find(|entry| entry.id == task_id)
-            .ok_or_else(|| anyhow!("Task not found: {task_id}"))?;
-
-        {
-            let mut runtimes = self
-                .agent_runtimes
-                .lock()
-                .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-            Self::prune_stale_runtimes(&mut runtimes)?;
-
-            if let Some(existing) = Self::find_existing_runtime(
-                &runtimes,
-                RuntimeExistingLookup {
-                    repo_key,
-                    role: role.into(),
-                    task_id: Some(task_id),
-                },
-            ) {
-                return Ok(RuntimePrerequisiteResolution::Existing(existing));
-            }
-        }
-
-        let prerequisites = match role {
-            AgentRuntimeRole::Qa => {
-                let setup = prepare_qa_worktree(
-                    repo_key,
-                    task_id,
-                    task.title.as_str(),
-                    &self.config_store,
-                )?;
-                RuntimePrerequisites {
-                    working_directory: setup.worktree_path.clone(),
-                    cleanup_repo_path: Some(setup.repo_path),
-                    cleanup_worktree_path: Some(setup.worktree_path),
-                }
-            }
-            AgentRuntimeRole::Spec | AgentRuntimeRole::Planner => RuntimePrerequisites {
-                working_directory: repo_key.to_string(),
-                cleanup_repo_path: None,
-                cleanup_worktree_path: None,
-            },
-        };
-
-        Ok(RuntimePrerequisiteResolution::Ready(prerequisites))
-    }
-
     fn spawn_and_register_runtime(
         &self,
         input: RuntimeStartInput<'_>,
     ) -> Result<AgentRuntimeSummary> {
         let spawned_server = self.spawn_runtime_server(&input)?;
         self.attach_runtime_session(input, spawned_server)
-    }
-
-    fn spawn_runtime_server(&self, input: &RuntimeStartInput<'_>) -> Result<SpawnedRuntimeServer> {
-        let port = pick_free_port()?;
-        let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
-        let mut child = spawn_opencode_server(
-            Path::new(input.working_directory.as_str()),
-            Path::new(input.repo_path),
-            TASK_METADATA_NAMESPACE,
-            port,
-        )?;
-        let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {
-            Ok(guard) => guard,
-            Err(error) => {
-                let tracking_error = anyhow!(error).context(input.tracking_error_context);
-                if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                    &mut child,
-                    input.cleanup_repo_path.as_deref(),
-                    input.cleanup_worktree_path.as_deref(),
-                ) {
-                    return Err(Self::append_cleanup_error(tracking_error, cleanup_error));
-                }
-                return Err(tracking_error);
-            }
-        };
-
-        let startup_policy = self.opencode_startup_readiness_policy();
-        let startup_cancel_epoch = self.startup_cancel_epoch();
-        let startup_cancel_snapshot = self.startup_cancel_snapshot();
-        self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
-            input.startup_scope,
-            input.repo_path,
-            Some(input.task_id),
-            input.role.as_str(),
-            port,
-            Some(StartupEventCorrelation::new(
-                "runtime_id",
-                runtime_id.as_str(),
-            )),
-            Some(startup_policy),
-        ));
-        let startup_report = match wait_for_local_server_with_process(
-            &mut child,
-            port,
-            startup_policy,
-            &startup_cancel_epoch,
-            startup_cancel_snapshot,
-        ) {
-            Ok(report) => report,
-            Err(error) => {
-                self.emit_opencode_startup_event(StartupEventPayload::failed(
-                    input.startup_scope,
-                    input.repo_path,
-                    Some(input.task_id),
-                    input.role.as_str(),
-                    port,
-                    Some(StartupEventCorrelation::new(
-                        "runtime_id",
-                        runtime_id.as_str(),
-                    )),
-                    Some(startup_policy),
-                    error.report,
-                    error.reason,
-                ));
-                let startup_error = anyhow!(error).context(input.startup_error_context.clone());
-                if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                    &mut child,
-                    input.cleanup_repo_path.as_deref(),
-                    input.cleanup_worktree_path.as_deref(),
-                ) {
-                    return Err(Self::append_cleanup_error(startup_error, cleanup_error));
-                }
-                return Err(startup_error);
-            }
-        };
-        self.emit_opencode_startup_event(StartupEventPayload::ready(
-            input.startup_scope,
-            input.repo_path,
-            Some(input.task_id),
-            input.role.as_str(),
-            port,
-            Some(StartupEventCorrelation::new(
-                "runtime_id",
-                runtime_id.as_str(),
-            )),
-            Some(startup_policy),
-            startup_report,
-        ));
-
-        Ok(SpawnedRuntimeServer {
-            runtime_id,
-            port,
-            child,
-            opencode_process_guard,
-        })
-    }
-
-    fn attach_runtime_session(
-        &self,
-        input: RuntimeStartInput<'_>,
-        mut spawned_server: SpawnedRuntimeServer,
-    ) -> Result<AgentRuntimeSummary> {
-        let RuntimeStartInput {
-            startup_scope,
-            repo_key,
-            task_id,
-            role,
-            working_directory,
-            cleanup_repo_path,
-            cleanup_worktree_path,
-            post_start_policy,
-            ..
-        } = input;
-
-        let summary = AgentRuntimeSummary {
-            runtime_id: spawned_server.runtime_id.clone(),
-            repo_path: repo_key,
-            task_id: task_id.to_string(),
-            role,
-            working_directory,
-            port: spawned_server.port,
-            started_at: now_rfc3339(),
-        };
-
-        let mut runtimes = match self.agent_runtimes.lock() {
-            Ok(runtimes) => runtimes,
-            Err(_) => {
-                let lock_error = anyhow!("Agent runtime state lock poisoned");
-                if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                    &mut spawned_server.child,
-                    cleanup_repo_path.as_deref(),
-                    cleanup_worktree_path.as_deref(),
-                ) {
-                    return Err(Self::append_cleanup_error(lock_error, cleanup_error));
-                }
-                return Err(lock_error);
-            }
-        };
-        if let Some(post_start_policy) = post_start_policy {
-            if let Err(error) = Self::prune_stale_runtimes(&mut runtimes) {
-                let prune_error = error.context(post_start_policy.prune_error_context);
-                if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                    &mut spawned_server.child,
-                    cleanup_repo_path.as_deref(),
-                    cleanup_worktree_path.as_deref(),
-                ) {
-                    return Err(Self::append_cleanup_error(prune_error, cleanup_error));
-                }
-                return Err(prune_error);
-            }
-            if let Some(existing) =
-                Self::find_existing_runtime(&runtimes, post_start_policy.existing_lookup)
-            {
-                if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                    &mut spawned_server.child,
-                    cleanup_repo_path.as_deref(),
-                    cleanup_worktree_path.as_deref(),
-                ) {
-                    return Err(anyhow!(
-                        "Found existing runtime {} while finalizing {startup_scope} startup\nAlso failed to remove QA worktree: {cleanup_error}",
-                        existing.runtime_id
-                    ));
-                }
-                return Ok(existing);
-            }
-        }
-
-        runtimes.insert(
-            spawned_server.runtime_id,
-            AgentRuntimeProcess {
-                summary: summary.clone(),
-                child: spawned_server.child,
-                _opencode_process_guard: Some(spawned_server.opencode_process_guard),
-                cleanup_repo_path,
-                cleanup_worktree_path,
-            },
-        );
-
-        Ok(summary)
-    }
-
-    fn find_existing_runtime(
-        runtimes: &HashMap<String, AgentRuntimeProcess>,
-        lookup: RuntimeExistingLookup<'_>,
-    ) -> Option<AgentRuntimeSummary> {
-        runtimes
-            .values()
-            .find(|runtime| {
-                runtime.summary.repo_path == lookup.repo_key
-                    && runtime.summary.role == lookup.role
-                    && lookup
-                        .task_id
-                        .map_or(true, |task_id| runtime.summary.task_id == task_id)
-            })
-            .map(|runtime| runtime.summary.clone())
-    }
-
-    fn cleanup_runtime_worktree_if_needed(
-        cleanup_repo_path: Option<&str>,
-        cleanup_worktree_path: Option<&str>,
-    ) -> Result<()> {
-        if let (Some(repo_path), Some(worktree_path)) = (cleanup_repo_path, cleanup_worktree_path) {
-            remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
-        }
-        Ok(())
-    }
-
-    fn cleanup_started_runtime(
-        child: &mut Child,
-        cleanup_repo_path: Option<&str>,
-        cleanup_worktree_path: Option<&str>,
-    ) -> Result<()> {
-        terminate_child_process(child);
-        Self::cleanup_runtime_worktree_if_needed(cleanup_repo_path, cleanup_worktree_path)
-    }
-
-    fn append_cleanup_error(
-        base_error: anyhow::Error,
-        cleanup_error: anyhow::Error,
-    ) -> anyhow::Error {
-        anyhow!("{base_error}\nAlso failed to remove QA worktree: {cleanup_error}")
-    }
-
-    pub fn opencode_runtime_stop(&self, runtime_id: &str) -> Result<bool> {
-        let mut runtimes = self
-            .agent_runtimes
-            .lock()
-            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
-        let mut runtime = runtimes
-            .remove(runtime_id)
-            .ok_or_else(|| anyhow!("Runtime not found: {runtime_id}"))?;
-        terminate_child_process(&mut runtime.child);
-        if let (Some(repo_path), Some(worktree_path)) = (
-            runtime.cleanup_repo_path.as_deref(),
-            runtime.cleanup_worktree_path.as_deref(),
-        ) {
-            remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))?;
-        }
-        Ok(true)
-    }
-
-    pub fn shutdown(&self) -> Result<()> {
-        self.startup_cancel_epoch
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let mut cleanup_errors = Vec::new();
-        if let Err(error) = self.terminate_pending_opencode_processes() {
-            cleanup_errors.push(format!(
-                "Failed terminating pending OpenCode processes: {error:#}"
-            ));
-        }
-
-        match self.runs.lock() {
-            Ok(mut runs) => {
-                for (_, mut run) in runs.drain() {
-                    terminate_child_process(&mut run.child);
-                }
-            }
-            Err(_) => cleanup_errors.push("Run state lock poisoned".to_string()),
-        }
-
-        match self.agent_runtimes.lock() {
-            Ok(mut runtimes) => {
-                for (_, mut runtime) in runtimes.drain() {
-                    terminate_child_process(&mut runtime.child);
-                    if let (Some(repo_path), Some(worktree_path)) = (
-                        runtime.cleanup_repo_path.as_deref(),
-                        runtime.cleanup_worktree_path.as_deref(),
-                    ) {
-                        if let Err(error) =
-                            remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))
-                        {
-                            cleanup_errors.push(format!(
-                                "Failed shutting down runtime {}: {}",
-                                runtime.summary.runtime_id, error
-                            ));
-                        }
-                    }
-                }
-            }
-            Err(_) => cleanup_errors.push("Agent runtime state lock poisoned".to_string()),
-        }
-
-        if cleanup_errors.is_empty() {
-            Ok(())
-        } else {
-            Err(anyhow!(cleanup_errors.join("\n")))
-        }
-    }
-
-    pub(crate) fn prune_stale_runtimes(
-        runtimes: &mut HashMap<String, AgentRuntimeProcess>,
-    ) -> Result<()> {
-        let stale_runtime_ids = runtimes
-            .iter_mut()
-            .filter_map(|(runtime_id, runtime)| {
-                runtime
-                    .child
-                    .try_wait()
-                    .ok()
-                    .flatten()
-                    .map(|_| runtime_id.clone())
-            })
-            .collect::<Vec<_>>();
-        let mut cleanup_errors = Vec::new();
-        for runtime_id in stale_runtime_ids {
-            if let Some(mut runtime) = runtimes.remove(&runtime_id) {
-                terminate_child_process(&mut runtime.child);
-                if let (Some(repo_path), Some(worktree_path)) = (
-                    runtime.cleanup_repo_path.as_deref(),
-                    runtime.cleanup_worktree_path.as_deref(),
-                ) {
-                    if let Err(error) =
-                        remove_runtime_worktree(Path::new(repo_path), Path::new(worktree_path))
-                    {
-                        cleanup_errors.push(format!(
-                            "Failed pruning stale runtime {runtime_id}: {error}"
-                        ));
-                    }
-                }
-            }
-        }
-
-        if cleanup_errors.is_empty() {
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "Failed pruning stale agent runtimes:\n{}",
-                cleanup_errors.join("\n")
-            ))
-        }
     }
 }
 

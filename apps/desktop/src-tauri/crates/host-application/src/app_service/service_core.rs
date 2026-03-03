@@ -35,8 +35,12 @@ pub(crate) struct AgentRuntimeProcess {
     pub(super) summary: AgentRuntimeSummary,
     pub(super) child: Child,
     pub(super) _opencode_process_guard: Option<TrackedOpencodeProcessGuard>,
-    pub(super) cleanup_repo_path: Option<String>,
-    pub(super) cleanup_worktree_path: Option<String>,
+    pub(super) cleanup_target: Option<RuntimeCleanupTarget>,
+}
+
+pub(crate) struct RuntimeCleanupTarget {
+    pub(super) repo_path: String,
+    pub(super) worktree_path: String,
 }
 
 pub(crate) struct CachedRuntimeCheck {

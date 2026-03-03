@@ -50,7 +50,7 @@ pub(crate) use process_registry::{
     with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
-pub(crate) use service_core::{AgentRuntimeProcess, CachedRuntimeCheck, RunProcess};
+pub(crate) use service_core::{AgentRuntimeProcess, CachedRuntimeCheck, RunProcess, RuntimeCleanupTarget};
 pub use service_core::{AppService, RunEmitter};
 #[cfg(test)]
 pub(crate) use startup_metrics::{

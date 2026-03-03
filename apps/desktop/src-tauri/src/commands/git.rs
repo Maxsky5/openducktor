@@ -517,8 +517,8 @@ pub async fn git_rebase_branch(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_worktree_status_with_snapshot, parse_diff_scope, require_target_branch,
-        hash_worktree_diff_payload, hash_worktree_status_payload, resolve_working_dir,
+        build_worktree_status_with_snapshot, hash_worktree_diff_payload,
+        hash_worktree_status_payload, parse_diff_scope, require_target_branch, resolve_working_dir,
         WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
     };
     use host_domain::{
@@ -708,7 +708,10 @@ mod tests {
             },
         );
 
-        assert_eq!(built.current_branch.name.as_deref(), Some("feature/snapshot"));
+        assert_eq!(
+            built.current_branch.name.as_deref(),
+            Some("feature/snapshot")
+        );
         assert_eq!(built.file_statuses.len(), 1);
         assert_eq!(built.file_diffs.len(), 1);
         assert_eq!(built.target_ahead_behind.ahead, 2);
