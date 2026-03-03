@@ -1,3 +1,4 @@
+import type { FileDiff, FileStatus } from "@openducktor/contracts";
 import type {
   AgentEvent,
   AgentModelCatalog,
@@ -85,4 +86,10 @@ export interface AgentEnginePort {
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe;
   stopSession(sessionId: string): Promise<void>;
+  loadSessionDiff(input: {
+    baseUrl: string;
+    sessionId: string;
+    messageId?: string;
+  }): Promise<FileDiff[]>;
+  loadFileStatus(input: { baseUrl: string }): Promise<FileStatus[]>;
 }

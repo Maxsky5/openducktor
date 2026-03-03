@@ -3,6 +3,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
+const AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY = "openducktor:agent-studio:right-panel";
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 
 export const parseTimestamp = (value: string | null | undefined): number | null => {
@@ -39,6 +40,8 @@ export const toContextStorageKey = (repoPath: string): string =>
 
 export const toTabsStorageKey = (repoPath: string): string =>
   `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${repoPath}`;
+
+export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
 
 export const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | null> => ({
   spec: null,

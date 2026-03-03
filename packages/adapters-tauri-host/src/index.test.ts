@@ -111,10 +111,12 @@ describe("TauriHostClient", () => {
     const replacement = async (_repoPath: string) => [];
     client.tasksList = replacement;
 
-    await expect(client.tasksList("/repo")).resolves.toEqual([]);
+    const rewritten = await client.tasksList("/repo");
+    expect(rewritten).toEqual([]);
 
     client.tasksList = original;
-    await expect(client.tasksList("/repo")).resolves.toHaveLength(1);
+    const rewrittenAfterReplace = await client.tasksList("/repo");
+    expect(rewrittenAfterReplace).toHaveLength(1);
   });
 
   test("facade exposes every delegated API method", () => {
@@ -177,6 +179,13 @@ describe("TauriHostClient", () => {
       "gitCreateWorktree",
       "gitRemoveWorktree",
       "gitPushBranch",
+      "gitPullBranch",
+      "gitGetStatus",
+      "gitGetDiff",
+      "gitCommitsAheadBehind",
+      "gitGetWorktreeStatus",
+      "gitCommitAll",
+      "gitRebaseBranch",
     ] as const;
 
     for (const methodName of expectedMethods) {
@@ -403,11 +412,43 @@ describe("TauriHostClient", () => {
       if (command === "git_create_worktree") {
         return { branch: "feature/task-1", worktreePath: "/tmp/wt/task-1" };
       }
+      if (command === "git_commit_all") {
+        return { outcome: "no_changes", output: "nothing to commit" };
+      }
+      if (command === "git_rebase_branch") {
+        return { outcome: "rebased", output: "rebased onto origin/main" };
+      }
       if (command === "git_remove_worktree") {
         return { ok: true };
       }
       if (command === "git_push_branch") {
         return { remote: "origin", branch: "feature/task-1", output: "Everything up-to-date" };
+      }
+      if (command === "git_pull_branch") {
+        return { outcome: "pulled", output: "updated from origin/feature/task-1" };
+      }
+      if (command === "git_get_worktree_status") {
+        return {
+          currentBranch: { name: "feature/task-1", detached: false },
+          fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 2,
+              deletions: 1,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/tmp/wt/task-1",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000000000,
+          },
+        };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -419,18 +460,33 @@ describe("TauriHostClient", () => {
       createBranch: true,
     });
     const removed = await client.gitRemoveWorktree("/repo", "/tmp/wt/task-1", { force: true });
+    const committed = await client.gitCommitAll("/repo", "Build all changes");
+    const rebased = await client.gitRebaseBranch("/repo", "origin/main", "/tmp/wt/task-1");
+    const pulled = await client.gitPullBranch("/repo", "/tmp/wt/task-1");
     const pushed = await client.gitPushBranch("/repo", "feature/task-1", {
       remote: "origin",
       setUpstream: true,
       forceWithLease: true,
+      workingDir: "/tmp/wt/task-1",
     });
+    const worktreeStatus = await client.gitGetWorktreeStatus(
+      "/repo",
+      "origin/main",
+      "target",
+      "/tmp/wt/task-1",
+    );
 
     expect(branches).toHaveLength(1);
     expect(current.detached).toBe(false);
     expect(switched.name).toBe("main");
     expect(worktree.worktreePath).toBe("/tmp/wt/task-1");
     expect(removed.ok).toBe(true);
+    expect(committed.outcome).toBe("no_changes");
+    expect(rebased.outcome).toBe("rebased");
+    expect(pulled.outcome).toBe("pulled");
     expect(pushed.remote).toBe("origin");
+    expect(worktreeStatus.currentBranch.name).toBe("feature/task-1");
+    expect(worktreeStatus.targetAheadBehind.ahead).toBe(1);
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "git_get_branches",
@@ -438,7 +494,11 @@ describe("TauriHostClient", () => {
       "git_switch_branch",
       "git_create_worktree",
       "git_remove_worktree",
+      "git_commit_all",
+      "git_rebase_branch",
+      "git_pull_branch",
       "git_push_branch",
+      "git_get_worktree_status",
     ]);
     expect(calls[2].args).toEqual({
       repoPath: "/repo",
@@ -451,12 +511,78 @@ describe("TauriHostClient", () => {
       branch: "feature/task-1",
       createBranch: true,
     });
+    expect(calls[4].args).toEqual({
+      repoPath: "/repo",
+      worktreePath: "/tmp/wt/task-1",
+      force: true,
+    });
     expect(calls[5].args).toEqual({
+      repoPath: "/repo",
+      message: "Build all changes",
+      workingDir: null,
+    });
+    expect(calls[6].args).toEqual({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[7].args).toEqual({
+      repoPath: "/repo",
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[8].args).toEqual({
       repoPath: "/repo",
       branch: "feature/task-1",
       remote: "origin",
       setUpstream: true,
       forceWithLease: true,
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[9].args).toEqual({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      diffScope: "target",
+      workingDir: "/tmp/wt/task-1",
+    });
+  });
+
+  test("git commit-all, pull, and rebase parse and reject malformed host payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_commit_all") {
+        return { outcome: "committed" };
+      }
+      if (command === "git_pull_branch") {
+        return { outcome: "pulled" };
+      }
+      if (command === "git_rebase_branch") {
+        return { outcome: "conflicts", conflictedFiles: ["src/index.ts"] };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.gitCommitAll("/repo", "Build all changes")).rejects.toThrow();
+    await expect(client.gitPullBranch("/repo")).rejects.toThrow();
+    await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
+  });
+
+  test("git pull parses typed conflicts outcome", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_pull_branch") {
+        return {
+          outcome: "conflicts",
+          conflictedFiles: ["src/index.ts"],
+          output: "Automatic merge failed; fix conflicts and then commit the result.",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.gitPullBranch("/repo");
+
+    expect(result).toEqual({
+      outcome: "conflicts",
+      conflictedFiles: ["src/index.ts"],
+      output: "Automatic merge failed; fix conflicts and then commit the result.",
     });
   });
 

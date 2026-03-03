@@ -25,9 +25,17 @@ export type RepoAgentDefaultInput = {
 export type RepoSettingsInput = {
   worktreeBasePath: string;
   branchPrefix: string;
+  /** Default branch used for ahead/behind comparison, rebase, and PR creation. */
+  defaultTargetBranch: string;
   trustedHooks: boolean;
   preStartHooks: string[];
   postCompleteHooks: string[];
+  /** Script executed after `git worktree add` (e.g., "bun install && cp .env.example .env"). */
+  worktreeSetupScript: string;
+  /** Script executed before `git worktree remove`. */
+  worktreeCleanupScript: string;
+  /** Files copied from the main repo into a new worktree on creation. */
+  worktreeFileCopies: string[];
   agentDefaults: {
     spec: RepoAgentDefaultInput | null;
     planner: RepoAgentDefaultInput | null;

@@ -159,6 +159,7 @@ mod tests {
             RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
                 branch_prefix: "odt".to_string(),
+                default_target_branch: "origin/main".to_string(),
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
@@ -190,6 +191,7 @@ mod tests {
             RepoConfig {
                 worktree_base_path: None,
                 branch_prefix: "odt".to_string(),
+                default_target_branch: "origin/main".to_string(),
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
@@ -224,6 +226,7 @@ mod tests {
             RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
                 branch_prefix: "odt".to_string(),
+                default_target_branch: "origin/main".to_string(),
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: Some(hook_set_fingerprint(&hooks)),
                 hooks,
@@ -259,6 +262,7 @@ mod tests {
             RepoConfig {
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
                 branch_prefix: "odt".to_string(),
+                default_target_branch: "origin/main".to_string(),
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),

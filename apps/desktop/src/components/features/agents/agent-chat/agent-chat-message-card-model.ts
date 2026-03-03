@@ -232,14 +232,13 @@ const summarizeSearchToolInput = (
 const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
   const candidate =
     input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
-  if (typeof candidate !== "string") {
-    return null;
+  if (typeof candidate === "string") {
+    const normalized = candidate.trim();
+    if (normalized.length > 0 && normalized !== ".") {
+      return normalized;
+    }
   }
-  const normalized = candidate.trim();
-  if (normalized.length === 0 || normalized === ".") {
-    return null;
-  }
-  return normalized;
+  return null;
 };
 
 const getTaskSummary = (
@@ -672,4 +671,83 @@ export const getAssistantFooterData = (
   }
 
   return { infoParts: parts };
+};
+
+// ─── File Edit Tool Detection ──────────────────────────────────────────────────
+
+const FILE_EDIT_TOOLS = new Set([
+  "edit",
+  "multiedit",
+  "write",
+  "create",
+  "file_write",
+  "apply_patch",
+  "str_replace",
+  "str_replace_based_edit_tool",
+  "patch",
+  "insert",
+  "replace",
+]);
+
+export const isFileEditTool = (toolName: string): boolean => {
+  return FILE_EDIT_TOOLS.has(toolName.toLowerCase());
+};
+
+export type FileEditData = {
+  filePath: string;
+  diff: string | null;
+  additions: number;
+  deletions: number;
+};
+
+export const extractFileEditData = (meta: ToolMeta): FileEditData | null => {
+  // 1) Try standard input path fields
+  let filePath = extractPathFromInput(meta.input);
+
+  // 2) For apply_patch: parse file path from the patch content in input
+  if (!filePath && typeof meta.input?.patch === "string") {
+    const patchContent = meta.input.patch as string;
+    const diffMatch = /^---\s+a\/(.+)$/m.exec(patchContent);
+    if (diffMatch?.[1]) {
+      filePath = diffMatch[1];
+    }
+  }
+
+  // 3) Fallback: parse file path from output (e.g. "Updated the following files: M path")
+  if (!filePath && typeof meta.output === "string") {
+    const outputFileMatch =
+      /(?:Updated|Modified|Created|Changed)[^:]*:\s*(?:[MADRCU]\s+)?(.+?)$/m.exec(meta.output);
+    if (outputFileMatch?.[1]) {
+      filePath = outputFileMatch[1].trim();
+    }
+  }
+
+  if (!filePath) {
+    return null;
+  }
+
+  // Try to extract diff content from metadata first, then from output
+  const diff =
+    typeof meta.metadata?.diff === "string"
+      ? meta.metadata.diff
+      : typeof meta.input?.patch === "string"
+        ? (meta.input.patch as string)
+        : typeof meta.output === "string" && meta.output.includes("@@")
+          ? meta.output
+          : null;
+
+  // Count additions/deletions from the diff if available
+  let additions = 0;
+  let deletions = 0;
+  if (diff) {
+    for (const line of diff.split("\n")) {
+      if (line.startsWith("+") && !line.startsWith("+++")) {
+        additions++;
+      } else if (line.startsWith("-") && !line.startsWith("---")) {
+        deletions++;
+      }
+    }
+  }
+
+  return { filePath, diff, additions, deletions };
 };

@@ -32,6 +32,132 @@ pub struct GitPushSummary {
     pub output: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPullRequest {
+    pub working_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitPullResult {
+    Pulled {
+        output: String,
+    },
+    UpToDate {
+        output: String,
+    },
+    Conflicts {
+        #[serde(rename = "conflictedFiles")]
+        conflicted_files: Vec<String>,
+        output: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileStatus {
+    pub path: String,
+    pub status: String,
+    pub staged: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileDiff {
+    pub file: String,
+    #[serde(rename = "type")]
+    pub diff_type: String,
+    pub additions: u32,
+    pub deletions: u32,
+    pub diff: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitAheadBehind {
+    pub ahead: u32,
+    pub behind: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GitDiffScope {
+    Target,
+    Uncommitted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatusSnapshot {
+    pub effective_working_dir: String,
+    pub target_branch: String,
+    pub diff_scope: GitDiffScope,
+    pub observed_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitUpstreamAheadBehind {
+    Tracking { ahead: u32, behind: u32 },
+    Untracked { ahead: u32 },
+    Error { message: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatus {
+    pub current_branch: GitCurrentBranch,
+    pub file_statuses: Vec<GitFileStatus>,
+    pub file_diffs: Vec<GitFileDiff>,
+    pub target_ahead_behind: GitAheadBehind,
+    pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub snapshot: GitWorktreeStatusSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitAllRequest {
+    pub working_dir: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitCommitAllResult {
+    Committed {
+        #[serde(rename = "commitHash")]
+        commit_hash: String,
+        output: String,
+    },
+    NoChanges {
+        output: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRebaseBranchRequest {
+    pub working_dir: Option<String>,
+    pub target_branch: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitRebaseBranchResult {
+    Rebased {
+        output: String,
+    },
+    UpToDate {
+        output: String,
+    },
+    Conflicts {
+        #[serde(rename = "conflictedFiles")]
+        conflicted_files: Vec<String>,
+        output: String,
+    },
+}
+
 pub trait GitPort: Send + Sync {
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>>;
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch>;
@@ -57,4 +183,99 @@ pub trait GitPort: Send + Sync {
         set_upstream: bool,
         force_with_lease: bool,
     ) -> Result<GitPushSummary>;
+    fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult>;
+    fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>>;
+    fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>>;
+    fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>>;
+    fn commits_ahead_behind(&self, repo_path: &Path, target_branch: &str)
+        -> Result<GitAheadBehind>;
+    fn commit_all(
+        &self,
+        repo_path: &Path,
+        request: GitCommitAllRequest,
+    ) -> Result<GitCommitAllResult>;
+    fn rebase_branch(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseBranchRequest,
+    ) -> Result<GitRebaseBranchResult>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GitCommitAllResult, GitPullResult, GitRebaseBranchResult};
+
+    #[test]
+    fn git_commit_all_no_changes_is_first_class_variant() {
+        let result = GitCommitAllResult::NoChanges {
+            output: "nothing to commit".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitCommitAllResult::NoChanges {
+                output: "nothing to commit".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_rebase_up_to_date_is_first_class_variant() {
+        let result = GitRebaseBranchResult::UpToDate {
+            output: "already up to date".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitRebaseBranchResult::UpToDate {
+                output: "already up to date".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_rebase_conflicts_keeps_conflicted_files() {
+        let result = GitRebaseBranchResult::Conflicts {
+            conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+            output: "rebase stopped due to conflicts".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitRebaseBranchResult::Conflicts {
+                conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+                output: "rebase stopped due to conflicts".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_pull_up_to_date_is_first_class_variant() {
+        let result = GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitPullResult::UpToDate {
+                output: "Already up to date.".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_pull_conflicts_keeps_conflicted_files() {
+        let result = GitPullResult::Conflicts {
+            conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+            output: "pull stopped due to conflicts".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitPullResult::Conflicts {
+                conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+                output: "pull stopped due to conflicts".to_string(),
+            }
+        );
+    }
 }

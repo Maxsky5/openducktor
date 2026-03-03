@@ -48,8 +48,12 @@ export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 export const repoConfigSchema = z.object({
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default("obp"),
+  defaultTargetBranch: z.string().default("origin/main"),
   trustedHooks: z.boolean().default(false),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
+  worktreeSetupScript: z.string().default(""),
+  worktreeCleanupScript: z.string().default(""),
+  worktreeFileCopies: z.array(z.string()).default([]),
   agentDefaults: repoAgentDefaultsSchema.default({
     spec: undefined,
     planner: undefined,

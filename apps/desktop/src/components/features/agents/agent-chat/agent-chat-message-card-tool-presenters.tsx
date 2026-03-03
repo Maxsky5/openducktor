@@ -13,13 +13,16 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
+import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import {
   buildToolSummary,
+  extractFileEditData,
   formatRawJsonLikeText,
   getToolDuration,
   getToolLifecyclePhase,
   hasNonEmptyInput,
   hasNonEmptyText,
+  isFileEditTool,
   questionToolDetails,
   toolDisplayName,
 } from "./agent-chat-message-card-model";
@@ -308,6 +311,12 @@ export const RegularToolMessage = ({
           </div>
         </details>
       ) : null}
+
+      {isFileEditTool(meta.tool) &&
+        (() => {
+          const fileEditData = extractFileEditData(meta);
+          return fileEditData ? <AgentChatFileEditCard data={fileEditData} /> : null;
+        })()}
     </div>
   );
 };

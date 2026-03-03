@@ -1,5 +1,9 @@
 use anyhow::{anyhow, Context, Result};
-use host_domain::{GitBranch, GitCurrentBranch, GitPort, GitPushSummary};
+use host_domain::{
+    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
+    GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitPushSummary,
+    GitRebaseBranchRequest, GitRebaseBranchResult,
+};
 use std::path::Path;
 
 use crate::process::{run_command_allow_failure_with_env, run_command_with_env};
@@ -30,6 +34,17 @@ impl GitCliPort {
         args: &[&str],
     ) -> Result<(bool, String, String)> {
         run_command_allow_failure_with_env("git", args, Some(repo_path), &GIT_NON_INTERACTIVE_ENV)
+    }
+
+    fn conflicted_files(&self, repo_path: &Path) -> Result<Vec<String>> {
+        let (_, conflicted_stdout, _) =
+            self.run_git_allow_failure(repo_path, &["diff", "--name-only", "--diff-filter=U"])?;
+        Ok(conflicted_stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>())
     }
 }
 
@@ -178,6 +193,269 @@ impl GitPort for GitCliPort {
             output,
         })
     }
+
+    fn pull_branch(&self, repo_path: &Path, _request: GitPullRequest) -> Result<GitPullResult> {
+        self.ensure_repository(repo_path)?;
+
+        let current = self.get_current_branch(repo_path)?;
+        if current.detached {
+            return Err(anyhow!("Cannot pull while detached"));
+        }
+
+        let upstream_target = self.resolve_upstream_target(repo_path)?.ok_or_else(|| {
+            anyhow!("Cannot pull because current branch does not track an upstream branch")
+        })?;
+
+        if !self.get_status(repo_path)?.is_empty() {
+            return Err(anyhow!("Cannot pull with uncommitted changes"));
+        }
+
+        let (fetch_ok, fetch_stdout, fetch_stderr) =
+            self.run_git_allow_failure(repo_path, &["fetch", "--prune"])?;
+        if !fetch_ok {
+            return Err(anyhow!(
+                "git fetch --prune failed: {}",
+                combine_output(fetch_stdout, fetch_stderr)
+            ));
+        }
+
+        let upstream_counts = self.commits_ahead_behind(repo_path, upstream_target.as_str())?;
+        if upstream_counts.behind == 0 {
+            return Ok(GitPullResult::UpToDate {
+                output: "No upstream commits to pull".to_string(),
+            });
+        }
+
+        let before_head = self.run_git(repo_path, &["rev-parse", "HEAD"])?;
+
+        let pull_args: [&str; 2] = if upstream_counts.ahead == 0 {
+            ["pull", "--ff-only"]
+        } else {
+            ["pull", "--rebase"]
+        };
+
+        let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &pull_args)?;
+        let output = combine_output(stdout, stderr);
+        if !ok {
+            let detail = if output.is_empty() {
+                "No output from git pull".to_string()
+            } else {
+                output
+            };
+
+            let conflicted_files = self.conflicted_files(repo_path)?;
+            if !conflicted_files.is_empty() {
+                return Ok(GitPullResult::Conflicts {
+                    conflicted_files,
+                    output: detail,
+                });
+            }
+
+            return Err(anyhow!("git pull failed: {}", detail));
+        }
+
+        let after_head = self.run_git(repo_path, &["rev-parse", "HEAD"])?;
+        if before_head == after_head {
+            return Ok(GitPullResult::UpToDate { output });
+        }
+
+        Ok(GitPullResult::Pulled { output })
+    }
+
+    fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>> {
+        self.ensure_repository(repo_path)?;
+        let output = self.run_git(repo_path, &["status", "--porcelain=v1"])?;
+        Ok(parse_status_porcelain(&output))
+    }
+
+    fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>> {
+        self.ensure_repository(repo_path)?;
+
+        let diff_spec = target_branch
+            .map(|b| b.trim().to_string())
+            .unwrap_or_default();
+        let diff_target = if diff_spec.is_empty() {
+            "HEAD"
+        } else {
+            diff_spec.as_str()
+        };
+
+        // Get numstat for additions/deletions counts
+        let numstat_args: Vec<&str> = vec!["diff", "--numstat", diff_target];
+        let (numstat_ok, numstat_stdout, numstat_stderr) =
+            self.run_git_allow_failure(repo_path, &numstat_args)?;
+        if !numstat_ok {
+            return Err(anyhow!(
+                "git diff --numstat {diff_target} failed: {}",
+                combine_output(numstat_stdout, numstat_stderr)
+            ));
+        }
+
+        // Get full unified diff
+        let diff_args: Vec<&str> = vec!["diff", diff_target];
+        let (diff_ok, diff_stdout, diff_stderr) =
+            self.run_git_allow_failure(repo_path, &diff_args)?;
+        if !diff_ok {
+            return Err(anyhow!(
+                "git diff {diff_target} failed: {}",
+                combine_output(diff_stdout, diff_stderr)
+            ));
+        }
+
+        Ok(build_file_diffs(&numstat_stdout, &diff_stdout))
+    }
+
+    fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>> {
+        self.ensure_repository(repo_path)?;
+        let branch = match self.get_current_branch(repo_path)?.name {
+            Some(name) => name,
+            None => return Ok(None),
+        };
+
+        let remote_key = format!("branch.{branch}.remote");
+        let merge_key = format!("branch.{branch}.merge");
+
+        let (remote_ok, remote_stdout, _) =
+            self.run_git_allow_failure(repo_path, &["config", "--get", remote_key.as_str()])?;
+        if !remote_ok {
+            return Ok(None);
+        }
+        let remote = remote_stdout.trim();
+        if remote.is_empty() {
+            return Ok(None);
+        }
+
+        let (merge_ok, merge_stdout, _) =
+            self.run_git_allow_failure(repo_path, &["config", "--get", merge_key.as_str()])?;
+        if !merge_ok {
+            return Ok(None);
+        }
+        let merge_ref = merge_stdout.trim();
+        if merge_ref.is_empty() {
+            return Ok(None);
+        }
+
+        let upstream_ref = resolve_upstream_ref(remote, merge_ref);
+        let (exists_ok, _, _) = self.run_git_allow_failure(
+            repo_path,
+            &["show-ref", "--verify", "--quiet", upstream_ref.as_str()],
+        )?;
+        if !exists_ok {
+            return Ok(None);
+        }
+
+        Ok(Some(upstream_ref))
+    }
+
+    fn commits_ahead_behind(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<GitAheadBehind> {
+        self.ensure_repository(repo_path)?;
+        let target = normalize_non_empty(target_branch, "target branch")?;
+        let range = format!("{target}...HEAD");
+        let (ok, stdout, stderr) = self
+            .run_git_allow_failure(repo_path, &["rev-list", "--count", "--left-right", &range])?;
+
+        if !ok {
+            return Err(anyhow!(
+                "git rev-list --count --left-right {range} failed: {}",
+                combine_output(stdout, stderr)
+            ));
+        }
+
+        parse_ahead_behind(&stdout)
+    }
+
+    fn commit_all(
+        &self,
+        repo_path: &Path,
+        request: GitCommitAllRequest,
+    ) -> Result<GitCommitAllResult> {
+        self.ensure_repository(repo_path)?;
+        let message = normalize_non_empty(request.message.as_str(), "commit message")?;
+
+        let (add_ok, add_stdout, add_stderr) =
+            self.run_git_allow_failure(repo_path, &["add", "-A"])?;
+        if !add_ok {
+            return Err(anyhow!(
+                "git add -A failed: {}",
+                combine_output(add_stdout, add_stderr)
+            ));
+        }
+
+        let staged_after_add = self.run_git(repo_path, &["diff", "--cached", "--name-only"])?;
+        if staged_after_add.lines().all(|line| line.trim().is_empty()) {
+            return Ok(GitCommitAllResult::NoChanges {
+                output: "No staged changes to commit".to_string(),
+            });
+        }
+
+        let (commit_ok, commit_stdout, commit_stderr) =
+            self.run_git_allow_failure(repo_path, &["commit", "-m", message.as_str()])?;
+        let output = combine_output(commit_stdout, commit_stderr);
+        if commit_ok {
+            let commit_hash = self.run_git(repo_path, &["rev-parse", "HEAD"])?;
+            return Ok(GitCommitAllResult::Committed {
+                commit_hash,
+                output,
+            });
+        }
+
+        Err(anyhow!("git commit-all failed: {}", output))
+    }
+
+    fn rebase_branch(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseBranchRequest,
+    ) -> Result<GitRebaseBranchResult> {
+        self.ensure_repository(repo_path)?;
+        let target_branch = normalize_non_empty(request.target_branch.as_str(), "target branch")?;
+
+        let current = self.get_current_branch(repo_path)?;
+        if current.detached {
+            return Err(anyhow!("Cannot rebase while detached"));
+        }
+
+        if !self.get_status(repo_path)?.is_empty() {
+            return Err(anyhow!("Cannot rebase with uncommitted changes"));
+        }
+
+        let (already_based, _, _) = self.run_git_allow_failure(
+            repo_path,
+            &[
+                "merge-base",
+                "--is-ancestor",
+                target_branch.as_str(),
+                "HEAD",
+            ],
+        )?;
+        if already_based {
+            return Ok(GitRebaseBranchResult::UpToDate {
+                output: "Branch already contains target history".to_string(),
+            });
+        }
+
+        let (rebase_ok, rebase_stdout, rebase_stderr) =
+            self.run_git_allow_failure(repo_path, &["rebase", target_branch.as_str()])?;
+        let output = combine_output(rebase_stdout, rebase_stderr);
+        if rebase_ok {
+            return Ok(GitRebaseBranchResult::Rebased { output });
+        }
+
+        let conflicted_files = self.conflicted_files(repo_path)?;
+
+        if !conflicted_files.is_empty() {
+            return Ok(GitRebaseBranchResult::Conflicts {
+                conflicted_files,
+                output,
+            });
+        }
+
+        Err(anyhow!("git rebase failed: {}", output))
+    }
 }
 
 fn normalize_non_empty(value: &str, label: &str) -> Result<String> {
@@ -192,6 +470,25 @@ fn path_to_string(path: &Path, label: &str) -> Result<String> {
     path.to_str()
         .map(|value| value.to_string())
         .ok_or_else(|| anyhow!("Invalid {label}: {}", path.display()))
+}
+
+fn normalize_merge_ref(merge_ref: &str) -> String {
+    if merge_ref.starts_with("refs/") {
+        merge_ref.to_string()
+    } else {
+        format!("refs/heads/{merge_ref}")
+    }
+}
+
+fn resolve_upstream_ref(remote: &str, merge_ref: &str) -> String {
+    let normalized_merge = normalize_merge_ref(merge_ref);
+    if remote == "." {
+        return normalized_merge;
+    }
+    let branch_ref = normalized_merge
+        .strip_prefix("refs/heads/")
+        .unwrap_or(normalized_merge.as_str());
+    format!("refs/remotes/{remote}/{branch_ref}")
 }
 
 fn combine_output(stdout: String, stderr: String) -> String {
@@ -234,10 +531,209 @@ fn parse_branch_rows(output: &str) -> Vec<GitBranch> {
         .collect()
 }
 
+fn parse_status_porcelain(output: &str) -> Vec<GitFileStatus> {
+    use host_domain::GitFileStatus;
+    output
+        .lines()
+        .filter_map(|line| {
+            if line.len() < 4 {
+                return None;
+            }
+            let index = line.chars().nth(0)?;
+            let worktree = line.chars().nth(1)?;
+            let path = line[3..].to_string();
+
+            let (status, staged) = match (index, worktree) {
+                ('?', '?') => ("untracked".to_string(), false),
+                ('!', '!') => ("ignored".to_string(), false),
+                (i, ' ') if i != ' ' => (porcelain_char_to_status(i), true),
+                (' ', w) if w != ' ' => (porcelain_char_to_status(w), false),
+                (i, _w) => (porcelain_char_to_status(i), true),
+            };
+
+            Some(GitFileStatus {
+                path,
+                status,
+                staged,
+            })
+        })
+        .collect()
+}
+
+fn porcelain_char_to_status(ch: char) -> String {
+    match ch {
+        'M' => "modified",
+        'A' => "added",
+        'D' => "deleted",
+        'R' => "renamed",
+        'C' => "copied",
+        'U' => "unmerged",
+        'T' => "typechange",
+        _ => "unknown",
+    }
+    .to_string()
+}
+
+fn build_file_diffs(numstat: &str, full_diff: &str) -> Vec<GitFileDiff> {
+    use host_domain::GitFileDiff;
+    use std::collections::HashMap;
+
+    // Parse numstat: "additions\tdeletions\tfile"
+    let stats: HashMap<String, (u32, u32)> = numstat
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() < 3 {
+                return None;
+            }
+            let adds = parts[0].parse::<u32>().unwrap_or(0);
+            let dels = parts[1].parse::<u32>().unwrap_or(0);
+            let file = parts[2..].join("\t");
+            Some((file, (adds, dels)))
+        })
+        .collect();
+
+    // Split full diff by file
+    let file_diffs = split_diff_by_file(full_diff);
+
+    // Merge numstat with file diffs
+    let mut results: Vec<GitFileDiff> = Vec::new();
+    for (file, diff_text) in &file_diffs {
+        let (additions, deletions) = stats.get(file).copied().unwrap_or((0, 0));
+        let diff_type = infer_diff_type(&diff_text);
+        results.push(GitFileDiff {
+            file: file.clone(),
+            diff_type,
+            additions,
+            deletions,
+            diff: diff_text.clone(),
+        });
+    }
+
+    // Add files from numstat that had no diff section (e.g., binary files)
+    for (file, (adds, dels)) in &stats {
+        if !file_diffs.iter().any(|(f, _)| f == file) {
+            results.push(GitFileDiff {
+                file: file.clone(),
+                diff_type: "modified".to_string(),
+                additions: *adds,
+                deletions: *dels,
+                diff: String::new(),
+            });
+        }
+    }
+
+    results.sort_by(|a, b| a.file.cmp(&b.file));
+    results
+}
+
+fn split_diff_by_file(full_diff: &str) -> Vec<(String, String)> {
+    let mut results: Vec<(String, String)> = Vec::new();
+    let mut current_file: Option<String> = None;
+    let mut current_diff = String::new();
+
+    for line in full_diff.lines() {
+        if line.starts_with("diff --git ") {
+            // Save previous file's diff
+            if let Some(file) = current_file.take() {
+                results.push((file, current_diff.clone()));
+            }
+            current_diff.clear();
+
+            // Extract file path from "diff --git a/path b/path"
+            let file = parse_diff_git_new_path(line).unwrap_or_default();
+            current_file = Some(file);
+            current_diff.push_str(line);
+            current_diff.push('\n');
+        } else {
+            current_diff.push_str(line);
+            current_diff.push('\n');
+        }
+    }
+
+    if let Some(file) = current_file {
+        results.push((file, current_diff));
+    }
+
+    results
+}
+
+fn parse_diff_git_new_path(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("diff --git ")?;
+    let (_old_path, remaining) = parse_diff_git_header_token(rest)?;
+    let (new_path, _tail) = parse_diff_git_header_token(remaining)?;
+    new_path.strip_prefix("b/").map(ToString::to_string)
+}
+
+fn parse_diff_git_header_token(input: &str) -> Option<(String, &str)> {
+    let input = input.trim_start();
+    if input.is_empty() {
+        return None;
+    }
+
+    if let Some(quoted) = input.strip_prefix('"') {
+        let mut escaped = false;
+        for (index, ch) in quoted.char_indices() {
+            if ch == '"' && !escaped {
+                let token = quoted[..index].to_string();
+                let remaining = &quoted[index + 1..];
+                return Some((token, remaining));
+            }
+
+            if ch == '\\' && !escaped {
+                escaped = true;
+            } else {
+                escaped = false;
+            }
+        }
+        return None;
+    }
+
+    let token_end = input.find(' ').unwrap_or(input.len());
+    Some((input[..token_end].to_string(), &input[token_end..]))
+}
+
+fn infer_diff_type(diff: &str) -> String {
+    for line in diff.lines() {
+        if line.starts_with("new file mode") {
+            return "added".to_string();
+        }
+        if line.starts_with("deleted file mode") {
+            return "deleted".to_string();
+        }
+        if line.starts_with("rename from") {
+            return "renamed".to_string();
+        }
+    }
+    "modified".to_string()
+}
+
+fn parse_ahead_behind(output: &str) -> Result<GitAheadBehind> {
+    use host_domain::GitAheadBehind;
+    let trimmed = output.trim();
+    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+    if parts.len() != 2 {
+        return Err(anyhow!(
+            "Unexpected output from git rev-list --count --left-right: {trimmed}"
+        ));
+    }
+    let behind = parts[0]
+        .parse::<u32>()
+        .with_context(|| format!("Failed to parse behind count: {}", parts[0]))?;
+    let ahead = parts[1]
+        .parse::<u32>()
+        .with_context(|| format!("Failed to parse ahead count: {}", parts[1]))?;
+    Ok(GitAheadBehind { ahead, behind })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{combine_output, parse_branch_rows, GitCliPort};
     use host_domain::GitPort;
+    use host_domain::{
+        GitCommitAllRequest, GitCommitAllResult, GitPullRequest, GitPullResult,
+        GitRebaseBranchRequest, GitRebaseBranchResult,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::{Command, Output, Stdio};
@@ -380,6 +876,203 @@ mod tests {
             .expect("detached branch state should resolve");
         assert!(detached.name.is_none());
         assert!(detached.detached);
+    }
+
+    #[test]
+    fn commit_all_commits_all_changes_with_message() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("commit-all-success");
+        let git = GitCliPort::new();
+
+        fs::write(repo.path.join("change.txt"), "change\n").expect("change file should write");
+        let result = git
+            .commit_all(
+                &repo.path,
+                GitCommitAllRequest {
+                    working_dir: None,
+                    message: "add change file".to_string(),
+                },
+            )
+            .expect("commit-all should succeed");
+
+        let latest = match result {
+            GitCommitAllResult::Committed {
+                commit_hash,
+                output,
+            } => {
+                assert!(!commit_hash.is_empty());
+                assert!(!output.is_empty());
+                commit_hash
+            }
+            other => panic!("expected committed result, got {other:?}"),
+        };
+
+        let repo_head = run_git_ok(&repo.path, &["rev-parse", "HEAD"]);
+        assert_eq!(latest, repo_head);
+        assert!(git
+            .get_status(&repo.path)
+            .expect("status should check out")
+            .is_empty());
+    }
+
+    #[test]
+    fn commit_all_returns_no_changes_without_modifications() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("commit-all-no-changes");
+        let git = GitCliPort::new();
+
+        let result = git
+            .commit_all(
+                &repo.path,
+                GitCommitAllRequest {
+                    working_dir: None,
+                    message: "nothing new".to_string(),
+                },
+            )
+            .expect("empty working tree should return typed no-changes result");
+
+        match result {
+            GitCommitAllResult::NoChanges { output } => {
+                assert!(output.contains("No staged changes"));
+            }
+            other => panic!("expected no-changes result, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rebase_branch_rewrites_branch_onto_target() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("rebase-success");
+        let git = GitCliPort::new();
+
+        git.switch_branch(&repo.path, "feature/rebase-success", true)
+            .expect("feature branch should be created");
+        fs::write(repo.path.join("feature.txt"), "feature\n").expect("feature file should write");
+        run_git_ok(&repo.path, &["add", "feature.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "feature commit"]);
+
+        git.switch_branch(&repo.path, "main", false)
+            .expect("return to main");
+        fs::write(repo.path.join("main.txt"), "main\n").expect("main file should write");
+        run_git_ok(&repo.path, &["add", "main.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "main commit"]);
+
+        git.switch_branch(&repo.path, "feature/rebase-success", false)
+            .expect("return to feature branch");
+        let result = git
+            .rebase_branch(
+                &repo.path,
+                GitRebaseBranchRequest {
+                    working_dir: None,
+                    target_branch: "main".to_string(),
+                },
+            )
+            .expect("rebase onto target should succeed");
+
+        match result {
+            GitRebaseBranchResult::Rebased { output } => {
+                assert!(!output.is_empty());
+            }
+            other => panic!("expected rebased result, got {other:?}"),
+        }
+
+        let log = run_git_ok(&repo.path, &["log", "--oneline", "-3"]);
+        assert!(log.contains("main commit"));
+        assert!(log.contains("feature commit"));
+    }
+
+    #[test]
+    fn rebase_branch_reports_up_to_date_when_target_is_current_base() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("rebase-up-to-date");
+        let git = GitCliPort::new();
+        let result = git
+            .rebase_branch(
+                &repo.path,
+                GitRebaseBranchRequest {
+                    working_dir: None,
+                    target_branch: "main".to_string(),
+                },
+            )
+            .expect("rebase should report up-to-date outcome");
+
+        match result {
+            GitRebaseBranchResult::UpToDate { output } => {
+                assert!(output.contains("already contains target history"));
+            }
+            GitRebaseBranchResult::Rebased { output } => {
+                assert!(!output.is_empty());
+            }
+            other => panic!("expected up-to-date or rebased-no-op result, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rebase_branch_reports_conflicts_when_merge_conflicts_occur() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("rebase-conflict");
+        let git = GitCliPort::new();
+
+        fs::write(repo.path.join("shared.txt"), "initial\n").expect("base file should write");
+        run_git_ok(&repo.path, &["add", "shared.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "shared base"]);
+
+        git.switch_branch(&repo.path, "feature/rebase-conflict", true)
+            .expect("feature branch should be created");
+        fs::write(repo.path.join("shared.txt"), "feature value\n")
+            .expect("feature change should write");
+        run_git_ok(&repo.path, &["add", "shared.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "feature change"]);
+
+        git.switch_branch(&repo.path, "main", false)
+            .expect("return to main");
+        fs::write(repo.path.join("shared.txt"), "main value\n").expect("main change should write");
+        run_git_ok(&repo.path, &["add", "shared.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "main change"]);
+
+        git.switch_branch(&repo.path, "feature/rebase-conflict", false)
+            .expect("return to feature branch");
+
+        let result = git
+            .rebase_branch(
+                &repo.path,
+                GitRebaseBranchRequest {
+                    working_dir: None,
+                    target_branch: "main".to_string(),
+                },
+            )
+            .expect("conflict should be surfaced as typed conflict result");
+
+        match result {
+            GitRebaseBranchResult::Conflicts {
+                conflicted_files,
+                output: _,
+            } => {
+                assert!(
+                    !conflicted_files.is_empty(),
+                    "conflict result should include conflicted files"
+                );
+                assert!(conflicted_files.iter().any(|file| file == "shared.txt"));
+            }
+            other => panic!("expected conflicts result, got {other:?}"),
+        }
+
+        run_git_ok(&repo.path, &["rebase", "--abort"]);
     }
 
     #[test]
@@ -537,6 +1230,397 @@ mod tests {
             ls_remote.contains("refs/heads/feature/push"),
             "remote should contain pushed branch"
         );
+    }
+
+    #[test]
+    fn pull_branch_pulls_new_upstream_commits() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("pull");
+        let remote = setup_bare_remote("pull-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        let clone_root = TempPath::new("pull-clone");
+        let clone_repo = clone_root.path.join("repo");
+        run_git_ok(
+            &clone_root.path,
+            &[
+                "clone",
+                remote_path.as_str(),
+                clone_repo.to_string_lossy().as_ref(),
+            ],
+        );
+        run_git_ok(
+            &clone_repo,
+            &["config", "user.email", "tests@openducktor.local"],
+        );
+        run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+        fs::write(clone_repo.join("upstream.txt"), "upstream\n")
+            .expect("upstream file should write");
+        run_git_ok(&clone_repo, &["add", "upstream.txt"]);
+        run_git_ok(&clone_repo, &["commit", "-m", "upstream update"]);
+        run_git_ok(&clone_repo, &["push", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        let result = git
+            .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+            .expect("pull should succeed");
+        assert!(matches!(result, GitPullResult::Pulled { .. }));
+
+        let pulled_file = repo.path.join("upstream.txt");
+        assert!(
+            pulled_file.exists(),
+            "pulled commit should update local working tree"
+        );
+    }
+
+    #[test]
+    fn pull_branch_returns_up_to_date_when_no_upstream_commits_exist() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("pull-up-to-date");
+        let remote = setup_bare_remote("pull-up-to-date-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        let result = git
+            .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+            .expect("pull should report up-to-date when upstream has no new commits");
+
+        match result {
+            GitPullResult::UpToDate { output } => {
+                assert!(
+                    !output.trim().is_empty(),
+                    "up-to-date pull should provide actionable output"
+                );
+            }
+            GitPullResult::Pulled { .. } => {
+                panic!("expected up-to-date outcome when upstream has no new commits");
+            }
+            GitPullResult::Conflicts { .. } => {
+                panic!("expected up-to-date outcome when upstream has no new commits");
+            }
+        }
+    }
+
+    #[test]
+    fn pull_branch_rebases_when_local_and_upstream_have_new_commits() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("pull-diverged");
+        let remote = setup_bare_remote("pull-diverged-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        fs::write(repo.path.join("local.txt"), "local\n").expect("local file should write");
+        run_git_ok(&repo.path, &["add", "local.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "local change"]);
+
+        let clone_root = TempPath::new("pull-diverged-clone");
+        let clone_repo = clone_root.path.join("repo");
+        run_git_ok(
+            &clone_root.path,
+            &[
+                "clone",
+                remote_path.as_str(),
+                clone_repo.to_string_lossy().as_ref(),
+            ],
+        );
+        run_git_ok(
+            &clone_repo,
+            &["config", "user.email", "tests@openducktor.local"],
+        );
+        run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+        fs::write(clone_repo.join("upstream.txt"), "upstream\n")
+            .expect("upstream file should write");
+        run_git_ok(&clone_repo, &["add", "upstream.txt"]);
+        run_git_ok(&clone_repo, &["commit", "-m", "upstream change"]);
+        run_git_ok(&clone_repo, &["push", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        let result = git
+            .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+            .expect("diverged pull should succeed");
+        assert!(matches!(result, GitPullResult::Pulled { .. }));
+
+        let latest_subject = run_git_ok(&repo.path, &["log", "-1", "--pretty=%s"]);
+        assert_eq!(latest_subject, "local change");
+
+        let head_with_parents =
+            run_git_ok(&repo.path, &["rev-list", "--parents", "-n", "1", "HEAD"]);
+        let parent_count = head_with_parents.split_whitespace().count();
+        assert_eq!(
+            parent_count, 2,
+            "rebase pull should keep linear history instead of creating merge commit"
+        );
+
+        let pulled_file = repo.path.join("upstream.txt");
+        assert!(
+            pulled_file.exists(),
+            "rebased pull should include upstream commit changes"
+        );
+    }
+
+    #[test]
+    fn pull_branch_returns_conflicts_when_rebase_encounters_conflicts() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("pull-diverged-conflicts");
+        let remote = setup_bare_remote("pull-diverged-conflicts-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        fs::write(repo.path.join("conflict.txt"), "local\n")
+            .expect("local conflict file should write");
+        run_git_ok(&repo.path, &["add", "conflict.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "local conflict change"]);
+
+        let clone_root = TempPath::new("pull-diverged-conflicts-clone");
+        let clone_repo = clone_root.path.join("repo");
+        run_git_ok(
+            &clone_root.path,
+            &[
+                "clone",
+                remote_path.as_str(),
+                clone_repo.to_string_lossy().as_ref(),
+            ],
+        );
+        run_git_ok(
+            &clone_repo,
+            &["config", "user.email", "tests@openducktor.local"],
+        );
+        run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+        fs::write(clone_repo.join("conflict.txt"), "upstream\n")
+            .expect("upstream conflict file should write");
+        run_git_ok(&clone_repo, &["add", "conflict.txt"]);
+        run_git_ok(&clone_repo, &["commit", "-m", "upstream conflict change"]);
+        run_git_ok(&clone_repo, &["push", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        let result = git
+            .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+            .expect("diverged pull with conflicts should return typed conflict result");
+
+        match result {
+            GitPullResult::Conflicts {
+                conflicted_files,
+                output,
+            } => {
+                assert!(
+                    conflicted_files.iter().any(|path| path == "conflict.txt"),
+                    "conflict list should include conflict.txt"
+                );
+                assert!(
+                    !output.trim().is_empty(),
+                    "conflict outcome should include actionable output"
+                );
+            }
+            GitPullResult::Pulled { .. } | GitPullResult::UpToDate { .. } => {
+                panic!("expected pull conflicts outcome for diverged conflicting histories");
+            }
+        }
+    }
+
+    #[test]
+    fn split_diff_by_file_parses_quoted_paths_with_b_slash_segment() {
+        let full_diff = "diff --git \"a/src/space b/path.ts\" \"b/src/space b/path.ts\"\nindex 123..456 100644\n--- \"a/src/space b/path.ts\"\n+++ \"b/src/space b/path.ts\"\n@@ -1 +1 @@\n-old\n+new\n";
+
+        let split = super::split_diff_by_file(full_diff);
+        assert_eq!(split.len(), 1);
+        assert_eq!(split[0].0, "src/space b/path.ts");
+        assert!(split[0].1.contains("@@ -1 +1 @@"));
+    }
+
+    #[test]
+    fn get_diff_returns_error_when_target_branch_is_invalid() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("diff-invalid-target");
+        let git = GitCliPort::new();
+
+        let error = git
+            .get_diff(&repo.path, Some("refs/heads/does-not-exist"))
+            .expect_err("invalid target branch should return error");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("git diff --numstat"),
+            "error should preserve actionable git command context, got: {message}"
+        );
+    }
+
+    #[test]
+    fn commits_ahead_behind_reads_upstream_counts_when_tracking_is_configured() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("ahead-behind-upstream");
+        let remote = setup_bare_remote("ahead-behind-upstream-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        git.switch_branch(&repo.path, "feature/upstream-ahead", true)
+            .expect("feature branch should be created");
+
+        fs::write(repo.path.join("upstream.txt"), "seed\n").expect("seed file should write");
+        run_git_ok(&repo.path, &["add", "upstream.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "seed upstream branch"]);
+        run_git_ok(
+            &repo.path,
+            &["push", "-u", "origin", "feature/upstream-ahead"],
+        );
+
+        fs::write(repo.path.join("upstream.txt"), "seed\nahead\n")
+            .expect("ahead file should write");
+        run_git_ok(&repo.path, &["add", "upstream.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "ahead of upstream"]);
+
+        let counts = git
+            .commits_ahead_behind(&repo.path, "@{upstream}")
+            .expect("upstream ahead/behind should resolve");
+        assert_eq!(counts.ahead, 1);
+        assert_eq!(counts.behind, 0);
+    }
+
+    #[test]
+    fn commits_ahead_behind_returns_error_when_upstream_is_missing() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("ahead-behind-no-upstream");
+        let git = GitCliPort::new();
+
+        let error = git
+            .commits_ahead_behind(&repo.path, "@{upstream}")
+            .expect_err("missing upstream should return an error");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("git rev-list --count --left-right"),
+            "error message should include upstream/rev-list context, got: {message}"
+        );
+    }
+
+    #[test]
+    fn resolve_upstream_target_returns_none_when_not_configured() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("resolve-upstream-none");
+        let git = GitCliPort::new();
+
+        let upstream = git
+            .resolve_upstream_target(&repo.path)
+            .expect("upstream resolution should not fail");
+        assert!(upstream.is_none());
+    }
+
+    #[test]
+    fn resolve_upstream_target_returns_tracking_ref_when_available() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("resolve-upstream-tracking");
+        let remote = setup_bare_remote("resolve-upstream-tracking-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        git.switch_branch(&repo.path, "feature/upstream-track", true)
+            .expect("feature branch should be created");
+
+        fs::write(repo.path.join("track.txt"), "track\n").expect("track file should write");
+        run_git_ok(&repo.path, &["add", "track.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "track upstream"]);
+        run_git_ok(
+            &repo.path,
+            &["push", "-u", "origin", "feature/upstream-track"],
+        );
+
+        let upstream = git
+            .resolve_upstream_target(&repo.path)
+            .expect("upstream resolution should succeed");
+        assert_eq!(
+            upstream,
+            Some("refs/remotes/origin/feature/upstream-track".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_upstream_target_returns_none_when_remote_ref_is_deleted() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("resolve-upstream-deleted");
+        let remote = setup_bare_remote("resolve-upstream-deleted-remote");
+        let remote_path = remote.path.to_string_lossy().to_string();
+        run_git_ok(
+            &repo.path,
+            &["remote", "add", "origin", remote_path.as_str()],
+        );
+        run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+        let git = GitCliPort::new();
+        git.switch_branch(&repo.path, "feature/upstream-deleted", true)
+            .expect("feature branch should be created");
+
+        fs::write(repo.path.join("deleted.txt"), "deleted\n").expect("deleted file should write");
+        run_git_ok(&repo.path, &["add", "deleted.txt"]);
+        run_git_ok(&repo.path, &["commit", "-m", "upstream deleted setup"]);
+        run_git_ok(
+            &repo.path,
+            &["push", "-u", "origin", "feature/upstream-deleted"],
+        );
+        run_git_ok(
+            &repo.path,
+            &["push", "origin", "--delete", "feature/upstream-deleted"],
+        );
+        run_git_ok(&repo.path, &["fetch", "--prune", "origin"]);
+
+        let upstream = git
+            .resolve_upstream_target(&repo.path)
+            .expect("upstream resolution should succeed");
+        assert!(upstream.is_none());
     }
 
     #[test]

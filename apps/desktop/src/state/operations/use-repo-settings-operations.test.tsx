@@ -62,9 +62,13 @@ const createHookHarness = (initialArgs: HookArgs) => {
 const inputFixture: RepoSettingsInput = {
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  codex/  ",
+  defaultTargetBranch: "  develop  ",
   trustedHooks: true,
   preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
+  worktreeSetupScript: "  bun install  ",
+  worktreeCleanupScript: "  rm -rf node_modules  ",
+  worktreeFileCopies: ["  .env  ", "  .env.local  "],
   agentDefaults: {
     spec: {
       providerId: " openai ",
@@ -140,9 +144,13 @@ describe("use-repo-settings-operations", () => {
       expect(loaded).toEqual({
         worktreeBasePath: "",
         branchPrefix: "codex/",
+        defaultTargetBranch: "origin/main",
         trustedHooks: false,
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
+        worktreeSetupScript: "",
+        worktreeCleanupScript: "",
+        worktreeFileCopies: [],
         agentDefaults: {
           spec: { providerId: "openai", modelId: "gpt-5", variant: "", opencodeAgent: "" },
           planner: null,
@@ -184,11 +192,15 @@ describe("use-repo-settings-operations", () => {
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
+        defaultTargetBranch: "origin/develop",
         trustedHooks: true,
         hooks: {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
+        worktreeSetupScript: "bun install",
+        worktreeCleanupScript: "rm -rf node_modules",
+        worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {
             providerId: "openai",

@@ -361,7 +361,7 @@ export function useAgentStudioOrchestrationController({
     role: viewRole,
     hasTaskContext: Boolean(viewTaskId),
     hasDocumentPanel: Boolean(agentStudioWorkspaceSidebarModel.activeDocument),
-    hasDiffPanel: false,
+    hasDiffPanel: viewRole === "build",
   });
 
   return {

@@ -2,9 +2,10 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCommitAllRequest,
+    GitCommitAllResult, GitCurrentBranch, GitPort, GitPullRequest, GitPullResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult, PlanSubtaskInput, QaReportDocument, QaVerdict,
+    RunEvent, RunState, RunSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -190,6 +191,7 @@ fn git_remove_worktree_forwards_force_flag() -> Result<()> {
 #[test]
 fn git_push_branch_defaults_remote_to_origin() -> Result<()> {
     let repo_path = "/tmp/odt-repo-push";
+    let working_dir = "/tmp/odt-repo-push-worktree";
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
@@ -199,17 +201,271 @@ fn git_push_branch_defaults_remote_to_origin() -> Result<()> {
         },
     );
 
-    let summary = service.git_push_branch(repo_path, Some("   "), "feature/x", true, false)?;
+    let summary = service.git_push_branch(
+        repo_path,
+        Some(working_dir),
+        Some("   "),
+        "feature/x",
+        true,
+        false,
+    )?;
     assert_eq!(summary.remote, "origin");
     assert_eq!(summary.branch, "feature/x");
 
     let git_state = git_state.lock().expect("git lock poisoned");
     assert!(git_state.calls.contains(&GitCall::PushBranch {
-        repo_path: repo_path.to_string(),
+        repo_path: working_dir.to_string(),
         remote: "origin".to_string(),
         branch: "feature/x".to_string(),
         set_upstream: true,
         force_with_lease: false,
     }));
+    Ok(())
+}
+
+#[test]
+fn git_pull_branch_forwards_working_dir_and_returns_result() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-pull";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.pull_branch_result = GitPullResult::Pulled {
+            output: "updated from upstream".to_string(),
+        };
+    }
+
+    let result = service.git_pull_branch(
+        repo_path,
+        GitPullRequest {
+            working_dir: Some("/tmp/odt-repo-pull-worktree".to_string()),
+        },
+    )?;
+
+    assert_eq!(
+        result,
+        GitPullResult::Pulled {
+            output: "updated from upstream".to_string(),
+        }
+    );
+
+    let git_state = git_state.lock().expect("git lock poisoned");
+    assert!(git_state.calls.contains(&GitCall::PullBranch {
+        repo_path: "/tmp/odt-repo-pull-worktree".to_string(),
+        working_dir: Some("/tmp/odt-repo-pull-worktree".to_string()),
+    }));
+
+    Ok(())
+}
+
+#[test]
+fn git_commit_all_rejects_empty_message() {
+    let repo_path = "/tmp/odt-repo-commit-empty";
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let error = service
+        .git_commit_all(
+            repo_path,
+            GitCommitAllRequest {
+                working_dir: None,
+                message: "   ".to_string(),
+            },
+        )
+        .expect_err("blank commit message should fail");
+
+    assert!(error.to_string().contains("commit message cannot be empty"));
+}
+
+#[test]
+fn git_commit_all_returns_committed_and_trims_message() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-commit-success";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.commit_all_result = GitCommitAllResult::Committed {
+            commit_hash: "abc1234".to_string(),
+            output: "ok commit".to_string(),
+        };
+    }
+
+    let result = service.git_commit_all(
+        repo_path,
+        GitCommitAllRequest {
+            working_dir: Some("/tmp/workspace".to_string()),
+            message: "  commit message  ".to_string(),
+        },
+    )?;
+
+    assert_eq!(
+        result,
+        GitCommitAllResult::Committed {
+            commit_hash: "abc1234".to_string(),
+            output: "ok commit".to_string(),
+        }
+    );
+
+    let git_state = git_state.lock().expect("git lock poisoned");
+    assert_eq!(
+        git_state.calls,
+        vec![GitCall::CommitAll {
+            repo_path: "/tmp/workspace".to_string(),
+            working_dir: Some("/tmp/workspace".to_string()),
+            message: "commit message".to_string(),
+        }]
+    );
+
+    Ok(())
+}
+
+#[test]
+fn git_commit_all_returns_no_changes() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-commit-no-changes";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.commit_all_result = GitCommitAllResult::NoChanges {
+            output: "nothing to commit".to_string(),
+        };
+    }
+
+    let result = service.git_commit_all(
+        repo_path,
+        GitCommitAllRequest {
+            working_dir: None,
+            message: "commit all".to_string(),
+        },
+    )?;
+
+    assert_eq!(
+        result,
+        GitCommitAllResult::NoChanges {
+            output: "nothing to commit".to_string(),
+        }
+    );
+
+    assert_eq!(
+        git_state
+            .lock()
+            .expect("git lock poisoned")
+            .calls
+            .first()
+            .cloned()
+            .expect("expected commit_all call"),
+        GitCall::CommitAll {
+            repo_path: repo_path.to_string(),
+            working_dir: None,
+            message: "commit all".to_string(),
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn git_rebase_branch_rejects_empty_target_branch() {
+    let repo_path = "/tmp/odt-repo-rebase-empty";
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let error = service
+        .git_rebase_branch(
+            repo_path,
+            GitRebaseBranchRequest {
+                working_dir: None,
+                target_branch: "   ".to_string(),
+            },
+        )
+        .expect_err("blank target branch should fail");
+
+    assert!(error.to_string().contains("target branch cannot be empty"));
+}
+
+#[test]
+fn git_rebase_branch_forwards_trimmed_target_branch_and_can_conflict() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-rebase-conflict";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.rebase_branch_result = GitRebaseBranchResult::Conflicts {
+            conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+            output: "conflicts found".to_string(),
+        };
+    }
+
+    let result = service.git_rebase_branch(
+        repo_path,
+        GitRebaseBranchRequest {
+            working_dir: None,
+            target_branch: "  origin/main  ".to_string(),
+        },
+    )?;
+
+    assert_eq!(
+        result,
+        GitRebaseBranchResult::Conflicts {
+            conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+            output: "conflicts found".to_string(),
+        }
+    );
+
+    assert_eq!(
+        git_state
+            .lock()
+            .expect("git lock poisoned")
+            .calls
+            .first()
+            .cloned()
+            .expect("expected rebase call"),
+        GitCall::RebaseBranch {
+            repo_path: repo_path.to_string(),
+            working_dir: None,
+            target_branch: "origin/main".to_string(),
+        }
+    );
+
     Ok(())
 }

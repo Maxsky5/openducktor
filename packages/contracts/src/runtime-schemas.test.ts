@@ -1,10 +1,21 @@
+// @ts-expect-error
 import { describe, expect, test } from "bun:test";
 import {
   agentRuntimeSummarySchema,
   agentSessionRecordSchema,
   gitBranchSchema,
+  gitCommitAllRequestSchema,
+  gitCommitAllResultSchema,
   gitCurrentBranchSchema,
+  gitDiffScopeSchema,
+  gitPullBranchRequestSchema,
+  gitPullBranchResultSchema,
   gitPushSummarySchema,
+  gitRebaseBranchRequestSchema,
+  gitRebaseBranchResultSchema,
+  gitUpstreamAheadBehindSchema,
+  gitWorktreeStatusSchema,
+  gitWorktreeStatusSnapshotSchema,
   gitWorktreeSummarySchema,
   repoConfigSchema,
   runEventSchema,
@@ -102,7 +113,9 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.type).toBe("permission_required");
-    expect(parsed.command).toBeUndefined();
+    expect(
+      "command" in parsed ? (parsed as { command?: unknown }).command : undefined,
+    ).toBeUndefined();
   });
 
   test("repo config accepts null worktree base path", () => {
@@ -183,6 +196,144 @@ describe("runtime schemas", () => {
     expect(current.detached).toBe(true);
   });
 
+  test("git commit-all request and result payloads parse for success and no-op", () => {
+    const commitRequest = gitCommitAllRequestSchema.parse({
+      repoPath: "/repo",
+      workingDir: null,
+      message: "Build all changes",
+    });
+    const commitCommitted = gitCommitAllResultSchema.parse({
+      outcome: "committed",
+      commitHash: "abc123",
+      output: "1 file changed",
+    });
+    const commitNoChanges = gitCommitAllResultSchema.parse({
+      outcome: "no_changes",
+      output: "nothing to commit",
+    });
+
+    expect(commitRequest.repoPath).toBe("/repo");
+    expect(commitRequest.workingDir).toBeUndefined();
+    expect(commitRequest.message).toBe("Build all changes");
+    expect(commitCommitted.outcome).toBe("committed");
+    expect(commitNoChanges.outcome).toBe("no_changes");
+  });
+
+  test("git commit-all result rejects unknown outcome and malformed committed payloads", () => {
+    expect(() =>
+      gitCommitAllResultSchema.parse({
+        outcome: "failed",
+        output: "commit failed",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitCommitAllResultSchema.parse({
+        outcome: "committed",
+        output: "did not include hash",
+      }),
+    ).toThrow();
+  });
+
+  test("git rebase branch request and result payloads parse for all outcomes", () => {
+    const rebaseRequest = gitRebaseBranchRequestSchema.parse({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      workingDir: "/tmp/worktree",
+    });
+    const rebaseRebased = gitRebaseBranchResultSchema.parse({
+      outcome: "rebased",
+      output: "rebased",
+    });
+    const rebaseUpToDate = gitRebaseBranchResultSchema.parse({
+      outcome: "up_to_date",
+      output: "up to date",
+    });
+    const rebaseConflicts = gitRebaseBranchResultSchema.parse({
+      outcome: "conflicts",
+      conflictedFiles: ["src/index.ts", "src/main.ts"],
+      output: "failed with conflicts",
+    });
+
+    expect(rebaseRequest.targetBranch).toBe("origin/main");
+    expect(rebaseRequest.workingDir).toBe("/tmp/worktree");
+    expect(rebaseRebased.outcome).toBe("rebased");
+    expect(rebaseUpToDate.outcome).toBe("up_to_date");
+    expect(rebaseConflicts.outcome).toBe("conflicts");
+  });
+
+  test("git rebase branch result rejects unknown and malformed payloads", () => {
+    expect(() =>
+      gitRebaseBranchResultSchema.parse({
+        outcome: "invalid",
+        output: "unknown",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitRebaseBranchResultSchema.parse({
+        outcome: "rebased",
+      }),
+    ).toThrow();
+  });
+
+  test("git rebase branch result rejects conflicts without file list", () => {
+    expect(() =>
+      gitRebaseBranchResultSchema.parse({
+        outcome: "conflicts",
+        output: "failed",
+      }),
+    ).toThrow();
+  });
+
+  test("git pull branch request and result payloads parse for all outcomes", () => {
+    const pullRequest = gitPullBranchRequestSchema.parse({
+      repoPath: "/repo",
+      workingDir: null,
+    });
+    const pullResult = gitPullBranchResultSchema.parse({
+      outcome: "pulled",
+      output: "updated local branch",
+    });
+    const upToDateResult = gitPullBranchResultSchema.parse({
+      outcome: "up_to_date",
+      output: "Already up to date.",
+    });
+    const conflictsResult = gitPullBranchResultSchema.parse({
+      outcome: "conflicts",
+      conflictedFiles: ["src/main.ts"],
+      output: "Automatic merge failed; fix conflicts and then commit the result.",
+    });
+
+    expect(pullRequest.repoPath).toBe("/repo");
+    expect(pullRequest.workingDir).toBeUndefined();
+    expect(pullResult.outcome).toBe("pulled");
+    expect(upToDateResult.outcome).toBe("up_to_date");
+    expect(conflictsResult.outcome).toBe("conflicts");
+  });
+
+  test("git pull branch result rejects unknown and malformed payloads", () => {
+    expect(() =>
+      gitPullBranchResultSchema.parse({
+        outcome: "invalid",
+        output: "unknown",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitPullBranchResultSchema.parse({
+        outcome: "pulled",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      gitPullBranchResultSchema.parse({
+        outcome: "conflicts",
+        output: "needs files",
+      }),
+    ).toThrow();
+  });
+
   test("git schemas parse worktree and push payloads", () => {
     const worktree = gitWorktreeSummarySchema.parse({
       branch: "feature/task-1",
@@ -196,6 +347,53 @@ describe("runtime schemas", () => {
 
     expect(worktree.branch).toBe("feature/task-1");
     expect(push.remote).toBe("origin");
+  });
+
+  test("git worktree status schema parses consolidated snapshot payload", () => {
+    const scope = gitDiffScopeSchema.parse("target");
+    const upstream = gitUpstreamAheadBehindSchema.parse({
+      outcome: "tracking",
+      ahead: 2,
+      behind: 0,
+    });
+    const snapshot = gitWorktreeStatusSnapshotSchema.parse({
+      effectiveWorkingDir: "/repo",
+      targetBranch: "origin/main",
+      diffScope: scope,
+      observedAtMs: 1731000000000,
+    });
+    const status = gitWorktreeStatusSchema.parse({
+      currentBranch: { name: "feature/task-1", detached: false },
+      fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+      fileDiffs: [
+        {
+          file: "src/main.ts",
+          type: "modified",
+          additions: 2,
+          deletions: 1,
+          diff: "@@ -1 +1 @@",
+        },
+      ],
+      targetAheadBehind: { ahead: 1, behind: 3 },
+      upstreamAheadBehind: upstream,
+      snapshot,
+    });
+
+    expect(status.snapshot.diffScope).toBe("target");
+    expect(status.upstreamAheadBehind.outcome).toBe("tracking");
+    expect(status.targetAheadBehind.behind).toBe(3);
+  });
+
+  test("git upstream schema parses untracked outcome", () => {
+    const upstream = gitUpstreamAheadBehindSchema.parse({
+      outcome: "untracked",
+      ahead: 4,
+    });
+
+    expect(upstream.outcome).toBe("untracked");
+    if (upstream.outcome === "untracked") {
+      expect(upstream.ahead).toBe(4);
+    }
   });
 
   test("agent runtime summary parses host payload", () => {

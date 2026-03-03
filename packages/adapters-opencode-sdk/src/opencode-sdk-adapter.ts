@@ -23,6 +23,10 @@ import {
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import { unwrapData } from "./data-utils";
 import {
+  loadFileStatus as loadFileStatusOp,
+  loadSessionDiff as loadSessionDiffOp,
+} from "./diff-ops";
+import {
   clearSessionListeners,
   emitSessionEvent,
   type SessionEventListeners,
@@ -213,6 +217,20 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       message: "Session stopped",
     });
     clearSessionListeners(this.listeners, sessionId);
+  }
+
+  async loadSessionDiff(input: {
+    baseUrl: string;
+    sessionId: string;
+    messageId?: string;
+  }): Promise<import("@openducktor/contracts").FileDiff[]> {
+    return loadSessionDiffOp(input.baseUrl, input.sessionId, input.messageId);
+  }
+
+  async loadFileStatus(input: {
+    baseUrl: string;
+  }): Promise<import("@openducktor/contracts").FileStatus[]> {
+    return loadFileStatusOp(input.baseUrl);
   }
 
   private emit(sessionId: string, event: AgentEvent): void {

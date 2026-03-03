@@ -61,6 +61,14 @@ pub async fn workspace_update_repo_config(
             .branch_prefix
             .or_else(|| existing.as_ref().map(|entry| entry.branch_prefix.clone()))
             .unwrap_or_else(|| "obp".to_string()),
+        default_target_branch: config
+            .default_target_branch
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .map(|entry| entry.default_target_branch.clone())
+            })
+            .unwrap_or_else(|| "origin/main".to_string()),
         trusted_hooks: existing
             .as_ref()
             .map(|entry| entry.trusted_hooks)
@@ -109,6 +117,9 @@ pub async fn workspace_save_repo_settings(
     let final_repo_config = RepoConfig {
         worktree_base_path: settings.worktree_base_path.or(existing.worktree_base_path),
         branch_prefix: settings.branch_prefix.unwrap_or(existing.branch_prefix),
+        default_target_branch: settings
+            .default_target_branch
+            .unwrap_or(existing.default_target_branch),
         trusted_hooks: settings.trusted_hooks,
         trusted_hooks_fingerprint: if settings.trusted_hooks {
             Some(hooks_fingerprint)

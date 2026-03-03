@@ -1,5 +1,12 @@
 # AGENTS.md
 
+## Critical Notice — No Fallbacks
+
+- NEVER implement fallback logic to mask failures.
+- Fix root causes at the source layer where the failure originates.
+- If a call fails, return/propagate an actionable error instead of silent defaults.
+- Do not add secondary probes or alternate paths to hide broken primary behavior.
+
 ## Project
 
 OpenDucktor is a **Bun monorepo** for a macOS-first **Tauri v2** desktop app that orchestrates AI planning/building workflows with **Beads** as task source-of-truth.

@@ -30,9 +30,13 @@ let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" 
 const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultTargetBranch: "main",
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
+  worktreeSetupScript: "",
+  worktreeCleanupScript: "",
+  worktreeFileCopies: [],
   agentDefaults: {
     spec: {
       providerId: "openai",

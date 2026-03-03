@@ -17,10 +17,12 @@ use super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitBranch,
-    GitCurrentBranch, GitPort, GitPushSummary, IssueType, PlanSubtaskInput, QaReportDocument,
-    QaVerdict, RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard,
-    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
+    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitFileDiff,
+    GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitPushSummary, GitRebaseBranchRequest,
+    GitRebaseBranchResult, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent,
+    RunState, RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata,
+    TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -329,6 +331,20 @@ pub(crate) enum GitCall {
         set_upstream: bool,
         force_with_lease: bool,
     },
+    PullBranch {
+        repo_path: String,
+        working_dir: Option<String>,
+    },
+    CommitAll {
+        repo_path: String,
+        working_dir: Option<String>,
+        message: String,
+    },
+    RebaseBranch {
+        repo_path: String,
+        working_dir: Option<String>,
+        target_branch: String,
+    },
 }
 
 #[derive(Debug)]
@@ -337,6 +353,9 @@ pub(crate) struct GitState {
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
     pub(crate) last_push_remote: Option<String>,
+    pub(crate) pull_branch_result: GitPullResult,
+    pub(crate) commit_all_result: GitCommitAllResult,
+    pub(crate) rebase_branch_result: GitRebaseBranchResult,
 }
 
 #[derive(Clone)]
@@ -430,6 +449,75 @@ impl GitPort for FakeGitPort {
             output: "ok".to_string(),
         })
     }
+
+    fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::PullBranch {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+        });
+        Ok(state.pull_branch_result.clone())
+    }
+
+    fn commit_all(
+        &self,
+        repo_path: &Path,
+        request: GitCommitAllRequest,
+    ) -> Result<GitCommitAllResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::CommitAll {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+            message: request.message,
+        });
+        Ok(state.commit_all_result.clone())
+    }
+
+    fn rebase_branch(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseBranchRequest,
+    ) -> Result<GitRebaseBranchResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::RebaseBranch {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+            target_branch: request.target_branch,
+        });
+        Ok(state.rebase_branch_result.clone())
+    }
+
+    fn get_status(&self, _repo_path: &Path) -> Result<Vec<GitFileStatus>> {
+        Ok(Vec::new())
+    }
+
+    fn get_diff(
+        &self,
+        _repo_path: &Path,
+        _target_branch: Option<&str>,
+    ) -> Result<Vec<GitFileDiff>> {
+        Ok(Vec::new())
+    }
+
+    fn resolve_upstream_target(&self, _repo_path: &Path) -> Result<Option<String>> {
+        let state = self.state.lock().expect("git state lock poisoned");
+        Ok(state
+            .current_branch
+            .name
+            .as_ref()
+            .map(|name| format!("refs/remotes/origin/{name}")))
+    }
+
+    fn commits_ahead_behind(
+        &self,
+        _repo_path: &Path,
+        _target_branch: &str,
+    ) -> Result<GitAheadBehind> {
+        Ok(GitAheadBehind {
+            ahead: 0,
+            behind: 0,
+        })
+    }
 }
 
 pub(crate) fn build_service_with_state(
@@ -473,6 +561,16 @@ pub(crate) fn build_service_with_git_state_enforced(
         branches,
         current_branch,
         last_push_remote: None,
+        pull_branch_result: GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        },
+        commit_all_result: GitCommitAllResult::Committed {
+            commit_hash: "deadbeef".to_string(),
+            output: "ok".to_string(),
+        },
+        rebase_branch_result: GitRebaseBranchResult::Rebased {
+            output: "rebase completed".to_string(),
+        },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: task_state.clone(),
@@ -513,6 +611,16 @@ pub(crate) fn build_service_with_git_state(
         branches,
         current_branch,
         last_push_remote: None,
+        pull_branch_result: GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        },
+        commit_all_result: GitCommitAllResult::Committed {
+            commit_hash: "deadbeef".to_string(),
+            output: "ok".to_string(),
+        },
+        rebase_branch_result: GitRebaseBranchResult::Rebased {
+            output: "rebase completed".to_string(),
+        },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: task_state.clone(),
@@ -918,6 +1026,16 @@ pub(crate) fn build_service_with_store(
         branches,
         current_branch,
         last_push_remote: None,
+        pull_branch_result: GitPullResult::UpToDate {
+            output: "Already up to date.".to_string(),
+        },
+        commit_all_result: GitCommitAllResult::Committed {
+            commit_hash: "deadbeef".to_string(),
+            output: "ok".to_string(),
+        },
+        rebase_branch_result: GitRebaseBranchResult::Rebased {
+            output: "rebase completed".to_string(),
+        },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: task_state.clone(),

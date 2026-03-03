@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
 import { requireActiveRepo } from "./task-operations-model";
@@ -72,9 +73,13 @@ export function useRepoSettingsOperations({
     return {
       worktreeBasePath: config.worktreeBasePath ?? "",
       branchPrefix: config.branchPrefix,
+      defaultTargetBranch: normalizeCanonicalTargetBranch(config.defaultTargetBranch),
       trustedHooks: config.trustedHooks,
       preStartHooks: config.hooks.preStart,
       postCompleteHooks: config.hooks.postComplete,
+      worktreeSetupScript: config.worktreeSetupScript ?? "",
+      worktreeCleanupScript: config.worktreeCleanupScript ?? "",
+      worktreeFileCopies: config.worktreeFileCopies ?? [],
       agentDefaults: {
         spec: toInputDefault(config.agentDefaults.spec),
         planner: toInputDefault(config.agentDefaults.planner),
@@ -94,6 +99,7 @@ export function useRepoSettingsOperations({
       const qaDefault = toConfigDefault(input.agentDefaults.qa);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
+      const normalizedTargetBranch = normalizeCanonicalTargetBranch(input.defaultTargetBranch);
       const agentDefaults = {
         ...(specDefault ? { spec: specDefault } : {}),
         ...(plannerDefault ? { planner: plannerDefault } : {}),
@@ -104,11 +110,15 @@ export function useRepoSettingsOperations({
       await host.workspaceSaveRepoSettings(repo, {
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
+        defaultTargetBranch: normalizedTargetBranch,
         trustedHooks: input.trustedHooks,
         hooks: {
           preStart: input.preStartHooks,
           postComplete: input.postCompleteHooks,
         },
+        worktreeSetupScript: input.worktreeSetupScript.trim(),
+        worktreeCleanupScript: input.worktreeCleanupScript.trim(),
+        worktreeFileCopies: input.worktreeFileCopies.map((f) => f.trim()).filter(Boolean),
         agentDefaults,
       });
 

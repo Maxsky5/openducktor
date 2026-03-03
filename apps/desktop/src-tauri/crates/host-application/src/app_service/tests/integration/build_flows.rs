@@ -65,6 +65,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -184,6 +185,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
             repo_config: RepoConfig {
                 worktree_base_path: None,
                 branch_prefix: "odt".to_string(),
+                default_target_branch: "origin/main".to_string(),
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
@@ -261,6 +263,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_failure_hooks)),
             hooks: pre_start_failure_hooks,
@@ -288,6 +291,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: Some(hook_set_fingerprint(&post_complete_failure_hooks)),
             hooks: post_complete_failure_hooks,
@@ -361,6 +365,7 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
         RepoConfig {
             worktree_base_path: None,
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -405,6 +410,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet {
@@ -455,6 +461,7 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -507,6 +514,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -565,6 +573,7 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
         RepoConfig {
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),

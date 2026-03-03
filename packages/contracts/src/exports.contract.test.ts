@@ -14,9 +14,22 @@ import type {
   AgentWorkflowState,
   AgentWorkflows,
   BeadsCheck,
+  CommitsAheadBehind,
+  FileDiff,
+  FileStatus,
   GitBranch,
+  GitCommitAllRequest,
+  GitCommitAllResult,
   GitCurrentBranch,
+  GitDiffScope,
+  GitPullBranchRequest,
+  GitPullBranchResult,
   GitPushSummary,
+  GitRebaseBranchRequest,
+  GitRebaseBranchResult,
+  GitUpstreamAheadBehind,
+  GitWorktreeStatus,
+  GitWorktreeStatusSnapshot,
   GitWorktreeSummary,
   GlobalConfig,
   IssueType,
@@ -63,10 +76,21 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadEntry",
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
+  "gitCommitAllRequestSchema",
+  "gitCommitAllResultSchema",
+  "commitsAheadBehindSchema",
+  "gitDiffScopeSchema",
+  "gitPullBranchRequestSchema",
+  "gitPullBranchResultSchema",
   "defaultSpecTemplateMarkdown",
+  "fileDiffSchema",
+  "fileStatusSchema",
   "gitBranchSchema",
   "gitCurrentBranchSchema",
   "gitPushSummarySchema",
+  "gitUpstreamAheadBehindSchema",
+  "gitWorktreeStatusSchema",
+  "gitWorktreeStatusSnapshotSchema",
   "gitWorktreeSummarySchema",
   "globalConfigSchema",
   "issueTypeSchema",
@@ -75,6 +99,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoAgentDefaultsSchema",
   "repoConfigSchema",
   "repoHooksSchema",
+  "gitRebaseBranchRequestSchema",
+  "gitRebaseBranchResultSchema",
   "runEventSchema",
   "runStateSchema",
   "runSummarySchema",
@@ -110,9 +136,22 @@ type ExportedTypeContract = {
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;
+  CommitsAheadBehind: CommitsAheadBehind;
+  GitCommitAllRequest: GitCommitAllRequest;
+  GitCommitAllResult: GitCommitAllResult;
+  FileDiff: FileDiff;
+  FileStatus: FileStatus;
   GitBranch: GitBranch;
   GitCurrentBranch: GitCurrentBranch;
+  GitDiffScope: GitDiffScope;
+  GitPullBranchRequest: GitPullBranchRequest;
+  GitPullBranchResult: GitPullBranchResult;
   GitPushSummary: GitPushSummary;
+  GitRebaseBranchRequest: GitRebaseBranchRequest;
+  GitRebaseBranchResult: GitRebaseBranchResult;
+  GitUpstreamAheadBehind: GitUpstreamAheadBehind;
+  GitWorktreeStatus: GitWorktreeStatus;
+  GitWorktreeStatusSnapshot: GitWorktreeStatusSnapshot;
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
   IssueType: IssueType;

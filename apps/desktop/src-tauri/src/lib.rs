@@ -118,6 +118,7 @@ struct BuildCompletePayload {
 struct RepoConfigPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
+    default_target_branch: Option<String>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
@@ -126,6 +127,7 @@ struct RepoConfigPayload {
 struct RepoSettingsPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
+    default_target_branch: Option<String>,
     trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
@@ -245,6 +247,13 @@ pub fn run() -> anyhow::Result<()> {
             git_create_worktree,
             git_remove_worktree,
             git_push_branch,
+            git_get_status,
+            git_get_diff,
+            git_commits_ahead_behind,
+            git_get_worktree_status,
+            git_commit_all,
+            git_pull_branch,
+            git_rebase_branch,
             tasks_list,
             task_create,
             task_update,
@@ -399,6 +408,30 @@ mod tests {
         assert!(
             error.to_string().contains("expected a sequence"),
             "deserialization error should preserve serde type detail: {error}"
+        );
+    }
+
+    #[test]
+    fn repo_payloads_deserialize_default_target_branch_field() {
+        let config_payload = json!({
+            "defaultTargetBranch": "origin/release"
+        });
+        let parsed_config = serde_json::from_value::<RepoConfigPayload>(config_payload)
+            .expect("repo config payload should deserialize");
+        assert_eq!(
+            parsed_config.default_target_branch.as_deref(),
+            Some("origin/release")
+        );
+
+        let settings_payload = json!({
+            "trustedHooks": false,
+            "defaultTargetBranch": "origin/develop"
+        });
+        let parsed_settings = serde_json::from_value::<RepoSettingsPayload>(settings_payload)
+            .expect("repo settings payload should deserialize");
+        assert_eq!(
+            parsed_settings.default_target_branch.as_deref(),
+            Some("origin/develop")
         );
     }
 

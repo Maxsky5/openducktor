@@ -15,7 +15,7 @@ jobs:
   knip-dependency-check:
     name: Knip Dependency Check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - name: Checkout

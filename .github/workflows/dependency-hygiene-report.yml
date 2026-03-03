@@ -19,7 +19,7 @@ jobs:
   outdated-report:
     name: Outdated Dependencies Report
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
 
     steps:
       - name: Checkout

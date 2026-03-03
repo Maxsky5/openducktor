@@ -17,9 +17,13 @@ type HookArgs = Parameters<typeof useAgentStudioRepoSettings>[0];
 const createSettings = (): RepoSettingsInput => ({
   worktreeBasePath: "/worktrees",
   branchPrefix: "codex/",
+  defaultTargetBranch: "main",
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
+  worktreeSetupScript: "",
+  worktreeCleanupScript: "",
+  worktreeFileCopies: [],
   agentDefaults: {
     spec: null,
     planner: null,

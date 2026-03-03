@@ -28,8 +28,12 @@ export type WorkspaceRepoConfigInput = {
 };
 
 export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {
+  defaultTargetBranch?: string;
   trustedHooks: boolean;
   hooks?: WorkspaceRepoHooksInput;
+  worktreeSetupScript?: string;
+  worktreeCleanupScript?: string;
+  worktreeFileCopies?: string[];
 };
 
 export type WorkspaceRepoHooksInput = {

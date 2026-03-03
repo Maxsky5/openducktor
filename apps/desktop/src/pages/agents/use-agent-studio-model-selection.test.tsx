@@ -87,9 +87,13 @@ const createRepoSettings = (
 ): RepoSettingsInput => ({
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultTargetBranch: "main",
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
+  worktreeSetupScript: "",
+  worktreeCleanupScript: "",
+  worktreeFileCopies: [],
   agentDefaults: {
     spec: specDefault,
     planner: null,
