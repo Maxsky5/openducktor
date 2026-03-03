@@ -22,27 +22,35 @@ describe("buildAgentStudioPageModelsArgs", () => {
 
     const onCreateTab = () => {};
     const onCloseTab = () => {};
-    const onSelectAgent = () => {};
-    const onSelectModel = () => {};
-    const onSelectVariant = () => {};
+    const handleSelectAgent = () => {};
+    const handleSelectModel = () => {};
+    const handleSelectVariant = () => {};
 
     const mapped = buildAgentStudioPageModelsArgs({
-      viewTaskId: "task-1",
-      viewRole: "planner",
-      viewSelectedTask: task,
-      viewSessionsForTask: [session],
-      viewActiveSession: session,
-      activeTaskTabId: "task-1",
-      taskTabs: [],
-      availableTabTasks: [task],
-      onCreateTab,
-      onCloseTab,
-      contextSwitchVersion: 4,
-      isLoadingTasks: false,
-      isActiveTaskHydrated: true,
-      specDoc: taskDocument,
-      planDoc: taskDocument,
-      qaDoc: taskDocument,
+      view: {
+        viewTaskId: "task-1",
+        viewRole: "planner",
+        viewSelectedTask: task,
+        contextSwitchVersion: 4,
+        isActiveTaskHydrated: true,
+      },
+      sessions: {
+        viewSessionsForTask: [session],
+        viewActiveSession: session,
+      },
+      tabs: {
+        activeTaskTabId: "task-1",
+        taskTabs: [],
+        availableTabTasks: [task],
+        isLoadingTasks: false,
+        onCreateTab,
+        onCloseTab,
+      },
+      documents: {
+        specDoc: taskDocument,
+        planDoc: taskDocument,
+        qaDoc: taskDocument,
+      },
       readiness: {
         agentStudioReady: true,
         agentStudioBlockedReason: "",
@@ -72,9 +80,9 @@ describe("buildAgentStudioPageModelsArgs", () => {
         modelOptions: [],
         modelGroups: [],
         variantOptions: [],
-        onSelectAgent,
-        onSelectModel,
-        onSelectVariant,
+        handleSelectAgent,
+        handleSelectModel,
+        handleSelectVariant,
         activeSessionAgentColors: {},
         activeSessionContextUsage: null,
       },
@@ -94,9 +102,9 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
     expect(mapped.documents.planDoc.markdown).toBe("# doc");
-    expect(mapped.modelSelection.onSelectAgent).toBe(onSelectAgent);
-    expect(mapped.modelSelection.onSelectModel).toBe(onSelectModel);
-    expect(mapped.modelSelection.onSelectVariant).toBe(onSelectVariant);
+    expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgent);
+    expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
+    expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.composer.input).toBe("hello");
   });
 });
