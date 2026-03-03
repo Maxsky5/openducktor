@@ -25,6 +25,7 @@ impl GitCliPort {
         if force_with_lease {
             args.push("--force-with-lease".to_string());
         }
+        args.push("--".to_string());
         args.push(remote.clone());
         args.push(branch.clone());
 

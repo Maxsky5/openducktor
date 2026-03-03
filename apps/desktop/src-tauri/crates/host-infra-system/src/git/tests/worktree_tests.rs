@@ -60,3 +60,27 @@ fn remove_worktree_requires_force_when_dirty() {
     git.remove_worktree(&repo.path, &worktree.path, true)
         .expect("dirty worktree removal with force should succeed");
 }
+
+#[test]
+fn create_worktree_rejects_option_like_branch_input() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-option-like-branch");
+    let git = GitCliPort::new();
+    let worktree = TempPath::new("worktree-option-like-branch-target");
+
+    let error = git
+        .create_worktree(&repo.path, &worktree.path, "--detach", false)
+        .expect_err("option-like branch must not be interpreted as worktree option");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("git worktree add"),
+        "error should retain actionable worktree context, got: {message}"
+    );
+    assert!(
+        !worktree.path.join(".git").exists(),
+        "option-like branch must not create a worktree"
+    );
+}

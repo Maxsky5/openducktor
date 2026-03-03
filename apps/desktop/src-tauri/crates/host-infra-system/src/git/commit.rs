@@ -78,8 +78,10 @@ impl GitCliPort {
             });
         }
 
-        let (rebase_ok, rebase_stdout, rebase_stderr) =
-            self.run_git_allow_failure(repo_path, &["rebase", target_branch.as_str()])?;
+        let (rebase_ok, rebase_stdout, rebase_stderr) = self.run_git_allow_failure(
+            repo_path,
+            &["rebase", "--end-of-options", target_branch.as_str()],
+        )?;
         let output = combine_output(rebase_stdout, rebase_stderr);
         if rebase_ok {
             return Ok(GitRebaseBranchResult::Rebased { output });

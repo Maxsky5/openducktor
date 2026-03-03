@@ -29,7 +29,7 @@ impl GitCliPort {
             diff_spec.as_str()
         };
 
-        let numstat_args: Vec<&str> = vec!["diff", "--numstat", diff_target];
+        let numstat_args: Vec<&str> = vec!["diff", "--numstat", "--end-of-options", diff_target];
         let (numstat_ok, numstat_stdout, numstat_stderr) =
             self.run_git_allow_failure(repo_path, &numstat_args)?;
         if !numstat_ok {
@@ -39,7 +39,7 @@ impl GitCliPort {
             ));
         }
 
-        let diff_args: Vec<&str> = vec!["diff", diff_target];
+        let diff_args: Vec<&str> = vec!["diff", "--end-of-options", diff_target];
         let (diff_ok, diff_stdout, diff_stderr) =
             self.run_git_allow_failure(repo_path, &diff_args)?;
         if !diff_ok {
@@ -60,8 +60,16 @@ impl GitCliPort {
         self.ensure_repository(repo_path)?;
         let target = normalize_non_empty(target_branch, "target branch")?;
         let range = format!("{target}...HEAD");
-        let (ok, stdout, stderr) = self
-            .run_git_allow_failure(repo_path, &["rev-list", "--count", "--left-right", &range])?;
+        let (ok, stdout, stderr) = self.run_git_allow_failure(
+            repo_path,
+            &[
+                "rev-list",
+                "--count",
+                "--left-right",
+                "--end-of-options",
+                &range,
+            ],
+        )?;
 
         if !ok {
             return Err(anyhow!(
@@ -162,7 +170,7 @@ fn build_file_diffs(numstat: &str, full_diff: &str) -> Vec<GitFileDiff> {
     results
 }
 
-pub(super) fn split_diff_by_file(full_diff: &str) -> Vec<(String, String)> {
+fn split_diff_by_file(full_diff: &str) -> Vec<(String, String)> {
     let mut results: Vec<(String, String)> = Vec::new();
     let mut current_file: Option<String> = None;
     let mut current_diff = String::new();

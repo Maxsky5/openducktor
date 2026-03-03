@@ -43,6 +43,25 @@ fn push_branch_pushes_to_remote_with_summary() {
 }
 
 #[test]
+fn push_branch_rejects_option_like_remote_input() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("push-option-like-remote");
+    let git = GitCliPort::new();
+
+    let error = git
+        .push_branch(&repo.path, "--help", "main", false, false)
+        .expect_err("option-like remote must not be interpreted as git push option");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("git push failed"),
+        "error should retain actionable push context, got: {message}"
+    );
+}
+
+#[test]
 fn pull_branch_pulls_new_upstream_commits() {
     if !git_available() {
         return;

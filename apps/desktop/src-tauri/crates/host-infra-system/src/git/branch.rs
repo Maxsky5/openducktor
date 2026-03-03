@@ -54,14 +54,14 @@ impl GitCliPort {
         if create {
             self.run_git(repo_path, &["switch", "-c", branch.as_str()])?;
         } else {
-            self.run_git(repo_path, &["switch", branch.as_str()])?;
+            self.run_git(repo_path, &["switch", "--end-of-options", branch.as_str()])?;
         }
 
         self.get_current_branch_impl(repo_path)
     }
 }
 
-pub(super) fn parse_branch_rows(output: &str) -> Vec<GitBranch> {
+fn parse_branch_rows(output: &str) -> Vec<GitBranch> {
     output
         .lines()
         .filter_map(|line| {

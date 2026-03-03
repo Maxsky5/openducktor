@@ -203,3 +203,29 @@ fn rebase_branch_reports_conflicts_when_merge_conflicts_occur() {
 
     run_git_ok(&repo.path, &["rebase", "--abort"]);
 }
+
+#[test]
+fn rebase_branch_rejects_option_like_target() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("rebase-option-like");
+    let git = GitCliPort::new();
+
+    let error = git
+        .rebase_branch(
+            &repo.path,
+            GitRebaseBranchRequest {
+                working_dir: None,
+                target_branch: "--help".to_string(),
+            },
+        )
+        .expect_err("option-like target branch must not be interpreted as rebase options");
+
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("git rebase"),
+        "error should retain actionable rebase context, got: {message}"
+    );
+}

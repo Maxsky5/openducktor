@@ -79,3 +79,28 @@ fn commits_ahead_behind_returns_error_when_upstream_is_missing() {
         "error message should include upstream/rev-list context, got: {message}"
     );
 }
+
+#[test]
+fn get_diff_rejects_option_like_target_and_does_not_write_output_file() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("diff-option-like-target");
+    let git = GitCliPort::new();
+    let output_path = repo.path.join("injected.diff");
+    let option_like_target = format!("--output={}", output_path.to_string_lossy());
+
+    let error = git
+        .get_diff(&repo.path, Some(option_like_target.as_str()))
+        .expect_err("option-like target must not be interpreted as git diff option");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("git diff --numstat"),
+        "error should retain actionable diff context, got: {message}"
+    );
+    assert!(
+        !output_path.exists(),
+        "option-like target must not create an output file"
+    );
+}

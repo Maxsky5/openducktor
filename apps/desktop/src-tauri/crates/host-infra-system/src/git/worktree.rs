@@ -24,13 +24,20 @@ impl GitCliPort {
                     "add",
                     "-b",
                     branch.as_str(),
+                    "--end-of-options",
                     worktree_path.as_str(),
                 ],
             )?;
         } else {
             self.run_git(
                 repo_path,
-                &["worktree", "add", worktree_path.as_str(), branch.as_str()],
+                &[
+                    "worktree",
+                    "add",
+                    "--end-of-options",
+                    worktree_path.as_str(),
+                    branch.as_str(),
+                ],
             )?;
         }
 
@@ -49,6 +56,7 @@ impl GitCliPort {
         if force {
             args.push("--force".to_string());
         }
+        args.push("--end-of-options".to_string());
         args.push(worktree_path);
         let borrowed = args.iter().map(String::as_str).collect::<Vec<_>>();
         self.run_git(repo_path, borrowed.as_slice())?;
