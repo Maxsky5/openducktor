@@ -1,16 +1,11 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentModelSelection,
-  AgentRole,
-  AgentScenario,
-} from "@openducktor/core";
+import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import { requireActiveRepo } from "../../task-operations-model";
-import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { RuntimeInfo } from "../runtime/runtime";
 import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
@@ -21,157 +16,26 @@ import {
   kickoffPrompt,
   throwIfRepoStale,
 } from "../support/utils";
+import type {
+  ModelDependencies,
+  ResolvedRuntimeAndModel,
+  RuntimeDependencies,
+  SessionDependencies,
+  SessionStartTags,
+  StartAgentSessionInput,
+  StartedSessionContext,
+  StartOrReuseResult,
+  StartSessionContext,
+  StartSessionCreationInput,
+  StartSessionDependencies,
+  StartSessionExecutionDependencies,
+  TaskDependencies,
+} from "./start-session.types";
+import { createSessionStartTags, pickLatestSession } from "./start-session-support";
 
-export type StartAgentSessionInput = {
-  taskId: string;
-  role: AgentRole;
-  scenario?: AgentScenario;
-  selectedModel?: AgentModelSelection | null;
-  sendKickoff?: boolean;
-  startMode?: "reuse_latest" | "fresh";
-  requireModelReady?: boolean;
-};
-
-type SessionStateById = Record<string, AgentSessionState>;
-type SessionStateUpdater = SessionStateById | ((current: SessionStateById) => SessionStateById);
-
-type SessionDependencies = {
-  setSessionsById: (updater: SessionStateUpdater) => void;
-  sessionsRef: { current: SessionStateById };
-  inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
-  persistSessionSnapshot: (session: AgentSessionState) => Promise<void>;
-  attachSessionListener: (repoPath: string, sessionId: string) => void;
-};
-
-type RuntimeDependencies = {
-  adapter: AgentEnginePort;
-  ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
-};
-
-type TaskDependencies = {
-  taskRef: { current: TaskCard[] };
-  loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  refreshTaskData: (repoPath: string) => Promise<void>;
-  sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
-};
-
-type ModelDependencies = {
-  loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
-  loadSessionTodos: (
-    sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<void>;
-  loadSessionModelCatalog: (
-    sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
-  ) => Promise<void>;
-};
-
-type RepoDependencies = {
-  activeRepo: string | null;
-  repoEpochRef: { current: number };
-  previousRepoRef: { current: string | null };
-};
-
-export type StartSessionDependencies = {
-  repo: RepoDependencies;
-  session: SessionDependencies;
-  runtime: RuntimeDependencies;
-  task: TaskDependencies;
-  model: ModelDependencies;
-};
+export type { StartAgentSessionInput, StartSessionDependencies } from "./start-session.types";
 
 const STALE_START_ERROR = "Workspace changed while starting session.";
-type RepoStaleGuard = () => boolean;
-type SessionStartSummary = Awaited<ReturnType<AgentEnginePort["startSession"]>>;
-
-type SessionStartTags = {
-  repoPath: string;
-  taskId: string;
-  role: AgentRole;
-  scenario: AgentScenario;
-  sessionId: string;
-};
-
-type StartSessionContext = {
-  repoPath: string;
-  taskId: string;
-  role: AgentRole;
-  isStaleRepoOperation: RepoStaleGuard;
-};
-
-type StartedSessionContext = StartSessionContext & {
-  summary: SessionStartSummary;
-  resolvedScenario: AgentScenario;
-};
-
-type StartSessionExecutionDependencies = Pick<
-  StartSessionDependencies,
-  "session" | "runtime" | "task" | "model"
->;
-
-type StartSessionCreationInput = {
-  scenario: AgentScenario | undefined;
-  selectedModel: AgentModelSelection | null;
-  startMode: "reuse_latest" | "fresh";
-};
-
-type ResolvedRuntimeAndModel = {
-  taskCard: TaskCard;
-  runtime: RuntimeInfo;
-  resolvedScenario: AgentScenario;
-  systemPrompt: string;
-  defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
-};
-
-type StartOrReuseResult =
-  | {
-      kind: "reused";
-      sessionId: string;
-    }
-  | {
-      kind: "started";
-      runtimeInfo: RuntimeInfo;
-      ctx: StartedSessionContext;
-      defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
-    };
-
-const compareBySessionRecency = (
-  a: { startedAt: string; sessionId: string },
-  b: { startedAt: string; sessionId: string },
-): number => {
-  if (a.startedAt !== b.startedAt) {
-    return a.startedAt > b.startedAt ? -1 : 1;
-  }
-  if (a.sessionId === b.sessionId) {
-    return 0;
-  }
-  return a.sessionId > b.sessionId ? -1 : 1;
-};
-
-const pickLatestSession = <T extends { startedAt: string; sessionId: string }>(
-  sessions: T[],
-): T | undefined => {
-  return [...sessions].sort(compareBySessionRecency)[0];
-};
-
-const createSessionStartTags = ({
-  repoPath,
-  taskId,
-  role,
-  resolvedScenario,
-  summary,
-}: StartedSessionContext): SessionStartTags => ({
-  repoPath,
-  taskId,
-  role,
-  scenario: resolvedScenario,
-  sessionId: summary.sessionId,
-});
 
 const stopSessionOnStaleAndThrow = async ({
   reason,
