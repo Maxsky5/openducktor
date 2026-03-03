@@ -1,4 +1,6 @@
-use super::super::super::{AgentRuntimeProcess, AppService, RuntimeCleanupTarget};
+use super::super::super::{
+    terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
+};
 use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Result};
 use host_domain::{now_rfc3339, AgentRuntimeSummary};
@@ -132,7 +134,7 @@ impl AppService {
         match self.runs.lock() {
             Ok(mut runs) => {
                 for (_, mut run) in runs.drain() {
-                    super::super::super::terminate_child_process(&mut run.child);
+                    terminate_child_process(&mut run.child);
                 }
             }
             Err(_) => cleanup_errors.push("Run state lock poisoned".to_string()),
