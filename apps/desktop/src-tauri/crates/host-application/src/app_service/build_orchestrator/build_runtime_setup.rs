@@ -205,7 +205,11 @@ impl AppService {
         task_id: &str,
         run_id: &str,
     ) -> Result<()> {
-        let startup_policy = self.opencode_startup_readiness_policy();
+        let startup_policy = self
+            .opencode_startup_readiness_policy()
+            .with_context(|| {
+                format!("OpenCode build runtime failed before readiness wait for task {task_id}")
+            })?;
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
         self.emit_build_runtime_wait_begin(

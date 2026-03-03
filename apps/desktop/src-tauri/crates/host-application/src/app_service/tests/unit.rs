@@ -423,12 +423,50 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
         state: Arc::new(Mutex::new(TaskStoreState::default())),
     });
     let service = AppService::new(task_store, config_store);
-    let policy = service.opencode_startup_readiness_policy();
+    let policy = service.opencode_startup_readiness_policy()?;
     assert_eq!(policy.timeout, Duration::from_millis(12_345));
     assert_eq!(policy.connect_timeout, Duration::from_millis(456));
     assert_eq!(policy.initial_retry_delay, Duration::from_millis(33));
     assert_eq!(policy.max_retry_delay, Duration::from_millis(99));
     assert_eq!(policy.child_state_check_interval, Duration::from_millis(77));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn opencode_startup_readiness_policy_returns_actionable_error_on_invalid_config() -> Result<()> {
+    let root = unique_temp_path("startup-policy-invalid-config");
+    let config_path = root.join("config.json");
+    fs::create_dir_all(&root)?;
+    fs::write(&config_path, "{ invalid json")?;
+
+    let config_store = AppConfigStore::from_path(config_path.clone());
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+        state: Arc::new(Mutex::new(TaskStoreState::default())),
+    });
+    let service = AppService::new(task_store, config_store);
+    let error = service
+        .opencode_startup_readiness_policy()
+        .expect_err("invalid config should fail startup readiness policy load");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains(&format!(
+            "Failed loading OpenCode startup readiness config from {}",
+            config_path.display()
+        )),
+        "error should include startup context and config path: {message}"
+    );
+    assert!(
+        message.contains(
+            "Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults"
+        ),
+        "error should include recovery instruction: {message}"
+    );
+    assert!(
+        message.contains("Failed parsing config file"),
+        "error should preserve parse failure context: {message}"
+    );
 
     let _ = fs::remove_dir_all(root);
     Ok(())

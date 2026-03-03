@@ -36,7 +36,22 @@ impl AppService {
             }
         };
 
-        let startup_policy = self.opencode_startup_readiness_policy();
+        let startup_policy = match self.opencode_startup_readiness_policy() {
+            Ok(policy) => policy,
+            Err(error) => {
+                let startup_policy_error = error.context(input.startup_error_context.clone());
+                if let Err(cleanup_error) = Self::cleanup_started_runtime(
+                    &mut child,
+                    input.cleanup_target.as_ref(),
+                ) {
+                    return Err(Self::append_cleanup_error(
+                        startup_policy_error,
+                        cleanup_error,
+                    ));
+                }
+                return Err(startup_policy_error);
+            }
+        };
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
         self.emit_opencode_startup_event(StartupEventPayload::wait_begin(

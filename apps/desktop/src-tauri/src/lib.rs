@@ -145,6 +145,15 @@ where
         .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
 
+fn validate_startup_config(config_store: &AppConfigStore) -> anyhow::Result<()> {
+    config_store.load().with_context(|| {
+        format!(
+            "Failed loading startup config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
+            config_store.path().display()
+        )
+    })?;
+    Ok(())
+}
 fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
@@ -157,9 +166,8 @@ fn startup_phase_tracing() {
 
 fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService>> {
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
-    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(
-        TASK_METADATA_NAMESPACE,
-    ));
+    validate_startup_config(&config_store)?;
+    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(TASK_METADATA_NAMESPACE));
     let service = Arc::new(AppService::new(task_store, config_store));
 
     Ok(service)
@@ -299,7 +307,62 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
     use serde_json::{json, Value};
+    use std::fs;
+    use std::path::PathBuf;
 
+    fn unique_temp_path(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("system clock should be after UNIX_EPOCH")
+            .as_nanos();
+        std::env::temp_dir().join(format!("openducktor-lib-tests-{prefix}-{nanos}"))
+    }
+
+    #[test]
+    fn validate_startup_config_succeeds_with_valid_config() -> anyhow::Result<()> {
+        let root = unique_temp_path("startup-config-valid");
+        let config_path = root.join("config.json");
+        let config_store = AppConfigStore::from_path(config_path);
+        let config = host_infra_system::GlobalConfig::default();
+        config_store.save(&config)?;
+
+        validate_startup_config(&config_store)?;
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn validate_startup_config_returns_actionable_error_on_config_failure() -> anyhow::Result<()> {
+        let root = unique_temp_path("startup-config-invalid");
+        let config_path = root.join("config.json");
+        fs::create_dir_all(&root)?;
+        fs::write(&config_path, "{ invalid json")?;
+
+        let config_store = AppConfigStore::from_path(config_path.clone());
+        let error = validate_startup_config(&config_store)
+            .expect_err("invalid config should fail startup config validation");
+        let message = format!("{error:#}");
+
+        assert!(
+            message.contains(&format!(
+                "Failed loading startup config from {}",
+                config_path.display()
+            )),
+            "error should include config path and startup context: {message}"
+        );
+        assert!(
+            message.contains(
+                "Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults"
+            ),
+            "error should include recovery instruction: {message}"
+        );
+        assert!(
+            message.contains("Failed parsing config file"),
+            "error should preserve parse failure context: {message}"
+        );
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
     #[test]
     fn run_service_blocking_propagates_operation_error() {
         let result = tauri::async_runtime::block_on(run_service_blocking(
