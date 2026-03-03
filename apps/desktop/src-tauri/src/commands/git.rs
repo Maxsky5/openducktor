@@ -8,7 +8,8 @@ use std::{
 use tauri::State;
 
 fn canonicalize_for_validation(path: &str, field: &str) -> Result<PathBuf, String> {
-    fs::canonicalize(path).map_err(|_| format!("{field} does not exist or is not accessible: {path}"))
+    fs::canonicalize(path)
+        .map_err(|_| format!("{field} does not exist or is not accessible: {path}"))
 }
 
 fn list_authorized_worktrees(repo_path: &Path) -> Result<Vec<PathBuf>, String> {
@@ -54,7 +55,10 @@ fn resolve_working_dir(repo_path: &str, working_dir: Option<&str>) -> Result<Str
             }
 
             let worktrees = list_authorized_worktrees(canonical_repo.as_path())?;
-            if worktrees.iter().any(|worktree| worktree == &canonical_working_dir) {
+            if worktrees
+                .iter()
+                .any(|worktree| worktree == &canonical_working_dir)
+            {
                 return Ok(canonical_working_dir.to_string_lossy().to_string());
             }
 
@@ -186,12 +190,7 @@ pub async fn git_get_status(
         .ensure_repo_authorized(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
-    as_error(
-        state
-            .service
-            .git_port()
-            .get_status(Path::new(&effective)),
-    )
+    as_error(state.service.git_port().get_status(Path::new(&effective)))
 }
 
 #[tauri::command]
@@ -264,8 +263,12 @@ pub async fn git_get_worktree_status(
             host_domain::GitDiffScope::Uncommitted => None,
         },
     ))?;
-    let target_ahead_behind =
-        as_error(state.service.git_port().commits_ahead_behind(repo, trimmed_target))?;
+    let target_ahead_behind = as_error(
+        state
+            .service
+            .git_port()
+            .commits_ahead_behind(repo, trimmed_target),
+    )?;
     let upstream_ahead_behind = match state.service.git_port().resolve_upstream_target(repo) {
         Ok(Some(upstream_target)) => {
             match state
@@ -459,7 +462,15 @@ mod tests {
         let repo_str = repo.to_string_lossy().to_string();
         let worktree_str = worktree.to_string_lossy().to_string();
         run_git(
-            &["-C", repo_str.as_str(), "worktree", "add", "-b", "feature/test", worktree_str.as_str()],
+            &[
+                "-C",
+                repo_str.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/test",
+                worktree_str.as_str(),
+            ],
             &repo,
         );
 

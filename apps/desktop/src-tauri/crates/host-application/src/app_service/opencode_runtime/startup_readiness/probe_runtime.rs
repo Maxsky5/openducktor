@@ -175,8 +175,8 @@ async fn probe_local_server_async(
 
 #[cfg(test)]
 mod tests {
-    use super::{LocalServerProbe, LocalServerProbeState};
     use super::super::{OpencodeStartupReadinessPolicy, StartupCancelEpoch};
+    use super::{LocalServerProbe, LocalServerProbeState};
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
@@ -197,7 +197,8 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
         let address = listener.local_addr().expect("listener address");
         let cancel_epoch: StartupCancelEpoch = Arc::new(AtomicU64::new(0));
-        let probe = LocalServerProbe::spawn(address, policy(Duration::from_secs(1)), cancel_epoch, 0);
+        let probe =
+            LocalServerProbe::spawn(address, policy(Duration::from_secs(1)), cancel_epoch, 0);
 
         let event = probe
             .recv_timeout(Duration::from_secs(2))
@@ -213,8 +214,12 @@ mod tests {
         drop(listener);
 
         let cancel_epoch: StartupCancelEpoch = Arc::new(AtomicU64::new(0));
-        let probe =
-            LocalServerProbe::spawn(address, policy(Duration::from_secs(2)), Arc::clone(&cancel_epoch), 0);
+        let probe = LocalServerProbe::spawn(
+            address,
+            policy(Duration::from_secs(2)),
+            Arc::clone(&cancel_epoch),
+            0,
+        );
         cancel_epoch.store(1, Ordering::SeqCst);
 
         let event = probe

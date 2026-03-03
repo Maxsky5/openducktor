@@ -101,10 +101,7 @@ impl std::fmt::Display for OpencodeStartupWaitFailure {
 
 impl std::error::Error for OpencodeStartupWaitFailure {}
 
-pub(super) fn startup_wait_report(
-    started_at: Instant,
-    attempts: u32,
-) -> OpencodeStartupWaitReport {
+pub(super) fn startup_wait_report(started_at: Instant, attempts: u32) -> OpencodeStartupWaitReport {
     OpencodeStartupWaitReport {
         attempts,
         elapsed: started_at.elapsed(),

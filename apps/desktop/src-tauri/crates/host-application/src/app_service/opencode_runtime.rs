@@ -7,8 +7,8 @@ use std::path::Path;
 use std::process::Child;
 
 pub(crate) use process_lifecycle::{
-    opencode_server_parent_pid, process_exists, read_opencode_version, resolve_opencode_binary_path,
-    terminate_child_process, terminate_process_by_pid,
+    opencode_server_parent_pid, process_exists, read_opencode_version,
+    resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
 };
 pub(crate) use startup_readiness::{
     wait_for_local_server_with_process, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
@@ -21,8 +21,13 @@ pub(crate) fn spawn_opencode_server(
     metadata_namespace: &str,
     port: u16,
 ) -> Result<Child> {
-    let config_content = mcp_config::build_opencode_config_content(repo_path_for_mcp, metadata_namespace)?;
-    process_lifecycle::spawn_opencode_server_with_config(working_directory, config_content.as_str(), port)
+    let config_content =
+        mcp_config::build_opencode_config_content(repo_path_for_mcp, metadata_namespace)?;
+    process_lifecycle::spawn_opencode_server_with_config(
+        working_directory,
+        config_content.as_str(),
+        port,
+    )
 }
 
 #[cfg(test)]
