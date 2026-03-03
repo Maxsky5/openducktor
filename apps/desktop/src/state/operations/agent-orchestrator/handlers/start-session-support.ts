@@ -16,14 +16,15 @@ export const compareBySessionRecency = (
 export const pickLatestSession = <T extends { startedAt: string; sessionId: string }>(
   sessions: T[],
 ): T | undefined => {
-  if (!sessions.length) {
+  const first = sessions[0];
+  if (!first) {
     return undefined;
   }
 
-  let latest = sessions[0];
+  let latest = first;
   for (let index = 1; index < sessions.length; index++) {
     const current = sessions[index];
-    if (compareBySessionRecency(current, latest) < 0) {
+    if (current && compareBySessionRecency(current, latest) < 0) {
       latest = current;
     }
   }
