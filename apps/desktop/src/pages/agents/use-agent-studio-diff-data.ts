@@ -3,6 +3,7 @@ import type {
   FileDiff,
   FileStatus,
   GitWorktreeStatus,
+  GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
@@ -29,6 +30,8 @@ export type DiffDataState = {
   fileDiffs: FileDiff[];
   /** File status from `git status`. */
   fileStatuses: FileStatus[];
+  /** Total changed files from lightweight worktree polling summaries. */
+  uncommittedFileCount?: number;
   /** Whether data is currently loading. */
   isLoading: boolean;
   /** Last error message, if any. */
@@ -69,6 +72,7 @@ type ScopeSnapshot = {
   branch: string | null;
   fileDiffs: FileDiff[];
   fileStatuses: FileStatus[];
+  uncommittedFileCount: number;
   commitsAheadBehind: CommitsAheadBehind | null;
   upstreamAheadBehind: CommitsAheadBehind | null;
   error: string | null;
@@ -102,6 +106,7 @@ type LoadDataContext = {
   targetBranch: string;
   workingDir: string | null;
   scope: DiffScope;
+  mode?: "full" | "summary";
 };
 
 /** Stable empty arrays hoisted outside the component (rerender-memo-with-default-value). */
@@ -112,6 +117,7 @@ const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   branch: null,
   fileDiffs: EMPTY_DIFFS,
   fileStatuses: EMPTY_STATUSES,
+  uncommittedFileCount: 0,
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
   error: null,
@@ -231,6 +237,7 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
       left.branch === right.branch &&
       arraysEqual(left.fileDiffs, right.fileDiffs, fileDiffEqual) &&
       arraysEqual(left.fileStatuses, right.fileStatuses, fileStatusEqual) &&
+      left.uncommittedFileCount === right.uncommittedFileCount &&
       aheadBehindEqual(left.commitsAheadBehind, right.commitsAheadBehind) &&
       aheadBehindEqual(left.upstreamAheadBehind, right.upstreamAheadBehind) &&
       left.error === right.error &&
@@ -276,6 +283,7 @@ const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
     branch: snapshot.currentBranch.name ?? null,
     fileDiffs: snapshot.fileDiffs,
     fileStatuses: snapshot.fileStatuses,
+    uncommittedFileCount: snapshot.fileStatuses.length,
     commitsAheadBehind: snapshot.targetAheadBehind,
     upstreamAheadBehind,
     error,
@@ -285,10 +293,51 @@ const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
   };
 };
 
+type ScopeSummaryFields = Pick<
+  ScopeSnapshot,
+  | "branch"
+  | "uncommittedFileCount"
+  | "commitsAheadBehind"
+  | "upstreamAheadBehind"
+  | "error"
+  | "hashVersion"
+  | "statusHash"
+  | "diffHash"
+>;
+
+const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSummaryFields => {
+  const { upstreamAheadBehind, error } = toUpstreamAndError(summary.upstreamAheadBehind);
+  return {
+    branch: summary.currentBranch.name ?? null,
+    uncommittedFileCount: summary.fileStatusCounts.total,
+    commitsAheadBehind: summary.targetAheadBehind,
+    upstreamAheadBehind,
+    error,
+    hashVersion: summary.snapshot.hashVersion,
+    statusHash: summary.snapshot.statusHash,
+    diffHash: summary.snapshot.diffHash,
+  };
+};
+
 const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): ScopeSnapshot => ({
   ...base,
   branch: source.branch,
   fileStatuses: source.fileStatuses,
+  uncommittedFileCount: source.uncommittedFileCount,
+  commitsAheadBehind: source.commitsAheadBehind,
+  upstreamAheadBehind: source.upstreamAheadBehind,
+  error: source.error,
+  hashVersion: source.hashVersion,
+  statusHash: source.statusHash,
+});
+
+const mergeSharedSummaryFields = (
+  base: ScopeSnapshot,
+  source: ScopeSummaryFields,
+): ScopeSnapshot => ({
+  ...base,
+  branch: source.branch,
+  uncommittedFileCount: source.uncommittedFileCount,
   commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
   error: source.error,
@@ -499,7 +548,8 @@ export function useAgentStudioDiffData({
     const scope = context?.scope ?? diffScopeRef.current;
     const target = context?.targetBranch ?? targetBranchRef.current;
     const workingDir = context?.workingDir ?? workingDirRef.current;
-    const requestKey = `${path}::${target}::${workingDir ?? ""}`;
+    const mode = context?.mode ?? "full";
+    const requestKey = `${path}::${target}::${workingDir ?? ""}::${mode}`;
 
     if (inFlightScopeRequestRef.current[scope] === requestKey) {
       return;
@@ -516,6 +566,73 @@ export function useAgentStudioDiffData({
 
     try {
       const wd = workingDir ?? undefined;
+
+      if (mode === "summary") {
+        const summary = await host.gitGetWorktreeStatusSummary(path, target, scope, wd);
+
+        const hasContextChanged =
+          repoPathRef.current !== path ||
+          targetBranchRef.current !== target ||
+          (workingDirRef.current ?? null) !== workingDir;
+        if (hasContextChanged) {
+          return;
+        }
+
+        // Stale response guard
+        if (versionByScopeRef.current[scope] !== version) {
+          return;
+        }
+
+        setState((prev) => {
+          const summaryFields = toScopeSummaryFields(summary);
+          const previousFetchedScopeSnapshot = prev.byScope[scope];
+          const nextFetchedScopeSnapshot: ScopeSnapshot = {
+            ...previousFetchedScopeSnapshot,
+            ...summaryFields,
+          };
+          let didChange = false;
+          const nextByScope: Record<DiffScope, ScopeSnapshot> = {
+            ...prev.byScope,
+          };
+
+          if (!scopeSnapshotEqual(previousFetchedScopeSnapshot, nextFetchedScopeSnapshot)) {
+            nextByScope[scope] = nextFetchedScopeSnapshot;
+            didChange = true;
+          }
+
+          if (requestSequence >= latestSharedSequenceRef.current) {
+            latestSharedSequenceRef.current = requestSequence;
+            for (const otherScope of ALL_SCOPES) {
+              if (otherScope === scope) {
+                continue;
+              }
+
+              const previousOtherScopeSnapshot = nextByScope[otherScope];
+              const nextOtherScopeSnapshot = mergeSharedSummaryFields(
+                previousOtherScopeSnapshot,
+                summaryFields,
+              );
+
+              if (!scopeSnapshotEqual(previousOtherScopeSnapshot, nextOtherScopeSnapshot)) {
+                nextByScope[otherScope] = nextOtherScopeSnapshot;
+                didChange = true;
+              }
+            }
+          }
+
+          if (!didChange && !prev.isLoading) {
+            return prev;
+          }
+
+          return {
+            byScope: nextByScope,
+            loadedByScope: prev.loadedByScope,
+            isLoading: false,
+          };
+        });
+        return;
+      }
+
       const snapshot = await host.gitGetWorktreeStatus(path, target, scope, wd);
 
       const hasContextChanged =
@@ -604,7 +721,7 @@ export function useAgentStudioDiffData({
           };
 
           let nextLoadedByScope = prev.loadedByScope;
-          if (!prev.loadedByScope[scope]) {
+          if (mode === "full" && !prev.loadedByScope[scope]) {
             nextLoadedByScope = {
               ...prev.loadedByScope,
               [scope]: true,
@@ -728,6 +845,7 @@ export function useAgentStudioDiffData({
         targetBranch: targetBranchRef.current,
         workingDir: workingDirRef.current,
         scope: polledScope,
+        mode: "summary",
       });
     }, POLL_INTERVAL_MS);
 
@@ -763,6 +881,7 @@ export function useAgentStudioDiffData({
       upstreamAheadBehind: activeScopeState.upstreamAheadBehind,
       fileDiffs: activeScopeState.fileDiffs,
       fileStatuses: activeScopeState.fileStatuses,
+      uncommittedFileCount: activeScopeState.uncommittedFileCount,
       isLoading,
       error: displayError,
       refresh,

@@ -17,7 +17,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 }): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
-  const uncommittedFileCount = model.fileStatuses.length;
+  const uncommittedFileCount = model.uncommittedFileCount ?? model.fileStatuses.length;
   const hasUncommittedFiles = uncommittedFileCount > 0;
   const hasFiles = model.fileDiffs.length > 0;
 

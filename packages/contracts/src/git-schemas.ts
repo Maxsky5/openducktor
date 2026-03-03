@@ -76,6 +76,13 @@ export const fileStatusSchema = z.object({
 });
 export type FileStatus = z.infer<typeof fileStatusSchema>;
 
+export const gitFileStatusCountsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  staged: z.number().int().nonnegative(),
+  unstaged: z.number().int().nonnegative(),
+});
+export type GitFileStatusCounts = z.infer<typeof gitFileStatusCountsSchema>;
+
 /** Commits ahead/behind a reference branch (from `git rev-list --left-right`). */
 export const commitsAheadBehindSchema = z.object({
   ahead: z.number(),
@@ -123,6 +130,15 @@ export const gitWorktreeStatusSchema = z.object({
   snapshot: gitWorktreeStatusSnapshotSchema,
 });
 export type GitWorktreeStatus = z.infer<typeof gitWorktreeStatusSchema>;
+
+export const gitWorktreeStatusSummarySchema = z.object({
+  currentBranch: gitCurrentBranchSchema,
+  fileStatusCounts: gitFileStatusCountsSchema,
+  targetAheadBehind: commitsAheadBehindSchema,
+  upstreamAheadBehind: gitUpstreamAheadBehindSchema,
+  snapshot: gitWorktreeStatusSnapshotSchema,
+});
+export type GitWorktreeStatusSummary = z.infer<typeof gitWorktreeStatusSummarySchema>;
 
 export const gitCommitAllRequestSchema = z.object({
   repoPath: z.string(),

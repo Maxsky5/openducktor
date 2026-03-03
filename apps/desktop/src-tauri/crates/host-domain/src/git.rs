@@ -64,6 +64,14 @@ pub struct GitFileStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitFileStatusCounts {
+    pub total: u32,
+    pub staged: u32,
+    pub unstaged: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitFileDiff {
     pub file: String,
     #[serde(rename = "type")]
@@ -113,6 +121,16 @@ pub struct GitWorktreeStatus {
     pub current_branch: GitCurrentBranch,
     pub file_statuses: Vec<GitFileStatus>,
     pub file_diffs: Vec<GitFileDiff>,
+    pub target_ahead_behind: GitAheadBehind,
+    pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub snapshot: GitWorktreeStatusSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatusSummary {
+    pub current_branch: GitCurrentBranch,
+    pub file_status_counts: GitFileStatusCounts,
     pub target_ahead_behind: GitAheadBehind,
     pub upstream_ahead_behind: GitUpstreamAheadBehind,
     pub snapshot: GitWorktreeStatusSnapshot,

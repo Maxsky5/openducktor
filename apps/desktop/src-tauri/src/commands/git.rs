@@ -209,6 +209,75 @@ fn hash_worktree_diff_payload(file_diffs: &[host_domain::GitFileDiff]) -> String
     hasher.finish_hex()
 }
 
+fn hash_worktree_diff_summary_payload(
+    diff_scope: &host_domain::GitDiffScope,
+    target_ahead_behind: &host_domain::GitAheadBehind,
+    file_status_counts: &host_domain::GitFileStatusCounts,
+) -> String {
+    let mut hasher = Fnv1a64Hasher::new();
+
+    match diff_scope {
+        host_domain::GitDiffScope::Target => hasher.update_str("target"),
+        host_domain::GitDiffScope::Uncommitted => hasher.update_str("uncommitted"),
+    }
+
+    hasher.update_u32(target_ahead_behind.ahead);
+    hasher.update_u32(target_ahead_behind.behind);
+    hasher.update_u32(file_status_counts.total);
+    hasher.update_u32(file_status_counts.staged);
+    hasher.update_u32(file_status_counts.unstaged);
+
+    hasher.finish_hex()
+}
+
+fn build_file_status_counts(
+    file_statuses: &[host_domain::GitFileStatus],
+) -> Result<host_domain::GitFileStatusCounts, String> {
+    let total = u32::try_from(file_statuses.len()).map_err(|_| {
+        format!(
+            "too many file statuses to summarize: {}",
+            file_statuses.len()
+        )
+    })?;
+    let staged = u32::try_from(file_statuses.iter().filter(|status| status.staged).count())
+        .map_err(|_| "staged file status count overflowed u32".to_string())?;
+    let unstaged = total
+        .checked_sub(staged)
+        .ok_or_else(|| "unstaged file status count underflowed".to_string())?;
+
+    Ok(host_domain::GitFileStatusCounts {
+        total,
+        staged,
+        unstaged,
+    })
+}
+
+fn resolve_upstream_ahead_behind(
+    git_port: &dyn host_domain::GitPort,
+    repo: &Path,
+    target_ahead_behind: &host_domain::GitAheadBehind,
+) -> host_domain::GitUpstreamAheadBehind {
+    match git_port.resolve_upstream_target(repo) {
+        Ok(Some(upstream_target)) => {
+            match git_port.commits_ahead_behind(repo, upstream_target.as_str()) {
+                Ok(counts) => host_domain::GitUpstreamAheadBehind::Tracking {
+                    ahead: counts.ahead,
+                    behind: counts.behind,
+                },
+                Err(error) => host_domain::GitUpstreamAheadBehind::Error {
+                    message: format!("{error:#}"),
+                },
+            }
+        }
+        Ok(None) => host_domain::GitUpstreamAheadBehind::Untracked {
+            ahead: target_ahead_behind.ahead,
+        },
+        Err(error) => host_domain::GitUpstreamAheadBehind::Error {
+            message: format!("{error:#}"),
+        },
+    }
+}
+
 struct WorktreeSnapshotMetadata {
     effective_working_dir: String,
     target_branch: String,
@@ -229,6 +298,30 @@ fn build_worktree_status_with_snapshot(
         file_diffs: status_data.file_diffs,
         target_ahead_behind: status_data.target_ahead_behind,
         upstream_ahead_behind: status_data.upstream_ahead_behind,
+        snapshot: host_domain::GitWorktreeStatusSnapshot {
+            effective_working_dir: snapshot_metadata.effective_working_dir,
+            target_branch: snapshot_metadata.target_branch,
+            diff_scope: snapshot_metadata.diff_scope,
+            observed_at_ms: snapshot_metadata.observed_at_ms,
+            hash_version: snapshot_metadata.hash_version,
+            status_hash: snapshot_metadata.status_hash,
+            diff_hash: snapshot_metadata.diff_hash,
+        },
+    }
+}
+
+fn build_worktree_status_summary_with_snapshot(
+    current_branch: host_domain::GitCurrentBranch,
+    file_status_counts: host_domain::GitFileStatusCounts,
+    target_ahead_behind: host_domain::GitAheadBehind,
+    upstream_ahead_behind: host_domain::GitUpstreamAheadBehind,
+    snapshot_metadata: WorktreeSnapshotMetadata,
+) -> host_domain::GitWorktreeStatusSummary {
+    host_domain::GitWorktreeStatusSummary {
+        current_branch,
+        file_status_counts,
+        target_ahead_behind,
+        upstream_ahead_behind,
         snapshot: host_domain::GitWorktreeStatusSnapshot {
             effective_working_dir: snapshot_metadata.effective_working_dir,
             target_branch: snapshot_metadata.target_branch,
@@ -443,6 +536,61 @@ pub async fn git_get_worktree_status(
 }
 
 #[tauri::command]
+pub async fn git_get_worktree_status_summary(
+    state: State<'_, AppState>,
+    repo_path: String,
+    target_branch: String,
+    diff_scope: Option<String>,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitWorktreeStatusSummary, String> {
+    let trimmed_target = require_target_branch(&target_branch)?;
+    let scope = parse_diff_scope(diff_scope.as_deref())?;
+
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+    let repo = Path::new(&effective);
+    let git_port = state.service.git_port();
+
+    let current_branch = as_error(git_port.get_current_branch(repo))?;
+    let file_statuses = as_error(git_port.get_status(repo))?;
+    let file_status_counts = build_file_status_counts(file_statuses.as_slice())?;
+    let target_ahead_behind = as_error(git_port.commits_ahead_behind(repo, trimmed_target))?;
+    let upstream_ahead_behind = resolve_upstream_ahead_behind(git_port, repo, &target_ahead_behind);
+
+    let observed_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let status_hash = hash_worktree_status_payload(
+        &current_branch,
+        file_statuses.as_slice(),
+        &target_ahead_behind,
+        &upstream_ahead_behind,
+    );
+    let diff_hash =
+        hash_worktree_diff_summary_payload(&scope, &target_ahead_behind, &file_status_counts);
+
+    Ok(build_worktree_status_summary_with_snapshot(
+        current_branch,
+        file_status_counts,
+        target_ahead_behind,
+        upstream_ahead_behind,
+        WorktreeSnapshotMetadata {
+            effective_working_dir: effective,
+            target_branch: trimmed_target.to_string(),
+            diff_scope: scope,
+            observed_at_ms,
+            hash_version: GIT_WORKTREE_HASH_VERSION,
+            status_hash,
+            diff_hash,
+        },
+    ))
+}
+
+#[tauri::command]
 pub async fn git_commit_all(
     state: State<'_, AppState>,
     repo_path: String,
@@ -517,9 +665,11 @@ pub async fn git_rebase_branch(
 #[cfg(test)]
 mod tests {
     use super::{
+        build_file_status_counts, build_worktree_status_summary_with_snapshot,
         build_worktree_status_with_snapshot, git_get_worktree_status, hash_worktree_diff_payload,
-        hash_worktree_status_payload, parse_diff_scope, require_target_branch, resolve_working_dir,
-        WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
+        hash_worktree_diff_summary_payload, hash_worktree_status_payload, parse_diff_scope,
+        require_target_branch, resolve_working_dir, WorktreeSnapshotMetadata,
+        GIT_WORKTREE_HASH_VERSION,
     };
     use crate::AppState;
     use anyhow::anyhow;
@@ -527,9 +677,10 @@ mod tests {
     use host_domain::GitPort;
     use host_domain::{
         GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-        GitDiffScope, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushSummary,
-        GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-        GitWorktreeStatusData, TaskStore, TASK_METADATA_NAMESPACE,
+        GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPullRequest,
+        GitPullResult, GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult,
+        GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, TaskStore,
+        TASK_METADATA_NAMESPACE,
     };
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::AppConfigStore;
@@ -1334,5 +1485,117 @@ mod tests {
         let changed_hash = hash_worktree_diff_payload(changed_diff.as_slice());
 
         assert_ne!(baseline_hash, changed_hash);
+    }
+
+    #[test]
+    fn diff_summary_hash_changes_when_scope_or_counts_change() {
+        let target_ahead_behind = GitAheadBehind {
+            ahead: 1,
+            behind: 0,
+        };
+        let baseline_counts = GitFileStatusCounts {
+            total: 2,
+            staged: 1,
+            unstaged: 1,
+        };
+        let changed_counts = GitFileStatusCounts {
+            total: 3,
+            staged: 1,
+            unstaged: 2,
+        };
+
+        let baseline_hash = hash_worktree_diff_summary_payload(
+            &GitDiffScope::Target,
+            &target_ahead_behind,
+            &baseline_counts,
+        );
+        let changed_counts_hash = hash_worktree_diff_summary_payload(
+            &GitDiffScope::Target,
+            &target_ahead_behind,
+            &changed_counts,
+        );
+        let changed_scope_hash = hash_worktree_diff_summary_payload(
+            &GitDiffScope::Uncommitted,
+            &target_ahead_behind,
+            &baseline_counts,
+        );
+
+        assert_ne!(baseline_hash, changed_counts_hash);
+        assert_ne!(baseline_hash, changed_scope_hash);
+    }
+
+    #[test]
+    fn build_file_status_counts_splits_staged_and_unstaged_entries() {
+        let statuses = vec![
+            GitFileStatus {
+                path: "src/staged.ts".to_string(),
+                status: "M".to_string(),
+                staged: true,
+            },
+            GitFileStatus {
+                path: "src/unstaged.ts".to_string(),
+                status: "M".to_string(),
+                staged: false,
+            },
+        ];
+
+        let counts = build_file_status_counts(statuses.as_slice())
+            .expect("file status counts should be derived");
+        assert_eq!(counts.total, 2);
+        assert_eq!(counts.staged, 1);
+        assert_eq!(counts.unstaged, 1);
+    }
+
+    #[test]
+    fn build_worktree_status_summary_with_snapshot_preserves_payload_and_snapshot_fields() {
+        let built = build_worktree_status_summary_with_snapshot(
+            GitCurrentBranch {
+                name: Some("feature/snapshot".to_string()),
+                detached: false,
+            },
+            GitFileStatusCounts {
+                total: 4,
+                staged: 2,
+                unstaged: 2,
+            },
+            GitAheadBehind {
+                ahead: 3,
+                behind: 1,
+            },
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 5,
+                behind: 0,
+            },
+            WorktreeSnapshotMetadata {
+                effective_working_dir: "/tmp/openducktor-worktree".to_string(),
+                target_branch: "origin/main".to_string(),
+                diff_scope: GitDiffScope::Uncommitted,
+                observed_at_ms: 99,
+                hash_version: GIT_WORKTREE_HASH_VERSION,
+                status_hash: "0123456789abcdef".to_string(),
+                diff_hash: "fedcba9876543210".to_string(),
+            },
+        );
+
+        assert_eq!(
+            built.current_branch.name.as_deref(),
+            Some("feature/snapshot")
+        );
+        assert_eq!(built.file_status_counts.total, 4);
+        assert_eq!(built.file_status_counts.staged, 2);
+        assert_eq!(built.file_status_counts.unstaged, 2);
+        assert_eq!(built.target_ahead_behind.ahead, 3);
+        assert_eq!(
+            built.upstream_ahead_behind,
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 5,
+                behind: 0
+            }
+        );
+        assert_eq!(built.snapshot.diff_scope, GitDiffScope::Uncommitted);
+        assert_eq!(built.snapshot.observed_at_ms, 99);
+        assert_eq!(built.snapshot.hash_version, GIT_WORKTREE_HASH_VERSION);
+        assert_eq!(built.snapshot.status_hash, "0123456789abcdef");
+        assert_eq!(built.snapshot.diff_hash, "fedcba9876543210");
     }
 }

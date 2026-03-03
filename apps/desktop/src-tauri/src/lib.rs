@@ -226,6 +226,7 @@ fn startup_phase_command_registration(
         git_get_diff,
         git_commits_ahead_behind,
         git_get_worktree_status,
+        git_get_worktree_status_summary,
         git_commit_all,
         git_pull_branch,
         git_rebase_branch,

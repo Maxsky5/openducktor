@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { GitWorktreeStatus } from "@openducktor/contracts";
+import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -40,11 +40,47 @@ const gitGetWorktreeStatusMock = mock(
       },
     }),
 );
+const gitGetWorktreeStatusSummaryMock = mock(
+  async (
+    _repoPath: string,
+    targetBranch: string,
+    diffScope?: "target" | "uncommitted",
+    workingDir?: string,
+  ): Promise<GitWorktreeStatusSummary> => {
+    const fullStatus = withSnapshotHashes({
+      currentBranch: { name: "feature/task-10", detached: false },
+      fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+      fileDiffs:
+        (diffScope ?? "target") === "target"
+          ? [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 0,
+                diff: "@@ -1 +1 @@",
+              },
+            ]
+          : [],
+      targetAheadBehind: { ahead: 0, behind: 0 },
+      upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+      snapshot: {
+        effectiveWorkingDir: workingDir ?? "/repo",
+        targetBranch,
+        diffScope: diffScope ?? "target",
+        observedAtMs: 1731000000000,
+      },
+    });
+
+    return toWorktreeStatusSummary(fullStatus);
+  },
+);
 
 mock.module("@/state/operations/host", () => ({
   host: {
     runsList: runsListMock,
     gitGetWorktreeStatus: gitGetWorktreeStatusMock,
+    gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
   },
 }));
 
@@ -106,6 +142,22 @@ const withSnapshotHashes = (
   };
 };
 
+const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeStatusSummary => {
+  const staged = status.fileStatuses.filter((fileStatus) => fileStatus.staged).length;
+  const total = status.fileStatuses.length;
+  return {
+    currentBranch: status.currentBranch,
+    fileStatusCounts: {
+      total,
+      staged,
+      unstaged: total - staged,
+    },
+    targetAheadBehind: status.targetAheadBehind,
+    upstreamAheadBehind: status.upstreamAheadBehind,
+    snapshot: status.snapshot,
+  };
+};
+
 const createBaseArgs = (): HookArgs => ({
   repoPath: "/repo",
   sessionWorkingDirectory: null,
@@ -121,6 +173,7 @@ beforeAll(async () => {
 beforeEach(() => {
   runsListMock.mockClear();
   gitGetWorktreeStatusMock.mockClear();
+  gitGetWorktreeStatusSummaryMock.mockClear();
   gitGetWorktreeStatusMock.mockImplementation(
     async (
       _repoPath: string,
@@ -152,6 +205,41 @@ beforeEach(() => {
           observedAtMs: 1731000000000,
         },
       }),
+  );
+  gitGetWorktreeStatusSummaryMock.mockImplementation(
+    async (
+      _repoPath: string,
+      targetBranch: string,
+      diffScope?: "target" | "uncommitted",
+      workingDir?: string,
+    ): Promise<GitWorktreeStatusSummary> => {
+      const fullStatus = withSnapshotHashes({
+        currentBranch: { name: "feature/task-10", detached: false },
+        fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+        fileDiffs:
+          (diffScope ?? "target") === "target"
+            ? [
+                {
+                  file: "src/main.ts",
+                  type: "modified",
+                  additions: 1,
+                  deletions: 0,
+                  diff: "@@ -1 +1 @@",
+                },
+              ]
+            : [],
+        targetAheadBehind: { ahead: 0, behind: 0 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+        snapshot: {
+          effectiveWorkingDir: workingDir ?? "/repo",
+          targetBranch,
+          diffScope: diffScope ?? "target",
+          observedAtMs: 1731000000000,
+        },
+      });
+
+      return toWorktreeStatusSummary(fullStatus);
+    },
   );
 });
 
@@ -339,21 +427,22 @@ describe("useAgentStudioDiffData", () => {
       await harness.run(() => {
         runTick();
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
-      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        2,
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
+      expect(gitGetWorktreeStatusSummaryMock).toHaveBeenNthCalledWith(
+        1,
         "/repo",
         "origin/main",
         "target",
         undefined,
       );
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
 
       await harness.run((state) => {
         state.setDiffScope("uncommitted");
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        3,
+        2,
         "/repo",
         "origin/main",
         "uncommitted",
@@ -363,14 +452,15 @@ describe("useAgentStudioDiffData", () => {
       await harness.run(() => {
         runTick();
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 4);
-      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        4,
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 2);
+      expect(gitGetWorktreeStatusSummaryMock).toHaveBeenNthCalledWith(
+        2,
         "/repo",
         "origin/main",
         "uncommitted",
         undefined,
       );
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
     } finally {
       await harness.unmount();
       expect(clearIntervalMock).toHaveBeenCalledTimes(1);
@@ -383,7 +473,6 @@ describe("useAgentStudioDiffData", () => {
     const originalSetInterval = globalThis.setInterval;
     const originalClearInterval = globalThis.clearInterval;
     let intervalCallback: (() => void) | null = null;
-    let callCount = 0;
 
     const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
       if (typeof callback !== "function") {
@@ -396,20 +485,14 @@ describe("useAgentStudioDiffData", () => {
     });
     const clearIntervalMock = mock((_intervalId: number) => {});
 
-    gitGetWorktreeStatusMock.mockImplementation(
+    gitGetWorktreeStatusSummaryMock.mockImplementation(
       async (
         _repoPath: string,
         targetBranch: string,
         diffScope?: "target" | "uncommitted",
         workingDir?: string,
-      ): Promise<GitWorktreeStatus> => {
-        callCount += 1;
-        const upstream: GitWorktreeStatus["upstreamAheadBehind"] =
-          callCount === 1
-            ? { outcome: "untracked", ahead: 1 }
-            : { outcome: "tracking", ahead: 1, behind: 0 };
-
-        return withSnapshotHashes({
+      ): Promise<GitWorktreeStatusSummary> => {
+        const status = withSnapshotHashes({
           currentBranch: { name: "feature/task-10", detached: false },
           fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
           fileDiffs:
@@ -425,14 +508,16 @@ describe("useAgentStudioDiffData", () => {
                 ]
               : [],
           targetAheadBehind: { ahead: 1, behind: 0 },
-          upstreamAheadBehind: upstream,
+          upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
           snapshot: {
             effectiveWorkingDir: workingDir ?? "/repo",
             targetBranch,
             diffScope: diffScope ?? "target",
-            observedAtMs: 1731000000000 + callCount,
+            observedAtMs: 1731000000000,
           },
         });
+
+        return toWorktreeStatusSummary(status);
       },
     );
 
@@ -460,7 +545,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.run(() => {
         runTick();
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
       const secondState = harness.getLatest();
       expect(secondState.upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
       expect(secondState).not.toBe(firstState);
@@ -468,9 +553,99 @@ describe("useAgentStudioDiffData", () => {
       await harness.run(() => {
         runTick();
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 2);
       const thirdState = harness.getLatest();
       expect(thirdState).toBe(secondState);
+    } finally {
+      await harness.unmount();
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    }
+  });
+
+  test("polling updates uncommitted file count from summary payloads", async () => {
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    let intervalCallback: (() => void) | null = null;
+
+    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
+      if (typeof callback !== "function") {
+        throw new Error("Expected polling callback function");
+      }
+      intervalCallback = () => {
+        callback();
+      };
+      return 1;
+    });
+    const clearIntervalMock = mock((_intervalId: number) => {});
+
+    gitGetWorktreeStatusSummaryMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatusSummary> => {
+        const status = withSnapshotHashes({
+          currentBranch: { name: "feature/task-10", detached: false },
+          fileStatuses: [
+            { path: "src/a.ts", status: "M", staged: false },
+            { path: "src/b.ts", status: "A", staged: true },
+            { path: "src/c.ts", status: "D", staged: false },
+            { path: "src/d.ts", status: "M", staged: false },
+          ],
+          fileDiffs:
+            (diffScope ?? "target") === "target"
+              ? [
+                  {
+                    file: "src/main.ts",
+                    type: "modified",
+                    additions: 1,
+                    deletions: 0,
+                    diff: "@@ -1 +1 @@",
+                  },
+                ]
+              : [],
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: workingDir ?? "/repo",
+            targetBranch,
+            diffScope: diffScope ?? "target",
+            observedAtMs: 1731000000000,
+          },
+        });
+
+        return toWorktreeStatusSummary(status);
+      },
+    );
+
+    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
+    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    const runTick = (): void => {
+      if (intervalCallback == null) {
+        throw new Error("Polling callback was not registered");
+      }
+      intervalCallback();
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(harness.getLatest().uncommittedFileCount).toBe(1);
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
+      expect(harness.getLatest().uncommittedFileCount).toBe(4);
     } finally {
       await harness.unmount();
       globalThis.setInterval = originalSetInterval;
@@ -1040,6 +1215,7 @@ describe("useAgentStudioDiffData", () => {
 
       expect(setIntervalMock).not.toHaveBeenCalled();
       expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
+      expect(gitGetWorktreeStatusSummaryMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       globalThis.setInterval = originalSetInterval;

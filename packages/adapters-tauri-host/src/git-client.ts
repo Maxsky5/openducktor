@@ -15,6 +15,7 @@ import {
   type GitRebaseBranchRequest,
   type GitRebaseBranchResult,
   type GitWorktreeStatus,
+  type GitWorktreeStatusSummary,
   type GitWorktreeSummary,
   gitBranchSchema,
   gitCommitAllResultSchema,
@@ -24,6 +25,7 @@ import {
   gitPushSummarySchema,
   gitRebaseBranchResultSchema,
   gitWorktreeStatusSchema,
+  gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -186,6 +188,22 @@ export const gitGetWorktreeStatus = async (
   return gitWorktreeStatusSchema.parse(payload);
 };
 
+export const gitGetWorktreeStatusSummary = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  targetBranch: string,
+  diffScope?: "target" | "uncommitted",
+  workingDir?: string,
+): Promise<GitWorktreeStatusSummary> => {
+  const payload = await invokeFn<unknown>("git_get_worktree_status_summary", {
+    repoPath,
+    targetBranch,
+    diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
+    workingDir: workingDir ?? null,
+  });
+  return gitWorktreeStatusSummarySchema.parse(payload);
+};
+
 export const gitCommitAll = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -304,6 +322,21 @@ export class TauriGitClient {
     workingDir?: string,
   ): Promise<GitWorktreeStatus> {
     return gitGetWorktreeStatus(this.invokeFn, repoPath, targetBranch, diffScope, workingDir);
+  }
+
+  async gitGetWorktreeStatusSummary(
+    repoPath: string,
+    targetBranch: string,
+    diffScope?: "target" | "uncommitted",
+    workingDir?: string,
+  ): Promise<GitWorktreeStatusSummary> {
+    return gitGetWorktreeStatusSummary(
+      this.invokeFn,
+      repoPath,
+      targetBranch,
+      diffScope,
+      workingDir,
+    );
   }
 
   async gitCommitAll(
