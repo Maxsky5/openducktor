@@ -48,45 +48,33 @@ impl GitCliPort {
             GitDiffScope::Uncommitted => None,
         };
 
-        let (file_statuses, file_diffs, target_ahead_behind, upstream_target_result) =
-            std::thread::scope(|scope| -> Result<(
-                Vec<GitFileStatus>,
-                Vec<GitFileDiff>,
-                GitAheadBehind,
-                Result<Option<String>>,
-            )> {
-                let status_worker = scope.spawn(|| self.get_status_unchecked(repo_path));
-                let diff_worker = scope.spawn(|| self.get_diff_unchecked(repo_path, diff_target));
-                let target_counts_worker = scope.spawn(|| {
-                    self.commits_ahead_behind_unchecked(repo_path, target_branch.as_str())
-                });
-                let upstream_target_worker = scope.spawn(|| {
-                    self.resolve_upstream_target_for_branch_impl(
-                        repo_path,
-                        current_branch_name.as_deref(),
+        let joined = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || self.get_status_unchecked(repo_path),
+                        || self.get_diff_unchecked(repo_path, diff_target),
                     )
-                });
+                },
+                || {
+                    rayon::join(
+                        || self.commits_ahead_behind_unchecked(repo_path, target_branch.as_str()),
+                        || {
+                            self.resolve_upstream_target_for_branch_impl(
+                                repo_path,
+                                current_branch_name.as_deref(),
+                            )
+                        },
+                    )
+                },
+            )
+        }))
+        .map_err(|_| anyhow!("git worktree status worker join failure"))?;
 
-                let file_statuses = status_worker
-                    .join()
-                    .map_err(|_| anyhow!("git status worker panicked"))??;
-                let file_diffs = diff_worker
-                    .join()
-                    .map_err(|_| anyhow!("git diff worker panicked"))??;
-                let target_ahead_behind = target_counts_worker
-                    .join()
-                    .map_err(|_| anyhow!("git rev-list worker panicked"))??;
-                let upstream_target_result = upstream_target_worker
-                    .join()
-                    .map_err(|_| anyhow!("git upstream worker panicked"))?;
-
-                Ok((
-                    file_statuses,
-                    file_diffs,
-                    target_ahead_behind,
-                    upstream_target_result,
-                ))
-            })?;
+        let ((file_statuses, file_diffs), (target_ahead_behind, upstream_target_result)) = joined;
+        let file_statuses = file_statuses?;
+        let file_diffs = file_diffs?;
+        let target_ahead_behind = target_ahead_behind?;
 
         let upstream_ahead_behind = match upstream_target_result {
             Ok(Some(upstream_target)) => match self

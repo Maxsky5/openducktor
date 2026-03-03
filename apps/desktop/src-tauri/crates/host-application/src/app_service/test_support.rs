@@ -358,6 +358,7 @@ pub(crate) struct GitState {
     pub(crate) calls: Vec<GitCall>,
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
+    pub(crate) worktree_status_data: Option<GitWorktreeStatusData>,
     pub(crate) last_push_remote: Option<String>,
     pub(crate) pull_branch_result: GitPullResult,
     pub(crate) commit_all_result: GitCommitAllResult,
@@ -517,6 +518,10 @@ impl GitPort for FakeGitPort {
             target_branch: target_branch.to_string(),
             diff_scope,
         });
+        if let Some(configured) = state.worktree_status_data.clone() {
+            return Ok(configured);
+        }
+
         let current_branch = state.current_branch.clone();
         let upstream_ahead_behind = if current_branch.name.is_some() {
             GitUpstreamAheadBehind::Tracking {
@@ -600,6 +605,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         calls: Vec::new(),
         branches,
         current_branch,
+        worktree_status_data: None,
         last_push_remote: None,
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
@@ -650,6 +656,7 @@ pub(crate) fn build_service_with_git_state(
         calls: Vec::new(),
         branches,
         current_branch,
+        worktree_status_data: None,
         last_push_remote: None,
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
@@ -1065,6 +1072,7 @@ pub(crate) fn build_service_with_store(
         calls: Vec::new(),
         branches,
         current_branch,
+        worktree_status_data: None,
         last_push_remote: None,
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),

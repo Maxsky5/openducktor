@@ -80,6 +80,36 @@ fn parse_diff_scope(diff_scope: Option<&str>) -> Result<host_domain::GitDiffScop
     }
 }
 
+fn require_target_branch(target_branch: &str) -> Result<&str, String> {
+    let trimmed_target = target_branch.trim();
+    if trimmed_target.is_empty() {
+        return Err("targetBranch is required".to_string());
+    }
+    Ok(trimmed_target)
+}
+
+fn build_worktree_status_with_snapshot(
+    status_data: host_domain::GitWorktreeStatusData,
+    effective_working_dir: String,
+    target_branch: String,
+    diff_scope: host_domain::GitDiffScope,
+    observed_at_ms: u64,
+) -> host_domain::GitWorktreeStatus {
+    host_domain::GitWorktreeStatus {
+        current_branch: status_data.current_branch,
+        file_statuses: status_data.file_statuses,
+        file_diffs: status_data.file_diffs,
+        target_ahead_behind: status_data.target_ahead_behind,
+        upstream_ahead_behind: status_data.upstream_ahead_behind,
+        snapshot: host_domain::GitWorktreeStatusSnapshot {
+            effective_working_dir,
+            target_branch,
+            diff_scope,
+            observed_at_ms,
+        },
+    }
+}
+
 #[tauri::command]
 pub async fn git_get_branches(
     state: State<'_, AppState>,
@@ -241,10 +271,7 @@ pub async fn git_get_worktree_status(
     diff_scope: Option<String>,
     working_dir: Option<String>,
 ) -> Result<host_domain::GitWorktreeStatus, String> {
-    let trimmed_target = target_branch.trim();
-    if trimmed_target.is_empty() {
-        return Err("targetBranch is required".to_string());
-    }
+    let trimmed_target = require_target_branch(&target_branch)?;
     let scope = parse_diff_scope(diff_scope.as_deref())?;
 
     let _ = state
@@ -263,19 +290,13 @@ pub async fn git_get_worktree_status(
         .unwrap_or_default()
         .as_millis() as u64;
 
-    Ok(host_domain::GitWorktreeStatus {
-        current_branch: worktree_status.current_branch,
-        file_statuses: worktree_status.file_statuses,
-        file_diffs: worktree_status.file_diffs,
-        target_ahead_behind: worktree_status.target_ahead_behind,
-        upstream_ahead_behind: worktree_status.upstream_ahead_behind,
-        snapshot: host_domain::GitWorktreeStatusSnapshot {
-            effective_working_dir: effective,
-            target_branch: trimmed_target.to_string(),
-            diff_scope: scope,
-            observed_at_ms,
-        },
-    })
+    Ok(build_worktree_status_with_snapshot(
+        worktree_status,
+        effective,
+        trimmed_target.to_string(),
+        scope,
+        observed_at_ms,
+    ))
 }
 
 #[tauri::command]
@@ -352,7 +373,14 @@ pub async fn git_rebase_branch(
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_working_dir;
+    use super::{
+        build_worktree_status_with_snapshot, parse_diff_scope, require_target_branch,
+        resolve_working_dir,
+    };
+    use host_domain::{
+        GitAheadBehind, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
+        GitUpstreamAheadBehind, GitWorktreeStatusData,
+    };
     use std::{
         env, fs,
         path::{Path, PathBuf},
@@ -470,5 +498,87 @@ mod tests {
         );
 
         fs::remove_dir_all(&root).expect("failed to remove test directory");
+    }
+
+    #[test]
+    fn require_target_branch_rejects_blank_values() {
+        let error = require_target_branch("   ")
+            .expect_err("blank target branch should be rejected at command boundary");
+        assert_eq!(error, "targetBranch is required");
+    }
+
+    #[test]
+    fn parse_diff_scope_accepts_uncommitted_and_rejects_unknown_values() {
+        assert_eq!(
+            parse_diff_scope(Some("uncommitted")).expect("uncommitted scope should parse"),
+            GitDiffScope::Uncommitted
+        );
+
+        let error = parse_diff_scope(Some("staged"))
+            .expect_err("unknown diff scope should be rejected at command boundary");
+        assert!(
+            error.contains("diffScope must be either 'target' or 'uncommitted'"),
+            "unexpected scope parse error: {error}"
+        );
+    }
+
+    #[test]
+    fn build_worktree_status_with_snapshot_preserves_payload_and_snapshot_fields() {
+        let status_data = GitWorktreeStatusData {
+            current_branch: GitCurrentBranch {
+                name: Some("feature/snapshot".to_string()),
+                detached: false,
+            },
+            file_statuses: vec![GitFileStatus {
+                path: "src/main.rs".to_string(),
+                status: "modified".to_string(),
+                staged: false,
+            }],
+            file_diffs: vec![GitFileDiff {
+                file: "src/main.rs".to_string(),
+                diff_type: "modified".to_string(),
+                additions: 3,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n".to_string(),
+            }],
+            target_ahead_behind: GitAheadBehind {
+                ahead: 2,
+                behind: 0,
+            },
+            upstream_ahead_behind: GitUpstreamAheadBehind::Tracking {
+                ahead: 1,
+                behind: 4,
+            },
+        };
+
+        let built = build_worktree_status_with_snapshot(
+            status_data,
+            "/tmp/openducktor-worktree".to_string(),
+            "origin/main".to_string(),
+            GitDiffScope::Target,
+            42,
+        );
+
+        assert_eq!(
+            built.current_branch.name.as_deref(),
+            Some("feature/snapshot")
+        );
+        assert_eq!(built.file_statuses.len(), 1);
+        assert_eq!(built.file_diffs.len(), 1);
+        assert_eq!(built.target_ahead_behind.ahead, 2);
+        assert_eq!(
+            built.upstream_ahead_behind,
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 1,
+                behind: 4
+            }
+        );
+        assert_eq!(
+            built.snapshot.effective_working_dir,
+            "/tmp/openducktor-worktree"
+        );
+        assert_eq!(built.snapshot.target_branch, "origin/main");
+        assert_eq!(built.snapshot.diff_scope, GitDiffScope::Target);
+        assert_eq!(built.snapshot.observed_at_ms, 42);
     }
 }
