@@ -2,6 +2,7 @@ import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { toOdtWorkflowToolDisplayName } from "@openducktor/core";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { stripToolPrefix } from "./tool-text-utils";
 
 export const SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
 
@@ -32,14 +33,7 @@ export const formatRawJsonLikeText = (value: string): string => {
   return value;
 };
 
-export const stripToolPrefix = (tool: string, value: string): string => {
-  const escaped = tool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const normalized = value.trim();
-  return normalized
-    .replace(new RegExp(`^Tool\\s+${escaped}\\s*`, "i"), "")
-    .replace(/^(queued|running|executing|completed|failed|cancelled|canceled)\s*[:.-]?\s*/i, "")
-    .trim();
-};
+export { stripToolPrefix };
 
 export const toolDisplayName = (tool: string): string => {
   return toOdtWorkflowToolDisplayName(tool);
