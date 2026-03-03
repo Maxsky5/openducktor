@@ -5,7 +5,7 @@ use super::{
     TrackedOpencodeProcessGuard,
 };
 use anyhow::{anyhow, Result};
-use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary};
+use host_domain::{now_rfc3339, AgentRuntimeSummary, RunSummary, RuntimeRole};
 use host_infra_system::pick_free_port;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -15,7 +15,7 @@ use uuid::Uuid;
 #[derive(Clone, Copy)]
 struct RuntimeExistingLookup<'a> {
     repo_key: &'a str,
-    role: &'a str,
+    role: RuntimeRole,
     task_id: Option<&'a str>,
 }
 
@@ -29,7 +29,7 @@ struct RuntimeStartInput<'a> {
     repo_path: &'a str,
     repo_key: String,
     task_id: &'a str,
-    role: &'a str,
+    role: RuntimeRole,
     working_directory: String,
     cleanup_repo_path: Option<String>,
     cleanup_worktree_path: Option<String>,
@@ -190,7 +190,7 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
-        role: &str,
+        role: RuntimeRole,
     ) -> Result<AgentRuntimeSummary> {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
@@ -227,12 +227,16 @@ impl AppService {
         &self,
         repo_key: &str,
         task_id: &str,
-        role: &str,
+        role: RuntimeRole,
     ) -> Result<RuntimePrerequisiteResolution> {
-        if !matches!(role, "spec" | "planner" | "qa") {
-            return Err(anyhow!(
-                "Unsupported agent runtime role: {role}. Supported: spec, planner, qa"
-            ));
+        match role {
+            RuntimeRole::Workspace => {
+                return Err(anyhow!(
+                    "Unsupported agent runtime role: {}. Supported: spec, planner, qa",
+                    role
+                ));
+            }
+            RuntimeRole::Spec | RuntimeRole::Planner | RuntimeRole::Qa => {}
         }
 
         let tasks = self.task_store.list_tasks(Path::new(repo_key))?;
@@ -260,20 +264,26 @@ impl AppService {
             }
         }
 
-        let prerequisites = if role == "qa" {
-            let setup =
-                prepare_qa_worktree(repo_key, task_id, task.title.as_str(), &self.config_store)?;
-            RuntimePrerequisites {
-                working_directory: setup.worktree_path.clone(),
-                cleanup_repo_path: Some(setup.repo_path),
-                cleanup_worktree_path: Some(setup.worktree_path),
+        let prerequisites = match role {
+            RuntimeRole::Qa => {
+                let setup = prepare_qa_worktree(
+                    repo_key,
+                    task_id,
+                    task.title.as_str(),
+                    &self.config_store,
+                )?;
+                RuntimePrerequisites {
+                    working_directory: setup.worktree_path.clone(),
+                    cleanup_repo_path: Some(setup.repo_path),
+                    cleanup_worktree_path: Some(setup.worktree_path),
+                }
             }
-        } else {
-            RuntimePrerequisites {
+            RuntimeRole::Spec | RuntimeRole::Planner => RuntimePrerequisites {
                 working_directory: repo_key.to_string(),
                 cleanup_repo_path: None,
                 cleanup_worktree_path: None,
-            }
+            },
+            RuntimeRole::Workspace => unreachable!("workspace role is rejected above"),
         };
 
         Ok(RuntimePrerequisiteResolution::Ready(prerequisites))
@@ -319,7 +329,7 @@ impl AppService {
             input.startup_scope,
             input.repo_path,
             Some(input.task_id),
-            input.role,
+            input.role.as_str(),
             port,
             Some(StartupEventCorrelation::new(
                 "runtime_id",
@@ -340,7 +350,7 @@ impl AppService {
                     input.startup_scope,
                     input.repo_path,
                     Some(input.task_id),
-                    input.role,
+                    input.role.as_str(),
                     port,
                     Some(StartupEventCorrelation::new(
                         "runtime_id",
@@ -365,7 +375,7 @@ impl AppService {
             input.startup_scope,
             input.repo_path,
             Some(input.task_id),
-            input.role,
+            input.role.as_str(),
             port,
             Some(StartupEventCorrelation::new(
                 "runtime_id",
@@ -404,7 +414,7 @@ impl AppService {
             runtime_id: spawned_server.runtime_id.clone(),
             repo_path: repo_key,
             task_id: task_id.to_string(),
-            role: role.to_string(),
+            role,
             working_directory,
             port: spawned_server.port,
             started_at: now_rfc3339(),

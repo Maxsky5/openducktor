@@ -16,7 +16,7 @@ pub use git::{
     GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
     GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeSummary,
 };
-pub use runtime::{AgentRuntimeSummary, RunEvent, RunState, RunSummary};
+pub use runtime::{AgentRuntimeSummary, RunEvent, RunState, RunSummary, RuntimeRole};
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, SystemCheck, WorkspaceRecord};
 pub use task::{
@@ -98,9 +98,9 @@ mod tests {
             GitWorktreeStatusData,
             GitWorktreeStatusSnapshot, GitWorktreeSummary, IssueType, PlanSubtaskInput,
             QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary,
-            RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard, TaskDocumentPresence,
-            TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence, TaskStatus, TaskStore,
-            UpdateTaskPatch, WorkspaceRecord,
+            RuntimeCheck, RuntimeRole, SpecDocument, SystemCheck, TaskAction, TaskCard,
+            TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
+            TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
         };
 
         macro_rules! check_types_exported {
@@ -143,6 +143,7 @@ mod tests {
             RunState,
             RunSummary,
             RuntimeCheck,
+            RuntimeRole,
             SpecDocument,
             SystemCheck,
             TaskAction,

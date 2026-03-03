@@ -1,5 +1,5 @@
 use crate::{as_error, extend_runtime_errors_with_startup, run_service_blocking, AppState};
-use host_domain::{AgentRuntimeSummary, BeadsCheck, RuntimeCheck, SystemCheck};
+use host_domain::{AgentRuntimeSummary, BeadsCheck, RuntimeCheck, RuntimeRole, SystemCheck};
 use tauri::State;
 
 #[tauri::command]
@@ -47,11 +47,11 @@ pub async fn opencode_runtime_start(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
-    role: String,
+    role: RuntimeRole,
 ) -> Result<AgentRuntimeSummary, String> {
     let service = state.service.clone();
     let result = run_service_blocking("opencode_runtime_start", move || {
-        service.opencode_runtime_start(&repo_path, &task_id, &role)
+        service.opencode_runtime_start(&repo_path, &task_id, role)
     })
     .await;
     as_error(result)

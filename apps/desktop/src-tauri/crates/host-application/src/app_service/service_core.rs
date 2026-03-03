@@ -51,7 +51,7 @@ impl Drop for AppService {
 }
 
 impl AppService {
-    pub(super) const WORKSPACE_RUNTIME_ROLE: &'static str = "workspace";
+    pub(super) const WORKSPACE_RUNTIME_ROLE: RuntimeRole = RuntimeRole::Workspace;
     pub(super) const WORKSPACE_RUNTIME_TASK_ID: &'static str = "__workspace__";
 
     pub fn new(task_store: Arc<dyn TaskStore>, config_store: AppConfigStore) -> Self {

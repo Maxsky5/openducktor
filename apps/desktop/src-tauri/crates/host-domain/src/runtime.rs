@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -10,6 +11,32 @@ pub enum RunState {
     Completed,
     Failed,
     Stopped,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeRole {
+    Workspace,
+    Spec,
+    Planner,
+    Qa,
+}
+
+impl RuntimeRole {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace",
+            Self::Spec => "spec",
+            Self::Planner => "planner",
+            Self::Qa => "qa",
+        }
+    }
+}
+
+impl fmt::Display for RuntimeRole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +59,7 @@ pub struct AgentRuntimeSummary {
     pub runtime_id: String,
     pub repo_path: String,
     pub task_id: String,
-    pub role: String,
+    pub role: RuntimeRole,
     pub working_directory: String,
     pub port: u16,
     pub started_at: String,
