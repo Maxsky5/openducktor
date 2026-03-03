@@ -37,6 +37,39 @@ const createMemoryStorage = (): StorageLike => {
   };
 };
 
+const createThrowingStorage = (args: {
+  throwOnGetItem?: boolean;
+  throwOnSetItem?: boolean;
+  message?: string;
+}): StorageLike => {
+  const store = new Map<string, string>();
+  const message = args.message ?? "storage unavailable";
+  return {
+    getItem: (key) => {
+      if (args.throwOnGetItem) {
+        throw new Error(message);
+      }
+      return store.get(key) ?? null;
+    },
+    setItem: (key, value) => {
+      if (args.throwOnSetItem) {
+        throw new Error(message);
+      }
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+};
+
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
 const createSession = (taskId: string, sessionId: string) =>
@@ -310,6 +343,78 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
+  test("applies fallback routing only once for an unchanged fallback target", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo"),
+        toPersistedTaskTabs({
+          tabs: ["task-2"],
+          activeTaskId: "task-2",
+        }),
+      );
+
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const latestSession = createSession("task-2", "session-2");
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-2")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-2", latestSession]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+      await harness.waitFor(() => updateCalls.length === 1);
+
+      await harness.update({
+        activeRepo: "/repo",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-2")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-2", latestSession]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.update({
+        activeRepo: "/repo",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-2")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-2", latestSession]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      expect(updateCalls).toHaveLength(1);
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
   test("does not route stale fallback tab while switching repos", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
@@ -431,6 +536,74 @@ describe("useAgentStudioTaskTabs", () => {
       expect(harness.getLatest().tabTaskIds).toEqual([]);
 
       await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("throws actionable error when task tabs storage read fails", async () => {
+    const throwingStorage = createThrowingStorage({
+      throwOnGetItem: true,
+      message: "read blocked",
+    });
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: throwingStorage,
+    });
+
+    try {
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        taskId: "",
+        selectedTask: null,
+        tasks: [createTask("task-1")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map(),
+        updateQuery: () => {},
+        clearComposerInput: () => {},
+      });
+
+      await expect(harness.mount()).rejects.toThrow(
+        `Failed to read agent studio task tabs storage key "${toTabsStorageKey("/repo")}": read blocked`,
+      );
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("throws actionable error when task tabs storage persistence fails", async () => {
+    const throwingStorage = createThrowingStorage({
+      throwOnSetItem: true,
+      message: "write blocked",
+    });
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: throwingStorage,
+    });
+
+    try {
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        taskId: "task-1",
+        selectedTask: createTask("task-1"),
+        tasks: [createTask("task-1")],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map(),
+        updateQuery: () => {},
+        clearComposerInput: () => {},
+      });
+
+      await expect(harness.mount()).rejects.toThrow(
+        `Failed to persist agent studio task tabs storage key "${toTabsStorageKey("/repo")}": write blocked`,
+      );
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,

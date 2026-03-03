@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect } from "react";
+import { errorMessage } from "@/lib/errors";
 import {
   canPersistTaskTabs,
   parsePersistedTaskTabs,
@@ -8,6 +9,28 @@ import {
 import { toTabsStorageKey } from "./agents-page-utils";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
+
+const readTaskTabsStorage = (storageKey: string): string | null => {
+  try {
+    return globalThis.localStorage.getItem(storageKey);
+  } catch (cause) {
+    throw new Error(
+      `Failed to read agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+};
+
+const writeTaskTabsStorage = (storageKey: string, payload: string): void => {
+  try {
+    globalThis.localStorage.setItem(storageKey, payload);
+  } catch (cause) {
+    throw new Error(
+      `Failed to persist agent studio task tabs storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+};
 
 type UseTaskTabPersistenceArgs = {
   activeRepo: string | null;
@@ -49,7 +72,8 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
       return;
     }
 
-    const raw = globalThis.localStorage.getItem(toTabsStorageKey(activeRepo));
+    const tabsStorageKey = toTabsStorageKey(activeRepo);
+    const raw = readTaskTabsStorage(tabsStorageKey);
     const persistedTabs = parsePersistedTaskTabs(raw);
     setOpenTaskTabs(persistedTabs.tabs);
     setPersistedActiveTaskId(persistedTabs.activeTaskId);
@@ -98,8 +122,9 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     if (!activeRepo) {
       return;
     }
-    globalThis.localStorage.setItem(
-      toTabsStorageKey(activeRepo),
+    const tabsStorageKey = toTabsStorageKey(activeRepo);
+    writeTaskTabsStorage(
+      tabsStorageKey,
       toPersistedTaskTabs({
         tabs: openTaskTabs,
         activeTaskId: activeTaskTabId || null,

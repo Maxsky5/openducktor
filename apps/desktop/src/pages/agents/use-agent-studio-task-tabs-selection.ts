@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -46,6 +46,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     () => ensureActiveTaskTab(openTaskTabs, taskId),
     [openTaskTabs, taskId],
   );
+  const appliedFallbackKeyRef = useRef<string | null>(null);
 
   const activeTaskTabId = useMemo(() => {
     if (intentActiveTaskId && tabTaskIds.includes(intentActiveTaskId)) {
@@ -83,6 +84,11 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     if (!fallbackTaskId) {
       return;
     }
+    const fallbackKey = `${activeRepo}:${fallbackTaskId}`;
+    if (appliedFallbackKeyRef.current === fallbackKey) {
+      return;
+    }
+    appliedFallbackKeyRef.current = fallbackKey;
     navigateToTask(fallbackTaskId);
   }, [
     activeRepo,
@@ -92,6 +98,12 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     tabsStorageHydratedRepo,
     taskId,
   ]);
+
+  useEffect(() => {
+    if (!activeRepo || taskId) {
+      appliedFallbackKeyRef.current = null;
+    }
+  }, [activeRepo, taskId]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {
