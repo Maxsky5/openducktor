@@ -133,6 +133,30 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session?.messages[0]?.content).toContain("Model catalog unavailable: catalog failed");
   });
 
+  test("rejects invalid model catalog runtime baseUrl before adapter call", async () => {
+    const harness = createStateHarness(createSession());
+    let listAvailableModelsCalled = false;
+    const loadSessionModelCatalog = createLoadSessionModelCatalog({
+      adapter: {
+        listAvailableModels: async () => {
+          listAvailableModelsCalled = true;
+          return catalogFixture;
+        },
+        loadSessionTodos: async () => [],
+      },
+      updateSession: harness.updateSession,
+    });
+
+    await loadSessionModelCatalog("session-1", "https://example.com:4444", "/tmp/repo");
+
+    const session = harness.getState()["session-1"];
+    expect(listAvailableModelsCalled).toBe(false);
+    expect(session?.isLoadingModelCatalog).toBe(false);
+    expect(session?.messages[0]?.content).toContain(
+      "Model catalog unavailable: Session runtime baseUrl must use the http protocol.",
+    );
+  });
+
   test("loads todos and merges while preserving existing order", async () => {
     const harness = createStateHarness(
       createSession({}, [
@@ -158,5 +182,25 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(mergedTodos.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
     expect(mergedTodos[0]?.content).toBe("A updated");
     expect(mergedTodos[1]?.status).toBe("in_progress");
+  });
+
+  test("throws for invalid todo working directory before adapter call", async () => {
+    const harness = createStateHarness(createSession());
+    let loadSessionTodosCalled = false;
+    const loadSessionTodos = createLoadSessionTodos({
+      adapter: {
+        listAvailableModels: async () => catalogFixture,
+        loadSessionTodos: async () => {
+          loadSessionTodosCalled = true;
+          return [];
+        },
+      },
+      updateSession: harness.updateSession,
+    });
+
+    await expect(
+      loadSessionTodos("session-1", "http://127.0.0.1:4444", "/tmp/repo/../escape", "external-1"),
+    ).rejects.toThrow("Session runtime workingDirectory must not contain traversal segments.");
+    expect(loadSessionTodosCalled).toBe(false);
   });
 });
