@@ -59,7 +59,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const StreamingRoleIcon = streamingRoleDisplay?.icon ?? Bot;
   const streamingRoleLabel = streamingRoleDisplay?.label ?? "Assistant";
 
-  const virtualRows = session ? buildAgentChatVirtualRows(session) : [];
+  const virtualRows = useMemo(
+    () => (session ? buildAgentChatVirtualRows(session) : []),
+    [
+      session,
+      session?.messages.length,
+      session?.draftAssistantText,
+      session?.status,
+      session?.pendingQuestions.length,
+    ],
+  );
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
   const activeSessionId = session?.sessionId ?? null;
   const measuredSessionIdRef = useRef<string | null>(null);
