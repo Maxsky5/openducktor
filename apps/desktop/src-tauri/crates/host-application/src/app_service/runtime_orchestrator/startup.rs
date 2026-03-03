@@ -1,21 +1,49 @@
 use super::super::{
     spawn_opencode_server, wait_for_local_server_with_process, AppService,
-    StartupEventCorrelation, StartupEventPayload,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventCorrelation,
+    StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
 use super::{RuntimeStartInput, SpawnedRuntimeServer};
-use anyhow::{anyhow, Result};
-use host_domain::TASK_METADATA_NAMESPACE;
+use anyhow::{anyhow, Context, Result};
+use host_domain::{RuntimeRole, TASK_METADATA_NAMESPACE};
 use host_infra_system::pick_free_port;
 use std::path::Path;
 use uuid::Uuid;
 
 impl AppService {
+    pub(crate) fn resolve_runtime_startup_policy(
+        &self,
+        startup_scope: &str,
+        repo_path: &str,
+        task_id: &str,
+        role: RuntimeRole,
+        startup_error_context: &str,
+    ) -> Result<OpencodeStartupReadinessPolicy> {
+        self.opencode_startup_readiness_policy()
+            .map_err(|error| {
+                self.emit_opencode_startup_event(StartupEventPayload::failed(
+                    startup_scope,
+                    repo_path,
+                    Some(task_id),
+                    role.as_str(),
+                    0,
+                    None,
+                    None,
+                    OpencodeStartupWaitReport::zero(),
+                    STARTUP_CONFIG_INVALID_REASON,
+                ));
+                error
+            })
+            .with_context(|| startup_error_context.to_string())
+    }
+
     pub(super) fn spawn_runtime_server(
         &self,
         input: &RuntimeStartInput<'_>,
     ) -> Result<SpawnedRuntimeServer> {
         let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
+        let startup_policy = input.startup_policy;
         let mut child = spawn_opencode_server(
             Path::new(input.working_directory.as_str()),
             Path::new(input.repo_path),
@@ -26,17 +54,14 @@ impl AppService {
             Ok(guard) => guard,
             Err(error) => {
                 let tracking_error = anyhow!(error).context(input.tracking_error_context);
-                if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                    &mut child,
-                    input.cleanup_target.as_ref(),
-                ) {
+                if let Err(cleanup_error) =
+                    Self::cleanup_started_runtime(&mut child, input.cleanup_target.as_ref())
+                {
                     return Err(Self::append_cleanup_error(tracking_error, cleanup_error));
                 }
                 return Err(tracking_error);
             }
         };
-
-        let startup_policy = self.opencode_startup_readiness_policy();
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
         self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
@@ -75,10 +100,9 @@ impl AppService {
                     error.reason,
                 ));
                 let startup_error = anyhow!(error).context(input.startup_error_context.clone());
-                if let Err(cleanup_error) = Self::cleanup_started_runtime(
-                    &mut child,
-                    input.cleanup_target.as_ref(),
-                ) {
+                if let Err(cleanup_error) =
+                    Self::cleanup_started_runtime(&mut child, input.cleanup_target.as_ref())
+                {
                     return Err(Self::append_cleanup_error(startup_error, cleanup_error));
                 }
                 return Err(startup_error);

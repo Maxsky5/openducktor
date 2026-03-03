@@ -1,6 +1,6 @@
 use anyhow::Result;
 use host_domain::{
-    CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskStatus, TaskStore,
+    CreateTaskInput, IssueType, PlanSubtaskInput, RuntimeRole, TaskAction, TaskStatus, TaskStore,
     UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, OpencodeStartupReadinessConfig};
@@ -423,7 +423,7 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
         state: Arc::new(Mutex::new(TaskStoreState::default())),
     });
     let service = AppService::new(task_store, config_store);
-    let policy = service.opencode_startup_readiness_policy();
+    let policy = service.opencode_startup_readiness_policy()?;
     assert_eq!(policy.timeout, Duration::from_millis(12_345));
     assert_eq!(policy.connect_timeout, Duration::from_millis(456));
     assert_eq!(policy.initial_retry_delay, Duration::from_millis(33));
@@ -431,6 +431,98 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
     assert_eq!(policy.child_state_check_interval, Duration::from_millis(77));
 
     let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn opencode_startup_readiness_policy_returns_actionable_error_on_invalid_config() -> Result<()> {
+    let root = unique_temp_path("startup-policy-invalid-config");
+    let config_path = root.join("config.json");
+    fs::create_dir_all(&root)?;
+    fs::write(&config_path, "{ invalid json")?;
+
+    let config_store = AppConfigStore::from_path(config_path.clone());
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+        state: Arc::new(Mutex::new(TaskStoreState::default())),
+    });
+    let service = AppService::new(task_store, config_store);
+    let error = service
+        .opencode_startup_readiness_policy()
+        .expect_err("invalid config should fail startup readiness policy load");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains(&format!(
+            "Failed loading OpenCode startup readiness config from {}",
+            config_path.display()
+        )),
+        "error should include startup context and config path: {message}"
+    );
+    assert!(
+        message.contains(
+            "Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults"
+        ),
+        "error should include recovery instruction: {message}"
+    );
+    assert!(
+        message.contains("Failed parsing config file"),
+        "error should preserve parse failure context: {message}"
+    );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
+    let root = unique_temp_path("build-startup-policy-invalid-config");
+    let config_path = root.join("config.json");
+    fs::create_dir_all(&root)?;
+    fs::write(&config_path, "{ invalid json")?;
+
+    let config_store = AppConfigStore::from_path(config_path);
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+        state: Arc::new(Mutex::new(TaskStoreState::default())),
+    });
+    let service = AppService::new(task_store, config_store);
+    let error = service
+        .resolve_build_startup_policy("/tmp/repo", "task-42", "run-abc")
+        .expect_err("invalid config should fail build startup policy resolution");
+    let message = format!("{error:#}");
+    assert!(message.contains("OpenCode build runtime failed before worktree preparation"));
+    assert!(message.contains("Failed loading OpenCode startup readiness config"));
+
+    let metrics = service.startup_metrics_snapshot()?;
+    assert_eq!(metrics.failed_by_reason.get("startup_config_invalid"), Some(&1));
+    Ok(())
+}
+
+#[test]
+fn resolve_runtime_startup_policy_emits_config_failure_metrics() -> Result<()> {
+    let root = unique_temp_path("runtime-startup-policy-invalid-config");
+    let config_path = root.join("config.json");
+    fs::create_dir_all(&root)?;
+    fs::write(&config_path, "{ invalid json")?;
+
+    let config_store = AppConfigStore::from_path(config_path);
+    let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
+        state: Arc::new(Mutex::new(TaskStoreState::default())),
+    });
+    let service = AppService::new(task_store, config_store);
+    let error = service
+        .resolve_runtime_startup_policy(
+            "agent_runtime",
+            "/tmp/repo",
+            "task-42",
+            RuntimeRole::Qa,
+            "OpenCode runtime failed to start for task task-42",
+        )
+        .expect_err("invalid config should fail runtime startup policy resolution");
+    let message = format!("{error:#}");
+    assert!(message.contains("OpenCode runtime failed to start for task task-42"));
+    assert!(message.contains("Failed loading OpenCode startup readiness config"));
+
+    let metrics = service.startup_metrics_snapshot()?;
+    assert_eq!(metrics.failed_by_reason.get("startup_config_invalid"), Some(&1));
     Ok(())
 }
 

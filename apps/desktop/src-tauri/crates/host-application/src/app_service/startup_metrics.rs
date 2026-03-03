@@ -8,6 +8,7 @@ const STARTUP_MS_BUCKETS: [&str; 7] = [
     "<=100", "<=250", "<=500", "<=1000", "<=2000", "<=5000", ">5000",
 ];
 const STARTUP_ATTEMPTS_BUCKETS: [&str; 6] = ["<=1", "<=3", "<=5", "<=10", "<=20", ">20"];
+pub(crate) const STARTUP_CONFIG_INVALID_REASON: &str = "startup_config_invalid";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -393,18 +394,16 @@ pub(crate) fn build_opencode_startup_event_payload(
 }
 
 impl AppService {
-    pub(crate) fn opencode_startup_readiness_policy(&self) -> OpencodeStartupReadinessPolicy {
-        match self.config_store.opencode_startup_readiness() {
-            Ok(config) => OpencodeStartupReadinessPolicy::from_config(config),
-            Err(error) => {
-                tracing::warn!(
-                    target: "openducktor.opencode.startup",
-                    error = %format!("{error:#}"),
-                    "Failed loading OpenCode startup readiness config; using defaults"
-                );
-                OpencodeStartupReadinessPolicy::default()
-            }
-        }
+    pub(crate) fn opencode_startup_readiness_policy(
+        &self,
+    ) -> Result<OpencodeStartupReadinessPolicy> {
+        let config = self.config_store.opencode_startup_readiness().with_context(|| {
+            format!(
+                "Failed loading OpenCode startup readiness config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
+                self.config_store.path().display()
+            )
+        })?;
+        Ok(OpencodeStartupReadinessPolicy::from_config(config))
     }
 
     pub(crate) fn startup_cancel_epoch(&self) -> StartupCancelEpoch {
@@ -413,6 +412,15 @@ impl AppService {
 
     pub(crate) fn startup_cancel_snapshot(&self) -> u64 {
         self.startup_cancel_epoch.load(Ordering::SeqCst)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn startup_metrics_snapshot(&self) -> Result<OpencodeStartupMetricsSnapshot> {
+        let metrics = self
+            .startup_metrics
+            .lock()
+            .map_err(|_| anyhow!("OpenCode startup metrics lock poisoned"))?;
+        Ok(metrics.snapshot())
     }
 
     pub(crate) fn emit_opencode_startup_event(&self, event: StartupEventPayload<'_>) {

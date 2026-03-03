@@ -71,6 +71,13 @@ impl OpencodeStartupWaitReport {
         self.elapsed.as_millis().min(u64::MAX as u128) as u64
     }
 
+    pub(crate) fn zero() -> Self {
+        Self {
+            attempts: 0,
+            elapsed: Duration::ZERO,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn from_parts(attempts: u32, elapsed: Duration) -> Self {
         Self { attempts, elapsed }
