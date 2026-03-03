@@ -94,6 +94,9 @@ pub struct GitWorktreeStatusSnapshot {
     pub target_branch: String,
     pub diff_scope: GitDiffScope,
     pub observed_at_ms: u64,
+    pub hash_version: u32,
+    pub status_hash: String,
+    pub diff_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

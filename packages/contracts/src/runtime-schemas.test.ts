@@ -363,6 +363,9 @@ describe("runtime schemas", () => {
       targetBranch: "origin/main",
       diffScope: scope,
       observedAtMs: 1731000000000,
+      hashVersion: 1,
+      statusHash: "status-hash",
+      diffHash: "diff-hash",
     });
     const status = gitWorktreeStatusSchema.parse({
       currentBranch: { name: "feature/task-1", detached: false },

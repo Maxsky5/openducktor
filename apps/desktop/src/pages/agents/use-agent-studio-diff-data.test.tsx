@@ -14,30 +14,31 @@ const gitGetWorktreeStatusMock = mock(
     targetBranch: string,
     diffScope?: "target" | "uncommitted",
     workingDir?: string,
-  ): Promise<GitWorktreeStatus> => ({
-    currentBranch: { name: "feature/task-10", detached: false },
-    fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-    fileDiffs:
-      (diffScope ?? "target") === "target"
-        ? [
-            {
-              file: "src/main.ts",
-              type: "modified",
-              additions: 1,
-              deletions: 0,
-              diff: "@@ -1 +1 @@",
-            },
-          ]
-        : [],
-    targetAheadBehind: { ahead: 0, behind: 0 },
-    upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-    snapshot: {
-      effectiveWorkingDir: workingDir ?? "/repo",
-      targetBranch,
-      diffScope: diffScope ?? "target",
-      observedAtMs: 1731000000000,
-    },
-  }),
+  ): Promise<GitWorktreeStatus> =>
+    withSnapshotHashes({
+      currentBranch: { name: "feature/task-10", detached: false },
+      fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+      fileDiffs:
+        (diffScope ?? "target") === "target"
+          ? [
+              {
+                file: "src/main.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 0,
+                diff: "@@ -1 +1 @@",
+              },
+            ]
+          : [],
+      targetAheadBehind: { ahead: 0, behind: 0 },
+      upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+      snapshot: {
+        effectiveWorkingDir: workingDir ?? "/repo",
+        targetBranch,
+        diffScope: diffScope ?? "target",
+        observedAtMs: 1731000000000,
+      },
+    }),
 );
 
 mock.module("@/state/operations/host", () => ({
@@ -68,6 +69,43 @@ const createDeferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
+const hashTestPayload = (value: unknown): string => {
+  const json = JSON.stringify(value);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < json.length; index += 1) {
+    hash ^= json.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+const withSnapshotHashes = (
+  status: Omit<GitWorktreeStatus, "snapshot"> & {
+    snapshot: Omit<GitWorktreeStatus["snapshot"], "hashVersion" | "statusHash" | "diffHash">;
+  },
+): GitWorktreeStatus => {
+  const statusHash = hashTestPayload({
+    currentBranch: status.currentBranch,
+    fileStatuses: status.fileStatuses,
+    targetAheadBehind: status.targetAheadBehind,
+    upstreamAheadBehind: status.upstreamAheadBehind,
+  });
+  const diffHash = hashTestPayload({
+    fileDiffs: status.fileDiffs,
+  });
+
+  return {
+    ...status,
+    snapshot: {
+      ...status.snapshot,
+      hashVersion: 1,
+      statusHash,
+      diffHash,
+    },
+  };
+};
+
 const createBaseArgs = (): HookArgs => ({
   repoPath: "/repo",
   sessionWorkingDirectory: null,
@@ -89,30 +127,31 @@ beforeEach(() => {
       targetBranch: string,
       diffScope?: "target" | "uncommitted",
       workingDir?: string,
-    ): Promise<GitWorktreeStatus> => ({
-      currentBranch: { name: "feature/task-10", detached: false },
-      fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-      fileDiffs:
-        (diffScope ?? "target") === "target"
-          ? [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 0,
-                diff: "@@ -1 +1 @@",
-              },
-            ]
-          : [],
-      targetAheadBehind: { ahead: 0, behind: 0 },
-      upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-      snapshot: {
-        effectiveWorkingDir: workingDir ?? "/repo",
-        targetBranch,
-        diffScope: diffScope ?? "target",
-        observedAtMs: 1731000000000,
-      },
-    }),
+    ): Promise<GitWorktreeStatus> =>
+      withSnapshotHashes({
+        currentBranch: { name: "feature/task-10", detached: false },
+        fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+        fileDiffs:
+          (diffScope ?? "target") === "target"
+            ? [
+                {
+                  file: "src/main.ts",
+                  type: "modified",
+                  additions: 1,
+                  deletions: 0,
+                  diff: "@@ -1 +1 @@",
+                },
+              ]
+            : [],
+        targetAheadBehind: { ahead: 0, behind: 0 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+        snapshot: {
+          effectiveWorkingDir: workingDir ?? "/repo",
+          targetBranch,
+          diffScope: diffScope ?? "target",
+          observedAtMs: 1731000000000,
+        },
+      }),
   );
 });
 
@@ -213,30 +252,31 @@ describe("useAgentStudioDiffData", () => {
           targetBranch: string,
           diffScope?: "target" | "uncommitted",
           workingDir?: string,
-        ): Promise<GitWorktreeStatus> => ({
-          currentBranch: { name: "feature/task-11", detached: false },
-          fileStatuses: [{ path: "src/updated.ts", status: "M", staged: false }],
-          fileDiffs:
-            (diffScope ?? "target") === "target"
-              ? [
-                  {
-                    file: "src/updated.ts",
-                    type: "modified",
-                    additions: 4,
-                    deletions: 1,
-                    diff: "@@ -1 +1 @@",
-                  },
-                ]
-              : [],
-          targetAheadBehind: { ahead: 2, behind: 1 },
-          upstreamAheadBehind: { outcome: "tracking", ahead: 5, behind: 2 },
-          snapshot: {
-            effectiveWorkingDir: workingDir ?? "/repo",
-            targetBranch,
-            diffScope: diffScope ?? "target",
-            observedAtMs: 1731000000001,
-          },
-        }),
+        ): Promise<GitWorktreeStatus> =>
+          withSnapshotHashes({
+            currentBranch: { name: "feature/task-11", detached: false },
+            fileStatuses: [{ path: "src/updated.ts", status: "M", staged: false }],
+            fileDiffs:
+              (diffScope ?? "target") === "target"
+                ? [
+                    {
+                      file: "src/updated.ts",
+                      type: "modified",
+                      additions: 4,
+                      deletions: 1,
+                      diff: "@@ -1 +1 @@",
+                    },
+                  ]
+                : [],
+            targetAheadBehind: { ahead: 2, behind: 1 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 5, behind: 2 },
+            snapshot: {
+              effectiveWorkingDir: workingDir ?? "/repo",
+              targetBranch,
+              diffScope: diffScope ?? "target",
+              observedAtMs: 1731000000001,
+            },
+          }),
       );
 
       await harness.run((state) => {
@@ -441,51 +481,55 @@ describe("useAgentStudioDiffData", () => {
         undefined,
       );
 
-      secondRequest.resolve({
-        currentBranch: { name: "feature/repo-b", detached: false },
-        fileStatuses: [{ path: "src/repo-b.ts", status: "M", staged: false }],
-        fileDiffs: [
-          {
-            file: "src/repo-b.ts",
-            type: "modified",
-            additions: 3,
-            deletions: 1,
-            diff: "@@ -1 +1 @@",
+      secondRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/repo-b", detached: false },
+          fileStatuses: [{ path: "src/repo-b.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/repo-b.ts",
+              type: "modified",
+              additions: 3,
+              deletions: 1,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo-b",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000002000,
           },
-        ],
-        targetAheadBehind: { ahead: 0, behind: 0 },
-        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
-        snapshot: {
-          effectiveWorkingDir: "/repo-b",
-          targetBranch: "origin/main",
-          diffScope: "target",
-          observedAtMs: 1731000002000,
-        },
-      });
+        }),
+      );
 
       await harness.waitFor((state) => state.branch === "feature/repo-b");
 
-      firstRequest.resolve({
-        currentBranch: { name: "feature/repo-a", detached: false },
-        fileStatuses: [{ path: "src/repo-a.ts", status: "M", staged: false }],
-        fileDiffs: [
-          {
-            file: "src/repo-a.ts",
-            type: "modified",
-            additions: 1,
-            deletions: 0,
-            diff: "@@ -1 +1 @@",
+      firstRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/repo-a", detached: false },
+          fileStatuses: [{ path: "src/repo-a.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/repo-a.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo-a",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000001000,
           },
-        ],
-        targetAheadBehind: { ahead: 0, behind: 0 },
-        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
-        snapshot: {
-          effectiveWorkingDir: "/repo-a",
-          targetBranch: "origin/main",
-          diffScope: "target",
-          observedAtMs: 1731000001000,
-        },
-      });
+        }),
+      );
 
       await harness.run(async () => {
         await Promise.resolve();
@@ -535,27 +579,29 @@ describe("useAgentStudioDiffData", () => {
       });
       await harness.waitFor((state) => state.branch === null && state.fileDiffs.length === 0);
 
-      pendingRequest.resolve({
-        currentBranch: { name: "feature/stale", detached: false },
-        fileStatuses: [{ path: "src/stale.ts", status: "M", staged: false }],
-        fileDiffs: [
-          {
-            file: "src/stale.ts",
-            type: "modified",
-            additions: 1,
-            deletions: 0,
-            diff: "@@ -1 +1 @@",
+      pendingRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/stale", detached: false },
+          fileStatuses: [{ path: "src/stale.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/stale.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo-a",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000003000,
           },
-        ],
-        targetAheadBehind: { ahead: 0, behind: 0 },
-        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
-        snapshot: {
-          effectiveWorkingDir: "/repo-a",
-          targetBranch: "origin/main",
-          diffScope: "target",
-          observedAtMs: 1731000003000,
-        },
-      });
+        }),
+      );
 
       await harness.run(async () => {
         await Promise.resolve();
@@ -609,42 +655,46 @@ describe("useAgentStudioDiffData", () => {
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
 
-      uncommittedRequest.resolve({
-        currentBranch: { name: "feature/newer", detached: false },
-        fileStatuses: [{ path: "src/newer.ts", status: "M", staged: false }],
-        fileDiffs: [],
-        targetAheadBehind: { ahead: 2, behind: 1 },
-        upstreamAheadBehind: { outcome: "tracking", ahead: 4, behind: 1 },
-        snapshot: {
-          effectiveWorkingDir: "/repo",
-          targetBranch: "origin/main",
-          diffScope: "uncommitted",
-          observedAtMs: 1731000004000,
-        },
-      });
+      uncommittedRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/newer", detached: false },
+          fileStatuses: [{ path: "src/newer.ts", status: "M", staged: false }],
+          fileDiffs: [],
+          targetAheadBehind: { ahead: 2, behind: 1 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 4, behind: 1 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "uncommitted",
+            observedAtMs: 1731000004000,
+          },
+        }),
+      );
       await harness.waitFor((state) => state.branch === "feature/newer");
 
-      targetRequest.resolve({
-        currentBranch: { name: "feature/older", detached: false },
-        fileStatuses: [{ path: "src/older.ts", status: "M", staged: false }],
-        fileDiffs: [
-          {
-            file: "src/older.ts",
-            type: "modified",
-            additions: 1,
-            deletions: 0,
-            diff: "@@ -1 +1 @@",
+      targetRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/older", detached: false },
+          fileStatuses: [{ path: "src/older.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/older.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000003000,
           },
-        ],
-        targetAheadBehind: { ahead: 0, behind: 0 },
-        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
-        snapshot: {
-          effectiveWorkingDir: "/repo",
-          targetBranch: "origin/main",
-          diffScope: "target",
-          observedAtMs: 1731000003000,
-        },
-      });
+        }),
+      );
 
       await harness.run(async () => {
         await Promise.resolve();
@@ -717,19 +767,20 @@ describe("useAgentStudioDiffData", () => {
         targetBranch: string,
         _diffScope?: "target" | "uncommitted",
         _workingDir?: string,
-      ): Promise<GitWorktreeStatus> => ({
-        currentBranch: { name: "feature/task-10", detached: false },
-        fileStatuses: [],
-        fileDiffs: [],
-        targetAheadBehind: { ahead: 3, behind: 1 },
-        upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-        snapshot: {
-          effectiveWorkingDir: "/repo",
-          targetBranch,
-          diffScope: "target",
-          observedAtMs: 1731000000000,
-        },
-      }),
+      ): Promise<GitWorktreeStatus> =>
+        withSnapshotHashes({
+          currentBranch: { name: "feature/task-10", detached: false },
+          fileStatuses: [],
+          fileDiffs: [],
+          targetAheadBehind: { ahead: 3, behind: 1 },
+          upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch,
+            diffScope: "target",
+            observedAtMs: 1731000000000,
+          },
+        }),
     );
 
     const harness = createHookHarness(createBaseArgs());
@@ -752,19 +803,20 @@ describe("useAgentStudioDiffData", () => {
         targetBranch: string,
         _diffScope?: "target" | "uncommitted",
         _workingDir?: string,
-      ): Promise<GitWorktreeStatus> => ({
-        currentBranch: { name: "feature/task-10", detached: false },
-        fileStatuses: [],
-        fileDiffs: [],
-        targetAheadBehind: { ahead: 1, behind: 0 },
-        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 1 },
-        snapshot: {
-          effectiveWorkingDir: "/repo",
-          targetBranch,
-          diffScope: "target",
-          observedAtMs: 1731000000000,
-        },
-      }),
+      ): Promise<GitWorktreeStatus> =>
+        withSnapshotHashes({
+          currentBranch: { name: "feature/task-10", detached: false },
+          fileStatuses: [],
+          fileDiffs: [],
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 1 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch,
+            diffScope: "target",
+            observedAtMs: 1731000000000,
+          },
+        }),
     );
 
     const harness = createHookHarness(createBaseArgs());
@@ -788,7 +840,7 @@ describe("useAgentStudioDiffData", () => {
         _diffScope?: "target" | "uncommitted",
         _workingDir?: string,
       ): Promise<GitWorktreeStatus> => {
-        return {
+        return withSnapshotHashes({
           currentBranch: { name: "feature/task-10", detached: false },
           fileStatuses: [],
           fileDiffs: [],
@@ -800,7 +852,7 @@ describe("useAgentStudioDiffData", () => {
             diffScope: "target",
             observedAtMs: 1731000000000,
           },
-        };
+        });
       },
     );
 

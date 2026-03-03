@@ -447,6 +447,9 @@ describe("TauriHostClient", () => {
             targetBranch: "origin/main",
             diffScope: "target",
             observedAtMs: 1731000000000,
+            hashVersion: 1,
+            statusHash: "status-hash",
+            diffHash: "diff-hash",
           },
         };
       }

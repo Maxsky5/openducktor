@@ -108,6 +108,9 @@ export const gitWorktreeStatusSnapshotSchema = z.object({
   targetBranch: z.string(),
   diffScope: gitDiffScopeSchema,
   observedAtMs: z.number(),
+  hashVersion: z.number().int().positive(),
+  statusHash: z.string().min(1),
+  diffHash: z.string().min(1),
 });
 export type GitWorktreeStatusSnapshot = z.infer<typeof gitWorktreeStatusSnapshotSchema>;
 
