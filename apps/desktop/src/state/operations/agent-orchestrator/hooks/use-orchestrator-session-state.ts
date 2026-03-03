@@ -60,7 +60,8 @@ const createMutableBridge = <K extends keyof OrchestratorMutableState>(
   }) as MutableRefObject<OrchestratorMutableState[K]>;
 
 const clearUnsubscribers = (unsubscribers: Map<string, () => void>): void => {
-  for (const unsubscribe of unsubscribers.values()) {
+  const unsubscribeCallbacks = [...unsubscribers.values()];
+  for (const unsubscribe of unsubscribeCallbacks) {
     unsubscribe();
   }
   unsubscribers.clear();

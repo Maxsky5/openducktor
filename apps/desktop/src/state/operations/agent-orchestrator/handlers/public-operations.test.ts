@@ -57,7 +57,7 @@ describe("agent-orchestrator-public-operations", () => {
     expect(operations.sessions.map((entry) => entry.sessionId)).toEqual(["newer", "older"]);
   });
 
-  test("shows toast and swallows load errors", async () => {
+  test("shows toast and rethrows load errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
@@ -71,7 +71,7 @@ describe("agent-orchestrator-public-operations", () => {
     });
 
     try {
-      await expect(operations.loadAgentSessions("task-1")).resolves.toBeUndefined();
+      await expect(operations.loadAgentSessions("task-1")).rejects.toThrow("load failed");
       expect(toastError).toHaveBeenCalledWith("Failed to load agent sessions", {
         description: "load failed",
       });

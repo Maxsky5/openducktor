@@ -48,21 +48,27 @@ export function useAgentStudioTaskHydration({
 
     hydratingTasksByRepoRef.current.add(hydrationKey);
     let cancelled = false;
-    void loadAgentSessions(activeTaskId).finally(() => {
-      hydratingTasksByRepoRef.current.delete(hydrationKey);
-      if (cancelled) {
-        return;
-      }
-      setHydratedTasksByRepoAndTask((current) => {
-        if (current[hydrationKey] === true) {
-          return current;
+    void loadAgentSessions(activeTaskId)
+      .then(() => {
+        if (cancelled) {
+          return;
         }
-        return {
-          ...current,
-          [hydrationKey]: true,
-        };
+        setHydratedTasksByRepoAndTask((current) => {
+          if (current[hydrationKey] === true) {
+            return current;
+          }
+          return {
+            ...current,
+            [hydrationKey]: true,
+          };
+        });
+      })
+      .catch(() => {
+        // Keep task unhydrated so callers can retry after load failures.
+      })
+      .finally(() => {
+        hydratingTasksByRepoRef.current.delete(hydrationKey);
       });
-    });
 
     return () => {
       cancelled = true;
@@ -86,13 +92,19 @@ export function useAgentStudioTaskHydration({
     let cancelled = false;
     void loadAgentSessions(activeTaskId, {
       hydrateHistoryForSessionId: activeSessionId,
-    }).finally(() => {
-      hydratingSessionHistoriesByRepoRef.current.delete(sessionHydrationKey);
-      if (cancelled) {
-        return;
-      }
-      hydratedSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
-    });
+    })
+      .then(() => {
+        if (cancelled) {
+          return;
+        }
+        hydratedSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
+      })
+      .catch(() => {
+        // Keep history unhydrated so callers can retry after load failures.
+      })
+      .finally(() => {
+        hydratingSessionHistoriesByRepoRef.current.delete(sessionHydrationKey);
+      });
 
     return () => {
       cancelled = true;

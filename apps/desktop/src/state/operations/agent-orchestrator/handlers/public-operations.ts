@@ -56,6 +56,7 @@ export const createOrchestratorPublicOperations = ({
       toast.error("Failed to load agent sessions", {
         description: errorMessage(error),
       });
+      throw error;
     }
   },
   startAgentSession: async (input: StartAgentSessionInput): Promise<string> => {
