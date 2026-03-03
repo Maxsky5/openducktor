@@ -42,3 +42,25 @@ pub(super) fn combine_output(stdout: String, stderr: String) -> String {
         (stdout, stderr) => format!("{stdout}\n{stderr}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::combine_output;
+
+    #[test]
+    fn combine_output_prefers_non_empty_streams_and_preserves_both() {
+        assert_eq!(combine_output("".to_string(), "".to_string()), "");
+        assert_eq!(
+            combine_output("stdout".to_string(), "".to_string()),
+            "stdout"
+        );
+        assert_eq!(
+            combine_output("".to_string(), "stderr".to_string()),
+            "stderr"
+        );
+        assert_eq!(
+            combine_output("stdout".to_string(), "stderr".to_string()),
+            "stdout\nstderr"
+        );
+    }
+}

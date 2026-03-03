@@ -257,3 +257,66 @@ fn parse_ahead_behind(output: &str) -> Result<GitAheadBehind> {
         .with_context(|| format!("Failed to parse ahead count: {}", parts[1]))?;
     Ok(GitAheadBehind { ahead, behind })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        parse_ahead_behind, parse_diff_git_header_token, split_diff_by_file, GitAheadBehind,
+    };
+
+    #[test]
+    fn split_diff_by_file_parses_quoted_paths_with_b_slash_segment() {
+        let full_diff = "diff --git \"a/src/space b/path.ts\" \"b/src/space b/path.ts\"\nindex 123..456 100644\n--- \"a/src/space b/path.ts\"\n+++ \"b/src/space b/path.ts\"\n@@ -1 +1 @@\n-old\n+new\n";
+
+        let split = split_diff_by_file(full_diff);
+        assert_eq!(split.len(), 1);
+        assert_eq!(split[0].0, "src/space b/path.ts");
+        assert!(split[0].1.contains("@@ -1 +1 @@"));
+    }
+
+    #[test]
+    fn parse_diff_git_header_token_parses_escaped_quote_sequence() {
+        let input = "\"b/quote\\\"name.rs\" rest";
+        let parsed = parse_diff_git_header_token(input).expect("quoted token should parse");
+        assert_eq!(parsed.0, "b/quote\\\"name.rs");
+        assert_eq!(parsed.1, " rest");
+    }
+
+    #[test]
+    fn parse_diff_git_header_token_rejects_unterminated_quoted_token() {
+        let input = "\"b/unterminated path";
+        assert!(parse_diff_git_header_token(input).is_none());
+    }
+
+    #[test]
+    fn parse_ahead_behind_returns_error_for_non_numeric_counts() {
+        let error =
+            parse_ahead_behind("1 only-one").expect_err("non-numeric output should fail parsing");
+        assert!(
+            format!("{error:#}").contains("Failed to parse ahead count"),
+            "error should preserve ahead-count parsing context: {error:#}"
+        );
+    }
+
+    #[test]
+    fn parse_ahead_behind_returns_error_for_unexpected_token_count() {
+        let error =
+            parse_ahead_behind("1").expect_err("missing ahead/behind token should fail parsing");
+        assert!(
+            format!("{error:#}").contains("Unexpected output"),
+            "error should preserve rev-list parsing context: {error:#}"
+        );
+    }
+
+    #[test]
+    fn parse_ahead_behind_parses_valid_counts() {
+        let parsed = parse_ahead_behind("4 2").expect("counts should parse");
+        assert_eq!(
+            parsed,
+            GitAheadBehind {
+                ahead: 2,
+                behind: 4
+            }
+        );
+    }
+}

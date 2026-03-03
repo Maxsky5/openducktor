@@ -91,3 +91,32 @@ pub(super) fn parse_branch_rows(output: &str) -> Vec<GitBranch> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_branch_rows;
+
+    #[test]
+    fn parse_branch_rows_marks_current_local_and_remote_branches() {
+        let parsed = parse_branch_rows(
+            "1|main|refs/heads/main\n0|feature/a|refs/heads/feature/a\n0|origin/main|refs/remotes/origin/main\n",
+        );
+
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed[0].name, "main");
+        assert!(parsed[0].is_current);
+        assert!(!parsed[0].is_remote);
+        assert_eq!(parsed[2].name, "origin/main");
+        assert!(parsed[2].is_remote);
+    }
+
+    #[test]
+    fn parse_branch_rows_skips_remote_head_symbolic_ref() {
+        let parsed = parse_branch_rows(
+            "0|origin/HEAD|refs/remotes/origin/HEAD\n0|origin/main|refs/remotes/origin/main\n",
+        );
+
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].name, "origin/main");
+    }
+}
