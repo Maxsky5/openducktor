@@ -1,10 +1,32 @@
 use super::super::{qa_worktree::prepare_qa_worktree, AppService, RuntimeCleanupTarget};
 use super::{RuntimeExistingLookup, RuntimePrerequisiteResolution, RuntimePrerequisites};
 use anyhow::{anyhow, Result};
-use host_domain::AgentRuntimeRole;
+use host_domain::{AgentRuntimeRole, AgentRuntimeSummary, RuntimeRole};
 use std::path::Path;
 
 impl AppService {
+    pub(super) fn resolve_existing_runtime_for_start(
+        &self,
+        repo_key: &str,
+        role: RuntimeRole,
+        task_id: &str,
+    ) -> Result<Option<AgentRuntimeSummary>> {
+        let mut runtimes = self
+            .agent_runtimes
+            .lock()
+            .map_err(|_| anyhow!("Agent runtime state lock poisoned"))?;
+        Self::prune_stale_runtimes(&mut runtimes)?;
+
+        Ok(Self::find_existing_runtime(
+            &runtimes,
+            RuntimeExistingLookup {
+                repo_key,
+                role,
+                task_id: Some(task_id),
+            },
+        ))
+    }
+
     pub(super) fn resolve_runtime_prerequisites(
         &self,
         repo_key: &str,
@@ -38,8 +60,12 @@ impl AppService {
 
         let prerequisites = match role {
             AgentRuntimeRole::Qa => {
-                let setup =
-                    prepare_qa_worktree(repo_key, task_id, task.title.as_str(), &self.config_store)?;
+                let setup = prepare_qa_worktree(
+                    repo_key,
+                    task_id,
+                    task.title.as_str(),
+                    &self.config_store,
+                )?;
                 RuntimePrerequisites {
                     working_directory: setup.worktree_path.clone(),
                     cleanup_target: Some(RuntimeCleanupTarget {

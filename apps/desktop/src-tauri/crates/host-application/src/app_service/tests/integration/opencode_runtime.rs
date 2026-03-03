@@ -134,8 +134,8 @@ fn opencode_workspace_runtime_ensure_stops_spawned_child_when_post_start_prune_f
                 _opencode_process_guard: None,
                 cleanup_target: Some(RuntimeCleanupTarget {
                     repo_path: "/tmp/non-existent-repo-for-ensure-post-start-prune".to_string(),
-                    worktree_path:
-                        "/tmp/non-existent-worktree-for-ensure-post-start-prune".to_string(),
+                    worktree_path: "/tmp/non-existent-worktree-for-ensure-post-start-prune"
+                        .to_string(),
                 }),
             },
         );
@@ -465,8 +465,7 @@ fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Resu
 }
 
 #[test]
-fn opencode_runtime_start_fails_on_invalid_startup_config_before_qa_worktree_setup() -> Result<()>
-{
+fn opencode_runtime_start_fails_on_invalid_startup_config_before_qa_worktree_setup() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("runtime-invalid-startup-config");
     let repo = root.join("repo");
@@ -545,6 +544,8 @@ fn opencode_runtime_start_reuses_existing_runtime_for_same_task_and_role() -> Re
 
     let first =
         service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)?;
+    let config_path = root.join("config.json");
+    fs::write(&config_path, "{ invalid json")?;
     let second =
         service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)?;
     assert_eq!(first.runtime_id, second.runtime_id);
@@ -579,14 +580,12 @@ fn opencode_runtime_start_deduplicates_concurrent_same_task_and_role() -> Result
     let repo_path = repo.to_string_lossy().to_string();
 
     let (first, second) = thread::scope(|scope| {
-        let first_start =
-            scope.spawn(|| {
-                service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)
-            });
-        let second_start =
-            scope.spawn(|| {
-                service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)
-            });
+        let first_start = scope.spawn(|| {
+            service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)
+        });
+        let second_start = scope.spawn(|| {
+            service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)
+        });
         (
             first_start
                 .join()

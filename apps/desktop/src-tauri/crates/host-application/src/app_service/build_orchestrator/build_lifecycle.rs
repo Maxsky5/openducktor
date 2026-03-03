@@ -1,7 +1,7 @@
 use super::super::{
     emit_event, spawn_output_forwarder, terminate_child_process, AppService,
     OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter, RunProcess,
-    StartupEventCorrelation, StartupEventPayload,
+    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree, SpawnedBuildAgent};
 use super::BuildResponseAction;
@@ -9,8 +9,6 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
 use std::process::{ChildStderr, ChildStdout};
 use uuid::Uuid;
-
-const STARTUP_CONFIG_INVALID_REASON: &str = "startup_config_invalid";
 
 struct BuildRunRegistration {
     run_id: String,

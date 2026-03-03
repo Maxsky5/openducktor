@@ -8,6 +8,7 @@ const STARTUP_MS_BUCKETS: [&str; 7] = [
     "<=100", "<=250", "<=500", "<=1000", "<=2000", "<=5000", ">5000",
 ];
 const STARTUP_ATTEMPTS_BUCKETS: [&str; 6] = ["<=1", "<=3", "<=5", "<=10", "<=20", ">20"];
+pub(crate) const STARTUP_CONFIG_INVALID_REASON: &str = "startup_config_invalid";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

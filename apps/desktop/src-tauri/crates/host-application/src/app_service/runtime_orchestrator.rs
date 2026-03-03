@@ -51,8 +51,6 @@ pub(super) struct SpawnedRuntimeServer {
     opencode_process_guard: super::TrackedOpencodeProcessGuard,
 }
 
-pub(super) const STARTUP_CONFIG_INVALID_REASON: &str = "startup_config_invalid";
-
 impl AppService {
     pub fn runs_list(&self, repo_path: Option<&str>) -> Result<Vec<RunSummary>> {
         let repo_key_filter = repo_path
@@ -159,6 +157,11 @@ impl AppService {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
         let runtime_role = RuntimeRole::from(role);
+        if let Some(existing) =
+            self.resolve_existing_runtime_for_start(repo_path, runtime_role, task_id)?
+        {
+            return Ok(existing);
+        }
         let startup_error_context = format!("OpenCode runtime failed to start for task {task_id}");
         let startup_policy = self.resolve_runtime_startup_policy(
             "agent_runtime",
