@@ -286,6 +286,66 @@ describe("useAgentStudioDocuments", () => {
     }
   });
 
+  test("retries completed tool messages after loading clears for spec/plan/qa", async () => {
+    const scenarios = [
+      { tool: "odt_set_spec", section: "spec" as const, sessionId: "session-spec-loading" },
+      { tool: "odt_set_plan", section: "plan" as const, sessionId: "session-plan-loading" },
+      { tool: "odt_qa_rejected", section: "qa" as const, sessionId: "session-qa-loading" },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      reloadDocumentMock.mockClear();
+      applyDocumentUpdateMock.mockClear();
+
+      setTaskDocumentsState({
+        specDoc: createDocumentState({
+          markdown: "",
+          updatedAt: null,
+          isLoading: scenario.section === "spec",
+        }),
+        planDoc: createDocumentState({
+          markdown: "",
+          updatedAt: null,
+          isLoading: scenario.section === "plan",
+        }),
+        qaDoc: createDocumentState({
+          markdown: "",
+          updatedAt: null,
+          isLoading: scenario.section === "qa",
+        }),
+      });
+
+      const activeSession = createAgentSessionFixture({
+        sessionId: scenario.sessionId,
+        messages: [createCompletedToolMessage({ tool: scenario.tool, input: {}, output: "done" })],
+      });
+
+      const baseArgs = {
+        ...createBaseArgs(),
+        selectedTask: null,
+        activeSession,
+      };
+      const harness = createHookHarness(baseArgs);
+
+      try {
+        await harness.mount();
+        expect(reloadDocumentMock).not.toHaveBeenCalled();
+
+        setTaskDocumentsState({
+          specDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),
+          planDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),
+          qaDoc: createDocumentState({ markdown: "", updatedAt: null, isLoading: false }),
+        });
+        await harness.update(baseArgs);
+
+        expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+        expect(reloadDocumentMock).toHaveBeenCalledWith(scenario.section);
+      } finally {
+        await harness.unmount();
+      }
+    }
+  });
+
   test("resets processed tool-event context when switching sessions", async () => {
     setTaskDocumentsState({
       specDoc: createDocumentState({
