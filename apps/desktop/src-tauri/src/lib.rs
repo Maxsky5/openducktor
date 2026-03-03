@@ -24,7 +24,6 @@ use commands::workspace::*;
 
 struct AppState {
     service: Arc<AppService>,
-    startup_errors: Vec<String>,
     hook_trust_challenges: Mutex<HashMap<String, HookTrustChallenge>>,
 }
 
@@ -36,11 +35,6 @@ struct HookTrustChallenge {
     repo_path: String,
     fingerprint: String,
     expires_at: SystemTime,
-}
-
-struct ServiceBootstrapPhase {
-    service: Arc<AppService>,
-    startup_errors: Vec<String>,
 }
 
 fn init_tracing_subscriber() {
@@ -151,14 +145,6 @@ where
         .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
 
-fn extend_runtime_errors_with_startup(
-    mut check: host_domain::RuntimeCheck,
-    startup_errors: &[String],
-) -> host_domain::RuntimeCheck {
-    check.errors.extend(startup_errors.iter().cloned());
-    check
-}
-
 fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
@@ -169,17 +155,14 @@ fn startup_phase_tracing() {
     init_tracing_subscriber();
 }
 
-fn startup_phase_service_bootstrap() -> anyhow::Result<ServiceBootstrapPhase> {
+fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService>> {
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
     let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(
         TASK_METADATA_NAMESPACE,
     ));
     let service = Arc::new(AppService::new(task_store, config_store));
 
-    Ok(ServiceBootstrapPhase {
-        service,
-        startup_errors: Vec::new(),
-    })
+    Ok(service)
 }
 
 fn install_shutdown_signal_handler(service: Arc<AppService>) {
@@ -273,13 +256,12 @@ fn startup_phase_command_registration(
 }
 
 fn startup_phase_build_tauri_app(
-    bootstrap: ServiceBootstrapPhase,
+    service: Arc<AppService>,
 ) -> anyhow::Result<tauri::App<tauri::Wry>> {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
-            service: bootstrap.service,
-            startup_errors: bootstrap.startup_errors,
+            service,
             hook_trust_challenges: Mutex::new(HashMap::new()),
         });
 
@@ -303,11 +285,11 @@ fn startup_phase_exit_shutdown_handler(
 
 pub fn run() -> anyhow::Result<()> {
     startup_phase_tracing();
-    let bootstrap = startup_phase_service_bootstrap()?;
-    let app_service = bootstrap.service.clone();
+    let service = startup_phase_service_bootstrap()?;
+    let app_service = service.clone();
     startup_phase_shutdown_hooks(app_service.clone());
 
-    startup_phase_build_tauri_app(bootstrap)?.run(startup_phase_exit_shutdown_handler(app_service));
+    startup_phase_build_tauri_app(service)?.run(startup_phase_exit_shutdown_handler(app_service));
 
     Ok(())
 }
@@ -316,27 +298,7 @@ pub fn run() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use anyhow::anyhow;
-    use host_domain::RuntimeCheck;
     use serde_json::{json, Value};
-
-    #[test]
-    fn extend_runtime_errors_with_startup_appends_startup_messages() {
-        let runtime = RuntimeCheck {
-            git_ok: true,
-            git_version: Some("git version 2.0.0".to_string()),
-            opencode_ok: true,
-            opencode_version: Some("1.0.0".to_string()),
-            errors: vec!["runtime issue".to_string()],
-        };
-
-        let startup_errors = vec!["startup warning".to_string()];
-        let updated = extend_runtime_errors_with_startup(runtime, &startup_errors);
-
-        assert_eq!(
-            updated.errors,
-            vec!["runtime issue".to_string(), "startup warning".to_string()]
-        );
-    }
 
     #[test]
     fn run_service_blocking_propagates_operation_error() {
