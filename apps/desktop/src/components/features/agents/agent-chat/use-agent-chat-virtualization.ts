@@ -59,10 +59,13 @@ export function useAgentChatVirtualization({
     activeSessionId,
     virtualRows,
   });
+  const resolveScrollElement = useCallback((): HTMLDivElement | null => {
+    return messagesContainerRef.current;
+  }, [messagesContainerRef]);
 
   const virtualizer = useVirtualizer({
     count: shouldVirtualize ? virtualRows.length : 0,
-    getScrollElement: () => messagesContainerRef.current,
+    getScrollElement: resolveScrollElement,
     estimateSize: estimateRowSize,
     measureElement: measureVirtualRowElement,
     getItemKey: resolveRowKey,
@@ -132,6 +135,8 @@ function useVirtualRowMeasurements({
   activeSessionId,
   virtualRows,
 }: UseVirtualRowMeasurementsInput): UseVirtualRowMeasurementsResult {
+  const virtualRowsRef = useRef(virtualRows);
+  virtualRowsRef.current = virtualRows;
   const measuredSessionIdRef = useRef<string | null>(null);
   const measuredRowHeightByKeyRef = useRef<Record<string, number>>({});
 
@@ -140,48 +145,48 @@ function useVirtualRowMeasurements({
     measuredRowHeightByKeyRef.current = {};
   }
 
-  const estimateRowSize = useCallback(
-    (index: number): number => {
-      const row = virtualRows[index];
-      if (!row) {
-        return 0;
-      }
-      const trailingGap = index < virtualRows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
-      const measuredHeight = measuredRowHeightByKeyRef.current[row.key];
-      if (typeof measuredHeight === "number" && measuredHeight > 0) {
-        return measuredHeight + trailingGap;
-      }
+  const estimateRowSize = useCallback((index: number): number => {
+    const rows = virtualRowsRef.current;
+    const row = rows[index];
+    if (!row) {
+      return 0;
+    }
+    const trailingGap = index < rows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
+    const measuredHeight = measuredRowHeightByKeyRef.current[row.key];
+    if (typeof measuredHeight === "number" && measuredHeight > 0) {
+      return measuredHeight + trailingGap;
+    }
 
-      return 1 + trailingGap;
-    },
-    [virtualRows],
-  );
+    return 1 + trailingGap;
+  }, []);
 
-  const measureVirtualRowElement = useCallback(
-    (element: Element): number => {
-      const measuredHeight = element.getBoundingClientRect().height;
+  const measureVirtualRowElement = useCallback((element: Element): number => {
+    const measuredHeight = element.getBoundingClientRect().height;
+    let rowKey = element.getAttribute("data-row-key");
+
+    if (!rowKey) {
       const indexValue = Number.parseInt(element.getAttribute("data-index") ?? "", 10);
       const row =
-        Number.isFinite(indexValue) && indexValue >= 0 ? virtualRows[indexValue] : undefined;
-      if (row && measuredHeight > 0) {
-        const previousHeight = measuredRowHeightByKeyRef.current[row.key];
-        if (typeof previousHeight !== "number") {
-          measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
-        } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
-          measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
-        }
-      }
-      return measuredHeight;
-    },
-    [virtualRows],
-  );
+        Number.isFinite(indexValue) && indexValue >= 0
+          ? virtualRowsRef.current[indexValue]
+          : undefined;
+      rowKey = row?.key ?? null;
+    }
 
-  const resolveRowKey = useCallback(
-    (index: number): string | number => {
-      return virtualRows[index]?.key ?? index;
-    },
-    [virtualRows],
-  );
+    if (rowKey && measuredHeight > 0) {
+      const previousHeight = measuredRowHeightByKeyRef.current[rowKey];
+      if (typeof previousHeight !== "number") {
+        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
+      } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
+        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
+      }
+    }
+    return measuredHeight;
+  }, []);
+
+  const resolveRowKey = useCallback((index: number): string | number => {
+    return virtualRowsRef.current[index]?.key ?? index;
+  }, []);
 
   return { estimateRowSize, measureVirtualRowElement, resolveRowKey };
 }
