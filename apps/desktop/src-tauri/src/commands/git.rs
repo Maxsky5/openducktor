@@ -517,20 +517,202 @@ pub async fn git_rebase_branch(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_worktree_status_with_snapshot, hash_worktree_diff_payload,
+        build_worktree_status_with_snapshot, git_get_worktree_status, hash_worktree_diff_payload,
         hash_worktree_status_payload, parse_diff_scope, require_target_branch, resolve_working_dir,
         WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
     };
+    use crate::AppState;
+    use anyhow::anyhow;
+    use host_application::AppService;
+    use host_domain::GitPort;
     use host_domain::{
-        GitAheadBehind, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
-        GitUpstreamAheadBehind, GitWorktreeStatusData,
+        GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
+        GitDiffScope, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushSummary,
+        GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
+        GitWorktreeStatusData, TaskStore, TASK_METADATA_NAMESPACE,
     };
+    use host_infra_beads::BeadsTaskStore;
+    use host_infra_system::AppConfigStore;
+    use serde_json::{json, Value};
     use std::{
+        collections::HashMap,
         env, fs,
         path::{Path, PathBuf},
         process::Command,
+        sync::{Arc, Mutex},
         time::{SystemTime, UNIX_EPOCH},
     };
+    use tauri::{
+        ipc::{CallbackFn, InvokeBody},
+        test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY},
+        webview::InvokeRequest,
+        App, Webview, WebviewWindow, WebviewWindowBuilder,
+    };
+
+    #[derive(Clone)]
+    enum WorktreeStatusResult {
+        Ok(GitWorktreeStatusData),
+        Err(String),
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct WorktreeStatusCall {
+        repo_path: String,
+        target_branch: String,
+        diff_scope: GitDiffScope,
+    }
+
+    struct CommandGitPortState {
+        worktree_status_result: WorktreeStatusResult,
+        worktree_status_calls: Vec<WorktreeStatusCall>,
+    }
+
+    struct CommandGitPort {
+        state: Arc<Mutex<CommandGitPortState>>,
+    }
+
+    impl CommandGitPort {
+        fn new(result: WorktreeStatusResult) -> Self {
+            Self {
+                state: Arc::new(Mutex::new(CommandGitPortState {
+                    worktree_status_result: result,
+                    worktree_status_calls: Vec::new(),
+                })),
+            }
+        }
+    }
+
+    impl GitPort for CommandGitPort {
+        fn get_branches(&self, _repo_path: &Path) -> anyhow::Result<Vec<GitBranch>> {
+            panic!("unexpected call: get_branches");
+        }
+
+        fn get_current_branch(&self, _repo_path: &Path) -> anyhow::Result<GitCurrentBranch> {
+            panic!("unexpected call: get_current_branch");
+        }
+
+        fn switch_branch(
+            &self,
+            _repo_path: &Path,
+            _branch: &str,
+            _create: bool,
+        ) -> anyhow::Result<GitCurrentBranch> {
+            panic!("unexpected call: switch_branch");
+        }
+
+        fn create_worktree(
+            &self,
+            _repo_path: &Path,
+            _worktree_path: &Path,
+            _branch: &str,
+            _create_branch: bool,
+        ) -> anyhow::Result<()> {
+            panic!("unexpected call: create_worktree");
+        }
+
+        fn remove_worktree(
+            &self,
+            _repo_path: &Path,
+            _worktree_path: &Path,
+            _force: bool,
+        ) -> anyhow::Result<()> {
+            panic!("unexpected call: remove_worktree");
+        }
+
+        fn push_branch(
+            &self,
+            _repo_path: &Path,
+            _remote: &str,
+            _branch: &str,
+            _set_upstream: bool,
+            _force_with_lease: bool,
+        ) -> anyhow::Result<GitPushSummary> {
+            panic!("unexpected call: push_branch");
+        }
+
+        fn pull_branch(
+            &self,
+            _repo_path: &Path,
+            _request: GitPullRequest,
+        ) -> anyhow::Result<GitPullResult> {
+            panic!("unexpected call: pull_branch");
+        }
+
+        fn get_status(&self, _repo_path: &Path) -> anyhow::Result<Vec<GitFileStatus>> {
+            panic!("unexpected call: get_status");
+        }
+
+        fn get_diff(
+            &self,
+            _repo_path: &Path,
+            _target_branch: Option<&str>,
+        ) -> anyhow::Result<Vec<GitFileDiff>> {
+            panic!("unexpected call: get_diff");
+        }
+
+        fn get_worktree_status(
+            &self,
+            repo_path: &Path,
+            target_branch: &str,
+            diff_scope: GitDiffScope,
+        ) -> anyhow::Result<GitWorktreeStatusData> {
+            let mut state = self
+                .state
+                .lock()
+                .expect("command git port state lock should not be poisoned");
+            state.worktree_status_calls.push(WorktreeStatusCall {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                target_branch: target_branch.to_string(),
+                diff_scope,
+            });
+            match state.worktree_status_result.clone() {
+                WorktreeStatusResult::Ok(payload) => Ok(payload),
+                WorktreeStatusResult::Err(message) => Err(anyhow!(message)),
+            }
+        }
+
+        fn resolve_upstream_target(&self, _repo_path: &Path) -> anyhow::Result<Option<String>> {
+            panic!("unexpected call: resolve_upstream_target");
+        }
+
+        fn commits_ahead_behind(
+            &self,
+            _repo_path: &Path,
+            _target_branch: &str,
+        ) -> anyhow::Result<GitAheadBehind> {
+            panic!("unexpected call: commits_ahead_behind");
+        }
+
+        fn commit_all(
+            &self,
+            _repo_path: &Path,
+            _request: GitCommitAllRequest,
+        ) -> anyhow::Result<GitCommitAllResult> {
+            panic!("unexpected call: commit_all");
+        }
+
+        fn rebase_branch(
+            &self,
+            _repo_path: &Path,
+            _request: GitRebaseBranchRequest,
+        ) -> anyhow::Result<GitRebaseBranchResult> {
+            panic!("unexpected call: rebase_branch");
+        }
+    }
+
+    struct CommandGitFixture {
+        _app: App<MockRuntime>,
+        webview: WebviewWindow<MockRuntime>,
+        repo_path: String,
+        git_state: Arc<Mutex<CommandGitPortState>>,
+        root: PathBuf,
+    }
+
+    impl Drop for CommandGitFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
 
     fn unique_test_dir(prefix: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -568,6 +750,231 @@ mod tests {
             ],
             path,
         );
+    }
+
+    fn setup_command_git_fixture(
+        prefix: &str,
+        result: WorktreeStatusResult,
+        authorize_repo: bool,
+    ) -> CommandGitFixture {
+        let root = unique_test_dir(prefix);
+        let repo = root.join("repo");
+        fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        if authorize_repo {
+            config_store
+                .add_workspace(repo.to_string_lossy().as_ref())
+                .expect("workspace should be allowlisted");
+        }
+
+        let git_port = CommandGitPort::new(result);
+        let git_state = git_port.state.clone();
+        let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
+            TASK_METADATA_NAMESPACE,
+        ));
+        let service = Arc::new(AppService::with_git_port(
+            task_store,
+            config_store,
+            Arc::new(git_port),
+        ));
+        let app = mock_builder()
+            .manage(AppState {
+                service,
+                hook_trust_challenges: Mutex::new(HashMap::new()),
+            })
+            .invoke_handler(tauri::generate_handler![git_get_worktree_status])
+            .build(mock_context(noop_assets()))
+            .expect("test app should build");
+        let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("test webview should build");
+
+        CommandGitFixture {
+            _app: app,
+            webview,
+            repo_path: repo.to_string_lossy().to_string(),
+            git_state,
+            root,
+        }
+    }
+
+    fn invoke_json<W: AsRef<Webview<MockRuntime>>>(
+        webview: &W,
+        cmd: &str,
+        body: Value,
+    ) -> Result<Value, Value> {
+        tauri::test::get_ipc_response(
+            webview,
+            InvokeRequest {
+                cmd: cmd.to_string(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: "http://tauri.localhost"
+                    .parse()
+                    .expect("invoke URL should parse"),
+                body: InvokeBody::Json(body),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .map(|payload| {
+            payload
+                .deserialize::<Value>()
+                .expect("command response should deserialize")
+        })
+    }
+
+    fn sample_worktree_status_data(upstream: GitUpstreamAheadBehind) -> GitWorktreeStatusData {
+        GitWorktreeStatusData {
+            current_branch: GitCurrentBranch {
+                name: Some("feature/command".to_string()),
+                detached: false,
+            },
+            file_statuses: vec![GitFileStatus {
+                path: "src/main.rs".to_string(),
+                status: "M".to_string(),
+                staged: false,
+            }],
+            file_diffs: vec![GitFileDiff {
+                file: "src/main.rs".to_string(),
+                diff_type: "modified".to_string(),
+                additions: 1,
+                deletions: 0,
+                diff: "@@ -1 +1 @@\n-old\n+new\n".to_string(),
+            }],
+            target_ahead_behind: GitAheadBehind {
+                ahead: 1,
+                behind: 0,
+            },
+            upstream_ahead_behind: upstream,
+        }
+    }
+
+    #[test]
+    fn git_get_worktree_status_rejects_unauthorized_repo() {
+        let fixture = setup_command_git_fixture(
+            "git-command-unauthorized",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            false,
+        );
+
+        let error = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+            }),
+        )
+        .expect_err("unauthorized repo should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Repository path is not in the configured workspace allowlist"),
+            "unexpected error: {error}"
+        );
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert!(
+            state.worktree_status_calls.is_empty(),
+            "git port should not run when authorization fails"
+        );
+    }
+
+    #[test]
+    fn git_get_worktree_status_keeps_upstream_error_variant_and_snapshot_metadata() {
+        let fixture = setup_command_git_fixture(
+            "git-command-upstream-error",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(GitUpstreamAheadBehind::Error {
+                message: "upstream not configured".to_string(),
+            })),
+            true,
+        );
+
+        let response = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "  origin/main  ",
+                "diffScope": "uncommitted",
+            }),
+        )
+        .expect("command should succeed");
+        let status: GitWorktreeStatus =
+            serde_json::from_value(response).expect("response should decode as GitWorktreeStatus");
+
+        assert_eq!(
+            status.upstream_ahead_behind,
+            GitUpstreamAheadBehind::Error {
+                message: "upstream not configured".to_string()
+            }
+        );
+        assert_eq!(status.snapshot.target_branch, "origin/main");
+        assert_eq!(status.snapshot.diff_scope, GitDiffScope::Uncommitted);
+        assert_eq!(status.snapshot.hash_version, GIT_WORKTREE_HASH_VERSION);
+        assert_eq!(status.snapshot.status_hash.len(), 16);
+        assert_eq!(status.snapshot.diff_hash.len(), 16);
+
+        let expected_effective = fs::canonicalize(Path::new(&fixture.repo_path))
+            .expect("repo should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(status.snapshot.effective_working_dir, expected_effective);
+
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert_eq!(state.worktree_status_calls.len(), 1);
+        assert_eq!(
+            state.worktree_status_calls[0],
+            WorktreeStatusCall {
+                repo_path: expected_effective,
+                target_branch: "origin/main".to_string(),
+                diff_scope: GitDiffScope::Uncommitted,
+            }
+        );
+    }
+
+    #[test]
+    fn git_get_worktree_status_propagates_upstream_status_collection_failures() {
+        let fixture = setup_command_git_fixture(
+            "git-command-status-failure",
+            WorktreeStatusResult::Err("failed collecting upstream status".to_string()),
+            true,
+        );
+
+        let error = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+            }),
+        )
+        .expect_err("git port failure should be returned");
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed collecting upstream status"),
+            "unexpected error: {error}"
+        );
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert_eq!(state.worktree_status_calls.len(), 1);
     }
 
     #[test]
