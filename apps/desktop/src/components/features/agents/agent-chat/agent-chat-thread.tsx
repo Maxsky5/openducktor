@@ -94,6 +94,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     };
     return nextRows;
   }, [session, virtualRowsSignature]);
+  const virtualRowsRef = useRef(virtualRows);
+  virtualRowsRef.current = virtualRows;
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
   const activeSessionId = session?.sessionId ?? null;
   const measuredSessionIdRef = useRef<string | null>(null);
@@ -105,48 +107,40 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     measuredRowHeightByKeyRef.current = {};
   }
 
-  const estimateRowSize = useCallback(
-    (index: number): number => {
-      const row = virtualRows[index];
-      if (!row) {
-        return 0;
-      }
-      const trailingGap = index < virtualRows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
-      const measuredHeight = measuredRowHeightByKeyRef.current[row.key];
-      if (typeof measuredHeight === "number" && measuredHeight > 0) {
-        return measuredHeight + trailingGap;
-      }
+  const estimateRowSize = useCallback((index: number): number => {
+    const rows = virtualRowsRef.current;
+    const row = rows[index];
+    if (!row) {
+      return 0;
+    }
+    const trailingGap = index < rows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
+    const measuredHeight = measuredRowHeightByKeyRef.current[row.key];
+    if (typeof measuredHeight === "number" && measuredHeight > 0) {
+      return measuredHeight + trailingGap;
+    }
 
-      return 1 + trailingGap;
-    },
-    [virtualRows],
-  );
+    return 1 + trailingGap;
+  }, []);
 
-  const measureVirtualRowElement = useCallback(
-    (element: Element): number => {
-      const measuredHeight = element.getBoundingClientRect().height;
-      const indexValue = Number.parseInt(element.getAttribute("data-index") ?? "", 10);
-      const row =
-        Number.isFinite(indexValue) && indexValue >= 0 ? virtualRows[indexValue] : undefined;
-      if (row && measuredHeight > 0) {
-        const previousHeight = measuredRowHeightByKeyRef.current[row.key];
-        if (typeof previousHeight !== "number") {
-          measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
-        } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
-          measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
-        }
+  const measureVirtualRowElement = useCallback((element: Element): number => {
+    const measuredHeight = element.getBoundingClientRect().height;
+    const indexValue = Number.parseInt(element.getAttribute("data-index") ?? "", 10);
+    const rows = virtualRowsRef.current;
+    const row = Number.isFinite(indexValue) && indexValue >= 0 ? rows[indexValue] : undefined;
+    if (row && measuredHeight > 0) {
+      const previousHeight = measuredRowHeightByKeyRef.current[row.key];
+      if (typeof previousHeight !== "number") {
+        measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
+      } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
+        measuredRowHeightByKeyRef.current[row.key] = measuredHeight;
       }
-      return measuredHeight;
-    },
-    [virtualRows],
-  );
+    }
+    return measuredHeight;
+  }, []);
 
-  const resolveRowKey = useCallback(
-    (index: number): string | number => {
-      return virtualRows[index]?.key ?? index;
-    },
-    [virtualRows],
-  );
+  const resolveRowKey = useCallback((index: number): string | number => {
+    return virtualRowsRef.current[index]?.key ?? index;
+  }, []);
 
   const virtualizer = useVirtualizer({
     count: shouldVirtualize ? virtualRows.length : 0,
