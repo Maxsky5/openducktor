@@ -156,4 +156,82 @@ describe("AgentChatThread virtualizer callbacks", () => {
       renderer.unmount();
     });
   });
+
+  test("clears measured row cache when active session changes", async () => {
+    const { AgentChatThread } = await import("./agent-chat-thread");
+
+    const firstSession = buildSession({
+      sessionId: "session-a",
+      messages: Array.from({ length: 45 }, (_, index) =>
+        buildMessage("assistant", `Session A Message ${index + 1}`, {
+          id: `message-${index + 1}`,
+        }),
+      ),
+    });
+    const secondSession = buildSession({
+      sessionId: "session-b",
+      messages: Array.from({ length: 45 }, (_, index) =>
+        buildMessage("assistant", `Session B Message ${index + 1}`, {
+          id: `message-${index + 1}`,
+        }),
+      ),
+    });
+    const secondSessionFirstRowKey = `${secondSession.sessionId}:message-1`;
+    let model = {
+      ...baseModel,
+      session: firstSession,
+    };
+
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(
+        createElement(AgentChatThread, {
+          model,
+        }),
+      );
+    });
+
+    const firstOptions = useVirtualizerOptionsByRender.at(-1);
+    expect(firstOptions).toBeDefined();
+    const seededMeasurement = firstOptions?.measureElement({
+      getBoundingClientRect: () => ({ height: 77 }),
+      getAttribute: (attributeName: string) => {
+        if (attributeName === "data-row-key") {
+          return secondSessionFirstRowKey;
+        }
+        if (attributeName === "data-index") {
+          return "0";
+        }
+        return null;
+      },
+    } as unknown as Element);
+    expect(seededMeasurement).toBe(77);
+
+    model = {
+      ...baseModel,
+      session: secondSession,
+    };
+    await act(async () => {
+      renderer.update(
+        createElement(AgentChatThread, {
+          model,
+        }),
+      );
+    });
+
+    const secondOptions = useVirtualizerOptionsByRender.at(-1);
+    expect(secondOptions).toBeDefined();
+    const secondSessionRows = buildAgentChatVirtualRows(secondSession);
+    const secondSessionRowIndex = secondSessionRows.findIndex(
+      (row) => row.key === secondSessionFirstRowKey,
+    );
+    expect(secondSessionRowIndex).toBeGreaterThanOrEqual(0);
+    const expectedDefaultEstimate =
+      secondSessionRowIndex < secondSessionRows.length - 1 ? 1 + AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 1;
+    expect(secondOptions?.estimateSize(secondSessionRowIndex)).toBe(expectedDefaultEstimate);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });

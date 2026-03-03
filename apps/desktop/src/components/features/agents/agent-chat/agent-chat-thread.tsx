@@ -1,31 +1,14 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { AlertTriangle, Bot, Brain, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import {
-  Fragment,
-  type ReactElement,
-  type UIEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { AlertTriangle, Bot, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
+import { Fragment, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import { AgentChatMessageCard } from "./agent-chat-message-card";
-import {
-  AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
-  AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
-  AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT,
-  type AgentChatVirtualRow,
-  buildAgentChatVirtualRows,
-  buildAgentChatVirtualRowsSignature,
-} from "./agent-chat-thread-virtualization";
+import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
-import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
+import { useAgentChatAutoScroll } from "./use-agent-chat-auto-scroll";
+import { useAgentChatVirtualization } from "./use-agent-chat-virtualization";
 
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
@@ -61,217 +44,28 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const StreamingRoleIcon = streamingRoleDisplay?.icon ?? Bot;
   const streamingRoleLabel = streamingRoleDisplay?.label ?? "Assistant";
 
-  const messageIdentityTokenByMessageRef = useRef<WeakMap<AgentChatMessage, number>>(new WeakMap());
-  const nextMessageIdentityTokenRef = useRef(1);
-  const virtualRowsCacheRef = useRef<{ signature: string | null; rows: AgentChatVirtualRow[] }>({
-    signature: null,
-    rows: [],
+  const {
+    activeSessionId,
+    canRenderVirtualRows,
+    hasRenderableSessionRows,
+    shouldVirtualize,
+    virtualRows,
+    virtualRowsToRender,
+    virtualizer,
+  } = useAgentChatVirtualization({
+    session,
+    messagesContainerRef,
   });
-  const resolveMessageIdentityToken = useCallback((message: AgentChatMessage): number => {
-    const cached = messageIdentityTokenByMessageRef.current.get(message);
-    if (typeof cached === "number") {
-      return cached;
-    }
-
-    const nextToken = nextMessageIdentityTokenRef.current;
-    nextMessageIdentityTokenRef.current += 1;
-    messageIdentityTokenByMessageRef.current.set(message, nextToken);
-    return nextToken;
-  }, []);
-  const virtualRowsSignature = session
-    ? buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken)
-    : null;
-  const virtualRows = useMemo(() => {
-    const cached = virtualRowsCacheRef.current;
-    if (cached.signature === virtualRowsSignature) {
-      return cached.rows;
-    }
-
-    const nextRows = session ? buildAgentChatVirtualRows(session) : [];
-    virtualRowsCacheRef.current = {
-      signature: virtualRowsSignature,
-      rows: nextRows,
-    };
-    return nextRows;
-  }, [session, virtualRowsSignature]);
-  const virtualRowsRef = useRef(virtualRows);
-  virtualRowsRef.current = virtualRows;
-  const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
-  const activeSessionId = session?.sessionId ?? null;
-  const measuredSessionIdRef = useRef<string | null>(null);
-  const measuredRowHeightByKeyRef = useRef<Record<string, number>>({});
-  const previousVirtualizedSessionIdRef = useRef<string | null>(null);
-
-  if (measuredSessionIdRef.current !== activeSessionId) {
-    measuredSessionIdRef.current = activeSessionId;
-    measuredRowHeightByKeyRef.current = {};
-  }
-
-  const estimateRowSize = useCallback((index: number): number => {
-    const rows = virtualRowsRef.current;
-    const row = rows[index];
-    if (!row) {
-      return 0;
-    }
-    const trailingGap = index < rows.length - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
-    const measuredHeight = measuredRowHeightByKeyRef.current[row.key];
-    if (typeof measuredHeight === "number" && measuredHeight > 0) {
-      return measuredHeight + trailingGap;
-    }
-
-    return 1 + trailingGap;
-  }, []);
-
-  const measureVirtualRowElement = useCallback((element: Element): number => {
-    const measuredHeight = element.getBoundingClientRect().height;
-    const rowKey = element.getAttribute("data-row-key");
-    if (rowKey && measuredHeight > 0) {
-      const previousHeight = measuredRowHeightByKeyRef.current[rowKey];
-      if (typeof previousHeight !== "number") {
-        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
-      } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
-        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
-      }
-    }
-    return measuredHeight;
-  }, []);
-
-  const resolveRowKey = useCallback((index: number): string | number => {
-    return virtualRowsRef.current[index]?.key ?? index;
-  }, []);
-  const resolveScrollElement = useCallback((): HTMLDivElement | null => {
-    return messagesContainerRef.current;
-  }, [messagesContainerRef]);
-
-  const virtualizer = useVirtualizer({
-    count: shouldVirtualize ? virtualRows.length : 0,
-    getScrollElement: resolveScrollElement,
-    estimateSize: estimateRowSize,
-    measureElement: measureVirtualRowElement,
-    getItemKey: resolveRowKey,
-    overscan: AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
-  });
-
-  useEffect(() => {
-    if (!activeSessionId || !shouldVirtualize || virtualRows.length === 0) {
-      previousVirtualizedSessionIdRef.current = activeSessionId;
-      return;
-    }
-
-    const sessionChanged = previousVirtualizedSessionIdRef.current !== activeSessionId;
-    previousVirtualizedSessionIdRef.current = activeSessionId;
-
-    if (!sessionChanged && !isPinnedToBottom) {
-      return;
-    }
-
-    const lastRowIndex = virtualRows.length - 1;
-    const scrollToBottom = (): void => {
-      if (sessionChanged) {
-        virtualizer.measure();
-      }
-      virtualizer.scrollToIndex(lastRowIndex, { align: "end" });
-
-      const container = messagesContainerRef.current;
-      if (!container) {
-        return;
-      }
-
-      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
-    };
-
-    if (typeof window === "undefined") {
-      scrollToBottom();
-      return;
-    }
-
-    const rafId = window.requestAnimationFrame(() => {
-      scrollToBottom();
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [
+  useAgentChatAutoScroll({
     activeSessionId,
     isPinnedToBottom,
     messagesContainerRef,
     shouldVirtualize,
-    virtualRows.length,
+    virtualRowsCount: virtualRows.length,
     virtualizer,
-  ]);
-
-  const handleMessagesContainerScroll = useCallback(
-    (event: UIEvent<HTMLDivElement>): void => {
-      onMessagesScroll(event);
-    },
-    [onMessagesScroll],
-  );
-  const virtualItems = virtualizer.getVirtualItems();
-  const virtualRowsToRender = useMemo(
-    () =>
-      virtualItems
-        .map((virtualItem) => {
-          const row = virtualRows[virtualItem.index];
-          if (!row) {
-            return null;
-          }
-          return { row, virtualItem };
-        })
-        .filter(
-          (
-            entry,
-          ): entry is { row: AgentChatVirtualRow; virtualItem: (typeof virtualItems)[number] } =>
-            entry !== null,
-        ),
-    [virtualItems, virtualRows],
-  );
-  const canRenderVirtualRows = shouldVirtualize && virtualRowsToRender.length > 0;
-  const hasRenderableSessionRows = virtualRows.length > 0;
-
-  const renderVirtualRow = useCallback(
-    (row: AgentChatVirtualRow): ReactElement => {
-      if (row.kind === "turn_duration") {
-        return <AgentTurnDurationSeparator durationMs={row.durationMs} />;
-      }
-
-      if (row.kind === "message") {
-        const isUserMessage = row.message.role === "user";
-        return (
-          <div className={cn("flow-root", isUserMessage ? "pt-4" : undefined)}>
-            <AgentChatMessageCard
-              message={row.message}
-              sessionRole={session?.role ?? null}
-              sessionSelectedModel={session?.selectedModel ?? null}
-              sessionAgentColors={sessionAgentColors}
-            />
-          </div>
-        );
-      }
-
-      if (row.kind === "draft") {
-        return (
-          <article className="px-1 py-1 text-sm text-foreground">
-            <header className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <StreamingRoleIcon className="size-3" />
-              {streamingRoleLabel} (streaming)
-              <LoaderCircle className="size-3 animate-spin" />
-            </header>
-            <p className="whitespace-pre-wrap leading-6 text-foreground">{row.draftText}</p>
-          </article>
-        );
-      }
-
-      return (
-        <div className="flex items-center gap-2 rounded-md border border-dashed border-input bg-card px-3 py-2 text-xs text-muted-foreground">
-          <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
-          <Brain className="size-3.5 text-pending-accent" />
-          Agent is thinking...
-        </div>
-      );
-    },
-    [session, sessionAgentColors, StreamingRoleIcon, streamingRoleLabel],
-  );
+  });
+  const sessionRole = session?.role ?? null;
+  const sessionSelectedModel = session?.selectedModel ?? null;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -298,7 +92,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       <div
         ref={messagesContainerRef}
         className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
-        onScroll={handleMessagesContainerScroll}
+        onScroll={onMessagesScroll}
       >
         {!session ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
@@ -351,7 +145,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
                     width: "100%",
                   }}
                 >
-                  {renderVirtualRow(row)}
+                  <AgentChatThreadRow
+                    row={row}
+                    sessionRole={sessionRole}
+                    sessionSelectedModel={sessionSelectedModel}
+                    sessionAgentColors={sessionAgentColors}
+                    streamingRoleIcon={StreamingRoleIcon}
+                    streamingRoleLabel={streamingRoleLabel}
+                  />
                 </div>
               );
             })}
@@ -360,7 +161,18 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
         {session && !canRenderVirtualRows ? (
           hasRenderableSessionRows ? (
-            virtualRows.map((row) => <Fragment key={row.key}>{renderVirtualRow(row)}</Fragment>)
+            virtualRows.map((row) => (
+              <Fragment key={row.key}>
+                <AgentChatThreadRow
+                  row={row}
+                  sessionRole={sessionRole}
+                  sessionSelectedModel={sessionSelectedModel}
+                  sessionAgentColors={sessionAgentColors}
+                  streamingRoleIcon={StreamingRoleIcon}
+                  streamingRoleLabel={streamingRoleLabel}
+                />
+              </Fragment>
+            ))
           ) : (
             <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
               Loading session history...
