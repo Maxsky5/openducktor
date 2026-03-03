@@ -467,7 +467,7 @@ describe("OpencodeSdkAdapter", () => {
 
   test("sendUserMessage applies runtime workflow aliases when available", async () => {
     const mock = makeMockClient({
-      toolIdsResponse: ["customprefix_odt_set_spec", "customprefix_odt_set_plan"],
+      toolIdsResponse: ["openducktor_odt_set_spec", "openducktor_odt_set_plan"],
     });
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -484,8 +484,8 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptCalls).toHaveLength(1);
     const tools = (mock.session.promptCalls[0] as { tools?: Record<string, boolean> }).tools;
     expect(tools).toMatchObject({
-      customprefix_odt_set_spec: true,
-      customprefix_odt_set_plan: false,
+      openducktor_odt_set_spec: true,
+      openducktor_odt_set_plan: false,
     });
   });
 

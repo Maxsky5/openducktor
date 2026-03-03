@@ -22,14 +22,14 @@ describe("workflow-tool-selection", () => {
   test("uses runtime tool aliases when available", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
-        toolIds: ["customprefix_odt_set_spec", "customprefix_odt_set_plan"],
+        toolIds: ["openducktor_odt_set_spec", "openducktor_odt_set_plan"],
       }),
       role: "spec",
       workingDirectory: "/repo",
     });
 
-    expect(selection.customprefix_odt_set_spec).toBe(true);
-    expect(selection.customprefix_odt_set_plan).toBe(false);
+    expect(selection.openducktor_odt_set_spec).toBe(true);
+    expect(selection.openducktor_odt_set_plan).toBe(false);
   });
 
   test("falls back to known alias policy when tool discovery fails", async () => {
@@ -48,9 +48,10 @@ describe("workflow-tool-selection", () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
         toolIds: [
-          "customprefix_odt_set_spec_extra",
+          "openducktor_odt_set_spec_extra",
           "customprefix_odt_",
           "customprefix_odt_set_plan",
+          "openducktor_odt_set_plan",
         ],
       }),
       role: "spec",
@@ -59,7 +60,8 @@ describe("workflow-tool-selection", () => {
 
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
-    expect(selection.customprefix_odt_set_spec_extra).toBeUndefined();
-    expect(selection.customprefix_odt_set_plan).toBe(false);
+    expect(selection.openducktor_odt_set_spec_extra).toBeUndefined();
+    expect(selection.customprefix_odt_set_plan).toBeUndefined();
+    expect(selection.openducktor_odt_set_plan).toBe(false);
   });
 });

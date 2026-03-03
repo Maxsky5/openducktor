@@ -24,15 +24,17 @@ export const normalizeOdtWorkflowToolName = (toolName: string): AgentToolName | 
     return normalized as AgentToolName;
   }
 
-  const odtMarkerIndex = normalized.lastIndexOf("odt_");
-  if (odtMarkerIndex <= 0) {
-    return null;
+  for (const prefix of ODT_MCP_TOOL_PREFIXES) {
+    if (!normalized.startsWith(prefix)) {
+      continue;
+    }
+    const candidate = normalized.slice(prefix.length);
+    return ODT_WORKFLOW_TOOL_SET.has(candidate as AgentToolName)
+      ? (candidate as AgentToolName)
+      : null;
   }
 
-  const candidate = normalized.slice(odtMarkerIndex);
-  return ODT_WORKFLOW_TOOL_SET.has(candidate as AgentToolName)
-    ? (candidate as AgentToolName)
-    : null;
+  return null;
 };
 
 export const isOdtWorkflowToolName = (toolName: string): boolean => {
