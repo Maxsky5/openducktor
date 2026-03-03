@@ -39,6 +39,11 @@ struct HookTrustChallenge {
     expires_at: SystemTime,
 }
 
+struct ServiceBootstrapPhase {
+    service: Arc<AppService>,
+    startup_errors: Vec<String>,
+}
+
 fn init_tracing_subscriber() {
     TRACING_INITIALIZED.get_or_init(|| {
         let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -176,7 +181,11 @@ fn run_emitter(app: AppHandle) -> RunEmitter {
     })
 }
 
-fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
+fn startup_phase_tracing() {
+    init_tracing_subscriber();
+}
+
+fn startup_phase_service_bootstrap() -> anyhow::Result<ServiceBootstrapPhase> {
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
     let mut startup_errors = Vec::new();
     let (metadata_namespace, startup_warning) =
@@ -193,7 +202,10 @@ fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
     let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(&metadata_namespace));
     let service = Arc::new(AppService::new(task_store, config_store));
 
-    Ok((service, startup_errors))
+    Ok(ServiceBootstrapPhase {
+        service,
+        startup_errors,
+    })
 }
 
 fn install_shutdown_signal_handler(service: Arc<AppService>) {
@@ -215,91 +227,113 @@ fn install_shutdown_signal_handler(service: Arc<AppService>) {
     }
 }
 
-pub fn run() -> anyhow::Result<()> {
-    init_tracing_subscriber();
-    let (service, startup_errors) = bootstrap_service()?;
-    install_shutdown_signal_handler(service.clone());
+fn startup_phase_shutdown_hooks(service: Arc<AppService>) {
+    install_shutdown_signal_handler(service);
+}
 
-    let app_service = service.clone();
-    tauri::Builder::default()
+fn startup_phase_command_registration(
+    builder: tauri::Builder<tauri::Wry>,
+) -> tauri::Builder<tauri::Wry> {
+    builder.invoke_handler(tauri::generate_handler![
+        system_check,
+        runtime_check,
+        beads_check,
+        workspace_list,
+        workspace_add,
+        workspace_select,
+        workspace_update_repo_config,
+        workspace_save_repo_settings,
+        workspace_update_repo_hooks,
+        workspace_prepare_trusted_hooks_challenge,
+        workspace_get_repo_config,
+        workspace_set_trusted_hooks,
+        git_get_branches,
+        git_get_current_branch,
+        git_switch_branch,
+        git_create_worktree,
+        git_remove_worktree,
+        git_push_branch,
+        git_get_status,
+        git_get_diff,
+        git_commits_ahead_behind,
+        git_get_worktree_status,
+        git_commit_all,
+        git_pull_branch,
+        git_rebase_branch,
+        tasks_list,
+        task_create,
+        task_update,
+        task_delete,
+        task_transition,
+        task_defer,
+        task_resume_deferred,
+        spec_get,
+        task_metadata_get,
+        set_spec,
+        spec_save_document,
+        plan_get,
+        set_plan,
+        plan_save_document,
+        qa_get_report,
+        qa_approved,
+        qa_rejected,
+        build_start,
+        build_respond,
+        build_stop,
+        build_cleanup,
+        build_blocked,
+        build_resumed,
+        build_completed,
+        human_request_changes,
+        human_approve,
+        runs_list,
+        opencode_runtime_list,
+        opencode_runtime_start,
+        opencode_runtime_stop,
+        opencode_repo_runtime_ensure,
+        agent_sessions_list,
+        agent_session_upsert,
+        get_theme,
+        set_theme
+    ])
+}
+
+fn startup_phase_build_tauri_app(
+    bootstrap: ServiceBootstrapPhase,
+) -> anyhow::Result<tauri::App<tauri::Wry>> {
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
-            service,
-            startup_errors,
+            service: bootstrap.service,
+            startup_errors: bootstrap.startup_errors,
             hook_trust_challenges: Mutex::new(HashMap::new()),
-        })
-        .invoke_handler(tauri::generate_handler![
-            system_check,
-            runtime_check,
-            beads_check,
-            workspace_list,
-            workspace_add,
-            workspace_select,
-            workspace_update_repo_config,
-            workspace_save_repo_settings,
-            workspace_update_repo_hooks,
-            workspace_prepare_trusted_hooks_challenge,
-            workspace_get_repo_config,
-            workspace_set_trusted_hooks,
-            git_get_branches,
-            git_get_current_branch,
-            git_switch_branch,
-            git_create_worktree,
-            git_remove_worktree,
-            git_push_branch,
-            git_get_status,
-            git_get_diff,
-            git_commits_ahead_behind,
-            git_get_worktree_status,
-            git_commit_all,
-            git_pull_branch,
-            git_rebase_branch,
-            tasks_list,
-            task_create,
-            task_update,
-            task_delete,
-            task_transition,
-            task_defer,
-            task_resume_deferred,
-            spec_get,
-            task_metadata_get,
-            set_spec,
-            spec_save_document,
-            plan_get,
-            set_plan,
-            plan_save_document,
-            qa_get_report,
-            qa_approved,
-            qa_rejected,
-            build_start,
-            build_respond,
-            build_stop,
-            build_cleanup,
-            build_blocked,
-            build_resumed,
-            build_completed,
-            human_request_changes,
-            human_approve,
-            runs_list,
-            opencode_runtime_list,
-            opencode_runtime_start,
-            opencode_runtime_stop,
-            opencode_repo_runtime_ensure,
-            agent_sessions_list,
-            agent_session_upsert,
-            get_theme,
-            set_theme
-        ])
-        .build(tauri::generate_context!())
-        .context("error while building openducktor")?
-        .run(move |_handle, event| {
-            if matches!(
-                event,
-                TauriRunEvent::ExitRequested { .. } | TauriRunEvent::Exit
-            ) {
-                let _ = app_service.shutdown();
-            }
         });
+
+    startup_phase_command_registration(builder)
+        .build(tauri::generate_context!())
+        .context("error while building openducktor")
+}
+
+fn startup_phase_exit_shutdown_handler(
+    app_service: Arc<AppService>,
+) -> impl FnMut(&AppHandle, TauriRunEvent) {
+    move |_handle, event| {
+        if matches!(
+            event,
+            TauriRunEvent::ExitRequested { .. } | TauriRunEvent::Exit
+        ) {
+            let _ = app_service.shutdown();
+        }
+    }
+}
+
+pub fn run() -> anyhow::Result<()> {
+    startup_phase_tracing();
+    let bootstrap = startup_phase_service_bootstrap()?;
+    let app_service = bootstrap.service.clone();
+    startup_phase_shutdown_hooks(app_service.clone());
+
+    startup_phase_build_tauri_app(bootstrap)?.run(startup_phase_exit_shutdown_handler(app_service));
 
     Ok(())
 }
