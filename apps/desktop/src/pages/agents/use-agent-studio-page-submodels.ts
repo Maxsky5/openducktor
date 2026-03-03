@@ -1,8 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { type RefObject, type UIEvent, useCallback, useMemo } from "react";
-import type { AgentChatModel } from "@/components/features/agents";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import { useCallback, useMemo } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -11,23 +8,22 @@ import {
   buildAgentChatThreadModel,
   buildAgentStudioHeaderModel,
 } from "./agents-page-view-model";
-import type { WorkflowModelContext } from "./use-agent-studio-page-model-builders";
-
-type WorkflowHeaderContext = Pick<
-  WorkflowModelContext,
-  | "workflowStateByRole"
-  | "selectedInteractionRole"
-  | "latestSessionByRole"
-  | "sessionSelectorValue"
-  | "sessionSelectorGroups"
-  | "sessionCreateOptions"
-  | "createSessionDisabled"
->;
-
-type WorkflowComposerContext = Pick<
-  WorkflowModelContext,
-  "selectedRoleAvailable" | "selectedRoleReadOnlyReason"
->;
+import type {
+  AgentStudioComposerInteractionContext,
+  AgentStudioComposerLayoutContext,
+  AgentStudioComposerReadinessContext,
+  AgentStudioComposerSelectionContext,
+  AgentStudioComposerSessionContext,
+  AgentStudioThreadKickoffContext,
+  AgentStudioThreadPermissionsContext,
+  AgentStudioThreadQuestionsContext,
+  AgentStudioThreadReadinessContext,
+  AgentStudioThreadScrollContext,
+  AgentStudioThreadSessionContext,
+  AgentStudioThreadTodoPanelContext,
+  AgentStudioWorkflowStepSelect,
+  WorkflowHeaderContext,
+} from "./use-agent-studio-page-submodel-contracts";
 
 export type UseAgentStudioHeaderModelArgs = {
   selectedTask: TaskCard | null;
@@ -36,7 +32,7 @@ export type UseAgentStudioHeaderModelArgs = {
   contextSessionsLength: number;
   agentStudioReady: boolean;
   isStarting: boolean;
-  onWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
+  onWorkflowStepSelect: AgentStudioWorkflowStepSelect;
   onSessionSelectionChange: (nextValue: string) => void;
   onCreateSession: (option: SessionCreateOption) => void;
   workflow: WorkflowHeaderContext;
@@ -97,44 +93,13 @@ export const useAgentStudioHeaderModel = ({
 };
 
 export type UseAgentStudioThreadModelArgs = {
-  session: {
-    threadSession: AgentSessionState | null;
-    taskId: string;
-    activeSessionAgentColors: Record<string, string>;
-  };
-  readiness: {
-    agentStudioReady: boolean;
-    agentStudioBlockedReason: string;
-    isLoadingChecks: boolean;
-    refreshChecks: () => Promise<void>;
-  };
-  kickoff: {
-    canKickoffNewSession: boolean;
-    selectedRoleAvailable: boolean;
-    kickoffLabel: string;
-    startScenarioKickoff: () => Promise<void>;
-    isStarting: boolean;
-    isSending: boolean;
-  };
-  questions: {
-    isSubmittingQuestionByRequestId: Record<string, boolean>;
-    onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-  };
-  permissions: {
-    isSubmittingPermissionByRequestId: Record<string, boolean>;
-    permissionReplyErrorByRequestId: Record<string, string>;
-    onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
-  };
-  todoPanel: {
-    todoPanelCollapsed: boolean;
-    onToggleTodoPanel: () => void;
-    todoPanelBottomOffset: number;
-  };
-  scroll: {
-    isPinnedToBottom: boolean;
-    messagesContainerRef: RefObject<HTMLDivElement | null>;
-    onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
-  };
+  session: AgentStudioThreadSessionContext;
+  readiness: AgentStudioThreadReadinessContext;
+  kickoff: AgentStudioThreadKickoffContext;
+  questions: AgentStudioThreadQuestionsContext;
+  permissions: AgentStudioThreadPermissionsContext;
+  todoPanel: AgentStudioThreadTodoPanelContext;
+  scroll: AgentStudioThreadScrollContext;
 };
 
 export const useAgentStudioThreadModel = ({
@@ -193,54 +158,37 @@ export const useAgentStudioThreadModel = ({
       handleKickoff,
       handlePermissionReply,
       handleRefreshChecks,
-      kickoff,
-      permissions,
-      questions,
-      readiness,
-      scroll,
-      session,
-      todoPanel,
+      kickoff.canKickoffNewSession,
+      kickoff.isSending,
+      kickoff.isStarting,
+      kickoff.kickoffLabel,
+      kickoff.selectedRoleAvailable,
+      permissions.isSubmittingPermissionByRequestId,
+      permissions.permissionReplyErrorByRequestId,
+      questions.isSubmittingQuestionByRequestId,
+      questions.onSubmitQuestionAnswers,
+      readiness.agentStudioBlockedReason,
+      readiness.agentStudioReady,
+      readiness.isLoadingChecks,
+      scroll.isPinnedToBottom,
+      scroll.messagesContainerRef,
+      scroll.onMessagesScroll,
+      session.activeSessionAgentColors,
+      session.taskId,
+      session.threadSession,
+      todoPanel.onToggleTodoPanel,
+      todoPanel.todoPanelBottomOffset,
+      todoPanel.todoPanelCollapsed,
     ],
   );
 };
 
 export type UseAgentStudioComposerModelArgs = {
-  session: {
-    taskId: string;
-    activeSession: AgentSessionState | null;
-    isSessionWorking: boolean;
-    canStopSession: boolean;
-    stopAgentSession: (sessionId: string) => Promise<void>;
-  };
-  readiness: {
-    agentStudioReady: boolean;
-    workflow: WorkflowComposerContext;
-  };
-  interaction: {
-    input: string;
-    setInput: (value: string) => void;
-    onSend: () => Promise<void>;
-    isSending: boolean;
-    isStarting: boolean;
-    chatContextUsage: AgentChatModel["composer"]["contextUsage"];
-  };
-  selection: {
-    selectedModelSelection: AgentModelSelection | null;
-    isSelectionCatalogLoading: boolean;
-    agentOptions: ComboboxOption[];
-    modelOptions: ComboboxOption[];
-    modelGroups: ComboboxGroup[];
-    variantOptions: ComboboxOption[];
-    onSelectAgent: (agent: string) => void;
-    onSelectModel: (model: string) => void;
-    onSelectVariant: (variant: string) => void;
-    activeSessionAgentColors: Record<string, string>;
-  };
-  layout: {
-    composerFormRef: RefObject<HTMLFormElement | null>;
-    composerTextareaRef: RefObject<HTMLTextAreaElement | null>;
-    resizeComposerTextarea: () => void;
-  };
+  session: AgentStudioComposerSessionContext;
+  readiness: AgentStudioComposerReadinessContext;
+  interaction: AgentStudioComposerInteractionContext;
+  selection: AgentStudioComposerSelectionContext;
+  layout: AgentStudioComposerLayoutContext;
 };
 
 export const useAgentStudioComposerModel = ({
@@ -300,11 +248,30 @@ export const useAgentStudioComposerModel = ({
       handleSend,
       handleStopSession,
       isModelSelectionPending,
-      interaction,
-      layout,
-      readiness,
-      selection,
-      session,
+      interaction.chatContextUsage,
+      interaction.input,
+      interaction.isSending,
+      interaction.isStarting,
+      interaction.setInput,
+      layout.composerFormRef,
+      layout.composerTextareaRef,
+      layout.resizeComposerTextarea,
+      readiness.agentStudioReady,
+      readiness.workflow.selectedRoleAvailable,
+      readiness.workflow.selectedRoleReadOnlyReason,
+      selection.activeSessionAgentColors,
+      selection.agentOptions,
+      selection.isSelectionCatalogLoading,
+      selection.modelGroups,
+      selection.modelOptions,
+      selection.onSelectAgent,
+      selection.onSelectModel,
+      selection.onSelectVariant,
+      selection.selectedModelSelection,
+      selection.variantOptions,
+      session.canStopSession,
+      session.isSessionWorking,
+      session.taskId,
     ],
   );
 };

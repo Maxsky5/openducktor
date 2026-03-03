@@ -23,6 +23,20 @@ import {
   buildWorkflowModelContext,
   toChatContextUsage,
 } from "./use-agent-studio-page-model-builders";
+import type {
+  AgentStudioComposerInteractionContext,
+  AgentStudioComposerLayoutContext,
+  AgentStudioComposerReadinessContext,
+  AgentStudioComposerSelectionContext,
+  AgentStudioComposerSessionContext,
+  AgentStudioThreadKickoffContext,
+  AgentStudioThreadPermissionsContext,
+  AgentStudioThreadQuestionsContext,
+  AgentStudioThreadReadinessContext,
+  AgentStudioThreadScrollContext,
+  AgentStudioThreadSessionContext,
+  AgentStudioThreadTodoPanelContext,
+} from "./use-agent-studio-page-submodel-contracts";
 import {
   useAgentStudioComposerModel,
   useAgentStudioHeaderModel,
@@ -67,12 +81,7 @@ type AgentStudioSessionActionsContext = {
   stopAgentSession: (sessionId: string) => Promise<void>;
 };
 
-type AgentStudioReadinessContext = {
-  agentStudioReady: boolean;
-  agentStudioBlockedReason: string;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-};
+type AgentStudioReadinessContext = AgentStudioThreadReadinessContext;
 
 type AgentStudioModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
@@ -88,11 +97,7 @@ type AgentStudioModelSelectionContext = {
   activeSessionContextUsage: AgentStudioSessionContextUsage;
 };
 
-type AgentStudioPermissionContext = {
-  isSubmittingPermissionByRequestId: Record<string, boolean>;
-  permissionReplyErrorByRequestId: Record<string, string>;
-  onReplyPermission: (requestId: string, reply: "once" | "always" | "reject") => Promise<void>;
-};
+type AgentStudioPermissionContext = AgentStudioThreadPermissionsContext;
 
 type AgentStudioComposerContext = {
   input: string;
@@ -271,7 +276,7 @@ export function useAgentStudioPageModels({
     }));
   }, [activeSessionId]);
 
-  const threadSessionContext = useMemo(
+  const threadSessionContext = useMemo<AgentStudioThreadSessionContext>(
     () => ({
       threadSession,
       taskId: core.taskId,
@@ -280,7 +285,7 @@ export function useAgentStudioPageModels({
     [core.taskId, modelSelection.activeSessionAgentColors, threadSession],
   );
 
-  const threadReadinessContext = useMemo(
+  const threadReadinessContext = useMemo<AgentStudioThreadReadinessContext>(
     () => ({
       agentStudioReady: readiness.agentStudioReady,
       agentStudioBlockedReason: readiness.agentStudioBlockedReason,
@@ -295,7 +300,7 @@ export function useAgentStudioPageModels({
     ],
   );
 
-  const threadKickoffContext = useMemo(
+  const threadKickoffContext = useMemo<AgentStudioThreadKickoffContext>(
     () => ({
       canKickoffNewSession: sessionActions.canKickoffNewSession,
       selectedRoleAvailable,
@@ -314,7 +319,7 @@ export function useAgentStudioPageModels({
     ],
   );
 
-  const threadQuestionContext = useMemo(
+  const threadQuestionContext = useMemo<AgentStudioThreadQuestionsContext>(
     () => ({
       isSubmittingQuestionByRequestId: sessionActions.isSubmittingQuestionByRequestId,
       onSubmitQuestionAnswers: sessionActions.onSubmitQuestionAnswers,
@@ -322,7 +327,7 @@ export function useAgentStudioPageModels({
     [sessionActions.isSubmittingQuestionByRequestId, sessionActions.onSubmitQuestionAnswers],
   );
 
-  const threadPermissionContext = useMemo(
+  const threadPermissionContext = useMemo<AgentStudioThreadPermissionsContext>(
     () => ({
       isSubmittingPermissionByRequestId: permissions.isSubmittingPermissionByRequestId,
       permissionReplyErrorByRequestId: permissions.permissionReplyErrorByRequestId,
@@ -335,7 +340,7 @@ export function useAgentStudioPageModels({
     ],
   );
 
-  const threadTodoPanelContext = useMemo(
+  const threadTodoPanelContext = useMemo<AgentStudioThreadTodoPanelContext>(
     () => ({
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
@@ -344,7 +349,7 @@ export function useAgentStudioPageModels({
     [activeTodoPanelCollapsed, handleToggleTodoPanel, todoPanelBottomOffset],
   );
 
-  const threadScrollContext = useMemo(
+  const threadScrollContext = useMemo<AgentStudioThreadScrollContext>(
     () => ({
       isPinnedToBottom,
       messagesContainerRef,
@@ -363,7 +368,7 @@ export function useAgentStudioPageModels({
     scroll: threadScrollContext,
   });
 
-  const composerSessionContext = useMemo(
+  const composerSessionContext = useMemo<AgentStudioComposerSessionContext>(
     () => ({
       taskId: core.taskId,
       activeSession: core.activeSession,
@@ -380,7 +385,7 @@ export function useAgentStudioPageModels({
     ],
   );
 
-  const composerReadinessContext = useMemo(
+  const composerReadinessContext = useMemo<AgentStudioComposerReadinessContext>(
     () => ({
       agentStudioReady: readiness.agentStudioReady,
       workflow: {
@@ -391,7 +396,7 @@ export function useAgentStudioPageModels({
     [readiness.agentStudioReady, selectedRoleAvailable, selectedRoleReadOnlyReason],
   );
 
-  const composerInteractionContext = useMemo(
+  const composerInteractionContext = useMemo<AgentStudioComposerInteractionContext>(
     () => ({
       input: composer.input,
       setInput: composer.setInput,
@@ -410,7 +415,7 @@ export function useAgentStudioPageModels({
     ],
   );
 
-  const composerSelectionContext = useMemo(
+  const composerSelectionContext = useMemo<AgentStudioComposerSelectionContext>(
     () => ({
       selectedModelSelection: modelSelection.selectedModelSelection,
       isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
@@ -437,7 +442,7 @@ export function useAgentStudioPageModels({
     ],
   );
 
-  const composerLayoutContext = useMemo(
+  const composerLayoutContext = useMemo<AgentStudioComposerLayoutContext>(
     () => ({
       composerFormRef,
       composerTextareaRef,
