@@ -759,7 +759,7 @@ mod tests {
     ) -> CommandGitFixture {
         let root = unique_test_dir(prefix);
         let repo = root.join("repo");
-        fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
+        init_repo(&repo);
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
         if authorize_repo {
@@ -975,6 +975,101 @@ mod tests {
             .lock()
             .expect("command git state lock should not be poisoned");
         assert_eq!(state.worktree_status_calls.len(), 1);
+    }
+
+    #[test]
+    fn git_get_worktree_status_rejects_unrelated_working_dir() {
+        let fixture = setup_command_git_fixture(
+            "git-command-working-dir-reject",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            true,
+        );
+        let external = fixture.root.join("external");
+        init_repo(&external);
+
+        let error = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+                "workingDir": external.to_string_lossy().to_string(),
+            }),
+        )
+        .expect_err("unrelated working_dir should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("working_dir is not within authorized repository or linked worktrees"),
+            "unexpected error: {error}"
+        );
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert!(
+            state.worktree_status_calls.is_empty(),
+            "git port should not run for unauthorized working_dir"
+        );
+    }
+
+    #[test]
+    fn git_get_worktree_status_accepts_registered_worktree_working_dir() {
+        let fixture = setup_command_git_fixture(
+            "git-command-working-dir-accept",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 1,
+                    behind: 0,
+                },
+            )),
+            true,
+        );
+        let worktree = fixture.root.join("repo-wt");
+        let worktree_str = worktree.to_string_lossy().to_string();
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/command-working-dir",
+                worktree_str.as_str(),
+            ],
+            Path::new(&fixture.repo_path),
+        );
+
+        let response = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+                "workingDir": worktree_str,
+            }),
+        )
+        .expect("registered worktree should be accepted");
+        let status: GitWorktreeStatus =
+            serde_json::from_value(response).expect("response should decode as GitWorktreeStatus");
+        let expected_worktree = fs::canonicalize(&worktree)
+            .expect("worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(status.snapshot.effective_working_dir, expected_worktree);
+
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert_eq!(state.worktree_status_calls.len(), 1);
+        assert_eq!(state.worktree_status_calls[0].repo_path, expected_worktree);
     }
 
     #[test]
