@@ -69,7 +69,12 @@ impl GitCliPort {
                 },
             )
         }))
-        .map_err(|_| anyhow!("git worktree status worker join failure"))?;
+        .map_err(|payload| {
+            anyhow!(
+                "git worktree status worker panicked: {}",
+                panic_payload_message(&*payload)
+            )
+        })?;
 
         let ((file_statuses, file_diffs), (target_ahead_behind, upstream_target_result)) = joined;
         let file_statuses = file_statuses?;
@@ -174,6 +179,14 @@ impl GitCliPort {
 
         parse_ahead_behind(&stdout)
     }
+}
+
+fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|message| (*message).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic payload".to_string())
 }
 
 fn parse_status_porcelain(output: &str) -> Vec<GitFileStatus> {
@@ -363,7 +376,8 @@ fn parse_ahead_behind(output: &str) -> Result<GitAheadBehind> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_ahead_behind, parse_diff_git_header_token, split_diff_by_file, GitAheadBehind,
+        panic_payload_message, parse_ahead_behind, parse_diff_git_header_token, split_diff_by_file,
+        GitAheadBehind,
     };
 
     #[test]
@@ -419,6 +433,25 @@ mod tests {
                 ahead: 2,
                 behind: 4
             }
+        );
+    }
+
+    #[test]
+    fn panic_payload_message_reads_str_and_string_payloads() {
+        let str_payload: Box<dyn std::any::Any + Send> = Box::new("panic from &str");
+        assert_eq!(panic_payload_message(&*str_payload), "panic from &str");
+
+        let string_payload: Box<dyn std::any::Any + Send> =
+            Box::new("panic from String".to_string());
+        assert_eq!(panic_payload_message(&*string_payload), "panic from String");
+    }
+
+    #[test]
+    fn panic_payload_message_falls_back_for_unknown_payload_types() {
+        let unknown_payload: Box<dyn std::any::Any + Send> = Box::new(42u32);
+        assert_eq!(
+            panic_payload_message(&*unknown_payload),
+            "unknown panic payload"
         );
     }
 }
