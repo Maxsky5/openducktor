@@ -2,10 +2,12 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCommitAllRequest,
-    GitCommitAllResult, GitCurrentBranch, GitPort, GitPullRequest, GitPullResult,
-    GitRebaseBranchRequest, GitRebaseBranchResult, PlanSubtaskInput, QaReportDocument, QaVerdict,
-    RunEvent, RunState, RunSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitAheadBehind, GitBranch,
+    GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff,
+    GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData, PlanSubtaskInput,
+    QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
+    TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -466,6 +468,67 @@ fn git_rebase_branch_forwards_trimmed_target_branch_and_can_conflict() -> Result
             target_branch: "origin/main".to_string(),
         }
     );
+
+    Ok(())
+}
+
+#[test]
+fn git_port_get_worktree_status_returns_configured_payload_from_fake_port() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-worktree-status";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let expected = GitWorktreeStatusData {
+        current_branch: GitCurrentBranch {
+            name: Some("feature/composite".to_string()),
+            detached: false,
+        },
+        file_statuses: vec![GitFileStatus {
+            path: "src/main.rs".to_string(),
+            status: "modified".to_string(),
+            staged: false,
+        }],
+        file_diffs: vec![GitFileDiff {
+            file: "src/main.rs".to_string(),
+            diff_type: "modified".to_string(),
+            additions: 2,
+            deletions: 1,
+            diff: "@@ -1 +1 @@\n-old\n+new\n".to_string(),
+        }],
+        target_ahead_behind: GitAheadBehind {
+            ahead: 3,
+            behind: 1,
+        },
+        upstream_ahead_behind: GitUpstreamAheadBehind::Tracking {
+            ahead: 4,
+            behind: 5,
+        },
+    };
+
+    {
+        let mut state = git_state.lock().expect("git state lock poisoned");
+        state.worktree_status_data = Some(expected.clone());
+    }
+
+    let actual = service.git_port().get_worktree_status(
+        Path::new(repo_path),
+        "origin/main",
+        GitDiffScope::Target,
+    )?;
+    assert_eq!(actual, expected);
+
+    let state = git_state.lock().expect("git state lock poisoned");
+    assert!(state.calls.contains(&GitCall::GetWorktreeStatus {
+        repo_path: repo_path.to_string(),
+        target_branch: "origin/main".to_string(),
+        diff_scope: GitDiffScope::Target,
+    }));
 
     Ok(())
 }

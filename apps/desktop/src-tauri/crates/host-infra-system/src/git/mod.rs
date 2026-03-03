@@ -10,8 +10,8 @@ mod worktree;
 use anyhow::{Context, Result};
 use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-    GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitPushSummary,
-    GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitDiffScope, GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult,
+    GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
 };
 use std::path::Path;
 
@@ -110,6 +110,15 @@ impl GitPort for GitCliPort {
 
     fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>> {
         self.get_diff_impl(repo_path, target_branch)
+    }
+
+    fn get_worktree_status(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusData> {
+        self.get_worktree_status_impl(repo_path, target_branch, diff_scope)
     }
 
     fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>> {

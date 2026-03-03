@@ -18,11 +18,12 @@ use super::{
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
-    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitFileDiff,
-    GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitPushSummary, GitRebaseBranchRequest,
-    GitRebaseBranchResult, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent,
-    RunState, RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata,
-    TaskStatus, TaskStore, UpdateTaskPatch,
+    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
+    GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitPushSummary,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData,
+    IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
+    SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -345,6 +346,11 @@ pub(crate) enum GitCall {
         working_dir: Option<String>,
         target_branch: String,
     },
+    GetWorktreeStatus {
+        repo_path: String,
+        target_branch: String,
+        diff_scope: GitDiffScope,
+    },
 }
 
 #[derive(Debug)]
@@ -352,6 +358,7 @@ pub(crate) struct GitState {
     pub(crate) calls: Vec<GitCall>,
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
+    pub(crate) worktree_status_data: Option<GitWorktreeStatusData>,
     pub(crate) last_push_remote: Option<String>,
     pub(crate) pull_branch_result: GitPullResult,
     pub(crate) commit_all_result: GitCommitAllResult,
@@ -499,6 +506,44 @@ impl GitPort for FakeGitPort {
         Ok(Vec::new())
     }
 
+    fn get_worktree_status(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusData> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::GetWorktreeStatus {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            target_branch: target_branch.to_string(),
+            diff_scope,
+        });
+        if let Some(configured) = state.worktree_status_data.clone() {
+            return Ok(configured);
+        }
+
+        let current_branch = state.current_branch.clone();
+        let upstream_ahead_behind = if current_branch.name.is_some() {
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 0,
+                behind: 0,
+            }
+        } else {
+            GitUpstreamAheadBehind::Untracked { ahead: 0 }
+        };
+
+        Ok(GitWorktreeStatusData {
+            current_branch,
+            file_statuses: Vec::new(),
+            file_diffs: Vec::new(),
+            target_ahead_behind: GitAheadBehind {
+                ahead: 0,
+                behind: 0,
+            },
+            upstream_ahead_behind,
+        })
+    }
+
     fn resolve_upstream_target(&self, _repo_path: &Path) -> Result<Option<String>> {
         let state = self.state.lock().expect("git state lock poisoned");
         Ok(state
@@ -560,6 +605,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         calls: Vec::new(),
         branches,
         current_branch,
+        worktree_status_data: None,
         last_push_remote: None,
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
@@ -610,6 +656,7 @@ pub(crate) fn build_service_with_git_state(
         calls: Vec::new(),
         branches,
         current_branch,
+        worktree_status_data: None,
         last_push_remote: None,
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
@@ -1025,6 +1072,7 @@ pub(crate) fn build_service_with_store(
         calls: Vec::new(),
         branches,
         current_branch,
+        worktree_status_data: None,
         last_push_remote: None,
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),

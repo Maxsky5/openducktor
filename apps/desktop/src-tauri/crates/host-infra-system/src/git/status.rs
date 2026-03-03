@@ -1,5 +1,8 @@
 use anyhow::{anyhow, Context, Result};
-use host_domain::{GitAheadBehind, GitFileDiff, GitFileStatus};
+use host_domain::{
+    GitAheadBehind, GitDiffScope, GitFileDiff, GitFileStatus, GitUpstreamAheadBehind,
+    GitWorktreeStatusData,
+};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -9,8 +12,7 @@ use super::GitCliPort;
 impl GitCliPort {
     pub(super) fn get_status_impl(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>> {
         self.ensure_repository(repo_path)?;
-        let output = self.run_git(repo_path, &["status", "--porcelain=v1"])?;
-        Ok(parse_status_porcelain(&output))
+        self.get_status_unchecked(repo_path)
     }
 
     pub(super) fn get_diff_impl(
@@ -19,9 +21,107 @@ impl GitCliPort {
         target_branch: Option<&str>,
     ) -> Result<Vec<GitFileDiff>> {
         self.ensure_repository(repo_path)?;
+        self.get_diff_unchecked(repo_path, target_branch)
+    }
 
+    pub(super) fn commits_ahead_behind_impl(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+    ) -> Result<GitAheadBehind> {
+        self.ensure_repository(repo_path)?;
+        self.commits_ahead_behind_unchecked(repo_path, target_branch)
+    }
+
+    pub(super) fn get_worktree_status_impl(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusData> {
+        self.ensure_repository(repo_path)?;
+        let target_branch = normalize_non_empty(target_branch, "target branch")?;
+        let current_branch = self.get_current_branch_unchecked(repo_path)?;
+        let current_branch_name = current_branch.name.clone();
+        let diff_target = match diff_scope {
+            GitDiffScope::Target => Some(target_branch.as_str()),
+            GitDiffScope::Uncommitted => None,
+        };
+
+        let joined = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || self.get_status_unchecked(repo_path),
+                        || self.get_diff_unchecked(repo_path, diff_target),
+                    )
+                },
+                || {
+                    rayon::join(
+                        || self.commits_ahead_behind_unchecked(repo_path, target_branch.as_str()),
+                        || {
+                            self.resolve_upstream_target_for_branch_impl(
+                                repo_path,
+                                current_branch_name.as_deref(),
+                            )
+                        },
+                    )
+                },
+            )
+        }))
+        .map_err(|payload| {
+            anyhow!(
+                "git worktree status worker panicked: {}",
+                panic_payload_message(&*payload)
+            )
+        })?;
+
+        let ((file_statuses, file_diffs), (target_ahead_behind, upstream_target_result)) = joined;
+        let file_statuses = file_statuses?;
+        let file_diffs = file_diffs?;
+        let target_ahead_behind = target_ahead_behind?;
+
+        let upstream_ahead_behind = match upstream_target_result {
+            Ok(Some(upstream_target)) => match self
+                .commits_ahead_behind_unchecked(repo_path, upstream_target.as_str())
+            {
+                Ok(counts) => GitUpstreamAheadBehind::Tracking {
+                    ahead: counts.ahead,
+                    behind: counts.behind,
+                },
+                Err(error) => GitUpstreamAheadBehind::Error {
+                    message: format!("{error:#}"),
+                },
+            },
+            Ok(None) => GitUpstreamAheadBehind::Untracked {
+                ahead: target_ahead_behind.ahead,
+            },
+            Err(error) => GitUpstreamAheadBehind::Error {
+                message: format!("{error:#}"),
+            },
+        };
+
+        Ok(GitWorktreeStatusData {
+            current_branch,
+            file_statuses,
+            file_diffs,
+            target_ahead_behind,
+            upstream_ahead_behind,
+        })
+    }
+
+    pub(super) fn get_status_unchecked(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>> {
+        let output = self.run_git(repo_path, &["status", "--porcelain=v1"])?;
+        Ok(parse_status_porcelain(&output))
+    }
+
+    pub(super) fn get_diff_unchecked(
+        &self,
+        repo_path: &Path,
+        target_branch: Option<&str>,
+    ) -> Result<Vec<GitFileDiff>> {
         let diff_spec = target_branch
-            .map(|b| b.trim().to_string())
+            .map(|value| value.trim().to_string())
             .unwrap_or_default();
         let diff_target = if diff_spec.is_empty() {
             "HEAD"
@@ -52,12 +152,11 @@ impl GitCliPort {
         Ok(build_file_diffs(&numstat_stdout, &diff_stdout))
     }
 
-    pub(super) fn commits_ahead_behind_impl(
+    pub(super) fn commits_ahead_behind_unchecked(
         &self,
         repo_path: &Path,
         target_branch: &str,
     ) -> Result<GitAheadBehind> {
-        self.ensure_repository(repo_path)?;
         let target = normalize_non_empty(target_branch, "target branch")?;
         let range = format!("{target}...HEAD");
         let (ok, stdout, stderr) = self.run_git_allow_failure(
@@ -80,6 +179,14 @@ impl GitCliPort {
 
         parse_ahead_behind(&stdout)
     }
+}
+
+fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|message| (*message).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic payload".to_string())
 }
 
 fn parse_status_porcelain(output: &str) -> Vec<GitFileStatus> {
@@ -269,7 +376,8 @@ fn parse_ahead_behind(output: &str) -> Result<GitAheadBehind> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_ahead_behind, parse_diff_git_header_token, split_diff_by_file, GitAheadBehind,
+        panic_payload_message, parse_ahead_behind, parse_diff_git_header_token, split_diff_by_file,
+        GitAheadBehind,
     };
 
     #[test]
@@ -325,6 +433,25 @@ mod tests {
                 ahead: 2,
                 behind: 4
             }
+        );
+    }
+
+    #[test]
+    fn panic_payload_message_reads_str_and_string_payloads() {
+        let str_payload: Box<dyn std::any::Any + Send> = Box::new("panic from &str");
+        assert_eq!(panic_payload_message(&*str_payload), "panic from &str");
+
+        let string_payload: Box<dyn std::any::Any + Send> =
+            Box::new("panic from String".to_string());
+        assert_eq!(panic_payload_message(&*string_payload), "panic from String");
+    }
+
+    #[test]
+    fn panic_payload_message_falls_back_for_unknown_payload_types() {
+        let unknown_payload: Box<dyn std::any::Any + Send> = Box::new(42u32);
+        assert_eq!(
+            panic_payload_message(&*unknown_payload),
+            "unknown panic payload"
         );
     }
 }

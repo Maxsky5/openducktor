@@ -1,8 +1,9 @@
-use host_domain::GitPort;
+use host_domain::{GitDiffScope, GitPort, GitUpstreamAheadBehind};
 
 use super::super::GitCliPort;
 use super::support::{git_available, run_git_ok, setup_bare_remote, setup_repo};
 use std::fs;
+use std::path::Path;
 
 #[test]
 fn get_diff_returns_error_when_target_branch_is_invalid() {
@@ -103,4 +104,181 @@ fn get_diff_rejects_option_like_target_and_does_not_write_output_file() {
         !output_path.exists(),
         "option-like target must not create an output file"
     );
+}
+
+#[test]
+fn get_worktree_status_returns_tracking_counts_when_upstream_exists() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-tracking");
+    let remote = setup_bare_remote("worktree-status-tracking-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    fs::write(repo.path.join("tracking.txt"), "ahead\n").expect("tracking file should write");
+    run_git_ok(&repo.path, &["add", "tracking.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "ahead of origin"]);
+
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "origin/main", GitDiffScope::Target)
+        .expect("composite worktree status should resolve");
+
+    assert_eq!(status.current_branch.name.as_deref(), Some("main"));
+    assert_eq!(status.target_ahead_behind.ahead, 1);
+    assert_eq!(status.target_ahead_behind.behind, 0);
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Tracking {
+            ahead: 1,
+            behind: 0,
+        }
+    );
+}
+
+#[test]
+fn get_worktree_status_reports_untracked_when_upstream_is_missing() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-untracked");
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("composite worktree status should resolve");
+
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Untracked { ahead: 0 }
+    );
+}
+
+#[test]
+fn get_worktree_status_requires_non_empty_target_branch() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-empty-target");
+    let git = GitCliPort::new();
+    let error = git
+        .get_worktree_status(&repo.path, "   ", GitDiffScope::Target)
+        .expect_err("empty target branch should return error");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("target branch"),
+        "error should preserve target branch context, got: {message}"
+    );
+}
+
+#[test]
+fn get_worktree_status_honors_diff_scope_uncommitted_vs_target() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-diff-scope");
+    run_git_ok(&repo.path, &["switch", "-c", "feature/diff-scope"]);
+
+    fs::write(repo.path.join("committed_only.txt"), "committed\n")
+        .expect("committed file should write");
+    run_git_ok(&repo.path, &["add", "committed_only.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "add committed-only file"]);
+
+    fs::write(
+        repo.path.join("README.md"),
+        "# OpenDucktor\ntracked-uncommitted-change\n",
+    )
+    .expect("tracked uncommitted file should write");
+
+    let git = GitCliPort::new();
+    let target_scope = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("target scope should resolve");
+    let uncommitted_scope = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Uncommitted)
+        .expect("uncommitted scope should resolve");
+
+    assert!(
+        target_scope
+            .file_diffs
+            .iter()
+            .any(|diff| diff.file == "committed_only.txt"),
+        "target scope should include committed changes against main"
+    );
+    assert!(
+        target_scope
+            .file_diffs
+            .iter()
+            .any(|diff| diff.file == "README.md"),
+        "target scope should include tracked uncommitted working tree changes"
+    );
+    assert!(
+        uncommitted_scope
+            .file_diffs
+            .iter()
+            .any(|diff| diff.file == "README.md"),
+        "uncommitted scope should include tracked working tree changes"
+    );
+    assert!(
+        !uncommitted_scope
+            .file_diffs
+            .iter()
+            .any(|diff| diff.file == "committed_only.txt"),
+        "uncommitted scope should exclude already committed feature-only changes"
+    );
+}
+
+#[test]
+fn get_worktree_status_surfaces_non_fatal_upstream_count_error() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-upstream-error");
+    let remote = setup_bare_remote("worktree-status-upstream-error-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    let git_dir = run_git_ok(&repo.path, &["rev-parse", "--git-dir"]);
+    let git_dir_path = Path::new(git_dir.as_str());
+    let git_dir_abs = if git_dir_path.is_absolute() {
+        git_dir_path.to_path_buf()
+    } else {
+        repo.path.join(git_dir_path)
+    };
+    let broken_upstream_ref = git_dir_abs.join("refs/remotes/origin/main");
+    if let Some(parent) = broken_upstream_ref.parent() {
+        fs::create_dir_all(parent).expect("upstream ref parent directory should exist");
+    }
+
+    let blob_oid = run_git_ok(&repo.path, &["hash-object", "-w", "README.md"]);
+    fs::write(&broken_upstream_ref, format!("{blob_oid}\n"))
+        .expect("upstream ref should be overwritten with blob oid");
+
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "main", GitDiffScope::Target)
+        .expect("worktree status should stay non-fatal when upstream count fails");
+
+    match status.upstream_ahead_behind {
+        GitUpstreamAheadBehind::Error { message } => {
+            assert!(
+                message.contains("git rev-list --count --left-right"),
+                "upstream count error should preserve actionable command context, got: {message}"
+            );
+        }
+        other => panic!("expected upstream error outcome, got: {other:?}"),
+    }
 }

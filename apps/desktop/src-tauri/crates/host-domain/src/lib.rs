@@ -14,7 +14,7 @@ pub use git::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
     GitDiffScope, GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult,
     GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
-    GitWorktreeStatus, GitWorktreeStatusSnapshot, GitWorktreeSummary,
+    GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeSummary,
 };
 pub use runtime::{AgentRuntimeSummary, RunEvent, RunState, RunSummary};
 pub use store::TaskStore;
@@ -95,6 +95,7 @@ mod tests {
             GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitPort,
             GitPullRequest, GitPullResult, GitPushSummary, GitRebaseBranchRequest,
             GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
+            GitWorktreeStatusData,
             GitWorktreeStatusSnapshot, GitWorktreeSummary, IssueType, PlanSubtaskInput,
             QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary,
             RuntimeCheck, SpecDocument, SystemCheck, TaskAction, TaskCard, TaskDocumentPresence,
@@ -130,6 +131,7 @@ mod tests {
             GitRebaseBranchResult,
             GitUpstreamAheadBehind,
             GitWorktreeStatus,
+            GitWorktreeStatusData,
             GitWorktreeStatusSnapshot,
             GitWorktreeSummary,
             IssueType,
