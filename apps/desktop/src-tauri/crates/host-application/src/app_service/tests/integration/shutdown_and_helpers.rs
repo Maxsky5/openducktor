@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
     GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    RuntimeRole, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -89,7 +89,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
                     runtime_id,
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
-                    role: "qa".to_string(),
+                    role: RuntimeRole::Qa,
                     working_directory: "/tmp/worktree".to_string(),
                     port: 1,
                     started_at: "2026-02-20T12:00:00Z".to_string(),
@@ -226,7 +226,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
                     runtime_id: "runtime-shutdown-registry-error".to_string(),
                     repo_path: "/tmp/repo".to_string(),
                     task_id: "task-1".to_string(),
-                    role: "spec".to_string(),
+                    role: RuntimeRole::Spec,
                     working_directory: "/tmp/repo".to_string(),
                     port: 1,
                     started_at: "2026-02-20T12:00:00Z".to_string(),

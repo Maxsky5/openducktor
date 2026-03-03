@@ -1,4 +1,5 @@
 import {
+  type AgentRuntimeStartRole,
   type AgentRuntimeSummary,
   agentRuntimeSummarySchema,
   type BeadsCheck,
@@ -15,7 +16,7 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
 
-export type RuntimeRole = "spec" | "planner" | "qa";
+export type RuntimeRole = AgentRuntimeStartRole;
 export type BuildRespondAction = "approve" | "deny" | "message";
 export type BuildCleanupMode = "success" | "failure";
 

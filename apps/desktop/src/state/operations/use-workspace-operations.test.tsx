@@ -214,7 +214,7 @@ describe("use-workspace-operations", () => {
       runtimeId: string;
       repoPath: string;
       taskId: string;
-      role: "build";
+      role: "workspace";
       workingDirectory: string;
       port: number;
       startedAt: string;
@@ -224,7 +224,7 @@ describe("use-workspace-operations", () => {
       runtimeId: "runtime-1",
       repoPath: "/repo-a",
       taskId: "task-1",
-      role: "build",
+      role: "workspace",
       workingDirectory: "/tmp/repo-a",
       port: 3030,
       startedAt: "2026-02-22T08:00:00.000Z",

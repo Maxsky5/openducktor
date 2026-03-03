@@ -9,7 +9,7 @@ const runtimeFixture: RuntimeSummary = {
   runtimeId: "runtime-1",
   repoPath: "/tmp/repo",
   taskId: "task-1",
-  role: "build",
+  role: "workspace",
   workingDirectory: "/tmp/repo/worktree",
   port: 4444,
   startedAt: "2026-02-22T08:00:00.000Z",

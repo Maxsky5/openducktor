@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use fs2::FileExt;
 use host_domain::{
-    AgentRuntimeSummary, GitPort, RunEvent, RunSummary, RuntimeCheck, TaskCard, TaskStore,
+    AgentRuntimeSummary, GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeRole, TaskCard,
+    TaskStore,
 };
 use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig};
 use serde::{Deserialize, Serialize};
