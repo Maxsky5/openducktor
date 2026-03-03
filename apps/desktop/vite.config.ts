@@ -14,6 +14,28 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-ui": [
+            "lucide-react",
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-popover",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-switch",
+            "@radix-ui/react-slot",
+            "radix-ui",
+            "cmdk",
+            "sonner",
+          ],
+          "vendor-markdown": ["react-markdown", "remark-gfm"],
+          "vendor-virtual": ["@tanstack/react-virtual"],
+        },
+      },
+    },
+  },
   clearScreen: false,
   server: {
     port: 1420,
