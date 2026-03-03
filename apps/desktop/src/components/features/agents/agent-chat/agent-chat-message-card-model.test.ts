@@ -806,7 +806,12 @@ describe("agent-chat-message-card-model", () => {
           },
         }),
       );
-      expect(fromPatch?.filePath).toBe("src/patch.ts");
+      expect(fromPatch).toEqual({
+        filePath: "src/patch.ts",
+        diff: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+        additions: 1,
+        deletions: 1,
+      });
 
       const fromOutput = extractFileEditData(
         createToolMeta({
