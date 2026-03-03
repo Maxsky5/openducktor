@@ -198,7 +198,12 @@ pub(super) fn spawn_opencode_server_with_config(
 ) -> Result<Child> {
     let opencode_binary = resolve_opencode_binary_path()
         .ok_or_else(|| anyhow!("opencode binary not found in PATH or ~/.opencode/bin"))?;
-    spawn_opencode_server_with_binary(opencode_binary.as_str(), working_directory, config_content, port)
+    spawn_opencode_server_with_binary(
+        opencode_binary.as_str(),
+        working_directory,
+        config_content,
+        port,
+    )
 }
 
 fn spawn_opencode_server_with_binary(
