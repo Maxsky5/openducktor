@@ -76,6 +76,9 @@ export function useAgentStudioQuerySessionSync({
     if (!activeSession) {
       return;
     }
+    if (!sessionParam) {
+      return;
+    }
 
     const updates: Record<string, string | undefined> = {};
     if (taskIdParam !== activeSession.taskId) {

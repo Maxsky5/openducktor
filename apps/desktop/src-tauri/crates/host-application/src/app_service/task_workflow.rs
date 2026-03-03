@@ -534,8 +534,8 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
         mut session: AgentSessionDocument,
     ) -> Result<bool> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
-        if session.task_id != task_id {
-            session.task_id = task_id.to_string();
+        if session.task_id.as_deref() != Some(task_id) {
+            session.task_id = Some(task_id.to_string());
         }
         self.task_store
             .upsert_agent_session(Path::new(&repo_path), task_id, session)

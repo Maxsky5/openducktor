@@ -1,6 +1,51 @@
 use super::*;
 
 impl BeadsTaskStore {
+    fn compact_agent_session_for_storage(
+        &self,
+        mut session: AgentSessionDocument,
+    ) -> Result<AgentSessionDocument> {
+        session.session_id = session.session_id.trim().to_string();
+        if session.session_id.is_empty() {
+            return Err(anyhow!("Agent session sessionId is required"));
+        }
+
+        session.role = session.role.trim().to_string();
+        if session.role.is_empty() {
+            return Err(anyhow!("Agent session role is required"));
+        }
+
+        let scenario = session
+            .scenario
+            .as_mut()
+            .ok_or_else(|| anyhow!("Agent session scenario is required"))?;
+        *scenario = scenario.trim().to_string();
+        if scenario.is_empty() {
+            return Err(anyhow!("Agent session scenario is required"));
+        }
+
+        session.started_at = session.started_at.trim().to_string();
+        if session.started_at.is_empty() {
+            return Err(anyhow!("Agent session startedAt is required"));
+        }
+
+        session.working_directory = session.working_directory.trim().to_string();
+        if session.working_directory.is_empty() {
+            return Err(anyhow!("Agent session workingDirectory is required"));
+        }
+
+        session.external_session_id = None;
+        session.task_id = None;
+        session.status = None;
+        session.updated_at = None;
+        session.ended_at = None;
+        session.runtime_id = None;
+        session.run_id = None;
+        session.base_url = None;
+
+        Ok(session)
+    }
+
     pub(super) fn list_agent_sessions_impl(
         &self,
         repo_path: &Path,
@@ -24,6 +69,7 @@ impl BeadsTaskStore {
         task_id: &str,
         session: AgentSessionDocument,
     ) -> Result<()> {
+        let compact_session = self.compact_agent_session_for_storage(session)?;
         let (mut root, namespace_key, mut namespace_map) =
             self.load_namespace(repo_path, task_id)?;
         let mut sessions = namespace_map
@@ -33,11 +79,11 @@ impl BeadsTaskStore {
 
         if let Some(existing_index) = sessions
             .iter()
-            .position(|entry| entry.session_id == session.session_id)
+            .position(|entry| entry.session_id == compact_session.session_id)
         {
-            sessions[existing_index] = session;
+            sessions[existing_index] = compact_session;
         } else {
-            sessions.push(session);
+            sessions.push(compact_session);
         }
 
         sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));

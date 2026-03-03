@@ -1,5 +1,10 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentSessionHistoryMessage } from "@openducktor/core";
+import type {
+  AgentModelSelection,
+  AgentRole,
+  AgentScenario,
+  AgentSessionHistoryMessage,
+} from "@openducktor/core";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../../agent-tool-messages";
 import { normalizePersistedSelection } from "./models";
@@ -7,40 +12,46 @@ import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 
-export const toPersistedSessionRecord = (
-  session: AgentSessionState,
-  updatedAt: string,
-): AgentSessionRecord => ({
+export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
   sessionId: session.sessionId,
-  externalSessionId: session.externalSessionId,
-  taskId: session.taskId,
   role: session.role,
   scenario: session.scenario,
-  status: session.status,
   startedAt: session.startedAt,
-  updatedAt,
-  ...(session.status === "stopped" || session.status === "error" ? { endedAt: updatedAt } : {}),
-  runtimeId: session.runtimeId ?? undefined,
-  runId: session.runId ?? undefined,
-  baseUrl: session.baseUrl,
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel ?? undefined,
 });
 
-export const fromPersistedSessionRecord = (session: AgentSessionRecord): AgentSessionState => {
+export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
+  if (role === "spec") {
+    return "spec_initial";
+  }
+  if (role === "planner") {
+    return "planner_initial";
+  }
+  if (role === "qa") {
+    return "qa_review";
+  }
+  return "build_implementation_start";
+};
+
+export const fromPersistedSessionRecord = (
+  session: AgentSessionRecord,
+  fallbackTaskId: string,
+): AgentSessionState => {
+  const persistedStatus = session.status ?? "stopped";
   const normalizedStatus =
-    session.status === "starting" || session.status === "running" ? "stopped" : session.status;
+    persistedStatus === "starting" || persistedStatus === "running" ? "stopped" : persistedStatus;
   return {
     sessionId: session.sessionId,
-    externalSessionId: session.externalSessionId,
-    taskId: session.taskId,
+    externalSessionId: session.externalSessionId ?? session.sessionId,
+    taskId: session.taskId ?? fallbackTaskId,
     role: session.role,
-    scenario: session.scenario,
+    scenario: session.scenario ?? defaultScenarioForRole(session.role),
     status: normalizedStatus,
     startedAt: session.startedAt,
     runtimeId: session.runtimeId ?? null,
     runId: session.runId ?? null,
-    baseUrl: session.baseUrl,
+    baseUrl: session.baseUrl ?? "",
     workingDirectory: session.workingDirectory,
     messages: [],
     draftAssistantText: "",

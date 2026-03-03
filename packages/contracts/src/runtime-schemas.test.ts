@@ -476,4 +476,18 @@ describe("runtime schemas", () => {
     expect(parsed.externalSessionId).toBe("session-opencode-1");
     expect(parsed.selectedModel?.modelId).toBe("gpt-5");
   });
+
+  test("agent session record parses compact persisted payload", () => {
+    const parsed = agentSessionRecordSchema.parse({
+      sessionId: "obp-session-2",
+      role: "planner",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      workingDirectory: "/repo",
+    });
+
+    expect(parsed.role).toBe("planner");
+    expect(parsed.scenario).toBeUndefined();
+    expect(parsed.externalSessionId).toBeUndefined();
+    expect(parsed.status).toBeUndefined();
+  });
 });

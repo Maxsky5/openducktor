@@ -768,7 +768,7 @@ describe("TauriHostClient", () => {
     });
   });
 
-  test("agentSessionsList normalizes legacy scenarios and skips invalid rows", async () => {
+  test("agentSessionsList normalizes legacy scenarios and strips invalid scenario values", async () => {
     const { client } = createClient((command) => {
       if (command === "task_metadata_get") {
         return {
@@ -832,9 +832,10 @@ describe("TauriHostClient", () => {
 
     const sessions = await client.agentSessionsList("/repo", "task-1");
 
-    expect(sessions).toHaveLength(2);
+    expect(sessions).toHaveLength(3);
     expect(sessions[0]?.scenario).toBe("spec_initial");
     expect(sessions[1]?.scenario).toBe("planner_initial");
+    expect(sessions[2]?.scenario).toBeUndefined();
   });
 
   test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {

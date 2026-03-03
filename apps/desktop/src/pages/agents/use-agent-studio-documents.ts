@@ -27,14 +27,12 @@ export function useAgentStudioDocuments({
 
   const documentContextKey = `${taskId}:${activeSession?.sessionId ?? ""}`;
   const processedDocumentToolEventsRef = useRef(new Set<string>());
-  const processedDocumentMessageCountBySessionRef = useRef<Record<string, number>>({});
   const documentReloadAttemptsRef = useRef(new Map<string, number>());
   const refreshedTaskVersionsRef = useRef(new Set<string>());
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Context key intentionally controls reset boundary.
   useEffect(() => {
     processedDocumentToolEventsRef.current.clear();
-    processedDocumentMessageCountBySessionRef.current = {};
     documentReloadAttemptsRef.current.clear();
   }, [documentContextKey]);
 
@@ -68,12 +66,7 @@ export function useAgentStudioDocuments({
       return;
     }
 
-    const previousMessageCount =
-      processedDocumentMessageCountBySessionRef.current[activeSession.sessionId] ?? 0;
-    const startIndex =
-      previousMessageCount > activeSession.messages.length ? 0 : previousMessageCount;
-
-    for (let index = startIndex; index < activeSession.messages.length; index += 1) {
+    for (let index = 0; index < activeSession.messages.length; index += 1) {
       const message = activeSession.messages[index];
       if (!message) {
         continue;
@@ -150,9 +143,6 @@ export function useAgentStudioDocuments({
         documentReloadAttemptsRef.current.set(eventKey, attempts + 1);
       }
     }
-
-    processedDocumentMessageCountBySessionRef.current[activeSession.sessionId] =
-      activeSession.messages.length;
   }, [activeSession, applyDocumentUpdate, planDoc, qaDoc, reloadDocument, specDoc, taskId]);
 
   return {

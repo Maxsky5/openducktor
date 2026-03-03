@@ -115,7 +115,9 @@ pub struct QaReportDocument {
 pub struct AgentSessionModelSelection {
     pub provider_id: String,
     pub model_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub variant: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub opencode_agent: Option<String>,
 }
 
@@ -123,18 +125,28 @@ pub struct AgentSessionModelSelection {
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionDocument {
     pub session_id: String,
-    pub external_session_id: String,
-    pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
     pub role: String,
-    pub scenario: String,
-    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenario: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
     pub started_at: String,
-    pub updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
-    pub base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
     pub working_directory: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_model: Option<AgentSessionModelSelection>,
 }
 

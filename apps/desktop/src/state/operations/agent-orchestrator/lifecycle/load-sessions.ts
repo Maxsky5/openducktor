@@ -9,6 +9,7 @@ import {
 } from "../support/async-side-effects";
 import {
   createRepoStaleGuard,
+  defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
   normalizePersistedSelection,
@@ -134,7 +135,7 @@ export const createLoadAgentSessions = ({
         if (next[record.sessionId]) {
           continue;
         }
-        next[record.sessionId] = fromPersistedSessionRecord(record);
+        next[record.sessionId] = fromPersistedSessionRecord(record, taskId);
       }
       return next;
     });
@@ -201,10 +202,17 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const baseUrl = workspaceRuntime ? toBaseUrl(workspaceRuntime.port) : record.baseUrl;
+      const baseUrl = workspaceRuntime ? toBaseUrl(workspaceRuntime.port) : (record.baseUrl ?? "");
+      if (!workspaceRuntime && baseUrl.length === 0) {
+        throw new Error(
+          `Cannot hydrate session ${record.sessionId}: runtime baseUrl is missing from metadata.`,
+        );
+      }
       // Always use the persisted workingDirectory — it is the source of truth.
       // Build sessions store the worktree path; other roles store repoPath.
       const workingDirectory = record.workingDirectory;
+      const externalSessionId = record.externalSessionId ?? record.sessionId;
+      const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
       const existingSession = sessionsRef.current[record.sessionId];
       if (existingSession && existingSession.messages.length > 0) {
         if (isStaleRepoOperation()) {
@@ -219,7 +227,7 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
+        warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
         return;
       }
 
@@ -229,7 +237,7 @@ export const createLoadAgentSessions = ({
           const history = await adapter.loadSessionHistory({
             baseUrl,
             workingDirectory,
-            externalSessionId: record.externalSessionId,
+            externalSessionId,
             limit: INITIAL_SESSION_HISTORY_LIMIT,
           });
           return { ok: true as const, history };
@@ -237,9 +245,9 @@ export const createLoadAgentSessions = ({
         {
           tags: {
             repoPath,
-            taskId: record.taskId,
+            taskId,
             sessionId: record.sessionId,
-            externalSessionId: record.externalSessionId,
+            externalSessionId,
           },
           logLevel: "warn",
           fallback: (failure): SessionHistoryLoadResult => ({
@@ -254,12 +262,12 @@ export const createLoadAgentSessions = ({
         {
           id: `history:session-start:${record.sessionId}`,
           role: "system",
-          content: `Session started (${record.role} - ${record.scenario})`,
+          content: `Session started (${record.role} - ${resolvedScenario})`,
           timestamp: record.startedAt,
         },
       ];
 
-      const task = taskRef.current.find((entry) => entry.id === record.taskId);
+      const task = taskRef.current.find((entry) => entry.id === taskId);
       const preludeMessages = task
         ? [
             ...basicPreludeMessages,
@@ -268,7 +276,7 @@ export const createLoadAgentSessions = ({
               role: "system" as const,
               content: `System prompt:\n\n${buildAgentSystemPrompt({
                 role: record.role,
-                scenario: record.scenario,
+                scenario: resolvedScenario,
                 task: {
                   taskId: task.id,
                   title: task.title,
@@ -312,7 +320,7 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
+        warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
         return;
       }
 
@@ -332,7 +340,7 @@ export const createLoadAgentSessions = ({
         }),
         { persist: false },
       );
-      warmSessionData(record.sessionId, baseUrl, workingDirectory, record.externalSessionId);
+      warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
     };
 
     for (

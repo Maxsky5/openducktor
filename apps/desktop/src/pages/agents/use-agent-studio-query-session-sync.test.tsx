@@ -121,7 +121,7 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
-  test("aligns query params with resolved active session", async () => {
+  test("aligns query params with resolved active session when session param is present", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const activeSession = createAgentSessionFixture({
       sessionId: "session-1",
@@ -133,7 +133,8 @@ describe("useAgentStudioQuerySessionSync", () => {
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionParam: "stale-session-id",
+        selectedSessionById: activeSession,
         taskId: "task-1",
         activeSession,
         roleFromQuery: "spec",
@@ -151,6 +152,34 @@ describe("useAgentStudioQuerySessionSync", () => {
           agent: "planner",
         },
       ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not repin session when query intentionally omits session", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const activeSession = createAgentSessionFixture({
+      sessionId: "session-1",
+      externalSessionId: "ext-session-1",
+      taskId: "task-1",
+      role: "spec",
+      scenario: "spec_initial",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        taskIdParam: "task-1",
+        sessionParam: null,
+        taskId: "task-1",
+        activeSession,
+        roleFromQuery: "spec",
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

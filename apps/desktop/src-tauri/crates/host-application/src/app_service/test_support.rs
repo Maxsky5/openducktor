@@ -683,17 +683,17 @@ pub(crate) fn build_service_with_git_state(
 pub(crate) fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocument {
     AgentSessionDocument {
         session_id: session_id.to_string(),
-        external_session_id: format!("external-{session_id}"),
-        task_id: task_id.to_string(),
+        external_session_id: Some(format!("external-{session_id}")),
+        task_id: Some(task_id.to_string()),
         role: "build".to_string(),
-        scenario: "build_default".to_string(),
-        status: "running".to_string(),
+        scenario: Some("build_default".to_string()),
+        status: Some("running".to_string()),
         started_at: "2026-02-20T12:00:00Z".to_string(),
-        updated_at: "2026-02-20T12:00:10Z".to_string(),
+        updated_at: Some("2026-02-20T12:00:10Z".to_string()),
         ended_at: None,
         runtime_id: Some("runtime-1".to_string()),
         run_id: Some("run-1".to_string()),
-        base_url: "http://127.0.0.1:4173".to_string(),
+        base_url: Some("http://127.0.0.1:4173".to_string()),
         working_directory: "/tmp/repo".to_string(),
         selected_model: None,
     }

@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import {
   computeRepoId,
   normalizePlanSubtasks,
   ODT_TOOL_SCHEMAS,
   OdtTaskStore,
+  resolveCentralBeadsDir,
   resolveStoreContext,
 } from "./lib";
 
@@ -157,6 +161,19 @@ describe("openducktor-mcp lib", () => {
   test("computes stable repo id with slug and hash", async () => {
     const id = await computeRepoId("/tmp/OpenDucktor Repo");
     expect(id).toMatch(/^openducktor-repo-[a-f0-9]{8}$/);
+  });
+
+  test("resolveCentralBeadsDir does not create directory side effects", async () => {
+    const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const repoPath = `/tmp/odt-beads-no-side-effect-${nonce}/repo`;
+    const repoId = await computeRepoId(repoPath);
+    const repoRoot = resolve(homedir(), ".openducktor", "beads", repoId);
+
+    expect(existsSync(repoRoot)).toBe(false);
+
+    const resolved = await resolveCentralBeadsDir(repoPath);
+    expect(resolved).toBe(resolve(repoRoot, ".beads"));
+    expect(existsSync(repoRoot)).toBe(false);
   });
 
   test("schema validates odt_set_spec required fields", () => {

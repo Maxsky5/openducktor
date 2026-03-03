@@ -1,6 +1,7 @@
 import {
   type AgentSessionRecord,
   agentSessionRecordSchema,
+  agentSessionScenarioSchema,
   type TaskMetadataPayload,
   taskMetadataPayloadSchema,
 } from "@openducktor/contracts";
@@ -11,7 +12,7 @@ const LEGACY_AGENT_SESSION_SCENARIO_MAP: Record<string, AgentSessionRecord["scen
   planner_revision: "planner_initial",
 };
 
-const normalizeLegacyAgentSessionScenario = (entry: unknown): unknown => {
+const normalizeAgentSessionScenario = (entry: unknown): unknown => {
   if (!entry || typeof entry !== "object") {
     return entry;
   }
@@ -21,7 +22,11 @@ const normalizeLegacyAgentSessionScenario = (entry: unknown): unknown => {
   }
   const normalizedScenario = LEGACY_AGENT_SESSION_SCENARIO_MAP[candidate.scenario];
   if (!normalizedScenario) {
-    return entry;
+    if (agentSessionScenarioSchema.safeParse(candidate.scenario).success) {
+      return entry;
+    }
+    const { scenario: _ignoredScenario, ...rest } = entry as Record<string, unknown>;
+    return rest;
   }
   return {
     ...entry,
@@ -36,7 +41,7 @@ export type ParsedTaskMetadata = Omit<TaskMetadataPayload, "agentSessions"> & {
 const parseAgentSessions = (entries: unknown[]): AgentSessionRecord[] => {
   const sessions: AgentSessionRecord[] = [];
   for (const entry of entries) {
-    const parsed = agentSessionRecordSchema.safeParse(normalizeLegacyAgentSessionScenario(entry));
+    const parsed = agentSessionRecordSchema.safeParse(normalizeAgentSessionScenario(entry));
     if (parsed.success) {
       sessions.push(parsed.data);
     }

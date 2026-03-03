@@ -909,6 +909,6 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     let task_state = task_state.lock().expect("task lock poisoned");
     assert_eq!(task_state.upserted_sessions.len(), 1);
     assert_eq!(task_state.upserted_sessions[0].0, "task-1");
-    assert_eq!(task_state.upserted_sessions[0].1.task_id, "task-1");
+    assert_eq!(task_state.upserted_sessions[0].1.task_id.as_deref(), Some("task-1"));
     Ok(())
 }
