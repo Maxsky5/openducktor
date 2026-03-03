@@ -1,7 +1,6 @@
-import type { AgentRole } from "@openducktor/core";
+import { type AgentRole, isRecord } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
-import { isRecord } from "@/lib/guards";
 import { isRole } from "./agents-page-constants";
 import { toContextStorageKey } from "./agents-page-utils";
 
