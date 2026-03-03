@@ -1,12 +1,31 @@
 import { describe, expect, test } from "bun:test";
-import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { buildMessage, buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 import {
   buildAgentChatVirtualRows,
+  buildAgentChatVirtualRowsSignature,
   buildVirtualRowLayout,
   findVirtualWindowRange,
   getVirtualWindowEdgeOffsets,
   normalizeVirtualWindowRange,
 } from "./agent-chat-thread-virtualization";
+
+const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number) => {
+  const tokenByMessage = new WeakMap<AgentChatMessage, number>();
+  let nextToken = 1;
+
+  return (message: AgentChatMessage): number => {
+    const cached = tokenByMessage.get(message);
+    if (typeof cached === "number") {
+      return cached;
+    }
+
+    const assignedToken = nextToken;
+    nextToken += 1;
+    tokenByMessage.set(message, assignedToken);
+    return assignedToken;
+  };
+};
 
 describe("agent-chat-thread virtualization helpers", () => {
   test("buildAgentChatVirtualRows keeps message order and stable synthetic row keys", () => {
@@ -56,6 +75,86 @@ describe("agent-chat-thread virtualization helpers", () => {
     expect(firstKeys).toContain("session-a:message-1");
     expect(secondKeys).toContain("session-b:message-1");
     expect(firstKeys).not.toContain("session-b:message-1");
+  });
+
+  test("buildAgentChatVirtualRowsSignature stays stable for non-row session updates", () => {
+    const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
+    const baseSession = buildSession({
+      messages,
+      selectedModel: buildModelSelection({ variant: "high" }),
+      isLoadingModelCatalog: false,
+    });
+    const updatedSession = {
+      ...baseSession,
+      selectedModel: buildModelSelection({ variant: "low" }),
+      isLoadingModelCatalog: true,
+    };
+    const resolveMessageIdentityToken = createMessageIdentityResolver();
+
+    const baselineSignature = buildAgentChatVirtualRowsSignature(
+      baseSession,
+      resolveMessageIdentityToken,
+    );
+    const updatedSignature = buildAgentChatVirtualRowsSignature(
+      updatedSession,
+      resolveMessageIdentityToken,
+    );
+
+    expect(updatedSignature).toBe(baselineSignature);
+  });
+
+  test("buildAgentChatVirtualRowsSignature changes when messages are appended in place", () => {
+    const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
+    const session = buildSession({ messages });
+    const resolveMessageIdentityToken = createMessageIdentityResolver();
+
+    const previousSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+    messages.push(buildMessage("assistant", "Message 2", { id: "message-2" }));
+    const nextSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+
+    expect(nextSignature).not.toBe(previousSignature);
+  });
+
+  test("buildAgentChatVirtualRowsSignature changes when a message object is replaced in place", () => {
+    const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
+    const session = buildSession({ messages });
+    const resolveMessageIdentityToken = createMessageIdentityResolver();
+
+    const previousSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+    messages[0] = buildMessage("assistant", "Message 1 updated", { id: "message-1" });
+    const nextSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+
+    expect(nextSignature).not.toBe(previousSignature);
+  });
+
+  test("buildAgentChatVirtualRowsSignature changes when assistant duration mutates in place", () => {
+    const messages = [
+      buildMessage("assistant", "Message 1", {
+        id: "message-1",
+        meta: {
+          kind: "assistant",
+          agentRole: "spec",
+          opencodeAgent: "Hephaestus (Deep Agent)",
+          durationMs: 1_500,
+        },
+      }),
+    ];
+    const session = buildSession({ messages });
+    const resolveMessageIdentityToken = createMessageIdentityResolver();
+    const previousSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+
+    const assistantMessage = messages[0];
+    if (!assistantMessage) {
+      throw new Error("Expected assistant message");
+    }
+    expect(assistantMessage.meta?.kind).toBe("assistant");
+    if (assistantMessage.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message metadata");
+    }
+    assistantMessage.meta.durationMs = 2_400;
+
+    const nextSignature = buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken);
+    expect(nextSignature).not.toBe(previousSignature);
   });
 
   test("buildAgentChatVirtualRows appends thinking row when session is running without draft", () => {
