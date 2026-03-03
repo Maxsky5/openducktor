@@ -2,11 +2,16 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { buildMessage, buildSession, TEST_ROLE_OPTIONS } from "./agent-chat-test-fixtures";
+import {
+  AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
+  buildAgentChatVirtualRows,
+} from "./agent-chat-thread-virtualization";
 
 type VirtualizerOptions = {
   estimateSize: (index: number) => number;
   measureElement: (element: Element) => number;
   getItemKey: (index: number) => string | number;
+  getScrollElement: () => Element | null;
 };
 
 const useVirtualizerOptionsByRender: VirtualizerOptions[] = [];
@@ -78,6 +83,12 @@ describe("AgentChatThread virtualizer callbacks", () => {
         }),
       ),
     });
+    const measuredRowKey = `${session.sessionId}:message-1`;
+    const initialRows = buildAgentChatVirtualRows(session);
+    const initialRowCount = initialRows.length;
+    const appendedRowIndex = initialRowCount;
+    const measuredRowIndex = initialRows.findIndex((row) => row.key === measuredRowKey);
+    expect(measuredRowIndex).toBeGreaterThanOrEqual(0);
     const model = {
       ...baseModel,
       session,
@@ -94,6 +105,27 @@ describe("AgentChatThread virtualizer callbacks", () => {
 
     const firstOptions = useVirtualizerOptionsByRender.at(-1);
     expect(firstOptions).toBeDefined();
+    expect(firstOptions?.estimateSize(appendedRowIndex)).toBe(0);
+    expect(firstOptions?.getItemKey(appendedRowIndex)).toBe(appendedRowIndex);
+
+    const firstMeasureElement = firstOptions?.measureElement;
+    expect(firstMeasureElement).toBeDefined();
+    const measuredHeight = firstMeasureElement?.({
+      getBoundingClientRect: () => ({ height: 32 }),
+      getAttribute: (attributeName: string) => {
+        if (attributeName === "data-row-key") {
+          return measuredRowKey;
+        }
+        if (attributeName === "data-index") {
+          return "999";
+        }
+        return null;
+      },
+    } as unknown as Element);
+    expect(measuredHeight).toBe(32);
+    const measuredRowTrailingGap =
+      measuredRowIndex < initialRowCount - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
+    expect(firstOptions?.estimateSize(measuredRowIndex)).toBe(32 + measuredRowTrailingGap);
 
     session.messages.push(
       buildMessage("assistant", "Message 46", {
@@ -115,6 +147,10 @@ describe("AgentChatThread virtualizer callbacks", () => {
     expect(secondOptions?.estimateSize).toBe(firstOptions?.estimateSize);
     expect(secondOptions?.measureElement).toBe(firstOptions?.measureElement);
     expect(secondOptions?.getItemKey).toBe(firstOptions?.getItemKey);
+    expect(secondOptions?.getScrollElement).toBe(firstOptions?.getScrollElement);
+    const updatedRows = buildAgentChatVirtualRows(session);
+    expect(firstOptions?.estimateSize(appendedRowIndex)).toBeGreaterThan(0);
+    expect(firstOptions?.getItemKey(appendedRowIndex)).toBe(updatedRows[appendedRowIndex]?.key);
 
     await act(async () => {
       renderer.unmount();
