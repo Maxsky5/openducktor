@@ -10,7 +10,6 @@ use tauri::State;
 const GIT_WORKTREE_HASH_VERSION: u32 = 1;
 const FNV1A_64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV1A_64_PRIME: u64 = 0x100000001b3;
-const FNV1A_64_MASK: u64 = u64::MAX;
 
 fn canonicalize_for_validation(path: &str, field: &str) -> Result<PathBuf, String> {
     fs::canonicalize(path)
@@ -106,7 +105,7 @@ impl Fnv1a64Hasher {
 
     fn update_byte(&mut self, byte: u8) {
         self.state ^= u64::from(byte);
-        self.state = self.state.wrapping_mul(FNV1A_64_PRIME) & FNV1A_64_MASK;
+        self.state = self.state.wrapping_mul(FNV1A_64_PRIME);
     }
 
     fn update_bytes(&mut self, bytes: &[u8]) {
