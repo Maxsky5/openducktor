@@ -101,6 +101,33 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
   return rows;
 }
 
+export function buildAgentChatVirtualRowsSignature(
+  session: AgentSessionState,
+  resolveMessageIdentityToken: (message: AgentChatMessage) => number,
+): string {
+  const signatureParts: string[] = [
+    session.sessionId,
+    session.status,
+    session.draftAssistantText,
+    String(session.pendingQuestions.length),
+  ];
+
+  for (const message of session.messages) {
+    const assistantDurationToken =
+      message.meta?.kind === "assistant" && typeof message.meta.durationMs === "number"
+        ? String(message.meta.durationMs)
+        : "";
+    signatureParts.push(
+      String(resolveMessageIdentityToken(message)),
+      message.id,
+      message.role,
+      assistantDurationToken,
+    );
+  }
+
+  return signatureParts.join("\u001f");
+}
+
 export function buildVirtualRowLayout({ itemHeights, gapPx }: BuildVirtualRowLayoutArgs): {
   itemOffsets: number[];
   totalHeight: number;

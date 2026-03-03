@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import {
@@ -19,6 +20,7 @@ import {
   AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT,
   type AgentChatVirtualRow,
   buildAgentChatVirtualRows,
+  buildAgentChatVirtualRowsSignature,
 } from "./agent-chat-thread-virtualization";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
@@ -59,7 +61,39 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const StreamingRoleIcon = streamingRoleDisplay?.icon ?? Bot;
   const streamingRoleLabel = streamingRoleDisplay?.label ?? "Assistant";
 
-  const virtualRows = session ? buildAgentChatVirtualRows(session) : [];
+  const messageIdentityTokenByMessageRef = useRef<WeakMap<AgentChatMessage, number>>(new WeakMap());
+  const nextMessageIdentityTokenRef = useRef(1);
+  const virtualRowsCacheRef = useRef<{ signature: string | null; rows: AgentChatVirtualRow[] }>({
+    signature: null,
+    rows: [],
+  });
+  const resolveMessageIdentityToken = useCallback((message: AgentChatMessage): number => {
+    const cached = messageIdentityTokenByMessageRef.current.get(message);
+    if (typeof cached === "number") {
+      return cached;
+    }
+
+    const nextToken = nextMessageIdentityTokenRef.current;
+    nextMessageIdentityTokenRef.current += 1;
+    messageIdentityTokenByMessageRef.current.set(message, nextToken);
+    return nextToken;
+  }, []);
+  const virtualRowsSignature = session
+    ? buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken)
+    : null;
+  const virtualRows = useMemo(() => {
+    const cached = virtualRowsCacheRef.current;
+    if (cached.signature === virtualRowsSignature) {
+      return cached.rows;
+    }
+
+    const nextRows = session ? buildAgentChatVirtualRows(session) : [];
+    virtualRowsCacheRef.current = {
+      signature: virtualRowsSignature,
+      rows: nextRows,
+    };
+    return nextRows;
+  }, [session, virtualRowsSignature]);
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
   const activeSessionId = session?.sessionId ?? null;
   const measuredSessionIdRef = useRef<string | null>(null);
