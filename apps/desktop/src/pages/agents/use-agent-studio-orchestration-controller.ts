@@ -80,104 +80,103 @@ type UseAgentStudioOrchestrationControllerResult = {
   rightPanel: ReturnType<typeof useAgentStudioRightPanel>;
 };
 
+type AgentStudioPageModelsViewContext = Pick<
+  AgentStudioOrchestrationSelectionContext,
+  "viewTaskId" | "viewRole" | "viewSelectedTask" | "contextSwitchVersion" | "isActiveTaskHydrated"
+>;
+
+type AgentStudioPageModelsSessionsContext = Pick<
+  AgentStudioOrchestrationSelectionContext,
+  "viewSessionsForTask" | "viewActiveSession"
+>;
+
+type AgentStudioPageModelsTabsContext = Pick<
+  AgentStudioOrchestrationSelectionContext,
+  | "activeTaskTabId"
+  | "taskTabs"
+  | "availableTabTasks"
+  | "isLoadingTasks"
+  | "onCreateTab"
+  | "onCloseTab"
+>;
+
+type AgentStudioPageModelsDocumentsContext = Pick<
+  ReturnType<typeof useAgentStudioDocuments>,
+  "specDoc" | "planDoc" | "qaDoc"
+>;
+
+type AgentStudioPageModelsSessionActionsContext = Parameters<
+  typeof useAgentStudioPageModels
+>[0]["sessionActions"];
+
+type AgentStudioPageModelsModelSelectionContext = Pick<
+  ReturnType<typeof useAgentStudioModelSelection>,
+  | "selectedModelSelection"
+  | "isSelectionCatalogLoading"
+  | "agentOptions"
+  | "modelOptions"
+  | "modelGroups"
+  | "variantOptions"
+  | "activeSessionAgentColors"
+  | "activeSessionContextUsage"
+  | "handleSelectAgent"
+  | "handleSelectModel"
+  | "handleSelectVariant"
+>;
+
 type BuildAgentStudioPageModelsArgsInput = {
-  viewTaskId: string;
-  viewRole: AgentRole;
-  viewSelectedTask: TaskCard | null;
-  viewSessionsForTask: AgentSessionState[];
-  viewActiveSession: AgentSessionState | null;
-  activeTaskTabId: string;
-  taskTabs: AgentStudioTaskTabsModel["tabs"];
-  availableTabTasks: TaskCard[];
-  onCreateTab: (taskId: string) => void;
-  onCloseTab: (taskId: string) => void;
-  contextSwitchVersion: number;
-  isLoadingTasks: boolean;
-  isActiveTaskHydrated: boolean;
-  specDoc: ReturnType<typeof useAgentStudioDocuments>["specDoc"];
-  planDoc: ReturnType<typeof useAgentStudioDocuments>["planDoc"];
-  qaDoc: ReturnType<typeof useAgentStudioDocuments>["qaDoc"];
+  view: AgentStudioPageModelsViewContext;
+  sessions: AgentStudioPageModelsSessionsContext;
+  tabs: AgentStudioPageModelsTabsContext;
+  documents: AgentStudioPageModelsDocumentsContext;
   readiness: AgentStudioOrchestrationReadinessContext;
-  sessionActions: ReturnType<typeof useAgentStudioSessionActions> & {
-    stopAgentSession: AgentStateContextValue["stopAgentSession"];
-  };
-  modelSelection: {
-    selectedModelSelection: ReturnType<
-      typeof useAgentStudioModelSelection
-    >["selectedModelSelection"];
-    isSelectionCatalogLoading: ReturnType<
-      typeof useAgentStudioModelSelection
-    >["isSelectionCatalogLoading"];
-    agentOptions: ReturnType<typeof useAgentStudioModelSelection>["agentOptions"];
-    modelOptions: ReturnType<typeof useAgentStudioModelSelection>["modelOptions"];
-    modelGroups: ReturnType<typeof useAgentStudioModelSelection>["modelGroups"];
-    variantOptions: ReturnType<typeof useAgentStudioModelSelection>["variantOptions"];
-    onSelectAgent: ReturnType<typeof useAgentStudioModelSelection>["handleSelectAgent"];
-    onSelectModel: ReturnType<typeof useAgentStudioModelSelection>["handleSelectModel"];
-    onSelectVariant: ReturnType<typeof useAgentStudioModelSelection>["handleSelectVariant"];
-    activeSessionAgentColors: ReturnType<
-      typeof useAgentStudioModelSelection
-    >["activeSessionAgentColors"];
-    activeSessionContextUsage: ReturnType<
-      typeof useAgentStudioModelSelection
-    >["activeSessionContextUsage"];
-  };
+  sessionActions: AgentStudioPageModelsSessionActionsContext;
+  modelSelection: AgentStudioPageModelsModelSelectionContext;
   permissions: ReturnType<typeof useAgentSessionPermissionActions>;
   composer: AgentStudioOrchestrationComposerContext;
 };
 
 export const buildAgentStudioPageModelsArgs = ({
-  viewTaskId,
-  viewRole,
-  viewSelectedTask,
-  viewSessionsForTask,
-  viewActiveSession,
-  activeTaskTabId,
-  taskTabs,
-  availableTabTasks,
-  onCreateTab,
-  onCloseTab,
-  contextSwitchVersion,
-  isLoadingTasks,
-  isActiveTaskHydrated,
-  specDoc,
-  planDoc,
-  qaDoc,
+  view,
+  sessions,
+  tabs,
+  documents,
   readiness,
   sessionActions,
   modelSelection,
   permissions,
   composer,
-}: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => ({
-  core: {
-    activeTabValue: activeTaskTabId || viewTaskId || "__agent_studio_empty__",
-    taskId: viewTaskId,
-    role: viewRole,
-    selectedTask: viewSelectedTask,
-    sessionsForTask: viewSessionsForTask,
-    contextSessionsLength: viewSessionsForTask.length,
-    activeSession: viewActiveSession,
-    isTaskHydrating: Boolean(viewTaskId && !isActiveTaskHydrated),
-    contextSwitchVersion,
-  },
-  taskTabs: {
+}: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
+  const { activeTaskTabId, ...taskTabs } = tabs;
+  const { handleSelectAgent, handleSelectModel, handleSelectVariant, ...restOfModelSelection } =
+    modelSelection;
+
+  return {
+    core: {
+      activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
+      taskId: view.viewTaskId,
+      role: view.viewRole,
+      selectedTask: view.viewSelectedTask,
+      sessionsForTask: sessions.viewSessionsForTask,
+      contextSessionsLength: sessions.viewSessionsForTask.length,
+      activeSession: sessions.viewActiveSession,
+      isTaskHydrating: Boolean(view.viewTaskId && !view.isActiveTaskHydrated),
+      contextSwitchVersion: view.contextSwitchVersion,
+    },
     taskTabs,
-    availableTabTasks,
-    isLoadingTasks,
-    onCreateTab,
-    onCloseTab,
-  },
-  documents: {
-    specDoc,
-    planDoc,
-    qaDoc,
-  },
-  readiness,
-  sessionActions,
-  modelSelection,
-  permissions,
-  composer,
-});
+    documents,
+    readiness,
+    sessionActions,
+    modelSelection: {
+      ...restOfModelSelection,
+      onSelectAgent: handleSelectAgent,
+      onSelectModel: handleSelectModel,
+      onSelectVariant: handleSelectVariant,
+    },
+    permissions,
+    composer,
+  };
+};
 
 export function useAgentStudioOrchestrationController({
   workspace,
@@ -295,22 +294,30 @@ export function useAgentStudioOrchestrationController({
     });
 
   const pageModelsArgs = buildAgentStudioPageModelsArgs({
-    viewTaskId,
-    viewRole,
-    viewSelectedTask,
-    viewSessionsForTask,
-    viewActiveSession,
-    activeTaskTabId,
-    taskTabs,
-    availableTabTasks,
-    onCreateTab,
-    onCloseTab,
-    contextSwitchVersion,
-    isLoadingTasks,
-    isActiveTaskHydrated,
-    specDoc,
-    planDoc,
-    qaDoc,
+    view: {
+      viewTaskId,
+      viewRole,
+      viewSelectedTask,
+      contextSwitchVersion,
+      isActiveTaskHydrated,
+    },
+    sessions: {
+      viewSessionsForTask,
+      viewActiveSession,
+    },
+    tabs: {
+      activeTaskTabId,
+      taskTabs,
+      availableTabTasks,
+      isLoadingTasks,
+      onCreateTab,
+      onCloseTab,
+    },
+    documents: {
+      specDoc,
+      planDoc,
+      qaDoc,
+    },
     readiness,
     sessionActions: {
       isStarting,
@@ -337,9 +344,9 @@ export function useAgentStudioOrchestrationController({
       variantOptions,
       activeSessionAgentColors,
       activeSessionContextUsage,
-      onSelectAgent: handleSelectAgent,
-      onSelectModel: handleSelectModel,
-      onSelectVariant: handleSelectVariant,
+      handleSelectAgent,
+      handleSelectModel,
+      handleSelectVariant,
     },
     permissions: {
       isSubmittingPermissionByRequestId,
