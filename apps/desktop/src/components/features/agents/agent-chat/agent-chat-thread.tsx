@@ -3,7 +3,7 @@ import { Fragment, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
-import { AgentChatVirtualRow } from "./agent-chat-virtual-row";
+import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
@@ -145,7 +145,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
                     width: "100%",
                   }}
                 >
-                  <AgentChatVirtualRow
+                  <AgentChatThreadRow
                     row={row}
                     sessionRole={sessionRole}
                     sessionSelectedModel={sessionSelectedModel}
@@ -163,7 +163,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           hasRenderableSessionRows ? (
             virtualRows.map((row) => (
               <Fragment key={row.key}>
-                <AgentChatVirtualRow
+                <AgentChatThreadRow
                   row={row}
                   sessionRole={sessionRole}
                   sessionSelectedModel={sessionSelectedModel}

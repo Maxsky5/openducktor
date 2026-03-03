@@ -33,10 +33,58 @@ type UseAgentChatVirtualizationResult = {
   virtualizer: AgentChatVirtualizer;
 };
 
+type UseAgentChatVirtualRowsResult = {
+  activeSessionId: string | null;
+  shouldVirtualize: boolean;
+  virtualRows: AgentChatVirtualRow[];
+};
+
+type UseVirtualRowMeasurementsInput = {
+  activeSessionId: string | null;
+  virtualRows: AgentChatVirtualRow[];
+};
+
+type UseVirtualRowMeasurementsResult = {
+  estimateRowSize: (index: number) => number;
+  measureVirtualRowElement: (element: Element) => number;
+  resolveRowKey: (index: number) => string | number;
+};
+
 export function useAgentChatVirtualization({
   session,
   messagesContainerRef,
 }: UseAgentChatVirtualizationInput): UseAgentChatVirtualizationResult {
+  const { activeSessionId, shouldVirtualize, virtualRows } = useAgentChatVirtualRows(session);
+  const { estimateRowSize, measureVirtualRowElement, resolveRowKey } = useVirtualRowMeasurements({
+    activeSessionId,
+    virtualRows,
+  });
+
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? virtualRows.length : 0,
+    getScrollElement: () => messagesContainerRef.current,
+    estimateSize: estimateRowSize,
+    measureElement: measureVirtualRowElement,
+    getItemKey: resolveRowKey,
+    overscan: AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
+  });
+
+  const virtualRowsToRender = useVirtualRowsToRender(virtualRows, virtualizer.getVirtualItems());
+  const canRenderVirtualRows = shouldVirtualize && virtualRowsToRender.length > 0;
+  const hasRenderableSessionRows = virtualRows.length > 0;
+
+  return {
+    activeSessionId,
+    canRenderVirtualRows,
+    hasRenderableSessionRows,
+    shouldVirtualize,
+    virtualRows,
+    virtualRowsToRender,
+    virtualizer,
+  };
+}
+
+function useAgentChatVirtualRows(session: AgentSessionState | null): UseAgentChatVirtualRowsResult {
   const messageIdentityTokenByMessageRef = useRef<WeakMap<AgentChatMessage, number>>(new WeakMap());
   const nextMessageIdentityTokenRef = useRef(1);
   const virtualRowsCacheRef = useRef<{ signature: string | null; rows: AgentChatVirtualRow[] }>({
@@ -72,6 +120,18 @@ export function useAgentChatVirtualization({
   }, [session, virtualRowsSignature]);
   const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
   const activeSessionId = session?.sessionId ?? null;
+
+  return {
+    activeSessionId,
+    shouldVirtualize,
+    virtualRows,
+  };
+}
+
+function useVirtualRowMeasurements({
+  activeSessionId,
+  virtualRows,
+}: UseVirtualRowMeasurementsInput): UseVirtualRowMeasurementsResult {
   const measuredSessionIdRef = useRef<string | null>(null);
   const measuredRowHeightByKeyRef = useRef<Record<string, number>>({});
 
@@ -123,17 +183,14 @@ export function useAgentChatVirtualization({
     [virtualRows],
   );
 
-  const virtualizer = useVirtualizer({
-    count: shouldVirtualize ? virtualRows.length : 0,
-    getScrollElement: () => messagesContainerRef.current,
-    estimateSize: estimateRowSize,
-    measureElement: measureVirtualRowElement,
-    getItemKey: resolveRowKey,
-    overscan: AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
-  });
+  return { estimateRowSize, measureVirtualRowElement, resolveRowKey };
+}
 
-  const virtualItems = virtualizer.getVirtualItems();
-  const virtualRowsToRender = useMemo(
+function useVirtualRowsToRender(
+  virtualRows: AgentChatVirtualRow[],
+  virtualItems: VirtualItem[],
+): AgentChatVirtualRowsToRenderEntry[] {
+  return useMemo(
     () =>
       virtualItems
         .map((virtualItem) => {
@@ -146,16 +203,4 @@ export function useAgentChatVirtualization({
         .filter((entry): entry is AgentChatVirtualRowsToRenderEntry => entry !== null),
     [virtualItems, virtualRows],
   );
-  const canRenderVirtualRows = shouldVirtualize && virtualRowsToRender.length > 0;
-  const hasRenderableSessionRows = virtualRows.length > 0;
-
-  return {
-    activeSessionId,
-    canRenderVirtualRows,
-    hasRenderableSessionRows,
-    shouldVirtualize,
-    virtualRows,
-    virtualRowsToRender,
-    virtualizer,
-  };
 }

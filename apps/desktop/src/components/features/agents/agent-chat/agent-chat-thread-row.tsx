@@ -3,11 +3,11 @@ import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
-import type { AgentChatVirtualRow as AgentChatVirtualRowItem } from "./agent-chat-thread-virtualization";
+import type { AgentChatVirtualRow } from "./agent-chat-thread-virtualization";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 
 type AgentChatVirtualRowProps = {
-  row: AgentChatVirtualRowItem;
+  row: AgentChatVirtualRow;
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionSelectedModel: AgentSessionState["selectedModel"] | null;
@@ -15,7 +15,7 @@ type AgentChatVirtualRowProps = {
   streamingRoleLabel: string;
 };
 
-export function AgentChatVirtualRow({
+export function AgentChatThreadRow({
   row,
   sessionAgentColors,
   sessionRole,
