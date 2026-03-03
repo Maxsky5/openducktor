@@ -10,6 +10,7 @@ import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
 
 const POLL_INTERVAL_MS = 30_000;
+const WORKTREE_RESOLUTION_TIMEOUT_MS = 5_000;
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -136,11 +137,35 @@ const IDLE_WORKTREE_RESOLUTION_STATE: WorktreeResolutionState = { status: "idle"
 
 const buildWorktreeResolutionError = (runId: string, reason?: string): string => {
   const baseMessage = `Failed to resolve run worktree path for session ${runId}`;
-  if (reason == null || reason.trim().length === 0) {
-    return baseMessage;
+  const retryMessage = "Use Refresh to retry.";
+  const normalizedReason = reason?.trim() ?? "";
+  if (normalizedReason.length === 0) {
+    return `${baseMessage}. ${retryMessage}`;
   }
 
-  return `${baseMessage}: ${reason}`;
+  const reasonTerminator = /[.!?]$/.test(normalizedReason) ? "" : ".";
+  return `${baseMessage}: ${normalizedReason}${reasonTerminator} ${retryMessage}`;
+};
+
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== null) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
 };
 
 // ─── Structural equality helpers ───────────────────────────────────────────────
@@ -374,9 +399,13 @@ export function useAgentStudioDiffData({
       };
     });
 
-    void host
-      .runsList(worktreeResolutionRepoPath)
-      .then((runs) => {
+    void (async () => {
+      try {
+        const runs = await withTimeout(
+          host.runsList(worktreeResolutionRepoPath),
+          WORKTREE_RESOLUTION_TIMEOUT_MS,
+          `Timed out after ${WORKTREE_RESOLUTION_TIMEOUT_MS}ms while loading runs list.`,
+        );
         if (!isCurrent) {
           return;
         }
@@ -427,8 +456,7 @@ export function useAgentStudioDiffData({
             path: nextPath,
           };
         });
-      })
-      .catch((cause) => {
+      } catch (cause) {
         if (!isCurrent) {
           return;
         }
@@ -443,7 +471,8 @@ export function useAgentStudioDiffData({
           runId: worktreeResolutionRunId,
           error: resolutionError,
         });
-      });
+      }
+    })();
 
     return () => {
       isCurrent = false;
