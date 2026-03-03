@@ -28,14 +28,7 @@ pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
 pub fn resolve_central_beads_dir(repo_path: &Path) -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
     let repo_id = compute_repo_id(repo_path)?;
-    let repo_root = home.join(".openducktor").join("beads").join(repo_id);
-    fs::create_dir_all(&repo_root).with_context(|| {
-        format!(
-            "Failed to create centralized Beads directory {}",
-            repo_root.display()
-        )
-    })?;
-    Ok(repo_root.join(".beads"))
+    Ok(home.join(".openducktor").join("beads").join(repo_id).join(".beads"))
 }
 
 fn canonical_or_absolute(repo_path: &Path) -> Result<PathBuf> {
@@ -85,7 +78,8 @@ fn sanitize_slug(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{compute_repo_id, compute_repo_slug, resolve_central_beads_dir};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn slug_sanitizes_to_ascii_and_collapses_separators() {
@@ -121,5 +115,36 @@ mod tests {
         let as_string = resolved.to_string_lossy();
         assert!(as_string.contains(".openducktor/beads/"));
         assert!(as_string.ends_with("/.beads"));
+    }
+
+    #[test]
+    fn central_beads_dir_resolution_does_not_create_directories() {
+        let home = dirs::home_dir().expect("home directory should resolve");
+
+        for attempt in 0..64 {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time should be after epoch")
+                .as_nanos();
+            let candidate =
+                PathBuf::from(format!("/tmp/odt-beads-no-side-effect-{nanos}-{attempt}/repo"));
+            let repo_id = compute_repo_id(&candidate).expect("repo id should resolve");
+            let repo_root = home.join(".openducktor").join("beads").join(repo_id);
+            if repo_root.exists() {
+                continue;
+            }
+
+            let resolved =
+                resolve_central_beads_dir(&candidate).expect("beads path should resolve");
+            assert_eq!(resolved, repo_root.join(".beads"));
+            assert!(
+                !repo_root.exists(),
+                "resolve_central_beads_dir should not create {}",
+                repo_root.display()
+            );
+            return;
+        }
+
+        panic!("failed to generate unique beads directory candidate path");
     }
 }

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, realpath } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 
@@ -115,6 +115,5 @@ export const computeRepoId = async (repoPath: string): Promise<string> => {
 export const resolveCentralBeadsDir = async (repoPath: string): Promise<string> => {
   const repoId = await computeRepoId(repoPath);
   const root = resolve(homedir(), ".openducktor", "beads", repoId);
-  await mkdir(root, { recursive: true });
   return resolve(root, ".beads");
 };
