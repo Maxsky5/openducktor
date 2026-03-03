@@ -146,44 +146,37 @@ export const buildAgentStudioPageModelsArgs = ({
   modelSelection,
   permissions,
   composer,
-}: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => ({
-  core: {
-    activeTabValue: tabs.activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
-    taskId: view.viewTaskId,
-    role: view.viewRole,
-    selectedTask: view.viewSelectedTask,
-    sessionsForTask: sessions.viewSessionsForTask,
-    contextSessionsLength: sessions.viewSessionsForTask.length,
-    activeSession: sessions.viewActiveSession,
-    isTaskHydrating: Boolean(view.viewTaskId && !view.isActiveTaskHydrated),
-    contextSwitchVersion: view.contextSwitchVersion,
-  },
-  taskTabs: {
-    taskTabs: tabs.taskTabs,
-    availableTabTasks: tabs.availableTabTasks,
-    isLoadingTasks: tabs.isLoadingTasks,
-    onCreateTab: tabs.onCreateTab,
-    onCloseTab: tabs.onCloseTab,
-  },
-  documents,
-  readiness,
-  sessionActions,
-  modelSelection: {
-    selectedModelSelection: modelSelection.selectedModelSelection,
-    isSelectionCatalogLoading: modelSelection.isSelectionCatalogLoading,
-    agentOptions: modelSelection.agentOptions,
-    modelOptions: modelSelection.modelOptions,
-    modelGroups: modelSelection.modelGroups,
-    variantOptions: modelSelection.variantOptions,
-    onSelectAgent: modelSelection.handleSelectAgent,
-    onSelectModel: modelSelection.handleSelectModel,
-    onSelectVariant: modelSelection.handleSelectVariant,
-    activeSessionAgentColors: modelSelection.activeSessionAgentColors,
-    activeSessionContextUsage: modelSelection.activeSessionContextUsage,
-  },
-  permissions,
-  composer,
-});
+}: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
+  const { activeTaskTabId, ...taskTabs } = tabs;
+  const { handleSelectAgent, handleSelectModel, handleSelectVariant, ...restOfModelSelection } =
+    modelSelection;
+
+  return {
+    core: {
+      activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
+      taskId: view.viewTaskId,
+      role: view.viewRole,
+      selectedTask: view.viewSelectedTask,
+      sessionsForTask: sessions.viewSessionsForTask,
+      contextSessionsLength: sessions.viewSessionsForTask.length,
+      activeSession: sessions.viewActiveSession,
+      isTaskHydrating: Boolean(view.viewTaskId && !view.isActiveTaskHydrated),
+      contextSwitchVersion: view.contextSwitchVersion,
+    },
+    taskTabs,
+    documents,
+    readiness,
+    sessionActions,
+    modelSelection: {
+      ...restOfModelSelection,
+      onSelectAgent: handleSelectAgent,
+      onSelectModel: handleSelectModel,
+      onSelectVariant: handleSelectVariant,
+    },
+    permissions,
+    composer,
+  };
+};
 
 export function useAgentStudioOrchestrationController({
   workspace,
