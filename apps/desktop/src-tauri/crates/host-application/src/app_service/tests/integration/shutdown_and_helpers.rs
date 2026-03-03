@@ -31,7 +31,8 @@ use crate::app_service::{
     resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
     terminate_process_by_pid, validate_parent_relationships_for_update,
     with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
-    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
 #[test]
@@ -96,8 +97,10 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
                 },
                 child: spawn_sleep_process(20),
                 _opencode_process_guard: None,
-                cleanup_repo_path: Some("/tmp/non-existent-repo-for-shutdown".to_string()),
-                cleanup_worktree_path: Some("/tmp/non-existent-worktree-for-shutdown".to_string()),
+                cleanup_target: Some(RuntimeCleanupTarget {
+                    repo_path: "/tmp/non-existent-repo-for-shutdown".to_string(),
+                    worktree_path: "/tmp/non-existent-worktree-for-shutdown".to_string(),
+                }),
             },
         );
 
@@ -233,8 +236,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
                 },
                 child: runtime_child,
                 _opencode_process_guard: None,
-                cleanup_repo_path: None,
-                cleanup_worktree_path: None,
+                cleanup_target: None,
             },
         );
 

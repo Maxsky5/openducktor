@@ -27,8 +27,7 @@ pub(super) struct RuntimeStartInput<'a> {
     task_id: &'a str,
     role: RuntimeRole,
     working_directory: String,
-    cleanup_repo_path: Option<String>,
-    cleanup_worktree_path: Option<String>,
+    cleanup_target: Option<super::RuntimeCleanupTarget>,
     tracking_error_context: &'static str,
     startup_error_context: String,
     post_start_policy: Option<RuntimePostStartPolicy<'a>>,
@@ -41,8 +40,7 @@ pub(super) enum RuntimePrerequisiteResolution {
 
 pub(super) struct RuntimePrerequisites {
     working_directory: String,
-    cleanup_repo_path: Option<String>,
-    cleanup_worktree_path: Option<String>,
+    cleanup_target: Option<super::RuntimeCleanupTarget>,
 }
 
 pub(super) struct SpawnedRuntimeServer {
@@ -122,8 +120,7 @@ impl AppService {
             task_id: Self::WORKSPACE_RUNTIME_TASK_ID,
             role: Self::WORKSPACE_RUNTIME_ROLE,
             working_directory: repo_key.clone(),
-            cleanup_repo_path: None,
-            cleanup_worktree_path: None,
+            cleanup_target: None,
             tracking_error_context: "Failed tracking spawned OpenCode workspace runtime",
             startup_error_context: format!("OpenCode workspace runtime failed to start for {repo_path}"),
             post_start_policy: Some(RuntimePostStartPolicy {
@@ -160,8 +157,7 @@ impl AppService {
             task_id,
             role: runtime_role,
             working_directory: prerequisites.working_directory,
-            cleanup_repo_path: prerequisites.cleanup_repo_path,
-            cleanup_worktree_path: prerequisites.cleanup_worktree_path,
+            cleanup_target: prerequisites.cleanup_target,
             tracking_error_context: "Failed tracking spawned OpenCode agent runtime",
             startup_error_context: format!("OpenCode runtime failed to start for task {task_id}"),
             post_start_policy: Some(RuntimePostStartPolicy {

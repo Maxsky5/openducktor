@@ -32,7 +32,8 @@ use crate::app_service::{
     resolve_mcp_command, resolve_opencode_binary_path, terminate_child_process,
     terminate_process_by_pid, validate_parent_relationships_for_update,
     with_locked_opencode_process_registry, AgentRuntimeProcess, OpencodeProcessRegistryInstance,
-    RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
+    RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
 #[test]
@@ -131,12 +132,11 @@ fn opencode_workspace_runtime_ensure_stops_spawned_child_when_post_start_prune_f
                 },
                 child: stale_child,
                 _opencode_process_guard: None,
-                cleanup_repo_path: Some(
-                    "/tmp/non-existent-repo-for-ensure-post-start-prune".to_string(),
-                ),
-                cleanup_worktree_path: Some(
-                    "/tmp/non-existent-worktree-for-ensure-post-start-prune".to_string(),
-                ),
+                cleanup_target: Some(RuntimeCleanupTarget {
+                    repo_path: "/tmp/non-existent-repo-for-ensure-post-start-prune".to_string(),
+                    worktree_path:
+                        "/tmp/non-existent-worktree-for-ensure-post-start-prune".to_string(),
+                }),
             },
         );
 
@@ -740,8 +740,10 @@ fn opencode_runtime_stop_reports_cleanup_failure() -> Result<()> {
                 },
                 child: spawn_sleep_process(20),
                 _opencode_process_guard: None,
-                cleanup_repo_path: Some("/tmp/non-existent-repo-for-stop".to_string()),
-                cleanup_worktree_path: Some("/tmp/non-existent-worktree-for-stop".to_string()),
+                cleanup_target: Some(RuntimeCleanupTarget {
+                    repo_path: "/tmp/non-existent-repo-for-stop".to_string(),
+                    worktree_path: "/tmp/non-existent-worktree-for-stop".to_string(),
+                }),
             },
         );
 
@@ -803,8 +805,7 @@ fn opencode_runtime_list_prunes_stale_entries() -> Result<()> {
                 summary,
                 child: stale_child,
                 _opencode_process_guard: None,
-                cleanup_repo_path: None,
-                cleanup_worktree_path: None,
+                cleanup_target: None,
             },
         );
 
@@ -859,8 +860,10 @@ fn opencode_runtime_list_surfaces_stale_cleanup_failure() -> Result<()> {
                 summary,
                 child: stale_child,
                 _opencode_process_guard: None,
-                cleanup_repo_path: Some("/tmp/non-existent-repo-for-prune".to_string()),
-                cleanup_worktree_path: Some("/tmp/non-existent-worktree-for-prune".to_string()),
+                cleanup_target: Some(RuntimeCleanupTarget {
+                    repo_path: "/tmp/non-existent-repo-for-prune".to_string(),
+                    worktree_path: "/tmp/non-existent-worktree-for-prune".to_string(),
+                }),
             },
         );
 

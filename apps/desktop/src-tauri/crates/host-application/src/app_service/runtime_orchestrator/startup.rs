@@ -28,8 +28,7 @@ impl AppService {
                 let tracking_error = anyhow!(error).context(input.tracking_error_context);
                 if let Err(cleanup_error) = Self::cleanup_started_runtime(
                     &mut child,
-                    input.cleanup_repo_path.as_deref(),
-                    input.cleanup_worktree_path.as_deref(),
+                    input.cleanup_target.as_ref(),
                 ) {
                     return Err(Self::append_cleanup_error(tracking_error, cleanup_error));
                 }
@@ -78,8 +77,7 @@ impl AppService {
                 let startup_error = anyhow!(error).context(input.startup_error_context.clone());
                 if let Err(cleanup_error) = Self::cleanup_started_runtime(
                     &mut child,
-                    input.cleanup_repo_path.as_deref(),
-                    input.cleanup_worktree_path.as_deref(),
+                    input.cleanup_target.as_ref(),
                 ) {
                     return Err(Self::append_cleanup_error(startup_error, cleanup_error));
                 }

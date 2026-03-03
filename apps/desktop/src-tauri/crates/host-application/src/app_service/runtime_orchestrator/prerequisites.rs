@@ -1,7 +1,5 @@
-use super::super::{qa_worktree::prepare_qa_worktree, AppService};
-use super::{
-    RuntimeExistingLookup, RuntimePrerequisiteResolution, RuntimePrerequisites,
-};
+use super::super::{qa_worktree::prepare_qa_worktree, AppService, RuntimeCleanupTarget};
+use super::{RuntimeExistingLookup, RuntimePrerequisiteResolution, RuntimePrerequisites};
 use anyhow::{anyhow, Result};
 use host_domain::AgentRuntimeRole;
 use std::path::Path;
@@ -40,22 +38,19 @@ impl AppService {
 
         let prerequisites = match role {
             AgentRuntimeRole::Qa => {
-                let setup = prepare_qa_worktree(
-                    repo_key,
-                    task_id,
-                    task.title.as_str(),
-                    &self.config_store,
-                )?;
+                let setup =
+                    prepare_qa_worktree(repo_key, task_id, task.title.as_str(), &self.config_store)?;
                 RuntimePrerequisites {
                     working_directory: setup.worktree_path.clone(),
-                    cleanup_repo_path: Some(setup.repo_path),
-                    cleanup_worktree_path: Some(setup.worktree_path),
+                    cleanup_target: Some(RuntimeCleanupTarget {
+                        repo_path: setup.repo_path,
+                        worktree_path: setup.worktree_path,
+                    }),
                 }
             }
             AgentRuntimeRole::Spec | AgentRuntimeRole::Planner => RuntimePrerequisites {
                 working_directory: repo_key.to_string(),
-                cleanup_repo_path: None,
-                cleanup_worktree_path: None,
+                cleanup_target: None,
             },
         };
 
