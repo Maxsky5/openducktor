@@ -12,12 +12,10 @@ import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 
-export const toPersistedSessionRecord = (
-  session: AgentSessionState,
-  _updatedAt: string,
-): AgentSessionRecord => ({
+export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
   sessionId: session.sessionId,
   role: session.role,
+  scenario: session.scenario,
   startedAt: session.startedAt,
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel ?? undefined,

@@ -1598,7 +1598,10 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
         .find(|entry| entry["sessionId"] == Value::String("session-1".to_string()))
         .expect("session-1 missing");
     assert!(session_1.get("status").is_none());
-    assert!(session_1.get("scenario").is_none());
+    assert_eq!(
+        session_1.get("scenario").and_then(Value::as_str),
+        Some("build_default")
+    );
     assert!(session_1.get("baseUrl").is_none());
     Ok(())
 }

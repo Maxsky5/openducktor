@@ -33,12 +33,13 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
   });
 
-  test("persists session with endedAt for terminal states", () => {
+  test("persists compact session fields and keeps scenario", () => {
     const session: AgentSessionState = {
       ...fromPersistedSessionRecord(recordFixture, "task-1"),
       status: "error",
     };
-    const persisted = toPersistedSessionRecord(session, "2026-02-22T08:10:00.000Z");
+    const persisted = toPersistedSessionRecord(session);
+    expect(persisted.scenario).toBe("build_implementation_start");
     expect(persisted.endedAt).toBeUndefined();
   });
 

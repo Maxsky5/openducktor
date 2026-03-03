@@ -15,6 +15,15 @@ impl BeadsTaskStore {
             return Err(anyhow!("Agent session role is required"));
         }
 
+        let scenario = session
+            .scenario
+            .as_mut()
+            .ok_or_else(|| anyhow!("Agent session scenario is required"))?;
+        *scenario = scenario.trim().to_string();
+        if scenario.is_empty() {
+            return Err(anyhow!("Agent session scenario is required"));
+        }
+
         session.started_at = session.started_at.trim().to_string();
         if session.started_at.is_empty() {
             return Err(anyhow!("Agent session startedAt is required"));
@@ -27,7 +36,6 @@ impl BeadsTaskStore {
 
         session.external_session_id = None;
         session.task_id = None;
-        session.scenario = None;
         session.status = None;
         session.updated_at = None;
         session.ended_at = None;

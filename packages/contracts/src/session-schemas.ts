@@ -10,35 +10,26 @@ export type AgentSessionRole = z.infer<typeof agentSessionRoleSchema>;
 export const agentSessionScenarioSchema = agentScenarioSchema;
 export type AgentSessionScenario = z.infer<typeof agentSessionScenarioSchema>;
 
+const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (value === null ? undefined : value), schema.optional());
+
 export const agentSessionModelSelectionSchema = z.object({
   providerId: z.string(),
   modelId: z.string(),
-  variant: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-  opencodeAgent: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    z.string().optional(),
-  ),
+  variant: optionalFromNullable(z.string()),
+  opencodeAgent: optionalFromNullable(z.string()),
 });
 export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelectionSchema>;
 
-const optionalStringFromNullable = z.preprocess(
-  (value) => (value === null ? undefined : value),
-  z.string().optional(),
-);
+const optionalStringFromNullable = optionalFromNullable(z.string());
 
 export const agentSessionRecordSchema = z.object({
   sessionId: z.string(),
   externalSessionId: optionalStringFromNullable,
   taskId: optionalStringFromNullable,
   role: agentSessionRoleSchema,
-  scenario: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    agentSessionScenarioSchema.optional(),
-  ),
-  status: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    agentSessionStatusSchema.optional(),
-  ),
+  scenario: optionalFromNullable(agentSessionScenarioSchema),
+  status: optionalFromNullable(agentSessionStatusSchema),
   startedAt: z.string(),
   updatedAt: optionalStringFromNullable,
   endedAt: optionalStringFromNullable,
@@ -46,9 +37,6 @@ export const agentSessionRecordSchema = z.object({
   runId: optionalStringFromNullable,
   baseUrl: optionalStringFromNullable,
   workingDirectory: z.string(),
-  selectedModel: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    agentSessionModelSelectionSchema.optional(),
-  ),
+  selectedModel: optionalFromNullable(agentSessionModelSelectionSchema),
 });
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;

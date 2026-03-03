@@ -13,7 +13,6 @@ import {
   createLoadAgentSessions,
   loadRepoDefaultModel,
   loadTaskDocuments,
-  now,
   runOrchestratorSideEffect,
   toPersistedSessionRecord,
 } from "./agent-orchestrator";
@@ -69,12 +68,7 @@ export function useAgentOrchestratorOperations({
       if (!activeRepo) {
         return;
       }
-      const updatedAt = now();
-      await host.agentSessionUpsert(
-        activeRepo,
-        session.taskId,
-        toPersistedSessionRecord(session, updatedAt),
-      );
+      await host.agentSessionUpsert(activeRepo, session.taskId, toPersistedSessionRecord(session));
     },
     [activeRepo],
   );
