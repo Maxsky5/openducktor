@@ -1,7 +1,7 @@
 import {
   type AgentSessionRecord,
-  agentSessionScenarioSchema,
   agentSessionRecordSchema,
+  agentSessionScenarioSchema,
   type TaskMetadataPayload,
   taskMetadataPayloadSchema,
 } from "@openducktor/contracts";
