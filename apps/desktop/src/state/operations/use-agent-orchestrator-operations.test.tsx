@@ -1093,11 +1093,15 @@ describe("use-agent-orchestrator-operations", () => {
       };
       host.workspaceGetRepoConfig = async () => ({
         branchPrefix: "obp",
+        defaultTargetBranch: "main",
         trustedHooks: false,
         hooks: {
           preStart: [],
           postComplete: [],
         },
+        worktreeSetupScript: "",
+        worktreeCleanupScript: "",
+        worktreeFileCopies: [],
         agentDefaults: {},
       });
 
