@@ -201,17 +201,18 @@ export const useAgentStudioComposerModel = ({
   const isModelSelectionPending = Boolean(
     session.activeSession?.isLoadingModelCatalog && !session.activeSession?.selectedModel,
   );
+  const activeSessionId = session.activeSession?.sessionId;
 
   const handleSend = useCallback((): void => {
     void interaction.onSend();
   }, [interaction.onSend]);
 
   const handleStopSession = useCallback((): void => {
-    if (!session.activeSession) {
+    if (!activeSessionId) {
       return;
     }
-    void session.stopAgentSession(session.activeSession.sessionId);
-  }, [session.activeSession, session.stopAgentSession]);
+    void session.stopAgentSession(activeSessionId);
+  }, [activeSessionId, session.stopAgentSession]);
 
   return useMemo(
     () =>

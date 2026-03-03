@@ -541,6 +541,51 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("keeps composer model stable when active session reference changes with same session id", async () => {
+    const initialSession = createSession("session-1", "external-1", {
+      role: "spec",
+      status: "running",
+      isLoadingModelCatalog: false,
+    });
+    const baseProps = createHookArgs({
+      core: {
+        activeSession: initialSession,
+        sessionsForTask: [initialSession],
+      },
+      composer: {
+        input: "draft",
+      },
+      sessionActions: {
+        isSessionWorking: true,
+      },
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialComposerModel = harness.getLatest().agentChatModel.composer;
+
+    const sameSessionIdNewRef = createSession("session-1", "external-1", {
+      role: "spec",
+      status: "running",
+      isLoadingModelCatalog: false,
+    });
+    await harness.update(
+      createHookArgs({
+        ...baseProps,
+        core: {
+          ...baseProps.core,
+          activeSession: sameSessionIdNewRef,
+          sessionsForTask: [sameSessionIdNewRef],
+        },
+      }),
+    );
+
+    const nextComposerModel = harness.getLatest().agentChatModel.composer;
+    expect(nextComposerModel).toBe(initialComposerModel);
+
+    await harness.unmount();
+  });
+
   test("treats unavailable selected role as read-only and hides kickoff action", async () => {
     const unavailablePlannerTask = createTaskCardFixture({
       status: "open",
