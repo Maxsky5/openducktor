@@ -103,40 +103,37 @@ describe("useAgentStudioTaskHydration", () => {
     }
   });
 
-  test("marks a task hydrated even when loading sessions rejects", async () => {
-    const deferred = createDeferred<void>();
+  test("keeps a task unhydrated when loading sessions rejects", async () => {
     const loadError = new Error("load failed");
-    const loadAgentSessions = mock(() => {
-      const promise = deferred.promise;
-      const originalFinally = promise.finally.bind(promise);
-      promise.finally = ((onFinally) => {
-        const finalPromise = originalFinally(onFinally);
-        void finalPromise.catch(() => undefined);
-        return finalPromise;
-      }) as Promise<void>["finally"];
-      return promise;
+    let loadCount = 0;
+    const loadAgentSessions = mock(async () => {
+      loadCount += 1;
+      if (loadCount === 1) {
+        throw loadError;
+      }
     });
-
-    const harness = createHookHarness(createBaseArgs({ loadAgentSessions }));
+    const args = createBaseArgs({ loadAgentSessions });
+    const harness = createHookHarness(args);
 
     try {
       await harness.mount();
-      const rejectionCapture = deferred.promise.then(
-        () => null,
-        (error: unknown) => error,
-      );
-
-      await harness.run(() => {
-        deferred.reject(loadError);
-      });
-
-      const capturedError = await rejectionCapture;
-      expect(capturedError).toBe(loadError);
-
-      await harness.waitFor((state) => state["/repo-a:task-1"] === true);
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
+      expect(harness.getLatest()["/repo-a:task-1"]).toBeUndefined();
       expect(loadAgentSessions).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        createBaseArgs({
+          activeTaskId: "task-2",
+          loadAgentSessions,
+        }),
+      );
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 2);
+      expect(harness.getLatest()["/repo-a:task-2"]).toBe(true);
+
+      await harness.update(args);
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 3);
+      expect(harness.getLatest()["/repo-a:task-1"]).toBe(true);
     } finally {
-      deferred.resolve(undefined);
       await harness.unmount();
     }
   });
