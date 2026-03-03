@@ -1,6 +1,6 @@
 import { useVirtualizer, type VirtualItem, type Virtualizer } from "@tanstack/react-virtual";
 import type { RefObject } from "react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
@@ -137,13 +137,16 @@ function useVirtualRowMeasurements({
 }: UseVirtualRowMeasurementsInput): UseVirtualRowMeasurementsResult {
   const virtualRowsRef = useRef(virtualRows);
   virtualRowsRef.current = virtualRows;
-  const measuredSessionIdRef = useRef<string | null>(null);
+  const measuredSessionIdRef = useRef<string | null>(activeSessionId);
   const measuredRowHeightByKeyRef = useRef<Record<string, number>>({});
 
-  if (measuredSessionIdRef.current !== activeSessionId) {
+  useEffect(() => {
+    if (measuredSessionIdRef.current === activeSessionId) {
+      return;
+    }
     measuredSessionIdRef.current = activeSessionId;
     measuredRowHeightByKeyRef.current = {};
-  }
+  }, [activeSessionId]);
 
   const estimateRowSize = useCallback((index: number): number => {
     const rows = virtualRowsRef.current;
