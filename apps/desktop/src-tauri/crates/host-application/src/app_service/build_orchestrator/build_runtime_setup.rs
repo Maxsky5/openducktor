@@ -5,7 +5,7 @@ use super::super::{
     StartupEventPayload, TrackedOpencodeProcessGuard,
 };
 use anyhow::{anyhow, Context, Result};
-use host_domain::TaskStatus;
+use host_domain::{TaskStatus, TASK_METADATA_NAMESPACE};
 use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, RepoConfig};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -177,11 +177,10 @@ impl AppService {
         prepared_worktree: &PreparedBuildWorktree,
     ) -> Result<SpawnedBuildAgent> {
         let port = pick_free_port()?;
-        let metadata_namespace = self.config_store.task_metadata_namespace()?;
         let mut child = spawn_opencode_server(
             prepared_worktree.worktree_dir.as_path(),
             Path::new(prerequisites.repo_path.as_str()),
-            metadata_namespace.as_str(),
+            TASK_METADATA_NAMESPACE,
             port,
         )?;
         let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {

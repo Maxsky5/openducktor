@@ -1,8 +1,7 @@
 use super::migrate::{canonicalize_workspace_key, migrate_repos_to_canonical_keys};
 use super::normalize::{normalize_global_config, normalize_repo_config};
 use super::types::{
-    default_task_metadata_namespace, hook_set_fingerprint, GlobalConfig, HookSet,
-    OpencodeStartupReadinessConfig, RepoConfig,
+    hook_set_fingerprint, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
@@ -87,16 +86,6 @@ impl AppConfigStore {
         parsed.recent_repos = canonical_recent;
 
         Ok(parsed)
-    }
-
-    pub fn task_metadata_namespace(&self) -> Result<String> {
-        let config = self.load()?;
-        let trimmed = config.task_metadata_namespace.trim();
-        if trimmed.is_empty() {
-            Ok(default_task_metadata_namespace())
-        } else {
-            Ok(trimmed.to_string())
-        }
     }
 
     pub fn opencode_startup_readiness(&self) -> Result<OpencodeStartupReadinessConfig> {

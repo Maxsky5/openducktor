@@ -46,38 +46,9 @@ mod tests {
         let (store, root) = test_store("load-default");
         let config = store.load().expect("load default");
         assert_eq!(config.version, 1);
-        assert_eq!(config.task_metadata_namespace, "openducktor");
         assert_eq!(config.opencode_startup.timeout_ms, 8_000);
         assert_eq!(config.opencode_startup.connect_timeout_ms, 250);
         assert!(config.repos.is_empty());
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn task_metadata_namespace_defaults_when_blank() {
-        let (store, root) = test_store("namespace-default");
-        let config = GlobalConfig {
-            task_metadata_namespace: "   ".to_string(),
-            ..GlobalConfig::default()
-        };
-        store.save(&config).expect("save config");
-
-        let namespace = store.task_metadata_namespace().expect("namespace");
-        assert_eq!(namespace, "openducktor");
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn task_metadata_namespace_trims_non_empty_value() {
-        let (store, root) = test_store("namespace-trim");
-        let config = GlobalConfig {
-            task_metadata_namespace: "  custom-ns  ".to_string(),
-            ..GlobalConfig::default()
-        };
-        store.save(&config).expect("save config");
-
-        let namespace = store.task_metadata_namespace().expect("namespace");
-        assert_eq!(namespace, "custom-ns");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -482,7 +453,6 @@ mod tests {
         let payload = json!({
             "version": 1,
             "activeRepo": repo_str,
-            "taskMetadataNamespace": "   ",
             "repos": repos,
             "recentRepos": [],
             "scheduler": {
@@ -521,9 +491,6 @@ mod tests {
         assert_eq!(spec.model_id, "gpt-5");
         assert!(spec.variant.is_none());
         assert!(spec.opencode_agent.is_none());
-
-        let namespace = store.task_metadata_namespace().expect("namespace");
-        assert_eq!(namespace, "openducktor");
 
         let _ = fs::remove_dir_all(root);
     }

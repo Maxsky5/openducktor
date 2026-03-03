@@ -5,7 +5,10 @@ use super::{
     TrackedOpencodeProcessGuard,
 };
 use anyhow::{anyhow, Result};
-use host_domain::{now_rfc3339, AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeRole};
+use host_domain::{
+    now_rfc3339, AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeRole,
+    TASK_METADATA_NAMESPACE,
+};
 use host_infra_system::pick_free_port;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -290,11 +293,10 @@ impl AppService {
     fn spawn_runtime_server(&self, input: &RuntimeStartInput<'_>) -> Result<SpawnedRuntimeServer> {
         let port = pick_free_port()?;
         let runtime_id = format!("runtime-{}", Uuid::new_v4().simple());
-        let metadata_namespace = self.config_store.task_metadata_namespace()?;
         let mut child = spawn_opencode_server(
             Path::new(input.working_directory.as_str()),
             Path::new(input.repo_path),
-            metadata_namespace.as_str(),
+            TASK_METADATA_NAMESPACE,
             port,
         )?;
         let opencode_process_guard = match self.track_pending_opencode_process(child.id()) {

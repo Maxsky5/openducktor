@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use host_application::{AppService, RunEmitter};
-use host_domain::RunEvent;
 #[cfg(test)]
 use host_domain::TaskStatus;
+use host_domain::{RunEvent, TASK_METADATA_NAMESPACE};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::AppConfigStore;
 use serde::Deserialize;
@@ -24,11 +24,9 @@ use commands::workspace::*;
 
 struct AppState {
     service: Arc<AppService>,
-    startup_errors: Vec<String>,
     hook_trust_challenges: Mutex<HashMap<String, HookTrustChallenge>>,
 }
 
-const FALLBACK_TASK_METADATA_NAMESPACE: &str = "openducktor";
 const HOOK_TRUST_CHALLENGE_TTL: Duration = Duration::from_secs(120);
 static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
 
@@ -147,53 +145,24 @@ where
         .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
 
-fn extend_runtime_errors_with_startup(
-    mut check: host_domain::RuntimeCheck,
-    startup_errors: &[String],
-) -> host_domain::RuntimeCheck {
-    check.errors.extend(startup_errors.iter().cloned());
-    check
-}
-
-fn namespace_with_startup_warning(
-    namespace_result: anyhow::Result<String>,
-) -> (String, Option<String>) {
-    match namespace_result {
-        Ok(namespace) => (namespace, None),
-        Err(error) => (
-            FALLBACK_TASK_METADATA_NAMESPACE.to_string(),
-            Some(format!(
-                "Failed to read task metadata namespace from config; using fallback namespace '{}': {error:#}",
-                FALLBACK_TASK_METADATA_NAMESPACE
-            )),
-        ),
-    }
-}
-
 fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
     })
 }
 
-fn bootstrap_service() -> anyhow::Result<(Arc<AppService>, Vec<String>)> {
-    let config_store = AppConfigStore::new().context("failed to initialize config store")?;
-    let mut startup_errors = Vec::new();
-    let (metadata_namespace, startup_warning) =
-        namespace_with_startup_warning(config_store.task_metadata_namespace());
-    if let Some(message) = startup_warning {
-        tracing::warn!(
-            target: "openducktor.startup",
-            warning = %message,
-            "OpenDucktor startup warning"
-        );
-        startup_errors.push(message);
-    }
+fn startup_phase_tracing() {
+    init_tracing_subscriber();
+}
 
-    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(&metadata_namespace));
+fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService>> {
+    let config_store = AppConfigStore::new().context("failed to initialize config store")?;
+    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(
+        TASK_METADATA_NAMESPACE,
+    ));
     let service = Arc::new(AppService::new(task_store, config_store));
 
-    Ok((service, startup_errors))
+    Ok(service)
 }
 
 fn install_shutdown_signal_handler(service: Arc<AppService>) {
@@ -215,91 +184,112 @@ fn install_shutdown_signal_handler(service: Arc<AppService>) {
     }
 }
 
-pub fn run() -> anyhow::Result<()> {
-    init_tracing_subscriber();
-    let (service, startup_errors) = bootstrap_service()?;
-    install_shutdown_signal_handler(service.clone());
+fn startup_phase_shutdown_hooks(service: Arc<AppService>) {
+    install_shutdown_signal_handler(service);
+}
 
-    let app_service = service.clone();
-    tauri::Builder::default()
+fn startup_phase_command_registration(
+    builder: tauri::Builder<tauri::Wry>,
+) -> tauri::Builder<tauri::Wry> {
+    builder.invoke_handler(tauri::generate_handler![
+        system_check,
+        runtime_check,
+        beads_check,
+        workspace_list,
+        workspace_add,
+        workspace_select,
+        workspace_update_repo_config,
+        workspace_save_repo_settings,
+        workspace_update_repo_hooks,
+        workspace_prepare_trusted_hooks_challenge,
+        workspace_get_repo_config,
+        workspace_set_trusted_hooks,
+        git_get_branches,
+        git_get_current_branch,
+        git_switch_branch,
+        git_create_worktree,
+        git_remove_worktree,
+        git_push_branch,
+        git_get_status,
+        git_get_diff,
+        git_commits_ahead_behind,
+        git_get_worktree_status,
+        git_commit_all,
+        git_pull_branch,
+        git_rebase_branch,
+        tasks_list,
+        task_create,
+        task_update,
+        task_delete,
+        task_transition,
+        task_defer,
+        task_resume_deferred,
+        spec_get,
+        task_metadata_get,
+        set_spec,
+        spec_save_document,
+        plan_get,
+        set_plan,
+        plan_save_document,
+        qa_get_report,
+        qa_approved,
+        qa_rejected,
+        build_start,
+        build_respond,
+        build_stop,
+        build_cleanup,
+        build_blocked,
+        build_resumed,
+        build_completed,
+        human_request_changes,
+        human_approve,
+        runs_list,
+        opencode_runtime_list,
+        opencode_runtime_start,
+        opencode_runtime_stop,
+        opencode_repo_runtime_ensure,
+        agent_sessions_list,
+        agent_session_upsert,
+        get_theme,
+        set_theme
+    ])
+}
+
+fn startup_phase_build_tauri_app(
+    service: Arc<AppService>,
+) -> anyhow::Result<tauri::App<tauri::Wry>> {
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             service,
-            startup_errors,
             hook_trust_challenges: Mutex::new(HashMap::new()),
-        })
-        .invoke_handler(tauri::generate_handler![
-            system_check,
-            runtime_check,
-            beads_check,
-            workspace_list,
-            workspace_add,
-            workspace_select,
-            workspace_update_repo_config,
-            workspace_save_repo_settings,
-            workspace_update_repo_hooks,
-            workspace_prepare_trusted_hooks_challenge,
-            workspace_get_repo_config,
-            workspace_set_trusted_hooks,
-            git_get_branches,
-            git_get_current_branch,
-            git_switch_branch,
-            git_create_worktree,
-            git_remove_worktree,
-            git_push_branch,
-            git_get_status,
-            git_get_diff,
-            git_commits_ahead_behind,
-            git_get_worktree_status,
-            git_commit_all,
-            git_pull_branch,
-            git_rebase_branch,
-            tasks_list,
-            task_create,
-            task_update,
-            task_delete,
-            task_transition,
-            task_defer,
-            task_resume_deferred,
-            spec_get,
-            task_metadata_get,
-            set_spec,
-            spec_save_document,
-            plan_get,
-            set_plan,
-            plan_save_document,
-            qa_get_report,
-            qa_approved,
-            qa_rejected,
-            build_start,
-            build_respond,
-            build_stop,
-            build_cleanup,
-            build_blocked,
-            build_resumed,
-            build_completed,
-            human_request_changes,
-            human_approve,
-            runs_list,
-            opencode_runtime_list,
-            opencode_runtime_start,
-            opencode_runtime_stop,
-            opencode_repo_runtime_ensure,
-            agent_sessions_list,
-            agent_session_upsert,
-            get_theme,
-            set_theme
-        ])
-        .build(tauri::generate_context!())
-        .context("error while building openducktor")?
-        .run(move |_handle, event| {
-            if matches!(
-                event,
-                TauriRunEvent::ExitRequested { .. } | TauriRunEvent::Exit
-            ) {
-                let _ = app_service.shutdown();
-            }
         });
+
+    startup_phase_command_registration(builder)
+        .build(tauri::generate_context!())
+        .context("error while building openducktor")
+}
+
+fn startup_phase_exit_shutdown_handler(
+    app_service: Arc<AppService>,
+) -> impl FnMut(&AppHandle, TauriRunEvent) {
+    move |_handle, event| {
+        if matches!(
+            event,
+            TauriRunEvent::ExitRequested { .. } | TauriRunEvent::Exit
+        ) {
+            let _ = app_service.shutdown();
+        }
+    }
+}
+
+pub fn run() -> anyhow::Result<()> {
+    startup_phase_tracing();
+    let service = startup_phase_service_bootstrap()?;
+    let app_service = service.clone();
+    startup_phase_shutdown_hooks(app_service.clone());
+
+    startup_phase_build_tauri_app(service)?.run(startup_phase_exit_shutdown_handler(app_service));
 
     Ok(())
 }
@@ -308,56 +298,7 @@ pub fn run() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use anyhow::anyhow;
-    use host_domain::RuntimeCheck;
     use serde_json::{json, Value};
-
-    #[test]
-    fn namespace_with_startup_warning_uses_configured_namespace() {
-        let (namespace, warning) =
-            namespace_with_startup_warning(Ok("custom-namespace".to_string()));
-
-        assert_eq!(namespace, "custom-namespace");
-        assert!(warning.is_none());
-    }
-
-    #[test]
-    fn namespace_with_startup_warning_falls_back_and_reports_error_context() -> Result<(), String> {
-        let (namespace, warning) =
-            namespace_with_startup_warning(Err(anyhow!("config parse failure")));
-
-        assert_eq!(namespace, FALLBACK_TASK_METADATA_NAMESPACE);
-
-        let warning =
-            warning.ok_or_else(|| "expected startup warning for fallback namespace".to_string())?;
-        assert!(
-            warning.contains("using fallback namespace 'openducktor'"),
-            "warning should mention fallback namespace: {warning}"
-        );
-        assert!(
-            warning.contains("config parse failure"),
-            "warning should include original error context: {warning}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn extend_runtime_errors_with_startup_appends_startup_messages() {
-        let runtime = RuntimeCheck {
-            git_ok: true,
-            git_version: Some("git version 2.0.0".to_string()),
-            opencode_ok: true,
-            opencode_version: Some("1.0.0".to_string()),
-            errors: vec!["runtime issue".to_string()],
-        };
-
-        let startup_errors = vec!["startup warning".to_string()];
-        let updated = extend_runtime_errors_with_startup(runtime, &startup_errors);
-
-        assert_eq!(
-            updated.errors,
-            vec!["runtime issue".to_string(), "startup warning".to_string()]
-        );
-    }
 
     #[test]
     fn run_service_blocking_propagates_operation_error() {

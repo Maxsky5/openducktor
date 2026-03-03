@@ -1,4 +1,4 @@
-use crate::{as_error, extend_runtime_errors_with_startup, run_service_blocking, AppState};
+use crate::{as_error, run_service_blocking, AppState};
 use host_domain::{AgentRuntimeRole, AgentRuntimeSummary, BeadsCheck, RuntimeCheck, SystemCheck};
 use tauri::State;
 
@@ -15,15 +15,11 @@ pub async fn runtime_check(
     state: State<'_, AppState>,
     force: Option<bool>,
 ) -> Result<RuntimeCheck, String> {
-    let check = as_error(
+    as_error(
         state
             .service
             .runtime_check_with_refresh(force.unwrap_or(false)),
-    )?;
-    Ok(extend_runtime_errors_with_startup(
-        check,
-        &state.startup_errors,
-    ))
+    )
 }
 
 #[tauri::command]

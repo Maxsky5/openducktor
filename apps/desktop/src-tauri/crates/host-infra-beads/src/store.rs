@@ -3,7 +3,7 @@ use host_domain::{
     now_rfc3339, AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument,
     TaskCard, TaskMetadata, TaskStore, UpdateTaskPatch,
 };
-use host_infra_system::{compute_repo_slug, resolve_central_beads_dir, AppConfigStore};
+use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -28,12 +28,9 @@ mod task_ops;
 
 use cache::TaskListCacheState;
 
-type MetadataNamespaceResolver = Arc<dyn Fn() -> Result<String> + Send + Sync>;
-
 pub struct BeadsTaskStore {
     pub(crate) command_runner: Arc<dyn CommandRunner>,
     pub(crate) metadata_namespace: Mutex<String>,
-    pub(crate) metadata_namespace_resolver: Option<MetadataNamespaceResolver>,
     pub(crate) init_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     pub(crate) initialized_repos: Mutex<HashSet<String>>,
     task_list_cache: Mutex<HashMap<String, TaskListCacheState>>,
@@ -43,10 +40,6 @@ impl fmt::Debug for BeadsTaskStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BeadsTaskStore")
             .field("metadata_namespace", &self.metadata_namespace_snapshot())
-            .field(
-                "has_metadata_namespace_resolver",
-                &self.metadata_namespace_resolver.is_some(),
-            )
             .finish_non_exhaustive()
     }
 }
@@ -59,30 +52,20 @@ impl Default for BeadsTaskStore {
 
 impl BeadsTaskStore {
     pub fn new() -> Self {
-        Self::with_metadata_namespace_and_runner(
-            DEFAULT_METADATA_NAMESPACE,
-            Arc::new(ProcessCommandRunner),
-            Some(Self::default_metadata_namespace_resolver()),
-        )
+        Self::with_metadata_namespace_and_runner(DEFAULT_METADATA_NAMESPACE, Arc::new(ProcessCommandRunner))
     }
 
     pub fn with_metadata_namespace(namespace: &str) -> Self {
-        Self::with_metadata_namespace_and_runner(
-            namespace,
-            Arc::new(ProcessCommandRunner),
-            Some(Self::default_metadata_namespace_resolver()),
-        )
+        Self::with_metadata_namespace_and_runner(namespace, Arc::new(ProcessCommandRunner))
     }
 
     fn with_metadata_namespace_and_runner(
         namespace: &str,
         command_runner: Arc<dyn CommandRunner>,
-        metadata_namespace_resolver: Option<MetadataNamespaceResolver>,
     ) -> Self {
         Self {
             command_runner,
             metadata_namespace: Mutex::new(Self::normalize_metadata_namespace(namespace)),
-            metadata_namespace_resolver,
             init_locks: Mutex::new(HashMap::new()),
             initialized_repos: Mutex::new(HashSet::new()),
             task_list_cache: Mutex::new(HashMap::new()),
@@ -94,20 +77,7 @@ impl BeadsTaskStore {
         namespace: &str,
         command_runner: Arc<dyn CommandRunner>,
     ) -> Self {
-        Self::with_metadata_namespace_and_runner(namespace, command_runner, None)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_test_runner_and_namespace_resolver(
-        namespace: &str,
-        command_runner: Arc<dyn CommandRunner>,
-        metadata_namespace_resolver: Arc<dyn Fn() -> Result<String> + Send + Sync>,
-    ) -> Self {
-        Self::with_metadata_namespace_and_runner(
-            namespace,
-            command_runner,
-            Some(metadata_namespace_resolver),
-        )
+        Self::with_metadata_namespace_and_runner(namespace, command_runner)
     }
 }
 

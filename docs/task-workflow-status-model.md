@@ -84,12 +84,11 @@ When `qaRequired=false`, transition from build completion skips `ai_review` and 
 ## Metadata Contract (Agent-Owned Documents)
 Agent-authored documents are stored under issue `metadata` only, never in user-authored fields.
 
-Root namespace key is configurable and defaults to `openducktor`.
+Root namespace key is fixed to `openducktor`.
 
 ### Namespace Key Requirement
-- Config key: `taskMetadataNamespace`
-- Default value: `openducktor`
-- All metadata reads/writes must use that key (no hard-coded namespace)
+- Value: `openducktor`
+- All metadata reads/writes must use that key
 
 ### JSON Shape
 ```json
