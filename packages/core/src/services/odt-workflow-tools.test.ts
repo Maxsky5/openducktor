@@ -35,6 +35,7 @@ describe("odt workflow tools", () => {
     expect(resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_spec")).toBe(
       "odt_set_spec",
     );
+    expect(resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_spec_extra")).toBeNull();
     expect(resolveOdtWorkflowToolNameForAuthorization("OpenDucktor_ODT_SET_SPEC")).toBeNull();
     expect(resolveOdtWorkflowToolNameForAuthorization("odt_SET_SPEC")).toBeNull();
     expect(resolveOdtWorkflowToolNameForAuthorization("customprefix_odt_set_spec")).toBeNull();
