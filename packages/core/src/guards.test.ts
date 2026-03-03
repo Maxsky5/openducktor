@@ -2,13 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { isRecord, isUnknownRecord } from "./guards";
 
 describe("guards", () => {
-  test("isUnknownRecord returns true for non-array objects", () => {
+  test("isUnknownRecord returns true for plain objects", () => {
     expect(isUnknownRecord({ key: "value" })).toBe(true);
     expect(isUnknownRecord(Object.create(null))).toBe(true);
-    expect(isUnknownRecord(new Date())).toBe(true);
   });
 
-  test("isUnknownRecord returns false for null, arrays, and primitives", () => {
+  test("isUnknownRecord returns false for non-plain objects and primitives", () => {
+    class ExampleClass {
+      readonly id = "example";
+    }
+
+    expect(isUnknownRecord(new Date())).toBe(false);
+    expect(isUnknownRecord(new ExampleClass())).toBe(false);
     expect(isUnknownRecord(null)).toBe(false);
     expect(isUnknownRecord([])).toBe(false);
     expect(isUnknownRecord("value")).toBe(false);
