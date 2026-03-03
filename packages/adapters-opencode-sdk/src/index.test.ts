@@ -4,6 +4,24 @@ import type { AgentEvent, AgentSessionTodoItem } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
 
 const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
+  "odt_read_task",
+  "odt_set_spec",
+  "odt_set_plan",
+  "odt_build_blocked",
+  "odt_build_resumed",
+  "odt_build_completed",
+  "odt_qa_approved",
+  "odt_qa_rejected",
+  "openducktor_odt_read_task",
+  "openducktor_odt_set_spec",
+  "openducktor_odt_set_plan",
+  "openducktor_odt_build_blocked",
+  "openducktor_odt_build_resumed",
+  "openducktor_odt_build_completed",
+  "openducktor_odt_qa_approved",
+  "openducktor_odt_qa_rejected",
+] as const;
 
 type MockSession = {
   createCalls: unknown[];
@@ -116,8 +134,8 @@ const makeMockClient = ({
     },
   },
   agentsResponse = [],
-  toolIdsResponse = [],
-  mcpStatusResponse = {},
+  toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
+  mcpStatusResponse = { openducktor: { status: "connected" } },
 }: MakeMockClientInput): {
   client: OpencodeClient;
   session: MockSession;
@@ -467,7 +485,11 @@ describe("OpencodeSdkAdapter", () => {
 
   test("sendUserMessage applies runtime workflow aliases when available", async () => {
     const mock = makeMockClient({
-      toolIdsResponse: ["customprefix_odt_set_spec", "customprefix_odt_set_plan"],
+      toolIdsResponse: [
+        "openducktor_odt_read_task",
+        "openducktor_odt_set_spec",
+        "openducktor_odt_set_plan",
+      ],
     });
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -484,9 +506,51 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptCalls).toHaveLength(1);
     const tools = (mock.session.promptCalls[0] as { tools?: Record<string, boolean> }).tools;
     expect(tools).toMatchObject({
-      customprefix_odt_set_spec: true,
-      customprefix_odt_set_plan: false,
+      openducktor_odt_read_task: true,
+      openducktor_odt_set_spec: true,
+      openducktor_odt_set_plan: false,
     });
+  });
+
+  test("sendUserMessage fails closed when trusted MCP server is disconnected", async () => {
+    const mock = makeMockClient({
+      toolIdsResponse: ["odt_read_task", "odt_set_spec"],
+      mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        content: "Write and persist spec",
+      }),
+    ).rejects.toThrow('MCP server "openducktor" is "failed"');
+
+    expect(mock.session.promptCalls).toHaveLength(0);
+  });
+
+  test("sendUserMessage fails closed when required trusted role tools are missing", async () => {
+    const mock = makeMockClient({
+      toolIdsResponse: ["odt_read_task", "odt_set_plan"],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    await expect(
+      adapter.sendUserMessage({
+        sessionId: "session-1",
+        content: "Write and persist spec",
+      }),
+    ).rejects.toThrow("missing trusted runtime tool IDs");
+
+    expect(mock.session.promptCalls).toHaveLength(0);
   });
 
   test("loadSessionHistory preserves assistant text and maps streamed parts", async () => {
