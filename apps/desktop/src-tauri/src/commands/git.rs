@@ -210,8 +210,7 @@ fn hash_worktree_diff_payload(file_diffs: &[host_domain::GitFileDiff]) -> String
     hasher.finish_hex()
 }
 
-fn build_worktree_status_with_snapshot(
-    status_data: host_domain::GitWorktreeStatusData,
+struct WorktreeSnapshotMetadata {
     effective_working_dir: String,
     target_branch: String,
     diff_scope: host_domain::GitDiffScope,
@@ -219,6 +218,11 @@ fn build_worktree_status_with_snapshot(
     hash_version: u32,
     status_hash: String,
     diff_hash: String,
+}
+
+fn build_worktree_status_with_snapshot(
+    status_data: host_domain::GitWorktreeStatusData,
+    snapshot_metadata: WorktreeSnapshotMetadata,
 ) -> host_domain::GitWorktreeStatus {
     host_domain::GitWorktreeStatus {
         current_branch: status_data.current_branch,
@@ -227,13 +231,13 @@ fn build_worktree_status_with_snapshot(
         target_ahead_behind: status_data.target_ahead_behind,
         upstream_ahead_behind: status_data.upstream_ahead_behind,
         snapshot: host_domain::GitWorktreeStatusSnapshot {
-            effective_working_dir,
-            target_branch,
-            diff_scope,
-            observed_at_ms,
-            hash_version,
-            status_hash,
-            diff_hash,
+            effective_working_dir: snapshot_metadata.effective_working_dir,
+            target_branch: snapshot_metadata.target_branch,
+            diff_scope: snapshot_metadata.diff_scope,
+            observed_at_ms: snapshot_metadata.observed_at_ms,
+            hash_version: snapshot_metadata.hash_version,
+            status_hash: snapshot_metadata.status_hash,
+            diff_hash: snapshot_metadata.diff_hash,
         },
     }
 }
@@ -427,13 +431,15 @@ pub async fn git_get_worktree_status(
 
     Ok(build_worktree_status_with_snapshot(
         worktree_status,
-        effective,
-        trimmed_target.to_string(),
-        scope,
-        observed_at_ms,
-        GIT_WORKTREE_HASH_VERSION,
-        status_hash,
-        diff_hash,
+        WorktreeSnapshotMetadata {
+            effective_working_dir: effective,
+            target_branch: trimmed_target.to_string(),
+            diff_scope: scope,
+            observed_at_ms,
+            hash_version: GIT_WORKTREE_HASH_VERSION,
+            status_hash,
+            diff_hash,
+        },
     ))
 }
 
@@ -514,7 +520,7 @@ mod tests {
     use super::{
         build_worktree_status_with_snapshot, parse_diff_scope, require_target_branch,
         hash_worktree_diff_payload, hash_worktree_status_payload, resolve_working_dir,
-        GIT_WORKTREE_HASH_VERSION,
+        WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
     };
     use host_domain::{
         GitAheadBehind, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
@@ -692,13 +698,15 @@ mod tests {
 
         let built = build_worktree_status_with_snapshot(
             status_data,
-            "/tmp/openducktor-worktree".to_string(),
-            "origin/main".to_string(),
-            GitDiffScope::Target,
-            42,
-            GIT_WORKTREE_HASH_VERSION,
-            "0123456789abcdef".to_string(),
-            "fedcba9876543210".to_string(),
+            WorktreeSnapshotMetadata {
+                effective_working_dir: "/tmp/openducktor-worktree".to_string(),
+                target_branch: "origin/main".to_string(),
+                diff_scope: GitDiffScope::Target,
+                observed_at_ms: 42,
+                hash_version: GIT_WORKTREE_HASH_VERSION,
+                status_hash: "0123456789abcdef".to_string(),
+                diff_hash: "fedcba9876543210".to_string(),
+            },
         );
 
         assert_eq!(built.current_branch.name.as_deref(), Some("feature/snapshot"));
