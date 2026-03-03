@@ -27,7 +27,7 @@ impl AppService {
             runtime_id: spawned_server.runtime_id.clone(),
             repo_path: repo_key,
             task_id: task_id.to_string(),
-            role: role.to_string(),
+            role,
             working_directory,
             port: spawned_server.port,
             started_at: now_rfc3339(),

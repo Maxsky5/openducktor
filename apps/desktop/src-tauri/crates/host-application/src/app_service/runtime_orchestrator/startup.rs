@@ -3,7 +3,7 @@ use super::super::{
     StartupEventCorrelation, StartupEventPayload,
 };
 use super::{RuntimeStartInput, SpawnedRuntimeServer};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use host_domain::TASK_METADATA_NAMESPACE;
 use host_infra_system::pick_free_port;
 use std::path::Path;
