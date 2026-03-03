@@ -66,7 +66,6 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 export const globalConfigSchema = z.object({
   version: z.literal(1),
   activeRepo: z.string().optional(),
-  taskMetadataNamespace: z.string().min(1).default("openducktor"),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   recentRepos: z.array(z.string()).default([]),
   scheduler: z

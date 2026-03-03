@@ -1370,54 +1370,6 @@ fn set_spec_trims_markdown_and_increments_revision() -> Result<()> {
 }
 
 #[test]
-fn set_spec_switches_namespace_after_config_recovers() -> Result<()> {
-    let repo = RepoFixture::new("set-spec-namespace-resync");
-    let current = issue_value("task-1", "open", "task", None, json!([]), None);
-    let runner = MockCommandRunner::with_steps(vec![
-        MockStep::WithEnv(Ok(json!([current.clone()]).to_string())),
-        MockStep::WithEnv(Ok("{}".to_string())),
-        MockStep::WithEnv(Ok(json!([current]).to_string())),
-        MockStep::WithEnv(Ok("{}".to_string())),
-    ]);
-
-    let namespace_results = Arc::new(Mutex::new(VecDeque::from(vec![
-        Err(anyhow!("config temporarily unreadable")),
-        Ok("custom-ns".to_string()),
-    ])));
-    let namespace_results_for_resolver = Arc::clone(&namespace_results);
-    let resolver: Arc<dyn Fn() -> Result<String> + Send + Sync> = Arc::new(move || {
-        let mut guard = namespace_results_for_resolver
-            .lock()
-            .map_err(|_| anyhow!("namespace resolver lock poisoned"))?;
-        guard
-            .pop_front()
-            .unwrap_or_else(|| Ok("custom-ns".to_string()))
-    });
-
-    let store = BeadsTaskStore::with_test_runner_and_namespace_resolver(
-        "openducktor",
-        runner.clone(),
-        resolver,
-    );
-
-    store.set_spec(repo.path(), "task-1", "First write")?;
-    store.set_spec(repo.path(), "task-1", "Second write")?;
-
-    let calls = runner.take_calls();
-    assert_eq!(calls.len(), 4);
-
-    let first_metadata_root = metadata_from_call(&calls[1]);
-    assert!(first_metadata_root.get("openducktor").is_some());
-    assert!(first_metadata_root.get("custom-ns").is_none());
-
-    let second_metadata_root = metadata_from_call(&calls[3]);
-    assert!(second_metadata_root.get("custom-ns").is_some());
-    assert!(second_metadata_root.get("openducktor").is_none());
-
-    Ok(())
-}
-
-#[test]
 fn get_and_set_plan_use_implementation_plan_metadata() -> Result<()> {
     let repo = RepoFixture::new("plan-docs");
     let current_with_plan = issue_value(

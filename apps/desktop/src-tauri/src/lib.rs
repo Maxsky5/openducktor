@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use host_application::{AppService, RunEmitter};
-use host_domain::RunEvent;
 #[cfg(test)]
 use host_domain::TaskStatus;
+use host_domain::{RunEvent, TASK_METADATA_NAMESPACE};
 use host_infra_beads::BeadsTaskStore;
 use host_infra_system::AppConfigStore;
 use serde::Deserialize;
@@ -28,7 +28,6 @@ struct AppState {
     hook_trust_challenges: Mutex<HashMap<String, HookTrustChallenge>>,
 }
 
-const FALLBACK_TASK_METADATA_NAMESPACE: &str = "openducktor";
 const HOOK_TRUST_CHALLENGE_TTL: Duration = Duration::from_secs(120);
 static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
 
@@ -160,21 +159,6 @@ fn extend_runtime_errors_with_startup(
     check
 }
 
-fn namespace_with_startup_warning(
-    namespace_result: anyhow::Result<String>,
-) -> (String, Option<String>) {
-    match namespace_result {
-        Ok(namespace) => (namespace, None),
-        Err(error) => (
-            FALLBACK_TASK_METADATA_NAMESPACE.to_string(),
-            Some(format!(
-                "Failed to read task metadata namespace from config; using fallback namespace '{}': {error:#}",
-                FALLBACK_TASK_METADATA_NAMESPACE
-            )),
-        ),
-    }
-}
-
 fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
@@ -187,24 +171,14 @@ fn startup_phase_tracing() {
 
 fn startup_phase_service_bootstrap() -> anyhow::Result<ServiceBootstrapPhase> {
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
-    let mut startup_errors = Vec::new();
-    let (metadata_namespace, startup_warning) =
-        namespace_with_startup_warning(config_store.task_metadata_namespace());
-    if let Some(message) = startup_warning {
-        tracing::warn!(
-            target: "openducktor.startup",
-            warning = %message,
-            "OpenDucktor startup warning"
-        );
-        startup_errors.push(message);
-    }
-
-    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(&metadata_namespace));
+    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(
+        TASK_METADATA_NAMESPACE,
+    ));
     let service = Arc::new(AppService::new(task_store, config_store));
 
     Ok(ServiceBootstrapPhase {
         service,
-        startup_errors,
+        startup_errors: Vec::new(),
     })
 }
 
@@ -344,35 +318,6 @@ mod tests {
     use anyhow::anyhow;
     use host_domain::RuntimeCheck;
     use serde_json::{json, Value};
-
-    #[test]
-    fn namespace_with_startup_warning_uses_configured_namespace() {
-        let (namespace, warning) =
-            namespace_with_startup_warning(Ok("custom-namespace".to_string()));
-
-        assert_eq!(namespace, "custom-namespace");
-        assert!(warning.is_none());
-    }
-
-    #[test]
-    fn namespace_with_startup_warning_falls_back_and_reports_error_context() -> Result<(), String> {
-        let (namespace, warning) =
-            namespace_with_startup_warning(Err(anyhow!("config parse failure")));
-
-        assert_eq!(namespace, FALLBACK_TASK_METADATA_NAMESPACE);
-
-        let warning =
-            warning.ok_or_else(|| "expected startup warning for fallback namespace".to_string())?;
-        assert!(
-            warning.contains("using fallback namespace 'openducktor'"),
-            "warning should mention fallback namespace: {warning}"
-        );
-        assert!(
-            warning.contains("config parse failure"),
-            "warning should include original error context: {warning}"
-        );
-        Ok(())
-    }
 
     #[test]
     fn extend_runtime_errors_with_startup_appends_startup_messages() {

@@ -1,7 +1,6 @@
 use super::types::{
-    default_branch_prefix, default_target_branch, default_task_metadata_namespace,
-    hook_set_fingerprint, AgentModelDefault, GlobalConfig, OpencodeStartupReadinessConfig,
-    RepoConfig,
+    default_branch_prefix, default_target_branch, hook_set_fingerprint, AgentModelDefault,
+    GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -97,12 +96,6 @@ pub(super) fn normalize_opencode_startup_readiness_config(
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) {
-    let namespace = config.task_metadata_namespace.trim();
-    config.task_metadata_namespace = if namespace.is_empty() {
-        default_task_metadata_namespace()
-    } else {
-        namespace.to_string()
-    };
     normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
     for repo in config.repos.values_mut() {
         normalize_repo_config(repo);

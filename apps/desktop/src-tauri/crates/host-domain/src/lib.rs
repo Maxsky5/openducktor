@@ -25,6 +25,8 @@ pub use task::{
     CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
 };
 
+pub const TASK_METADATA_NAMESPACE: &str = "openducktor";
+
 pub fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
 }

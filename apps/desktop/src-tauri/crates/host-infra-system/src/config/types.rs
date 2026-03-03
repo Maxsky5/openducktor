@@ -89,10 +89,6 @@ pub(super) fn default_target_branch() -> String {
     "origin/main".to_string()
 }
 
-pub(super) fn default_task_metadata_namespace() -> String {
-    "openducktor".to_string()
-}
-
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
@@ -197,8 +193,6 @@ fn default_theme() -> String {
 pub struct GlobalConfig {
     pub version: u8,
     pub active_repo: Option<String>,
-    #[serde(default = "default_task_metadata_namespace")]
-    pub task_metadata_namespace: String,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
@@ -216,7 +210,6 @@ impl Default for GlobalConfig {
         Self {
             version: 1,
             active_repo: None,
-            task_metadata_namespace: default_task_metadata_namespace(),
             theme: default_theme(),
             opencode_startup: OpencodeStartupReadinessConfig::default(),
             repos: HashMap::new(),
