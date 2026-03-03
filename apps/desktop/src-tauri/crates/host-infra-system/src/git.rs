@@ -254,31 +254,35 @@ impl GitPort for GitCliPort {
         let diff_spec = target_branch
             .map(|b| b.trim().to_string())
             .unwrap_or_default();
+        let diff_target = if diff_spec.is_empty() {
+            "HEAD"
+        } else {
+            diff_spec.as_str()
+        };
 
         // Get numstat for additions/deletions counts
-        let numstat_args: Vec<&str> = if diff_spec.is_empty() {
-            vec!["diff", "--numstat", "HEAD"]
-        } else {
-            vec!["diff", "--numstat", diff_spec.as_str()]
-        };
-        let (numstat_ok, numstat_stdout, _) =
+        let numstat_args: Vec<&str> = vec!["diff", "--numstat", diff_target];
+        let (numstat_ok, numstat_stdout, numstat_stderr) =
             self.run_git_allow_failure(repo_path, &numstat_args)?;
-        let numstat = if numstat_ok {
-            numstat_stdout
-        } else {
-            String::new()
-        };
+        if !numstat_ok {
+            return Err(anyhow!(
+                "git diff --numstat {diff_target} failed: {}",
+                combine_output(numstat_stdout, numstat_stderr)
+            ));
+        }
 
         // Get full unified diff
-        let diff_args: Vec<&str> = if diff_spec.is_empty() {
-            vec!["diff", "HEAD"]
-        } else {
-            vec!["diff", diff_spec.as_str()]
-        };
-        let (diff_ok, diff_stdout, _) = self.run_git_allow_failure(repo_path, &diff_args)?;
-        let full_diff = if diff_ok { diff_stdout } else { String::new() };
+        let diff_args: Vec<&str> = vec!["diff", diff_target];
+        let (diff_ok, diff_stdout, diff_stderr) =
+            self.run_git_allow_failure(repo_path, &diff_args)?;
+        if !diff_ok {
+            return Err(anyhow!(
+                "git diff {diff_target} failed: {}",
+                combine_output(diff_stdout, diff_stderr)
+            ));
+        }
 
-        Ok(build_file_diffs(&numstat, &full_diff))
+        Ok(build_file_diffs(&numstat_stdout, &diff_stdout))
     }
 
     fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>> {
@@ -1327,6 +1331,25 @@ mod tests {
         assert!(
             pulled_file.exists(),
             "rebased pull should include upstream commit changes"
+        );
+    }
+
+    #[test]
+    fn get_diff_returns_error_when_target_branch_is_invalid() {
+        if !git_available() {
+            return;
+        }
+
+        let repo = setup_repo("diff-invalid-target");
+        let git = GitCliPort::new();
+
+        let error = git
+            .get_diff(&repo.path, Some("refs/heads/does-not-exist"))
+            .expect_err("invalid target branch should return error");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("git diff --numstat"),
+            "error should preserve actionable git command context, got: {message}"
         );
     }
 

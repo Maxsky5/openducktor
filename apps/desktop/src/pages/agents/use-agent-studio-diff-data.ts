@@ -72,6 +72,12 @@ type ScopeSnapshot = {
   error: string | null;
 };
 
+type ResolvedWorktreeState = {
+  repoPath: string;
+  runId: string;
+  path: string | null;
+};
+
 type LoadDataContext = {
   repoPath: string | null;
   targetBranch: string;
@@ -215,13 +221,18 @@ export function useAgentStudioDiffData({
   const [state, setState] = useState<DiffBatchState>(createInitialState);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
-  const [resolvedWorktreePath, setResolvedWorktreePath] = useState<string | null>(null);
+  const [resolvedWorktreeState, setResolvedWorktreeState] = useState<ResolvedWorktreeState | null>(
+    null,
+  );
 
   const versionByScopeRef = useRef<Record<DiffScope, number>>({
     target: 0,
     uncommitted: 0,
   });
-  const inFlightScopesRef = useRef<Set<DiffScope>>(new Set());
+  const inFlightScopeRequestRef = useRef<Record<DiffScope, string | null>>({
+    target: null,
+    uncommitted: null,
+  });
 
   // Derive stable primitives
   const targetBranch = normalizeCanonicalTargetBranch(defaultTargetBranch);
@@ -232,27 +243,67 @@ export function useAgentStudioDiffData({
     sessionWorkingDirectory && sessionWorkingDirectory !== repoPath
       ? sessionWorkingDirectory
       : null;
+  const resolvedWorktreePath =
+    resolvedWorktreeState != null &&
+    resolvedWorktreeState.repoPath === repoPath &&
+    resolvedWorktreeState.runId === sessionRunId
+      ? resolvedWorktreeState.path
+      : null;
   const worktreePath = directWorktreePath ?? resolvedWorktreePath;
 
   // Resolve worktree path from RunSummary when session.workingDirectory === repoPath.
   // The Rust backend always stores the correct worktreePath in RunSummary, even if
   // the session's workingDirectory was set to repoPath at creation time.
-  const resolvedRunIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (directWorktreePath || !repoPath || !sessionRunId) {
+      setResolvedWorktreeState(null);
       return;
     }
-    // Skip if we already resolved for this runId
-    if (resolvedRunIdRef.current === sessionRunId) {
-      return;
-    }
-    resolvedRunIdRef.current = sessionRunId;
-    void host.runsList(repoPath).then((runs) => {
-      const matchingRun = runs.find((r) => r.runId === sessionRunId);
-      if (matchingRun && matchingRun.worktreePath !== repoPath) {
-        setResolvedWorktreePath(matchingRun.worktreePath);
-      }
-    });
+
+    let isCurrent = true;
+    void host
+      .runsList(repoPath)
+      .then((runs) => {
+        if (!isCurrent) {
+          return;
+        }
+
+        const matchingRun = runs.find((run) => run.runId === sessionRunId);
+        const nextPath =
+          matchingRun && matchingRun.worktreePath !== repoPath ? matchingRun.worktreePath : null;
+
+        setResolvedWorktreeState((previous) => {
+          if (
+            previous != null &&
+            previous.repoPath === repoPath &&
+            previous.runId === sessionRunId &&
+            previous.path === nextPath
+          ) {
+            return previous;
+          }
+
+          return {
+            repoPath,
+            runId: sessionRunId,
+            path: nextPath,
+          };
+        });
+      })
+      .catch(() => {
+        if (!isCurrent) {
+          return;
+        }
+
+        setResolvedWorktreeState({
+          repoPath,
+          runId: sessionRunId,
+          path: null,
+        });
+      });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [directWorktreePath, repoPath, sessionRunId]);
 
   // Stable refs for use in callbacks (advanced-event-handler-refs)
@@ -273,11 +324,15 @@ export function useAgentStudioDiffData({
     }
 
     const scope = context?.scope ?? diffScopeRef.current;
-    if (inFlightScopesRef.current.has(scope)) {
+    const target = context?.targetBranch ?? targetBranchRef.current;
+    const workingDir = context?.workingDir ?? workingDirRef.current;
+    const requestKey = `${path}::${target}::${workingDir ?? ""}`;
+
+    if (inFlightScopeRequestRef.current[scope] === requestKey) {
       return;
     }
 
-    inFlightScopesRef.current.add(scope);
+    inFlightScopeRequestRef.current[scope] = requestKey;
     const version = ++versionByScopeRef.current[scope];
 
     // Only show loading indicator on initial load / manual refresh — NOT on polling
@@ -286,9 +341,16 @@ export function useAgentStudioDiffData({
     }
 
     try {
-      const target = context?.targetBranch ?? targetBranchRef.current;
-      const wd = context?.workingDir ?? workingDirRef.current ?? undefined;
+      const wd = workingDir ?? undefined;
       const snapshot = await host.gitGetWorktreeStatus(path, target, scope, wd);
+
+      const hasContextChanged =
+        repoPathRef.current !== path ||
+        targetBranchRef.current !== target ||
+        (workingDirRef.current ?? null) !== workingDir;
+      if (hasContextChanged) {
+        return;
+      }
 
       // Stale response guard
       if (versionByScopeRef.current[scope] !== version) {
@@ -345,6 +407,14 @@ export function useAgentStudioDiffData({
         };
       });
     } catch (err) {
+      const hasContextChanged =
+        repoPathRef.current !== path ||
+        targetBranchRef.current !== target ||
+        (workingDirRef.current ?? null) !== workingDir;
+      if (hasContextChanged) {
+        return;
+      }
+
       if (versionByScopeRef.current[scope] === version) {
         setState((prev) => {
           const previousScopeSnapshot = prev.byScope[scope];
@@ -378,7 +448,9 @@ export function useAgentStudioDiffData({
         });
       }
     } finally {
-      inFlightScopesRef.current.delete(scope);
+      if (inFlightScopeRequestRef.current[scope] === requestKey) {
+        inFlightScopeRequestRef.current[scope] = null;
+      }
     }
   }, []);
 
@@ -391,6 +463,10 @@ export function useAgentStudioDiffData({
         scope: diffScopeRef.current,
       });
     } else {
+      versionByScopeRef.current.target += 1;
+      versionByScopeRef.current.uncommitted += 1;
+      inFlightScopeRequestRef.current.target = null;
+      inFlightScopeRequestRef.current.uncommitted = null;
       setState(createInitialState());
       setSelectedFile(null);
     }

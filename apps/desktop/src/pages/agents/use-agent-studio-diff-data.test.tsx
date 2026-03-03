@@ -7,7 +7,7 @@ import {
 
 enableReactActEnvironment();
 
-const runsListMock = mock(async () => []);
+const runsListMock = mock(async (): Promise<Array<{ runId: string; worktreePath: string }>> => []);
 const gitGetWorktreeStatusMock = mock(
   async (
     _repoPath: string,
@@ -56,6 +56,17 @@ type HookArgs = Parameters<UseAgentStudioDiffDataHook>[0];
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioDiffData, initialProps);
+
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
+};
 
 const createBaseArgs = (): HookArgs => ({
   repoPath: "/repo",
@@ -325,6 +336,213 @@ describe("useAgentStudioDiffData", () => {
       expect(clearIntervalMock).toHaveBeenCalledTimes(1);
       globalThis.setInterval = originalSetInterval;
       globalThis.clearInterval = originalClearInterval;
+    }
+  });
+
+  test("does not drop same-scope reload when context changes during in-flight request", async () => {
+    const firstRequest = createDeferred<GitWorktreeStatus>();
+    const secondRequest = createDeferred<GitWorktreeStatus>();
+    const queue = [firstRequest, secondRequest];
+
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        const deferred = queue.shift();
+        if (!deferred) {
+          throw new Error("No deferred response left");
+        }
+
+        return deferred.promise.then((snapshot) => ({
+          ...snapshot,
+          snapshot: {
+            ...snapshot.snapshot,
+            targetBranch,
+            diffScope: diffScope ?? snapshot.snapshot.diffScope,
+            effectiveWorkingDir: workingDir ?? snapshot.snapshot.effectiveWorkingDir,
+          },
+        }));
+      },
+    );
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      repoPath: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.update({
+        ...createBaseArgs(),
+        repoPath: "/repo-b",
+      });
+
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        2,
+        "/repo-b",
+        "origin/main",
+        "target",
+        undefined,
+      );
+
+      secondRequest.resolve({
+        currentBranch: { name: "feature/repo-b", detached: false },
+        fileStatuses: [{ path: "src/repo-b.ts", status: "M", staged: false }],
+        fileDiffs: [
+          {
+            file: "src/repo-b.ts",
+            type: "modified",
+            additions: 3,
+            deletions: 1,
+            diff: "@@ -1 +1 @@",
+          },
+        ],
+        targetAheadBehind: { ahead: 0, behind: 0 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+        snapshot: {
+          effectiveWorkingDir: "/repo-b",
+          targetBranch: "origin/main",
+          diffScope: "target",
+          observedAtMs: 1731000002000,
+        },
+      });
+
+      await harness.waitFor((state) => state.branch === "feature/repo-b");
+
+      firstRequest.resolve({
+        currentBranch: { name: "feature/repo-a", detached: false },
+        fileStatuses: [{ path: "src/repo-a.ts", status: "M", staged: false }],
+        fileDiffs: [
+          {
+            file: "src/repo-a.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 0,
+            diff: "@@ -1 +1 @@",
+          },
+        ],
+        targetAheadBehind: { ahead: 0, behind: 0 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+        snapshot: {
+          effectiveWorkingDir: "/repo-a",
+          targetBranch: "origin/main",
+          diffScope: "target",
+          observedAtMs: 1731000001000,
+        },
+      });
+
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().branch).toBe("feature/repo-b");
+      expect(harness.getLatest().fileDiffs[0]?.file).toBe("src/repo-b.ts");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("ignores stale in-flight response after repo path is cleared", async () => {
+    const pendingRequest = createDeferred<GitWorktreeStatus>();
+
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        return pendingRequest.promise.then((snapshot) => ({
+          ...snapshot,
+          snapshot: {
+            ...snapshot.snapshot,
+            targetBranch,
+            diffScope: diffScope ?? snapshot.snapshot.diffScope,
+            effectiveWorkingDir: workingDir ?? snapshot.snapshot.effectiveWorkingDir,
+          },
+        }));
+      },
+    );
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      repoPath: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.update({
+        ...createBaseArgs(),
+        repoPath: null,
+      });
+      await harness.waitFor((state) => state.branch === null && state.fileDiffs.length === 0);
+
+      pendingRequest.resolve({
+        currentBranch: { name: "feature/stale", detached: false },
+        fileStatuses: [{ path: "src/stale.ts", status: "M", staged: false }],
+        fileDiffs: [
+          {
+            file: "src/stale.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 0,
+            diff: "@@ -1 +1 @@",
+          },
+        ],
+        targetAheadBehind: { ahead: 0, behind: 0 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+        snapshot: {
+          effectiveWorkingDir: "/repo-a",
+          targetBranch: "origin/main",
+          diffScope: "target",
+          observedAtMs: 1731000003000,
+        },
+      });
+
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().branch).toBeNull();
+      expect(harness.getLatest().fileDiffs).toEqual([]);
+      expect(harness.getLatest().fileStatuses).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("clears stale resolved worktree when run context changes", async () => {
+    runsListMock.mockImplementation(async () => [
+      { runId: "run-1", worktreePath: "/repo/.worktrees/run-1" },
+    ]);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionRunId: "run-1",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
+
+      runsListMock.mockImplementation(async () => []);
+      await harness.update({
+        ...createBaseArgs(),
+        sessionRunId: "run-2",
+      });
+
+      await harness.waitFor((state) => state.worktreePath === null);
+      expect(harness.getLatest().worktreePath).toBeNull();
+    } finally {
+      await harness.unmount();
     }
   });
 
