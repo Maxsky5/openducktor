@@ -45,7 +45,7 @@ export function TaskDeleteConfirmDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
+        <div className="mt-4 space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
           <p className="font-medium">This action permanently removes the task from Beads.</p>
           {hasSubtasks ? (
             <p>Direct subtasks will also be deleted to avoid orphaned children in the workflow.</p>
