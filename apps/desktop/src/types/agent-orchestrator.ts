@@ -1,3 +1,4 @@
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -5,7 +6,6 @@ import type {
   AgentScenario,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 
 export type AgentChatMessageMeta =
   | {

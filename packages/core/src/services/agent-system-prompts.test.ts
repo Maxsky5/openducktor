@@ -123,7 +123,9 @@ describe("buildAgentSystemPrompt", () => {
           },
         },
       }),
-    ).toThrow('Prompt template "system.scenario.spec_initial" uses unsupported placeholder "unknown.placeholder".');
+    ).toThrow(
+      'Prompt template "system.scenario.spec_initial" uses unsupported placeholder "unknown.placeholder".',
+    );
   });
 });
 

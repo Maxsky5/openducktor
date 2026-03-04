@@ -100,7 +100,7 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
             prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
+            agent_defaults: Default::default(),
         },
     )?;
     assert!(updated.has_config);

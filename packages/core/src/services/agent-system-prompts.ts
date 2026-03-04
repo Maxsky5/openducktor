@@ -417,9 +417,7 @@ const resolveTemplate = ({
   const tokens = extractPlaceholderTokens(template);
   for (const token of tokens) {
     if (!KNOWN_PLACEHOLDERS.has(token)) {
-      throw new Error(
-        `Prompt template "${templateId}" uses unsupported placeholder "${token}".`,
-      );
+      throw new Error(`Prompt template "${templateId}" uses unsupported placeholder "${token}".`);
     }
     if (!(token in placeholderValues)) {
       throw new Error(`Prompt template "${templateId}" is missing placeholder value "${token}".`);

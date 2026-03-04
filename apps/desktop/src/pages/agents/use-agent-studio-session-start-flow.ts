@@ -132,7 +132,7 @@ export function useAgentStudioSessionStartFlow({
     await sendAgentMessage(
       sessionId,
       kickoffPromptForScenario(role, scenario, taskId, {
-        ...(promptOverrides ? { overrides: promptOverrides } : {}),
+        overrides: promptOverrides ?? {},
         task: {
           ...(selectedTask
             ? {

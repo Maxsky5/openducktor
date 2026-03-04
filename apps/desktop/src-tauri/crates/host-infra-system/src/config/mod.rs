@@ -117,7 +117,7 @@ mod tests {
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
+                    agent_defaults: Default::default(),
                 },
             )
             .expect("update config");
@@ -226,7 +226,7 @@ mod tests {
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
+                    agent_defaults: Default::default(),
                 },
             )
             .expect("repo config update should succeed");
@@ -291,7 +291,7 @@ mod tests {
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
+                    agent_defaults: Default::default(),
                 },
             )
             .expect("update config");
@@ -326,7 +326,7 @@ mod tests {
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
+                    agent_defaults: Default::default(),
                 },
             )
             .expect("update config");
@@ -358,7 +358,7 @@ mod tests {
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
                     prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
+                    agent_defaults: Default::default(),
                 },
             )
             .expect("repo config update should succeed");
@@ -514,7 +514,9 @@ mod tests {
         assert_eq!(kickoff_override.template, "custom kickoff {{task.id}}");
         assert_eq!(kickoff_override.base_version, 1);
         assert!(
-            !repo_config.prompt_overrides.contains_key("kickoff.qa_review"),
+            !repo_config
+                .prompt_overrides
+                .contains_key("kickoff.qa_review"),
             "blank templates should be removed"
         );
 

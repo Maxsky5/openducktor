@@ -1,5 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentModelSelection,

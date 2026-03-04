@@ -1,10 +1,9 @@
-import type { TaskCard } from "@openducktor/contracts";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import {
-  buildAgentKickoffPrompt,
-  type BuildAgentKickoffPromptInput,
   type AgentRole,
   type AgentScenario,
+  type BuildAgentKickoffPromptInput,
+  buildAgentKickoffPrompt,
 } from "@openducktor/core";
 
 const hasMarkdown = (value: string): boolean => value.trim().length > 0;

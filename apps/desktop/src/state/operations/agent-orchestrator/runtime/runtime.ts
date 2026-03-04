@@ -1,6 +1,5 @@
-import type { RunSummary } from "@openducktor/contracts";
+import type { RepoPromptOverrides, RunSummary } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { host } from "../../host";
 import {
   captureOrchestratorFallback,

@@ -66,7 +66,7 @@ const autoRejectMutatingPermission = (
   try {
     rejectionMessage = buildReadOnlyPermissionRejectionMessage({
       role,
-      ...(promptOverrides ? { overrides: promptOverrides } : {}),
+      overrides: promptOverrides ?? {},
     });
   } catch (error) {
     markManualResponseRequired(error);

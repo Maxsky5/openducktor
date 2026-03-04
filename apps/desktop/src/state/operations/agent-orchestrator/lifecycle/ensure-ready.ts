@@ -1,6 +1,5 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";

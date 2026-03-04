@@ -190,7 +190,7 @@ export function useKanbanSessionStartFlow({
                 : undefined;
               const intentTask = tasks.find((entry) => entry.id === intent.taskId);
               return kickoffPromptForScenario(intent.role, intent.scenario, intent.taskId, {
-                ...(promptOverrides ? { overrides: promptOverrides } : {}),
+                overrides: promptOverrides ?? {},
                 task: {
                   ...(intentTask
                     ? {

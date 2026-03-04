@@ -95,7 +95,7 @@ export function useAgentStudioFreshSessionCreation({
           await sendAgentMessage(
             sessionId,
             kickoffPromptForScenario(nextRole, nextScenario, taskId, {
-              ...(promptOverrides ? { overrides: promptOverrides } : {}),
+              overrides: promptOverrides ?? {},
               task: {
                 ...(selectedTask
                   ? {

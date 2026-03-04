@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import { buildAgentKickoffPrompt, type AgentRole, type AgentScenario } from "@openducktor/core";
+import { type AgentRole, type AgentScenario, buildAgentKickoffPrompt } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { AGENT_ROLE_LABELS } from "@/types";
 
@@ -80,6 +80,6 @@ export const kickoffPromptForScenario = (
       taskId,
       ...(options?.task ?? {}),
     },
-    ...(options?.overrides ? { overrides: options.overrides } : {}),
+    overrides: options?.overrides ?? {},
   });
 };
