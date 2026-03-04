@@ -558,10 +558,7 @@ export function useAgentStudioDiffData({
       return;
     }
 
-    if (
-      mode === "summary" &&
-      inFlightScopeRequestRef.current[scope].full === requestKey
-    ) {
+    if (mode === "summary" && inFlightScopeRequestRef.current[scope].full === requestKey) {
       return;
     }
 

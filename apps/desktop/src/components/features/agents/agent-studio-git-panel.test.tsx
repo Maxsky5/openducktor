@@ -32,9 +32,7 @@ type AgentStudioGitPanelModel = import("./agent-studio-git-panel").AgentStudioGi
 
 let AgentStudioGitPanel: AgentStudioGitPanelComponent;
 
-const baseModel = (
-  overrides: Partial<AgentStudioGitPanelModel> = {},
-): AgentStudioGitPanelModel => {
+const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStudioGitPanelModel => {
   const model: AgentStudioGitPanelModel = {
     branch: "feature/task-11",
     worktreePath: "/tmp/worktree",
@@ -442,6 +440,49 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
     expect(setSelectedFile).toHaveBeenNthCalledWith(2, null);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("handles rapid consecutive file toggles without stale expansion state", async () => {
+    const setSelectedFile = mock((_path: string | null) => {});
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            fileDiffs: [
+              {
+                file: "src/a.ts",
+                type: "modified",
+                additions: 2,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            setSelectedFile,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const diffButton = findButtonByText(root, "a.ts");
+
+    await act(async () => {
+      diffButton.props.onClick();
+      diffButton.props.onClick();
+      await flush();
+    });
+
+    expect(setSelectedFile).toHaveBeenNthCalledWith(1, "src/a.ts");
+    expect(setSelectedFile).toHaveBeenNthCalledWith(2, null);
+    expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

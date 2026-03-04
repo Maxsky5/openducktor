@@ -23,17 +23,19 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 
   const toggleFile = useCallback(
     (filePath: string): void => {
-      const next = new Set(expandedFiles);
-      if (next.has(filePath)) {
-        next.delete(filePath);
-        model.setSelectedFile(null);
-      } else {
-        next.add(filePath);
-        model.setSelectedFile(filePath);
-      }
-      setExpandedFiles(next);
+      setExpandedFiles((previous) => {
+        const next = new Set(previous);
+        if (next.has(filePath)) {
+          next.delete(filePath);
+          model.setSelectedFile(null);
+        } else {
+          next.add(filePath);
+          model.setSelectedFile(filePath);
+        }
+        return next;
+      });
     },
-    [expandedFiles, model.setSelectedFile],
+    [model.setSelectedFile],
   );
 
   const handleDiffScopeChange = useCallback(
