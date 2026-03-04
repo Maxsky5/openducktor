@@ -76,18 +76,38 @@ describe("workspace-operations-model", () => {
       "current_branch_probe",
     );
     expect(runtimeUnavailable.code).toBe("runtime_unavailable");
+
+    const structuredAuthorization = classifyBranchProbeError(
+      {
+        code: "GIT_COMMAND_UNAUTHORIZED",
+        message: "Command failed",
+      },
+      "branch_refresh",
+    );
+    expect(structuredAuthorization.code).toBe("authorization_failed");
   });
 
-  test("reports probe failures when signature changes or throttle interval elapses", () => {
-    const signature = branchProbeErrorSignature(
-      classifyBranchProbeError(new Error("git fetch failed"), "current_branch_probe"),
+  test("reports probe failures when stage/code signature changes or throttle interval elapses", () => {
+    const initialError = classifyBranchProbeError(
+      new Error("git fetch failed on origin/main"),
+      "current_branch_probe",
+    );
+    const initialSignature = branchProbeErrorSignature(initialError);
+    const sameClassDifferentMessageSignature = branchProbeErrorSignature(
+      classifyBranchProbeError(
+        new Error("git fetch failed on origin/develop"),
+        "current_branch_probe",
+      ),
+    );
+    const changedStageSignature = branchProbeErrorSignature(
+      classifyBranchProbeError(new Error("git fetch failed"), "branch_refresh"),
     );
 
     expect(
       shouldReportBranchProbeError({
         nowMs: 1000,
         throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
-        errorSignature: signature,
+        errorSignature: initialSignature,
         lastReportedAtMs: null,
         lastReportedSignature: null,
       }),
@@ -97,9 +117,9 @@ describe("workspace-operations-model", () => {
       shouldReportBranchProbeError({
         nowMs: 5000,
         throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
-        errorSignature: signature,
+        errorSignature: sameClassDifferentMessageSignature,
         lastReportedAtMs: 1000,
-        lastReportedSignature: signature,
+        lastReportedSignature: initialSignature,
       }),
     ).toBe(false);
 
@@ -107,9 +127,9 @@ describe("workspace-operations-model", () => {
       shouldReportBranchProbeError({
         nowMs: 7000,
         throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
-        errorSignature: `${signature}:next`,
+        errorSignature: changedStageSignature,
         lastReportedAtMs: 1000,
-        lastReportedSignature: signature,
+        lastReportedSignature: initialSignature,
       }),
     ).toBe(true);
   });

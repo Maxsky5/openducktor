@@ -87,25 +87,56 @@ const toErrorMessage = (error: unknown): string => {
   }
 };
 
-const classifyBranchProbeErrorCode = (message: string): BranchProbeErrorCode => {
+const toOptionalString = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value : null;
+
+const toRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+
+const extractStructuredErrorHint = (error: unknown): string | null => {
+  const record = toRecord(error);
+  if (!record) {
+    return null;
+  }
+
+  const directHint = toOptionalString(record.code) ?? toOptionalString(record.kind);
+  if (directHint) {
+    return directHint;
+  }
+
+  const causeRecord = toRecord(record.cause);
+  if (!causeRecord) {
+    return null;
+  }
+
+  return toOptionalString(causeRecord.code) ?? toOptionalString(causeRecord.kind);
+};
+
+const classifyBranchProbeErrorCode = (
+  message: string,
+  structuredHint: string | null,
+): BranchProbeErrorCode => {
   const normalizedMessage = message.toLowerCase();
+  const normalizedHint = structuredHint?.toLowerCase() ?? "";
+  const combined = `${normalizedHint} ${normalizedMessage}`.trim();
 
   if (
-    normalizedMessage.includes("unauthorized") ||
-    normalizedMessage.includes("forbidden") ||
-    normalizedMessage.includes("permission denied")
+    combined.includes("unauthorized") ||
+    combined.includes("forbidden") ||
+    combined.includes("permission denied")
   ) {
     return "authorization_failed";
   }
 
   if (
-    normalizedMessage.includes("tauri runtime not available") ||
-    normalizedMessage.includes("desktop shell")
+    combined.includes("tauri runtime not available") ||
+    combined.includes("desktop shell") ||
+    combined.includes("runtime unavailable")
   ) {
     return "runtime_unavailable";
   }
 
-  if (normalizedMessage.includes("git")) {
+  if (combined.includes("git")) {
     return "git_command_failed";
   }
 
@@ -117,9 +148,10 @@ export const classifyBranchProbeError = (
   stage: BranchProbeStage,
 ): BranchProbeError => {
   const message = toErrorMessage(error);
+  const structuredHint = extractStructuredErrorHint(error);
 
   return {
-    code: classifyBranchProbeErrorCode(message),
+    code: classifyBranchProbeErrorCode(message, structuredHint),
     stage,
     message,
     cause: error,
@@ -127,7 +159,7 @@ export const classifyBranchProbeError = (
 };
 
 export const branchProbeErrorSignature = (error: BranchProbeError): string =>
-  `${error.stage}:${error.code}:${error.message}`;
+  `${error.stage}:${error.code}`;
 
 type ShouldReportBranchProbeErrorParams = {
   nowMs: number;

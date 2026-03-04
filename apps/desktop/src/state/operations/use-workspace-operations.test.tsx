@@ -439,6 +439,7 @@ describe("use-workspace-operations", () => {
   test("marks branch sync degraded and throttles repeated probe failure toasts", async () => {
     const setActiveRepo = mock(() => {});
     let intervalCallback: (() => void) | null = null;
+    let probeFailureCount = 0;
 
     const addWindowEventListener = mock(() => {});
     const removeWindowEventListener = mock(() => {});
@@ -463,7 +464,8 @@ describe("use-workspace-operations", () => {
     const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
 
     const gitGetCurrentBranch = mock(async () => {
-      throw new Error("permission denied while reading branch");
+      probeFailureCount += 1;
+      throw new Error(`permission denied while reading branch (${probeFailureCount})`);
     });
 
     const original = {
@@ -497,7 +499,7 @@ describe("use-workspace-operations", () => {
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
       expect(toastError).toHaveBeenCalledTimes(1);
       expect(toastError).toHaveBeenCalledWith("Branch sync probe degraded", {
-        description: "[current_branch_probe] permission denied while reading branch",
+        description: "[current_branch_probe] permission denied while reading branch (1)",
       });
 
       await act(async () => {
@@ -593,6 +595,172 @@ describe("use-workspace-operations", () => {
       await harness.unmount();
       host.gitGetCurrentBranch = original.gitGetCurrentBranch;
       host.gitGetBranches = original.gitGetBranches;
+      restoreBrowserGlobals();
+    }
+  });
+
+  test("marks branch sync degraded when refresh after branch identity change fails", async () => {
+    const setActiveRepo = mock(() => {});
+    let intervalCallback: (() => void) | null = null;
+    let currentBranchCallCount = 0;
+    let branchesCallCount = 0;
+
+    const setIntervalMock = mock((callback: () => void) => {
+      intervalCallback = callback;
+      return 1;
+    });
+    const fakeWindow = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      setInterval: setIntervalMock,
+      clearInterval: () => {},
+    } as unknown as Window;
+    const fakeDocument = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      visibilityState: "visible" as const,
+    } as unknown as Document;
+    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+
+    const gitGetCurrentBranch = mock(async () => {
+      currentBranchCallCount += 1;
+      return {
+        name: currentBranchCallCount === 1 ? "main" : "feature/probe",
+        detached: false,
+      };
+    });
+    const gitGetBranches = mock(async () => {
+      branchesCallCount += 1;
+      if (branchesCallCount === 1) {
+        return [
+          {
+            name: "main",
+            isCurrent: true,
+            isRemote: false,
+          },
+          {
+            name: "feature/probe",
+            isCurrent: false,
+            isRemote: false,
+          },
+        ];
+      }
+
+      throw new Error("git branches load failed");
+    });
+
+    const original = {
+      gitGetCurrentBranch: host.gitGetCurrentBranch,
+      gitGetBranches: host.gitGetBranches,
+    };
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      const callback = intervalCallback as unknown as (() => void) | null;
+      if (!callback) {
+        throw new Error("Expected interval callback to be set");
+      }
+
+      await act(async () => {
+        callback();
+      });
+      await flush();
+
+      expect(harness.getLatest().branchSyncDegraded).toBe(true);
+      expect(toastError).toHaveBeenCalledWith("Branch sync probe degraded", {
+        description: "[branch_refresh] git branches load failed",
+      });
+    } finally {
+      await harness.unmount();
+      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      host.gitGetBranches = original.gitGetBranches;
+      (toast as { error: typeof toast.error }).error = originalToastError;
+      restoreBrowserGlobals();
+    }
+  });
+
+  test("clears branch cache and degraded state on active repository change", async () => {
+    const setActiveRepo = mock(() => {});
+    let intervalCallback: (() => void) | null = null;
+
+    const setIntervalMock = mock((callback: () => void) => {
+      intervalCallback = callback;
+      return 1;
+    });
+    const fakeWindow = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      setInterval: setIntervalMock,
+      clearInterval: () => {},
+    } as unknown as Window;
+    const fakeDocument = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      visibilityState: "visible" as const,
+    } as unknown as Document;
+    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+
+    const gitGetCurrentBranch = mock(async () => {
+      throw new Error("permission denied while reading branch");
+    });
+
+    const original = {
+      gitGetCurrentBranch: host.gitGetCurrentBranch,
+    };
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+    });
+
+    try {
+      await harness.mount();
+
+      const callback = intervalCallback as unknown as (() => void) | null;
+      if (!callback) {
+        throw new Error("Expected interval callback to be set");
+      }
+
+      await act(async () => {
+        callback();
+      });
+      await flush();
+
+      expect(harness.getLatest().branchSyncDegraded).toBe(true);
+
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+        setActiveRepo,
+        clearTaskData: () => {},
+        clearActiveBeadsCheck: () => {},
+      });
+
+      expect(harness.getLatest().branchSyncDegraded).toBe(false);
+      expect(harness.getLatest().activeBranch).toBeNull();
+      expect(harness.getLatest().branches).toHaveLength(0);
+    } finally {
+      await harness.unmount();
+      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
       restoreBrowserGlobals();
     }
   });

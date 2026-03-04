@@ -61,6 +61,7 @@ export function useWorkspaceOperations({
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const activeRepoRef = useRef(activeRepo);
+  const previousActiveRepoRef = useRef(activeRepo);
   const probeGatesRef = useRef({
     isSwitchingWorkspace,
     isLoadingBranches,
@@ -70,10 +71,6 @@ export function useWorkspaceOperations({
   probeGatesRef.current.isSwitchingWorkspace = isSwitchingWorkspace;
   probeGatesRef.current.isLoadingBranches = isLoadingBranches;
   probeGatesRef.current.isSwitchingBranch = isSwitchingBranch;
-
-  useEffect(() => {
-    activeRepoRef.current = activeRepo;
-  }, [activeRepo]);
 
   const applyBranchState = useCallback(
     (current: GitCurrentBranch, allBranches: GitBranch[]): void => {
@@ -99,6 +96,17 @@ export function useWorkspaceOperations({
     setIsLoadingBranches(false);
     setIsSwitchingBranch(false);
   }, []);
+
+  useEffect(() => {
+    const previousActiveRepo = previousActiveRepoRef.current;
+
+    if (previousActiveRepo !== activeRepo) {
+      clearBranchData();
+    }
+
+    previousActiveRepoRef.current = activeRepo;
+    activeRepoRef.current = activeRepo;
+  }, [activeRepo, clearBranchData]);
 
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string): Promise<void> => {
@@ -297,12 +305,6 @@ export function useWorkspaceOperations({
       setBranchSyncDegraded(false);
     }
   }, [probeExternalBranchChange, reportBranchProbeError]);
-
-  useEffect(() => {
-    if (!activeRepo) {
-      clearBranchData();
-    }
-  }, [activeRepo, clearBranchData]);
 
   useEffect(() => {
     if (!activeRepo || typeof window === "undefined" || typeof document === "undefined") {
