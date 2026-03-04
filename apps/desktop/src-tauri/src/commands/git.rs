@@ -1,6 +1,6 @@
 use crate::{as_error, AppState};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -20,7 +20,8 @@ const AUTHORIZED_WORKTREE_CACHE_TTL: Duration = Duration::from_secs(60);
 #[derive(Clone)]
 struct AuthorizedWorktreeCacheEntry {
     cached_at: Instant,
-    worktrees: Vec<PathBuf>,
+    worktree_state_token: String,
+    worktrees: HashSet<PathBuf>,
 }
 
 static AUTHORIZED_WORKTREE_CACHE: OnceLock<Mutex<HashMap<String, AuthorizedWorktreeCacheEntry>>> =
@@ -38,25 +39,201 @@ fn cache_key(canonical_repo: &Path) -> String {
     canonical_repo.to_string_lossy().to_string()
 }
 
-fn list_authorized_worktrees_cached(canonical_repo: &Path) -> Result<Vec<PathBuf>, String> {
+fn read_git_dir_from_dot_git_file(
+    canonical_repo: &Path,
+    dot_git_file: &Path,
+) -> Result<PathBuf, String> {
+    let contents = fs::read_to_string(dot_git_file).map_err(|e| {
+        format!(
+            "failed to read git metadata file {}: {e}",
+            dot_git_file.display()
+        )
+    })?;
+    let git_dir_raw = contents
+        .lines()
+        .find_map(|line| line.strip_prefix("gitdir:").map(str::trim))
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "failed to parse gitdir from metadata file {}",
+                dot_git_file.display()
+            )
+        })?;
+
+    let git_dir_path = PathBuf::from(git_dir_raw);
+    let resolved_git_dir = if git_dir_path.is_absolute() {
+        git_dir_path
+    } else {
+        canonical_repo.join(git_dir_path)
+    };
+    fs::canonicalize(&resolved_git_dir).map_err(|e| {
+        format!(
+            "failed to canonicalize gitdir path {}: {e}",
+            resolved_git_dir.display()
+        )
+    })
+}
+
+fn read_git_common_dir(canonical_repo: &Path) -> Result<PathBuf, String> {
+    let dot_git = canonical_repo.join(".git");
+    let dot_git_metadata = fs::metadata(&dot_git).map_err(|e| {
+        format!(
+            "failed to access repository metadata {}: {e}",
+            dot_git.display()
+        )
+    })?;
+
+    if dot_git_metadata.is_dir() {
+        return fs::canonicalize(&dot_git).map_err(|e| {
+            format!(
+                "failed to canonicalize repository git directory {}: {e}",
+                dot_git.display()
+            )
+        });
+    }
+
+    if !dot_git_metadata.is_file() {
+        return Err(format!(
+            "repository metadata path is neither a directory nor file: {}",
+            dot_git.display()
+        ));
+    }
+
+    let git_dir = read_git_dir_from_dot_git_file(canonical_repo, dot_git.as_path())?;
+    let common_dir_path = git_dir.join("commondir");
+    if !common_dir_path.exists() {
+        return Ok(git_dir);
+    }
+    if !common_dir_path.is_file() {
+        return Err(format!(
+            "git commondir metadata is not a file: {}",
+            common_dir_path.display()
+        ));
+    }
+
+    let common_dir_raw = fs::read_to_string(&common_dir_path).map_err(|e| {
+        format!(
+            "failed to read git commondir metadata {}: {e}",
+            common_dir_path.display()
+        )
+    })?;
+    let common_dir_value = common_dir_raw.trim();
+    if common_dir_value.is_empty() {
+        return Err(format!(
+            "git commondir metadata is empty: {}",
+            common_dir_path.display()
+        ));
+    }
+
+    let common_dir = PathBuf::from(common_dir_value);
+    let resolved_common_dir = if common_dir.is_absolute() {
+        common_dir
+    } else {
+        git_dir.join(common_dir)
+    };
+    fs::canonicalize(&resolved_common_dir).map_err(|e| {
+        format!(
+            "failed to canonicalize git common directory {}: {e}",
+            resolved_common_dir.display()
+        )
+    })
+}
+
+fn system_time_to_nanos(value: SystemTime, context: &str) -> Result<u128, String> {
+    value
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .map_err(|e| format!("{context} is before unix epoch: {e}"))
+}
+
+fn read_worktree_state_token(canonical_repo: &Path) -> Result<String, String> {
+    let common_git_dir = read_git_common_dir(canonical_repo)?;
+    let worktrees_dir = common_git_dir.join("worktrees");
+    if !worktrees_dir.exists() {
+        return Ok(format!(
+            "{}|worktrees=none",
+            common_git_dir.to_string_lossy()
+        ));
+    }
+
+    let worktrees_metadata = fs::metadata(&worktrees_dir).map_err(|e| {
+        format!(
+            "failed to read git worktrees metadata {}: {e}",
+            worktrees_dir.display()
+        )
+    })?;
+    if !worktrees_metadata.is_dir() {
+        return Err(format!(
+            "git worktrees path is not a directory: {}",
+            worktrees_dir.display()
+        ));
+    }
+
+    let modified_nanos = system_time_to_nanos(
+        worktrees_metadata.modified().map_err(|e| {
+            format!(
+                "failed to read git worktrees modified time {}: {e}",
+                worktrees_dir.display()
+            )
+        })?,
+        "git worktrees modified time",
+    )?;
+
+    let mut entry_names = fs::read_dir(&worktrees_dir)
+        .map_err(|e| {
+            format!(
+                "failed to read git worktrees directory {}: {e}",
+                worktrees_dir.display()
+            )
+        })?
+        .map(|entry_result| {
+            entry_result
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .map_err(|e| {
+                    format!(
+                        "failed to read entry from git worktrees directory {}: {e}",
+                        worktrees_dir.display()
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    entry_names.sort_unstable();
+
+    Ok(format!(
+        "{}|worktrees_modified_ns={modified_nanos}|entries={}",
+        common_git_dir.to_string_lossy(),
+        entry_names.join(",")
+    ))
+}
+
+fn is_authorized_worktree(
+    canonical_repo: &Path,
+    canonical_working_dir: &Path,
+) -> Result<bool, String> {
     let key = cache_key(canonical_repo);
+    let worktree_state_token = read_worktree_state_token(canonical_repo)?;
     let now = Instant::now();
-    if let Some(worktrees) = {
+    if let Some(cached_membership) = {
         let cache = authorized_worktree_cache()
             .lock()
             .map_err(|_| cache_lock_error("loading cached worktree entries"))?;
         cache.get(&key).and_then(|entry| {
-            if now.duration_since(entry.cached_at) <= AUTHORIZED_WORKTREE_CACHE_TTL {
-                Some(entry.worktrees.clone())
+            if entry.worktree_state_token == worktree_state_token
+                && now.duration_since(entry.cached_at) <= AUTHORIZED_WORKTREE_CACHE_TTL
+            {
+                Some(entry.worktrees.contains(canonical_working_dir))
             } else {
                 None
             }
         })
     } {
-        return Ok(worktrees);
+        return Ok(cached_membership);
     }
 
-    let worktrees = list_authorized_worktrees(canonical_repo)?;
+    let worktree_set = list_authorized_worktrees(canonical_repo)?
+        .into_iter()
+        .collect::<HashSet<_>>();
+    let is_member = worktree_set.contains(canonical_working_dir);
     let mut cache = authorized_worktree_cache()
         .lock()
         .map_err(|_| cache_lock_error("storing cached worktree entries"))?;
@@ -64,10 +241,11 @@ fn list_authorized_worktrees_cached(canonical_repo: &Path) -> Result<Vec<PathBuf
         key,
         AuthorizedWorktreeCacheEntry {
             cached_at: now,
-            worktrees: worktrees.clone(),
+            worktree_state_token,
+            worktrees: worktree_set,
         },
     );
-    Ok(worktrees)
+    Ok(is_member)
 }
 
 pub(crate) fn invalidate_worktree_resolution_cache_for_repo(repo_path: &str) -> Result<(), String> {
@@ -135,11 +313,7 @@ fn resolve_working_dir(repo_path: &str, working_dir: Option<&str>) -> Result<Str
                 return Ok(canonical_working_dir.to_string_lossy().to_string());
             }
 
-            let worktrees = list_authorized_worktrees_cached(canonical_repo.as_path())?;
-            if worktrees
-                .iter()
-                .any(|worktree| worktree == &canonical_working_dir)
-            {
+            if is_authorized_worktree(canonical_repo.as_path(), canonical_working_dir.as_path())? {
                 return Ok(canonical_working_dir.to_string_lossy().to_string());
             }
 
@@ -698,14 +872,15 @@ pub async fn git_rebase_branch(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
-        git_get_worktree_status, git_get_worktree_status_summary, hash_worktree_diff_payload,
-        hash_worktree_diff_summary_payload, hash_worktree_status_payload,
-        invalidate_worktree_resolution_cache_all, invalidate_worktree_resolution_cache_for_repo,
-        parse_diff_scope, require_target_branch, resolve_working_dir, WorktreeSnapshotMetadata,
-        GIT_WORKTREE_HASH_VERSION,
+        authorized_worktree_cache, build_worktree_status_summary_with_snapshot,
+        build_worktree_status_with_snapshot, cache_key, git_create_worktree,
+        git_get_worktree_status, git_get_worktree_status_summary, git_remove_worktree,
+        hash_worktree_diff_payload, hash_worktree_diff_summary_payload,
+        hash_worktree_status_payload, invalidate_worktree_resolution_cache_all, parse_diff_scope,
+        read_worktree_state_token, require_target_branch, resolve_working_dir,
+        AuthorizedWorktreeCacheEntry, WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
     };
-    use crate::AppState;
+    use crate::{commands::workspace::workspace_select, AppState};
     use anyhow::anyhow;
     use host_application::AppService;
     use host_domain::GitPort;
@@ -720,18 +895,18 @@ mod tests {
     use host_infra_system::AppConfigStore;
     use serde_json::{json, Value};
     use std::{
-        collections::HashMap,
+        collections::{HashMap, HashSet},
         env, fs,
         path::{Path, PathBuf},
         process::Command,
         sync::{Arc, Mutex},
-        time::{SystemTime, UNIX_EPOCH},
+        time::{Instant, SystemTime, UNIX_EPOCH},
     };
     use tauri::{
         ipc::{CallbackFn, InvokeBody},
         test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY},
         webview::InvokeRequest,
-        App, Webview, WebviewWindow, WebviewWindowBuilder,
+        App, Manager, Webview, WebviewWindow, WebviewWindowBuilder,
     };
 
     #[derive(Clone)]
@@ -760,11 +935,29 @@ mod tests {
         diff_scope: GitDiffScope,
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct CreateWorktreeCall {
+        repo_path: String,
+        worktree_path: String,
+        branch: String,
+        create_branch: bool,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct RemoveWorktreeCall {
+        repo_path: String,
+        worktree_path: String,
+        force: bool,
+    }
+
     struct CommandGitPortState {
         worktree_status_result: WorktreeStatusResult,
         worktree_status_calls: Vec<WorktreeStatusCall>,
         worktree_status_summary_result: WorktreeStatusSummaryResult,
         worktree_status_summary_calls: Vec<WorktreeStatusSummaryCall>,
+        worktree_mutation_allowed: bool,
+        create_worktree_calls: Vec<CreateWorktreeCall>,
+        remove_worktree_calls: Vec<RemoveWorktreeCall>,
     }
 
     struct CommandGitPort {
@@ -775,6 +968,7 @@ mod tests {
         fn new_with_summary_result(
             result: WorktreeStatusResult,
             summary_result: WorktreeStatusSummaryResult,
+            worktree_mutation_allowed: bool,
         ) -> Self {
             Self {
                 state: Arc::new(Mutex::new(CommandGitPortState {
@@ -782,6 +976,9 @@ mod tests {
                     worktree_status_calls: Vec::new(),
                     worktree_status_summary_result: summary_result,
                     worktree_status_summary_calls: Vec::new(),
+                    worktree_mutation_allowed,
+                    create_worktree_calls: Vec::new(),
+                    remove_worktree_calls: Vec::new(),
                 })),
             }
         }
@@ -807,21 +1004,46 @@ mod tests {
 
         fn create_worktree(
             &self,
-            _repo_path: &Path,
-            _worktree_path: &Path,
-            _branch: &str,
-            _create_branch: bool,
+            repo_path: &Path,
+            worktree_path: &Path,
+            branch: &str,
+            create_branch: bool,
         ) -> anyhow::Result<()> {
-            panic!("unexpected call: create_worktree");
+            let mut state = self
+                .state
+                .lock()
+                .expect("command git port state lock should not be poisoned");
+            if !state.worktree_mutation_allowed {
+                panic!("unexpected call: create_worktree");
+            }
+            state.create_worktree_calls.push(CreateWorktreeCall {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                worktree_path: worktree_path.to_string_lossy().to_string(),
+                branch: branch.to_string(),
+                create_branch,
+            });
+            Ok(())
         }
 
         fn remove_worktree(
             &self,
-            _repo_path: &Path,
-            _worktree_path: &Path,
-            _force: bool,
+            repo_path: &Path,
+            worktree_path: &Path,
+            force: bool,
         ) -> anyhow::Result<()> {
-            panic!("unexpected call: remove_worktree");
+            let mut state = self
+                .state
+                .lock()
+                .expect("command git port state lock should not be poisoned");
+            if !state.worktree_mutation_allowed {
+                panic!("unexpected call: remove_worktree");
+            }
+            state.remove_worktree_calls.push(RemoveWorktreeCall {
+                repo_path: repo_path.to_string_lossy().to_string(),
+                worktree_path: worktree_path.to_string_lossy().to_string(),
+                force,
+            });
+            Ok(())
         }
 
         fn push_branch(
@@ -995,6 +1217,26 @@ mod tests {
                 },
             )),
             authorize_repo,
+            false,
+        )
+    }
+
+    fn setup_command_git_fixture_with_mutations(
+        prefix: &str,
+        result: WorktreeStatusResult,
+        authorize_repo: bool,
+    ) -> CommandGitFixture {
+        setup_command_git_fixture_with_summary(
+            prefix,
+            result,
+            WorktreeStatusSummaryResult::Ok(sample_worktree_status_summary_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            authorize_repo,
+            true,
         )
     }
 
@@ -1003,6 +1245,7 @@ mod tests {
         result: WorktreeStatusResult,
         summary_result: WorktreeStatusSummaryResult,
         authorize_repo: bool,
+        worktree_mutation_allowed: bool,
     ) -> CommandGitFixture {
         let root = unique_test_dir(prefix);
         let repo = root.join("repo");
@@ -1015,7 +1258,11 @@ mod tests {
                 .expect("workspace should be allowlisted");
         }
 
-        let git_port = CommandGitPort::new_with_summary_result(result, summary_result);
+        let git_port = CommandGitPort::new_with_summary_result(
+            result,
+            summary_result,
+            worktree_mutation_allowed,
+        );
         let git_state = git_port.state.clone();
         let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
             TASK_METADATA_NAMESPACE,
@@ -1033,7 +1280,9 @@ mod tests {
             })
             .invoke_handler(tauri::generate_handler![
                 git_get_worktree_status,
-                git_get_worktree_status_summary
+                git_get_worktree_status_summary,
+                git_create_worktree,
+                git_remove_worktree
             ])
             .build(mock_context(noop_assets()))
             .expect("test app should build");
@@ -1074,6 +1323,30 @@ mod tests {
                 .deserialize::<Value>()
                 .expect("command response should deserialize")
         })
+    }
+
+    fn seed_authorized_worktree_cache_with_subset(repo: &Path, allowed_worktrees: &[&Path]) {
+        let canonical_repo =
+            fs::canonicalize(repo).expect("repo should canonicalize for cache seed");
+        let worktree_state_token = read_worktree_state_token(canonical_repo.as_path())
+            .expect("worktree state token should be readable for cache seed");
+        let seeded_worktrees = allowed_worktrees
+            .iter()
+            .map(|path| {
+                fs::canonicalize(path).expect("worktree should canonicalize for cache seed")
+            })
+            .collect::<HashSet<_>>();
+        let mut cache = authorized_worktree_cache()
+            .lock()
+            .expect("authorized worktree cache lock should not be poisoned");
+        cache.insert(
+            cache_key(canonical_repo.as_path()),
+            AuthorizedWorktreeCacheEntry {
+                cached_at: Instant::now(),
+                worktree_state_token,
+                worktrees: seeded_worktrees,
+            },
+        );
     }
 
     fn sample_worktree_status_data(upstream: GitUpstreamAheadBehind) -> GitWorktreeStatusData {
@@ -1404,6 +1677,7 @@ mod tests {
                 },
             )),
             true,
+            false,
         );
 
         let response = invoke_json(
@@ -1464,6 +1738,7 @@ mod tests {
             )),
             WorktreeStatusSummaryResult::Err("failed collecting summary status".to_string()),
             true,
+            false,
         );
 
         let error = invoke_json(
@@ -1625,7 +1900,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_working_dir_refreshes_cached_worktrees_after_repo_invalidation() {
+    fn resolve_working_dir_refreshes_when_worktree_metadata_changes() {
         invalidate_worktree_resolution_cache_all()
             .expect("worktree cache should clear before test setup");
 
@@ -1673,17 +1948,8 @@ mod tests {
             &repo,
         );
 
-        let stale_error = resolve_working_dir(repo_str.as_str(), Some(worktree_two_str.as_str()))
-            .expect_err("cache should remain stale until explicitly invalidated");
-        assert!(
-            stale_error.contains("not within authorized repository or linked worktrees"),
-            "unexpected stale cache error: {stale_error}"
-        );
-
-        invalidate_worktree_resolution_cache_for_repo(repo_str.as_str())
-            .expect("repo cache invalidation should succeed");
         let resolved_two = resolve_working_dir(repo_str.as_str(), Some(worktree_two_str.as_str()))
-            .expect("worktree should resolve once cache is invalidated");
+            .expect("worktree should resolve once metadata coherency forces a refresh");
         let expected_two = fs::canonicalize(&worktree_two)
             .expect("second worktree should canonicalize")
             .to_string_lossy()
@@ -1693,6 +1959,240 @@ mod tests {
         invalidate_worktree_resolution_cache_all()
             .expect("worktree cache should clear during test teardown");
         fs::remove_dir_all(&root).expect("failed to remove test directory");
+    }
+
+    #[test]
+    fn git_create_worktree_invalidates_authorized_worktree_cache() {
+        invalidate_worktree_resolution_cache_all()
+            .expect("worktree cache should clear before test setup");
+
+        let fixture = setup_command_git_fixture_with_mutations(
+            "git-command-create-worktree-cache-invalidate",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            true,
+        );
+        let repo_path = Path::new(&fixture.repo_path);
+        let worktree_one = fixture.root.join("repo-wt-create-one");
+        let worktree_two = fixture.root.join("repo-wt-create-two");
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/create-cache-one",
+                worktree_one.to_string_lossy().as_ref(),
+            ],
+            repo_path,
+        );
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/create-cache-two",
+                worktree_two.to_string_lossy().as_ref(),
+            ],
+            repo_path,
+        );
+
+        seed_authorized_worktree_cache_with_subset(repo_path, &[worktree_one.as_path()]);
+
+        let worktree_two_str = worktree_two.to_string_lossy().to_string();
+        let stale_error =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect_err("seeded cache should reject worktree omitted from subset");
+        assert!(
+            stale_error.contains("not within authorized repository or linked worktrees"),
+            "unexpected stale cache error: {stale_error}"
+        );
+
+        let command_worktree_path = fixture.root.join("repo-wt-command-create");
+        invoke_json(
+            &fixture.webview,
+            "git_create_worktree",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "worktreePath": command_worktree_path.to_string_lossy().to_string(),
+                "branch": "feature/command-create",
+                "createBranch": true,
+            }),
+        )
+        .expect("git_create_worktree should succeed");
+
+        let resolved =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect("worktree cache should refresh after create command invalidation");
+        let expected = fs::canonicalize(&worktree_two)
+            .expect("worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
+
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert_eq!(state.create_worktree_calls.len(), 1);
+    }
+
+    #[test]
+    fn git_remove_worktree_invalidates_authorized_worktree_cache() {
+        invalidate_worktree_resolution_cache_all()
+            .expect("worktree cache should clear before test setup");
+
+        let fixture = setup_command_git_fixture_with_mutations(
+            "git-command-remove-worktree-cache-invalidate",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            true,
+        );
+        let repo_path = Path::new(&fixture.repo_path);
+        let worktree_one = fixture.root.join("repo-wt-remove-one");
+        let worktree_two = fixture.root.join("repo-wt-remove-two");
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/remove-cache-one",
+                worktree_one.to_string_lossy().as_ref(),
+            ],
+            repo_path,
+        );
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/remove-cache-two",
+                worktree_two.to_string_lossy().as_ref(),
+            ],
+            repo_path,
+        );
+
+        seed_authorized_worktree_cache_with_subset(repo_path, &[worktree_one.as_path()]);
+
+        let worktree_two_str = worktree_two.to_string_lossy().to_string();
+        let stale_error =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect_err("seeded cache should reject worktree omitted from subset");
+        assert!(
+            stale_error.contains("not within authorized repository or linked worktrees"),
+            "unexpected stale cache error: {stale_error}"
+        );
+
+        invoke_json(
+            &fixture.webview,
+            "git_remove_worktree",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "worktreePath": worktree_one.to_string_lossy().to_string(),
+                "force": false,
+            }),
+        )
+        .expect("git_remove_worktree should succeed");
+
+        let resolved =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect("worktree cache should refresh after remove command invalidation");
+        let expected = fs::canonicalize(&worktree_two)
+            .expect("worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
+
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert_eq!(state.remove_worktree_calls.len(), 1);
+    }
+
+    #[test]
+    fn workspace_select_invalidates_authorized_worktree_cache() {
+        invalidate_worktree_resolution_cache_all()
+            .expect("worktree cache should clear before test setup");
+
+        let fixture = setup_command_git_fixture(
+            "workspace-select-cache-invalidate",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            true,
+        );
+        let repo_path = Path::new(&fixture.repo_path);
+        let worktree_one = fixture.root.join("repo-wt-workspace-one");
+        let worktree_two = fixture.root.join("repo-wt-workspace-two");
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/workspace-cache-one",
+                worktree_one.to_string_lossy().as_ref(),
+            ],
+            repo_path,
+        );
+        run_git(
+            &[
+                "-C",
+                fixture.repo_path.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/workspace-cache-two",
+                worktree_two.to_string_lossy().as_ref(),
+            ],
+            repo_path,
+        );
+
+        seed_authorized_worktree_cache_with_subset(repo_path, &[worktree_one.as_path()]);
+
+        let worktree_two_str = worktree_two.to_string_lossy().to_string();
+        let stale_error =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect_err("seeded cache should reject worktree omitted from subset");
+        assert!(
+            stale_error.contains("not within authorized repository or linked worktrees"),
+            "unexpected stale cache error: {stale_error}"
+        );
+
+        tauri::async_runtime::block_on(workspace_select(
+            fixture._app.state(),
+            fixture.repo_path.clone(),
+        ))
+        .expect("workspace_select should succeed");
+
+        let resolved =
+            resolve_working_dir(fixture.repo_path.as_str(), Some(worktree_two_str.as_str()))
+                .expect("worktree cache should refresh after workspace selection invalidation");
+        let expected = fs::canonicalize(&worktree_two)
+            .expect("worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved, expected);
     }
 
     #[test]
