@@ -22,6 +22,7 @@ fn has_configured_worktree(repo: &RepoConfig) -> bool {
 #[derive(Debug, Clone)]
 pub struct AppConfigStore {
     pub(super) path: PathBuf,
+    pub(super) enforce_private_parent_permissions: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -47,11 +48,18 @@ impl AppConfigStore {
     pub fn new() -> Result<Self> {
         Ok(Self {
             path: resolve_default_path(USER_SETTINGS_FILENAME)?,
+            enforce_private_parent_permissions: true,
         })
     }
 
     pub fn from_path(path: PathBuf) -> Self {
-        Self { path }
+        let enforce_private_parent_permissions = resolve_default_path(USER_SETTINGS_FILENAME)
+            .map(|default_path| default_path == path)
+            .unwrap_or(false);
+        Self {
+            path,
+            enforce_private_parent_permissions,
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -63,7 +71,7 @@ impl AppConfigStore {
             return Ok(GlobalConfig::default());
         }
 
-        validate_config_access(&self.path)?;
+        validate_config_access(&self.path, self.enforce_private_parent_permissions)?;
 
         let data = fs::read_to_string(&self.path)
             .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
@@ -114,13 +122,13 @@ impl AppConfigStore {
             fs::create_dir_all(parent).with_context(|| {
                 format!("Failed creating config directory {}", parent.display())
             })?;
-            enforce_directory_permissions(parent)?;
+            enforce_directory_permissions(parent, self.enforce_private_parent_permissions)?;
         }
         let mut normalized = config.clone();
         normalize_global_config(&mut normalized);
         let payload = serde_json::to_string_pretty(&normalized)?;
         write_config_file(&self.path, payload.as_bytes())?;
-        validate_config_access(&self.path)?;
+        validate_config_access(&self.path, self.enforce_private_parent_permissions)?;
         Ok(())
     }
 
@@ -438,7 +446,7 @@ fn write_config_file(path: &Path, contents: &[u8]) -> Result<()> {
     }
 }
 
-fn validate_config_access(path: &Path) -> Result<()> {
+fn validate_config_access(path: &Path, enforce_private_parent_permissions: bool) -> Result<()> {
     #[cfg(unix)]
     {
         let parent = path.parent().ok_or_else(|| {
@@ -447,38 +455,39 @@ fn validate_config_access(path: &Path) -> Result<()> {
                 path.display()
             )
         })?;
-        let expected_uid = current_user_uid()?;
-        validate_private_directory(parent, expected_uid)?;
+        let expected_uid = current_effective_uid();
+        if enforce_private_parent_permissions {
+            validate_private_directory(parent, expected_uid)?;
+        }
         validate_private_file(path, expected_uid)?;
     }
     Ok(())
 }
 
-fn enforce_directory_permissions(path: &Path) -> Result<()> {
+fn enforce_directory_permissions(
+    path: &Path,
+    enforce_private_parent_permissions: bool,
+) -> Result<()> {
     #[cfg(unix)]
     {
-        fs::set_permissions(path, fs::Permissions::from_mode(CONFIG_DIR_MODE)).with_context(
-            || {
-                format!(
-                    "Failed setting secure permissions on config directory {}",
-                    path.display()
-                )
-            },
-        )?;
+        if enforce_private_parent_permissions {
+            fs::set_permissions(path, fs::Permissions::from_mode(CONFIG_DIR_MODE)).with_context(
+                || {
+                    format!(
+                        "Failed setting secure permissions on config directory {}",
+                        path.display()
+                    )
+                },
+            )?;
+        }
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn current_user_uid() -> Result<u32> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
-    let metadata = fs::metadata(&home).with_context(|| {
-        format!(
-            "Failed reading metadata for home directory {}",
-            home.display()
-        )
-    })?;
-    Ok(metadata.uid())
+fn current_effective_uid() -> u32 {
+    // SAFETY: geteuid has no preconditions and does not dereference pointers.
+    unsafe { libc::geteuid() as u32 }
 }
 
 #[cfg(unix)]
@@ -500,9 +509,9 @@ fn validate_private_directory(path: &Path, expected_uid: u32) -> Result<()> {
             path.display()
         ));
     }
-    if mode & 0o077 != 0 {
+    if mode != CONFIG_DIR_MODE {
         return Err(anyhow!(
-            "Config directory {} is too permissive (mode {:04o}). Expected 0700 or stricter. Run `chmod 700 {}`.",
+            "Config directory {} has unsupported mode {:04o}. Expected 0700 exactly. Run `chmod 700 {}`.",
             path.display(),
             mode,
             path.display()
@@ -526,9 +535,9 @@ fn validate_private_file(path: &Path, expected_uid: u32) -> Result<()> {
             path.display()
         ));
     }
-    if mode & 0o077 != 0 {
+    if mode != CONFIG_FILE_MODE {
         return Err(anyhow!(
-            "Config file {} is too permissive (mode {:04o}). Expected 0600 or stricter. Run `chmod 600 {}`.",
+            "Config file {} has unsupported mode {:04o}. Expected 0600 exactly. Run `chmod 600 {}`.",
             path.display(),
             mode,
             path.display()

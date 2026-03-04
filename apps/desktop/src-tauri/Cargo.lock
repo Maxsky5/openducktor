@@ -1305,6 +1305,7 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "host-domain",
+ "libc",
  "rayon",
  "serde",
  "serde_json",
