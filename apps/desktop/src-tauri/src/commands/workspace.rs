@@ -83,22 +83,6 @@ pub async fn workspace_update_repo_config(
             .as_ref()
             .map(|entry| entry.hooks.clone())
             .unwrap_or_default(),
-        worktree_setup_script: config
-            .worktree_setup_script
-            .or_else(|| {
-                existing
-                    .as_ref()
-                    .map(|entry| entry.worktree_setup_script.clone())
-            })
-            .unwrap_or_default(),
-        worktree_cleanup_script: config
-            .worktree_cleanup_script
-            .or_else(|| {
-                existing
-                    .as_ref()
-                    .map(|entry| entry.worktree_cleanup_script.clone())
-            })
-            .unwrap_or_default(),
         worktree_file_copies: config
             .worktree_file_copies
             .or_else(|| {
@@ -158,12 +142,6 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
         trusted_hooks: settings.trusted_hooks,
         trusted_hooks_fingerprint,
         hooks: normalized_hooks,
-        worktree_setup_script: settings
-            .worktree_setup_script
-            .unwrap_or(existing.worktree_setup_script),
-        worktree_cleanup_script: settings
-            .worktree_cleanup_script
-            .unwrap_or(existing.worktree_cleanup_script),
         worktree_file_copies: settings
             .worktree_file_copies
             .unwrap_or(existing.worktree_file_copies),
@@ -438,7 +416,7 @@ async fn confirm_hook_trust_dialog<R: tauri::Runtime>(
     }
 
     let dialog_message = format!(
-        "Approve trusted hooks for this workspace?\n\nRepository:\n{repo}\n\nPre-start hooks:\n{pre}\n\nPost-complete hooks:\n{post}\n\nTrusted hooks can execute shell commands on this machine.",
+        "Approve trusted scripts for this workspace?\n\nRepository:\n{repo}\n\nWorktree setup script commands:\n{pre}\n\nWorktree cleanup script commands:\n{post}\n\nTrusted scripts can execute shell commands on this machine.",
         repo = repo_path,
         pre = format_hook_list(&hooks.pre_start),
         post = format_hook_list(&hooks.post_complete),
@@ -450,10 +428,10 @@ async fn confirm_hook_trust_dialog<R: tauri::Runtime>(
             Ok(app_handle
                 .dialog()
                 .message(dialog_message)
-                .title("Trust Workspace Hooks")
+                .title("Trust Workspace Scripts")
                 .kind(MessageDialogKind::Warning)
                 .buttons(MessageDialogButtons::OkCancelCustom(
-                    "Trust hooks".to_string(),
+                    "Trust scripts".to_string(),
                     "Cancel".to_string(),
                 ))
                 .blocking_show())

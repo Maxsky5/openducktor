@@ -99,8 +99,6 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            worktree_setup_script: String::new(),
-            worktree_cleanup_script: String::new(),
             worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),

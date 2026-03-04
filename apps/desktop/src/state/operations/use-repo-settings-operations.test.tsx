@@ -66,8 +66,6 @@ const inputFixture: RepoSettingsInput = {
   trustedHooks: true,
   preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
-  worktreeSetupScript: "  bun install  ",
-  worktreeCleanupScript: "  rm -rf node_modules  ",
   worktreeFileCopies: ["  .env  ", "  .env.local  "],
   agentDefaults: {
     spec: {
@@ -148,8 +146,6 @@ describe("use-repo-settings-operations", () => {
         trustedHooks: false,
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
-        worktreeSetupScript: "",
-        worktreeCleanupScript: "",
         worktreeFileCopies: [],
         agentDefaults: {
           spec: { providerId: "openai", modelId: "gpt-5", variant: "", opencodeAgent: "" },
@@ -198,8 +194,6 @@ describe("use-repo-settings-operations", () => {
           preStart: ["echo pre"],
           postComplete: ["echo post"],
         },
-        worktreeSetupScript: "bun install",
-        worktreeCleanupScript: "rm -rf node_modules",
         worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {

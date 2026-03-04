@@ -301,8 +301,6 @@ const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
       preStart: repo.hooks.preStart.map((entry) => entry.trim()).filter(Boolean),
       postComplete: repo.hooks.postComplete.map((entry) => entry.trim()).filter(Boolean),
     },
-    worktreeSetupScript: repo.worktreeSetupScript.trim(),
-    worktreeCleanupScript: repo.worktreeCleanupScript.trim(),
     worktreeFileCopies: repo.worktreeFileCopies.map((entry) => entry.trim()).filter(Boolean),
     promptOverrides: normalizePromptOverridesForSave(repo.promptOverrides),
     agentDefaults: {
@@ -1001,12 +999,14 @@ export function SettingsModal({
               }))
             }
           />
-          Trust hooks for this repository
+          Trust scripts for this repository
         </Label>
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="repo-pre-start-hooks">Pre-start hooks (one command per line)</Label>
+            <Label htmlFor="repo-pre-start-hooks">
+              Worktree setup script (one command per line)
+            </Label>
             <Textarea
               id="repo-pre-start-hooks"
               rows={4}
@@ -1027,7 +1027,7 @@ export function SettingsModal({
 
           <div className="grid gap-2">
             <Label htmlFor="repo-post-complete-hooks">
-              Post-complete hooks (one command per line)
+              Worktree cleanup script (one command per line)
             </Label>
             <Textarea
               id="repo-post-complete-hooks"
@@ -1042,42 +1042,6 @@ export function SettingsModal({
                     ...repoConfig.hooks,
                     postComplete: parseHookLines(postCompleteHooksInput),
                   },
-                }));
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="grid gap-2">
-            <Label htmlFor="repo-worktree-setup">Worktree setup script</Label>
-            <Textarea
-              id="repo-worktree-setup"
-              rows={4}
-              value={selectedRepoConfig.worktreeSetupScript}
-              disabled={isLoadingSettings || isSaving}
-              onChange={(event) => {
-                const worktreeSetupScript = event.currentTarget.value;
-                updateSelectedRepoConfig((repoConfig) => ({
-                  ...repoConfig,
-                  worktreeSetupScript,
-                }));
-              }}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="repo-worktree-cleanup">Worktree cleanup script</Label>
-            <Textarea
-              id="repo-worktree-cleanup"
-              rows={4}
-              value={selectedRepoConfig.worktreeCleanupScript}
-              disabled={isLoadingSettings || isSaving}
-              onChange={(event) => {
-                const worktreeCleanupScript = event.currentTarget.value;
-                updateSelectedRepoConfig((repoConfig) => ({
-                  ...repoConfig,
-                  worktreeCleanupScript,
                 }));
               }}
             />

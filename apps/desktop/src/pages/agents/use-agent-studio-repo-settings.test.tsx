@@ -21,8 +21,6 @@ const createSettings = (): RepoSettingsInput => ({
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
-  worktreeSetupScript: "",
-  worktreeCleanupScript: "",
   worktreeFileCopies: [],
   agentDefaults: {
     spec: null,

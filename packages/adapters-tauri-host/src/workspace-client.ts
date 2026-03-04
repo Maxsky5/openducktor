@@ -28,8 +28,6 @@ export type WorkspaceRepoConfigInput = {
   worktreeBasePath?: string;
   branchPrefix?: string;
   defaultTargetBranch?: string;
-  worktreeSetupScript?: string;
-  worktreeCleanupScript?: string;
   worktreeFileCopies?: string[];
   agentDefaults?: WorkspaceAgentDefaults;
   promptOverrides?: RepoPromptOverrides;
@@ -39,8 +37,6 @@ export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {
   defaultTargetBranch?: string;
   trustedHooks: boolean;
   hooks?: WorkspaceRepoHooksInput;
-  worktreeSetupScript?: string;
-  worktreeCleanupScript?: string;
   worktreeFileCopies?: string[];
 };
 

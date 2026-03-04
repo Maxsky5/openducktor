@@ -80,8 +80,6 @@ export function useRepoSettingsOperations({
       trustedHooks: config.trustedHooks,
       preStartHooks: config.hooks.preStart,
       postCompleteHooks: config.hooks.postComplete,
-      worktreeSetupScript: config.worktreeSetupScript ?? "",
-      worktreeCleanupScript: config.worktreeCleanupScript ?? "",
       worktreeFileCopies: config.worktreeFileCopies ?? [],
       agentDefaults: {
         spec: toInputDefault(config.agentDefaults.spec),
@@ -119,8 +117,6 @@ export function useRepoSettingsOperations({
           preStart: input.preStartHooks,
           postComplete: input.postCompleteHooks,
         },
-        worktreeSetupScript: input.worktreeSetupScript.trim(),
-        worktreeCleanupScript: input.worktreeCleanupScript.trim(),
         worktreeFileCopies: input.worktreeFileCopies.map((f) => f.trim()).filter(Boolean),
         agentDefaults,
       });

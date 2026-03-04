@@ -93,10 +93,6 @@ pub struct RepoConfig {
     #[serde(default)]
     pub hooks: HookSet,
     #[serde(default)]
-    pub worktree_setup_script: String,
-    #[serde(default)]
-    pub worktree_cleanup_script: String,
-    #[serde(default)]
     pub worktree_file_copies: Vec<String>,
     #[serde(default)]
     pub prompt_overrides: PromptOverrides,
@@ -121,8 +117,6 @@ impl Default for RepoConfig {
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            worktree_setup_script: String::new(),
-            worktree_cleanup_script: String::new(),
             worktree_file_copies: Vec::new(),
             prompt_overrides: PromptOverrides::default(),
             agent_defaults: AgentDefaults::default(),

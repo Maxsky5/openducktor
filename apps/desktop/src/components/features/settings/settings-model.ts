@@ -18,8 +18,6 @@ export const emptyRepoSettings = (): RepoSettingsInput => ({
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
-  worktreeSetupScript: "",
-  worktreeCleanupScript: "",
   worktreeFileCopies: [],
   agentDefaults: {
     spec: null,

@@ -89,8 +89,6 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     repo.default_target_branch = canonicalize_default_target_branch(&repo.default_target_branch);
     normalize_hook_commands(&mut repo.hooks.pre_start);
     normalize_hook_commands(&mut repo.hooks.post_complete);
-    repo.worktree_setup_script = repo.worktree_setup_script.trim().to_string();
-    repo.worktree_cleanup_script = repo.worktree_cleanup_script.trim().to_string();
     normalize_hook_commands(&mut repo.worktree_file_copies);
     let current_fingerprint = hook_set_fingerprint(&repo.hooks);
     if repo.trusted_hooks {

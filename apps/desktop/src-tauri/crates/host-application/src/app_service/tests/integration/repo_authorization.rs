@@ -126,8 +126,6 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
-                worktree_setup_script: String::new(),
-                worktree_cleanup_script: String::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),

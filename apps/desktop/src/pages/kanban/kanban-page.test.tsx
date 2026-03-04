@@ -44,8 +44,6 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
-  worktreeSetupScript: "",
-  worktreeCleanupScript: "",
   worktreeFileCopies: [],
   agentDefaults: {
     spec: {

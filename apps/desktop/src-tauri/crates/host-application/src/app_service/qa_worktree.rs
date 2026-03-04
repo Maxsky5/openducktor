@@ -74,10 +74,12 @@ pub(super) fn prepare_qa_worktree(
                 remove_runtime_worktree(repo_path_ref, qa_worktree.as_path())
             {
                 return Err(anyhow!(
-                    "QA pre-start hook failed: {hook}\n{stderr}\nAlso failed to remove QA worktree: {cleanup_error}"
+                    "QA worktree setup script command failed: {hook}\n{stderr}\nAlso failed to remove QA worktree: {cleanup_error}"
                 ));
             }
-            return Err(anyhow!("QA pre-start hook failed: {hook}\n{stderr}"));
+            return Err(anyhow!(
+                "QA worktree setup script command failed: {hook}\n{stderr}"
+            ));
         }
     }
 
@@ -163,8 +165,6 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
-                worktree_setup_script: String::new(),
-                worktree_cleanup_script: String::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -199,8 +199,6 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
-                worktree_setup_script: String::new(),
-                worktree_cleanup_script: String::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -238,8 +236,6 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: Some(hook_set_fingerprint(&hooks)),
                 hooks,
-                worktree_setup_script: String::new(),
-                worktree_cleanup_script: String::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
@@ -249,7 +245,9 @@ mod tests {
         let qa_worktree_path = worktree_base.join("qa-task-1");
         let error = prepare_qa_worktree(repo_path.as_str(), "task-1", "Task 1", &config_store)
             .expect_err("failing pre-start hook should fail setup");
-        assert!(error.to_string().contains("QA pre-start hook failed"));
+        assert!(error
+            .to_string()
+            .contains("QA worktree setup script command failed"));
         assert!(
             !qa_worktree_path.exists(),
             "qa worktree should be removed when pre-start hook fails"
@@ -278,8 +276,6 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
-                worktree_setup_script: String::new(),
-                worktree_cleanup_script: String::new(),
                 worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),

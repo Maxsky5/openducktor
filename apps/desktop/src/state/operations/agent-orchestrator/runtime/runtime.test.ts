@@ -172,8 +172,6 @@ describe("agent-orchestrator-runtime", () => {
         preStart: [],
         postComplete: [],
       },
-      worktreeSetupScript: "",
-      worktreeCleanupScript: "",
       worktreeFileCopies: [],
       promptOverrides: {},
       agentDefaults: {
@@ -210,8 +208,6 @@ describe("agent-orchestrator-runtime", () => {
         preStart: [],
         postComplete: [],
       },
-      worktreeSetupScript: "",
-      worktreeCleanupScript: "",
       worktreeFileCopies: [],
       promptOverrides: {
         "kickoff.planner_initial": {

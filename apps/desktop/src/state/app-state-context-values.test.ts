@@ -52,8 +52,6 @@ describe("app-state-context-values", () => {
         trustedHooks: false,
         preStartHooks: [],
         postCompleteHooks: [],
-        worktreeSetupScript: "",
-        worktreeCleanupScript: "",
         worktreeFileCopies: [],
         agentDefaults: { spec: null, planner: null, build: null, qa: null },
       }),

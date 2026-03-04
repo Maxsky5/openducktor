@@ -45,14 +45,14 @@ pub(crate) fn validate_hook_trust(repo_path: &str, repo_config: &RepoConfig) -> 
 
     if !repo_config.trusted_hooks {
         return Err(anyhow!(
-            "Hooks are configured but not trusted for {repo_path}. Confirm trust first."
+            "Scripts are configured but not trusted for {repo_path}. Confirm trust first."
         ));
     }
 
     let current_fingerprint = hook_set_fingerprint(&repo_config.hooks);
     if repo_config.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
         return Err(anyhow!(
-            "Hooks changed since last approval for {repo_path}. Reconfirm trust before running hooks."
+            "Scripts changed since last approval for {repo_path}. Reconfirm trust before running scripts."
         ));
     }
 

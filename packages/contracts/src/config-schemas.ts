@@ -53,8 +53,6 @@ export const repoConfigSchema = z.object({
   trustedHooks: z.boolean().default(false),
   trustedHooksFingerprint: nullableToOptional(z.string().min(1)),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
-  worktreeSetupScript: z.string().default(""),
-  worktreeCleanupScript: z.string().default(""),
   worktreeFileCopies: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
   agentDefaults: repoAgentDefaultsSchema.default({

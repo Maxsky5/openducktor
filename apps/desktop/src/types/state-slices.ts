@@ -31,10 +31,6 @@ export type RepoSettingsInput = {
   trustedHooks: boolean;
   preStartHooks: string[];
   postCompleteHooks: string[];
-  /** Script executed after `git worktree add` (e.g., "bun install && cp .env.example .env"). */
-  worktreeSetupScript: string;
-  /** Script executed before `git worktree remove`. */
-  worktreeCleanupScript: string;
   /** Files copied from the main repo into a new worktree on creation. */
   worktreeFileCopies: string[];
   agentDefaults: {
