@@ -64,6 +64,14 @@ pub struct GitFileStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitFileStatusCounts {
+    pub total: u32,
+    pub staged: u32,
+    pub unstaged: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitFileDiff {
     pub file: String,
     #[serde(rename = "type")]
@@ -120,10 +128,30 @@ pub struct GitWorktreeStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatusSummary {
+    pub current_branch: GitCurrentBranch,
+    pub file_status_counts: GitFileStatusCounts,
+    pub target_ahead_behind: GitAheadBehind,
+    pub upstream_ahead_behind: GitUpstreamAheadBehind,
+    pub snapshot: GitWorktreeStatusSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GitWorktreeStatusData {
     pub current_branch: GitCurrentBranch,
     pub file_statuses: Vec<GitFileStatus>,
     pub file_diffs: Vec<GitFileDiff>,
+    pub target_ahead_behind: GitAheadBehind,
+    pub upstream_ahead_behind: GitUpstreamAheadBehind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitWorktreeStatusSummaryData {
+    pub current_branch: GitCurrentBranch,
+    pub file_statuses: Vec<GitFileStatus>,
+    pub file_status_counts: GitFileStatusCounts,
     pub target_ahead_behind: GitAheadBehind,
     pub upstream_ahead_behind: GitUpstreamAheadBehind,
 }
@@ -205,6 +233,12 @@ pub trait GitPort: Send + Sync {
         target_branch: &str,
         diff_scope: GitDiffScope,
     ) -> Result<GitWorktreeStatusData>;
+    fn get_worktree_status_summary(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusSummaryData>;
     fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>>;
     fn commits_ahead_behind(&self, repo_path: &Path, target_branch: &str)
         -> Result<GitAheadBehind>;

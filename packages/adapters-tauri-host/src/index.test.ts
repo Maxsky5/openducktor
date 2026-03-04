@@ -185,6 +185,7 @@ describe("TauriHostClient", () => {
       "gitGetDiff",
       "gitCommitsAheadBehind",
       "gitGetWorktreeStatus",
+      "gitGetWorktreeStatusSummary",
       "gitCommitAll",
       "gitRebaseBranch",
     ] as const;
@@ -454,6 +455,23 @@ describe("TauriHostClient", () => {
           },
         };
       }
+      if (command === "git_get_worktree_status_summary") {
+        return {
+          currentBranch: { name: "feature/task-1", detached: false },
+          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/tmp/wt/task-1",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000000000,
+            hashVersion: 1,
+            statusHash: "0123456789abcdef",
+            diffHash: "fedcba9876543210",
+          },
+        };
+      }
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -479,6 +497,12 @@ describe("TauriHostClient", () => {
       "target",
       "/tmp/wt/task-1",
     );
+    const worktreeStatusSummary = await client.gitGetWorktreeStatusSummary(
+      "/repo",
+      "origin/main",
+      "target",
+      "/tmp/wt/task-1",
+    );
 
     expect(branches).toHaveLength(1);
     expect(current.detached).toBe(false);
@@ -491,6 +515,7 @@ describe("TauriHostClient", () => {
     expect(pushed.remote).toBe("origin");
     expect(worktreeStatus.currentBranch.name).toBe("feature/task-1");
     expect(worktreeStatus.targetAheadBehind.ahead).toBe(1);
+    expect(worktreeStatusSummary.fileStatusCounts.total).toBe(1);
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "git_get_branches",
@@ -503,6 +528,7 @@ describe("TauriHostClient", () => {
       "git_pull_branch",
       "git_push_branch",
       "git_get_worktree_status",
+      "git_get_worktree_status_summary",
     ]);
     expect(calls[2].args).toEqual({
       repoPath: "/repo",
@@ -543,6 +569,12 @@ describe("TauriHostClient", () => {
       workingDir: "/tmp/wt/task-1",
     });
     expect(calls[9].args).toEqual({
+      repoPath: "/repo",
+      targetBranch: "origin/main",
+      diffScope: "target",
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[10].args).toEqual({
       repoPath: "/repo",
       targetBranch: "origin/main",
       diffScope: "target",
@@ -602,6 +634,33 @@ describe("TauriHostClient", () => {
 
     await expect(
       client.gitGetWorktreeStatus("/repo", "origin/main", "target", "/tmp/wt/task-1"),
+    ).rejects.toThrow();
+  });
+
+  test("git worktree status summary rejects malformed payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_get_worktree_status_summary") {
+        return {
+          currentBranch: { name: "feature/task-1", detached: false },
+          fileStatusCounts: { total: -1, staged: 0, unstaged: 0 },
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/tmp/wt/task-1",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000000000,
+            hashVersion: 1,
+            statusHash: "0123456789abcdef",
+            diffHash: "fedcba9876543210",
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.gitGetWorktreeStatusSummary("/repo", "origin/main", "target", "/tmp/wt/task-1"),
     ).rejects.toThrow();
   });
 

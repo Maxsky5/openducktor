@@ -209,6 +209,27 @@ fn hash_worktree_diff_payload(file_diffs: &[host_domain::GitFileDiff]) -> String
     hasher.finish_hex()
 }
 
+fn hash_worktree_diff_summary_payload(
+    diff_scope: &host_domain::GitDiffScope,
+    target_ahead_behind: &host_domain::GitAheadBehind,
+    file_status_counts: &host_domain::GitFileStatusCounts,
+) -> String {
+    let mut hasher = Fnv1a64Hasher::new();
+
+    match diff_scope {
+        host_domain::GitDiffScope::Target => hasher.update_str("target"),
+        host_domain::GitDiffScope::Uncommitted => hasher.update_str("uncommitted"),
+    }
+
+    hasher.update_u32(target_ahead_behind.ahead);
+    hasher.update_u32(target_ahead_behind.behind);
+    hasher.update_u32(file_status_counts.total);
+    hasher.update_u32(file_status_counts.staged);
+    hasher.update_u32(file_status_counts.unstaged);
+
+    hasher.finish_hex()
+}
+
 struct WorktreeSnapshotMetadata {
     effective_working_dir: String,
     target_branch: String,
@@ -229,6 +250,30 @@ fn build_worktree_status_with_snapshot(
         file_diffs: status_data.file_diffs,
         target_ahead_behind: status_data.target_ahead_behind,
         upstream_ahead_behind: status_data.upstream_ahead_behind,
+        snapshot: host_domain::GitWorktreeStatusSnapshot {
+            effective_working_dir: snapshot_metadata.effective_working_dir,
+            target_branch: snapshot_metadata.target_branch,
+            diff_scope: snapshot_metadata.diff_scope,
+            observed_at_ms: snapshot_metadata.observed_at_ms,
+            hash_version: snapshot_metadata.hash_version,
+            status_hash: snapshot_metadata.status_hash,
+            diff_hash: snapshot_metadata.diff_hash,
+        },
+    }
+}
+
+fn build_worktree_status_summary_with_snapshot(
+    current_branch: host_domain::GitCurrentBranch,
+    file_status_counts: host_domain::GitFileStatusCounts,
+    target_ahead_behind: host_domain::GitAheadBehind,
+    upstream_ahead_behind: host_domain::GitUpstreamAheadBehind,
+    snapshot_metadata: WorktreeSnapshotMetadata,
+) -> host_domain::GitWorktreeStatusSummary {
+    host_domain::GitWorktreeStatusSummary {
+        current_branch,
+        file_status_counts,
+        target_ahead_behind,
+        upstream_ahead_behind,
         snapshot: host_domain::GitWorktreeStatusSnapshot {
             effective_working_dir: snapshot_metadata.effective_working_dir,
             target_branch: snapshot_metadata.target_branch,
@@ -443,6 +488,62 @@ pub async fn git_get_worktree_status(
 }
 
 #[tauri::command]
+pub async fn git_get_worktree_status_summary(
+    state: State<'_, AppState>,
+    repo_path: String,
+    target_branch: String,
+    diff_scope: Option<String>,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitWorktreeStatusSummary, String> {
+    let trimmed_target = require_target_branch(&target_branch)?;
+    let scope = parse_diff_scope(diff_scope.as_deref())?;
+
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+    let repo = Path::new(&effective);
+    let worktree_status = as_error(state.service.git_port().get_worktree_status_summary(
+        repo,
+        trimmed_target,
+        scope.clone(),
+    ))?;
+
+    let observed_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let status_hash = hash_worktree_status_payload(
+        &worktree_status.current_branch,
+        worktree_status.file_statuses.as_slice(),
+        &worktree_status.target_ahead_behind,
+        &worktree_status.upstream_ahead_behind,
+    );
+    let diff_hash = hash_worktree_diff_summary_payload(
+        &scope,
+        &worktree_status.target_ahead_behind,
+        &worktree_status.file_status_counts,
+    );
+
+    Ok(build_worktree_status_summary_with_snapshot(
+        worktree_status.current_branch,
+        worktree_status.file_status_counts,
+        worktree_status.target_ahead_behind,
+        worktree_status.upstream_ahead_behind,
+        WorktreeSnapshotMetadata {
+            effective_working_dir: effective,
+            target_branch: trimmed_target.to_string(),
+            diff_scope: scope,
+            observed_at_ms,
+            hash_version: GIT_WORKTREE_HASH_VERSION,
+            status_hash,
+            diff_hash,
+        },
+    ))
+}
+
+#[tauri::command]
 pub async fn git_commit_all(
     state: State<'_, AppState>,
     repo_path: String,
@@ -517,9 +618,11 @@ pub async fn git_rebase_branch(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_worktree_status_with_snapshot, git_get_worktree_status, hash_worktree_diff_payload,
-        hash_worktree_status_payload, parse_diff_scope, require_target_branch, resolve_working_dir,
-        WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
+        build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
+        git_get_worktree_status, git_get_worktree_status_summary, hash_worktree_diff_payload,
+        hash_worktree_diff_summary_payload, hash_worktree_status_payload, parse_diff_scope,
+        require_target_branch, resolve_working_dir, WorktreeSnapshotMetadata,
+        GIT_WORKTREE_HASH_VERSION,
     };
     use crate::AppState;
     use anyhow::anyhow;
@@ -527,9 +630,10 @@ mod tests {
     use host_domain::GitPort;
     use host_domain::{
         GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-        GitDiffScope, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushSummary,
-        GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-        GitWorktreeStatusData, TaskStore, TASK_METADATA_NAMESPACE,
+        GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPullRequest,
+        GitPullResult, GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult,
+        GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSummary,
+        GitWorktreeStatusSummaryData, TaskStore, TASK_METADATA_NAMESPACE,
     };
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::AppConfigStore;
@@ -555,8 +659,21 @@ mod tests {
         Err(String),
     }
 
+    #[derive(Clone)]
+    enum WorktreeStatusSummaryResult {
+        Ok(GitWorktreeStatusSummaryData),
+        Err(String),
+    }
+
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct WorktreeStatusCall {
+        repo_path: String,
+        target_branch: String,
+        diff_scope: GitDiffScope,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct WorktreeStatusSummaryCall {
         repo_path: String,
         target_branch: String,
         diff_scope: GitDiffScope,
@@ -565,6 +682,8 @@ mod tests {
     struct CommandGitPortState {
         worktree_status_result: WorktreeStatusResult,
         worktree_status_calls: Vec<WorktreeStatusCall>,
+        worktree_status_summary_result: WorktreeStatusSummaryResult,
+        worktree_status_summary_calls: Vec<WorktreeStatusSummaryCall>,
     }
 
     struct CommandGitPort {
@@ -572,11 +691,16 @@ mod tests {
     }
 
     impl CommandGitPort {
-        fn new(result: WorktreeStatusResult) -> Self {
+        fn new_with_summary_result(
+            result: WorktreeStatusResult,
+            summary_result: WorktreeStatusSummaryResult,
+        ) -> Self {
             Self {
                 state: Arc::new(Mutex::new(CommandGitPortState {
                     worktree_status_result: result,
                     worktree_status_calls: Vec::new(),
+                    worktree_status_summary_result: summary_result,
+                    worktree_status_summary_calls: Vec::new(),
                 })),
             }
         }
@@ -671,6 +795,29 @@ mod tests {
             }
         }
 
+        fn get_worktree_status_summary(
+            &self,
+            repo_path: &Path,
+            target_branch: &str,
+            diff_scope: GitDiffScope,
+        ) -> anyhow::Result<GitWorktreeStatusSummaryData> {
+            let mut state = self
+                .state
+                .lock()
+                .expect("command git port state lock should not be poisoned");
+            state
+                .worktree_status_summary_calls
+                .push(WorktreeStatusSummaryCall {
+                    repo_path: repo_path.to_string_lossy().to_string(),
+                    target_branch: target_branch.to_string(),
+                    diff_scope,
+                });
+            match state.worktree_status_summary_result.clone() {
+                WorktreeStatusSummaryResult::Ok(payload) => Ok(payload),
+                WorktreeStatusSummaryResult::Err(message) => Err(anyhow!(message)),
+            }
+        }
+
         fn resolve_upstream_target(&self, _repo_path: &Path) -> anyhow::Result<Option<String>> {
             panic!("unexpected call: resolve_upstream_target");
         }
@@ -757,6 +904,25 @@ mod tests {
         result: WorktreeStatusResult,
         authorize_repo: bool,
     ) -> CommandGitFixture {
+        setup_command_git_fixture_with_summary(
+            prefix,
+            result,
+            WorktreeStatusSummaryResult::Ok(sample_worktree_status_summary_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            authorize_repo,
+        )
+    }
+
+    fn setup_command_git_fixture_with_summary(
+        prefix: &str,
+        result: WorktreeStatusResult,
+        summary_result: WorktreeStatusSummaryResult,
+        authorize_repo: bool,
+    ) -> CommandGitFixture {
         let root = unique_test_dir(prefix);
         let repo = root.join("repo");
         init_repo(&repo);
@@ -768,7 +934,7 @@ mod tests {
                 .expect("workspace should be allowlisted");
         }
 
-        let git_port = CommandGitPort::new(result);
+        let git_port = CommandGitPort::new_with_summary_result(result, summary_result);
         let git_state = git_port.state.clone();
         let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
             TASK_METADATA_NAMESPACE,
@@ -784,7 +950,10 @@ mod tests {
                 hook_trust_challenges: Mutex::new(HashMap::new()),
                 hook_trust_dialog_test_response: Mutex::new(None),
             })
-            .invoke_handler(tauri::generate_handler![git_get_worktree_status])
+            .invoke_handler(tauri::generate_handler![
+                git_get_worktree_status,
+                git_get_worktree_status_summary
+            ])
             .build(mock_context(noop_assets()))
             .expect("test app should build");
         let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
@@ -844,6 +1013,32 @@ mod tests {
                 deletions: 0,
                 diff: "@@ -1 +1 @@\n-old\n+new\n".to_string(),
             }],
+            target_ahead_behind: GitAheadBehind {
+                ahead: 1,
+                behind: 0,
+            },
+            upstream_ahead_behind: upstream,
+        }
+    }
+
+    fn sample_worktree_status_summary_data(
+        upstream: GitUpstreamAheadBehind,
+    ) -> GitWorktreeStatusSummaryData {
+        GitWorktreeStatusSummaryData {
+            current_branch: GitCurrentBranch {
+                name: Some("feature/command".to_string()),
+                detached: false,
+            },
+            file_statuses: vec![GitFileStatus {
+                path: "src/main.rs".to_string(),
+                status: "M".to_string(),
+                staged: false,
+            }],
+            file_status_counts: GitFileStatusCounts {
+                total: 1,
+                staged: 0,
+                unstaged: 1,
+            },
             target_ahead_behind: GitAheadBehind {
                 ahead: 1,
                 behind: 0,
@@ -1071,6 +1266,228 @@ mod tests {
             .expect("command git state lock should not be poisoned");
         assert_eq!(state.worktree_status_calls.len(), 1);
         assert_eq!(state.worktree_status_calls[0].repo_path, expected_worktree);
+    }
+
+    #[test]
+    fn git_get_worktree_status_summary_rejects_unauthorized_repo() {
+        let fixture = setup_command_git_fixture(
+            "git-command-summary-unauthorized",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            false,
+        );
+
+        let error = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status_summary",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+            }),
+        )
+        .expect_err("unauthorized repo should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Repository path is not in the configured workspace allowlist"),
+            "unexpected error: {error}"
+        );
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert!(
+            state.worktree_status_summary_calls.is_empty(),
+            "git port summary path should not run when authorization fails"
+        );
+    }
+
+    #[test]
+    fn git_get_worktree_status_summary_keeps_upstream_error_variant_and_snapshot_metadata() {
+        let fixture = setup_command_git_fixture_with_summary(
+            "git-command-summary-upstream-error",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            WorktreeStatusSummaryResult::Ok(sample_worktree_status_summary_data(
+                GitUpstreamAheadBehind::Error {
+                    message: "upstream not configured".to_string(),
+                },
+            )),
+            true,
+        );
+
+        let response = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status_summary",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "  origin/main  ",
+                "diffScope": "uncommitted",
+            }),
+        )
+        .expect("summary command should succeed");
+        let status: GitWorktreeStatusSummary = serde_json::from_value(response)
+            .expect("response should decode as GitWorktreeStatusSummary");
+
+        assert_eq!(
+            status.upstream_ahead_behind,
+            GitUpstreamAheadBehind::Error {
+                message: "upstream not configured".to_string()
+            }
+        );
+        assert_eq!(status.snapshot.target_branch, "origin/main");
+        assert_eq!(status.snapshot.diff_scope, GitDiffScope::Uncommitted);
+        assert_eq!(status.snapshot.hash_version, GIT_WORKTREE_HASH_VERSION);
+        assert_eq!(status.snapshot.status_hash.len(), 16);
+        assert_eq!(status.snapshot.diff_hash.len(), 16);
+
+        let expected_effective = fs::canonicalize(Path::new(&fixture.repo_path))
+            .expect("repo should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(status.snapshot.effective_working_dir, expected_effective);
+
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert_eq!(state.worktree_status_summary_calls.len(), 1);
+        assert_eq!(
+            state.worktree_status_summary_calls[0],
+            WorktreeStatusSummaryCall {
+                repo_path: expected_effective,
+                target_branch: "origin/main".to_string(),
+                diff_scope: GitDiffScope::Uncommitted,
+            }
+        );
+    }
+
+    #[test]
+    fn git_get_worktree_status_summary_propagates_git_port_failures() {
+        let fixture = setup_command_git_fixture_with_summary(
+            "git-command-summary-status-failure",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            WorktreeStatusSummaryResult::Err("failed collecting summary status".to_string()),
+            true,
+        );
+
+        let error = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status_summary",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+            }),
+        )
+        .expect_err("git port summary failure should be returned");
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed collecting summary status"),
+            "unexpected error: {error}"
+        );
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert_eq!(state.worktree_status_summary_calls.len(), 1);
+    }
+
+    #[test]
+    fn git_get_worktree_status_summary_rejects_invalid_diff_scope_before_git_port_call() {
+        let fixture = setup_command_git_fixture(
+            "git-command-summary-invalid-scope",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            true,
+        );
+
+        let error = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status_summary",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+                "diffScope": "staged",
+            }),
+        )
+        .expect_err("invalid diff scope should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("diffScope must be either 'target' or 'uncommitted'"),
+            "unexpected error: {error}"
+        );
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert!(
+            state.worktree_status_summary_calls.is_empty(),
+            "git port summary path should not run when diffScope is invalid"
+        );
+    }
+
+    #[test]
+    fn git_get_worktree_status_summary_rejects_unrelated_working_dir() {
+        let fixture = setup_command_git_fixture(
+            "git-command-summary-working-dir-reject",
+            WorktreeStatusResult::Ok(sample_worktree_status_data(
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                },
+            )),
+            true,
+        );
+        let external = fixture.root.join("external-summary");
+        init_repo(&external);
+
+        let error = invoke_json(
+            &fixture.webview,
+            "git_get_worktree_status_summary",
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "targetBranch": "origin/main",
+                "workingDir": external.to_string_lossy().to_string(),
+            }),
+        )
+        .expect_err("unrelated working_dir should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("working_dir is not within authorized repository or linked worktrees"),
+            "unexpected error: {error}"
+        );
+        let state = fixture
+            .git_state
+            .lock()
+            .expect("command git state lock should not be poisoned");
+        assert!(
+            state.worktree_status_summary_calls.is_empty(),
+            "git port summary path should not run for unauthorized working_dir"
+        );
     }
 
     #[test]
@@ -1334,5 +1751,95 @@ mod tests {
         let changed_hash = hash_worktree_diff_payload(changed_diff.as_slice());
 
         assert_ne!(baseline_hash, changed_hash);
+    }
+
+    #[test]
+    fn diff_summary_hash_changes_when_scope_or_counts_change() {
+        let target_ahead_behind = GitAheadBehind {
+            ahead: 1,
+            behind: 0,
+        };
+        let baseline_counts = GitFileStatusCounts {
+            total: 2,
+            staged: 1,
+            unstaged: 1,
+        };
+        let changed_counts = GitFileStatusCounts {
+            total: 3,
+            staged: 1,
+            unstaged: 2,
+        };
+
+        let baseline_hash = hash_worktree_diff_summary_payload(
+            &GitDiffScope::Target,
+            &target_ahead_behind,
+            &baseline_counts,
+        );
+        let changed_counts_hash = hash_worktree_diff_summary_payload(
+            &GitDiffScope::Target,
+            &target_ahead_behind,
+            &changed_counts,
+        );
+        let changed_scope_hash = hash_worktree_diff_summary_payload(
+            &GitDiffScope::Uncommitted,
+            &target_ahead_behind,
+            &baseline_counts,
+        );
+
+        assert_ne!(baseline_hash, changed_counts_hash);
+        assert_ne!(baseline_hash, changed_scope_hash);
+    }
+
+    #[test]
+    fn build_worktree_status_summary_with_snapshot_preserves_payload_and_snapshot_fields() {
+        let built = build_worktree_status_summary_with_snapshot(
+            GitCurrentBranch {
+                name: Some("feature/snapshot".to_string()),
+                detached: false,
+            },
+            GitFileStatusCounts {
+                total: 4,
+                staged: 2,
+                unstaged: 2,
+            },
+            GitAheadBehind {
+                ahead: 3,
+                behind: 1,
+            },
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 5,
+                behind: 0,
+            },
+            WorktreeSnapshotMetadata {
+                effective_working_dir: "/tmp/openducktor-worktree".to_string(),
+                target_branch: "origin/main".to_string(),
+                diff_scope: GitDiffScope::Uncommitted,
+                observed_at_ms: 99,
+                hash_version: GIT_WORKTREE_HASH_VERSION,
+                status_hash: "0123456789abcdef".to_string(),
+                diff_hash: "fedcba9876543210".to_string(),
+            },
+        );
+
+        assert_eq!(
+            built.current_branch.name.as_deref(),
+            Some("feature/snapshot")
+        );
+        assert_eq!(built.file_status_counts.total, 4);
+        assert_eq!(built.file_status_counts.staged, 2);
+        assert_eq!(built.file_status_counts.unstaged, 2);
+        assert_eq!(built.target_ahead_behind.ahead, 3);
+        assert_eq!(
+            built.upstream_ahead_behind,
+            GitUpstreamAheadBehind::Tracking {
+                ahead: 5,
+                behind: 0
+            }
+        );
+        assert_eq!(built.snapshot.diff_scope, GitDiffScope::Uncommitted);
+        assert_eq!(built.snapshot.observed_at_ms, 99);
+        assert_eq!(built.snapshot.hash_version, GIT_WORKTREE_HASH_VERSION);
+        assert_eq!(built.snapshot.status_hash, "0123456789abcdef");
+        assert_eq!(built.snapshot.diff_hash, "fedcba9876543210");
     }
 }

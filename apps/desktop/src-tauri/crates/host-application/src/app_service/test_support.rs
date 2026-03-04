@@ -19,11 +19,11 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
     GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
-    GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitPushSummary,
-    GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData,
-    IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    SpecDocument, TaskAction, TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult,
+    GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput,
+    QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, SpecDocument, TaskAction,
+    TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -351,6 +351,11 @@ pub(crate) enum GitCall {
         target_branch: String,
         diff_scope: GitDiffScope,
     },
+    GetWorktreeStatusSummary {
+        repo_path: String,
+        target_branch: String,
+        diff_scope: GitDiffScope,
+    },
 }
 
 #[derive(Debug)]
@@ -541,6 +546,75 @@ impl GitPort for FakeGitPort {
                 behind: 0,
             },
             upstream_ahead_behind,
+        })
+    }
+
+    fn get_worktree_status_summary(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusSummaryData> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::GetWorktreeStatusSummary {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            target_branch: target_branch.to_string(),
+            diff_scope,
+        });
+
+        let status_data = if let Some(configured) = state.worktree_status_data.clone() {
+            configured
+        } else {
+            let current_branch = state.current_branch.clone();
+            let upstream_ahead_behind = if current_branch.name.is_some() {
+                GitUpstreamAheadBehind::Tracking {
+                    ahead: 0,
+                    behind: 0,
+                }
+            } else {
+                GitUpstreamAheadBehind::Untracked { ahead: 0 }
+            };
+
+            GitWorktreeStatusData {
+                current_branch,
+                file_statuses: Vec::new(),
+                file_diffs: Vec::new(),
+                target_ahead_behind: GitAheadBehind {
+                    ahead: 0,
+                    behind: 0,
+                },
+                upstream_ahead_behind,
+            }
+        };
+
+        let total = u32::try_from(status_data.file_statuses.len()).map_err(|_| {
+            anyhow!(
+                "too many file statuses to summarize in FakeGitPort: {}",
+                status_data.file_statuses.len()
+            )
+        })?;
+        let staged = u32::try_from(
+            status_data
+                .file_statuses
+                .iter()
+                .filter(|status| status.staged)
+                .count(),
+        )
+        .map_err(|_| anyhow!("staged file status count overflowed u32 in FakeGitPort"))?;
+        let unstaged = total.checked_sub(staged).ok_or_else(|| {
+            anyhow!("unstaged file status count underflowed in FakeGitPort")
+        })?;
+
+        Ok(GitWorktreeStatusSummaryData {
+            current_branch: status_data.current_branch,
+            file_statuses: status_data.file_statuses,
+            file_status_counts: GitFileStatusCounts {
+                total,
+                staged,
+                unstaged,
+            },
+            target_ahead_behind: status_data.target_ahead_behind,
+            upstream_ahead_behind: status_data.upstream_ahead_behind,
         })
     }
 

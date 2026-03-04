@@ -18,6 +18,7 @@ import {
   gitUpstreamAheadBehindSchema,
   gitWorktreeStatusSchema,
   gitWorktreeStatusSnapshotSchema,
+  gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
   repoConfigSchema,
   runEventSchema,
@@ -387,6 +388,29 @@ describe("runtime schemas", () => {
     expect(status.snapshot.diffScope).toBe("target");
     expect(status.upstreamAheadBehind.outcome).toBe("tracking");
     expect(status.targetAheadBehind.behind).toBe(3);
+  });
+
+  test("git worktree status summary schema parses lightweight polling payload", () => {
+    const summary = gitWorktreeStatusSummarySchema.parse({
+      currentBranch: { name: "feature/task-1", detached: false },
+      fileStatusCounts: { total: 3, staged: 1, unstaged: 2 },
+      targetAheadBehind: { ahead: 1, behind: 3 },
+      upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
+      snapshot: {
+        effectiveWorkingDir: "/repo",
+        targetBranch: "origin/main",
+        diffScope: "target",
+        observedAtMs: 1731000000000,
+        hashVersion: 1,
+        statusHash: "0123456789abcdef",
+        diffHash: "fedcba9876543210",
+      },
+    });
+
+    expect(summary.fileStatusCounts.total).toBe(3);
+    expect(summary.fileStatusCounts.staged).toBe(1);
+    expect(summary.fileStatusCounts.unstaged).toBe(2);
+    expect(summary.snapshot.diffScope).toBe("target");
   });
 
   test("git worktree status snapshot schema rejects malformed hash metadata", () => {

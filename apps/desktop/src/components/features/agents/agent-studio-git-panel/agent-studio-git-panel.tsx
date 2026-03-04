@@ -17,21 +17,26 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 }): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
-  const uncommittedFileCount = model.fileStatuses.length;
+  const uncommittedFileCount = model.uncommittedFileCount;
   const hasUncommittedFiles = uncommittedFileCount > 0;
   const hasFiles = model.fileDiffs.length > 0;
 
-  const toggleFile = useCallback((filePath: string): void => {
-    setExpandedFiles((previous) => {
-      const next = new Set(previous);
-      if (next.has(filePath)) {
-        next.delete(filePath);
-      } else {
-        next.add(filePath);
-      }
-      return next;
-    });
-  }, []);
+  const toggleFile = useCallback(
+    (filePath: string): void => {
+      setExpandedFiles((previous) => {
+        const next = new Set(previous);
+        if (next.has(filePath)) {
+          next.delete(filePath);
+          model.setSelectedFile(null);
+        } else {
+          next.add(filePath);
+          model.setSelectedFile(filePath);
+        }
+        return next;
+      });
+    },
+    [model.setSelectedFile],
+  );
 
   const handleDiffScopeChange = useCallback(
     (scope: DiffScope): void => {
@@ -41,9 +46,10 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
         }
         return new Set<string>();
       });
+      model.setSelectedFile(null);
       model.setDiffScope(scope);
     },
-    [model.setDiffScope],
+    [model.setDiffScope, model.setSelectedFile],
   );
 
   useEffect(() => {
@@ -65,7 +71,14 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
 
       return changed ? next : previous;
     });
-  }, [model.fileDiffs]);
+
+    if (
+      model.selectedFile != null &&
+      !model.fileDiffs.some((fileDiff) => fileDiff.file === model.selectedFile)
+    ) {
+      model.setSelectedFile(null);
+    }
+  }, [model.fileDiffs, model.selectedFile, model.setSelectedFile]);
 
   return (
     <TooltipProvider>
