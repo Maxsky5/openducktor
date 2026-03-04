@@ -4,7 +4,16 @@ use super::types::{hook_set_fingerprint, GlobalConfig, HookSet, RepoConfig, Runt
 use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::{fs::OpenOptions, io::Write};
+
+#[cfg(unix)]
+const CONFIG_DIR_MODE: u32 = 0o700;
+#[cfg(unix)]
+const CONFIG_FILE_MODE: u32 = 0o600;
 
 fn has_configured_worktree(repo: &RepoConfig) -> bool {
     repo.worktree_base_path.is_some()
@@ -53,6 +62,8 @@ impl AppConfigStore {
         if !self.path.exists() {
             return Ok(GlobalConfig::default());
         }
+
+        validate_config_access(&self.path)?;
 
         let data = fs::read_to_string(&self.path)
             .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
@@ -103,12 +114,13 @@ impl AppConfigStore {
             fs::create_dir_all(parent).with_context(|| {
                 format!("Failed creating config directory {}", parent.display())
             })?;
+            enforce_directory_permissions(parent)?;
         }
         let mut normalized = config.clone();
         normalize_global_config(&mut normalized);
         let payload = serde_json::to_string_pretty(&normalized)?;
-        fs::write(&self.path, payload)
-            .with_context(|| format!("Failed writing config file {}", self.path.display()))?;
+        write_config_file(&self.path, payload.as_bytes())?;
+        validate_config_access(&self.path)?;
         Ok(())
     }
 
@@ -391,4 +403,136 @@ pub(crate) fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {
     recent.retain(|entry| entry != repo_path);
     recent.insert(0, repo_path.to_string());
     recent.truncate(20);
+}
+
+fn write_config_file(path: &Path, contents: &[u8]) -> Result<()> {
+    #[cfg(unix)]
+    {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(CONFIG_FILE_MODE)
+            .open(path)
+            .with_context(|| format!("Failed opening config file {}", path.display()))?;
+        file.write_all(contents)
+            .with_context(|| format!("Failed writing config file {}", path.display()))?;
+        file.sync_all()
+            .with_context(|| format!("Failed syncing config file {}", path.display()))?;
+        fs::set_permissions(path, fs::Permissions::from_mode(CONFIG_FILE_MODE)).with_context(
+            || {
+                format!(
+                    "Failed setting secure permissions on config file {}",
+                    path.display()
+                )
+            },
+        )?;
+        return Ok(());
+    }
+
+    #[cfg(not(unix))]
+    {
+        fs::write(path, contents)
+            .with_context(|| format!("Failed writing config file {}", path.display()))?;
+        Ok(())
+    }
+}
+
+fn validate_config_access(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        let parent = path.parent().ok_or_else(|| {
+            anyhow!(
+                "Config file path {} is invalid: missing parent directory",
+                path.display()
+            )
+        })?;
+        let expected_uid = current_user_uid()?;
+        validate_private_directory(parent, expected_uid)?;
+        validate_private_file(path, expected_uid)?;
+    }
+    Ok(())
+}
+
+fn enforce_directory_permissions(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        fs::set_permissions(path, fs::Permissions::from_mode(CONFIG_DIR_MODE)).with_context(
+            || {
+                format!(
+                    "Failed setting secure permissions on config directory {}",
+                    path.display()
+                )
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn current_user_uid() -> Result<u32> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
+    let metadata = fs::metadata(&home).with_context(|| {
+        format!(
+            "Failed reading metadata for home directory {}",
+            home.display()
+        )
+    })?;
+    Ok(metadata.uid())
+}
+
+#[cfg(unix)]
+fn validate_private_directory(path: &Path, expected_uid: u32) -> Result<()> {
+    let metadata = fs::metadata(path).with_context(|| {
+        format!(
+            "Failed reading config directory metadata {}",
+            path.display()
+        )
+    })?;
+    let mode = metadata.mode() & 0o777;
+    let owner_uid = metadata.uid();
+    if owner_uid != expected_uid {
+        return Err(anyhow!(
+            "Config directory {} must be owned by the current user (uid {}). Found uid {}. Run `chown -R $(whoami) {}`.",
+            path.display(),
+            expected_uid,
+            owner_uid,
+            path.display()
+        ));
+    }
+    if mode & 0o077 != 0 {
+        return Err(anyhow!(
+            "Config directory {} is too permissive (mode {:04o}). Expected 0700 or stricter. Run `chmod 700 {}`.",
+            path.display(),
+            mode,
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn validate_private_file(path: &Path, expected_uid: u32) -> Result<()> {
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("Failed reading config file metadata {}", path.display()))?;
+    let mode = metadata.mode() & 0o777;
+    let owner_uid = metadata.uid();
+    if owner_uid != expected_uid {
+        return Err(anyhow!(
+            "Config file {} must be owned by the current user (uid {}). Found uid {}. Run `chown $(whoami) {}`.",
+            path.display(),
+            expected_uid,
+            owner_uid,
+            path.display()
+        ));
+    }
+    if mode & 0o077 != 0 {
+        return Err(anyhow!(
+            "Config file {} is too permissive (mode {:04o}). Expected 0600 or stricter. Run `chmod 600 {}`.",
+            path.display(),
+            mode,
+            path.display()
+        ));
+    }
+    Ok(())
 }
