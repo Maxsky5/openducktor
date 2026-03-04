@@ -228,19 +228,28 @@ describe("KanbanPage session start modal flow", () => {
       | undefined;
     const toastDescription = toastCall?.[1]?.description;
     expect(isValidElement(toastDescription)).toBe(true);
-    if (isValidElement(toastDescription)) {
-      let toastDescriptionRenderer!: ReactTestRenderer;
-      await act(async () => {
-        toastDescriptionRenderer = create(toastDescription);
-      });
-
-      const actionButton = toastDescriptionRenderer.root.findByType("button");
-      expect(actionButton.props.className).toContain("cursor-pointer");
-
-      await act(async () => {
-        toastDescriptionRenderer.unmount();
-      });
+    if (!isValidElement(toastDescription)) {
+      throw new Error("Expected background toast description to render an action element.");
     }
+    let toastDescriptionRenderer!: ReactTestRenderer;
+    await act(async () => {
+      toastDescriptionRenderer = create(toastDescription);
+    });
+
+    const actionButton = toastDescriptionRenderer.root.findByType("button");
+    expect(typeof actionButton.props.onClick).toBe("function");
+    await act(async () => {
+      actionButton.props.onClick();
+      await Promise.resolve();
+    });
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(latestLocation).toContain("session=session-1");
+    expect(latestLocation).toContain("agent=build");
+    expect(latestLocation).toContain("scenario=build_implementation_start");
+
+    await act(async () => {
+      toastDescriptionRenderer.unmount();
+    });
 
     await act(async () => {
       renderer.unmount();
