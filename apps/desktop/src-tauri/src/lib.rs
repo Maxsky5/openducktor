@@ -25,6 +25,8 @@ use commands::workspace::*;
 struct AppState {
     service: Arc<AppService>,
     hook_trust_challenges: Mutex<HashMap<String, HookTrustChallenge>>,
+    #[cfg(test)]
+    hook_trust_dialog_test_response: Mutex<Option<bool>>,
 }
 
 const HOOK_TRUST_CHALLENGE_TTL: Duration = Duration::from_secs(120);
@@ -167,7 +169,9 @@ fn startup_phase_tracing() {
 fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService>> {
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
     validate_startup_config(&config_store)?;
-    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(TASK_METADATA_NAMESPACE));
+    let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(
+        TASK_METADATA_NAMESPACE,
+    ));
     let service = Arc::new(AppService::new(task_store, config_store));
 
     Ok(service)
@@ -271,6 +275,8 @@ fn startup_phase_build_tauri_app(
         .manage(AppState {
             service,
             hook_trust_challenges: Mutex::new(HashMap::new()),
+            #[cfg(test)]
+            hook_trust_dialog_test_response: Mutex::new(None),
         });
 
     startup_phase_command_registration(builder)

@@ -5,6 +5,8 @@ use crate::{
 use host_infra_system::{hook_set_fingerprint, HookSet, RepoConfig};
 use std::path::Path;
 use std::time::SystemTime;
+#[cfg(test)]
+use tauri::Manager;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use uuid::Uuid;
@@ -93,10 +95,12 @@ pub async fn workspace_update_repo_config(
     )
 }
 
+// Generic runtime keeps this command testable under MockRuntime without changing
+// production behavior on the default Wry runtime.
 #[tauri::command]
-pub async fn workspace_save_repo_settings(
+pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     repo_path: String,
     settings: RepoSettingsPayload,
 ) -> Result<host_domain::WorkspaceRecord, String> {
@@ -193,10 +197,12 @@ pub async fn workspace_get_repo_config(
     as_error(state.service.workspace_get_repo_config(&repo_path))
 }
 
+// Generic runtime keeps this command testable under MockRuntime without changing
+// production behavior on the default Wry runtime.
 #[tauri::command]
-pub async fn workspace_set_trusted_hooks(
+pub async fn workspace_set_trusted_hooks<R: tauri::Runtime>(
     state: State<'_, AppState>,
-    app: AppHandle,
+    app: AppHandle<R>,
     repo_path: String,
     trusted: bool,
     challenge_nonce: Option<String>,
@@ -319,11 +325,31 @@ fn sanitize_hook_preview(command: &str) -> String {
     escaped
 }
 
-async fn confirm_hook_trust_dialog(
-    app: &AppHandle,
+// Generic runtime keeps dialog plumbing compatible with command tests that run
+// under MockRuntime.
+async fn confirm_hook_trust_dialog<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     repo_path: &str,
     hooks: &HookSet,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    {
+        let test_response = {
+            let state = app.state::<AppState>();
+            let response = state
+                .hook_trust_dialog_test_response
+                .lock()
+                .map_err(|_| "Hook trust dialog test response lock poisoned".to_string())?;
+            *response
+        };
+        if let Some(confirmed) = test_response {
+            if !confirmed {
+                return Err("Hook trust confirmation was cancelled by the user.".to_string());
+            }
+            return Ok(());
+        }
+    }
+
     let dialog_message = format!(
         "Approve trusted hooks for this workspace?\n\nRepository:\n{repo}\n\nPre-start hooks:\n{pre}\n\nPost-complete hooks:\n{post}\n\nTrusted hooks can execute shell commands on this machine.",
         repo = repo_path,
@@ -397,9 +423,440 @@ fn normalize_hook_commands(commands: &mut Vec<String>) {
 mod tests {
     use super::{
         canonical_repo_key, format_hook_list, normalize_hook_set, sanitize_hook_preview,
-        validate_trust_challenge_entry, HookSet, HookTrustChallenge,
+        validate_trust_challenge_entry, workspace_set_trusted_hooks, HookSet, HookTrustChallenge,
     };
-    use std::time::{Duration, SystemTime};
+    use crate::AppState;
+    use host_application::AppService;
+    use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
+    use host_infra_beads::BeadsTaskStore;
+    use host_infra_system::{hook_set_fingerprint, AppConfigStore, GitCliPort};
+    use serde_json::{json, Value};
+    use std::{
+        collections::HashMap,
+        fs,
+        path::PathBuf,
+        sync::{Arc, Mutex},
+        time::{Duration, SystemTime, UNIX_EPOCH},
+    };
+    use tauri::{
+        ipc::{CallbackFn, InvokeBody},
+        test::{mock_builder, mock_context, noop_assets, MockRuntime},
+        webview::InvokeRequest,
+        App, Manager,
+    };
+
+    struct WorkspaceCommandFixture {
+        app: App<MockRuntime>,
+        service: Arc<AppService>,
+        repo_path: String,
+        root: PathBuf,
+    }
+
+    impl Drop for WorkspaceCommandFixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn unique_test_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("openducktor-workspace-command-{prefix}-{nanos}"));
+        fs::create_dir_all(&root).expect("test root should be created");
+        root
+    }
+
+    fn setup_workspace_command_fixture(prefix: &str, hooks: HookSet) -> WorkspaceCommandFixture {
+        setup_workspace_command_fixture_with_dialog_response(prefix, hooks, None)
+    }
+
+    fn setup_workspace_command_fixture_with_dialog_response(
+        prefix: &str,
+        hooks: HookSet,
+        dialog_response: Option<bool>,
+    ) -> WorkspaceCommandFixture {
+        let root = unique_test_dir(prefix);
+        let repo = root.join("repo");
+        fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        config_store
+            .add_workspace(repo_path.as_str())
+            .expect("workspace should be allowlisted");
+        config_store
+            .update_repo_hooks(repo_path.as_str(), hooks)
+            .expect("hooks should be persisted");
+
+        let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
+            TASK_METADATA_NAMESPACE,
+        ));
+        let service = Arc::new(AppService::with_git_port(
+            task_store,
+            config_store,
+            Arc::new(GitCliPort::new()),
+        ));
+
+        let app = mock_builder()
+            .manage(AppState {
+                service: service.clone(),
+                hook_trust_challenges: Mutex::new(HashMap::new()),
+                hook_trust_dialog_test_response: Mutex::new(dialog_response),
+            })
+            .invoke_handler(tauri::generate_handler![workspace_set_trusted_hooks])
+            .build(mock_context(noop_assets()))
+            .expect("test app should build");
+
+        WorkspaceCommandFixture {
+            app,
+            service,
+            repo_path,
+            root,
+        }
+    }
+
+    fn run_workspace_set_trusted_hooks(
+        fixture: &WorkspaceCommandFixture,
+        trusted: bool,
+        challenge_nonce: Option<String>,
+        challenge_fingerprint: Option<String>,
+    ) -> Result<WorkspaceRecord, String> {
+        let state = fixture.app.state::<AppState>();
+        let app_handle = fixture.app.handle().clone();
+        tauri::async_runtime::block_on(workspace_set_trusted_hooks(
+            state,
+            app_handle,
+            fixture.repo_path.clone(),
+            trusted,
+            challenge_nonce,
+            challenge_fingerprint,
+        ))
+    }
+
+    fn insert_challenge(
+        fixture: &WorkspaceCommandFixture,
+        nonce: &str,
+        challenge: HookTrustChallenge,
+    ) -> Result<(), String> {
+        let state = fixture.app.state::<AppState>();
+        let mut map = state
+            .hook_trust_challenges
+            .lock()
+            .map_err(|_| "challenge lock poisoned".to_string())?;
+        map.insert(nonce.to_string(), challenge);
+        Ok(())
+    }
+
+    fn invoke_workspace_set_trusted_hooks_ipc(
+        fixture: &WorkspaceCommandFixture,
+        payload: Value,
+    ) -> Result<Value, Value> {
+        let label = format!(
+            "main-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos()
+        );
+        let webview = tauri::WebviewWindowBuilder::new(&fixture.app, label, Default::default())
+            .build()
+            .expect("test webview should build");
+
+        tauri::test::get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "workspace_set_trusted_hooks".to_string(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: "http://tauri.localhost"
+                    .parse()
+                    .expect("invoke URL should parse"),
+                body: InvokeBody::Json(payload),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .map(|body| {
+            body.deserialize::<Value>()
+                .expect("IPC response should deserialize")
+        })
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_requires_nonce_and_fingerprint_when_enabling() {
+        let fixture =
+            setup_workspace_command_fixture("missing-challenge-fields", HookSet::default());
+
+        let missing_nonce =
+            run_workspace_set_trusted_hooks(&fixture, true, None, Some("abc".to_string()))
+                .expect_err("missing nonce should fail");
+        assert!(
+            missing_nonce.contains("requires challenge nonce"),
+            "unexpected nonce error: {missing_nonce}"
+        );
+
+        let missing_fingerprint =
+            run_workspace_set_trusted_hooks(&fixture, true, Some("nonce-1".to_string()), None)
+                .expect_err("missing fingerprint should fail");
+        assert!(
+            missing_fingerprint.contains("requires challenge fingerprint"),
+            "unexpected fingerprint error: {missing_fingerprint}"
+        );
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_ipc_rejects_missing_nonce() {
+        let fixture = setup_workspace_command_fixture("ipc-missing-nonce", HookSet::default());
+        let error = invoke_workspace_set_trusted_hooks_ipc(
+            &fixture,
+            json!({
+                "repoPath": fixture.repo_path.as_str(),
+                "trusted": true,
+                "challengeFingerprint": "abc",
+            }),
+        )
+        .expect_err("missing nonce should fail over IPC");
+        assert!(
+            error.to_string().contains("requires challenge nonce"),
+            "unexpected IPC error: {error}"
+        );
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_rejects_expired_challenge_entries() -> Result<(), String> {
+        let fixture = setup_workspace_command_fixture("expired-challenge", HookSet::default());
+        let nonce = "expired-nonce".to_string();
+        let fingerprint = hook_set_fingerprint(&HookSet::default());
+        insert_challenge(
+            &fixture,
+            nonce.as_str(),
+            HookTrustChallenge {
+                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
+                fingerprint: fingerprint.clone(),
+                expires_at: SystemTime::now()
+                    .checked_sub(Duration::from_secs(1))
+                    .ok_or_else(|| "expired time should be valid".to_string())?,
+            },
+        )?;
+
+        let error = run_workspace_set_trusted_hooks(&fixture, true, Some(nonce), Some(fingerprint))
+            .expect_err("expired challenge should fail");
+        assert!(
+            error.contains("missing or expired"),
+            "unexpected error: {error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_rejects_fingerprint_mismatch() -> Result<(), String> {
+        let hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: Vec::new(),
+        };
+        let fixture = setup_workspace_command_fixture("fingerprint-mismatch", hooks.clone());
+        let nonce = "nonce-fp-mismatch".to_string();
+        let expected_fingerprint = hook_set_fingerprint(&hooks);
+        insert_challenge(
+            &fixture,
+            nonce.as_str(),
+            HookTrustChallenge {
+                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
+                fingerprint: expected_fingerprint,
+                expires_at: SystemTime::now()
+                    .checked_add(Duration::from_secs(60))
+                    .ok_or_else(|| "future time should be valid".to_string())?,
+            },
+        )?;
+
+        let error = run_workspace_set_trusted_hooks(
+            &fixture,
+            true,
+            Some(nonce),
+            Some("different-fingerprint".to_string()),
+        )
+        .expect_err("fingerprint mismatch should fail");
+        assert!(
+            error.contains("fingerprint mismatch"),
+            "unexpected error: {error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_rejects_repository_mismatch_and_consumes_nonce(
+    ) -> Result<(), String> {
+        let fixture = setup_workspace_command_fixture("repo-mismatch", HookSet::default());
+        let nonce = "nonce-repo-mismatch".to_string();
+        let fingerprint = hook_set_fingerprint(&HookSet::default());
+        insert_challenge(
+            &fixture,
+            nonce.as_str(),
+            HookTrustChallenge {
+                repo_path: "/tmp/not-the-same-repo".to_string(),
+                fingerprint: fingerprint.clone(),
+                expires_at: SystemTime::now()
+                    .checked_add(Duration::from_secs(60))
+                    .ok_or_else(|| "future time should be valid".to_string())?,
+            },
+        )?;
+
+        let mismatch_error = run_workspace_set_trusted_hooks(
+            &fixture,
+            true,
+            Some(nonce.clone()),
+            Some(fingerprint.clone()),
+        )
+        .expect_err("repository mismatch should fail");
+        assert!(
+            mismatch_error.contains("repository mismatch"),
+            "unexpected mismatch error: {mismatch_error}"
+        );
+
+        let replay_error =
+            run_workspace_set_trusted_hooks(&fixture, true, Some(nonce), Some(fingerprint))
+                .expect_err("challenge nonce should be consumed after mismatch");
+        assert!(
+            replay_error.contains("missing or expired"),
+            "unexpected replay error: {replay_error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_accepts_valid_challenge_and_persists_trust() -> Result<(), String>
+    {
+        let hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: vec!["echo post".to_string()],
+        };
+        let fixture = setup_workspace_command_fixture_with_dialog_response(
+            "trusted-hooks-happy-path",
+            hooks.clone(),
+            Some(true),
+        );
+        let nonce = "nonce-trust-success".to_string();
+        let fingerprint = hook_set_fingerprint(&hooks);
+        insert_challenge(
+            &fixture,
+            nonce.as_str(),
+            HookTrustChallenge {
+                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
+                fingerprint: fingerprint.clone(),
+                expires_at: SystemTime::now()
+                    .checked_add(Duration::from_secs(60))
+                    .ok_or_else(|| "future time should be valid".to_string())?,
+            },
+        )?;
+
+        let updated =
+            run_workspace_set_trusted_hooks(&fixture, true, Some(nonce), Some(fingerprint.clone()))
+                .expect("valid challenge should trust hooks");
+        assert_eq!(updated.path, canonical_repo_key(fixture.repo_path.as_str()));
+
+        let repo_config = fixture
+            .service
+            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .map_err(|error| error.to_string())?;
+        assert!(repo_config.trusted_hooks);
+        assert_eq!(
+            repo_config.trusted_hooks_fingerprint.as_deref(),
+            Some(fingerprint.as_str())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_consumes_nonce_and_rejects_replay_after_hook_changes(
+    ) -> Result<(), String> {
+        let original_hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: Vec::new(),
+        };
+        let fixture = setup_workspace_command_fixture("replay-and-stale", original_hooks.clone());
+        let nonce = "nonce-replay".to_string();
+        let challenge_fingerprint = hook_set_fingerprint(&original_hooks);
+        insert_challenge(
+            &fixture,
+            nonce.as_str(),
+            HookTrustChallenge {
+                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
+                fingerprint: challenge_fingerprint.clone(),
+                expires_at: SystemTime::now()
+                    .checked_add(Duration::from_secs(60))
+                    .ok_or_else(|| "future time should be valid".to_string())?,
+            },
+        )?;
+
+        fixture
+            .service
+            .workspace_update_repo_hooks(
+                fixture.repo_path.as_str(),
+                HookSet {
+                    pre_start: vec!["echo changed".to_string()],
+                    post_complete: Vec::new(),
+                },
+            )
+            .map_err(|error| error.to_string())?;
+
+        let stale_error = run_workspace_set_trusted_hooks(
+            &fixture,
+            true,
+            Some(nonce.clone()),
+            Some(challenge_fingerprint),
+        )
+        .expect_err("stale hook challenge should fail");
+        assert!(
+            stale_error.contains("Hook commands changed after challenge generation"),
+            "unexpected stale challenge error: {stale_error}"
+        );
+
+        let replay_error = run_workspace_set_trusted_hooks(
+            &fixture,
+            true,
+            Some(nonce),
+            Some("ignored".to_string()),
+        )
+        .expect_err("replay should fail after nonce consumption");
+        assert!(
+            replay_error.contains("missing or expired"),
+            "unexpected replay error: {replay_error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_set_trusted_hooks_disables_without_challenge() -> Result<(), String> {
+        let hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: Vec::new(),
+        };
+        let fixture = setup_workspace_command_fixture("disable-without-challenge", hooks.clone());
+        let fingerprint = hook_set_fingerprint(&hooks);
+        fixture
+            .service
+            .workspace_set_trusted_hooks(
+                fixture.repo_path.as_str(),
+                true,
+                Some(fingerprint.as_str()),
+            )
+            .map_err(|error| error.to_string())?;
+
+        let updated = run_workspace_set_trusted_hooks(&fixture, false, None, None)
+            .expect("disabling trust should succeed");
+        assert_eq!(updated.path, canonical_repo_key(fixture.repo_path.as_str()));
+
+        let repo_config = fixture
+            .service
+            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .map_err(|error| error.to_string())?;
+        assert!(!repo_config.trusted_hooks);
+        assert!(repo_config.trusted_hooks_fingerprint.is_none());
+        Ok(())
+    }
 
     #[test]
     fn sanitize_hook_preview_escapes_controls_and_truncates() {
