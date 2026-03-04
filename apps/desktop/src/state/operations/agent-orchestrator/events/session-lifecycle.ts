@@ -43,48 +43,63 @@ const autoRejectMutatingPermission = (
 ): void => {
   const pendingPermission = toPendingPermission(event);
   const promptOverrides = context.sessionsRef.current[context.sessionId]?.promptOverrides;
+  const markManualResponseRequired = (error: unknown): void => {
+    context.updateSession(context.sessionId, (current) => ({
+      ...current,
+      pendingPermissions: [
+        ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
+        pendingPermission,
+      ],
+      messages: [
+        ...current.messages,
+        {
+          id: crypto.randomUUID(),
+          role: "system",
+          content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
+          timestamp: event.timestamp,
+        },
+      ],
+    }));
+  };
+
+  let rejectionMessage: string;
+  try {
+    rejectionMessage = buildReadOnlyPermissionRejectionMessage({
+      role,
+      ...(promptOverrides ? { overrides: promptOverrides } : {}),
+    });
+  } catch (error) {
+    markManualResponseRequired(error);
+    return;
+  }
 
   void context.adapter
     .replyPermission({
       sessionId: context.sessionId,
       requestId: event.requestId,
       reply: "reject",
-      message: buildReadOnlyPermissionRejectionMessage({
-        role,
-        ...(promptOverrides ? { overrides: promptOverrides } : {}),
-      }),
+      message: rejectionMessage,
     })
-    .catch((error) => {
+    .then(() => {
       context.updateSession(context.sessionId, (current) => ({
         ...current,
-        pendingPermissions: [
-          ...current.pendingPermissions.filter((entry) => entry.requestId !== event.requestId),
-          pendingPermission,
-        ],
+        pendingPermissions: current.pendingPermissions.filter(
+          (entry) => entry.requestId !== event.requestId,
+        ),
         messages: [
           ...current.messages,
           {
             id: crypto.randomUUID(),
             role: "system",
-            content: `Automatic permission rejection failed: ${errorMessage(error)}. Manual response required.`,
+            content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
             timestamp: event.timestamp,
           },
         ],
       }));
+    })
+    .catch((error) => {
+      markManualResponseRequired(error);
     });
-
-  context.updateSession(context.sessionId, (current) => ({
-    ...current,
-    messages: [
-      ...current.messages,
-      {
-        id: crypto.randomUUID(),
-        role: "system",
-        content: `Auto-rejected mutating permission (${event.permission}) for ${role} session.`,
-        timestamp: event.timestamp,
-      },
-    ],
-  }));
 };
 
 export const handleSessionStarted = (

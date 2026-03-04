@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -20,6 +21,11 @@ const deferTaskMock = mock(async () => {});
 const resumeDeferredTaskMock = mock(async () => {});
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
+const workspaceGetRepoConfigMock = mock(
+  async (): Promise<{ promptOverrides: RepoPromptOverrides }> => ({
+    promptOverrides: {},
+  }),
+);
 
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
 let latestSessionStartModalModel: Record<string, unknown> | null = null;
@@ -64,10 +70,7 @@ mock.module("sonner", () => ({
 
 mock.module("@/state/operations/host", () => ({
   host: {
-    workspaceGetRepoConfig: async () =>
-      ({
-        promptOverrides: {},
-      }) as { promptOverrides: Record<string, never> },
+    workspaceGetRepoConfig: workspaceGetRepoConfigMock,
   },
 }));
 
@@ -167,6 +170,10 @@ describe("KanbanPage session start modal flow", () => {
     resumeDeferredTaskMock.mockClear();
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
+    workspaceGetRepoConfigMock.mockClear();
+    workspaceGetRepoConfigMock.mockImplementation(async () => ({
+      promptOverrides: {},
+    }));
   });
 
   afterAll(() => {
@@ -320,6 +327,67 @@ describe("KanbanPage session start modal flow", () => {
     });
 
     expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.");
+    expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("kickoff config load failure still reports kickoff error after session start", async () => {
+    workspaceGetRepoConfigMock.mockImplementationOnce(async () => {
+      throw new Error("config unavailable");
+    });
+
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.");
+    expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("malformed kickoff override still reports kickoff error after session start", async () => {
+    workspaceGetRepoConfigMock.mockImplementationOnce(async () => ({
+      promptOverrides: {
+        "kickoff.build_implementation_start": {
+          template: "Kickoff {{unsupported.token}}",
+          baseVersion: 1,
+        },
+      },
+    }));
+
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onDelegate as (taskId: string) => void)("TASK-123");
+    });
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledTimes(1);
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
     expect(latestLocation).toContain("/agents?task=TASK-123");
     expect(toastErrorMock).toHaveBeenCalledWith("Session started, but kickoff message failed.");
     expect(toastErrorMock).not.toHaveBeenCalledWith("Failed to start the session.");

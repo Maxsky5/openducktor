@@ -184,13 +184,12 @@ export function useKanbanSessionStartFlow({
           }
 
           if (startInBackground || intent.sendKickoff) {
-            const promptOverrides = activeRepo
-              ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
-              : undefined;
-            const intentTask = tasks.find((entry) => entry.id === intent.taskId);
-            const kickoffPromise = sendAgentMessage(
-              sessionId,
-              kickoffPromptForScenario(intent.role, intent.scenario, intent.taskId, {
+            const buildKickoffMessage = async (): Promise<string> => {
+              const promptOverrides = activeRepo
+                ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
+                : undefined;
+              const intentTask = tasks.find((entry) => entry.id === intent.taskId);
+              return kickoffPromptForScenario(intent.role, intent.scenario, intent.taskId, {
                 ...(promptOverrides ? { overrides: promptOverrides } : {}),
                 task: {
                   ...(intentTask
@@ -204,16 +203,20 @@ export function useKanbanSessionStartFlow({
                       }
                     : {}),
                 },
-              }),
-            );
+              });
+            };
 
             if (startInBackground) {
-              void kickoffPromise.catch(() => {
-                toast.error("Session started, but kickoff message failed.");
-              });
+              void (async () => {
+                try {
+                  await sendAgentMessage(sessionId, await buildKickoffMessage());
+                } catch {
+                  toast.error("Session started, but kickoff message failed.");
+                }
+              })();
             } else {
               try {
-                await kickoffPromise;
+                await sendAgentMessage(sessionId, await buildKickoffMessage());
               } catch {
                 toast.error("Session started, but kickoff message failed.");
               }
