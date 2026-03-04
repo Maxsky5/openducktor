@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { isAgentQuestionAnswered } from "./agent-session-question-draft";
+import { buildQuestionRenderEntries } from "./agent-session-question-keys";
 import { QuestionSubmitFooter } from "./agent-session-question-submit-footer";
 import { QuestionSummaryTab } from "./agent-session-question-summary-tab";
 import { QuestionTab } from "./agent-session-question-tab";
@@ -48,6 +49,8 @@ export function AgentSessionQuestionCard({
     return null;
   }
 
+  const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
+
   return (
     <section className="rounded-xl border border-input bg-card shadow-sm">
       <header className="flex items-center justify-between gap-2 border-b border-input px-3 py-1.5">
@@ -63,13 +66,13 @@ export function AgentSessionQuestionCard({
       <div className="space-y-2 p-2.5">
         {hasMultipleQuestions ? (
           <div className="flex flex-wrap gap-1">
-            {request.questions.map((question, index) => {
+            {questionRenderEntries.map(({ question, key }, index) => {
               const tabId = String(index);
               const isTabActive = activeTabId === tabId;
               const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
               return (
                 <Button
-                  key={`${request.requestId}:${question.header}:${question.question}`}
+                  key={key}
                   type="button"
                   size="sm"
                   variant="outline"

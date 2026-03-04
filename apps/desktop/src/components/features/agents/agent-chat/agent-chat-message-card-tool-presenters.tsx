@@ -23,6 +23,7 @@ import {
   hasNonEmptyInput,
   hasNonEmptyText,
   isFileEditTool,
+  type QuestionToolDetail,
   questionToolDetails,
   toolDisplayName,
 } from "./agent-chat-message-card-model";
@@ -60,6 +61,23 @@ const toolIcon = (toolName: string): ReactElement => {
     return <Globe className="size-3.5" />;
   }
   return <Wrench className="size-3.5" />;
+};
+
+const buildQuestionDetailRenderEntries = (
+  callId: string,
+  questionDetails: QuestionToolDetail[],
+): Array<{ key: string; detail: QuestionToolDetail }> => {
+  const countsByBaseKey = new Map<string, number>();
+
+  return questionDetails.map((detail) => {
+    const baseKey = `${callId}:question:${detail.prompt}:${detail.answers.join("|")}`;
+    const nextCount = (countsByBaseKey.get(baseKey) ?? 0) + 1;
+    countsByBaseKey.set(baseKey, nextCount);
+    return {
+      key: `${baseKey}:${nextCount}`,
+      detail,
+    };
+  });
 };
 
 type ToolJsonDetailsProps = {
@@ -211,6 +229,10 @@ export const RegularToolMessage = ({
   const hasExpandableDetails = hasInput || hasOutput || hasError;
   const isActive = lifecyclePhase === "queued" || lifecyclePhase === "executing";
   const questionDetails = questionToolDetails(meta);
+  const questionDetailRenderEntries = buildQuestionDetailRenderEntries(
+    meta.callId,
+    questionDetails,
+  );
 
   const summaryRow = (
     <div
@@ -295,19 +317,16 @@ export const RegularToolMessage = ({
             Questions and answers
           </summary>
           <div className="space-y-2 border-t border-border px-2 py-2 text-xs text-foreground">
-            {questionDetails.map((entry) => (
-              <div
-                key={`${meta.callId}:question:${entry.prompt}:${entry.answers.join("|")}`}
-                className="space-y-0.5"
-              >
-                <p className="font-medium text-foreground">{entry.prompt}</p>
+            {questionDetailRenderEntries.map(({ key, detail }) => (
+              <div key={key} className="space-y-0.5">
+                <p className="font-medium text-foreground">{detail.prompt}</p>
                 <p
                   className={cn(
                     "whitespace-pre-wrap",
-                    entry.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground",
+                    detail.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground",
                   )}
                 >
-                  {entry.answers.length > 0 ? entry.answers.join(", ") : "No answer yet"}
+                  {detail.answers.length > 0 ? detail.answers.join(", ") : "No answer yet"}
                 </p>
               </div>
             ))}
