@@ -1,6 +1,6 @@
 import type {} from "./bun-test";
 import type { TauriHostClient as TauriHostClientType } from "./index";
-import { TauriHostClient } from "./index";
+import { createTauriHostClient } from "./index";
 
 type InvokeCall = {
   command: string;
@@ -71,7 +71,8 @@ const createClient = (resolver: (command: string, args?: Record<string, unknown>
     calls.push({ command, args });
     return resolver(command, args) as T;
   };
-  return { client: new TauriHostClient(invoke), calls };
+  const client: TauriHostClientType = createTauriHostClient(invoke);
+  return { client, calls };
 };
 
 const assertClientType = (client: TauriHostClientType): TauriHostClientType => client;
@@ -835,7 +836,7 @@ describe("TauriHostClient", () => {
     expect(sessions).toHaveLength(3);
     expect(sessions[0]?.scenario).toBe("spec_initial");
     expect(sessions[1]?.scenario).toBe("planner_initial");
-    expect(sessions[2]?.scenario).toBeUndefined();
+    expect(sessions[2]?.scenario).toBe(undefined);
   });
 
   test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {
