@@ -1,8 +1,10 @@
-use super::*;
+use super::{fake_git_workspace, hook_set_fingerprint, HookSet, RepoConfig, TestStoreHarness};
 
 #[test]
 fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
-    let (store, root) = test_store("repo-config-roundtrip");
+    let harness = TestStoreHarness::new("repo-config-roundtrip");
+    let store = harness.store();
+    let root = harness.root();
     let repo = root.join("repo-main");
     fake_git_workspace(&repo);
     let repo_str = repo.to_string_lossy().to_string();
@@ -49,12 +51,13 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
         .repo_config_optional(repo_str.as_str())
         .expect("optional lookup should succeed");
     assert!(optional.is_some());
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn update_repo_hooks_revokes_trust_when_commands_change() {
-    let (store, root) = test_store("hooks-revoke-trust");
+    let harness = TestStoreHarness::new("hooks-revoke-trust");
+    let store = harness.store();
+    let root = harness.root();
     let repo = root.join("repo");
     fake_git_workspace(&repo);
     let repo_str = repo.to_string_lossy().to_string();
@@ -101,6 +104,4 @@ fn update_repo_hooks_revokes_trust_when_commands_change() {
         .expect("repo config should exist");
     assert!(!repo_config.trusted_hooks);
     assert!(repo_config.trusted_hooks_fingerprint.is_none());
-
-    let _ = fs::remove_dir_all(root);
 }

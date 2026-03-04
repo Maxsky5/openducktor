@@ -11,7 +11,44 @@ mod normalization;
 mod trust_fingerprint;
 mod workspace_config;
 
-fn unique_temp_path(name: &str) -> PathBuf {
+pub(super) struct TestStoreHarness {
+    store: AppConfigStore,
+    root: PathBuf,
+}
+
+impl TestStoreHarness {
+    pub(super) fn new(name: &str) -> Self {
+        let root = unique_temp_path(name);
+        let path = root.join("config.json");
+        Self {
+            store: AppConfigStore::from_path(path),
+            root,
+        }
+    }
+
+    pub(super) fn store(&self) -> &AppConfigStore {
+        &self.store
+    }
+
+    pub(super) fn root(&self) -> &Path {
+        &self.root
+    }
+}
+
+impl Drop for TestStoreHarness {
+    fn drop(&mut self) {
+        if let Err(error) = fs::remove_dir_all(&self.root) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                panic!(
+                    "failed removing test temp directory {}: {error}",
+                    self.root.display()
+                );
+            }
+        }
+    }
+}
+
+pub(super) fn unique_temp_path(name: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system time")
@@ -19,12 +56,6 @@ fn unique_temp_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("openducktor-{name}-{nonce}"))
 }
 
-fn test_store(name: &str) -> (AppConfigStore, PathBuf) {
-    let root = unique_temp_path(name);
-    let path = root.join("config.json");
-    (AppConfigStore { path }, root)
-}
-
-fn fake_git_workspace(path: &Path) {
+pub(super) fn fake_git_workspace(path: &Path) {
     fs::create_dir_all(path.join(".git")).expect("git directory should be created");
 }

@@ -1,8 +1,11 @@
-use super::*;
+use super::{fake_git_workspace, RepoConfig, TestStoreHarness};
+use std::fs;
 
 #[test]
 fn workspace_add_select_and_update_persist_state() {
-    let (store, root) = test_store("workspace-flow");
+    let harness = TestStoreHarness::new("workspace-flow");
+    let store = harness.store();
+    let root = harness.root();
     let repo_a = root.join("repo-a");
     let repo_b = root.join("repo-b");
     fs::create_dir_all(repo_a.join(".git")).expect("repo a");
@@ -65,13 +68,13 @@ fn workspace_add_select_and_update_persist_state() {
             .and_then(|entry| entry.worktree_base_path.as_deref()),
         Some("/tmp/worktrees")
     );
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn add_workspace_rejects_missing_and_non_git_paths() {
-    let (store, root) = test_store("workspace-invalid");
+    let harness = TestStoreHarness::new("workspace-invalid");
+    let store = harness.store();
+    let root = harness.root();
     let missing = root.join("missing");
     let missing_error = store
         .add_workspace(missing.to_string_lossy().as_ref())
@@ -84,12 +87,13 @@ fn add_workspace_rejects_missing_and_non_git_paths() {
         .add_workspace(non_git.to_string_lossy().as_ref())
         .expect_err("non-git path should fail");
     assert!(non_git_error.to_string().contains("not a git repository"));
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn select_and_repo_config_accessors_report_missing_entries() {
-    let (store, root) = test_store("workspace-missing-config");
+    let harness = TestStoreHarness::new("workspace-missing-config");
+    let store = harness.store();
+    let root = harness.root();
     let missing_repo = root.join("missing-repo");
     let missing_repo_str = missing_repo.to_string_lossy().to_string();
 
@@ -122,12 +126,13 @@ fn select_and_repo_config_accessors_report_missing_entries() {
     assert!(trust_error
         .to_string()
         .contains("Repository is not configured"));
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn update_repo_config_rejects_unknown_workspace() {
-    let (store, root) = test_store("update-repo-config-missing-workspace");
+    let harness = TestStoreHarness::new("update-repo-config-missing-workspace");
+    let store = harness.store();
+    let root = harness.root();
     let repo = root.join("missing-repo");
     fake_git_workspace(&repo);
     let repo_str = repo.to_string_lossy().to_string();
@@ -137,5 +142,4 @@ fn update_repo_config_rejects_unknown_workspace() {
         .expect_err("unknown workspace should be rejected");
 
     assert!(error.to_string().contains("Workspace not found in config"));
-    let _ = fs::remove_dir_all(root);
 }

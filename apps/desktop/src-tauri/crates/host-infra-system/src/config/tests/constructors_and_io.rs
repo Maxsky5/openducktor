@@ -1,10 +1,13 @@
-use super::*;
+use super::{touch_recent, unique_temp_path, AppConfigStore, GlobalConfig, TestStoreHarness};
+use std::fs;
 
 #[test]
 fn save_and_load_report_io_and_parse_errors() {
-    let (store, root) = test_store("config-io-errors");
+    let harness = TestStoreHarness::new("config-io-errors");
+    let store = harness.store();
+    let root = harness.root();
 
-    fs::create_dir_all(&root).expect("temp root should exist");
+    fs::create_dir_all(root).expect("temp root should exist");
     fs::write(store.path(), "{ invalid json").expect("invalid config should write");
     let parse_error = store.load().expect_err("invalid json should fail parsing");
     assert!(parse_error
@@ -20,7 +23,6 @@ fn save_and_load_report_io_and_parse_errors() {
     assert!(save_error
         .to_string()
         .contains("Failed creating config directory"));
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]

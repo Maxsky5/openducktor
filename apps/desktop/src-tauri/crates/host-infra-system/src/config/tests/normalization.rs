@@ -1,20 +1,22 @@
-use super::*;
+use super::{GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig, TestStoreHarness};
 use serde_json::json;
+use std::fs;
 
 #[test]
 fn load_missing_returns_default_config() {
-    let (store, root) = test_store("load-default");
+    let harness = TestStoreHarness::new("load-default");
+    let store = harness.store();
     let config = store.load().expect("load default");
     assert_eq!(config.version, 1);
     assert_eq!(config.opencode_startup.timeout_ms, 8_000);
     assert_eq!(config.opencode_startup.connect_timeout_ms, 250);
     assert!(config.repos.is_empty());
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn opencode_startup_readiness_defaults_and_normalizes() {
-    let (store, root) = test_store("opencode-startup-readiness");
+    let harness = TestStoreHarness::new("opencode-startup-readiness");
+    let store = harness.store();
     let config = GlobalConfig {
         opencode_startup: OpencodeStartupReadinessConfig {
             timeout_ms: 10,
@@ -35,13 +37,13 @@ fn opencode_startup_readiness_defaults_and_normalizes() {
     assert_eq!(readiness.initial_retry_delay_ms, 3_000);
     assert_eq!(readiness.max_retry_delay_ms, 3_000);
     assert_eq!(readiness.child_check_interval_ms, 10);
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn update_repo_config_normalizes_blank_worktree_path() {
-    let (store, root) = test_store("normalize-worktree");
+    let harness = TestStoreHarness::new("normalize-worktree");
+    let store = harness.store();
+    let root = harness.root();
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
@@ -70,13 +72,13 @@ fn update_repo_config_normalizes_blank_worktree_path() {
     assert!(loaded.worktree_base_path.is_none());
     assert_eq!(loaded.branch_prefix, "duck");
     assert_eq!(loaded.default_target_branch, "origin/main");
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
-    let (store, root) = test_store("canonical-target-branch");
+    let harness = TestStoreHarness::new("canonical-target-branch");
+    let store = harness.store();
+    let root = harness.root();
     let repo = root.join("repo");
     fs::create_dir_all(repo.join(".git")).expect("repo");
     let repo_str = repo.to_string_lossy().to_string();
@@ -100,17 +102,17 @@ fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
 
     let loaded = store.repo_config(&repo_str).expect("load repo config");
     assert_eq!(loaded.default_target_branch, "origin/main");
-
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn load_normalizes_legacy_blank_repo_config_values() {
-    let (store, root) = test_store("normalize-legacy");
+    let harness = TestStoreHarness::new("normalize-legacy");
+    let store = harness.store();
+    let root = harness.root();
     let repo = root.join("repo");
     let repo_str = repo.to_string_lossy().to_string();
 
-    fs::create_dir_all(store.path.parent().expect("config parent")).expect("create config dir");
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
     let mut repos = serde_json::Map::new();
     repos.insert(
         repo_str.clone(),
@@ -157,7 +159,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         }
     });
     fs::write(
-        &store.path,
+        store.path(),
         serde_json::to_string_pretty(&payload).expect("serialize payload"),
     )
     .expect("write config");
@@ -196,6 +198,4 @@ fn load_normalizes_legacy_blank_repo_config_values() {
             .contains_key("kickoff.qa_review"),
         "blank templates should be removed"
     );
-
-    let _ = fs::remove_dir_all(root);
 }
