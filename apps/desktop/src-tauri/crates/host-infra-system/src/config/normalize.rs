@@ -1,6 +1,6 @@
 use super::types::{
     default_branch_prefix, default_target_branch, hook_set_fingerprint, AgentModelDefault,
-    GlobalConfig, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig,
+    GlobalConfig, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RuntimeConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -121,8 +121,11 @@ pub(super) fn normalize_opencode_startup_readiness_config(
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) {
-    normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
     for repo in config.repos.values_mut() {
         normalize_repo_config(repo);
     }
+}
+
+pub(super) fn normalize_runtime_config(config: &mut RuntimeConfig) {
+    normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
 }

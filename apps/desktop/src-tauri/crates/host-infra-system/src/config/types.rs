@@ -208,13 +208,9 @@ pub struct GlobalConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
-    pub opencode_startup: OpencodeStartupReadinessConfig,
-    #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
     #[serde(default)]
     pub recent_repos: Vec<String>,
-    #[serde(default)]
-    pub scheduler: SchedulerConfig,
 }
 
 impl Default for GlobalConfig {
@@ -223,9 +219,27 @@ impl Default for GlobalConfig {
             version: 1,
             active_repo: None,
             theme: default_theme(),
-            opencode_startup: OpencodeStartupReadinessConfig::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfig {
+    pub version: u8,
+    #[serde(default)]
+    pub opencode_startup: OpencodeStartupReadinessConfig,
+    #[serde(default)]
+    pub scheduler: SchedulerConfig,
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            opencode_startup: OpencodeStartupReadinessConfig::default(),
             scheduler: SchedulerConfig::default(),
         }
     }

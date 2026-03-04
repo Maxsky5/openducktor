@@ -3,11 +3,11 @@ mod normalize;
 mod store;
 mod types;
 
-pub use store::AppConfigStore;
+pub use store::{AppConfigStore, RuntimeConfigStore};
 pub use types::{
     hook_set_fingerprint, AgentDefaults, AgentModelDefault, GlobalConfig, HookSet,
-    OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig, SchedulerConfig,
-    SoftGuardrails,
+    OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig, RuntimeConfig,
+    SchedulerConfig, SoftGuardrails,
 };
 
 #[cfg(test)]
@@ -17,7 +17,7 @@ pub(super) use store::touch_recent;
 mod tests {
     use super::{
         hook_set_fingerprint, touch_recent, AppConfigStore, GlobalConfig,
-        OpencodeStartupReadinessConfig, RepoConfig,
+        OpencodeStartupReadinessConfig, RepoConfig, RuntimeConfig, RuntimeConfigStore,
     };
     use serde_json::json;
     use std::fs;
@@ -38,6 +38,12 @@ mod tests {
         (AppConfigStore { path }, root)
     }
 
+    fn test_runtime_store(name: &str) -> (RuntimeConfigStore, PathBuf) {
+        let root = unique_temp_path(name);
+        let path = root.join("runtime-config.json");
+        (RuntimeConfigStore { path }, root)
+    }
+
     fn fake_git_workspace(path: &Path) {
         fs::create_dir_all(path.join(".git")).expect("git directory should be created");
     }
@@ -47,16 +53,14 @@ mod tests {
         let (store, root) = test_store("load-default");
         let config = store.load().expect("load default");
         assert_eq!(config.version, 1);
-        assert_eq!(config.opencode_startup.timeout_ms, 8_000);
-        assert_eq!(config.opencode_startup.connect_timeout_ms, 250);
         assert!(config.repos.is_empty());
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn opencode_startup_readiness_defaults_and_normalizes() {
-        let (store, root) = test_store("opencode-startup-readiness");
-        let config = GlobalConfig {
+    fn runtime_store_defaults_and_normalizes_startup_readiness() {
+        let (store, root) = test_runtime_store("runtime-config-startup-readiness");
+        let config = RuntimeConfig {
             opencode_startup: OpencodeStartupReadinessConfig {
                 timeout_ms: 10,
                 connect_timeout_ms: 0,
@@ -64,13 +68,14 @@ mod tests {
                 max_retry_delay_ms: 20,
                 child_check_interval_ms: 1,
             },
-            ..GlobalConfig::default()
+            ..RuntimeConfig::default()
         };
         store.save(&config).expect("save config");
 
         let readiness = store
-            .opencode_startup_readiness()
-            .expect("readiness policy should load");
+            .load()
+            .expect("runtime config should load")
+            .opencode_startup;
         assert_eq!(readiness.timeout_ms, 250);
         assert_eq!(readiness.connect_timeout_ms, 25);
         assert_eq!(readiness.initial_retry_delay_ms, 3_000);
@@ -414,17 +419,35 @@ mod tests {
     }
 
     #[test]
-    fn app_config_store_constructors_expose_expected_paths() {
-        let store = AppConfigStore::new().expect("new store should resolve home path");
-        let resolved = store.path().to_string_lossy().to_string();
+    fn config_store_constructors_expose_expected_paths() {
+        let user_store = AppConfigStore::new().expect("new store should resolve home path");
+        let resolved = user_store.path().to_string_lossy().to_string();
         assert!(
             resolved.ends_with("/.openducktor/config.json"),
             "unexpected config path: {resolved}"
         );
 
         let custom_path = unique_temp_path("custom-path").join("custom-config.json");
-        let from_path = AppConfigStore::from_path(custom_path.clone());
-        assert_eq!(from_path.path(), custom_path.as_path());
+        let user_from_path = AppConfigStore::from_path(custom_path.clone());
+        assert_eq!(user_from_path.path(), custom_path.as_path());
+
+        let runtime_store = RuntimeConfigStore::new().expect("new runtime store should resolve");
+        let runtime_resolved = runtime_store.path().to_string_lossy().to_string();
+        assert!(
+            runtime_resolved.ends_with("/.openducktor/runtime-config.json"),
+            "unexpected runtime config path: {runtime_resolved}"
+        );
+
+        let runtime_custom_path = unique_temp_path("runtime-custom-path").join("runtime.json");
+        let runtime_from_path = RuntimeConfigStore::from_path(runtime_custom_path.clone());
+        assert_eq!(runtime_from_path.path(), runtime_custom_path.as_path());
+
+        let runtime_from_user = RuntimeConfigStore::from_user_settings_store(&user_from_path);
+        let expected_runtime_path = custom_path
+            .parent()
+            .expect("custom config path parent")
+            .join("runtime-config.json");
+        assert_eq!(runtime_from_user.path(), expected_runtime_path.as_path());
     }
 
     #[test]
@@ -470,14 +493,7 @@ mod tests {
             "version": 1,
             "activeRepo": repo_str,
             "repos": repos,
-            "recentRepos": [],
-            "scheduler": {
-                "softGuardrails": {
-                    "cpuHighWatermarkPercent": 85,
-                    "minFreeMemoryMb": 2048,
-                    "backoffSeconds": 30
-                }
-            }
+            "recentRepos": []
         });
         fs::write(
             &store.path,

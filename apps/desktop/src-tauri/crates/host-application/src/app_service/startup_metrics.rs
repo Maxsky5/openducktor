@@ -397,13 +397,15 @@ impl AppService {
     pub(crate) fn opencode_startup_readiness_policy(
         &self,
     ) -> Result<OpencodeStartupReadinessPolicy> {
-        let config = self.config_store.opencode_startup_readiness().with_context(|| {
+        let config = self.runtime_config_store.load().with_context(|| {
             format!(
                 "Failed loading OpenCode startup readiness config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
-                self.config_store.path().display()
+                self.runtime_config_store.path().display()
             )
         })?;
-        Ok(OpencodeStartupReadinessPolicy::from_config(config))
+        Ok(OpencodeStartupReadinessPolicy::from_config(
+            config.opencode_startup,
+        ))
     }
 
     pub(crate) fn startup_cancel_epoch(&self) -> StartupCancelEpoch {

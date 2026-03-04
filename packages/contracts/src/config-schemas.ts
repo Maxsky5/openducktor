@@ -70,12 +70,5 @@ export const globalConfigSchema = z.object({
   activeRepo: z.string().optional(),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   recentRepos: z.array(z.string()).default([]),
-  scheduler: z
-    .object({
-      softGuardrails: softGuardrailsSchema.default(toSoftGuardrailsDefaults()),
-    })
-    .default({
-      softGuardrails: toSoftGuardrailsDefaults(),
-    }),
 });
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;

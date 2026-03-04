@@ -3,7 +3,9 @@ use host_domain::{
     CreateTaskInput, IssueType, PlanSubtaskInput, RuntimeRole, TaskAction, TaskStatus, TaskStore,
     UpdateTaskPatch,
 };
-use host_infra_system::{AppConfigStore, GlobalConfig, OpencodeStartupReadinessConfig};
+use host_infra_system::{
+    AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
+};
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::process::Command;
@@ -407,7 +409,8 @@ fn opencode_startup_event_payload_contract_includes_correlation_and_metrics() {
 fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
     let root = unique_temp_path("startup-policy-config");
     let config_store = AppConfigStore::from_path(root.join("config.json"));
-    let config = GlobalConfig {
+    let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
+    let config = RuntimeConfig {
         opencode_startup: OpencodeStartupReadinessConfig {
             timeout_ms: 12_345,
             connect_timeout_ms: 456,
@@ -415,9 +418,9 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
             max_retry_delay_ms: 99,
             child_check_interval_ms: 77,
         },
-        ..GlobalConfig::default()
+        ..RuntimeConfig::default()
     };
-    config_store.save(&config)?;
+    runtime_config_store.save(&config)?;
 
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: Arc::new(Mutex::new(TaskStoreState::default())),
@@ -437,11 +440,11 @@ fn opencode_startup_readiness_policy_uses_config_overrides() -> Result<()> {
 #[test]
 fn opencode_startup_readiness_policy_returns_actionable_error_on_invalid_config() -> Result<()> {
     let root = unique_temp_path("startup-policy-invalid-config");
-    let config_path = root.join("config.json");
+    let config_path = root.join("runtime-config.json");
     fs::create_dir_all(&root)?;
     fs::write(&config_path, "{ invalid json")?;
 
-    let config_store = AppConfigStore::from_path(config_path.clone());
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: Arc::new(Mutex::new(TaskStoreState::default())),
     });
@@ -475,11 +478,11 @@ fn opencode_startup_readiness_policy_returns_actionable_error_on_invalid_config(
 #[test]
 fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
     let root = unique_temp_path("build-startup-policy-invalid-config");
-    let config_path = root.join("config.json");
+    let config_path = root.join("runtime-config.json");
     fs::create_dir_all(&root)?;
     fs::write(&config_path, "{ invalid json")?;
 
-    let config_store = AppConfigStore::from_path(config_path);
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: Arc::new(Mutex::new(TaskStoreState::default())),
     });
@@ -492,18 +495,21 @@ fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
     assert!(message.contains("Failed loading OpenCode startup readiness config"));
 
     let metrics = service.startup_metrics_snapshot()?;
-    assert_eq!(metrics.failed_by_reason.get("startup_config_invalid"), Some(&1));
+    assert_eq!(
+        metrics.failed_by_reason.get("startup_config_invalid"),
+        Some(&1)
+    );
     Ok(())
 }
 
 #[test]
 fn resolve_runtime_startup_policy_emits_config_failure_metrics() -> Result<()> {
     let root = unique_temp_path("runtime-startup-policy-invalid-config");
-    let config_path = root.join("config.json");
+    let config_path = root.join("runtime-config.json");
     fs::create_dir_all(&root)?;
     fs::write(&config_path, "{ invalid json")?;
 
-    let config_store = AppConfigStore::from_path(config_path);
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
         state: Arc::new(Mutex::new(TaskStoreState::default())),
     });
@@ -522,7 +528,10 @@ fn resolve_runtime_startup_policy_emits_config_failure_metrics() -> Result<()> {
     assert!(message.contains("Failed loading OpenCode startup readiness config"));
 
     let metrics = service.startup_metrics_snapshot()?;
-    assert_eq!(metrics.failed_by_reason.get("startup_config_invalid"), Some(&1));
+    assert_eq!(
+        metrics.failed_by_reason.get("startup_config_invalid"),
+        Some(&1)
+    );
     Ok(())
 }
 
