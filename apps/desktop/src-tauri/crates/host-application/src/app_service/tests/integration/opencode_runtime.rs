@@ -200,7 +200,8 @@ fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
 
@@ -312,7 +313,8 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
     let missing_base_error = service
@@ -334,7 +336,8 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
                 pre_start: vec!["echo pre-hook".to_string()],
                 post_complete: Vec::new(),
             },
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
     let trust_error = service
@@ -353,7 +356,8 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
     fs::create_dir_all(worktree_base.join("qa-task-1"))?;
@@ -400,7 +404,8 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
             trusted_hooks: true,
             trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_cleanup_failure_hooks)),
             hooks: pre_start_cleanup_failure_hooks,
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
 
@@ -449,7 +454,8 @@ fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Resu
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
 
@@ -494,7 +500,8 @@ fn opencode_runtime_start_fails_on_invalid_startup_config_before_qa_worktree_set
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
 
@@ -722,7 +729,8 @@ fn opencode_runtime_start_cleans_up_qa_worktree_when_tracking_fails() -> Result<
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
-            agent_defaults: Default::default(),
+            prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
         },
     )?;
 

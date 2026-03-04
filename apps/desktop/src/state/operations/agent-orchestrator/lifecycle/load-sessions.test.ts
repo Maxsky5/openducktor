@@ -24,6 +24,7 @@ describe("agent-orchestrator-load-sessions", () => {
       updateSession: () => {},
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
     });
 
     await loadAgentSessions("task-1");
@@ -48,6 +49,7 @@ describe("agent-orchestrator-load-sessions", () => {
       updateSession: () => {},
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
     });
 
     await loadAgentSessions("   ");
@@ -80,6 +82,7 @@ describe("agent-orchestrator-load-sessions", () => {
       updateSession: () => {},
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
     });
 
     const originalList = (await import("../../host")).host.agentSessionsList;
@@ -139,6 +142,7 @@ describe("agent-orchestrator-load-sessions", () => {
       updateSession: () => {},
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
     });
 
     const hostModule = await import("../../host");
@@ -240,6 +244,7 @@ describe("agent-orchestrator-load-sessions", () => {
       updateSession,
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
     });
 
     const hostModule = await import("../../host");
@@ -316,6 +321,7 @@ describe("agent-orchestrator-load-sessions", () => {
       loadSessionModelCatalog: async () => {
         modelCatalogLoads += 1;
       },
+      loadRepoPromptOverrides: async () => ({}),
     });
 
     const originalList = (await import("../../host")).host.agentSessionsList;
@@ -400,6 +406,7 @@ describe("agent-orchestrator-load-sessions", () => {
       updateSession,
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
     });
 
     const hostModule = await import("../../host");

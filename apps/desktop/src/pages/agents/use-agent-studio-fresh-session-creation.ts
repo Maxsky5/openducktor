@@ -7,6 +7,7 @@ import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
 } from "../../state/operations/agent-orchestrator/support/async-side-effects";
+import { host } from "../../state/operations/host";
 import { kickoffPromptForScenario } from "./agents-page-constants";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -87,7 +88,29 @@ export function useAgentStudioFreshSessionCreation({
     (sessionId: string, nextRole: AgentRole, nextScenario: AgentScenario): void => {
       runOrchestratorSideEffect(
         "agent-studio-send-kickoff-message",
-        sendAgentMessage(sessionId, kickoffPromptForScenario(nextRole, nextScenario, taskId)),
+        (async () => {
+          const promptOverrides = activeRepo
+            ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
+            : undefined;
+          await sendAgentMessage(
+            sessionId,
+            kickoffPromptForScenario(nextRole, nextScenario, taskId, {
+              ...(promptOverrides ? { overrides: promptOverrides } : {}),
+              task: {
+                ...(selectedTask
+                  ? {
+                      title: selectedTask.title,
+                      issueType: selectedTask.issueType,
+                      status: selectedTask.status,
+                      qaRequired: selectedTask.aiReviewEnabled,
+                      description: selectedTask.description,
+                      acceptanceCriteria: selectedTask.acceptanceCriteria,
+                    }
+                  : {}),
+              },
+            }),
+          );
+        })(),
         {
           tags: {
             repoPath: activeRepo,
@@ -99,7 +122,7 @@ export function useAgentStudioFreshSessionCreation({
         },
       );
     },
-    [activeRepo, sendAgentMessage, taskId],
+    [activeRepo, selectedTask, sendAgentMessage, taskId],
   );
 
   const startFreshSessionWithFallback = useCallback(

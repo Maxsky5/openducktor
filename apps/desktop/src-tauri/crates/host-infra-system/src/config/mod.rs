@@ -6,7 +6,8 @@ mod types;
 pub use store::AppConfigStore;
 pub use types::{
     hook_set_fingerprint, AgentDefaults, AgentModelDefault, GlobalConfig, HookSet,
-    OpencodeStartupReadinessConfig, RepoConfig, SchedulerConfig, SoftGuardrails,
+    OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig, SchedulerConfig,
+    SoftGuardrails,
 };
 
 #[cfg(test)]
@@ -115,7 +116,8 @@ mod tests {
                     trusted_hooks: true,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
-                    agent_defaults: Default::default(),
+                    prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
                 },
             )
             .expect("update config");
@@ -223,7 +225,8 @@ mod tests {
                     trusted_hooks: false,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
-                    agent_defaults: Default::default(),
+                    prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
                 },
             )
             .expect("repo config update should succeed");
@@ -287,7 +290,8 @@ mod tests {
                     trusted_hooks: false,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
-                    agent_defaults: Default::default(),
+                    prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
                 },
             )
             .expect("update config");
@@ -321,7 +325,8 @@ mod tests {
                     trusted_hooks: false,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
-                    agent_defaults: Default::default(),
+                    prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
                 },
             )
             .expect("update config");
@@ -352,7 +357,8 @@ mod tests {
                     trusted_hooks: false,
                     trusted_hooks_fingerprint: None,
                     hooks: Default::default(),
-                    agent_defaults: Default::default(),
+                    prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
                 },
             )
             .expect("repo config update should succeed");
@@ -447,6 +453,16 @@ mod tests {
                         "variant": "  ",
                         "opencodeAgent": "  "
                     }
+                },
+                "promptOverrides": {
+                    " kickoff.spec_initial ": {
+                        "template": "  custom kickoff {{task.id}}  ",
+                        "baseVersion": 0
+                    },
+                    "kickoff.qa_review": {
+                        "template": "   ",
+                        "baseVersion": 2
+                    }
                 }
             }),
         );
@@ -491,6 +507,16 @@ mod tests {
         assert_eq!(spec.model_id, "gpt-5");
         assert!(spec.variant.is_none());
         assert!(spec.opencode_agent.is_none());
+        let kickoff_override = repo_config
+            .prompt_overrides
+            .get("kickoff.spec_initial")
+            .expect("kickoff override");
+        assert_eq!(kickoff_override.template, "custom kickoff {{task.id}}");
+        assert_eq!(kickoff_override.base_version, 1);
+        assert!(
+            !repo_config.prompt_overrides.contains_key("kickoff.qa_review"),
+            "blank templates should be removed"
+        );
 
         let _ = fs::remove_dir_all(root);
     }

@@ -2,6 +2,7 @@ export * from "./agent-workflow-schemas";
 export * from "./config-schemas";
 export * from "./git-schemas";
 export * from "./metadata-schemas";
+export * from "./prompt-schemas";
 export * from "./run-schemas";
 export * from "./session-schemas";
 export * from "./session-todo-parsing";

@@ -1,5 +1,6 @@
 import {
   type RepoConfig,
+  type RepoPromptOverrides,
   repoConfigSchema,
   type WorkspaceRecord,
   workspaceRecordSchema,
@@ -25,6 +26,7 @@ export type WorkspaceRepoConfigInput = {
   worktreeBasePath?: string;
   branchPrefix?: string;
   agentDefaults?: WorkspaceAgentDefaults;
+  promptOverrides?: RepoPromptOverrides;
 };
 
 export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {

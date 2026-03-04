@@ -1,5 +1,6 @@
 import type { RunSummary } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { host } from "../../host";
 import {
   captureOrchestratorFallback,
@@ -99,6 +100,11 @@ export const loadRepoDefaultModel = async (
     ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
     ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
   };
+};
+
+export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPromptOverrides> => {
+  const config = await host.workspaceGetRepoConfig(repoPath);
+  return config.promptOverrides;
 };
 
 export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeDependencies) => {

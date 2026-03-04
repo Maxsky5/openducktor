@@ -3,6 +3,7 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
+import { host } from "../../state/operations/host";
 import { kickoffPromptForScenario } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { useAgentStudioFreshSessionCreation } from "./use-agent-studio-fresh-session-creation";
@@ -125,8 +126,37 @@ export function useAgentStudioSessionStartFlow({
       return;
     }
 
-    await sendAgentMessage(sessionId, kickoffPromptForScenario(role, scenario, taskId));
-  }, [agentStudioReady, role, scenario, selectedTask, sendAgentMessage, startSession, taskId]);
+    const promptOverrides = activeRepo
+      ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
+      : undefined;
+    await sendAgentMessage(
+      sessionId,
+      kickoffPromptForScenario(role, scenario, taskId, {
+        ...(promptOverrides ? { overrides: promptOverrides } : {}),
+        task: {
+          ...(selectedTask
+            ? {
+                title: selectedTask.title,
+                issueType: selectedTask.issueType,
+                status: selectedTask.status,
+                qaRequired: selectedTask.aiReviewEnabled,
+                description: selectedTask.description,
+                acceptanceCriteria: selectedTask.acceptanceCriteria,
+              }
+            : {}),
+        },
+      }),
+    );
+  }, [
+    activeRepo,
+    agentStudioReady,
+    role,
+    scenario,
+    selectedTask,
+    sendAgentMessage,
+    startSession,
+    taskId,
+  ]);
 
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({
     activeRepo,

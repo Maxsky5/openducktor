@@ -1,4 +1,5 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { host } from "@/state/operations/host";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -42,6 +43,19 @@ const createBaseArgs = (): HookArgs => ({
 });
 
 describe("useAgentStudioSessionStartFlow", () => {
+  const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+
+  beforeEach(() => {
+    host.workspaceGetRepoConfig = async () =>
+      ({
+        promptOverrides: {},
+      }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+  });
+
+  afterEach(() => {
+    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+  });
+
   test("startSession reuses active session and clears fresh-start query flag", async () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const activeSession = createSession({

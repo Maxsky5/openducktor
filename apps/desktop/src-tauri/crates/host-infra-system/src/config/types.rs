@@ -63,6 +63,15 @@ pub struct AgentDefaults {
     pub qa: Option<AgentModelDefault>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptOverride {
+    pub template: String,
+    pub base_version: u32,
+}
+
+pub type PromptOverrides = HashMap<String, PromptOverride>;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoConfig {
@@ -77,6 +86,8 @@ pub struct RepoConfig {
     pub trusted_hooks_fingerprint: Option<String>,
     #[serde(default)]
     pub hooks: HookSet,
+    #[serde(default)]
+    pub prompt_overrides: PromptOverrides,
     #[serde(default)]
     pub agent_defaults: AgentDefaults,
 }
@@ -98,6 +109,7 @@ impl Default for RepoConfig {
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            prompt_overrides: PromptOverrides::default(),
             agent_defaults: AgentDefaults::default(),
         }
     }

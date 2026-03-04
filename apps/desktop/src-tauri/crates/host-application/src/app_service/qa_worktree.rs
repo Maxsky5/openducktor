@@ -163,6 +163,7 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
+                prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },
         )?;
@@ -195,6 +196,7 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
+                prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },
         )?;
@@ -230,6 +232,7 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: Some(hook_set_fingerprint(&hooks)),
                 hooks,
+                prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },
         )?;
@@ -266,6 +269,7 @@ mod tests {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
+                prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },
         )?;

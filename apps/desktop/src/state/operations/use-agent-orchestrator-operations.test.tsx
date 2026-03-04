@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
 import TestRenderer, { act } from "react-test-renderer";
@@ -202,6 +202,19 @@ const createHookHarness = (args: {
 };
 
 describe("use-agent-orchestrator-operations", () => {
+  const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+
+  beforeEach(() => {
+    host.workspaceGetRepoConfig = async () =>
+      ({
+        promptOverrides: {},
+      }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+  });
+
+  afterEach(() => {
+    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+  });
+
   test("reattaches listener before send when adapter session exists", async () => {
     let subscribeCalls = 0;
     let sendCalls = 0;
@@ -418,6 +431,7 @@ describe("use-agent-orchestrator-operations", () => {
         worktreeSetupScript: "",
         worktreeCleanupScript: "",
         worktreeFileCopies: [],
+        promptOverrides: {},
         agentDefaults: {},
       });
       host.buildStart = async () => ({
@@ -542,6 +556,7 @@ describe("use-agent-orchestrator-operations", () => {
         worktreeSetupScript: "",
         worktreeCleanupScript: "",
         worktreeFileCopies: [],
+        promptOverrides: {},
         agentDefaults: {},
       });
 
@@ -727,6 +742,7 @@ describe("use-agent-orchestrator-operations", () => {
         worktreeSetupScript: "",
         worktreeCleanupScript: "",
         worktreeFileCopies: [],
+        promptOverrides: {},
         agentDefaults: {},
       });
 
@@ -823,6 +839,7 @@ describe("use-agent-orchestrator-operations", () => {
         worktreeSetupScript: "",
         worktreeCleanupScript: "",
         worktreeFileCopies: [],
+        promptOverrides: {},
         agentDefaults: {},
       });
 
@@ -1102,6 +1119,7 @@ describe("use-agent-orchestrator-operations", () => {
         worktreeSetupScript: "",
         worktreeCleanupScript: "",
         worktreeFileCopies: [],
+        promptOverrides: {},
         agentDefaults: {},
       });
 

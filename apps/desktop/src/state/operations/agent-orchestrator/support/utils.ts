@@ -22,7 +22,7 @@ export {
   historyToChatMessages,
   toPersistedSessionRecord,
 } from "./persistence";
-export { inferScenario, kickoffPrompt } from "./scenario";
+export { inferScenario, kickoffPrompt, kickoffPromptWithTaskContext } from "./scenario";
 export {
   mergeTodoListPreservingOrder,
   parseTodosFromToolInput,

@@ -62,6 +62,15 @@ mock.module("sonner", () => ({
   },
 }));
 
+mock.module("@/state/operations/host", () => ({
+  host: {
+    workspaceGetRepoConfig: async () =>
+      ({
+        promptOverrides: {},
+      }) as { promptOverrides: Record<string, never> },
+  },
+}));
+
 mock.module("@/components/features/kanban", () => ({
   KanbanColumn: (props: Record<string, unknown>): ReactElement | null => {
     latestKanbanColumnProps = props;

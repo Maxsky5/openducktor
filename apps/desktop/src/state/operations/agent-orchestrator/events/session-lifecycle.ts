@@ -1,4 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
+import { buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { settleDanglingTodoToolMessages } from "../../agent-tool-messages";
 import { isMutatingPermission } from "../../permission-policy";
@@ -41,13 +42,17 @@ const autoRejectMutatingPermission = (
   role: AgentRole,
 ): void => {
   const pendingPermission = toPendingPermission(event);
+  const promptOverrides = context.sessionsRef.current[context.sessionId]?.promptOverrides;
 
   void context.adapter
     .replyPermission({
       sessionId: context.sessionId,
       requestId: event.requestId,
       reply: "reject",
-      message: `Rejected by OpenDucktor ${role} read-only policy.`,
+      message: buildReadOnlyPermissionRejectionMessage({
+        role,
+        ...(promptOverrides ? { overrides: promptOverrides } : {}),
+      }),
     })
     .catch((error) => {
       context.updateSession(context.sessionId, (current) => ({

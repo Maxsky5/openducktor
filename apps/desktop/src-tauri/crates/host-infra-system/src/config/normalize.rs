@@ -1,6 +1,6 @@
 use super::types::{
     default_branch_prefix, default_target_branch, hook_set_fingerprint, AgentModelDefault,
-    GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig,
+    GlobalConfig, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -43,6 +43,30 @@ fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
     }
 }
 
+fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
+    *overrides = std::mem::take(overrides)
+        .into_iter()
+        .filter_map(|(key, mut entry)| {
+            let normalized_key = key.trim();
+            if normalized_key.is_empty() {
+                return None;
+            }
+
+            let normalized_template = entry.template.trim();
+            if normalized_template.is_empty() {
+                return None;
+            }
+
+            entry.template = normalized_template.to_string();
+            if entry.base_version == 0 {
+                entry.base_version = 1;
+            }
+
+            Some((normalized_key.to_string(), entry))
+        })
+        .collect();
+}
+
 fn canonicalize_default_target_branch(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -76,6 +100,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     } else {
         repo.trusted_hooks_fingerprint = None;
     }
+    normalize_prompt_overrides(&mut repo.prompt_overrides);
     normalize_agent_model_default(&mut repo.agent_defaults.spec);
     normalize_agent_model_default(&mut repo.agent_defaults.planner);
     normalize_agent_model_default(&mut repo.agent_defaults.build);

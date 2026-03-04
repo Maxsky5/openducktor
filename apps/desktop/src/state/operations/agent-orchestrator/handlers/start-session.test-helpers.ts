@@ -35,6 +35,7 @@ export const toStartSessionDependencies = (
     },
     model: {
       loadRepoDefaultModel: deps.loadRepoDefaultModel,
+      loadRepoPromptOverrides: deps.loadRepoPromptOverrides,
       loadSessionTodos: deps.loadSessionTodos,
       loadSessionModelCatalog: deps.loadSessionModelCatalog,
     },

@@ -5,6 +5,7 @@ import type {
   AgentScenario,
   AgentSessionTodoItem,
 } from "@openducktor/core";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 
 export type AgentChatMessageMeta =
   | {
@@ -109,6 +110,7 @@ export type AgentSessionState = {
   modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;
   isLoadingModelCatalog: boolean;
+  promptOverrides?: RepoPromptOverrides;
 };
 
 export type AgentSessionLoadOptions = {

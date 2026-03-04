@@ -1,4 +1,5 @@
-import type { AgentRole, AgentScenario } from "@openducktor/core";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
+import { buildAgentKickoffPrompt, type AgentRole, type AgentScenario } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { AGENT_ROLE_LABELS } from "@/types";
 
@@ -53,31 +54,32 @@ export const firstScenario = (role: AgentRole): AgentScenario => {
   return "spec_initial";
 };
 
-const quoteTaskIdForPrompt = (taskId: string): string => JSON.stringify(taskId);
-
 export const kickoffPromptForScenario = (
   role: AgentRole,
   scenario: AgentScenario,
   taskId: string,
+  options?: {
+    overrides?: RepoPromptOverrides;
+    task?: {
+      title?: string;
+      issueType?: "task" | "feature" | "bug" | "epic";
+      status?: string;
+      qaRequired?: boolean;
+      description?: string;
+      acceptanceCriteria?: string;
+      specMarkdown?: string;
+      planMarkdown?: string;
+      latestQaReportMarkdown?: string;
+    };
+  },
 ): string => {
-  const taskInstruction = `Use taskId ${quoteTaskIdForPrompt(taskId)} for every odt_* tool call.`;
-  if (role === "spec") {
-    const base =
-      "Create or update the specification and call odt_set_spec with complete markdown when ready.";
-    return `${base}\n${taskInstruction}`;
-  }
-  if (role === "planner") {
-    const base = "Create or update the implementation plan and call odt_set_plan when ready.";
-    return `${base}\n${taskInstruction}`;
-  }
-  if (role === "qa") {
-    return `Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\n${taskInstruction}`;
-  }
-  if (scenario === "build_after_qa_rejected") {
-    return `Address all QA rejection findings and call odt_build_completed when done.\n${taskInstruction}`;
-  }
-  if (scenario === "build_after_human_request_changes") {
-    return `Apply all human-requested changes and call odt_build_completed when done.\n${taskInstruction}`;
-  }
-  return `Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.\n${taskInstruction}`;
+  return buildAgentKickoffPrompt({
+    role,
+    scenario,
+    task: {
+      taskId,
+      ...(options?.task ?? {}),
+    },
+    ...(options?.overrides ? { overrides: options.overrides } : {}),
+  });
 };

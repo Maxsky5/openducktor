@@ -1,3 +1,4 @@
+import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
@@ -22,6 +23,62 @@ export type BuildAgentPromptInput = {
   role: AgentRole;
   scenario: AgentScenario;
   task: AgentPromptTaskContext;
+  overrides?: RepoPromptOverrides;
+};
+
+export type BuildAgentKickoffPromptInput = {
+  role: AgentRole;
+  scenario: AgentScenario;
+  task: {
+    taskId: string;
+    title?: string;
+    issueType?: "task" | "feature" | "bug" | "epic";
+    status?: string;
+    qaRequired?: boolean;
+    description?: string;
+    acceptanceCriteria?: string;
+    specMarkdown?: string;
+    planMarkdown?: string;
+    latestQaReportMarkdown?: string;
+  };
+  overrides?: RepoPromptOverrides;
+};
+
+export type BuildReadOnlyPermissionRejectionMessageInput = {
+  role: AgentRole;
+  overrides?: RepoPromptOverrides;
+};
+
+type AgentPromptPurpose = "system" | "kickoff" | "permission";
+
+type AgentPromptTemplateDefinition = {
+  id: AgentPromptTemplateId;
+  purpose: AgentPromptPurpose;
+  builtinVersion: number;
+  template: string;
+};
+
+export type ResolvedAgentPromptTemplate = {
+  id: AgentPromptTemplateId;
+  purpose: AgentPromptPurpose;
+  source: "builtin" | "override";
+  builtinVersion: number;
+  overrideBaseVersion?: number;
+  hasStaleOverride: boolean;
+  content: string;
+};
+
+export type AgentPromptWarning = {
+  type: "override_base_version_mismatch";
+  templateId: AgentPromptTemplateId;
+  builtinVersion: number;
+  overrideBaseVersion: number;
+};
+
+export type BuiltAgentPrompt = {
+  prompt: string;
+  templates: ResolvedAgentPromptTemplate[];
+  warnings: AgentPromptWarning[];
 };
 
 const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
@@ -35,8 +92,12 @@ const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   odt_qa_rejected: `odt_qa_rejected({"taskId": string, "reportMarkdown": string})`,
 };
 
-const WORKFLOW_GUARDS = `
-Workflow constraints you must obey:
+const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplateDefinition> = {
+  "system.shared.workflow_guards": {
+    id: "system.shared.workflow_guards",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Workflow constraints you must obey:
 - Feature/epic flow: open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed.
 - Task/bug may skip planning and go open -> in_progress.
 - odt_set_spec allowed from open/spec_ready only.
@@ -45,11 +106,49 @@ Workflow constraints you must obey:
 - For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).
 - odt_build_completed from in_progress transitions to ai_review when qaRequired=true, else human_review.
 - odt_qa_rejected transitions ai_review -> in_progress.
-- odt_qa_approved transitions ai_review -> human_review.
-`;
+- odt_qa_approved transitions ai_review -> human_review.`,
+  },
+  "system.shared.tool_protocol": {
+    id: "system.shared.tool_protocol",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `OpenDucktor workflow tools are native MCP tools.
+Call them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.
 
-const SPEC_AGENT_BASE = `
-You are the Spec Agent for OpenDucktor.
+Allowed tools for this role:
+{{role.allowedTools}}
+
+Session task lock:
+- Use this exact taskId literal in every odt_* call: {{task.id.json}}.
+- Never derive taskId from title/slug or rewrite it.
+- If a tool call fails with task-id mismatch, retry with {{task.id.json}}.
+
+Always include taskId in every odt_* tool call.
+Never invent tool names. Never call tools not listed above.`,
+  },
+  "system.shared.task_context": {
+    id: "system.shared.task_context",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Task context:
+- id: {{task.id}}
+- title: {{task.title}}
+- issueType: {{task.issueType}}
+- currentStatus: {{task.status}}
+- qaRequired: {{task.qaRequired}}
+- description: {{task.description}}
+- acceptanceCriteria: {{task.acceptanceCriteria}}
+
+Existing documents:
+- spec: {{task.specMarkdown}}
+- implementationPlan: {{task.planMarkdown}}
+- latestQaReport: {{task.latestQaReportMarkdown}}`,
+  },
+  "system.role.spec.base": {
+    id: "system.role.spec.base",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `You are the Spec Agent for OpenDucktor.
 Your job is to produce or refine a complete, implementation-ready specification in markdown.
 Persist the canonical spec with the native odt_set_spec MCP tool.
 
@@ -59,11 +158,13 @@ Spec quality bar:
 - Resolve ambiguity before finalizing.
 - Ground the spec in repository evidence.
 - Before calling odt_set_spec, inspect relevant project files with read/list/search tools and cite concrete file paths in your final summary.
-- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.
-`;
-
-const PLANNER_AGENT_BASE = `
-You are the Planner Agent for OpenDucktor.
+- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.`,
+  },
+  "system.role.planner.base": {
+    id: "system.role.planner.base",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `You are the Planner Agent for OpenDucktor.
 Your job is to produce an implementation plan that developers or builder agents can execute directly.
 Persist the plan with odt_set_plan.
 
@@ -73,11 +174,13 @@ Plan quality bar:
 - For epic tasks, propose direct subtasks when useful (max one level deep, no epic subtasks).
 - If you include subtask priority, use integers only in 0..4 (default 2).
 - Use read/list/search tools when additional repository context is needed.
-- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.
-`;
-
-const BUILD_AGENT_BASE = `
-You are the Build Agent for OpenDucktor.
+- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.`,
+  },
+  "system.role.build.base": {
+    id: "system.role.build.base",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `You are the Build Agent for OpenDucktor.
 You run in a git worktree and execute implementation safely.
 
 Execution policy:
@@ -85,11 +188,13 @@ Execution policy:
 - Run relevant checks before completion.
 - If blocked, call odt_build_blocked with a specific reason.
 - When resumed after a blocker, call odt_build_resumed.
-- When complete, call odt_build_completed with a concise summary.
-`;
-
-const QA_AGENT_BASE = `
-You are the QA Agent for OpenDucktor.
+- When complete, call odt_build_completed with a concise summary.`,
+  },
+  "system.role.qa.base": {
+    id: "system.role.qa.base",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `You are the QA Agent for OpenDucktor.
 You validate implementation quality against task requirements.
 
 QA policy:
@@ -98,106 +203,331 @@ QA policy:
 - Call odt_qa_approved only when confidence is strong.
 - Call odt_qa_rejected with precise remediation guidance when quality bar is not met.
 - Use read/list/search tools to gather evidence when needed.
-- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.
-`;
-
-const SCENARIO_DIRECTIVES: Record<AgentScenario, string> = {
-  spec_initial: `
-Scenario: Specification authoring.
+- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.`,
+  },
+  "system.scenario.spec_initial": {
+    id: "system.scenario.spec_initial",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Scenario: Specification authoring.
 Create or update the task specification with complete, implementation-ready markdown.
-Call odt_set_spec exactly once with the updated markdown.
-`,
-  planner_initial: `
-Scenario: Planning.
+Call odt_set_spec exactly once with the updated markdown.`,
+  },
+  "system.scenario.planner_initial": {
+    id: "system.scenario.planner_initial",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Scenario: Planning.
 Create or update the implementation plan based on the current task context.
-Call odt_set_plan with the revised markdown.
-`,
-  build_implementation_start: `
-Scenario: Initial implementation run.
+Call odt_set_plan with the revised markdown.`,
+  },
+  "system.scenario.build_implementation_start": {
+    id: "system.scenario.build_implementation_start",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Scenario: Initial implementation run.
 Implement the task from current spec/plan context.
-Call odt_build_completed once implementation and checks are done.
-`,
-  build_after_qa_rejected: `
-Scenario: Rework after QA rejection.
-Address every QA rejection item before calling odt_build_completed again.
-`,
-  build_after_human_request_changes: `
-Scenario: Rework after human requested changes.
-Incorporate requested changes and provide a clean completion summary via odt_build_completed.
-`,
-  qa_review: `
-Scenario: QA review.
+Call odt_build_completed once implementation and checks are done.`,
+  },
+  "system.scenario.build_after_qa_rejected": {
+    id: "system.scenario.build_after_qa_rejected",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Scenario: Rework after QA rejection.
+Address every QA rejection item before calling odt_build_completed again.`,
+  },
+  "system.scenario.build_after_human_request_changes": {
+    id: "system.scenario.build_after_human_request_changes",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Scenario: Rework after human requested changes.
+Incorporate requested changes and provide a clean completion summary via odt_build_completed.`,
+  },
+  "system.scenario.qa_review": {
+    id: "system.scenario.qa_review",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Scenario: QA review.
 Evaluate the implementation and produce a QA report markdown.
-Call odt_qa_approved or odt_qa_rejected exactly once per review pass.
-`,
+Call odt_qa_approved or odt_qa_rejected exactly once per review pass.`,
+  },
+  "kickoff.spec_initial": {
+    id: "kickoff.spec_initial",
+    purpose: "kickoff",
+    builtinVersion: 1,
+    template:
+      "Create or update the specification and call odt_set_spec with complete markdown when ready.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+  },
+  "kickoff.planner_initial": {
+    id: "kickoff.planner_initial",
+    purpose: "kickoff",
+    builtinVersion: 1,
+    template:
+      "Create or update the implementation plan and call odt_set_plan when ready.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+  },
+  "kickoff.build_implementation_start": {
+    id: "kickoff.build_implementation_start",
+    purpose: "kickoff",
+    builtinVersion: 1,
+    template:
+      "Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+  },
+  "kickoff.build_after_qa_rejected": {
+    id: "kickoff.build_after_qa_rejected",
+    purpose: "kickoff",
+    builtinVersion: 1,
+    template:
+      "Address all QA rejection findings and call odt_build_completed when done.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+  },
+  "kickoff.build_after_human_request_changes": {
+    id: "kickoff.build_after_human_request_changes",
+    purpose: "kickoff",
+    builtinVersion: 1,
+    template:
+      "Apply all human-requested changes and call odt_build_completed when done.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+  },
+  "kickoff.qa_review": {
+    id: "kickoff.qa_review",
+    purpose: "kickoff",
+    builtinVersion: 1,
+    template:
+      "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+  },
+  "permission.read_only.reject": {
+    id: "permission.read_only.reject",
+    purpose: "permission",
+    builtinVersion: 1,
+    template: "Rejected by OpenDucktor {{role}} read-only policy.",
+  },
 };
 
-const roleBasePrompt = (role: AgentRole): string => {
-  switch (role) {
-    case "spec":
-      return SPEC_AGENT_BASE;
-    case "planner":
-      return PLANNER_AGENT_BASE;
-    case "build":
-      return BUILD_AGENT_BASE;
-    case "qa":
-      return QA_AGENT_BASE;
-    default:
-      return SPEC_AGENT_BASE;
-  }
-};
-
-const buildToolProtocol = (role: AgentRole, taskId: string): string => {
-  const allowedTools = AGENT_ROLE_TOOL_POLICY[role];
-  const toolList = allowedTools.map((tool) => `- ${TOOL_ARG_SPEC[tool]}`).join("\n");
-
-  return `
-OpenDucktor workflow tools are native MCP tools.
-Call them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.
-
-Allowed tools for this role:
-${toolList}
-
-Session task lock:
-- Use this exact taskId literal in every odt_* call: "${taskId}".
-- Never derive taskId from title/slug or rewrite it.
-- If a tool call fails with task-id mismatch, retry with "${taskId}".
-
-Always include taskId in every odt_* tool call.
-Never invent tool names. Never call tools not listed above.
-`;
-};
+const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
+const KNOWN_PLACEHOLDERS = new Set([
+  "role",
+  "role.allowedTools",
+  "task.id",
+  "task.id.json",
+  "task.title",
+  "task.issueType",
+  "task.status",
+  "task.qaRequired",
+  "task.description",
+  "task.acceptanceCriteria",
+  "task.specMarkdown",
+  "task.planMarkdown",
+  "task.latestQaReportMarkdown",
+]);
 
 const compact = (value: string | undefined): string => {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
 };
 
+const quoteTaskIdForPrompt = (taskId: string): string => JSON.stringify(taskId);
+
+const toRoleBaseTemplateId = (role: AgentRole): AgentPromptTemplateId => {
+  return `system.role.${role}.base`;
+};
+
+const toSystemScenarioTemplateId = (scenario: AgentScenario): AgentPromptTemplateId => {
+  return `system.scenario.${scenario}`;
+};
+
+const toKickoffTemplateId = (scenario: AgentScenario): AgentPromptTemplateId => {
+  return `kickoff.${scenario}`;
+};
+
+const buildToolListPlaceholder = (role: AgentRole): string => {
+  const allowedTools = AGENT_ROLE_TOOL_POLICY[role];
+  return allowedTools.map((tool) => `- ${TOOL_ARG_SPEC[tool]}`).join("\n");
+};
+
+const buildPlaceholderValues = ({
+  role,
+  task,
+}: {
+  role: AgentRole;
+  task: BuildAgentKickoffPromptInput["task"];
+}): Record<string, string> => {
+  return {
+    role,
+    "role.allowedTools": buildToolListPlaceholder(role),
+    "task.id": task.taskId,
+    "task.id.json": quoteTaskIdForPrompt(task.taskId),
+    "task.title": compact(task.title),
+    "task.issueType": task.issueType ?? "task",
+    "task.status": compact(task.status),
+    "task.qaRequired": task.qaRequired ? "true" : "false",
+    "task.description": compact(task.description),
+    "task.acceptanceCriteria": compact(task.acceptanceCriteria),
+    "task.specMarkdown": compact(task.specMarkdown),
+    "task.planMarkdown": compact(task.planMarkdown),
+    "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),
+  };
+};
+
+const extractPlaceholderTokens = (template: string): string[] => {
+  const tokens: string[] = [];
+  for (const match of template.matchAll(PLACEHOLDER_PATTERN)) {
+    const token = match[1];
+    if (token) {
+      tokens.push(token);
+    }
+  }
+  return tokens;
+};
+
+const collectPromptWarnings = (templates: ResolvedAgentPromptTemplate[]): AgentPromptWarning[] => {
+  const warnings: AgentPromptWarning[] = [];
+  for (const template of templates) {
+    if (!template.hasStaleOverride || template.overrideBaseVersion === undefined) {
+      continue;
+    }
+    warnings.push({
+      type: "override_base_version_mismatch",
+      templateId: template.id,
+      builtinVersion: template.builtinVersion,
+      overrideBaseVersion: template.overrideBaseVersion,
+    });
+  }
+  return warnings;
+};
+
+const resolveTemplate = ({
+  templateId,
+  placeholderValues,
+  overrides,
+}: {
+  templateId: AgentPromptTemplateId;
+  placeholderValues: Record<string, string>;
+  overrides: RepoPromptOverrides | undefined;
+}): ResolvedAgentPromptTemplate => {
+  const definition = AGENT_PROMPT_DEFINITIONS[templateId];
+  if (!definition) {
+    throw new Error(`Unknown prompt template id "${templateId}".`);
+  }
+
+  const override = overrides?.[templateId];
+  const source = override ? "override" : "builtin";
+  const template = (override?.template ?? definition.template).trim();
+  if (template.length === 0) {
+    throw new Error(`Prompt template "${templateId}" is empty.`);
+  }
+
+  const tokens = extractPlaceholderTokens(template);
+  for (const token of tokens) {
+    if (!KNOWN_PLACEHOLDERS.has(token)) {
+      throw new Error(
+        `Prompt template "${templateId}" uses unsupported placeholder "${token}".`,
+      );
+    }
+    if (!(token in placeholderValues)) {
+      throw new Error(`Prompt template "${templateId}" is missing placeholder value "${token}".`);
+    }
+  }
+
+  const content = template.replace(PLACEHOLDER_PATTERN, (_match, token: string) => {
+    const value = placeholderValues[token];
+    if (value === undefined) {
+      throw new Error(`Prompt template "${templateId}" is missing placeholder value "${token}".`);
+    }
+    return value;
+  });
+
+  return {
+    id: definition.id,
+    purpose: definition.purpose,
+    source,
+    builtinVersion: definition.builtinVersion,
+    ...(override ? { overrideBaseVersion: override.baseVersion } : {}),
+    hasStaleOverride: Boolean(override && override.baseVersion !== definition.builtinVersion),
+    content,
+  };
+};
+
+const buildPromptFromTemplates = ({
+  templateIds,
+  role,
+  task,
+  overrides,
+}: {
+  templateIds: AgentPromptTemplateId[];
+  role: AgentRole;
+  task: BuildAgentKickoffPromptInput["task"];
+  overrides: RepoPromptOverrides | undefined;
+}): BuiltAgentPrompt => {
+  const placeholderValues = buildPlaceholderValues({ role, task });
+  const templates = templateIds.map((templateId) =>
+    resolveTemplate({
+      templateId,
+      placeholderValues,
+      overrides,
+    }),
+  );
+
+  return {
+    prompt: templates
+      .map((entry) => entry.content.trim())
+      .join("\n\n")
+      .trim(),
+    templates,
+    warnings: collectPromptWarnings(templates),
+  };
+};
+
+export const listBuiltinAgentPromptTemplates = (): AgentPromptTemplateDefinition[] => {
+  return Object.values(AGENT_PROMPT_DEFINITIONS).map((definition) => ({ ...definition }));
+};
+
+export const buildAgentSystemPromptBundle = (input: BuildAgentPromptInput): BuiltAgentPrompt => {
+  return buildPromptFromTemplates({
+    templateIds: [
+      toRoleBaseTemplateId(input.role),
+      toSystemScenarioTemplateId(input.scenario),
+      "system.shared.workflow_guards",
+      "system.shared.tool_protocol",
+      "system.shared.task_context",
+    ],
+    role: input.role,
+    task: input.task,
+    overrides: input.overrides,
+  });
+};
+
 export function buildAgentSystemPrompt(input: BuildAgentPromptInput): string {
-  const task = input.task;
-  const taskContext = `
-Task context:
-- id: ${task.taskId}
-- title: ${task.title}
-- issueType: ${task.issueType}
-- currentStatus: ${task.status}
-- qaRequired: ${task.qaRequired ? "true" : "false"}
-- description: ${compact(task.description)}
-- acceptanceCriteria: ${compact(task.acceptanceCriteria)}
-
-Existing documents:
-- spec: ${compact(task.specMarkdown)}
-- implementationPlan: ${compact(task.planMarkdown)}
-- latestQaReport: ${compact(task.latestQaReportMarkdown)}
-`;
-
-  return [
-    roleBasePrompt(input.role),
-    SCENARIO_DIRECTIVES[input.scenario],
-    WORKFLOW_GUARDS,
-    buildToolProtocol(input.role, task.taskId),
-    taskContext,
-  ]
-    .join("\n")
-    .trim();
+  return buildAgentSystemPromptBundle(input).prompt;
 }
+
+export const buildAgentKickoffPromptBundle = (
+  input: BuildAgentKickoffPromptInput,
+): BuiltAgentPrompt => {
+  return buildPromptFromTemplates({
+    templateIds: [toKickoffTemplateId(input.scenario)],
+    role: input.role,
+    task: input.task,
+    overrides: input.overrides,
+  });
+};
+
+export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): string => {
+  return buildAgentKickoffPromptBundle(input).prompt;
+};
+
+export const buildReadOnlyPermissionRejectionMessageBundle = (
+  input: BuildReadOnlyPermissionRejectionMessageInput,
+): BuiltAgentPrompt => {
+  return buildPromptFromTemplates({
+    templateIds: ["permission.read_only.reject"],
+    role: input.role,
+    task: {
+      taskId: "permission-policy",
+    },
+    overrides: input.overrides,
+  });
+};
+
+export const buildReadOnlyPermissionRejectionMessage = (
+  input: BuildReadOnlyPermissionRejectionMessageInput,
+): string => {
+  return buildReadOnlyPermissionRejectionMessageBundle(input).prompt;
+};

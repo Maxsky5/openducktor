@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { repoPromptOverridesSchema } from "./prompt-schemas";
 
 const DEFAULT_SOFT_GUARDRAILS = {
   cpuHighWatermarkPercent: 85,
@@ -54,6 +55,7 @@ export const repoConfigSchema = z.object({
   worktreeSetupScript: z.string().default(""),
   worktreeCleanupScript: z.string().default(""),
   worktreeFileCopies: z.array(z.string()).default([]),
+  promptOverrides: repoPromptOverridesSchema.default({}),
   agentDefaults: repoAgentDefaultsSchema.default({
     spec: undefined,
     planner: undefined,

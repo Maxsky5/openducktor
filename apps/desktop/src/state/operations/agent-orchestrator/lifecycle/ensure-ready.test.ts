@@ -82,6 +82,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         planMarkdown: "",
         qaMarkdown: "",
       }),
+      loadRepoPromptOverrides: async () => ({}),
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
     });
@@ -153,6 +154,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         planMarkdown: "",
         qaMarkdown: "",
       }),
+      loadRepoPromptOverrides: async () => ({}),
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
     });
@@ -260,6 +262,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         planMarkdown: "",
         qaMarkdown: "",
       }),
+      loadRepoPromptOverrides: async () => ({}),
       loadSessionTodos: async () => {
         todosCalls += 1;
       },
@@ -344,6 +347,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         planMarkdown: "",
         qaMarkdown: "",
       }),
+      loadRepoPromptOverrides: async () => ({}),
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
     });

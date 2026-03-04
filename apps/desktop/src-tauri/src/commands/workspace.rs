@@ -82,6 +82,10 @@ pub async fn workspace_update_repo_config(
             .as_ref()
             .map(|entry| entry.hooks.clone())
             .unwrap_or_default(),
+        prompt_overrides: config
+            .prompt_overrides
+            .or_else(|| existing.as_ref().map(|entry| entry.prompt_overrides.clone()))
+            .unwrap_or_default(),
         agent_defaults: config
             .agent_defaults
             .or_else(|| existing.as_ref().map(|entry| entry.agent_defaults.clone()))
@@ -131,6 +135,7 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
             None
         },
         hooks: normalized_hooks,
+        prompt_overrides: settings.prompt_overrides.unwrap_or(existing.prompt_overrides),
         agent_defaults: settings.agent_defaults.unwrap_or(existing.agent_defaults),
     };
 
