@@ -1,13 +1,8 @@
 import type { PlannerTools } from "@openducktor/core";
-import {
-  type BuildCleanupMode,
-  type BuildRespondAction,
-  type RuntimeRole,
-  TauriAgentClient,
-} from "./build-runtime-client";
+import { TauriAgentClient } from "./build-runtime-client";
 import { TauriGitClient } from "./git-client";
 import type { InvokeFn } from "./invoke-utils";
-import { type SetPlanInput, type SetSpecInput, TauriTaskClient } from "./task-client";
+import { TauriTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
 import { TauriWorkspaceClient } from "./workspace-client";
 
@@ -98,6 +93,11 @@ type TauriHostClientApi = Pick<TauriWorkspaceClient, WorkspaceMethodName> &
   Pick<TauriAgentClient, AgentMethodName> &
   Pick<TauriGitClient, GitMethodName>;
 
+type MethodDelegate<TClient extends object, TMethodName extends MethodName<TClient>> = Extract<
+  TClient[TMethodName],
+  (...args: never[]) => unknown
+>;
+
 const bindDelegates = <
   THost extends object,
   TClient extends object,
@@ -113,54 +113,38 @@ const bindDelegates = <
       throw new Error(`Cannot delegate non-function member: ${String(methodName)}`);
     }
 
+    const delegate = candidate.bind(client) as MethodDelegate<TClient, TMethodName>;
+
     Object.defineProperty(host, methodName, {
       configurable: true,
       enumerable: false,
       writable: true,
-      value: candidate.bind(client),
+      value: delegate,
     });
   }
 };
 
-class TauriHostClientImpl implements PlannerTools {
-  private readonly workspaceClient: TauriWorkspaceClient;
-  private readonly taskClient: TauriTaskClient;
-  private readonly agentClient: TauriAgentClient;
-  private readonly gitClient: TauriGitClient;
-
-  declare setSpec: (input: SetSpecInput) => ReturnType<TauriTaskClient["setSpec"]>;
-  declare setPlan: (input: SetPlanInput) => ReturnType<TauriTaskClient["setPlan"]>;
-  declare opencodeRuntimeStart: (
-    repoPath: string,
-    taskId: string,
-    role: RuntimeRole,
-  ) => ReturnType<TauriAgentClient["opencodeRuntimeStart"]>;
-  declare buildRespond: (
-    runId: string,
-    action: BuildRespondAction,
-    payload?: string,
-  ) => ReturnType<TauriAgentClient["buildRespond"]>;
-  declare buildCleanup: (
-    runId: string,
-    mode: BuildCleanupMode,
-  ) => ReturnType<TauriAgentClient["buildCleanup"]>;
-
-  constructor(invokeFn: InvokeFn) {
-    const metadataCache = new TaskMetadataCache();
-    this.workspaceClient = new TauriWorkspaceClient(invokeFn);
-    this.taskClient = new TauriTaskClient(invokeFn, metadataCache);
-    this.agentClient = new TauriAgentClient(invokeFn);
-    this.gitClient = new TauriGitClient(invokeFn);
-
-    bindDelegates(this, this.workspaceClient, WORKSPACE_METHODS);
-    bindDelegates(this, this.taskClient, TASK_METHODS);
-    bindDelegates(this, this.agentClient, AGENT_METHODS);
-    bindDelegates(this, this.gitClient, GIT_METHODS);
-  }
-}
-
 export type TauriHostClient = TauriHostClientApi & PlannerTools;
 
-export const TauriHostClient = TauriHostClientImpl as unknown as new (
-  invokeFn: InvokeFn,
-) => TauriHostClient;
+const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
+  const metadataCache = new TaskMetadataCache();
+  const workspaceClient = new TauriWorkspaceClient(invokeFn);
+  const taskClient = new TauriTaskClient(invokeFn, metadataCache);
+  const agentClient = new TauriAgentClient(invokeFn);
+  const gitClient = new TauriGitClient(invokeFn);
+  const hostClient = {} as TauriHostClientApi;
+
+  bindDelegates(hostClient, workspaceClient, WORKSPACE_METHODS);
+  bindDelegates(hostClient, taskClient, TASK_METHODS);
+  bindDelegates(hostClient, agentClient, AGENT_METHODS);
+  bindDelegates(hostClient, gitClient, GIT_METHODS);
+
+  return hostClient;
+};
+
+export function createTauriHostClient(invokeFn: InvokeFn): TauriHostClient {
+  return createTauriHostClientApi(invokeFn);
+}
+
+export const TauriHostClient = (invokeFn: InvokeFn): TauriHostClient =>
+  createTauriHostClient(invokeFn);
