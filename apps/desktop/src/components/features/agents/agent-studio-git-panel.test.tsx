@@ -34,32 +34,41 @@ let AgentStudioGitPanel: AgentStudioGitPanelComponent;
 
 const baseModel = (
   overrides: Partial<AgentStudioGitPanelModel> = {},
-): AgentStudioGitPanelModel => ({
-  branch: "feature/task-11",
-  worktreePath: "/tmp/worktree",
-  targetBranch: "origin/main",
-  diffScope: "target",
-  commitsAheadBehind: { ahead: 2, behind: 1 },
-  fileDiffs: [],
-  fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-  isLoading: false,
-  error: null,
-  refresh: () => {},
-  selectedFile: null,
-  setSelectedFile: () => {},
-  setDiffScope: () => {},
-  isCommitting: false,
-  isPushing: false,
-  isRebasing: false,
-  commitError: null,
-  pushError: null,
-  rebaseError: null,
-  commitAll: async () => {},
-  pushBranch: async () => {},
-  rebaseOntoTarget: async () => {},
-  pullFromUpstream: async () => {},
-  ...overrides,
-});
+): AgentStudioGitPanelModel => {
+  const model: AgentStudioGitPanelModel = {
+    branch: "feature/task-11",
+    worktreePath: "/tmp/worktree",
+    targetBranch: "origin/main",
+    diffScope: "target",
+    commitsAheadBehind: { ahead: 2, behind: 1 },
+    fileDiffs: [],
+    fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+    uncommittedFileCount: 1,
+    isLoading: false,
+    error: null,
+    refresh: () => {},
+    selectedFile: null,
+    setSelectedFile: () => {},
+    setDiffScope: () => {},
+    isCommitting: false,
+    isPushing: false,
+    isRebasing: false,
+    commitError: null,
+    pushError: null,
+    rebaseError: null,
+    commitAll: async () => {},
+    pushBranch: async () => {},
+    rebaseOntoTarget: async () => {},
+    pullFromUpstream: async () => {},
+    ...overrides,
+  };
+
+  if (overrides.uncommittedFileCount === undefined) {
+    model.uncommittedFileCount = model.fileStatuses.length;
+  }
+
+  return model;
+};
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -388,6 +397,51 @@ describe("AgentStudioGitPanel", () => {
     expect(
       Boolean(findByTestId(root, "agent-studio-git-commit-submit-button").props.disabled),
     ).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("notifies selected-file changes when a diff entry is expanded or collapsed", async () => {
+    const setSelectedFile = mock((_path: string | null) => {});
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            fileDiffs: [
+              {
+                file: "src/a.ts",
+                type: "modified",
+                additions: 2,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            setSelectedFile,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const diffButton = findButtonByText(root, "a.ts");
+
+    await act(async () => {
+      diffButton.props.onClick();
+      await flush();
+    });
+    expect(setSelectedFile).toHaveBeenNthCalledWith(1, "src/a.ts");
+
+    await act(async () => {
+      diffButton.props.onClick();
+      await flush();
+    });
+    expect(setSelectedFile).toHaveBeenNthCalledWith(2, null);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

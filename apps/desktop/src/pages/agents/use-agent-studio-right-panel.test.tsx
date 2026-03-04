@@ -69,6 +69,7 @@ const diffModel: AgentStudioGitPanelModel = {
   commitsAheadBehind: null,
   fileDiffs: [],
   fileStatuses: [],
+  uncommittedFileCount: 0,
   isLoading: false,
   error: null,
   refresh: () => {},

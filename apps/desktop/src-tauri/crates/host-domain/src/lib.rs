@@ -15,7 +15,7 @@ pub use git::{
     GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest,
     GitPullResult, GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult,
     GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot,
-    GitWorktreeStatusSummary, GitWorktreeSummary,
+    GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 pub use runtime::{
     AgentRuntimeRole, AgentRuntimeSummary, RunEvent, RunState, RunSummary, RuntimeRole,
@@ -101,9 +101,9 @@ mod tests {
             GitDiffScope, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult,
             GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
             GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot,
-            GitWorktreeStatusSummary, GitWorktreeSummary, IssueType, PlanSubtaskInput,
-            QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary,
-            RuntimeCheck, RuntimeRole, SpecDocument, SystemCheck, TaskAction, TaskCard,
+            GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType,
+            PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
+            RunSummary, RuntimeCheck, RuntimeRole, SpecDocument, SystemCheck, TaskAction, TaskCard,
             TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
             TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
         };
@@ -141,6 +141,7 @@ mod tests {
             GitWorktreeStatusData,
             GitWorktreeStatusSnapshot,
             GitWorktreeStatusSummary,
+            GitWorktreeStatusSummaryData,
             GitWorktreeSummary,
             IssueType,
             PlanSubtaskInput,

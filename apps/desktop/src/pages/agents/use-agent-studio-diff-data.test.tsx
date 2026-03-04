@@ -317,6 +317,35 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("selected file triggers on-demand full reload for the active scope", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      await harness.run((state) => {
+        state.setSelectedFile("src/main.ts");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        3,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        undefined,
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refresh syncs shared branch/upstream fields for cached inactive scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 
@@ -464,6 +493,163 @@ describe("useAgentStudioDiffData", () => {
     } finally {
       await harness.unmount();
       expect(clearIntervalMock).toHaveBeenCalledTimes(1);
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    }
+  });
+
+  test("polling summary requests do not invalidate an in-flight full reload", async () => {
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    let intervalCallback: (() => void) | null = null;
+
+    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
+      if (typeof callback !== "function") {
+        throw new Error("Expected polling callback function");
+      }
+      intervalCallback = () => {
+        callback();
+      };
+      return 1;
+    });
+    const clearIntervalMock = mock((_intervalId: number) => {});
+    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
+    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
+
+    const pendingFullReload = createDeferred<GitWorktreeStatus>();
+    let fullRequestCount = 0;
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        fullRequestCount += 1;
+
+        if (fullRequestCount === 2) {
+          return pendingFullReload.promise.then((snapshot) => ({
+            ...snapshot,
+            snapshot: {
+              ...snapshot.snapshot,
+              targetBranch,
+              diffScope: diffScope ?? snapshot.snapshot.diffScope,
+              effectiveWorkingDir: workingDir ?? snapshot.snapshot.effectiveWorkingDir,
+            },
+          }));
+        }
+
+        return withSnapshotHashes({
+          currentBranch: { name: "feature/base", detached: false },
+          fileStatuses: [{ path: "src/base.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/base.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: workingDir ?? "/repo",
+            targetBranch,
+            diffScope: diffScope ?? "target",
+            observedAtMs: 1731000000000,
+          },
+        });
+      },
+    );
+    gitGetWorktreeStatusSummaryMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatusSummary> =>
+        toWorktreeStatusSummary(
+          withSnapshotHashes({
+            currentBranch: { name: "feature/summary", detached: false },
+            fileStatuses: [{ path: "src/summary.ts", status: "M", staged: false }],
+            fileDiffs: [],
+            targetAheadBehind: { ahead: 1, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: workingDir ?? "/repo",
+              targetBranch,
+              diffScope: diffScope ?? "target",
+              observedAtMs: 1731000000100,
+            },
+          }),
+        ),
+    );
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    const runTick = (): void => {
+      if (intervalCallback == null) {
+        throw new Error("Polling callback was not registered");
+      }
+      intervalCallback();
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setSelectedFile("src/full.ts");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+      expect(gitGetWorktreeStatusSummaryMock.mock.calls.length).toBe(0);
+      expect(harness.getLatest().branch).toBe("feature/base");
+
+      pendingFullReload.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/full", detached: false },
+          fileStatuses: [{ path: "src/full.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/full.ts",
+              type: "modified",
+              additions: 5,
+              deletions: 1,
+              diff: "@@ -1 +1 @@\n-old\n+new\n",
+            },
+          ],
+          targetAheadBehind: { ahead: 2, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000000200,
+          },
+        }),
+      );
+
+      await harness.waitFor((state) => state.branch === "feature/full");
+      expect(harness.getLatest().fileDiffs[0]?.file).toBe("src/full.ts");
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
+      expect(harness.getLatest().branch).toBe("feature/summary");
+    } finally {
+      await harness.unmount();
       globalThis.setInterval = originalSetInterval;
       globalThis.clearInterval = originalClearInterval;
     }

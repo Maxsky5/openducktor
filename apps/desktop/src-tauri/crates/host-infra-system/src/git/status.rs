@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    GitAheadBehind, GitDiffScope, GitFileDiff, GitFileStatus, GitUpstreamAheadBehind,
-    GitWorktreeStatusData,
+    GitAheadBehind, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
+    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -105,6 +105,74 @@ impl GitCliPort {
             current_branch,
             file_statuses,
             file_diffs,
+            target_ahead_behind,
+            upstream_ahead_behind,
+        })
+    }
+
+    pub(super) fn get_worktree_status_summary_impl(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        _diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusSummaryData> {
+        self.ensure_repository(repo_path)?;
+        let target_branch = normalize_non_empty(target_branch, "target branch")?;
+        let current_branch = self.get_current_branch_unchecked(repo_path)?;
+        let current_branch_name = current_branch.name.clone();
+
+        let joined = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || self.get_status_unchecked(repo_path),
+                        || self.commits_ahead_behind_unchecked(repo_path, target_branch.as_str()),
+                    )
+                },
+                || {
+                    self.resolve_upstream_target_for_branch_impl(
+                        repo_path,
+                        current_branch_name.as_deref(),
+                    )
+                },
+            )
+        }))
+        .map_err(|payload| {
+            anyhow!(
+                "git worktree status summary worker panicked: {}",
+                panic_payload_message(&*payload)
+            )
+        })?;
+
+        let ((file_statuses, target_ahead_behind), upstream_target_result) = joined;
+        let file_statuses = file_statuses?;
+        let file_status_counts = build_file_status_counts(file_statuses.as_slice())?;
+        let target_ahead_behind = target_ahead_behind?;
+
+        let upstream_ahead_behind = match upstream_target_result {
+            Ok(Some(upstream_target)) => match self
+                .commits_ahead_behind_unchecked(repo_path, upstream_target.as_str())
+            {
+                Ok(counts) => GitUpstreamAheadBehind::Tracking {
+                    ahead: counts.ahead,
+                    behind: counts.behind,
+                },
+                Err(error) => GitUpstreamAheadBehind::Error {
+                    message: format!("{error:#}"),
+                },
+            },
+            Ok(None) => GitUpstreamAheadBehind::Untracked {
+                ahead: target_ahead_behind.ahead,
+            },
+            Err(error) => GitUpstreamAheadBehind::Error {
+                message: format!("{error:#}"),
+            },
+        };
+
+        Ok(GitWorktreeStatusSummaryData {
+            current_branch,
+            file_statuses,
+            file_status_counts,
             target_ahead_behind,
             upstream_ahead_behind,
         })
@@ -354,6 +422,26 @@ fn infer_diff_type(diff: &str) -> String {
         }
     }
     "modified".to_string()
+}
+
+fn build_file_status_counts(file_statuses: &[GitFileStatus]) -> Result<GitFileStatusCounts> {
+    let total = u32::try_from(file_statuses.len()).map_err(|_| {
+        anyhow!(
+            "too many file statuses to summarize: {}",
+            file_statuses.len()
+        )
+    })?;
+    let staged = u32::try_from(file_statuses.iter().filter(|status| status.staged).count())
+        .map_err(|_| anyhow!("staged file status count overflowed u32"))?;
+    let unstaged = total
+        .checked_sub(staged)
+        .ok_or_else(|| anyhow!("unstaged file status count underflowed"))?;
+
+    Ok(GitFileStatusCounts {
+        total,
+        staged,
+        unstaged,
+    })
 }
 
 fn parse_ahead_behind(output: &str) -> Result<GitAheadBehind> {

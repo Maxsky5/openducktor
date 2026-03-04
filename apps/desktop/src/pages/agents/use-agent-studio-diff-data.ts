@@ -31,7 +31,7 @@ export type DiffDataState = {
   /** File status from `git status`. */
   fileStatuses: FileStatus[];
   /** Total changed files from lightweight worktree polling summaries. */
-  uncommittedFileCount?: number;
+  uncommittedFileCount: number;
   /** Whether data is currently loading. */
   isLoading: boolean;
   /** Last error message, if any. */
@@ -106,8 +106,10 @@ type LoadDataContext = {
   targetBranch: string;
   workingDir: string | null;
   scope: DiffScope;
-  mode?: "full" | "summary";
+  mode?: LoadDataMode;
 };
+
+type LoadDataMode = "full" | "summary";
 
 /** Stable empty arrays hoisted outside the component (rerender-memo-with-default-value). */
 const EMPTY_DIFFS: FileDiff[] = [];
@@ -139,6 +141,7 @@ const createInitialState = (): DiffBatchState => ({
 });
 
 const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
+const ALL_LOAD_DATA_MODES: LoadDataMode[] = ["full", "summary"];
 const IDLE_WORKTREE_RESOLUTION_STATE: WorktreeResolutionState = { status: "idle" };
 
 const buildWorktreeResolutionError = (runId: string, reason?: string): string => {
@@ -355,22 +358,22 @@ export function useAgentStudioDiffData({
   enablePolling,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const [state, setState] = useState<DiffBatchState>(createInitialState);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFileState] = useState<string | null>(null);
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
   const [worktreeResolutionState, setWorktreeResolutionState] = useState<WorktreeResolutionState>(
     IDLE_WORKTREE_RESOLUTION_STATE,
   );
   const [worktreeResolutionRetryToken, setWorktreeResolutionRetryToken] = useState(0);
 
-  const versionByScopeRef = useRef<Record<DiffScope, number>>({
-    target: 0,
-    uncommitted: 0,
+  const versionByScopeAndModeRef = useRef<Record<DiffScope, Record<LoadDataMode, number>>>({
+    target: { full: 0, summary: 0 },
+    uncommitted: { full: 0, summary: 0 },
   });
   const requestSequenceRef = useRef(0);
   const latestSharedSequenceRef = useRef(0);
-  const inFlightScopeRequestRef = useRef<Record<DiffScope, string | null>>({
-    target: null,
-    uncommitted: null,
+  const inFlightScopeRequestRef = useRef<Record<DiffScope, Record<LoadDataMode, string | null>>>({
+    target: { full: null, summary: null },
+    uncommitted: { full: null, summary: null },
   });
   const requestContextKeyRef = useRef<string | null>(null);
 
@@ -549,14 +552,21 @@ export function useAgentStudioDiffData({
     const target = context?.targetBranch ?? targetBranchRef.current;
     const workingDir = context?.workingDir ?? workingDirRef.current;
     const mode = context?.mode ?? "full";
-    const requestKey = `${path}::${target}::${workingDir ?? ""}::${mode}`;
+    const requestKey = `${path}::${target}::${workingDir ?? ""}`;
 
-    if (inFlightScopeRequestRef.current[scope] === requestKey) {
+    if (inFlightScopeRequestRef.current[scope][mode] === requestKey) {
       return;
     }
 
-    inFlightScopeRequestRef.current[scope] = requestKey;
-    const version = ++versionByScopeRef.current[scope];
+    if (
+      mode === "summary" &&
+      inFlightScopeRequestRef.current[scope].full === requestKey
+    ) {
+      return;
+    }
+
+    inFlightScopeRequestRef.current[scope][mode] = requestKey;
+    const version = ++versionByScopeAndModeRef.current[scope][mode];
     const requestSequence = ++requestSequenceRef.current;
 
     // Only show loading indicator on initial load / manual refresh — NOT on polling
@@ -579,7 +589,7 @@ export function useAgentStudioDiffData({
         }
 
         // Stale response guard
-        if (versionByScopeRef.current[scope] !== version) {
+        if (versionByScopeAndModeRef.current[scope][mode] !== version) {
           return;
         }
 
@@ -644,7 +654,7 @@ export function useAgentStudioDiffData({
       }
 
       // Stale response guard
-      if (versionByScopeRef.current[scope] !== version) {
+      if (versionByScopeAndModeRef.current[scope][mode] !== version) {
         return;
       }
 
@@ -709,7 +719,7 @@ export function useAgentStudioDiffData({
         return;
       }
 
-      if (versionByScopeRef.current[scope] === version) {
+      if (versionByScopeAndModeRef.current[scope][mode] === version) {
         setState((prev) => {
           const previousScopeSnapshot = prev.byScope[scope];
           const nextScopeSnapshot: ScopeSnapshot = {
@@ -745,8 +755,8 @@ export function useAgentStudioDiffData({
         });
       }
     } finally {
-      if (inFlightScopeRequestRef.current[scope] === requestKey) {
-        inFlightScopeRequestRef.current[scope] = null;
+      if (inFlightScopeRequestRef.current[scope][mode] === requestKey) {
+        inFlightScopeRequestRef.current[scope][mode] = null;
       }
     }
   }, []);
@@ -761,14 +771,16 @@ export function useAgentStudioDiffData({
 
     if (repoPath && !shouldBlockDiffLoading) {
       if (hasContextChanged) {
-        versionByScopeRef.current.target += 1;
-        versionByScopeRef.current.uncommitted += 1;
-        inFlightScopeRequestRef.current.target = null;
-        inFlightScopeRequestRef.current.uncommitted = null;
+        for (const scope of ALL_SCOPES) {
+          for (const mode of ALL_LOAD_DATA_MODES) {
+            versionByScopeAndModeRef.current[scope][mode] += 1;
+            inFlightScopeRequestRef.current[scope][mode] = null;
+          }
+        }
         requestSequenceRef.current = 0;
         latestSharedSequenceRef.current = 0;
         setState(createInitialState());
-        setSelectedFile(null);
+        setSelectedFileState(null);
       }
 
       void loadData(true, {
@@ -782,27 +794,31 @@ export function useAgentStudioDiffData({
 
     if (repoPath) {
       if (hasContextChanged) {
-        versionByScopeRef.current.target += 1;
-        versionByScopeRef.current.uncommitted += 1;
-        inFlightScopeRequestRef.current.target = null;
-        inFlightScopeRequestRef.current.uncommitted = null;
+        for (const scope of ALL_SCOPES) {
+          for (const mode of ALL_LOAD_DATA_MODES) {
+            versionByScopeAndModeRef.current[scope][mode] += 1;
+            inFlightScopeRequestRef.current[scope][mode] = null;
+          }
+        }
         requestSequenceRef.current = 0;
         latestSharedSequenceRef.current = 0;
         setState(createInitialState());
-        setSelectedFile(null);
+        setSelectedFileState(null);
       }
       return;
     }
 
-    versionByScopeRef.current.target += 1;
-    versionByScopeRef.current.uncommitted += 1;
-    inFlightScopeRequestRef.current.target = null;
-    inFlightScopeRequestRef.current.uncommitted = null;
+    for (const scope of ALL_SCOPES) {
+      for (const mode of ALL_LOAD_DATA_MODES) {
+        versionByScopeAndModeRef.current[scope][mode] += 1;
+        inFlightScopeRequestRef.current[scope][mode] = null;
+      }
+    }
     requestSequenceRef.current = 0;
     latestSharedSequenceRef.current = 0;
     requestContextKeyRef.current = null;
     setState(createInitialState());
-    setSelectedFile(null);
+    setSelectedFileState(null);
   }, [
     repoPath,
     worktreePath,
@@ -870,6 +886,30 @@ export function useAgentStudioDiffData({
     void loadData(true);
   }, [loadData, shouldBlockDiffLoading, worktreeResolutionError]);
 
+  const setSelectedFile = useCallback(
+    (path: string | null): void => {
+      setSelectedFileState(path);
+
+      if (path === null || shouldBlockDiffLoading) {
+        return;
+      }
+
+      const selectedRepoPath = repoPathRef.current;
+      if (!selectedRepoPath) {
+        return;
+      }
+
+      void loadData(false, {
+        repoPath: selectedRepoPath,
+        targetBranch: targetBranchRef.current,
+        workingDir: workingDirRef.current,
+        scope: diffScopeRef.current,
+        mode: "full",
+      });
+    },
+    [loadData, shouldBlockDiffLoading],
+  );
+
   // Memoize return value to prevent parent re-renders (rerender-memo-with-default-value)
   return useMemo<DiffDataState>(
     () => ({
@@ -898,6 +938,7 @@ export function useAgentStudioDiffData({
       activeScopeState,
       refresh,
       selectedFile,
+      setSelectedFile,
     ],
   );
 }

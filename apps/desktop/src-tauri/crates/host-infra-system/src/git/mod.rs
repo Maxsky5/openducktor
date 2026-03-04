@@ -12,6 +12,7 @@ use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
     GitDiffScope, GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult,
     GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
+    GitWorktreeStatusSummaryData,
 };
 use std::path::Path;
 
@@ -119,6 +120,15 @@ impl GitPort for GitCliPort {
         diff_scope: GitDiffScope,
     ) -> Result<GitWorktreeStatusData> {
         self.get_worktree_status_impl(repo_path, target_branch, diff_scope)
+    }
+
+    fn get_worktree_status_summary(
+        &self,
+        repo_path: &Path,
+        target_branch: &str,
+        diff_scope: GitDiffScope,
+    ) -> Result<GitWorktreeStatusSummaryData> {
+        self.get_worktree_status_summary_impl(repo_path, target_branch, diff_scope)
     }
 
     fn resolve_upstream_target(&self, repo_path: &Path) -> Result<Option<String>> {
