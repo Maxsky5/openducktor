@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
@@ -12,6 +13,8 @@ type UseRepoSettingsOperationsArgs = {
 type UseRepoSettingsOperationsResult = {
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
+  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
 export function useRepoSettingsOperations({
@@ -127,8 +130,22 @@ export function useRepoSettingsOperations({
     [activeRepo, refreshWorkspaces, toConfigDefault],
   );
 
+  const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
+    return host.workspaceGetSettingsSnapshot();
+  }, []);
+
+  const saveSettingsSnapshot = useCallback(
+    async (snapshot: SettingsSnapshot): Promise<void> => {
+      await host.workspaceSaveSettingsSnapshot(snapshot);
+      await refreshWorkspaces();
+    },
+    [refreshWorkspaces],
+  );
+
   return {
     loadRepoSettings,
     saveRepoSettings,
+    loadSettingsSnapshot,
+    saveSettingsSnapshot,
   };
 }

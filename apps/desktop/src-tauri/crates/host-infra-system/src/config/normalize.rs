@@ -89,6 +89,9 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     repo.default_target_branch = canonicalize_default_target_branch(&repo.default_target_branch);
     normalize_hook_commands(&mut repo.hooks.pre_start);
     normalize_hook_commands(&mut repo.hooks.post_complete);
+    repo.worktree_setup_script = repo.worktree_setup_script.trim().to_string();
+    repo.worktree_cleanup_script = repo.worktree_cleanup_script.trim().to_string();
+    normalize_hook_commands(&mut repo.worktree_file_copies);
     let current_fingerprint = hook_set_fingerprint(&repo.hooks);
     if repo.trusted_hooks {
         if repo.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
@@ -121,6 +124,7 @@ pub(super) fn normalize_opencode_startup_readiness_config(
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) {
+    normalize_prompt_overrides(&mut config.global_prompt_overrides);
     for repo in config.repos.values_mut() {
         normalize_repo_config(repo);
     }

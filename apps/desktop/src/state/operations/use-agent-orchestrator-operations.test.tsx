@@ -203,16 +203,22 @@ const createHookHarness = (args: {
 
 describe("use-agent-orchestrator-operations", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
       ({
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+    host.workspaceGetSettingsSnapshot = async () => ({
+      repos: {},
+      globalPromptOverrides: {},
+    });
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("reattaches listener before send when adapter session exists", async () => {

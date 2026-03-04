@@ -199,8 +199,9 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
-  test("loads repo prompt overrides from workspace config", async () => {
+  test("loads effective prompt overrides by merging global and repository values", async () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     host.workspaceGetRepoConfig = async () => ({
       branchPrefix: "obp",
       defaultTargetBranch: "main",
@@ -213,20 +214,38 @@ describe("agent-orchestrator-runtime", () => {
       worktreeCleanupScript: "",
       worktreeFileCopies: [],
       promptOverrides: {
-        "kickoff.spec_initial": {
-          template: "custom kickoff {{task.id}}",
+        "kickoff.planner_initial": {
+          template: "repo planner {{task.id}}",
           baseVersion: 1,
+          enabled: true,
+        },
+        "kickoff.spec_initial": {
+          template: "repo disabled {{task.id}}",
+          baseVersion: 1,
+          enabled: false,
         },
       },
       agentDefaults: {},
     });
+    host.workspaceGetSettingsSnapshot = async () => ({
+      repos: {},
+      globalPromptOverrides: {
+        "kickoff.spec_initial": {
+          template: "global kickoff {{task.id}}",
+          baseVersion: 1,
+          enabled: true,
+        },
+      },
+    });
 
     try {
       const overrides = await loadRepoPromptOverrides("/tmp/repo");
-      expect(overrides["kickoff.spec_initial"]?.template).toBe("custom kickoff {{task.id}}");
+      expect(overrides["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
       expect(overrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
+      expect(overrides["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
     } finally {
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     }
   });
 

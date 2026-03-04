@@ -6,8 +6,8 @@ use host_domain::{
     GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff,
     GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitRebaseBranchRequest,
     GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData, PlanSubtaskInput,
-    QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus,
-    TaskStore, UpdateTaskPatch,
+    QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, TaskAction, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;

@@ -2,6 +2,8 @@ import {
   type RepoConfig,
   type RepoPromptOverrides,
   repoConfigSchema,
+  settingsSnapshotSchema,
+  type SettingsSnapshot,
   type WorkspaceRecord,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
@@ -25,6 +27,10 @@ export type WorkspaceAgentDefaults = {
 export type WorkspaceRepoConfigInput = {
   worktreeBasePath?: string;
   branchPrefix?: string;
+  defaultTargetBranch?: string;
+  worktreeSetupScript?: string;
+  worktreeCleanupScript?: string;
+  worktreeFileCopies?: string[];
   agentDefaults?: WorkspaceAgentDefaults;
   promptOverrides?: RepoPromptOverrides;
 };
@@ -122,6 +128,21 @@ export const workspaceGetRepoConfig = async (
   return repoConfigSchema.parse(payload);
 };
 
+export const workspaceGetSettingsSnapshot = async (
+  invokeFn: InvokeFn,
+): Promise<SettingsSnapshot> => {
+  const payload = await invokeFn<unknown>("workspace_get_settings_snapshot");
+  return settingsSnapshotSchema.parse(payload);
+};
+
+export const workspaceSaveSettingsSnapshot = async (
+  invokeFn: InvokeFn,
+  snapshot: SettingsSnapshot,
+): Promise<WorkspaceRecord[]> => {
+  const payload = await invokeFn<unknown>("workspace_save_settings_snapshot", { snapshot });
+  return parseArray(workspaceRecordSchema, payload);
+};
+
 export const workspaceSetTrustedHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -194,6 +215,14 @@ export class TauriWorkspaceClient {
 
   async workspaceGetRepoConfig(repoPath: string): Promise<RepoConfig> {
     return workspaceGetRepoConfig(this.invokeFn, repoPath);
+  }
+
+  async workspaceGetSettingsSnapshot(): Promise<SettingsSnapshot> {
+    return workspaceGetSettingsSnapshot(this.invokeFn);
+  }
+
+  async workspaceSaveSettingsSnapshot(snapshot: SettingsSnapshot): Promise<WorkspaceRecord[]> {
+    return workspaceSaveSettingsSnapshot(this.invokeFn, snapshot);
   }
 
   async workspacePrepareTrustedHooksChallenge(repoPath: string): Promise<TrustedHooksChallenge> {

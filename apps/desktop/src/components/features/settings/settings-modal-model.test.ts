@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
+  buildPromptOverrideValidationErrors,
+  canResetPromptOverrideToBuiltin,
   clearRoleDefault,
   ensureAgentDefault,
   findCatalogModel,
   getMissingRequiredRoleLabels,
+  removePromptOverride,
+  resetPromptOverrideToBuiltin,
   selectedModelKeyForRole,
   toRoleVariantOptions,
   updateRoleDefault,
@@ -86,5 +91,95 @@ describe("settings-modal-model", () => {
     };
 
     expect(getMissingRequiredRoleLabels(defaults)).toEqual(["Planner", "Builder", "QA"]);
+  });
+
+  test("resets prompt override only when it exists and preserves enabled flag", () => {
+    const overrides: RepoPromptOverrides = {
+      "kickoff.spec_initial": {
+        template: "custom",
+        baseVersion: 3,
+        enabled: false,
+      },
+    };
+
+    const unchanged = resetPromptOverrideToBuiltin(
+      overrides,
+      "kickoff.planner_initial",
+      "builtin planner",
+      4,
+    );
+    expect(unchanged).toBe(overrides);
+
+    const reset = resetPromptOverrideToBuiltin(
+      overrides,
+      "kickoff.spec_initial",
+      "builtin spec",
+      5,
+    );
+    expect(reset["kickoff.spec_initial"]).toEqual({
+      template: "builtin spec",
+      baseVersion: 5,
+      enabled: false,
+    });
+  });
+
+  test("computes reset eligibility from override diff against builtin", () => {
+    expect(canResetPromptOverrideToBuiltin(undefined, "builtin")).toBe(false);
+    expect(
+      canResetPromptOverrideToBuiltin(
+        {
+          template: "builtin\r\n",
+          baseVersion: 1,
+          enabled: true,
+        },
+        "builtin",
+      ),
+    ).toBe(false);
+    expect(
+      canResetPromptOverrideToBuiltin(
+        {
+          template: "custom prompt",
+          baseVersion: 1,
+          enabled: false,
+        },
+        "builtin",
+      ),
+    ).toBe(true);
+  });
+
+  test("removes prompt override only when entry exists", () => {
+    const overrides: RepoPromptOverrides = {
+      "kickoff.spec_initial": {
+        template: "custom",
+        baseVersion: 2,
+        enabled: true,
+      },
+    };
+
+    const unchanged = removePromptOverride(overrides, "kickoff.qa_review");
+    expect(unchanged).toBe(overrides);
+
+    const removed = removePromptOverride(overrides, "kickoff.spec_initial");
+    expect(removed["kickoff.spec_initial"]).toBeUndefined();
+  });
+
+  test("validates unsupported placeholders in prompt overrides", () => {
+    const overrides: RepoPromptOverrides = {
+      "kickoff.spec_initial": {
+        template: "Good {{task.id}}",
+        baseVersion: 1,
+        enabled: true,
+      },
+      "system.scenario.spec_initial": {
+        template: "Bad {{task.foo}} and {{unknown.value}}",
+        baseVersion: 1,
+        enabled: true,
+      },
+    };
+
+    expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
+      "system.scenario.spec_initial":
+        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}.",
+    });
   });
 });

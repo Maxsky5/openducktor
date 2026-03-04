@@ -33,7 +33,10 @@ impl GitCliPort {
         self.get_current_branch_unchecked(repo_path)
     }
 
-    pub(super) fn get_current_branch_unchecked(&self, repo_path: &Path) -> Result<GitCurrentBranch> {
+    pub(super) fn get_current_branch_unchecked(
+        &self,
+        repo_path: &Path,
+    ) -> Result<GitCurrentBranch> {
         let output = self.run_git(repo_path, &["branch", "--show-current"])?;
         let name = output
             .lines()

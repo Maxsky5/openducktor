@@ -26,6 +26,10 @@ const workspaceGetRepoConfigMock = mock(
     promptOverrides: {},
   }),
 );
+const workspaceGetSettingsSnapshotMock = mock(async () => ({
+  repos: {},
+  globalPromptOverrides: {} as RepoPromptOverrides,
+}));
 
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
 let latestSessionStartModalModel: Record<string, unknown> | null = null;
@@ -71,6 +75,7 @@ mock.module("sonner", () => ({
 mock.module("@/state/operations/host", () => ({
   host: {
     workspaceGetRepoConfig: workspaceGetRepoConfigMock,
+    workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
   },
 }));
 
@@ -171,8 +176,13 @@ describe("KanbanPage session start modal flow", () => {
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
     workspaceGetRepoConfigMock.mockClear();
+    workspaceGetSettingsSnapshotMock.mockClear();
     workspaceGetRepoConfigMock.mockImplementation(async () => ({
       promptOverrides: {},
+    }));
+    workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
+      repos: {},
+      globalPromptOverrides: {},
     }));
   });
 

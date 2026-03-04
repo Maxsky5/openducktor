@@ -119,6 +119,9 @@ struct RepoConfigPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
     default_target_branch: Option<String>,
+    worktree_setup_script: Option<String>,
+    worktree_cleanup_script: Option<String>,
+    worktree_file_copies: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
@@ -131,8 +134,25 @@ struct RepoSettingsPayload {
     default_target_branch: Option<String>,
     trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
+    worktree_setup_script: Option<String>,
+    worktree_cleanup_script: Option<String>,
+    worktree_file_copies: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsSnapshotPayload {
+    repos: HashMap<String, host_infra_system::RepoConfig>,
+    global_prompt_overrides: host_infra_system::PromptOverrides,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsSnapshotResponsePayload {
+    repos: HashMap<String, host_infra_system::RepoConfig>,
+    global_prompt_overrides: host_infra_system::PromptOverrides,
 }
 
 fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
@@ -227,6 +247,8 @@ fn startup_phase_command_registration(
         workspace_update_repo_hooks,
         workspace_prepare_trusted_hooks_challenge,
         workspace_get_repo_config,
+        workspace_get_settings_snapshot,
+        workspace_save_settings_snapshot,
         workspace_set_trusted_hooks,
         git_get_branches,
         git_get_current_branch,

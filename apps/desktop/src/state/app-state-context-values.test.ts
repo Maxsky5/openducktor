@@ -58,6 +58,11 @@ describe("app-state-context-values", () => {
         agentDefaults: { spec: null, planner: null, build: null, qa: null },
       }),
       saveRepoSettings: async () => {},
+      loadSettingsSnapshot: async () => ({
+        repos: {},
+        globalPromptOverrides: {},
+      }),
+      saveSettingsSnapshot: async () => {},
     });
 
     expect(value.activeWorkspace?.path).toBe("/repo-a");

@@ -44,16 +44,22 @@ const createBaseArgs = (): HookArgs => ({
 
 describe("useAgentStudioSessionStartFlow", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
       ({
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+    host.workspaceGetSettingsSnapshot = async () => ({
+      repos: {},
+      globalPromptOverrides: {},
+    });
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("startSession reuses active session and clears fresh-start query flag", async () => {

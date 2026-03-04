@@ -68,9 +68,15 @@ pub struct AgentDefaults {
 pub struct PromptOverride {
     pub template: String,
     pub base_version: u32,
+    #[serde(default = "default_prompt_override_enabled")]
+    pub enabled: bool,
 }
 
 pub type PromptOverrides = HashMap<String, PromptOverride>;
+
+const fn default_prompt_override_enabled() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +92,12 @@ pub struct RepoConfig {
     pub trusted_hooks_fingerprint: Option<String>,
     #[serde(default)]
     pub hooks: HookSet,
+    #[serde(default)]
+    pub worktree_setup_script: String,
+    #[serde(default)]
+    pub worktree_cleanup_script: String,
+    #[serde(default)]
+    pub worktree_file_copies: Vec<String>,
     #[serde(default)]
     pub prompt_overrides: PromptOverrides,
     #[serde(default)]
@@ -109,6 +121,9 @@ impl Default for RepoConfig {
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_setup_script: String::new(),
+            worktree_cleanup_script: String::new(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: PromptOverrides::default(),
             agent_defaults: AgentDefaults::default(),
         }
@@ -208,6 +223,8 @@ pub struct GlobalConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
+    pub global_prompt_overrides: PromptOverrides,
+    #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
     #[serde(default)]
     pub recent_repos: Vec<String>,
@@ -219,6 +236,7 @@ impl Default for GlobalConfig {
             version: 1,
             active_repo: None,
             theme: default_theme(),
+            global_prompt_overrides: PromptOverrides::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),
         }

@@ -7,7 +7,7 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import { host } from "../../state/operations/host";
+import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { firstScenario, kickoffPromptForScenario } from "../agents/agents-page-constants";
 import { useSessionStartModalCoordinator } from "../shared/use-session-start-modal-coordinator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
@@ -186,7 +186,7 @@ export function useKanbanSessionStartFlow({
           if (startInBackground || intent.sendKickoff) {
             const buildKickoffMessage = async (): Promise<string> => {
               const promptOverrides = activeRepo
-                ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
+                ? await loadEffectivePromptOverrides(activeRepo)
                 : undefined;
               const intentTask = tasks.find((entry) => entry.id === intent.taskId);
               return kickoffPromptForScenario(intent.role, intent.scenario, intent.taskId, {

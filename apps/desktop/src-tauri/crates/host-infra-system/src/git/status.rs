@@ -82,17 +82,17 @@ impl GitCliPort {
         let target_ahead_behind = target_ahead_behind?;
 
         let upstream_ahead_behind = match upstream_target_result {
-            Ok(Some(upstream_target)) => match self
-                .commits_ahead_behind_unchecked(repo_path, upstream_target.as_str())
-            {
-                Ok(counts) => GitUpstreamAheadBehind::Tracking {
-                    ahead: counts.ahead,
-                    behind: counts.behind,
-                },
-                Err(error) => GitUpstreamAheadBehind::Error {
-                    message: format!("{error:#}"),
-                },
-            },
+            Ok(Some(upstream_target)) => {
+                match self.commits_ahead_behind_unchecked(repo_path, upstream_target.as_str()) {
+                    Ok(counts) => GitUpstreamAheadBehind::Tracking {
+                        ahead: counts.ahead,
+                        behind: counts.behind,
+                    },
+                    Err(error) => GitUpstreamAheadBehind::Error {
+                        message: format!("{error:#}"),
+                    },
+                }
+            }
             Ok(None) => GitUpstreamAheadBehind::Untracked {
                 ahead: target_ahead_behind.ahead,
             },
@@ -150,17 +150,17 @@ impl GitCliPort {
         let target_ahead_behind = target_ahead_behind?;
 
         let upstream_ahead_behind = match upstream_target_result {
-            Ok(Some(upstream_target)) => match self
-                .commits_ahead_behind_unchecked(repo_path, upstream_target.as_str())
-            {
-                Ok(counts) => GitUpstreamAheadBehind::Tracking {
-                    ahead: counts.ahead,
-                    behind: counts.behind,
-                },
-                Err(error) => GitUpstreamAheadBehind::Error {
-                    message: format!("{error:#}"),
-                },
-            },
+            Ok(Some(upstream_target)) => {
+                match self.commits_ahead_behind_unchecked(repo_path, upstream_target.as_str()) {
+                    Ok(counts) => GitUpstreamAheadBehind::Tracking {
+                        ahead: counts.ahead,
+                        behind: counts.behind,
+                    },
+                    Err(error) => GitUpstreamAheadBehind::Error {
+                        message: format!("{error:#}"),
+                    },
+                }
+            }
             Ok(None) => GitUpstreamAheadBehind::Untracked {
                 ahead: target_ahead_behind.ahead,
             },

@@ -51,6 +51,7 @@ export const repoConfigSchema = z.object({
   branchPrefix: z.string().min(1).default("obp"),
   defaultTargetBranch: z.string().default("origin/main"),
   trustedHooks: z.boolean().default(false),
+  trustedHooksFingerprint: nullableToOptional(z.string().min(1)),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
   worktreeSetupScript: z.string().default(""),
   worktreeCleanupScript: z.string().default(""),
@@ -69,6 +70,13 @@ export const globalConfigSchema = z.object({
   version: z.literal(1),
   activeRepo: z.string().optional(),
   repos: z.record(z.string(), repoConfigSchema).default({}),
+  globalPromptOverrides: repoPromptOverridesSchema.default({}),
   recentRepos: z.array(z.string()).default([]),
 });
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
+
+export const settingsSnapshotSchema = z.object({
+  repos: z.record(z.string(), repoConfigSchema).default({}),
+  globalPromptOverrides: repoPromptOverridesSchema.default({}),
+});
+export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;

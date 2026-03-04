@@ -50,16 +50,22 @@ const createBaseArgs = (): HookArgs => {
 
 describe("useAgentStudioSessionActions", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
       ({
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+    host.workspaceGetSettingsSnapshot = async () => ({
+      repos: {},
+      globalPromptOverrides: {},
+    });
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("onSend starts session and sends trimmed message", async () => {

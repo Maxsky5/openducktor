@@ -52,7 +52,10 @@ impl Default for BeadsTaskStore {
 
 impl BeadsTaskStore {
     pub fn new() -> Self {
-        Self::with_metadata_namespace_and_runner(DEFAULT_METADATA_NAMESPACE, Arc::new(ProcessCommandRunner))
+        Self::with_metadata_namespace_and_runner(
+            DEFAULT_METADATA_NAMESPACE,
+            Arc::new(ProcessCommandRunner),
+        )
     }
 
     pub fn with_metadata_namespace(namespace: &str) -> Self {

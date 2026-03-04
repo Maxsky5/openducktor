@@ -1,6 +1,7 @@
 use crate::{
     as_error, run_service_blocking, AppState, HookTrustChallenge, RepoConfigPayload,
-    RepoSettingsPayload, HOOK_TRUST_CHALLENGE_TTL,
+    RepoSettingsPayload, SettingsSnapshotPayload, SettingsSnapshotResponsePayload,
+    HOOK_TRUST_CHALLENGE_TTL,
 };
 use host_infra_system::{hook_set_fingerprint, HookSet, RepoConfig};
 use std::path::Path;
@@ -82,9 +83,37 @@ pub async fn workspace_update_repo_config(
             .as_ref()
             .map(|entry| entry.hooks.clone())
             .unwrap_or_default(),
+        worktree_setup_script: config
+            .worktree_setup_script
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .map(|entry| entry.worktree_setup_script.clone())
+            })
+            .unwrap_or_default(),
+        worktree_cleanup_script: config
+            .worktree_cleanup_script
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .map(|entry| entry.worktree_cleanup_script.clone())
+            })
+            .unwrap_or_default(),
+        worktree_file_copies: config
+            .worktree_file_copies
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .map(|entry| entry.worktree_file_copies.clone())
+            })
+            .unwrap_or_default(),
         prompt_overrides: config
             .prompt_overrides
-            .or_else(|| existing.as_ref().map(|entry| entry.prompt_overrides.clone()))
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .map(|entry| entry.prompt_overrides.clone())
+            })
             .unwrap_or_default(),
         agent_defaults: config
             .agent_defaults
@@ -111,16 +140,14 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
     let existing =
         as_error(state.service.workspace_get_repo_config_optional(&repo_path))?.unwrap_or_default();
 
-    let normalized_hooks =
-        normalize_hook_set(settings.hooks.unwrap_or_else(|| existing.hooks.clone()));
-    let hooks_fingerprint = hook_set_fingerprint(&normalized_hooks);
-    let trust_already_approved_for_same_hooks = existing.trusted_hooks
-        && existing.hooks == normalized_hooks
-        && existing.trusted_hooks_fingerprint.as_deref() == Some(hooks_fingerprint.as_str());
-
-    if settings.trusted_hooks && !trust_already_approved_for_same_hooks {
-        confirm_hook_trust_dialog(&app, &repo_path, &normalized_hooks).await?;
-    }
+    let (normalized_hooks, trusted_hooks_fingerprint) = normalize_hooks_with_trust_confirmation(
+        &app,
+        repo_path.as_str(),
+        &existing,
+        settings.trusted_hooks,
+        settings.hooks.unwrap_or_else(|| existing.hooks.clone()),
+    )
+    .await?;
 
     let final_repo_config = RepoConfig {
         worktree_base_path: settings.worktree_base_path.or(existing.worktree_base_path),
@@ -129,13 +156,20 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
             .default_target_branch
             .unwrap_or(existing.default_target_branch),
         trusted_hooks: settings.trusted_hooks,
-        trusted_hooks_fingerprint: if settings.trusted_hooks {
-            Some(hooks_fingerprint)
-        } else {
-            None
-        },
+        trusted_hooks_fingerprint,
         hooks: normalized_hooks,
-        prompt_overrides: settings.prompt_overrides.unwrap_or(existing.prompt_overrides),
+        worktree_setup_script: settings
+            .worktree_setup_script
+            .unwrap_or(existing.worktree_setup_script),
+        worktree_cleanup_script: settings
+            .worktree_cleanup_script
+            .unwrap_or(existing.worktree_cleanup_script),
+        worktree_file_copies: settings
+            .worktree_file_copies
+            .unwrap_or(existing.worktree_file_copies),
+        prompt_overrides: settings
+            .prompt_overrides
+            .unwrap_or(existing.prompt_overrides),
         agent_defaults: settings.agent_defaults.unwrap_or(existing.agent_defaults),
     };
 
@@ -200,6 +234,54 @@ pub async fn workspace_get_repo_config(
     repo_path: String,
 ) -> Result<host_infra_system::RepoConfig, String> {
     as_error(state.service.workspace_get_repo_config(&repo_path))
+}
+
+#[tauri::command]
+pub async fn workspace_get_settings_snapshot(
+    state: State<'_, AppState>,
+) -> Result<SettingsSnapshotResponsePayload, String> {
+    let (repos, global_prompt_overrides) =
+        as_error(state.service.workspace_get_settings_snapshot())?;
+    Ok(SettingsSnapshotResponsePayload {
+        repos,
+        global_prompt_overrides,
+    })
+}
+
+#[tauri::command]
+pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
+    state: State<'_, AppState>,
+    app: AppHandle<R>,
+    snapshot: SettingsSnapshotPayload,
+) -> Result<Vec<host_domain::WorkspaceRecord>, String> {
+    let SettingsSnapshotPayload {
+        mut repos,
+        global_prompt_overrides,
+    } = snapshot;
+
+    for (repo_path, repo_config) in repos.iter_mut() {
+        let existing = as_error(state.service.workspace_get_repo_config_optional(repo_path))?
+            .unwrap_or_default();
+        let submitted_hooks = std::mem::take(&mut repo_config.hooks);
+        let (normalized_hooks, trusted_hooks_fingerprint) =
+            normalize_hooks_with_trust_confirmation(
+                &app,
+                repo_path.as_str(),
+                &existing,
+                repo_config.trusted_hooks,
+                submitted_hooks,
+            )
+            .await?;
+        repo_config.hooks = normalized_hooks;
+        repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
+    }
+
+    as_error(
+        state
+            .service
+            .workspace_save_settings_snapshot(repos, global_prompt_overrides),
+    )?;
+    as_error(state.service.workspace_list())
 }
 
 // Generic runtime keeps this command testable under MockRuntime without changing
@@ -410,6 +492,32 @@ fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
     hooks
 }
 
+async fn normalize_hooks_with_trust_confirmation<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    repo_path: &str,
+    existing: &RepoConfig,
+    trusted_hooks: bool,
+    hooks: HookSet,
+) -> Result<(HookSet, Option<String>), String> {
+    let normalized_hooks = normalize_hook_set(hooks);
+    let hooks_fingerprint = hook_set_fingerprint(&normalized_hooks);
+    let trust_already_approved_for_same_hooks = existing.trusted_hooks
+        && existing.hooks == normalized_hooks
+        && existing.trusted_hooks_fingerprint.as_deref() == Some(hooks_fingerprint.as_str());
+
+    if trusted_hooks && !trust_already_approved_for_same_hooks {
+        confirm_hook_trust_dialog(app, repo_path, &normalized_hooks).await?;
+    }
+
+    let trusted_hooks_fingerprint = if trusted_hooks {
+        Some(hooks_fingerprint)
+    } else {
+        None
+    };
+
+    Ok((normalized_hooks, trusted_hooks_fingerprint))
+}
+
 fn normalize_hook_commands(commands: &mut Vec<String>) {
     *commands = std::mem::take(commands)
         .into_iter()
@@ -428,9 +536,10 @@ fn normalize_hook_commands(commands: &mut Vec<String>) {
 mod tests {
     use super::{
         canonical_repo_key, format_hook_list, normalize_hook_set, sanitize_hook_preview,
-        validate_trust_challenge_entry, workspace_set_trusted_hooks, HookSet, HookTrustChallenge,
+        validate_trust_challenge_entry, workspace_save_settings_snapshot,
+        workspace_set_trusted_hooks, HookSet, HookTrustChallenge,
     };
-    use crate::AppState;
+    use crate::{AppState, SettingsSnapshotPayload};
     use host_application::AppService;
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
@@ -538,6 +647,17 @@ mod tests {
             trusted,
             challenge_nonce,
             challenge_fingerprint,
+        ))
+    }
+
+    fn run_workspace_save_settings_snapshot(
+        fixture: &WorkspaceCommandFixture,
+        snapshot: SettingsSnapshotPayload,
+    ) -> Result<Vec<WorkspaceRecord>, String> {
+        let state = fixture.app.state::<AppState>();
+        let app_handle = fixture.app.handle().clone();
+        tauri::async_runtime::block_on(workspace_save_settings_snapshot(
+            state, app_handle, snapshot,
         ))
     }
 
@@ -860,6 +980,107 @@ mod tests {
             .map_err(|error| error.to_string())?;
         assert!(!repo_config.trusted_hooks);
         assert!(repo_config.trusted_hooks_fingerprint.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_requires_trust_confirmation_when_enabling_hooks(
+    ) -> Result<(), String> {
+        let hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: vec!["echo post".to_string()],
+        };
+        let fixture = setup_workspace_command_fixture_with_dialog_response(
+            "snapshot-trust-cancelled",
+            hooks,
+            Some(false),
+        );
+
+        let (repos, global_prompt_overrides) = fixture
+            .service
+            .workspace_get_settings_snapshot()
+            .map_err(|error| error.to_string())?;
+        let mut snapshot = SettingsSnapshotPayload {
+            repos,
+            global_prompt_overrides,
+        };
+        let repo_key = canonical_repo_key(fixture.repo_path.as_str());
+        let repo_config = snapshot
+            .repos
+            .get_mut(repo_key.as_str())
+            .ok_or_else(|| "repo config missing from snapshot".to_string())?;
+        repo_config.trusted_hooks = true;
+
+        let error = run_workspace_save_settings_snapshot(&fixture, snapshot)
+            .expect_err("enabling trust should require confirmation");
+        assert!(
+            error.contains("cancelled"),
+            "unexpected trust confirmation error: {error}"
+        );
+
+        let persisted = fixture
+            .service
+            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .map_err(|error| error.to_string())?;
+        assert!(
+            !persisted.trusted_hooks,
+            "snapshot save should not bypass trust confirmation"
+        );
+        assert!(persisted.trusted_hooks_fingerprint.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_persists_trusted_fingerprint_after_confirmation(
+    ) -> Result<(), String> {
+        let hooks = HookSet {
+            pre_start: vec![" echo pre ".to_string()],
+            post_complete: vec!["echo post".to_string()],
+        };
+        let fixture = setup_workspace_command_fixture_with_dialog_response(
+            "snapshot-trust-confirmed",
+            hooks.clone(),
+            Some(true),
+        );
+
+        let (repos, global_prompt_overrides) = fixture
+            .service
+            .workspace_get_settings_snapshot()
+            .map_err(|error| error.to_string())?;
+        let mut snapshot = SettingsSnapshotPayload {
+            repos,
+            global_prompt_overrides,
+        };
+        let repo_key = canonical_repo_key(fixture.repo_path.as_str());
+        let repo_config = snapshot
+            .repos
+            .get_mut(repo_key.as_str())
+            .ok_or_else(|| "repo config missing from snapshot".to_string())?;
+        repo_config.trusted_hooks = true;
+        repo_config.hooks = HookSet {
+            pre_start: vec!["  echo pre  ".to_string()],
+            post_complete: vec!["echo post".to_string()],
+        };
+        repo_config.trusted_hooks_fingerprint = None;
+
+        run_workspace_save_settings_snapshot(&fixture, snapshot)
+            .expect("snapshot save should persist trusted hooks");
+
+        let persisted = fixture
+            .service
+            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .map_err(|error| error.to_string())?;
+        let normalized_hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: vec!["echo post".to_string()],
+        };
+        let expected_fingerprint = hook_set_fingerprint(&normalized_hooks);
+        assert!(persisted.trusted_hooks);
+        assert_eq!(persisted.hooks, normalized_hooks);
+        assert_eq!(
+            persisted.trusted_hooks_fingerprint.as_deref(),
+            Some(expected_fingerprint.as_str())
+        );
         Ok(())
     }
 

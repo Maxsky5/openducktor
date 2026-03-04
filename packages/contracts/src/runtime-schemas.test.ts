@@ -171,6 +171,7 @@ describe("runtime schemas", () => {
         "kickoff.spec_initial": {
           template: "Custom kickoff for {{task.id}}",
           baseVersion: 1,
+          enabled: false,
         },
       },
     });
@@ -179,6 +180,7 @@ describe("runtime schemas", () => {
       "Custom kickoff for {{task.id}}",
     );
     expect(parsed.promptOverrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
+    expect(parsed.promptOverrides["kickoff.spec_initial"]?.enabled).toBe(false);
   });
 
   test("repo config normalizes null agent default fields and entries", () => {

@@ -28,7 +28,11 @@ pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
 pub fn resolve_central_beads_dir(repo_path: &Path) -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
     let repo_id = compute_repo_id(repo_path)?;
-    Ok(home.join(".openducktor").join("beads").join(repo_id).join(".beads"))
+    Ok(home
+        .join(".openducktor")
+        .join("beads")
+        .join(repo_id)
+        .join(".beads"))
 }
 
 fn canonical_or_absolute(repo_path: &Path) -> Result<PathBuf> {
@@ -126,8 +130,9 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .expect("time should be after epoch")
                 .as_nanos();
-            let candidate =
-                PathBuf::from(format!("/tmp/odt-beads-no-side-effect-{nanos}-{attempt}/repo"));
+            let candidate = PathBuf::from(format!(
+                "/tmp/odt-beads-no-side-effect-{nanos}-{attempt}/repo"
+            ));
             let repo_id = compute_repo_id(&candidate).expect("repo id should resolve");
             let repo_root = home.join(".openducktor").join("beads").join(repo_id);
             if repo_root.exists() {

@@ -27,9 +27,58 @@ export const agentPromptTemplateIdSchema = z.enum(agentPromptTemplateIdValues);
 export type AgentPromptTemplateId = z.infer<typeof agentPromptTemplateIdSchema>;
 const AGENT_PROMPT_TEMPLATE_ID_SET = new Set<string>(agentPromptTemplateIdValues);
 
+export const agentPromptPlaceholderValues = [
+  "role",
+  "role.allowedTools",
+  "task.id",
+  "task.title",
+  "task.issueType",
+  "task.status",
+  "task.qaRequired",
+  "task.description",
+  "task.acceptanceCriteria",
+  "task.specMarkdown",
+  "task.planMarkdown",
+  "task.latestQaReportMarkdown",
+] as const;
+export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues);
+export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;
+const AGENT_PROMPT_PLACEHOLDER_SET = new Set<string>(agentPromptPlaceholderValues);
+
+const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
+
+export const extractPromptTemplatePlaceholders = (template: string): string[] => {
+  const tokens: string[] = [];
+  const seen = new Set<string>();
+
+  for (const match of template.matchAll(PLACEHOLDER_PATTERN)) {
+    const token = match[1];
+    if (!token || seen.has(token)) {
+      continue;
+    }
+    seen.add(token);
+    tokens.push(token);
+  }
+
+  return tokens;
+};
+
+export const validatePromptTemplatePlaceholders = (template: string) => {
+  const placeholders = extractPromptTemplatePlaceholders(template);
+  const unsupportedPlaceholders = placeholders.filter(
+    (placeholder) => !AGENT_PROMPT_PLACEHOLDER_SET.has(placeholder),
+  );
+
+  return {
+    placeholders,
+    unsupportedPlaceholders,
+  };
+};
+
 export const agentPromptOverrideSchema = z.object({
   template: z.string().min(1),
   baseVersion: z.number().int().min(1),
+  enabled: z.boolean().optional(),
 });
 export type AgentPromptOverride = z.infer<typeof agentPromptOverrideSchema>;
 

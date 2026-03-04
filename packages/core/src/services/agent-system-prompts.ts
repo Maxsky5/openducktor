@@ -1,4 +1,8 @@
-import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/contracts";
+import {
+  validatePromptTemplatePlaceholders,
+  type AgentPromptTemplateId,
+  type RepoPromptOverrides,
+} from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
@@ -47,6 +51,11 @@ export type BuildAgentKickoffPromptInput = {
 export type BuildReadOnlyPermissionRejectionMessageInput = {
   role: AgentRole;
   overrides?: RepoPromptOverrides;
+};
+
+export type MergePromptOverridesInput = {
+  globalOverrides?: RepoPromptOverrides;
+  repoOverrides?: RepoPromptOverrides;
 };
 
 type AgentPromptPurpose = "system" | "kickoff" | "permission";
@@ -119,9 +128,9 @@ Allowed tools for this role:
 {{role.allowedTools}}
 
 Session task lock:
-- Use this exact taskId literal in every odt_* call: {{task.id.json}}.
+- Use this exact taskId literal in every odt_* call: {{task.id}}.
 - Never derive taskId from title/slug or rewrite it.
-- If a tool call fails with task-id mismatch, retry with {{task.id.json}}.
+- If a tool call fails with task-id mismatch, retry with {{task.id}}.
 
 Always include taskId in every odt_* tool call.
 Never invent tool names. Never call tools not listed above.`,
@@ -256,42 +265,42 @@ Call odt_qa_approved or odt_qa_rejected exactly once per review pass.`,
     purpose: "kickoff",
     builtinVersion: 1,
     template:
-      "Create or update the specification and call odt_set_spec with complete markdown when ready.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+      "Create or update the specification and call odt_set_spec with complete markdown when ready.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.planner_initial": {
     id: "kickoff.planner_initial",
     purpose: "kickoff",
     builtinVersion: 1,
     template:
-      "Create or update the implementation plan and call odt_set_plan when ready.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+      "Create or update the implementation plan and call odt_set_plan when ready.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.build_implementation_start": {
     id: "kickoff.build_implementation_start",
     purpose: "kickoff",
     builtinVersion: 1,
     template:
-      "Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+      "Start implementation now. Use odt_build_blocked/odt_build_resumed/odt_build_completed for workflow transitions.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.build_after_qa_rejected": {
     id: "kickoff.build_after_qa_rejected",
     purpose: "kickoff",
     builtinVersion: 1,
     template:
-      "Address all QA rejection findings and call odt_build_completed when done.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+      "Address all QA rejection findings and call odt_build_completed when done.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.build_after_human_request_changes": {
     id: "kickoff.build_after_human_request_changes",
     purpose: "kickoff",
     builtinVersion: 1,
     template:
-      "Apply all human-requested changes and call odt_build_completed when done.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+      "Apply all human-requested changes and call odt_build_completed when done.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.qa_review": {
     id: "kickoff.qa_review",
     purpose: "kickoff",
     builtinVersion: 1,
     template:
-      "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\nUse taskId {{task.id.json}} for every odt_* tool call.",
+      "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
   "permission.read_only.reject": {
     id: "permission.read_only.reject",
@@ -302,28 +311,11 @@ Call odt_qa_approved or odt_qa_rejected exactly once per review pass.`,
 };
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
-const KNOWN_PLACEHOLDERS = new Set([
-  "role",
-  "role.allowedTools",
-  "task.id",
-  "task.id.json",
-  "task.title",
-  "task.issueType",
-  "task.status",
-  "task.qaRequired",
-  "task.description",
-  "task.acceptanceCriteria",
-  "task.specMarkdown",
-  "task.planMarkdown",
-  "task.latestQaReportMarkdown",
-]);
 
 const compact = (value: string | undefined): string => {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
 };
-
-const quoteTaskIdForPrompt = (taskId: string): string => JSON.stringify(taskId);
 
 const toRoleBaseTemplateId = (role: AgentRole): AgentPromptTemplateId => {
   return `system.role.${role}.base`;
@@ -353,7 +345,6 @@ const buildPlaceholderValues = ({
     role,
     "role.allowedTools": buildToolListPlaceholder(role),
     "task.id": task.taskId,
-    "task.id.json": quoteTaskIdForPrompt(task.taskId),
     "task.title": compact(task.title),
     "task.issueType": task.issueType ?? "task",
     "task.status": compact(task.status),
@@ -364,17 +355,6 @@ const buildPlaceholderValues = ({
     "task.planMarkdown": compact(task.planMarkdown),
     "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),
   };
-};
-
-const extractPlaceholderTokens = (template: string): string[] => {
-  const tokens: string[] = [];
-  for (const match of template.matchAll(PLACEHOLDER_PATTERN)) {
-    const token = match[1];
-    if (token) {
-      tokens.push(token);
-    }
-  }
-  return tokens;
 };
 
 const collectPromptWarnings = (templates: ResolvedAgentPromptTemplate[]): AgentPromptWarning[] => {
@@ -407,18 +387,21 @@ const resolveTemplate = ({
     throw new Error(`Unknown prompt template id "${templateId}".`);
   }
 
-  const override = overrides?.[templateId];
+  const overrideEntry = overrides?.[templateId];
+  const override = overrideEntry && overrideEntry.enabled !== false ? overrideEntry : undefined;
   const source = override ? "override" : "builtin";
   const template = (override?.template ?? definition.template).trim();
   if (template.length === 0) {
     throw new Error(`Prompt template "${templateId}" is empty.`);
   }
 
-  const tokens = extractPlaceholderTokens(template);
-  for (const token of tokens) {
-    if (!KNOWN_PLACEHOLDERS.has(token)) {
-      throw new Error(`Prompt template "${templateId}" uses unsupported placeholder "${token}".`);
-    }
+  const { placeholders, unsupportedPlaceholders } = validatePromptTemplatePlaceholders(template);
+  if (unsupportedPlaceholders.length > 0) {
+    throw new Error(
+      `Prompt template "${templateId}" uses unsupported placeholder "${unsupportedPlaceholders[0]}".`,
+    );
+  }
+  for (const token of placeholders) {
     if (!(token in placeholderValues)) {
       throw new Error(`Prompt template "${templateId}" is missing placeholder value "${token}".`);
     }
@@ -528,4 +511,39 @@ export const buildReadOnlyPermissionRejectionMessage = (
   input: BuildReadOnlyPermissionRejectionMessageInput,
 ): string => {
   return buildReadOnlyPermissionRejectionMessageBundle(input).prompt;
+};
+
+export const mergePromptOverrides = ({
+  globalOverrides,
+  repoOverrides,
+}: MergePromptOverridesInput): RepoPromptOverrides => {
+  const result: RepoPromptOverrides = {};
+  const keys = new Set([
+    ...Object.keys(globalOverrides ?? {}),
+    ...Object.keys(repoOverrides ?? {}),
+  ]);
+
+  for (const key of keys) {
+    const templateId = key as AgentPromptTemplateId;
+    const repoOverride = repoOverrides?.[templateId];
+    if (repoOverride) {
+      if (repoOverride.enabled !== false) {
+        result[templateId] = repoOverride;
+        continue;
+      }
+
+      const globalOverride = globalOverrides?.[templateId];
+      if (globalOverride && globalOverride.enabled !== false) {
+        result[templateId] = globalOverride;
+      }
+      continue;
+    }
+
+    const globalOverride = globalOverrides?.[templateId];
+    if (globalOverride && globalOverride.enabled !== false) {
+      result[templateId] = globalOverride;
+    }
+  }
+
+  return result;
 };

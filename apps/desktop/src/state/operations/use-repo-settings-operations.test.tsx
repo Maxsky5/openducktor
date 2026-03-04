@@ -259,4 +259,57 @@ describe("use-repo-settings-operations", () => {
       host.workspaceSaveRepoSettings = original.workspaceSaveRepoSettings;
     }
   });
+
+  test("loads settings snapshot through atomic IPC route", async () => {
+    const refreshWorkspaces = mock(async () => {});
+    const workspaceGetSettingsSnapshot = mock(async () => ({
+      repos: {},
+      globalPromptOverrides: {},
+    }));
+
+    const original = {
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+
+    const harness = createHookHarness({ activeRepo: "/repo-a", refreshWorkspaces });
+
+    try {
+      await harness.mount();
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
+        repos: {},
+        globalPromptOverrides: {},
+      });
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("saves settings snapshot atomically and refreshes workspaces once", async () => {
+    const refreshWorkspaces = mock(async () => {});
+    const workspaceSaveSettingsSnapshot = mock(async () => []);
+
+    const original = {
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+    };
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+
+    const harness = createHookHarness({ activeRepo: "/repo-a", refreshWorkspaces });
+    const snapshot = {
+      repos: {},
+      globalPromptOverrides: {},
+    } as const;
+
+    try {
+      await harness.mount();
+      await harness.getLatest().saveSettingsSnapshot(snapshot);
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
+      expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+    }
+  });
 });

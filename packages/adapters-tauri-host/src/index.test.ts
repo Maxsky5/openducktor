@@ -135,6 +135,8 @@ describe("TauriHostClient", () => {
       "workspaceSaveRepoSettings",
       "workspaceUpdateRepoHooks",
       "workspaceGetRepoConfig",
+      "workspaceGetSettingsSnapshot",
+      "workspaceSaveSettingsSnapshot",
       "workspacePrepareTrustedHooksChallenge",
       "workspaceSetTrustedHooks",
       "getTheme",
@@ -375,6 +377,98 @@ describe("TauriHostClient", () => {
                 modelId: "gpt-5",
               },
             },
+          },
+        },
+      },
+    ]);
+  });
+
+  test("workspaceGetSettingsSnapshot uses snapshot IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_get_settings_snapshot") {
+        return {
+          repos: {
+            "/repo": {
+              branchPrefix: "obp",
+              defaultTargetBranch: "origin/main",
+              trustedHooks: false,
+              hooks: { preStart: [], postComplete: [] },
+              worktreeSetupScript: "",
+              worktreeCleanupScript: "",
+              worktreeFileCopies: [],
+              promptOverrides: {},
+              agentDefaults: {},
+            },
+          },
+          globalPromptOverrides: {},
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const snapshot = await client.workspaceGetSettingsSnapshot();
+
+    expect(Object.keys(snapshot.repos)).toEqual(["/repo"]);
+    expect(calls).toEqual([
+      {
+        command: "workspace_get_settings_snapshot",
+        args: undefined,
+      },
+    ]);
+  });
+
+  test("workspaceSaveSettingsSnapshot uses atomic snapshot IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_save_settings_snapshot") {
+        return [
+          {
+            path: "/repo",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: "/tmp/worktrees",
+          },
+        ];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.workspaceSaveSettingsSnapshot({
+      repos: {
+        "/repo": {
+          branchPrefix: "obp",
+          defaultTargetBranch: "origin/main",
+          trustedHooks: false,
+          hooks: { preStart: [], postComplete: [] },
+          worktreeSetupScript: "",
+          worktreeCleanupScript: "",
+          worktreeFileCopies: [],
+          promptOverrides: {},
+          agentDefaults: {},
+        },
+      },
+      globalPromptOverrides: {},
+    });
+
+    expect(result).toHaveLength(1);
+    expect(calls).toEqual([
+      {
+        command: "workspace_save_settings_snapshot",
+        args: {
+          snapshot: {
+            repos: {
+              "/repo": {
+                branchPrefix: "obp",
+                defaultTargetBranch: "origin/main",
+                trustedHooks: false,
+                hooks: { preStart: [], postComplete: [] },
+                worktreeSetupScript: "",
+                worktreeCleanupScript: "",
+                worktreeFileCopies: [],
+                promptOverrides: {},
+                agentDefaults: {},
+              },
+            },
+            globalPromptOverrides: {},
           },
         },
       },

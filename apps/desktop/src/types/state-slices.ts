@@ -5,6 +5,7 @@ import type {
   RunEvent,
   RunSummary,
   RuntimeCheck,
+  SettingsSnapshot,
   TaskCard,
   TaskCreateInput,
   TaskStatus,
@@ -59,6 +60,8 @@ export type WorkspaceStateContextValue = {
   switchBranch: (branchName: string) => Promise<void>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
+  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
 export type ChecksStateContextValue = {
