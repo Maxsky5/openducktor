@@ -4,8 +4,15 @@ import { toBranchSelectorOptions } from "@/components/features/repository/branch
 import { useWorkspaceState } from "@/state";
 
 export function BranchSwitcher(): ReactElement | null {
-  const { activeRepo, branches, activeBranch, isLoadingBranches, isSwitchingBranch, switchBranch } =
-    useWorkspaceState();
+  const {
+    activeRepo,
+    branches,
+    activeBranch,
+    isLoadingBranches,
+    isSwitchingBranch,
+    branchSyncDegraded,
+    switchBranch,
+  } = useWorkspaceState();
   const [selectedBranchValue, setSelectedBranchValue] = useState("");
 
   const branchOptions = useMemo(() => toBranchSelectorOptions(branches), [branches]);
@@ -50,6 +57,11 @@ export function BranchSwitcher(): ReactElement | null {
           });
         }}
       />
+      {branchSyncDegraded ? (
+        <p className="px-1 text-[11px] text-amber-700 dark:text-amber-400">
+          Branch sync degraded. Auto-refresh may be stale.
+        </p>
+      ) : null}
       {activeBranch?.detached ? (
         <p className="px-1 text-[11px] text-muted-foreground">Detached HEAD</p>
       ) : null}

@@ -37,6 +37,7 @@ describe("app-state-context-values", () => {
       isSwitchingWorkspace: false,
       isLoadingBranches: false,
       isSwitchingBranch: false,
+      branchSyncDegraded: false,
       workspaces: [workspace("/repo-a"), workspace("/repo-b")],
       activeRepo: "/repo-a",
       branches: [],
