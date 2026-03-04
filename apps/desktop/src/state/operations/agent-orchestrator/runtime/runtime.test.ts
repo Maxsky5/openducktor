@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
 import { host } from "../../host";
 import { createDeferred, withTimeout } from "../test-utils";
-import { createEnsureRuntime, loadRepoDefaultModel, loadTaskDocuments } from "./runtime";
+import {
+  createEnsureRuntime,
+  loadRepoDefaultModel,
+  loadRepoPromptOverrides,
+  loadTaskDocuments,
+} from "./runtime";
 
 const runningRunFixture: RunSummary = {
   runId: "run-1",
@@ -170,6 +175,7 @@ describe("agent-orchestrator-runtime", () => {
       worktreeSetupScript: "",
       worktreeCleanupScript: "",
       worktreeFileCopies: [],
+      promptOverrides: {},
       agentDefaults: {
         build: {
           providerId: "openai",
@@ -188,6 +194,37 @@ describe("agent-orchestrator-runtime", () => {
         variant: "high",
         opencodeAgent: "builder",
       });
+    } finally {
+      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+    }
+  });
+
+  test("loads repo prompt overrides from workspace config", async () => {
+    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+    host.workspaceGetRepoConfig = async () => ({
+      branchPrefix: "obp",
+      defaultTargetBranch: "main",
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      worktreeSetupScript: "",
+      worktreeCleanupScript: "",
+      worktreeFileCopies: [],
+      promptOverrides: {
+        "kickoff.spec_initial": {
+          template: "custom kickoff {{task.id}}",
+          baseVersion: 1,
+        },
+      },
+      agentDefaults: {},
+    });
+
+    try {
+      const overrides = await loadRepoPromptOverrides("/tmp/repo");
+      expect(overrides["kickoff.spec_initial"]?.template).toBe("custom kickoff {{task.id}}");
+      expect(overrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
     } finally {
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     }

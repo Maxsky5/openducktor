@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
@@ -33,6 +33,7 @@ type EnsureSessionReadyDependencies = {
     role: AgentSessionState["role"],
   ) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
     baseUrl: string,
@@ -60,6 +61,7 @@ export const createEnsureSessionReady = ({
   attachSessionListener,
   ensureRuntime,
   loadTaskDocuments,
+  loadRepoPromptOverrides,
   loadSessionTodos,
   loadSessionModelCatalog,
 }: EnsureSessionReadyDependencies) => {
@@ -113,9 +115,11 @@ export const createEnsureSessionReady = ({
       throw new Error(`Task not found: ${session.taskId}`);
     }
 
-    const docs = await loadTaskDocuments(repoPath, session.taskId);
-    assertNotStale();
-    const runtime = await ensureRuntime(repoPath, session.taskId, session.role);
+    const [docs, runtime, promptOverrides] = await Promise.all([
+      loadTaskDocuments(repoPath, session.taskId),
+      ensureRuntime(repoPath, session.taskId, session.role),
+      loadRepoPromptOverrides(repoPath),
+    ]);
     assertNotStale();
     const systemPrompt = buildAgentSystemPrompt({
       role: session.role,
@@ -132,6 +136,7 @@ export const createEnsureSessionReady = ({
         planMarkdown: docs.planMarkdown,
         latestQaReportMarkdown: docs.qaMarkdown,
       },
+      overrides: promptOverrides,
     });
 
     await adapter.resumeSession({
@@ -173,6 +178,7 @@ export const createEnsureSessionReady = ({
       runId: runtime.runId,
       baseUrl: runtime.baseUrl,
       workingDirectory: runtime.workingDirectory,
+      promptOverrides,
     }));
 
     if (isStaleRepoOperation()) {

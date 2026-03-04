@@ -1,4 +1,5 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { host } from "@/state/operations/host";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -48,6 +49,19 @@ const createBaseArgs = (): HookArgs => {
 };
 
 describe("useAgentStudioSessionActions", () => {
+  const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+
+  beforeEach(() => {
+    host.workspaceGetRepoConfig = async () =>
+      ({
+        promptOverrides: {},
+      }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+  });
+
+  afterEach(() => {
+    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+  });
+
   test("onSend starts session and sends trimmed message", async () => {
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});

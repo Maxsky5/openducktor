@@ -13,7 +13,7 @@ import {
 import {
   createRepoStaleGuard,
   inferScenario,
-  kickoffPrompt,
+  kickoffPromptWithTaskContext,
   throwIfRepoStale,
 } from "../support/utils";
 import type {
@@ -89,8 +89,13 @@ const resolveRuntimeAndModel = async ({
   const docsPromise = deps.task.loadTaskDocuments(ctx.repoPath, ctx.taskId);
   const runtimePromise = deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role);
   const defaultModelSelectionPromise = deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
+  const promptOverridesPromise = deps.model.loadRepoPromptOverrides(ctx.repoPath);
 
-  const [docs, runtimeInfo] = await Promise.all([docsPromise, runtimePromise]);
+  const [docs, runtimeInfo, promptOverrides] = await Promise.all([
+    docsPromise,
+    runtimePromise,
+    promptOverridesPromise,
+  ]);
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard, docs);
@@ -111,6 +116,7 @@ const resolveRuntimeAndModel = async ({
       planMarkdown: docs.planMarkdown,
       latestQaReportMarkdown: docs.qaMarkdown,
     },
+    overrides: promptOverrides,
   });
 
   return {
@@ -118,6 +124,7 @@ const resolveRuntimeAndModel = async ({
     runtime: runtimeInfo,
     resolvedScenario,
     systemPrompt,
+    promptOverrides,
     defaultModelSelectionPromise,
   };
 };
@@ -127,11 +134,13 @@ const buildInitialSession = ({
   selectedModel,
   runtime,
   systemPrompt,
+  promptOverrides,
 }: {
   startedCtx: StartedSessionContext;
   selectedModel: AgentModelSelection | null;
   runtime: RuntimeInfo;
   systemPrompt: string;
+  promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
 }): AgentSessionState => ({
   sessionId: startedCtx.summary.sessionId,
   externalSessionId: startedCtx.summary.externalSessionId,
@@ -165,6 +174,7 @@ const buildInitialSession = ({
   modelCatalog: null,
   selectedModel,
   isLoadingModelCatalog: true,
+  promptOverrides,
 });
 
 const persistInitialSession = ({
@@ -261,6 +271,7 @@ const createOrReuseSession = async ({
     selectedModel: input.selectedModel,
     runtime: resolved.runtime,
     systemPrompt: resolved.systemPrompt,
+    promptOverrides: resolved.promptOverrides,
   });
 
   deps.session.setSessionsById((current) => {
@@ -284,7 +295,9 @@ const createOrReuseSession = async ({
   return {
     kind: "started",
     runtimeInfo: resolved.runtime,
+    taskCard: resolved.taskCard,
     ctx: startedCtx,
+    promptOverrides: resolved.promptOverrides,
     defaultModelSelectionPromise: resolved.defaultModelSelectionPromise,
   };
 };
@@ -434,10 +447,14 @@ const maybeSendKickoff = async ({
   sendKickoff,
   startedCtx,
   task,
+  taskCard,
+  promptOverrides,
 }: {
   sendKickoff: boolean;
   startedCtx: StartedSessionContext;
   task: TaskDependencies;
+  taskCard: TaskCard;
+  promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
 }): Promise<void> => {
   if (!sendKickoff) {
     return;
@@ -446,7 +463,20 @@ const maybeSendKickoff = async ({
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   await task.sendAgentMessage(
     startedCtx.summary.sessionId,
-    kickoffPrompt(startedCtx.role, startedCtx.resolvedScenario, startedCtx.taskId),
+    kickoffPromptWithTaskContext(
+      startedCtx.role,
+      startedCtx.resolvedScenario,
+      {
+        taskId: startedCtx.taskId,
+        title: taskCard.title,
+        issueType: taskCard.issueType,
+        status: taskCard.status,
+        qaRequired: taskCard.aiReviewEnabled,
+        description: taskCard.description,
+        acceptanceCriteria: taskCard.acceptanceCriteria,
+      },
+      promptOverrides,
+    ),
   );
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   runOrchestratorSideEffect(
@@ -538,6 +568,8 @@ export const createStartAgentSession = ({
         sendKickoff,
         startedCtx: startResult.ctx,
         task,
+        taskCard: startResult.taskCard,
+        promptOverrides: startResult.promptOverrides,
       });
 
       return startResult.ctx.summary.sessionId;

@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
@@ -33,6 +33,7 @@ type SessionActionsDependencies = {
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
+  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
     baseUrl: string,
@@ -106,6 +107,7 @@ export const createAgentSessionActions = ({
   ensureRuntime,
   loadTaskDocuments,
   loadRepoDefaultModel,
+  loadRepoPromptOverrides,
   loadSessionTodos,
   loadSessionModelCatalog,
   loadAgentSessions,
@@ -125,6 +127,7 @@ export const createAgentSessionActions = ({
     attachSessionListener,
     ensureRuntime,
     loadTaskDocuments,
+    loadRepoPromptOverrides,
     loadSessionTodos,
     loadSessionModelCatalog,
   });
@@ -228,6 +231,7 @@ export const createAgentSessionActions = ({
     },
     model: {
       loadRepoDefaultModel,
+      loadRepoPromptOverrides,
       loadSessionTodos,
       loadSessionModelCatalog,
     },

@@ -7,6 +7,7 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
+import { host } from "../../state/operations/host";
 import { firstScenario, kickoffPromptForScenario } from "../agents/agents-page-constants";
 import { useSessionStartModalCoordinator } from "../shared/use-session-start-modal-coordinator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
@@ -183,18 +184,39 @@ export function useKanbanSessionStartFlow({
           }
 
           if (startInBackground || intent.sendKickoff) {
-            const kickoffPromise = sendAgentMessage(
-              sessionId,
-              kickoffPromptForScenario(intent.role, intent.scenario, intent.taskId),
-            );
+            const buildKickoffMessage = async (): Promise<string> => {
+              const promptOverrides = activeRepo
+                ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
+                : undefined;
+              const intentTask = tasks.find((entry) => entry.id === intent.taskId);
+              return kickoffPromptForScenario(intent.role, intent.scenario, intent.taskId, {
+                overrides: promptOverrides ?? {},
+                task: {
+                  ...(intentTask
+                    ? {
+                        title: intentTask.title,
+                        issueType: intentTask.issueType,
+                        status: intentTask.status,
+                        qaRequired: intentTask.aiReviewEnabled,
+                        description: intentTask.description,
+                        acceptanceCriteria: intentTask.acceptanceCriteria,
+                      }
+                    : {}),
+                },
+              });
+            };
 
             if (startInBackground) {
-              void kickoffPromise.catch(() => {
-                toast.error("Session started, but kickoff message failed.");
-              });
+              void (async () => {
+                try {
+                  await sendAgentMessage(sessionId, await buildKickoffMessage());
+                } catch {
+                  toast.error("Session started, but kickoff message failed.");
+                }
+              })();
             } else {
               try {
-                await kickoffPromise;
+                await sendAgentMessage(sessionId, await buildKickoffMessage());
               } catch {
                 toast.error("Session started, but kickoff message failed.");
               }
@@ -208,12 +230,14 @@ export function useKanbanSessionStartFlow({
       })();
     },
     [
+      activeRepo,
       closeStartModal,
       openSessionInAgentStudio,
       sendAgentMessage,
       sessionStartIntent,
       sessionStartSelection,
       startAgentSession,
+      tasks,
       updateAgentSessionModel,
     ],
   );

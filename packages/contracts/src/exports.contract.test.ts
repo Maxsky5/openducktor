@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type {
   AgentModelDefault,
+  AgentPromptOverride,
+  AgentPromptTemplateId,
   AgentRole,
   AgentRuntimeStartRole,
   AgentRuntimeSummary,
@@ -41,6 +43,7 @@ import type {
   RepoAgentDefaults,
   RepoConfig,
   RepoHooks,
+  RepoPromptOverrides,
   RunEvent,
   RunState,
   RunSummary,
@@ -74,6 +77,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRuntimeStartRoleSchema",
   "agentRuntimeSummarySchema",
   "agentRuntimeSummaryRoleSchema",
+  "agentPromptOverrideSchema",
+  "agentPromptTemplateIdSchema",
+  "agentPromptTemplateIdValues",
   "agentSessionModelSelectionSchema",
   "agentSessionRecordSchema",
   "agentSessionRoleSchema",
@@ -104,6 +110,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "issueTypeSchema",
   "missingSpecSections",
   "qaWorkflowVerdictSchema",
+  "repoPromptOverridesSchema",
   "repoAgentDefaultsSchema",
   "repoConfigSchema",
   "repoHooksSchema",
@@ -132,6 +139,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
 type ExportedTypeContract = {
   AgentRole: AgentRole;
   AgentModelDefault: AgentModelDefault;
+  AgentPromptOverride: AgentPromptOverride;
+  AgentPromptTemplateId: AgentPromptTemplateId;
   AgentScenario: AgentScenario;
   AgentRuntimeStartRole: AgentRuntimeStartRole;
   AgentRuntimeSummary: AgentRuntimeSummary;
@@ -171,6 +180,7 @@ type ExportedTypeContract = {
   RepoAgentDefaults: RepoAgentDefaults;
   RepoConfig: RepoConfig;
   RepoHooks: RepoHooks;
+  RepoPromptOverrides: RepoPromptOverrides;
   RunEvent: RunEvent;
   RunState: RunState;
   RunSummary: RunSummary;

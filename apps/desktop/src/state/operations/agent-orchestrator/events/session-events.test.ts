@@ -431,6 +431,93 @@ describe("agent-orchestrator-session-events", () => {
     ).toBe(true);
   });
 
+  test("keeps permission pending when auto-reject prompt rendering fails", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const replyPermission = mock(
+      (_request: Parameters<SessionEventAdapter["replyPermission"]>[0]) => Promise.resolve(),
+    );
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission,
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "spec",
+          promptOverrides: {
+            "permission.read_only.reject": {
+              template: "Rejected by policy {{unsupported.token}}",
+              baseVersion: 1,
+            },
+          },
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "permission_required",
+      sessionId: "session-1",
+      requestId: "perm-template-fail",
+      permission: "write",
+      patterns: ["edit file"],
+      metadata: { tool: "edit" },
+      timestamp: "2026-02-22T08:00:05.000Z",
+    });
+
+    await Promise.resolve();
+
+    expect(replyPermission).toHaveBeenCalledTimes(0);
+    expect(sessionsRef.current["session-1"]?.pendingPermissions).toHaveLength(1);
+    expect(sessionsRef.current["session-1"]?.pendingPermissions[0]?.requestId).toBe(
+      "perm-template-fail",
+    );
+    expect(
+      sessionsRef.current["session-1"]?.messages.some((message) =>
+        message.content.includes("Automatic permission rejection failed"),
+      ),
+    ).toBe(true);
+  });
+
   test("clears pending requests when session_error is received", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

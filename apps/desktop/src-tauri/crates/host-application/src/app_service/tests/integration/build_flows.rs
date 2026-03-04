@@ -69,6 +69,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -189,6 +190,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),
+                prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },
         },
@@ -267,6 +269,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_failure_hooks)),
             hooks: pre_start_failure_hooks,
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -295,6 +298,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: Some(hook_set_fingerprint(&post_complete_failure_hooks)),
             hooks: post_complete_failure_hooks,
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -369,6 +373,7 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -417,6 +422,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
                 pre_start: vec!["echo pre-hook".to_string()],
                 post_complete: Vec::new(),
             },
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -465,6 +471,7 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -518,6 +525,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -566,6 +574,7 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;
@@ -631,6 +640,7 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
     )?;

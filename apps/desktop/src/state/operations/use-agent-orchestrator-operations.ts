@@ -12,6 +12,7 @@ import {
   createEnsureRuntime,
   createLoadAgentSessions,
   loadRepoDefaultModel,
+  loadRepoPromptOverrides,
   loadTaskDocuments,
   runOrchestratorSideEffect,
   toPersistedSessionRecord,
@@ -190,6 +191,7 @@ export function useAgentOrchestratorOperations({
         updateSession,
         loadSessionTodos,
         loadSessionModelCatalog,
+        loadRepoPromptOverrides,
       }),
     [
       activeRepo,
@@ -262,6 +264,7 @@ export function useAgentOrchestratorOperations({
         loadRepoDefaultModel,
         loadSessionTodos,
         loadSessionModelCatalog,
+        loadRepoPromptOverrides,
         loadAgentSessions,
         clearTurnDuration,
         refreshTaskData,

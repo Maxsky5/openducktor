@@ -1,3 +1,4 @@
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -109,6 +110,7 @@ export type AgentSessionState = {
   modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;
   isLoadingModelCatalog: boolean;
+  promptOverrides?: RepoPromptOverrides;
 };
 
 export type AgentSessionLoadOptions = {

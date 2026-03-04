@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentModelSelection,
@@ -46,6 +46,7 @@ export type TaskDependencies = {
 
 export type ModelDependencies = {
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
+  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
     baseUrl: string,
@@ -112,6 +113,7 @@ export type ResolvedRuntimeAndModel = {
   runtime: RuntimeInfo;
   resolvedScenario: AgentScenario;
   systemPrompt: string;
+  promptOverrides: RepoPromptOverrides;
   defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
 };
 
@@ -123,6 +125,8 @@ export type StartOrReuseResult =
   | {
       kind: "started";
       runtimeInfo: RuntimeInfo;
+      taskCard: TaskCard;
       ctx: StartedSessionContext;
+      promptOverrides: RepoPromptOverrides;
       defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
     };

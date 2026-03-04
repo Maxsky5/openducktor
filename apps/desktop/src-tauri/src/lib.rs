@@ -119,6 +119,7 @@ struct RepoConfigPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
     default_target_branch: Option<String>,
+    prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 
@@ -130,6 +131,7 @@ struct RepoSettingsPayload {
     default_target_branch: Option<String>,
     trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
+    prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
 

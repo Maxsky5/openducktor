@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
@@ -58,6 +58,7 @@ type CreateLoadAgentSessionsArgs = {
     baseUrl: string,
     workingDirectory: string,
   ) => Promise<void>;
+  loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
 
 export const createLoadAgentSessions = ({
@@ -71,6 +72,7 @@ export const createLoadAgentSessions = ({
   updateSession,
   loadSessionTodos,
   loadSessionModelCatalog,
+  loadRepoPromptOverrides,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
   options?: AgentSessionLoadOptions,
@@ -119,7 +121,10 @@ export const createLoadAgentSessions = ({
       );
     };
 
-    const persisted = await host.agentSessionsList(repoPath, taskId);
+    const [persisted, repoPromptOverrides] = await Promise.all([
+      host.agentSessionsList(repoPath, taskId),
+      loadRepoPromptOverrides(repoPath),
+    ]);
     if (isStaleRepoOperation()) {
       return;
     }
@@ -135,7 +140,10 @@ export const createLoadAgentSessions = ({
         if (next[record.sessionId]) {
           continue;
         }
-        next[record.sessionId] = fromPersistedSessionRecord(record, taskId);
+        next[record.sessionId] = {
+          ...fromPersistedSessionRecord(record, taskId),
+          promptOverrides: repoPromptOverrides,
+        };
       }
       return next;
     });
@@ -224,6 +232,7 @@ export const createLoadAgentSessions = ({
             ...current,
             baseUrl,
             workingDirectory,
+            promptOverrides: repoPromptOverrides,
           }),
           { persist: false },
         );
@@ -289,6 +298,7 @@ export const createLoadAgentSessions = ({
                   planMarkdown: "",
                   latestQaReportMarkdown: "",
                 },
+                overrides: repoPromptOverrides,
               })}`,
               timestamp: record.startedAt,
             },
@@ -311,6 +321,7 @@ export const createLoadAgentSessions = ({
             ...current,
             baseUrl,
             workingDirectory,
+            promptOverrides: repoPromptOverrides,
             messages: upsertMessage(current.messages, {
               id: `history-unavailable:${record.sessionId}`,
               role: "system",
@@ -330,6 +341,7 @@ export const createLoadAgentSessions = ({
           ...current,
           baseUrl,
           workingDirectory,
+          promptOverrides: repoPromptOverrides,
           messages: [
             ...preludeMessages,
             ...historyToChatMessages(historyResult.history, {

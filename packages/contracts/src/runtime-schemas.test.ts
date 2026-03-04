@@ -130,6 +130,7 @@ describe("runtime schemas", () => {
     });
 
     expect(parsed.worktreeBasePath).toBeUndefined();
+    expect(parsed.promptOverrides).toEqual({});
     expect(parsed.agentDefaults).toEqual({
       spec: undefined,
       planner: undefined,
@@ -158,6 +159,26 @@ describe("runtime schemas", () => {
     expect(parsed.agentDefaults.spec?.modelId).toBe("gpt-5");
     expect(parsed.agentDefaults.spec?.variant).toBe("high");
     expect(parsed.agentDefaults.spec?.opencodeAgent).toBe("build");
+  });
+
+  test("repo config parses prompt overrides and keeps base version metadata", () => {
+    const parsed = repoConfigSchema.parse({
+      worktreeBasePath: "/tmp/wt",
+      branchPrefix: "obp",
+      trustedHooks: false,
+      hooks: { preStart: [], postComplete: [] },
+      promptOverrides: {
+        "kickoff.spec_initial": {
+          template: "Custom kickoff for {{task.id}}",
+          baseVersion: 1,
+        },
+      },
+    });
+
+    expect(parsed.promptOverrides["kickoff.spec_initial"]?.template).toBe(
+      "Custom kickoff for {{task.id}}",
+    );
+    expect(parsed.promptOverrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
   });
 
   test("repo config normalizes null agent default fields and entries", () => {
