@@ -836,7 +836,7 @@ describe("TauriHostClient", () => {
     expect(sessions).toHaveLength(3);
     expect(sessions[0]?.scenario).toBe("spec_initial");
     expect(sessions[1]?.scenario).toBe("planner_initial");
-    expect(sessions[2]?.scenario).toBe(undefined);
+    expect(sessions[2]?.scenario).toBeUndefined();
   });
 
   test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {
