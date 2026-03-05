@@ -283,6 +283,13 @@ export function useWorkspaceOperations({
 
       return { status: "unchanged" };
     } catch (error) {
+      if (activeRepoRef.current !== repoPath) {
+        return {
+          status: "skipped",
+          reason: "repo_changed",
+        };
+      }
+
       return {
         status: "degraded",
         error: classifyBranchProbeError(error, "current_branch_probe"),

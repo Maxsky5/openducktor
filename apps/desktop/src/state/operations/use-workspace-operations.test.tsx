@@ -517,6 +517,80 @@ describe("use-workspace-operations", () => {
     }
   });
 
+  test("ignores stale branch probe failures after active repository changes", async () => {
+    const setActiveRepo = mock(() => {});
+    let intervalCallback: (() => void) | null = null;
+    const branchProbeDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
+
+    const setIntervalMock = mock((callback: () => void) => {
+      intervalCallback = callback;
+      return 1;
+    });
+    const fakeWindow = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      setInterval: setIntervalMock,
+      clearInterval: () => {},
+    } as unknown as Window;
+    const fakeDocument = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      visibilityState: "visible" as const,
+    } as unknown as Document;
+    const restoreBrowserGlobals = mockBrowserGlobals(fakeWindow, fakeDocument);
+
+    const gitGetCurrentBranch = mock(async () => branchProbeDeferred.promise);
+
+    const original = {
+      gitGetCurrentBranch: host.gitGetCurrentBranch,
+    };
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const baseArgs = {
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+    };
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      ...baseArgs,
+    });
+
+    try {
+      await harness.mount();
+      const callback = intervalCallback as unknown as (() => void) | null;
+      if (!callback) {
+        throw new Error("Expected interval callback to be set");
+      }
+
+      await act(async () => {
+        callback();
+      });
+      await flush();
+
+      await harness.updateArgs({
+        activeRepo: "/repo-b",
+        ...baseArgs,
+      });
+
+      branchProbeDeferred.reject(new Error("permission denied while reading branch"));
+      await flush();
+
+      expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
+      expect(harness.getLatest().branchSyncDegraded).toBe(false);
+      expect(toastError).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      (toast as { error: typeof toast.error }).error = originalToastError;
+      restoreBrowserGlobals();
+    }
+  });
+
   test("clears degraded branch sync state after a successful probe", async () => {
     const setActiveRepo = mock(() => {});
     let shouldFailProbe = true;
