@@ -453,6 +453,13 @@ fn write_config_file_atomic(path: &Path, contents: &[u8]) -> Result<()> {
         {
             Ok(mut file) => {
                 let write_result = (|| -> Result<()> {
+                    file.set_permissions(fs::Permissions::from_mode(CONFIG_FILE_MODE))
+                        .with_context(|| {
+                            format!(
+                                "Failed setting secure permissions on config temp file {}",
+                                temp_path.display()
+                            )
+                        })?;
                     file.write_all(contents).with_context(|| {
                         format!("Failed writing config temp file {}", temp_path.display())
                     })?;
@@ -471,13 +478,16 @@ fn write_config_file_atomic(path: &Path, contents: &[u8]) -> Result<()> {
                 })();
 
                 if let Err(error) = write_result {
-                    if temp_path.exists() {
-                        fs::remove_file(&temp_path).with_context(|| {
-                            format!(
-                                "Failed cleaning up config temp file {} after write failure",
-                                temp_path.display()
-                            )
-                        })?;
+                    if let Err(cleanup_error) = fs::remove_file(&temp_path) {
+                        if cleanup_error.kind() != ErrorKind::NotFound {
+                            return Err(error).with_context(|| {
+                                format!(
+                                    "Failed cleaning up config temp file {} after write failure: {}",
+                                    temp_path.display(),
+                                    cleanup_error
+                                )
+                            });
+                        }
                     }
                     return Err(error);
                 }
