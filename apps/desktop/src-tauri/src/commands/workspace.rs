@@ -44,7 +44,7 @@ pub async fn workspace_select(
     repo_path: String,
 ) -> Result<host_domain::WorkspaceRecord, String> {
     let selected = as_error(state.service.workspace_select(&repo_path))?;
-    super::git::invalidate_worktree_resolution_cache_all()?;
+    super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
     Ok(selected)
 }
 
