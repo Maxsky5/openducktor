@@ -128,6 +128,28 @@ describe("buildAgentSystemPrompt", () => {
       'Prompt template "system.scenario.spec_initial" uses unsupported placeholder "unknown.placeholder".',
     );
   });
+
+  test("allows enabled empty override templates without runtime failure", () => {
+    const result = buildAgentSystemPromptBundle({
+      role: "spec",
+      scenario: "spec_initial",
+      task: taskContext,
+      overrides: {
+        "system.shared.workflow_guards": {
+          template: "",
+          baseVersion: 1,
+          enabled: true,
+        },
+      },
+    });
+
+    const workflowGuardsTemplate = result.templates.find(
+      (entry) => entry.id === "system.shared.workflow_guards",
+    );
+    expect(workflowGuardsTemplate?.source).toBe("override");
+    expect(workflowGuardsTemplate?.content).toBe("");
+    expect(result.prompt).not.toContain("Workflow constraints you must obey:");
+  });
 });
 
 describe("kickoff and permission prompts", () => {
@@ -163,6 +185,27 @@ describe("kickoff and permission prompts", () => {
 
     expect(result.prompt).toBe("Planner kickoff task-2 / desc");
     expect(result.templates[0]?.source).toBe("override");
+  });
+
+  test("allows enabled empty kickoff override templates", () => {
+    const result = buildAgentKickoffPromptBundle({
+      role: "planner",
+      scenario: "planner_initial",
+      task: {
+        taskId: "task-2",
+      },
+      overrides: {
+        "kickoff.planner_initial": {
+          template: "",
+          baseVersion: 1,
+          enabled: true,
+        },
+      },
+    });
+
+    expect(result.prompt).toBe("");
+    expect(result.templates[0]?.source).toBe("override");
+    expect(result.templates[0]?.content).toBe("");
   });
 
   test("ignores disabled overrides when building prompts", () => {

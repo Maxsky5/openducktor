@@ -392,9 +392,6 @@ const resolveTemplate = ({
   const override = overrideEntry && overrideEntry.enabled !== false ? overrideEntry : undefined;
   const source = override ? "override" : "builtin";
   const template = (override?.template ?? definition.template).trim();
-  if (template.length === 0) {
-    throw new Error(`Prompt template "${templateId}" is empty.`);
-  }
 
   const { placeholders, unsupportedPlaceholders } = validatePromptTemplatePlaceholders(template);
   if (unsupportedPlaceholders.length > 0) {
