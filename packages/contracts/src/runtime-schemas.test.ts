@@ -171,6 +171,7 @@ describe("runtime schemas", () => {
         "kickoff.spec_initial": {
           template: "Custom kickoff for {{task.id}}",
           baseVersion: 1,
+          enabled: false,
         },
       },
     });
@@ -179,6 +180,26 @@ describe("runtime schemas", () => {
       "Custom kickoff for {{task.id}}",
     );
     expect(parsed.promptOverrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
+    expect(parsed.promptOverrides["kickoff.spec_initial"]?.enabled).toBe(false);
+  });
+
+  test("repo config allows empty prompt override templates", () => {
+    const parsed = repoConfigSchema.parse({
+      worktreeBasePath: "/tmp/wt",
+      branchPrefix: "obp",
+      trustedHooks: false,
+      hooks: { preStart: [], postComplete: [] },
+      promptOverrides: {
+        "system.shared.workflow_guards": {
+          template: "",
+          baseVersion: 1,
+          enabled: true,
+        },
+      },
+    });
+
+    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.template).toBe("");
+    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.enabled).toBe(true);
   });
 
   test("repo config normalizes null agent default fields and entries", () => {

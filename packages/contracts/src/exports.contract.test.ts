@@ -48,6 +48,7 @@ import type {
   RunState,
   RunSummary,
   RuntimeCheck,
+  SettingsSnapshot,
   SoftGuardrails,
   SystemCheck,
   TaskAction,
@@ -78,6 +79,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRuntimeSummarySchema",
   "agentRuntimeSummaryRoleSchema",
   "agentPromptOverrideSchema",
+  "agentPromptPlaceholderSchema",
+  "agentPromptPlaceholderValues",
   "agentPromptTemplateIdSchema",
   "agentPromptTemplateIdValues",
   "agentSessionModelSelectionSchema",
@@ -95,6 +98,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitPullBranchRequestSchema",
   "gitPullBranchResultSchema",
   "defaultSpecTemplateMarkdown",
+  "extractPromptTemplatePlaceholders",
   "fileDiffSchema",
   "fileStatusSchema",
   "gitFileStatusCountsSchema",
@@ -121,6 +125,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runSummarySchema",
   "runtimeCheckSchema",
   "softGuardrailsSchema",
+  "settingsSnapshotSchema",
   "specTemplateSections",
   "systemCheckSchema",
   "taskActionSchema",
@@ -132,6 +137,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskPrioritySchema",
   "taskStatusSchema",
   "taskUpdatePatchSchema",
+  "validatePromptTemplatePlaceholders",
   "validateSpecMarkdown",
   "workspaceRecordSchema",
 ] as const;
@@ -186,6 +192,7 @@ type ExportedTypeContract = {
   RunSummary: RunSummary;
   RuntimeCheck: RuntimeCheck;
   SoftGuardrails: SoftGuardrails;
+  SettingsSnapshot: SettingsSnapshot;
   SystemCheck: SystemCheck;
   TaskAction: TaskAction;
   TaskCard: TaskCard;

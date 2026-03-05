@@ -20,6 +20,8 @@ const WORKSPACE_METHODS = [
   "workspaceSaveRepoSettings",
   "workspaceUpdateRepoHooks",
   "workspaceGetRepoConfig",
+  "workspaceGetSettingsSnapshot",
+  "workspaceSaveSettingsSnapshot",
   "workspacePrepareTrustedHooksChallenge",
   "workspaceSetTrustedHooks",
   "getTheme",

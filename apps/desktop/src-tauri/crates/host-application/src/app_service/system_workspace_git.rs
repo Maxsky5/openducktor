@@ -8,8 +8,9 @@ use host_domain::{
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
-    RepoConfig,
+    PromptOverrides, RepoConfig,
 };
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -188,6 +189,34 @@ impl AppService {
         repo_path: &str,
     ) -> Result<Option<RepoConfig>> {
         self.config_store.repo_config_optional(repo_path)
+    }
+
+    pub fn workspace_get_settings_snapshot(
+        &self,
+    ) -> Result<(HashMap<String, RepoConfig>, PromptOverrides)> {
+        let config = self.config_store.load()?;
+        Ok((config.repos, config.global_prompt_overrides))
+    }
+
+    pub fn workspace_save_settings_snapshot(
+        &self,
+        repos: HashMap<String, RepoConfig>,
+        global_prompt_overrides: PromptOverrides,
+    ) -> Result<()> {
+        let mut config = self.config_store.load()?;
+        for repo_path in repos.keys() {
+            if !config.repos.contains_key(repo_path) {
+                return Err(anyhow!(
+                    "Workspace not found in config: {repo_path}. Add/select the workspace before updating configuration."
+                ));
+            }
+        }
+
+        config.global_prompt_overrides = global_prompt_overrides;
+        for (repo_path, repo_config) in repos {
+            config.repos.insert(repo_path, repo_config);
+        }
+        self.config_store.save(&config)
     }
 
     pub fn workspace_set_trusted_hooks(

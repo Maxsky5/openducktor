@@ -1,17 +1,16 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import {
-  AGENT_ROLE_TOOL_POLICY,
-  type AgentRole,
-  type AgentToolName,
-  buildRoleScopedOdtToolSelection,
-  resolveOdtWorkflowToolNameForAuthorization,
-} from "@openducktor/core";
+import { type AgentRole, buildRoleScopedOdtToolSelection } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
 import { toToolIdList } from "./payload-mappers";
 
 const TRUSTED_ODT_MCP_SERVER_NAME = "openducktor";
 const CONNECTED_MCP_SERVER_STATUSES = new Set(["connected"]);
+
+type ModelScopedToolInput = {
+  providerId: string;
+  modelId: string;
+};
 
 const assertTrustedOdtMcpServerConnected = async (input: {
   client: OpencodeClient;
@@ -58,44 +57,93 @@ const assertTrustedOdtMcpServerConnected = async (input: {
   );
 };
 
+const toModelScopedToolIds = (payload: unknown): string[] => {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  const toolIds: string[] = [];
+  for (const entry of payload) {
+    const toolId = readStringProp(entry, ["id"]);
+    if (!toolId) {
+      continue;
+    }
+    const trimmedToolId = toolId.trim();
+    if (trimmedToolId.length === 0 || trimmedToolId === "invalid") {
+      continue;
+    }
+    toolIds.push(trimmedToolId);
+  }
+
+  return toolIds;
+};
+
+const listModelScopedToolIds = async (input: {
+  client: OpencodeClient;
+  workingDirectory: string;
+  model?: ModelScopedToolInput;
+}): Promise<string[]> => {
+  const providerId = input.model?.providerId.trim();
+  const modelId = input.model?.modelId.trim();
+  if (!providerId || !modelId) {
+    return [];
+  }
+
+  const toolApi = (input.client as { tool?: { list?: unknown } }).tool;
+  if (!toolApi || typeof toolApi.list !== "function") {
+    return [];
+  }
+
+  const response = await (
+    toolApi.list as (args: {
+      directory: string;
+      provider: string;
+      model: string;
+    }) => Promise<unknown>
+  )({
+    directory: input.workingDirectory,
+    provider: providerId,
+    model: modelId,
+  });
+
+  return toModelScopedToolIds(
+    unwrapData(
+      response as { data?: unknown; error?: { message?: string } | unknown },
+      "list model-scoped tool ids for role policy",
+    ),
+  );
+};
+
 export const resolveWorkflowToolSelection = async (input: {
   client: OpencodeClient;
   role: AgentRole;
   workingDirectory: string;
+  model?: ModelScopedToolInput;
 }): Promise<Record<string, boolean>> => {
-  const response = await input.client.tool.ids({
-    directory: input.workingDirectory,
-  });
-  const runtimeToolIds = toToolIdList(unwrapData(response, "list tool ids for role policy"));
-  if (runtimeToolIds.length === 0) {
-    throw new Error("ODT workflow tools unavailable: runtime tool ID list is empty.");
-  }
-
   await assertTrustedOdtMcpServerConnected({
     client: input.client,
     workingDirectory: input.workingDirectory,
   });
 
-  const discoveredTrustedTools = new Set<AgentToolName>();
-  for (const runtimeToolId of runtimeToolIds) {
-    const normalizedTool = resolveOdtWorkflowToolNameForAuthorization(runtimeToolId);
-    if (normalizedTool) {
-      discoveredTrustedTools.add(normalizedTool);
-    }
-  }
-  const missingRequiredTools = AGENT_ROLE_TOOL_POLICY[input.role].filter(
-    (tool) => !discoveredTrustedTools.has(tool),
+  const response = await input.client.tool.ids({
+    directory: input.workingDirectory,
+  });
+  const runtimeToolIdsFromDiscovery = toToolIdList(
+    unwrapData(response, "list global tool ids for role policy"),
   );
-  if (missingRequiredTools.length > 0) {
-    throw new Error(
-      `ODT workflow tools unavailable: missing trusted runtime tool IDs for role "${input.role}": ${missingRequiredTools.join(
-        ", ",
-      )}.`,
-    );
-  }
+  const runtimeToolIdsFromModelScope = await listModelScopedToolIds({
+    client: input.client,
+    workingDirectory: input.workingDirectory,
+    ...(input.model ? { model: input.model } : {}),
+  });
+  const runtimeToolIds = Array.from(
+    new Set([...runtimeToolIdsFromDiscovery, ...runtimeToolIdsFromModelScope]),
+  );
 
-  return buildRoleScopedOdtToolSelection(input.role, {
-    includeCanonicalDefaults: false,
+  const selection = buildRoleScopedOdtToolSelection(input.role, {
+    includeCanonicalDefaults: true,
     runtimeToolIds,
   });
+
+  return selection;
 };

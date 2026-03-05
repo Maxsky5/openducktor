@@ -4,7 +4,7 @@ use host_application::{AppService, RunEmitter};
 use host_domain::TaskStatus;
 use host_domain::{RunEvent, TASK_METADATA_NAMESPACE};
 use host_infra_beads::BeadsTaskStore;
-use host_infra_system::AppConfigStore;
+use host_infra_system::{AppConfigStore, RuntimeConfigStore};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -119,6 +119,7 @@ struct RepoConfigPayload {
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
     default_target_branch: Option<String>,
+    worktree_file_copies: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
 }
@@ -131,8 +132,23 @@ struct RepoSettingsPayload {
     default_target_branch: Option<String>,
     trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
+    worktree_file_copies: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsSnapshotPayload {
+    repos: HashMap<String, host_infra_system::RepoConfig>,
+    global_prompt_overrides: host_infra_system::PromptOverrides,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsSnapshotResponsePayload {
+    repos: HashMap<String, host_infra_system::RepoConfig>,
+    global_prompt_overrides: host_infra_system::PromptOverrides,
 }
 
 fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
@@ -149,11 +165,20 @@ where
         .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
 
-fn validate_startup_config(config_store: &AppConfigStore) -> anyhow::Result<()> {
+fn validate_startup_config(
+    config_store: &AppConfigStore,
+    runtime_config_store: &RuntimeConfigStore,
+) -> anyhow::Result<()> {
     config_store.load().with_context(|| {
         format!(
             "Failed loading startup config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
             config_store.path().display()
+        )
+    })?;
+    runtime_config_store.load().with_context(|| {
+        format!(
+            "Failed loading OpenCode runtime config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
+            runtime_config_store.path().display()
         )
     })?;
     Ok(())
@@ -170,7 +195,8 @@ fn startup_phase_tracing() {
 
 fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService>> {
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
-    validate_startup_config(&config_store)?;
+    let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
+    validate_startup_config(&config_store, &runtime_config_store)?;
     let task_store = Arc::new(BeadsTaskStore::with_metadata_namespace(
         TASK_METADATA_NAMESPACE,
     ));
@@ -217,6 +243,8 @@ fn startup_phase_command_registration(
         workspace_update_repo_hooks,
         workspace_prepare_trusted_hooks_challenge,
         workspace_get_repo_config,
+        workspace_get_settings_snapshot,
+        workspace_save_settings_snapshot,
         workspace_set_trusted_hooks,
         git_get_branches,
         git_get_current_branch,
@@ -332,10 +360,13 @@ mod tests {
         let root = unique_temp_path("startup-config-valid");
         let config_path = root.join("config.json");
         let config_store = AppConfigStore::from_path(config_path);
+        let runtime_store = RuntimeConfigStore::from_user_settings_store(&config_store);
         let config = host_infra_system::GlobalConfig::default();
+        let runtime_config = host_infra_system::RuntimeConfig::default();
         config_store.save(&config)?;
+        runtime_store.save(&runtime_config)?;
 
-        validate_startup_config(&config_store)?;
+        validate_startup_config(&config_store, &runtime_store)?;
         let _ = fs::remove_dir_all(root);
         Ok(())
     }
@@ -348,7 +379,8 @@ mod tests {
         fs::write(&config_path, "{ invalid json")?;
 
         let config_store = AppConfigStore::from_path(config_path.clone());
-        let error = validate_startup_config(&config_store)
+        let runtime_store = RuntimeConfigStore::from_user_settings_store(&config_store);
+        let error = validate_startup_config(&config_store, &runtime_store)
             .expect_err("invalid config should fail startup config validation");
         let message = format!("{error:#}");
 
@@ -369,6 +401,44 @@ mod tests {
             message.contains("Failed parsing config file"),
             "error should preserve parse failure context: {message}"
         );
+        let _ = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn validate_startup_config_returns_actionable_error_on_runtime_config_failure(
+    ) -> anyhow::Result<()> {
+        let root = unique_temp_path("runtime-config-invalid");
+        let config_store = AppConfigStore::from_path(root.join("config.json"));
+        config_store.save(&host_infra_system::GlobalConfig::default())?;
+
+        let runtime_path = root.join("runtime-config.json");
+        fs::create_dir_all(&root)?;
+        fs::write(&runtime_path, "{ invalid json")?;
+        let runtime_store = RuntimeConfigStore::from_user_settings_store(&config_store);
+
+        let error = validate_startup_config(&config_store, &runtime_store)
+            .expect_err("invalid runtime config should fail startup config validation");
+        let message = format!("{error:#}");
+
+        assert!(
+            message.contains(&format!(
+                "Failed loading OpenCode runtime config from {}",
+                runtime_path.display()
+            )),
+            "error should include runtime config path and startup context: {message}"
+        );
+        assert!(
+            message.contains(
+                "Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults"
+            ),
+            "error should include recovery instruction: {message}"
+        );
+        assert!(
+            message.contains("Failed parsing config file"),
+            "error should preserve parse failure context: {message}"
+        );
+
         let _ = fs::remove_dir_all(root);
         Ok(())
     }

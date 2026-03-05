@@ -295,8 +295,11 @@ export const RegularToolMessage = ({
             Questions and answers
           </summary>
           <div className="space-y-2 border-t border-border px-2 py-2 text-xs text-foreground">
-            {questionDetails.map((entry, index) => (
-              <div key={`${meta.callId}:question:${index}`} className="space-y-0.5">
+            {questionDetails.map((entry) => (
+              <div
+                key={`${meta.callId}:question:${entry.prompt}:${entry.answers.join("|")}`}
+                className="space-y-0.5"
+              >
                 <p className="font-medium text-foreground">{entry.prompt}</p>
                 <p
                   className={cn(

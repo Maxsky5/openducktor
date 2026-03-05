@@ -4,6 +4,7 @@ export {
   createHostOpencodeCatalogOperations,
   loadRepoOpencodeCatalog,
 } from "./opencode-catalog";
+export { loadRepoBranches } from "./repo-branches";
 export { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 export { useChecks } from "./use-checks";
 export { useDelegationOperations } from "./use-delegation-operations";

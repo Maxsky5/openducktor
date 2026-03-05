@@ -1,12 +1,19 @@
-export type { RepoDefaultRole } from "./settings-modal-model";
+export type { PromptOverrideValidationErrors, RepoDefaultRole } from "./settings-modal-model";
 export {
+  buildPromptOverrideValidationErrors,
+  canResetPromptOverrideToBuiltin,
   clearRoleDefault,
   ensureAgentDefault,
   findCatalogModel,
   getMissingRequiredRoleLabels,
   ROLE_DEFAULTS,
+  removePromptOverride,
+  resetPromptOverrideToBuiltin,
+  resolvePromptOverrideFallbackTemplate,
   selectedModelKeyForRole,
+  togglePromptOverrideEnabled,
   toRoleVariantOptions,
+  updatePromptOverrideTemplate,
   updateRoleDefault,
 } from "./settings-modal-model";
 export {

@@ -107,7 +107,7 @@ impl AppService {
                 run_parsed_hook_command_allow_failure(hook.as_str(), Path::new(&run.worktree_path));
 
             if !ok {
-                self.apply_blocked_transition(run, "Post-complete hook failed", false)?;
+                self.apply_blocked_transition(run, "Worktree cleanup script failed", false)?;
                 self.emit_cleanup_events(
                     emitter,
                     run_id,
@@ -189,19 +189,19 @@ impl AppService {
             },
             CleanupEvent::PostHookStarted { hook } => RunEvent::PostHookStarted {
                 run_id: run_id.to_string(),
-                message: format!("Running post-complete hook: {hook}"),
+                message: format!("Running worktree cleanup script command: {hook}"),
                 timestamp: now_rfc3339(),
             },
             CleanupEvent::PostHookFailed { hook, stderr } => RunEvent::PostHookFailed {
                 run_id: run_id.to_string(),
-                message: format!("Post-complete hook failed: {hook}\n{stderr}"),
+                message: format!("Worktree cleanup script command failed: {hook}\n{stderr}"),
                 timestamp: now_rfc3339(),
             },
             CleanupEvent::ReadyForReview { review_label } => {
                 RunEvent::ReadyForManualDoneConfirmation {
                     run_id: run_id.to_string(),
                     message: format!(
-                        "Post-complete hooks passed. Transitioning to {review_label}."
+                        "Worktree cleanup script passed. Transitioning to {review_label}."
                     ),
                     timestamp: now_rfc3339(),
                 }

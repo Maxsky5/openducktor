@@ -5,6 +5,7 @@ import type {
   RunEvent,
   RunSummary,
   RuntimeCheck,
+  SettingsSnapshot,
   TaskCard,
   TaskCreateInput,
   TaskStatus,
@@ -30,10 +31,6 @@ export type RepoSettingsInput = {
   trustedHooks: boolean;
   preStartHooks: string[];
   postCompleteHooks: string[];
-  /** Script executed after `git worktree add` (e.g., "bun install && cp .env.example .env"). */
-  worktreeSetupScript: string;
-  /** Script executed before `git worktree remove`. */
-  worktreeCleanupScript: string;
   /** Files copied from the main repo into a new worktree on creation. */
   worktreeFileCopies: string[];
   agentDefaults: {
@@ -59,6 +56,8 @@ export type WorkspaceStateContextValue = {
   switchBranch: (branchName: string) => Promise<void>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
+  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
 export type ChecksStateContextValue = {

@@ -62,8 +62,6 @@ const createRepoSettings = (
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
-  worktreeSetupScript: "",
-  worktreeCleanupScript: "",
   worktreeFileCopies: [],
   agentDefaults: {
     spec: {

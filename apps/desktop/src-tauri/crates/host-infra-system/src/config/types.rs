@@ -68,9 +68,15 @@ pub struct AgentDefaults {
 pub struct PromptOverride {
     pub template: String,
     pub base_version: u32,
+    #[serde(default = "default_prompt_override_enabled")]
+    pub enabled: bool,
 }
 
 pub type PromptOverrides = HashMap<String, PromptOverride>;
+
+const fn default_prompt_override_enabled() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +92,8 @@ pub struct RepoConfig {
     pub trusted_hooks_fingerprint: Option<String>,
     #[serde(default)]
     pub hooks: HookSet,
+    #[serde(default)]
+    pub worktree_file_copies: Vec<String>,
     #[serde(default)]
     pub prompt_overrides: PromptOverrides,
     #[serde(default)]
@@ -109,6 +117,7 @@ impl Default for RepoConfig {
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: PromptOverrides::default(),
             agent_defaults: AgentDefaults::default(),
         }
@@ -208,13 +217,11 @@ pub struct GlobalConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
-    pub opencode_startup: OpencodeStartupReadinessConfig,
+    pub global_prompt_overrides: PromptOverrides,
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
     #[serde(default)]
     pub recent_repos: Vec<String>,
-    #[serde(default)]
-    pub scheduler: SchedulerConfig,
 }
 
 impl Default for GlobalConfig {
@@ -223,9 +230,28 @@ impl Default for GlobalConfig {
             version: 1,
             active_repo: None,
             theme: default_theme(),
-            opencode_startup: OpencodeStartupReadinessConfig::default(),
+            global_prompt_overrides: PromptOverrides::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfig {
+    pub version: u8,
+    #[serde(default)]
+    pub opencode_startup: OpencodeStartupReadinessConfig,
+    #[serde(default)]
+    pub scheduler: SchedulerConfig,
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            opencode_startup: OpencodeStartupReadinessConfig::default(),
             scheduler: SchedulerConfig::default(),
         }
     }

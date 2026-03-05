@@ -1,8 +1,6 @@
 use super::migrate::{canonicalize_workspace_key, migrate_repos_to_canonical_keys};
-use super::normalize::{normalize_global_config, normalize_repo_config};
-use super::types::{
-    hook_set_fingerprint, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
-};
+use super::normalize::{normalize_global_config, normalize_repo_config, normalize_runtime_config};
+use super::types::{hook_set_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
 use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
 use std::fs;
@@ -17,6 +15,19 @@ pub struct AppConfigStore {
     pub(super) path: PathBuf,
 }
 
+#[derive(Debug, Clone)]
+pub struct RuntimeConfigStore {
+    pub(super) path: PathBuf,
+}
+
+const USER_SETTINGS_FILENAME: &str = "config.json";
+const RUNTIME_SETTINGS_FILENAME: &str = "runtime-config.json";
+
+fn resolve_default_path(file_name: &str) -> Result<PathBuf> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
+    Ok(home.join(".openducktor").join(file_name))
+}
+
 impl Default for AppConfigStore {
     fn default() -> Self {
         Self::new().expect("failed to initialize config store")
@@ -25,10 +36,9 @@ impl Default for AppConfigStore {
 
 impl AppConfigStore {
     pub fn new() -> Result<Self> {
-        let home =
-            dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
-        let path = home.join(".openducktor").join("config.json");
-        Ok(Self { path })
+        Ok(Self {
+            path: resolve_default_path(USER_SETTINGS_FILENAME)?,
+        })
     }
 
     pub fn from_path(path: PathBuf) -> Self {
@@ -86,10 +96,6 @@ impl AppConfigStore {
         parsed.recent_repos = canonical_recent;
 
         Ok(parsed)
-    }
-
-    pub fn opencode_startup_readiness(&self) -> Result<OpencodeStartupReadinessConfig> {
-        Ok(self.load()?.opencode_startup)
     }
 
     pub fn save(&self, config: &GlobalConfig) -> Result<()> {
@@ -320,6 +326,64 @@ impl AppConfigStore {
         let mut config = self.load()?;
         config.theme = theme.to_string();
         self.save(&config)
+    }
+}
+
+impl Default for RuntimeConfigStore {
+    fn default() -> Self {
+        Self::new().expect("failed to initialize runtime config store")
+    }
+}
+
+impl RuntimeConfigStore {
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            path: resolve_default_path(RUNTIME_SETTINGS_FILENAME)?,
+        })
+    }
+
+    pub fn from_path(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub fn from_user_settings_store(config_store: &AppConfigStore) -> Self {
+        let runtime_path = config_store
+            .path
+            .parent()
+            .map_or_else(PathBuf::new, Path::to_path_buf)
+            .join(RUNTIME_SETTINGS_FILENAME);
+        Self { path: runtime_path }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn load(&self) -> Result<RuntimeConfig> {
+        if !self.path.exists() {
+            return Ok(RuntimeConfig::default());
+        }
+
+        let data = fs::read_to_string(&self.path)
+            .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
+        let mut parsed: RuntimeConfig = serde_json::from_str(&data)
+            .with_context(|| format!("Failed parsing config file {}", self.path.display()))?;
+        normalize_runtime_config(&mut parsed);
+        Ok(parsed)
+    }
+
+    pub fn save(&self, config: &RuntimeConfig) -> Result<()> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed creating config directory {}", parent.display())
+            })?;
+        }
+        let mut normalized = config.clone();
+        normalize_runtime_config(&mut normalized);
+        let payload = serde_json::to_string_pretty(&normalized)?;
+        fs::write(&self.path, payload)
+            .with_context(|| format!("Failed writing config file {}", self.path.display()))?;
+        Ok(())
     }
 }
 

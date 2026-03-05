@@ -3,7 +3,7 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
-import { host } from "../../state/operations/host";
+import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { kickoffPromptForScenario } from "./agents-page-constants";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import { useAgentStudioFreshSessionCreation } from "./use-agent-studio-fresh-session-creation";
@@ -126,9 +126,7 @@ export function useAgentStudioSessionStartFlow({
       return;
     }
 
-    const promptOverrides = activeRepo
-      ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
-      : undefined;
+    const promptOverrides = activeRepo ? await loadEffectivePromptOverrides(activeRepo) : undefined;
     await sendAgentMessage(
       sessionId,
       kickoffPromptForScenario(role, scenario, taskId, {

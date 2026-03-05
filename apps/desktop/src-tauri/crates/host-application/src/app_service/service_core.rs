@@ -9,6 +9,7 @@ pub struct AppService {
     pub(super) task_store: Arc<dyn TaskStore>,
     pub(super) git_port: Arc<dyn GitPort>,
     pub(super) config_store: AppConfigStore,
+    pub(super) runtime_config_store: RuntimeConfigStore,
     pub(super) runs: Arc<Mutex<HashMap<String, RunProcess>>>,
     pub(super) agent_runtimes: Arc<Mutex<HashMap<String, AgentRuntimeProcess>>>,
     pub(super) tracked_opencode_processes: Arc<Mutex<HashMap<u32, usize>>>,
@@ -76,12 +77,14 @@ impl AppService {
         git_port: Arc<dyn GitPort>,
         enforce_repo_allowlist: bool,
     ) -> Self {
+        let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
         let opencode_process_registry_path = Self::opencode_process_registry_path(&config_store);
         let instance_pid = std::process::id();
         let service = Self {
             task_store,
             git_port,
             config_store,
+            runtime_config_store,
             runs: Arc::new(Mutex::new(HashMap::new())),
             agent_runtimes: Arc::new(Mutex::new(HashMap::new())),
             tracked_opencode_processes: Arc::new(Mutex::new(HashMap::new())),

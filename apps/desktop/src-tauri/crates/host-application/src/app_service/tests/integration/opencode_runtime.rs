@@ -200,6 +200,7 @@ fn opencode_runtime_start_supports_spec_and_qa_roles() -> Result<()> {
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
@@ -313,6 +314,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
@@ -336,6 +338,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
                 pre_start: vec!["echo pre-hook".to_string()],
                 post_complete: Vec::new(),
             },
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
@@ -345,7 +348,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
         .expect_err("qa runtime should reject untrusted hooks");
     assert!(trust_error
         .to_string()
-        .contains("Hooks are configured but not trusted"));
+        .contains("Scripts are configured but not trusted"));
 
     service.workspace_update_repo_config(
         repo_path.as_str(),
@@ -356,6 +359,7 @@ fn opencode_runtime_start_qa_validates_config_and_existing_worktree_path() -> Re
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
@@ -404,6 +408,7 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
             trusted_hooks: true,
             trusted_hooks_fingerprint: Some(hook_set_fingerprint(&pre_start_cleanup_failure_hooks)),
             hooks: pre_start_cleanup_failure_hooks,
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
@@ -413,7 +418,7 @@ fn opencode_runtime_start_surfaces_qa_pre_start_cleanup_failure() -> Result<()> 
         .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
         .expect_err("cleanup failure should be surfaced when pre-start hook fails");
     let message = error.to_string();
-    assert!(message.contains("QA pre-start hook failed"));
+    assert!(message.contains("QA worktree setup script command failed"));
     assert!(message.contains("Failed removing QA worktree runtime"));
 
     let _ = fs::remove_dir_all(root);
@@ -454,6 +459,7 @@ fn opencode_runtime_start_surfaces_cleanup_failure_after_startup_error() -> Resu
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
@@ -500,6 +506,7 @@ fn opencode_runtime_start_fails_on_invalid_startup_config_before_qa_worktree_set
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },
@@ -729,6 +736,7 @@ fn opencode_runtime_start_cleans_up_qa_worktree_when_tracking_fails() -> Result<
             trusted_hooks: true,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
             prompt_overrides: Default::default(),
             agent_defaults: Default::default(),
         },

@@ -135,13 +135,13 @@ impl AppService {
                     prerequisites.repo_path.as_str(),
                     task_id,
                     TaskStatus::Blocked,
-                    Some("Pre-start hook failed"),
+                    Some("Worktree setup script failed"),
                 );
                 let cleanup_error = remove_worktree(repo_path_ref, worktree_dir)
                     .err()
                     .map(|error| error.to_string());
                 return Err(anyhow!(
-                    "Pre-start hook failed: {hook}\n{stderr}{}",
+                    "Worktree setup script command failed: {hook}\n{stderr}{}",
                     cleanup_error
                         .map(|error| format!("\nAlso failed to remove worktree: {error}"))
                         .unwrap_or_default()

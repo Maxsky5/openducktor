@@ -7,7 +7,7 @@ import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
 } from "../../state/operations/agent-orchestrator/support/async-side-effects";
-import { host } from "../../state/operations/host";
+import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { kickoffPromptForScenario } from "./agents-page-constants";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -90,7 +90,7 @@ export function useAgentStudioFreshSessionCreation({
         "agent-studio-send-kickoff-message",
         (async () => {
           const promptOverrides = activeRepo
-            ? (await host.workspaceGetRepoConfig(activeRepo)).promptOverrides
+            ? await loadEffectivePromptOverrides(activeRepo)
             : undefined;
           await sendAgentMessage(
             sessionId,

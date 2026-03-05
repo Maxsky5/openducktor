@@ -1,3 +1,4 @@
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback } from "react";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -12,6 +13,8 @@ type UseRepoSettingsOperationsArgs = {
 type UseRepoSettingsOperationsResult = {
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
+  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
 export function useRepoSettingsOperations({
@@ -77,8 +80,6 @@ export function useRepoSettingsOperations({
       trustedHooks: config.trustedHooks,
       preStartHooks: config.hooks.preStart,
       postCompleteHooks: config.hooks.postComplete,
-      worktreeSetupScript: config.worktreeSetupScript ?? "",
-      worktreeCleanupScript: config.worktreeCleanupScript ?? "",
       worktreeFileCopies: config.worktreeFileCopies ?? [],
       agentDefaults: {
         spec: toInputDefault(config.agentDefaults.spec),
@@ -116,8 +117,6 @@ export function useRepoSettingsOperations({
           preStart: input.preStartHooks,
           postComplete: input.postCompleteHooks,
         },
-        worktreeSetupScript: input.worktreeSetupScript.trim(),
-        worktreeCleanupScript: input.worktreeCleanupScript.trim(),
         worktreeFileCopies: input.worktreeFileCopies.map((f) => f.trim()).filter(Boolean),
         agentDefaults,
       });
@@ -127,8 +126,22 @@ export function useRepoSettingsOperations({
     [activeRepo, refreshWorkspaces, toConfigDefault],
   );
 
+  const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
+    return host.workspaceGetSettingsSnapshot();
+  }, []);
+
+  const saveSettingsSnapshot = useCallback(
+    async (snapshot: SettingsSnapshot): Promise<void> => {
+      await host.workspaceSaveSettingsSnapshot(snapshot);
+      await refreshWorkspaces();
+    },
+    [refreshWorkspaces],
+  );
+
   return {
     loadRepoSettings,
     saveRepoSettings,
+    loadSettingsSnapshot,
+    saveSettingsSnapshot,
   };
 }

@@ -23,6 +23,8 @@ export type SessionRecord = {
   workflowToolSelectionCache?: Record<string, boolean>;
   /** Timestamp when cache was last populated. */
   workflowToolSelectionCachedAt?: number;
+  /** Model key used to compute the cached workflow tool selection. */
+  workflowToolSelectionCacheModelKey?: string;
 };
 
 export type ClientFactory = (input: {

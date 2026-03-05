@@ -1,48 +1,25 @@
-import type { AgentModelCatalog } from "@openducktor/core";
 import { Settings2 } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import {
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents";
-import {
-  clearRoleDefault,
-  DEFAULT_BRANCH_PREFIX,
-  emptyRepoSettings,
-  ensureAgentDefault,
-  findCatalogModel,
-  getMissingRequiredRoleLabels,
-  parseHookLines,
-  ROLE_DEFAULTS,
-  selectedModelKeyForRole,
-  toHookText,
-  toRoleVariantOptions,
-  updateRoleDefault,
-} from "@/components/features/settings";
+import type { ReactElement } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { ComboboxOption } from "@/components/ui/combobox";
-import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { errorMessage } from "@/lib/errors";
-import { DEFAULT_TARGET_BRANCH } from "@/lib/target-branch";
 import { cn } from "@/lib/utils";
-import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-repo-settings";
-import { useWorkspaceState } from "@/state";
-import { loadRepoOpencodeCatalog } from "@/state/operations";
+import type {
+  PromptRoleTabId,
+  RepositorySectionId,
+  SettingsSectionId,
+} from "./settings-modal-constants";
+import { SettingsModalContent } from "./settings-modal-content";
+import { SettingsModalFooter } from "./settings-modal-footer";
+import { SettingsSidebar } from "./settings-modal-sidebars";
+import { useSettingsModalController } from "./use-settings-modal-controller";
 
 type SettingsModalProps = {
   triggerClassName?: string;
@@ -53,168 +30,28 @@ export function SettingsModal({
   triggerClassName,
   triggerSize = "sm",
 }: SettingsModalProps): ReactElement {
-  const { activeRepo, activeWorkspace, loadRepoSettings, saveRepoSettings } = useWorkspaceState();
   const [open, setOpen] = useState(false);
-  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
-  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [catalog, setCatalog] = useState<AgentModelCatalog | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [worktreeBasePath, setWorktreeBasePath] = useState("");
-  const [branchPrefix, setBranchPrefix] = useState(DEFAULT_BRANCH_PREFIX);
-  const [defaultTargetBranch, setDefaultTargetBranch] = useState(DEFAULT_TARGET_BRANCH);
-  const [trustedHooks, setTrustedHooks] = useState(false);
-  const [preStartHooks, setPreStartHooks] = useState("");
-  const [postCompleteHooks, setPostCompleteHooks] = useState("");
-  const [worktreeSetupScript, setWorktreeSetupScript] = useState("");
-  const [worktreeCleanupScript, setWorktreeCleanupScript] = useState("");
-  const [worktreeFileCopies, setWorktreeFileCopies] = useState<string[]>([]);
-  const [agentDefaults, setAgentDefaults] = useState(emptyRepoSettings().agentDefaults);
+  const [section, setSection] = useState<SettingsSectionId>("repositories");
+  const [repositorySection, setRepositorySection] = useState<RepositorySectionId>("configuration");
+  const [globalPromptRoleTab, setGlobalPromptRoleTab] = useState<PromptRoleTabId>("shared");
+  const [repoPromptRoleTab, setRepoPromptRoleTab] = useState<PromptRoleTabId>("shared");
 
-  const updateAgentDefault = (
-    role: "spec" | "planner" | "build" | "qa",
-    field: "providerId" | "modelId" | "variant" | "opencodeAgent",
-    value: string,
-  ): void => {
-    setAgentDefaults((current) => updateRoleDefault(current, role, field, value));
-  };
+  const controller = useSettingsModalController(open);
+  const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
 
-  const clearAgentDefault = (role: "spec" | "planner" | "build" | "qa"): void => {
-    setAgentDefaults((current) => clearRoleDefault(current, role));
-  };
-
-  useEffect(() => {
-    if (!open) {
-      setSaveError(null);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || !activeRepo) {
-      return;
-    }
-
-    let cancelled = false;
-    setCatalogError(null);
-    setCatalog(null);
-    setIsLoadingConfig(true);
-    setIsLoadingCatalog(true);
-    void Promise.allSettled([loadRepoSettings(), loadRepoOpencodeCatalog(activeRepo)])
-      .then(([settingsResult, catalogResult]) => {
-        if (cancelled) {
-          return;
-        }
-
-        if (settingsResult.status === "fulfilled") {
-          const settings = settingsResult.value;
-          setWorktreeBasePath(settings.worktreeBasePath);
-          setBranchPrefix(settings.branchPrefix);
-          setDefaultTargetBranch(settings.defaultTargetBranch);
-          setTrustedHooks(settings.trustedHooks);
-          setPreStartHooks(toHookText(settings.preStartHooks));
-          setPostCompleteHooks(toHookText(settings.postCompleteHooks));
-          setWorktreeSetupScript(settings.worktreeSetupScript);
-          setWorktreeCleanupScript(settings.worktreeCleanupScript);
-          setWorktreeFileCopies(settings.worktreeFileCopies);
-          setAgentDefaults(settings.agentDefaults);
-        } else {
-          const defaults = emptyRepoSettings();
-          setWorktreeBasePath(
-            activeWorkspace?.configuredWorktreeBasePath ?? defaults.worktreeBasePath,
-          );
-          setBranchPrefix(defaults.branchPrefix);
-          setDefaultTargetBranch(defaults.defaultTargetBranch);
-          setTrustedHooks(defaults.trustedHooks);
-          setPreStartHooks(toHookText(defaults.preStartHooks));
-          setPostCompleteHooks(toHookText(defaults.postCompleteHooks));
-          setWorktreeSetupScript(defaults.worktreeSetupScript);
-          setWorktreeCleanupScript(defaults.worktreeCleanupScript);
-          setWorktreeFileCopies(defaults.worktreeFileCopies);
-          setAgentDefaults(defaults.agentDefaults);
-        }
-
-        if (catalogResult.status === "fulfilled") {
-          setCatalog(catalogResult.value);
-        } else {
-          setCatalog(null);
-          setCatalogError(errorMessage(catalogResult.reason));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingConfig(false);
-          setIsLoadingCatalog(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRepo, activeWorkspace, loadRepoSettings, open]);
-
-  const modelOptions = useMemo<ComboboxOption[]>(() => {
-    return toModelOptions(catalog);
-  }, [catalog]);
-
-  const agentOptions = useMemo<ComboboxOption[]>(() => {
-    return toPrimaryAgentOptions(catalog);
-  }, [catalog]);
-
-  const modelGroups = useMemo(() => toModelGroupsByProvider(catalog), [catalog]);
-
-  const missingRequiredRoleLabels = useMemo(() => {
-    return getMissingRequiredRoleLabels(agentDefaults);
-  }, [agentDefaults]);
-
-  const canSaveRoleDefaults = missingRequiredRoleLabels.length === 0;
-
-  const submit = async (): Promise<void> => {
-    if (!canSaveRoleDefaults) {
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      await saveRepoSettings({
-        worktreeBasePath,
-        branchPrefix,
-        defaultTargetBranch,
-        trustedHooks,
-        preStartHooks: parseHookLines(preStartHooks),
-        postCompleteHooks: parseHookLines(postCompleteHooks),
-        worktreeSetupScript,
-        worktreeCleanupScript,
-        worktreeFileCopies,
-        agentDefaults,
-      });
-
-      if (typeof window !== "undefined" && activeRepo) {
-        window.dispatchEvent(
-          new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
-            detail: { repoPath: activeRepo },
-          }),
-        );
+  const handleSave = (): void => {
+    void controller.submit().then((saved) => {
+      if (saved) {
+        setOpen(false);
       }
-
-      setOpen(false);
-    } catch (error: unknown) {
-      const reason = errorMessage(error);
-      setSaveError(reason);
-      toast.error("Failed to save workspace settings", {
-        description: reason,
-      });
-    } finally {
-      setIsSaving(false);
-    }
+    });
   };
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && isSaving) {
+        if (!nextOpen && controller.isSaving) {
           return;
         }
         setOpen(nextOpen);
@@ -226,209 +63,53 @@ export function SettingsModal({
           Settings
         </Button>
       </DialogTrigger>
-      <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col p-0">
+
+      <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0">
         <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
-          <DialogTitle>Workspace Settings</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
-            Settings are stored in <code>~/.openducktor/config.json</code>.
+            Configure global defaults, repository settings, and prompt overrides.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-6 py-4">
-          {!activeRepo ? (
-            <div className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-surface-foreground">
-              Select or add a workspace first, then save settings for that repository.
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)]">
+            <SettingsSidebar
+              section={section}
+              disabled={isInteractionDisabled}
+              errorCountById={controller.settingsSectionErrorCountById}
+              onChange={setSection}
+            />
+            <div className="min-h-0 overflow-y-auto">
+              <SettingsModalContent
+                section={section}
+                repositorySection={repositorySection}
+                globalPromptRoleTab={globalPromptRoleTab}
+                repoPromptRoleTab={repoPromptRoleTab}
+                isInteractionDisabled={isInteractionDisabled}
+                controller={controller}
+                onRepositorySectionChange={setRepositorySection}
+                onGlobalPromptRoleTabChange={setGlobalPromptRoleTab}
+                onRepoPromptRoleTabChange={setRepoPromptRoleTab}
+              />
             </div>
-          ) : null}
-
-          {activeRepo ? (
-            <div className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Active repo: <code className="font-mono">{activeRepo}</code>
-            </div>
-          ) : null}
-
-          <div className="grid gap-2">
-            <Label htmlFor="worktree-path">Worktree base path</Label>
-            <Input
-              id="worktree-path"
-              placeholder="/absolute/path/outside/repo"
-              value={worktreeBasePath}
-              disabled={isLoadingConfig || isSaving}
-              onChange={(event) => setWorktreeBasePath(event.currentTarget.value)}
-            />
           </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="branch-prefix">Branch prefix</Label>
-            <Input
-              id="branch-prefix"
-              value={branchPrefix}
-              disabled={isLoadingConfig || isSaving}
-              onChange={(event) => setBranchPrefix(event.currentTarget.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="pre-hooks">Pre-start hooks (one command per line)</Label>
-            <Textarea
-              id="pre-hooks"
-              rows={4}
-              value={preStartHooks}
-              disabled={isLoadingConfig || isSaving}
-              onChange={(event) => setPreStartHooks(event.currentTarget.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="post-hooks">Post-complete hooks (one command per line)</Label>
-            <Textarea
-              id="post-hooks"
-              rows={4}
-              value={postCompleteHooks}
-              disabled={isLoadingConfig || isSaving}
-              onChange={(event) => setPostCompleteHooks(event.currentTarget.value)}
-            />
-          </div>
-
-          <div className="grid gap-3 rounded-md border border-border bg-muted p-3">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Agent Defaults (Per Role)</h3>
-              <p className="text-xs text-muted-foreground">
-                Required defaults applied when sessions start in this repository.
-              </p>
-            </div>
-            {isLoadingCatalog ? (
-              <p className="text-xs text-muted-foreground">
-                Loading available agents/models from OpenCode...
-              </p>
-            ) : null}
-            {catalogError ? (
-              <p className="text-xs text-warning-muted">
-                Failed to load OpenCode values: {catalogError}
-              </p>
-            ) : null}
-            {!isLoadingCatalog && !canSaveRoleDefaults ? (
-              <p className="text-xs text-destructive-muted">
-                Agent and model are required for: {missingRequiredRoleLabels.join(", ")}.
-              </p>
-            ) : null}
-
-            {ROLE_DEFAULTS.map(({ role, label }) => {
-              const value = ensureAgentDefault(agentDefaults[role]);
-              const roleVariantOptions = toRoleVariantOptions(catalog, agentDefaults, role);
-              const modelKey = selectedModelKeyForRole(agentDefaults, role);
-              return (
-                <div key={role} className="grid gap-2 rounded border border-border bg-card p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {label}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={isLoadingConfig || isSaving}
-                      onClick={() => clearAgentDefault(role)}
-                    >
-                      Clear
-                    </Button>
-                  </div>
-
-                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                    <div className="grid min-w-0 gap-1">
-                      <Label className="text-xs">Agent</Label>
-                      <Combobox
-                        value={value.opencodeAgent}
-                        options={agentOptions}
-                        placeholder={isLoadingCatalog ? "Loading agents..." : "Select agent"}
-                        disabled={isLoadingCatalog || isSaving || agentOptions.length === 0}
-                        onValueChange={(opencodeAgent) =>
-                          updateAgentDefault(role, "opencodeAgent", opencodeAgent)
-                        }
-                      />
-                    </div>
-                    <div className="grid min-w-0 gap-1">
-                      <Label className="text-xs">Model</Label>
-                      <Combobox
-                        value={modelKey}
-                        options={modelOptions}
-                        groups={modelGroups}
-                        placeholder={isLoadingCatalog ? "Loading models..." : "Select model"}
-                        disabled={isLoadingCatalog || isSaving || modelOptions.length === 0}
-                        onValueChange={(selectedModelKey) => {
-                          const model = findCatalogModel(catalog, selectedModelKey);
-                          if (!model) {
-                            return;
-                          }
-                          setAgentDefaults((current) => ({
-                            ...current,
-                            [role]: {
-                              ...ensureAgentDefault(current[role]),
-                              providerId: model.providerId,
-                              modelId: model.modelId,
-                              variant: model.variants[0] ?? "",
-                            },
-                          }));
-                        }}
-                      />
-                    </div>
-                    <div className="grid min-w-0 gap-1">
-                      <Label className="text-xs">Variant</Label>
-                      <Combobox
-                        value={value.variant}
-                        options={roleVariantOptions}
-                        placeholder={
-                          roleVariantOptions.length > 0 ? "Select variant" : "No variants for model"
-                        }
-                        disabled={
-                          isLoadingCatalog ||
-                          isSaving ||
-                          !modelKey ||
-                          roleVariantOptions.length === 0
-                        }
-                        onValueChange={(variant) => updateAgentDefault(role, "variant", variant)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <Label
-            htmlFor="trusted-hooks"
-            className="flex items-center gap-2 text-sm text-foreground"
-          >
-            <Switch
-              id="trusted-hooks"
-              checked={trustedHooks}
-              disabled={isLoadingConfig || isSaving}
-              onCheckedChange={setTrustedHooks}
-            />
-            Trust hooks for this workspace
-          </Label>
         </div>
 
-        <DialogFooter className="mt-0 shrink-0 items-center justify-between border-t border-border px-6 pb-6 pt-4">
-          {saveError ? <p className="text-sm text-destructive-muted">{saveError}</p> : <span />}
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setOpen(false)}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void submit()}
-              disabled={isSaving || isLoadingConfig || !activeRepo || !canSaveRoleDefaults}
-            >
-              {isSaving ? "Saving..." : "Save Settings"}
-            </Button>
-          </div>
-        </DialogFooter>
+        <SettingsModalFooter
+          isSaving={controller.isSaving}
+          isLoadingSettings={controller.isLoadingSettings}
+          hasPromptValidationErrors={controller.hasPromptValidationErrors}
+          settingsError={controller.settingsError}
+          saveError={controller.saveError}
+          catalogError={controller.catalogError}
+          section={section}
+          repositorySection={repositorySection}
+          promptValidationState={controller.promptValidationState}
+          hasSnapshotDraft={Boolean(controller.snapshotDraft)}
+          onCancel={() => setOpen(false)}
+          onSave={handleSave}
+        />
       </DialogContent>
     </Dialog>
   );

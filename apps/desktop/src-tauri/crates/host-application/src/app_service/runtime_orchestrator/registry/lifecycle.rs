@@ -35,8 +35,8 @@ impl AppService {
             started_at: now_rfc3339(),
         };
 
-        let mut runtimes =
-            self.lock_runtime_registry_for_attach(&mut spawned_server.child, cleanup_target.as_ref())?;
+        let mut runtimes = self
+            .lock_runtime_registry_for_attach(&mut spawned_server.child, cleanup_target.as_ref())?;
         if let Some(existing) = Self::apply_post_start_policy(
             &mut runtimes,
             post_start_policy,
@@ -96,7 +96,9 @@ impl AppService {
             return Err(prune_error);
         }
 
-        if let Some(existing) = Self::find_existing_runtime(runtimes, post_start_policy.existing_lookup) {
+        if let Some(existing) =
+            Self::find_existing_runtime(runtimes, post_start_policy.existing_lookup)
+        {
             if let Err(cleanup_error) = Self::cleanup_started_runtime(child, cleanup_target) {
                 return Err(anyhow!(
                     "Found existing runtime {} while finalizing {startup_scope} startup\nAlso failed to remove QA worktree: {cleanup_error}",

@@ -1,6 +1,6 @@
 use super::types::{
     default_branch_prefix, default_target_branch, hook_set_fingerprint, AgentModelDefault,
-    GlobalConfig, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig,
+    GlobalConfig, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RuntimeConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -52,12 +52,7 @@ fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
                 return None;
             }
 
-            let normalized_template = entry.template.trim();
-            if normalized_template.is_empty() {
-                return None;
-            }
-
-            entry.template = normalized_template.to_string();
+            entry.template = entry.template.trim().to_string();
             if entry.base_version == 0 {
                 entry.base_version = 1;
             }
@@ -89,6 +84,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     repo.default_target_branch = canonicalize_default_target_branch(&repo.default_target_branch);
     normalize_hook_commands(&mut repo.hooks.pre_start);
     normalize_hook_commands(&mut repo.hooks.post_complete);
+    normalize_hook_commands(&mut repo.worktree_file_copies);
     let current_fingerprint = hook_set_fingerprint(&repo.hooks);
     if repo.trusted_hooks {
         if repo.trusted_hooks_fingerprint.as_deref() != Some(current_fingerprint.as_str()) {
@@ -121,8 +117,12 @@ pub(super) fn normalize_opencode_startup_readiness_config(
 }
 
 pub(super) fn normalize_global_config(config: &mut GlobalConfig) {
-    normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
+    normalize_prompt_overrides(&mut config.global_prompt_overrides);
     for repo in config.repos.values_mut() {
         normalize_repo_config(repo);
     }
+}
+
+pub(super) fn normalize_runtime_config(config: &mut RuntimeConfig) {
+    normalize_opencode_startup_readiness_config(&mut config.opencode_startup);
 }

@@ -35,10 +35,11 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     clearActiveBeadsCheck,
   });
 
-  const { loadRepoSettings, saveRepoSettings } = useRepoSettingsOperations({
-    activeRepo,
-    refreshWorkspaces,
-  });
+  const { loadRepoSettings, saveRepoSettings, loadSettingsSnapshot, saveSettingsSnapshot } =
+    useRepoSettingsOperations({
+      activeRepo,
+      refreshWorkspaces,
+    });
 
   const activeWorkspace = useMemo(
     () => findActiveWorkspace(workspaces, activeRepo),
@@ -62,6 +63,8 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         switchBranch,
         loadRepoSettings,
         saveRepoSettings,
+        loadSettingsSnapshot,
+        saveSettingsSnapshot,
       }),
     [
       activeRepo,
@@ -73,8 +76,10 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       isSwitchingBranch,
       isSwitchingWorkspace,
       loadRepoSettings,
+      loadSettingsSnapshot,
       refreshBranches,
       saveRepoSettings,
+      saveSettingsSnapshot,
       selectWorkspace,
       switchBranch,
       workspaces,

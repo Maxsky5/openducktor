@@ -601,9 +601,9 @@ impl GitPort for FakeGitPort {
                 .count(),
         )
         .map_err(|_| anyhow!("staged file status count overflowed u32 in FakeGitPort"))?;
-        let unstaged = total.checked_sub(staged).ok_or_else(|| {
-            anyhow!("unstaged file status count underflowed in FakeGitPort")
-        })?;
+        let unstaged = total
+            .checked_sub(staged)
+            .ok_or_else(|| anyhow!("unstaged file status count underflowed in FakeGitPort"))?;
 
         Ok(GitWorktreeStatusSummaryData {
             current_branch: status_data.current_branch,

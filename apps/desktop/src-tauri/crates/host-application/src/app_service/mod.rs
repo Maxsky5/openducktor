@@ -4,7 +4,7 @@ use host_domain::{
     AgentRuntimeSummary, GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeRole, TaskCard,
     TaskStore,
 };
-use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig};
+use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig, RuntimeConfigStore};
 use serde::{Deserialize, Serialize};
 
 use std::collections::{BTreeMap, HashMap, HashSet};

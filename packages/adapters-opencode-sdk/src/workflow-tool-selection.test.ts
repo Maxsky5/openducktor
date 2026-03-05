@@ -4,7 +4,9 @@ import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
 const makeClient = (input: {
   toolIds?: unknown;
+  modelTools?: unknown;
   throwOnIds?: boolean;
+  throwOnList?: boolean;
   mcpStatusResponse?: unknown;
   throwOnMcpStatus?: boolean;
 }): OpencodeClient => {
@@ -16,6 +18,15 @@ const makeClient = (input: {
         }
         return {
           data: input.toolIds ?? [],
+          error: undefined,
+        };
+      },
+      list: async () => {
+        if (input.throwOnList) {
+          throw new Error("list-boom");
+        }
+        return {
+          data: input.modelTools ?? [],
           error: undefined,
         };
       },
@@ -51,7 +62,30 @@ describe("workflow-tool-selection", () => {
     expect(selection.openducktor_odt_read_task).toBe(true);
     expect(selection.openducktor_odt_set_spec).toBe(true);
     expect(selection.openducktor_odt_set_plan).toBe(false);
-    expect(selection.odt_read_task).toBeUndefined();
+    expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_set_spec).toBe(true);
+    expect(selection.odt_set_plan).toBe(false);
+  });
+
+  test("uses functions-prefixed runtime tool aliases when available", async () => {
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: [
+          "functions.openducktor_odt_read_task",
+          "functions.openducktor_odt_set_spec",
+          "functions.openducktor_odt_set_plan",
+        ],
+      }),
+      role: "spec",
+      workingDirectory: "/repo",
+    });
+
+    expect(selection["functions.openducktor_odt_read_task"]).toBe(true);
+    expect(selection["functions.openducktor_odt_set_spec"]).toBe(true);
+    expect(selection["functions.openducktor_odt_set_plan"]).toBe(false);
+    expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_set_spec).toBe(true);
+    expect(selection.odt_set_plan).toBe(false);
   });
 
   test("accepts exact canonical runtime tool ids", async () => {
@@ -68,6 +102,32 @@ describe("workflow-tool-selection", () => {
     expect(selection.odt_set_plan).toBe(false);
   });
 
+  test("uses model-scoped tool ids when global ids miss ODT tools", async () => {
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: ["bash", "read", "glob"],
+        modelTools: [
+          { id: "openducktor_odt_read_task" },
+          { id: "openducktor_odt_set_spec" },
+          { id: "openducktor_odt_set_plan" },
+        ],
+      }),
+      role: "spec",
+      workingDirectory: "/repo",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    });
+
+    expect(selection.openducktor_odt_read_task).toBe(true);
+    expect(selection.openducktor_odt_set_spec).toBe(true);
+    expect(selection.openducktor_odt_set_plan).toBe(false);
+    expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_set_spec).toBe(true);
+    expect(selection.odt_set_plan).toBe(false);
+  });
+
   test("propagates tool discovery errors", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({ throwOnIds: true }),
@@ -77,6 +137,24 @@ describe("workflow-tool-selection", () => {
 
     expect(selection).toBeInstanceOf(Error);
     expect((selection as Error).message).toBe("boom");
+  });
+
+  test("propagates model-scoped tool discovery errors", async () => {
+    const selectionError = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: ["bash", "read", "glob"],
+        throwOnList: true,
+      }),
+      role: "spec",
+      workingDirectory: "/repo",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
+    }).catch((error: unknown) => error);
+
+    expect(selectionError).toBeInstanceOf(Error);
+    expect((selectionError as Error).message).toBe("list-boom");
   });
 
   test("throws actionable error when trusted MCP server is disconnected", async () => {
@@ -108,18 +186,18 @@ describe("workflow-tool-selection", () => {
     expect((selectionError as Error).message).toBe("mcp-down");
   });
 
-  test("throws actionable error when trusted runtime ids are missing for role tools", async () => {
-    const selectionError = await resolveWorkflowToolSelection({
+  test("keeps canonical trusted role tools when runtime discovery misses ODT ids", async () => {
+    const selection = await resolveWorkflowToolSelection({
       client: makeClient({
         toolIds: ["odt_read_task", "odt_set_plan"],
       }),
       role: "spec",
       workingDirectory: "/repo",
-    }).catch((error: unknown) => error);
+    });
 
-    expect(selectionError).toBeInstanceOf(Error);
-    expect((selectionError as Error).message).toContain("missing trusted runtime tool IDs");
-    expect((selectionError as Error).message).toContain("odt_set_spec");
+    expect(selection.odt_read_task).toBe(true);
+    expect(selection.odt_set_spec).toBe(true);
+    expect(selection.odt_set_plan).toBe(false);
   });
 
   test("ignores malformed or untrusted runtime aliases", async () => {
