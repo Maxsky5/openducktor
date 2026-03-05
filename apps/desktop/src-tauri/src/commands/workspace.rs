@@ -43,7 +43,9 @@ pub async fn workspace_select(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    as_error(state.service.workspace_select(&repo_path))
+    let selected = as_error(state.service.workspace_select(&repo_path))?;
+    super::git::invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
+    Ok(selected)
 }
 
 #[tauri::command]
