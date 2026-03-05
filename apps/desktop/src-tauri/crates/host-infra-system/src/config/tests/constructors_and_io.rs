@@ -3,6 +3,8 @@ use super::{
     TestStoreHarness,
 };
 use std::fs;
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
 #[test]
 fn save_and_load_report_io_and_parse_errors() {
@@ -11,7 +13,13 @@ fn save_and_load_report_io_and_parse_errors() {
     let root = harness.root();
 
     fs::create_dir_all(root).expect("temp root should exist");
+    #[cfg(unix)]
+    fs::set_permissions(root, Permissions::from_mode(0o700))
+        .expect("config root should be private");
     fs::write(store.path(), "{ invalid json").expect("invalid config should write");
+    #[cfg(unix)]
+    fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+        .expect("config file should be private");
     let parse_error = store.load().expect_err("invalid json should fail parsing");
     assert!(parse_error
         .to_string()
