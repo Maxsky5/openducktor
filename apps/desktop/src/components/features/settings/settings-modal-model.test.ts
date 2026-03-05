@@ -10,6 +10,7 @@ import {
   getMissingRequiredRoleLabels,
   removePromptOverride,
   resetPromptOverrideToBuiltin,
+  resolvePromptOverrideFallbackTemplate,
   selectedModelKeyForRole,
   togglePromptOverrideEnabled,
   toRoleVariantOptions,
@@ -211,6 +212,27 @@ describe("settings-modal-model", () => {
       baseVersion: 3,
       enabled: false,
     });
+  });
+
+  test("uses inherited template as fallback when creating a newly enabled override", () => {
+    const emptyOverrides: RepoPromptOverrides = {};
+    const created = togglePromptOverrideEnabled(
+      emptyOverrides,
+      "system.shared.workflow_guards",
+      true,
+      resolvePromptOverrideFallbackTemplate("global workflow guards", "builtin workflow guards"),
+      1,
+    );
+
+    expect(created["system.shared.workflow_guards"]).toEqual({
+      template: "global workflow guards",
+      baseVersion: 1,
+      enabled: true,
+    });
+  });
+
+  test("falls back to builtin template when inherited template is unavailable", () => {
+    expect(resolvePromptOverrideFallbackTemplate(undefined, "builtin")).toBe("builtin");
   });
 
   test("updates prompt override template without auto-enabling entries", () => {

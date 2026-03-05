@@ -11,7 +11,7 @@ export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(
   (tool) => tool !== "odt_read_task",
 );
 const ODT_WORKFLOW_MUTATION_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_MUTATION_TOOL_NAMES);
-const ODT_MCP_TOOL_PREFIXES = ["openducktor_"] as const;
+const ODT_MCP_TOOL_PREFIXES = ["openducktor_", "functions.openducktor_"] as const;
 
 const createOdtWorkflowRuntimeToolIdMap = (
   mapToolId: (toolId: string) => string,

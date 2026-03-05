@@ -4,7 +4,6 @@ import type {
   RepoPromptOverrides,
   SettingsSnapshot,
 } from "@openducktor/contracts";
-import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@/components/features/settings/settings-model";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 
@@ -13,24 +12,22 @@ const trimNonEmpty = (value: string): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const normalizePromptTemplate = (template: string): string => template.trim();
+
 export const normalizePromptOverridesForSave = (
   overrides: RepoPromptOverrides,
 ): RepoPromptOverrides => {
   const next: RepoPromptOverrides = {};
 
-  for (const templateId of agentPromptTemplateIdValues) {
-    const entry = overrides[templateId];
+  for (const [templateId, entry] of Object.entries(overrides) as Array<
+    [AgentPromptTemplateId, RepoPromptOverrides[AgentPromptTemplateId]]
+  >) {
     if (!entry) {
       continue;
     }
 
-    const template = trimNonEmpty(entry.template);
-    if (!template) {
-      continue;
-    }
-
     next[templateId] = {
-      template,
+      template: normalizePromptTemplate(entry.template),
       baseVersion: Math.max(1, Math.trunc(entry.baseVersion || 1)),
       enabled: entry.enabled !== false,
     };

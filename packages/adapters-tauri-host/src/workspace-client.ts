@@ -2,8 +2,8 @@ import {
   type RepoConfig,
   type RepoPromptOverrides,
   repoConfigSchema,
-  settingsSnapshotSchema,
   type SettingsSnapshot,
+  settingsSnapshotSchema,
   type WorkspaceRecord,
   workspaceRecordSchema,
 } from "@openducktor/contracts";

@@ -76,7 +76,7 @@ export const validatePromptTemplatePlaceholders = (template: string) => {
 };
 
 export const agentPromptOverrideSchema = z.object({
-  template: z.string().min(1),
+  template: z.string(),
   baseVersion: z.number().int().min(1),
   enabled: z.boolean().optional(),
 });

@@ -54,6 +54,7 @@ import type {
   OpencodeSdkAdapterOptions,
   SessionRecord,
 } from "./types";
+import { buildRoleScopedOdtPermissionRules } from "./workflow-tool-permissions";
 
 export class OpencodeSdkAdapter implements AgentEnginePort {
   private readonly sessions = new Map<string, SessionRecord>();
@@ -76,6 +77,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     const created = await client.session.create({
       directory: input.workingDirectory,
       title: `${input.role.toUpperCase()} ${input.taskId}`,
+      permission: buildRoleScopedOdtPermissionRules(input.role),
     });
     const createdData = unwrapData(created, "create session");
     const externalSessionId = createdData.id;

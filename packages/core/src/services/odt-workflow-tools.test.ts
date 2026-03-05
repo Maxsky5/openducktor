@@ -13,6 +13,7 @@ describe("odt workflow tools", () => {
     expect(normalizeOdtWorkflowToolName("odt_set_spec")).toBe("odt_set_spec");
     expect(normalizeOdtWorkflowToolName("OpenDucktor_ODT_SET_SPEC")).toBe("odt_set_spec");
     expect(normalizeOdtWorkflowToolName("  openducktor_odt_qa_rejected  ")).toBe("odt_qa_rejected");
+    expect(normalizeOdtWorkflowToolName("functions.openducktor_odt_set_spec")).toBe("odt_set_spec");
     expect(normalizeOdtWorkflowToolName("customprefix_odt_set_plan")).toBeNull();
     expect(normalizeOdtWorkflowToolName("customprefix_odt_")).toBeNull();
     expect(normalizeOdtWorkflowToolName("customprefix_odt_set_plan_extra")).toBeNull();
@@ -24,6 +25,7 @@ describe("odt workflow tools", () => {
   test("detects workflow tool ids", () => {
     expect(isOdtWorkflowToolName("odt_set_plan")).toBe(true);
     expect(isOdtWorkflowToolName("openducktor_odt_set_plan")).toBe(true);
+    expect(isOdtWorkflowToolName("functions.openducktor_odt_set_plan")).toBe(true);
     expect(isOdtWorkflowToolName("customprefix_odt_set_plan")).toBe(false);
     expect(isOdtWorkflowToolName("glob")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_set_plan")).toBe(true);
@@ -33,6 +35,9 @@ describe("odt workflow tools", () => {
   test("resolves trusted workflow tool ids for authorization with exact case-sensitive matching", () => {
     expect(resolveOdtWorkflowToolNameForAuthorization("odt_set_spec")).toBe("odt_set_spec");
     expect(resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_spec")).toBe(
+      "odt_set_spec",
+    );
+    expect(resolveOdtWorkflowToolNameForAuthorization("functions.openducktor_odt_set_spec")).toBe(
       "odt_set_spec",
     );
     expect(resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_spec_extra")).toBeNull();
@@ -55,6 +60,7 @@ describe("odt workflow tools", () => {
       includeCanonicalDefaults: false,
       runtimeToolIds: [
         "openducktor_odt_qa_approved",
+        "functions.openducktor_odt_qa_rejected",
         "OpenDucktor_ODT_QA_REJECTED",
         " customprefix_odt_set_spec ",
         " odt_read_task ",
@@ -62,6 +68,7 @@ describe("odt workflow tools", () => {
       ],
     });
     expect(selection.openducktor_odt_qa_approved).toBe(true);
+    expect(selection["functions.openducktor_odt_qa_rejected"]).toBe(true);
     expect(selection.odt_read_task).toBe(true);
     expect(selection.OpenDucktor_ODT_QA_REJECTED).toBeUndefined();
     expect(selection.customprefix_odt_set_spec).toBeUndefined();

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoConfig } from "@openducktor/contracts";
+import {
+  type AgentPromptTemplateId,
+  agentPromptTemplateIdValues,
+  type RepoConfig,
+  type RepoPromptOverrides,
+} from "@openducktor/contracts";
 import {
   normalizePromptOverridesForSave,
   normalizeRepoConfigForSave,
@@ -70,7 +75,66 @@ describe("settings-modal-normalization", () => {
         baseVersion: 1,
         enabled: true,
       },
+      "kickoff.qa_review": {
+        template: "",
+        baseVersion: 2,
+        enabled: true,
+      },
     });
+  });
+
+  test("preserves shared prompt override entries when normalizing for save", () => {
+    const normalized = normalizePromptOverridesForSave({
+      "system.shared.workflow_guards": {
+        template: "  guards override  ",
+        baseVersion: 3,
+        enabled: true,
+      },
+      "system.shared.tool_protocol": {
+        template: " protocol override ",
+        baseVersion: 4,
+        enabled: false,
+      },
+    });
+
+    expect(normalized).toEqual({
+      "system.shared.workflow_guards": {
+        template: "guards override",
+        baseVersion: 3,
+        enabled: true,
+      },
+      "system.shared.tool_protocol": {
+        template: "protocol override",
+        baseVersion: 4,
+        enabled: false,
+      },
+    });
+  });
+
+  test("preserves every known prompt override key across normalization", () => {
+    const source = Object.fromEntries(
+      agentPromptTemplateIdValues.map((templateId, index) => [
+        templateId,
+        {
+          template: ` ${templateId} template `,
+          baseVersion: index + 1,
+          enabled: index % 2 === 0,
+        },
+      ]),
+    ) as RepoPromptOverrides;
+
+    const normalized = normalizePromptOverridesForSave(source);
+    const normalizedKeys = Object.keys(normalized).sort();
+    expect(normalizedKeys).toEqual([...agentPromptTemplateIdValues].sort());
+
+    for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
+      const entry = normalized[templateId as AgentPromptTemplateId];
+      expect(entry).toEqual({
+        template: `${templateId} template`,
+        baseVersion: index + 1,
+        enabled: index % 2 === 0,
+      });
+    }
   });
 
   test("normalizes repo config and removes incomplete agent defaults", () => {
@@ -88,6 +152,11 @@ describe("settings-modal-normalization", () => {
       "kickoff.spec_initial": {
         template: "custom kickoff",
         baseVersion: 1,
+        enabled: true,
+      },
+      "kickoff.qa_review": {
+        template: "",
+        baseVersion: 2,
         enabled: true,
       },
     });

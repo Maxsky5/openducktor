@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
+import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { host } from "../../host";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
@@ -239,6 +240,60 @@ describe("agent-orchestrator-runtime", () => {
       expect(overrides["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
       expect(overrides["kickoff.spec_initial"]?.baseVersion).toBe(1);
       expect(overrides["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
+    } finally {
+      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("resolves effective overrides deterministically for every prompt template id", async () => {
+    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+
+    const globalPromptOverrides = Object.fromEntries(
+      agentPromptTemplateIdValues.map((templateId) => [
+        templateId,
+        {
+          template: `global ${templateId}`,
+          baseVersion: 1,
+          enabled: true,
+        },
+      ]),
+    );
+    const repoPromptOverrides = Object.fromEntries(
+      agentPromptTemplateIdValues.map((templateId, index) => [
+        templateId,
+        {
+          template: `repo ${templateId}`,
+          baseVersion: 1,
+          enabled: index % 2 === 0,
+        },
+      ]),
+    );
+
+    host.workspaceGetRepoConfig = async () => ({
+      branchPrefix: "obp",
+      defaultTargetBranch: "main",
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      worktreeFileCopies: [],
+      promptOverrides: repoPromptOverrides,
+      agentDefaults: {},
+    });
+    host.workspaceGetSettingsSnapshot = async () => ({
+      repos: {},
+      globalPromptOverrides,
+    });
+
+    try {
+      const overrides = await loadRepoPromptOverrides("/tmp/repo");
+      for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
+        const expectedTemplate = index % 2 === 0 ? `repo ${templateId}` : `global ${templateId}`;
+        expect(overrides[templateId]?.template).toBe(expectedTemplate);
+      }
     } finally {
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
       host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;

@@ -7,8 +7,6 @@ const DEFAULT_SOFT_GUARDRAILS = {
   backoffSeconds: 30,
 } as const;
 
-const toSoftGuardrailsDefaults = () => ({ ...DEFAULT_SOFT_GUARDRAILS });
-
 const nullableToOptional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 

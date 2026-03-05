@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -301,6 +302,77 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+    }
+  });
+
+  test("forwards every prompt override key when saving snapshot", async () => {
+    const refreshWorkspaces = mock(async () => {});
+    let forwardedSnapshot: unknown = null;
+    const workspaceSaveSettingsSnapshot = mock(async (snapshotArg: unknown) => {
+      forwardedSnapshot = snapshotArg;
+      return [];
+    });
+
+    const original = {
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+    };
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+
+    const harness = createHookHarness({ activeRepo: "/repo-a", refreshWorkspaces });
+    const globalPromptOverrides = Object.fromEntries(
+      agentPromptTemplateIdValues.map((templateId) => [
+        templateId,
+        {
+          template: `global ${templateId}`,
+          baseVersion: 1,
+          enabled: true,
+        },
+      ]),
+    );
+    const repoPromptOverrides = Object.fromEntries(
+      agentPromptTemplateIdValues.map((templateId) => [
+        templateId,
+        {
+          template: `repo ${templateId}`,
+          baseVersion: 1,
+          enabled: false,
+        },
+      ]),
+    );
+    const snapshot = {
+      repos: {
+        "/repo-a": {
+          worktreeBasePath: "/tmp/worktrees",
+          branchPrefix: "odt",
+          defaultTargetBranch: "origin/main",
+          trustedHooks: false,
+          hooks: { preStart: [], postComplete: [] },
+          worktreeFileCopies: [],
+          promptOverrides: repoPromptOverrides,
+          agentDefaults: {},
+        },
+      },
+      globalPromptOverrides,
+    };
+
+    try {
+      await harness.mount();
+      await harness.getLatest().saveSettingsSnapshot(snapshot);
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
+      expect(forwardedSnapshot).toBeDefined();
+      const parsedForwarded = forwardedSnapshot as {
+        globalPromptOverrides: Record<string, unknown>;
+        repos: Record<string, { promptOverrides: Record<string, unknown> }>;
+      };
+      expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(
+        [...agentPromptTemplateIdValues].sort(),
+      );
+      expect(Object.keys(parsedForwarded.repos["/repo-a"]?.promptOverrides ?? {}).sort()).toEqual(
+        [...agentPromptTemplateIdValues].sort(),
+      );
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

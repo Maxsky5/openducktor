@@ -534,12 +534,12 @@ mod tests {
             .expect("kickoff override");
         assert_eq!(kickoff_override.template, "custom kickoff {{task.id}}");
         assert_eq!(kickoff_override.base_version, 1);
-        assert!(
-            !repo_config
-                .prompt_overrides
-                .contains_key("kickoff.qa_review"),
-            "blank templates should be removed"
-        );
+        let qa_review_override = repo_config
+            .prompt_overrides
+            .get("kickoff.qa_review")
+            .expect("qa review override");
+        assert_eq!(qa_review_override.template, "");
+        assert_eq!(qa_review_override.base_version, 2);
 
         let _ = fs::remove_dir_all(root);
     }

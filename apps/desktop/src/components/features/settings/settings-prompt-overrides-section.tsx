@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import {
   canResetPromptOverrideToBuiltin,
   resetPromptOverrideToBuiltin,
+  resolvePromptOverrideFallbackTemplate,
   togglePromptOverrideEnabled,
   updatePromptOverrideTemplate,
 } from "@/components/features/settings";
@@ -75,7 +76,12 @@ export function PromptOverridesSection({
         {promptIds.map((templateId) => {
           const builtin = BUILTIN_PROMPTS_BY_ID[templateId];
           const override = overrides[templateId];
+          const inheritedPreview = resolveInheritedPreview(templateId, builtin.template, override);
           const canResetToBuiltin = canResetPromptOverrideToBuiltin(override, builtin.template);
+          const enableFallbackTemplate = resolvePromptOverrideFallbackTemplate(
+            inheritedPreview?.template,
+            builtin.template,
+          );
 
           return (
             <PromptOverrideCard
@@ -83,7 +89,7 @@ export function PromptOverridesSection({
               label={PROMPT_TEMPLATE_LABELS[templateId]}
               description={PROMPT_TEMPLATE_DESCRIPTIONS[templateId]}
               override={override}
-              inheritedPreview={resolveInheritedPreview(templateId, builtin.template, override)}
+              inheritedPreview={inheritedPreview}
               disabled={disabled}
               canResetToBuiltin={canResetToBuiltin}
               validationError={validationErrors[templateId]}
@@ -93,7 +99,7 @@ export function PromptOverridesSection({
                     currentOverrides,
                     templateId,
                     nextEnabled,
-                    builtin.template,
+                    enableFallbackTemplate,
                     builtin.builtinVersion,
                   ),
                 );

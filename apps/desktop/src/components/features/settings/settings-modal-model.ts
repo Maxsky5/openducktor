@@ -1,6 +1,5 @@
 import {
   type AgentPromptTemplateId,
-  agentPromptTemplateIdValues,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
@@ -185,6 +184,11 @@ export const togglePromptOverrideEnabled = (
   };
 };
 
+export const resolvePromptOverrideFallbackTemplate = (
+  inheritedTemplate: string | undefined,
+  builtinTemplate: string,
+): string => inheritedTemplate ?? builtinTemplate;
+
 export const updatePromptOverrideTemplate = (
   overrides: RepoPromptOverrides,
   templateId: AgentPromptTemplateId,
@@ -222,8 +226,9 @@ export const buildPromptOverrideValidationErrors = (
 ): PromptOverrideValidationErrors => {
   const errors: PromptOverrideValidationErrors = {};
 
-  for (const templateId of agentPromptTemplateIdValues) {
-    const override = overrides[templateId];
+  for (const [templateId, override] of Object.entries(overrides) as Array<
+    [AgentPromptTemplateId, RepoPromptOverrides[AgentPromptTemplateId]]
+  >) {
     if (!override) {
       continue;
     }

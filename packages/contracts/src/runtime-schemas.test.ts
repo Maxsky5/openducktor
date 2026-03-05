@@ -183,6 +183,25 @@ describe("runtime schemas", () => {
     expect(parsed.promptOverrides["kickoff.spec_initial"]?.enabled).toBe(false);
   });
 
+  test("repo config allows empty prompt override templates", () => {
+    const parsed = repoConfigSchema.parse({
+      worktreeBasePath: "/tmp/wt",
+      branchPrefix: "obp",
+      trustedHooks: false,
+      hooks: { preStart: [], postComplete: [] },
+      promptOverrides: {
+        "system.shared.workflow_guards": {
+          template: "",
+          baseVersion: 1,
+          enabled: true,
+        },
+      },
+    });
+
+    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.template).toBe("");
+    expect(parsed.promptOverrides["system.shared.workflow_guards"]?.enabled).toBe(true);
+  });
+
   test("repo config normalizes null agent default fields and entries", () => {
     const parsed = repoConfigSchema.parse({
       worktreeBasePath: "/tmp/wt",

@@ -90,6 +90,7 @@ export const clearWorkflowToolCacheForDirectory = (
     if (session.input.workingDirectory === workingDirectory) {
       delete session.workflowToolSelectionCache;
       delete session.workflowToolSelectionCachedAt;
+      delete session.workflowToolSelectionCacheModelKey;
     }
   }
 };

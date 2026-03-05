@@ -69,7 +69,7 @@ export function AgentSessionQuestionCard({
               const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
               return (
                 <Button
-                  key={`${request.requestId}:${question.header}:${index}`}
+                  key={`${request.requestId}:${question.header}:${question.question}`}
                   type="button"
                   size="sm"
                   variant="outline"

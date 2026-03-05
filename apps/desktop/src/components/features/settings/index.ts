@@ -9,6 +9,7 @@ export {
   ROLE_DEFAULTS,
   removePromptOverride,
   resetPromptOverrideToBuiltin,
+  resolvePromptOverrideFallbackTemplate,
   selectedModelKeyForRole,
   togglePromptOverrideEnabled,
   toRoleVariantOptions,

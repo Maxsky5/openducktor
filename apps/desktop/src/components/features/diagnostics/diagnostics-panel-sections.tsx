@@ -19,12 +19,15 @@ const renderSection = ({
         <p className="text-xs text-muted-foreground">{section.emptyMessage}</p>
       ) : (
         <div className="space-y-1 text-xs text-foreground">
-          {section.rows.map((row, index) => (
-            <DiagnosticsKeyValueRow key={`${row.label}-${index}`} {...row} />
+          {section.rows.map((row) => (
+            <DiagnosticsKeyValueRow
+              key={`${section.title}:row:${row.label}:${row.value}`}
+              {...row}
+            />
           ))}
-          {section.errors.map((error, index) => (
+          {section.errors.map((error) => (
             <p
-              key={`${section.title}-${error}-${index}`}
+              key={`${section.title}:error:${error}`}
               className="flex items-start gap-1 text-destructive-muted"
             >
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />

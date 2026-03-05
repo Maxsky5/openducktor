@@ -1,5 +1,5 @@
-import { useCallback } from "react";
 import type { SettingsSnapshot } from "@openducktor/contracts";
+import { useCallback } from "react";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";

@@ -521,7 +521,7 @@ mod tests {
     use host_application::AppService;
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
-    use host_infra_system::{hook_set_fingerprint, AppConfigStore, GitCliPort};
+    use host_infra_system::{hook_set_fingerprint, AppConfigStore, GitCliPort, PromptOverride};
     use serde_json::{json, Value};
     use std::{
         collections::HashMap,
@@ -598,7 +598,10 @@ mod tests {
                 hook_trust_challenges: Mutex::new(HashMap::new()),
                 hook_trust_dialog_test_response: Mutex::new(dialog_response),
             })
-            .invoke_handler(tauri::generate_handler![workspace_set_trusted_hooks])
+            .invoke_handler(tauri::generate_handler![
+                workspace_set_trusted_hooks,
+                workspace_save_settings_snapshot
+            ])
             .build(mock_context(noop_assets()))
             .expect("test app should build");
 
@@ -672,6 +675,41 @@ mod tests {
             &webview,
             InvokeRequest {
                 cmd: "workspace_set_trusted_hooks".to_string(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: "http://tauri.localhost"
+                    .parse()
+                    .expect("invoke URL should parse"),
+                body: InvokeBody::Json(payload),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_string(),
+            },
+        )
+        .map(|body| {
+            body.deserialize::<Value>()
+                .expect("IPC response should deserialize")
+        })
+    }
+
+    fn invoke_workspace_save_settings_snapshot_ipc(
+        fixture: &WorkspaceCommandFixture,
+        payload: Value,
+    ) -> Result<Value, Value> {
+        let label = format!(
+            "snapshot-main-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after unix epoch")
+                .as_nanos()
+        );
+        let webview = tauri::WebviewWindowBuilder::new(&fixture.app, label, Default::default())
+            .build()
+            .expect("test webview should build");
+
+        tauri::test::get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "workspace_save_settings_snapshot".to_string(),
                 callback: CallbackFn(0),
                 error: CallbackFn(1),
                 url: "http://tauri.localhost"
@@ -1059,6 +1097,115 @@ mod tests {
             persisted.trusted_hooks_fingerprint.as_deref(),
             Some(expected_fingerprint.as_str())
         );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_ipc_preserves_shared_prompt_override_keys(
+    ) -> Result<(), String> {
+        let fixture =
+            setup_workspace_command_fixture("snapshot-ipc-shared-prompts", HookSet::default());
+
+        let (repos, global_prompt_overrides) = fixture
+            .service
+            .workspace_get_settings_snapshot()
+            .map_err(|error| error.to_string())?;
+        let mut snapshot = SettingsSnapshotPayload {
+            repos,
+            global_prompt_overrides,
+        };
+
+        snapshot.global_prompt_overrides.insert(
+            "system.shared.workflow_guards".to_string(),
+            PromptOverride {
+                template: "global workflow guards".to_string(),
+                base_version: 1,
+                enabled: true,
+            },
+        );
+        snapshot.global_prompt_overrides.insert(
+            "system.shared.tool_protocol".to_string(),
+            PromptOverride {
+                template: "global tool protocol".to_string(),
+                base_version: 1,
+                enabled: true,
+            },
+        );
+
+        let repo_key = canonical_repo_key(fixture.repo_path.as_str());
+        let repo_config = snapshot
+            .repos
+            .get_mut(repo_key.as_str())
+            .ok_or_else(|| "repo config missing from snapshot".to_string())?;
+        repo_config.prompt_overrides.insert(
+            "system.shared.workflow_guards".to_string(),
+            PromptOverride {
+                template: "repo workflow guards".to_string(),
+                base_version: 1,
+                enabled: true,
+            },
+        );
+        repo_config.prompt_overrides.insert(
+            "system.shared.tool_protocol".to_string(),
+            PromptOverride {
+                template: "repo tool protocol".to_string(),
+                base_version: 1,
+                enabled: false,
+            },
+        );
+
+        let payload = json!({
+            "snapshot": {
+                "repos": snapshot.repos,
+                "globalPromptOverrides": snapshot.global_prompt_overrides,
+            }
+        });
+
+        let ipc_response = invoke_workspace_save_settings_snapshot_ipc(&fixture, payload)
+            .expect("IPC snapshot save should succeed");
+        let records = ipc_response
+            .as_array()
+            .ok_or_else(|| "IPC response should be an array".to_string())?;
+        assert!(
+            !records.is_empty(),
+            "snapshot save response should include workspace records"
+        );
+
+        let (persisted_repos, persisted_global) = fixture
+            .service
+            .workspace_get_settings_snapshot()
+            .map_err(|error| error.to_string())?;
+        let persisted_repo = persisted_repos
+            .get(repo_key.as_str())
+            .ok_or_else(|| "persisted repo config missing".to_string())?;
+
+        assert_eq!(
+            persisted_global
+                .get("system.shared.workflow_guards")
+                .map(|entry| entry.template.as_str()),
+            Some("global workflow guards")
+        );
+        assert_eq!(
+            persisted_global
+                .get("system.shared.tool_protocol")
+                .map(|entry| entry.template.as_str()),
+            Some("global tool protocol")
+        );
+        assert_eq!(
+            persisted_repo
+                .prompt_overrides
+                .get("system.shared.workflow_guards")
+                .map(|entry| entry.template.as_str()),
+            Some("repo workflow guards")
+        );
+        assert_eq!(
+            persisted_repo
+                .prompt_overrides
+                .get("system.shared.tool_protocol")
+                .map(|entry| entry.enabled),
+            Some(false)
+        );
+
         Ok(())
     }
 

@@ -126,9 +126,7 @@ export function useAgentStudioSessionStartFlow({
       return;
     }
 
-    const promptOverrides = activeRepo
-      ? await loadEffectivePromptOverrides(activeRepo)
-      : undefined;
+    const promptOverrides = activeRepo ? await loadEffectivePromptOverrides(activeRepo) : undefined;
     await sendAgentMessage(
       sessionId,
       kickoffPromptForScenario(role, scenario, taskId, {

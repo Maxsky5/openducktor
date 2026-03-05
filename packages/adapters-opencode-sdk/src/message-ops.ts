@@ -1,5 +1,6 @@
 import type {
   AgentEvent,
+  AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentStreamPart,
@@ -7,6 +8,7 @@ import type {
   ReplyQuestionInput,
   SendAgentUserMessageInput,
 } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY, ODT_WORKFLOW_TOOL_NAMES } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import {
   extractMessageTotalTokens,
@@ -19,8 +21,6 @@ import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory, SessionRecord } from "./types";
-import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
-import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
 type TodoRequestFailure = {
   message: string;
@@ -77,6 +77,17 @@ const normalizeTodoRequestFailure = (
         : {}),
     ...(errorCode ? { code: errorCode } : {}),
   };
+};
+
+const buildRoleScopedPromptToolSelection = (role: AgentRole) => {
+  const allowedTools = new Set(AGENT_ROLE_TOOL_POLICY[role]);
+  const selection: Record<string, boolean> = {};
+
+  for (const tool of ODT_WORKFLOW_TOOL_NAMES) {
+    selection[`openducktor_${tool}`] = allowedTools.has(tool);
+  }
+
+  return selection;
 };
 
 export const loadSessionHistory = async (
@@ -174,24 +185,7 @@ export const sendUserMessage = async (input: {
 }): Promise<void> => {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
-
-  const nowEpoch = Date.now();
-  const cacheAge = input.session.workflowToolSelectionCachedAt
-    ? nowEpoch - input.session.workflowToolSelectionCachedAt
-    : Infinity;
-  const workflowToolSelection =
-    input.session.workflowToolSelectionCache && cacheAge < WORKFLOW_TOOL_CACHE_TTL_MS
-      ? input.session.workflowToolSelectionCache
-      : await resolveWorkflowToolSelection({
-          client: input.session.client,
-          role: input.session.input.role,
-          workingDirectory: input.session.input.workingDirectory,
-        });
-
-  if (cacheAge >= WORKFLOW_TOOL_CACHE_TTL_MS) {
-    input.session.workflowToolSelectionCache = workflowToolSelection;
-    input.session.workflowToolSelectionCachedAt = nowEpoch;
-  }
+  const tools = buildRoleScopedPromptToolSelection(input.session.input.role);
 
   const response = await input.session.client.session.prompt({
     sessionID: input.session.externalSessionId,
@@ -202,7 +196,7 @@ export const sendUserMessage = async (input: {
     ...(modelInput.model ? { model: modelInput.model } : {}),
     ...(modelInput.variant ? { variant: modelInput.variant } : {}),
     ...(modelInput.agent ? { agent: modelInput.agent } : {}),
-    tools: workflowToolSelection,
+    tools,
     parts: [{ type: "text", text: input.request.content }],
   });
   const responseData = unwrapData(response, "prompt session");

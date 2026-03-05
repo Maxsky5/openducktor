@@ -40,7 +40,7 @@ export const QuestionSummaryTab = ({
         const answered = isAgentQuestionAnswered(question, draft[index]);
         return (
           <button
-            key={`${request.requestId}:summary:${question.header}:${index}`}
+            key={`${request.requestId}:summary:${question.header}:${question.question}`}
             type="button"
             className="w-full cursor-pointer rounded-md px-2 py-1 text-left hover:bg-accent"
             onClick={() => onSelectQuestion(index)}

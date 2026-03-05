@@ -21,6 +21,14 @@ const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
   "openducktor_odt_build_completed",
   "openducktor_odt_qa_approved",
   "openducktor_odt_qa_rejected",
+  "functions.openducktor_odt_read_task",
+  "functions.openducktor_odt_set_spec",
+  "functions.openducktor_odt_set_plan",
+  "functions.openducktor_odt_build_blocked",
+  "functions.openducktor_odt_build_resumed",
+  "functions.openducktor_odt_build_completed",
+  "functions.openducktor_odt_qa_approved",
+  "functions.openducktor_odt_qa_rejected",
 ] as const;
 
 type MockSession = {
@@ -404,11 +412,40 @@ describe("OpencodeSdkAdapter", () => {
     expect(summary.sessionId).toBe("session-1");
     expect(summary.externalSessionId).toBe("session-opencode-1");
     expect(summary.role).toBe("planner");
+    expect(mock.session.createCalls).toHaveLength(1);
+    expect(mock.session.createCalls[0]).toMatchObject({
+      directory: "/repo",
+      title: "PLANNER task-1",
+    });
+    const createInput = mock.session.createCalls[0] as {
+      permission?: Array<{ permission: string; pattern: string; action: string }>;
+    };
+    const permissionRules = createInput.permission ?? [];
+    expect(permissionRules[0]).toEqual({
+      permission: "openducktor_odt_*",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "openducktor_odt_read_task",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "openducktor_odt_set_plan",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(permissionRules).not.toContainEqual({
+      permission: "openducktor_odt_set_spec",
+      pattern: "*",
+      action: "allow",
+    });
     expect(events).toHaveLength(1);
     expect((events[0] as { type: string }).type).toBe("session_started");
   });
 
-  test("sendUserMessage forwards selected model and role-scoped odt tools", async () => {
+  test("sendUserMessage forwards selected model with openducktor role-scoped tools", async () => {
     const mock = makeMockClient({
       promptQueue: [
         {
@@ -454,6 +491,9 @@ describe("OpencodeSdkAdapter", () => {
 
     expect(mock.session.promptCalls).toHaveLength(1);
     expect(mock.session.promptCalls[0]).toMatchObject({
+      sessionID: "session-opencode-1",
+      directory: "/repo",
+      system: "system prompt",
       model: {
         providerID: "openai",
         modelID: "gpt-5",
@@ -461,18 +501,16 @@ describe("OpencodeSdkAdapter", () => {
       variant: "high",
       agent: "hephaestus",
       tools: {
-        odt_read_task: true,
-        odt_set_spec: true,
-        odt_set_plan: false,
-        odt_build_blocked: false,
-        odt_build_resumed: false,
-        odt_build_completed: false,
-        odt_qa_approved: false,
-        odt_qa_rejected: false,
         openducktor_odt_read_task: true,
         openducktor_odt_set_spec: true,
         openducktor_odt_set_plan: false,
+        openducktor_odt_build_blocked: false,
+        openducktor_odt_build_resumed: false,
+        openducktor_odt_build_completed: false,
+        openducktor_odt_qa_approved: false,
+        openducktor_odt_qa_rejected: false,
       },
+      parts: [{ type: "text", text: "Write and persist spec" }],
     });
     expect(events.some((event) => event.type === "assistant_message")).toBe(true);
     const assistantMessage = events.find((event) => event.type === "assistant_message");
@@ -483,74 +521,35 @@ describe("OpencodeSdkAdapter", () => {
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
   });
 
-  test("sendUserMessage applies runtime workflow aliases when available", async () => {
-    const mock = makeMockClient({
-      toolIdsResponse: [
-        "openducktor_odt_read_task",
-        "openducktor_odt_set_spec",
-        "openducktor_odt_set_plan",
-      ],
-    });
+  test("sendUserMessage never calls deprecated workflow tool discovery on prompt", async () => {
+    const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
     });
 
     await startDefaultSession(adapter, "session-1", "spec");
+
+    const selectedModel = {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    } as const;
 
     await adapter.sendUserMessage({
       sessionId: "session-1",
-      content: "Write and persist spec",
+      content: "First message",
+      model: selectedModel,
+    });
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Second message",
+      model: selectedModel,
     });
 
-    expect(mock.session.promptCalls).toHaveLength(1);
-    const tools = (mock.session.promptCalls[0] as { tools?: Record<string, boolean> }).tools;
-    expect(tools).toMatchObject({
-      openducktor_odt_read_task: true,
-      openducktor_odt_set_spec: true,
-      openducktor_odt_set_plan: false,
-    });
-  });
-
-  test("sendUserMessage fails closed when trusted MCP server is disconnected", async () => {
-    const mock = makeMockClient({
-      toolIdsResponse: ["odt_read_task", "odt_set_spec"],
-      mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
-    });
-    const adapter = new OpencodeSdkAdapter({
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-    await startDefaultSession(adapter, "session-1", "spec");
-
-    await expect(
-      adapter.sendUserMessage({
-        sessionId: "session-1",
-        content: "Write and persist spec",
-      }),
-    ).rejects.toThrow('MCP server "openducktor" is "failed"');
-
-    expect(mock.session.promptCalls).toHaveLength(0);
-  });
-
-  test("sendUserMessage fails closed when required trusted role tools are missing", async () => {
-    const mock = makeMockClient({
-      toolIdsResponse: ["odt_read_task", "odt_set_plan"],
-    });
-    const adapter = new OpencodeSdkAdapter({
-      createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
-    });
-    await startDefaultSession(adapter, "session-1", "spec");
-
-    await expect(
-      adapter.sendUserMessage({
-        sessionId: "session-1",
-        content: "Write and persist spec",
-      }),
-    ).rejects.toThrow("missing trusted runtime tool IDs");
-
-    expect(mock.session.promptCalls).toHaveLength(0);
+    expect(mock.tool.idsCalls).toEqual([]);
+    expect(mock.mcp.statusCalls).toEqual([]);
+    expect(mock.session.promptCalls).toHaveLength(2);
   });
 
   test("loadSessionHistory preserves assistant text and maps streamed parts", async () => {

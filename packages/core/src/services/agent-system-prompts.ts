@@ -1,7 +1,7 @@
 import {
-  validatePromptTemplatePlaceholders,
   type AgentPromptTemplateId,
   type RepoPromptOverrides,
+  validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
@@ -133,7 +133,8 @@ Session task lock:
 - If a tool call fails with task-id mismatch, retry with {{task.id}}.
 
 Always include taskId in every odt_* tool call.
-Never invent tool names. Never call tools not listed above.`,
+Never invent tool names. Never call tools not listed above.
+When asked about which ODT tools are enabled or disabled, answer strictly from the allowed-tools list above and treat every other ODT workflow tool as denied.`,
   },
   "system.shared.task_context": {
     id: "system.shared.task_context",

@@ -52,12 +52,7 @@ fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
                 return None;
             }
 
-            let normalized_template = entry.template.trim();
-            if normalized_template.is_empty() {
-                return None;
-            }
-
-            entry.template = normalized_template.to_string();
+            entry.template = entry.template.trim().to_string();
             if entry.base_version == 0 {
                 entry.base_version = 1;
             }

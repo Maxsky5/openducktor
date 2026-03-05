@@ -37,9 +37,9 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
 
   const { loadRepoSettings, saveRepoSettings, loadSettingsSnapshot, saveSettingsSnapshot } =
     useRepoSettingsOperations({
-    activeRepo,
-    refreshWorkspaces,
-  });
+      activeRepo,
+      refreshWorkspaces,
+    });
 
   const activeWorkspace = useMemo(
     () => findActiveWorkspace(workspaces, activeRepo),
