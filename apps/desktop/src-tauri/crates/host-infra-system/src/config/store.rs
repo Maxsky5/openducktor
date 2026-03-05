@@ -8,7 +8,7 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
-use std::{fs::OpenOptions, io::Write};
+use std::{ffi::OsString, fs::OpenOptions, io::ErrorKind, io::Write, time::SystemTime};
 
 #[cfg(unix)]
 const CONFIG_DIR_MODE: u32 = 0o700;
@@ -28,6 +28,7 @@ pub struct AppConfigStore {
 #[derive(Debug, Clone)]
 pub struct RuntimeConfigStore {
     pub(super) path: PathBuf,
+    pub(super) enforce_private_parent_permissions: bool,
 }
 
 const USER_SETTINGS_FILENAME: &str = "config.json";
@@ -359,11 +360,18 @@ impl RuntimeConfigStore {
     pub fn new() -> Result<Self> {
         Ok(Self {
             path: resolve_default_path(RUNTIME_SETTINGS_FILENAME)?,
+            enforce_private_parent_permissions: true,
         })
     }
 
     pub fn from_path(path: PathBuf) -> Self {
-        Self { path }
+        let enforce_private_parent_permissions = resolve_default_path(RUNTIME_SETTINGS_FILENAME)
+            .map(|default_path| default_path == path)
+            .unwrap_or(false);
+        Self {
+            path,
+            enforce_private_parent_permissions,
+        }
     }
 
     pub fn from_user_settings_store(config_store: &AppConfigStore) -> Self {
@@ -372,7 +380,10 @@ impl RuntimeConfigStore {
             .parent()
             .map_or_else(PathBuf::new, Path::to_path_buf)
             .join(RUNTIME_SETTINGS_FILENAME);
-        Self { path: runtime_path }
+        Self {
+            path: runtime_path,
+            enforce_private_parent_permissions: config_store.enforce_private_parent_permissions,
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -383,6 +394,8 @@ impl RuntimeConfigStore {
         if !self.path.exists() {
             return Ok(RuntimeConfig::default());
         }
+
+        validate_config_access(&self.path, self.enforce_private_parent_permissions)?;
 
         let data = fs::read_to_string(&self.path)
             .with_context(|| format!("Failed reading config file {}", self.path.display()))?;
@@ -397,12 +410,13 @@ impl RuntimeConfigStore {
             fs::create_dir_all(parent).with_context(|| {
                 format!("Failed creating config directory {}", parent.display())
             })?;
+            enforce_directory_permissions(parent, self.enforce_private_parent_permissions)?;
         }
         let mut normalized = config.clone();
         normalize_runtime_config(&mut normalized);
         let payload = serde_json::to_string_pretty(&normalized)?;
-        fs::write(&self.path, payload)
-            .with_context(|| format!("Failed writing config file {}", self.path.display()))?;
+        write_config_file(&self.path, payload.as_bytes())?;
+        validate_config_access(&self.path, self.enforce_private_parent_permissions)?;
         Ok(())
     }
 }
@@ -416,26 +430,7 @@ pub(crate) fn touch_recent(recent: &mut Vec<String>, repo_path: &str) {
 fn write_config_file(path: &Path, contents: &[u8]) -> Result<()> {
     #[cfg(unix)]
     {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .mode(CONFIG_FILE_MODE)
-            .open(path)
-            .with_context(|| format!("Failed opening config file {}", path.display()))?;
-        file.write_all(contents)
-            .with_context(|| format!("Failed writing config file {}", path.display()))?;
-        file.sync_all()
-            .with_context(|| format!("Failed syncing config file {}", path.display()))?;
-        fs::set_permissions(path, fs::Permissions::from_mode(CONFIG_FILE_MODE)).with_context(
-            || {
-                format!(
-                    "Failed setting secure permissions on config file {}",
-                    path.display()
-                )
-            },
-        )?;
-        return Ok(());
+        return write_config_file_atomic(path, contents);
     }
 
     #[cfg(not(unix))]
@@ -444,6 +439,88 @@ fn write_config_file(path: &Path, contents: &[u8]) -> Result<()> {
             .with_context(|| format!("Failed writing config file {}", path.display()))?;
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn write_config_file_atomic(path: &Path, contents: &[u8]) -> Result<()> {
+    for attempt in 0..8_u8 {
+        let temp_path = create_temporary_config_path(path, attempt)?;
+        match OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(CONFIG_FILE_MODE)
+            .open(&temp_path)
+        {
+            Ok(mut file) => {
+                let write_result = (|| -> Result<()> {
+                    file.write_all(contents).with_context(|| {
+                        format!("Failed writing config temp file {}", temp_path.display())
+                    })?;
+                    file.sync_all().with_context(|| {
+                        format!("Failed syncing config temp file {}", temp_path.display())
+                    })?;
+                    drop(file);
+                    fs::rename(&temp_path, path).with_context(|| {
+                        format!(
+                            "Failed atomically replacing config file {} with {}",
+                            path.display(),
+                            temp_path.display()
+                        )
+                    })?;
+                    Ok(())
+                })();
+
+                if let Err(error) = write_result {
+                    if temp_path.exists() {
+                        fs::remove_file(&temp_path).with_context(|| {
+                            format!(
+                                "Failed cleaning up config temp file {} after write failure",
+                                temp_path.display()
+                            )
+                        })?;
+                    }
+                    return Err(error);
+                }
+
+                return Ok(());
+            }
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("Failed opening config temp file {}", temp_path.display())
+                });
+            }
+        }
+    }
+
+    Err(anyhow!(
+        "Failed creating unique temp file for config write at {} after 8 attempts",
+        path.display()
+    ))
+}
+
+#[cfg(unix)]
+fn create_temporary_config_path(path: &Path, attempt: u8) -> Result<PathBuf> {
+    let parent = path.parent().ok_or_else(|| {
+        anyhow!(
+            "Config file path {} is invalid: missing parent directory",
+            path.display()
+        )
+    })?;
+    let file_name = path.file_name().ok_or_else(|| {
+        anyhow!(
+            "Config file path {} is invalid: missing file name",
+            path.display()
+        )
+    })?;
+    let nanos = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| anyhow!("System clock error while building temp config path: {error}"))?
+        .as_nanos();
+    let mut temp_name = OsString::from(".");
+    temp_name.push(file_name);
+    temp_name.push(format!(".tmp-{}-{nanos}-{attempt}", std::process::id()));
+    Ok(parent.join(temp_name))
 }
 
 fn validate_config_access(path: &Path, enforce_private_parent_permissions: bool) -> Result<()> {
