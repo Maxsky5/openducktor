@@ -39,6 +39,7 @@ fn workspace_add_select_and_update_persist_state() {
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
+                worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },

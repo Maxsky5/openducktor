@@ -1,4 +1,4 @@
-use super::{GlobalConfig, OpencodeStartupReadinessConfig, RepoConfig, TestStoreHarness};
+use super::{RepoConfig, TestStoreHarness};
 use serde_json::json;
 use std::fs;
 
@@ -8,35 +8,7 @@ fn load_missing_returns_default_config() {
     let store = harness.store();
     let config = store.load().expect("load default");
     assert_eq!(config.version, 1);
-    assert_eq!(config.opencode_startup.timeout_ms, 8_000);
-    assert_eq!(config.opencode_startup.connect_timeout_ms, 250);
     assert!(config.repos.is_empty());
-}
-
-#[test]
-fn opencode_startup_readiness_defaults_and_normalizes() {
-    let harness = TestStoreHarness::new("opencode-startup-readiness");
-    let store = harness.store();
-    let config = GlobalConfig {
-        opencode_startup: OpencodeStartupReadinessConfig {
-            timeout_ms: 10,
-            connect_timeout_ms: 0,
-            initial_retry_delay_ms: 3_000,
-            max_retry_delay_ms: 20,
-            child_check_interval_ms: 1,
-        },
-        ..GlobalConfig::default()
-    };
-    store.save(&config).expect("save config");
-
-    let readiness = store
-        .opencode_startup_readiness()
-        .expect("readiness policy should load");
-    assert_eq!(readiness.timeout_ms, 250);
-    assert_eq!(readiness.connect_timeout_ms, 25);
-    assert_eq!(readiness.initial_retry_delay_ms, 3_000);
-    assert_eq!(readiness.max_retry_delay_ms, 3_000);
-    assert_eq!(readiness.child_check_interval_ms, 10);
 }
 
 #[test]
@@ -59,6 +31,7 @@ fn update_repo_config_normalizes_blank_worktree_path() {
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
+                worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },
@@ -94,6 +67,7 @@ fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
+                worktree_file_copies: Vec::new(),
                 prompt_overrides: Default::default(),
                 agent_defaults: Default::default(),
             },
@@ -149,14 +123,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         "version": 1,
         "activeRepo": repo_str,
         "repos": repos,
-        "recentRepos": [],
-        "scheduler": {
-            "softGuardrails": {
-                "cpuHighWatermarkPercent": 85,
-                "minFreeMemoryMb": 2048,
-                "backoffSeconds": 30
-            }
-        }
+        "recentRepos": []
     });
     fs::write(
         store.path(),
@@ -192,10 +159,10 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         .expect("kickoff override");
     assert_eq!(kickoff_override.template, "custom kickoff {{task.id}}");
     assert_eq!(kickoff_override.base_version, 1);
-    assert!(
-        !repo_config
-            .prompt_overrides
-            .contains_key("kickoff.qa_review"),
-        "blank templates should be removed"
-    );
+    let qa_review_override = repo_config
+        .prompt_overrides
+        .get("kickoff.qa_review")
+        .expect("qa review override");
+    assert_eq!(qa_review_override.template, "");
+    assert_eq!(qa_review_override.base_version, 2);
 }
