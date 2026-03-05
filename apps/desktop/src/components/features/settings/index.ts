@@ -10,7 +10,9 @@ export {
   removePromptOverride,
   resetPromptOverrideToBuiltin,
   selectedModelKeyForRole,
+  togglePromptOverrideEnabled,
   toRoleVariantOptions,
+  updatePromptOverrideTemplate,
   updateRoleDefault,
 } from "./settings-modal-model";
 export {

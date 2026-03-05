@@ -11,7 +11,9 @@ import {
   removePromptOverride,
   resetPromptOverrideToBuiltin,
   selectedModelKeyForRole,
+  togglePromptOverrideEnabled,
   toRoleVariantOptions,
+  updatePromptOverrideTemplate,
   updateRoleDefault,
 } from "./settings-modal-model";
 
@@ -178,8 +180,70 @@ describe("settings-modal-model", () => {
     };
 
     expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
-      "system.scenario.spec_initial":
-        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}.",
+      "system.scenario.spec_initial": "Unsupported placeholders: {{task.foo}}, {{unknown.value}}.",
+    });
+  });
+
+  test("enables prompt override and creates missing entries from fallback values", () => {
+    const emptyOverrides: RepoPromptOverrides = {};
+    const created = togglePromptOverrideEnabled(
+      emptyOverrides,
+      "kickoff.spec_initial",
+      true,
+      "builtin",
+      3,
+    );
+    expect(created["kickoff.spec_initial"]).toEqual({
+      template: "builtin",
+      baseVersion: 3,
+      enabled: true,
+    });
+
+    const disabled = togglePromptOverrideEnabled(
+      created,
+      "kickoff.spec_initial",
+      false,
+      "builtin",
+      3,
+    );
+    expect(disabled["kickoff.spec_initial"]).toEqual({
+      template: "builtin",
+      baseVersion: 3,
+      enabled: false,
+    });
+  });
+
+  test("updates prompt override template without auto-enabling entries", () => {
+    const emptyOverrides: RepoPromptOverrides = {};
+    const created = updatePromptOverrideTemplate(
+      emptyOverrides,
+      "kickoff.spec_initial",
+      "custom",
+      9,
+    );
+    expect(created["kickoff.spec_initial"]).toEqual({
+      template: "custom",
+      baseVersion: 9,
+      enabled: false,
+    });
+
+    const enabledOverrides: RepoPromptOverrides = {
+      "kickoff.spec_initial": {
+        template: "old",
+        baseVersion: 4,
+        enabled: true,
+      },
+    };
+    const updated = updatePromptOverrideTemplate(
+      enabledOverrides,
+      "kickoff.spec_initial",
+      "new",
+      10,
+    );
+    expect(updated["kickoff.spec_initial"]).toEqual({
+      template: "new",
+      baseVersion: 4,
+      enabled: true,
     });
   });
 });

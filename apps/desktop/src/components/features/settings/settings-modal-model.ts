@@ -1,8 +1,8 @@
 import {
-  agentPromptTemplateIdValues,
-  validatePromptTemplatePlaceholders,
   type AgentPromptTemplateId,
+  agentPromptTemplateIdValues,
   type RepoPromptOverrides,
+  validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxOption } from "@/components/ui/combobox";
@@ -149,6 +149,55 @@ export const resetPromptOverrideToBuiltin = (
       ...existing,
       template: builtinTemplate,
       baseVersion: builtinVersion,
+    },
+  };
+};
+
+export const togglePromptOverrideEnabled = (
+  overrides: RepoPromptOverrides,
+  templateId: AgentPromptTemplateId,
+  nextEnabled: boolean,
+  fallbackTemplate: string,
+  fallbackBaseVersion: number,
+): RepoPromptOverrides => {
+  const existing = overrides[templateId];
+  if (nextEnabled) {
+    return {
+      ...overrides,
+      [templateId]: {
+        template: existing?.template ?? fallbackTemplate,
+        baseVersion: existing?.baseVersion ?? fallbackBaseVersion,
+        enabled: true,
+      },
+    };
+  }
+
+  if (!existing) {
+    return overrides;
+  }
+
+  return {
+    ...overrides,
+    [templateId]: {
+      ...existing,
+      enabled: false,
+    },
+  };
+};
+
+export const updatePromptOverrideTemplate = (
+  overrides: RepoPromptOverrides,
+  templateId: AgentPromptTemplateId,
+  nextTemplate: string,
+  fallbackBaseVersion: number,
+): RepoPromptOverrides => {
+  const existing = overrides[templateId];
+  return {
+    ...overrides,
+    [templateId]: {
+      template: nextTemplate,
+      baseVersion: existing?.baseVersion ?? fallbackBaseVersion,
+      enabled: existing ? existing.enabled !== false : false,
     },
   };
 };
