@@ -27,13 +27,6 @@ export const gitWorktreeSummarySchema = z.object({
 });
 export type GitWorktreeSummary = z.infer<typeof gitWorktreeSummarySchema>;
 
-export const gitPushSummarySchema = z.object({
-  remote: z.string(),
-  branch: z.string(),
-  output: z.string(),
-});
-export type GitPushSummary = z.infer<typeof gitPushSummarySchema>;
-
 export const gitPushBranchResultSchema = z.discriminatedUnion("outcome", [
   z.object({
     outcome: z.literal("pushed"),

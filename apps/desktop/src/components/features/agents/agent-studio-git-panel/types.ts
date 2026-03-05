@@ -23,7 +23,7 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   commitError?: string | null;
   pushError?: string | null;
   rebaseError?: string | null;
-  commitAll?: (message: string) => Promise<void>;
+  commitAll?: (message: string) => Promise<boolean>;
   pushBranch?: () => Promise<void>;
   confirmForcePush?: () => Promise<void>;
   cancelForcePush?: () => void;

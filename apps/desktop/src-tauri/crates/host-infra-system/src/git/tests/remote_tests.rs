@@ -186,6 +186,58 @@ fn pull_branch_pulls_new_upstream_commits() {
 }
 
 #[test]
+fn pull_branch_fetches_only_the_configured_upstream_remote() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("pull-specific-remote");
+    let remote = setup_bare_remote("pull-specific-remote-origin");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(
+        &repo.path,
+        &[
+            "remote",
+            "add",
+            "backup",
+            "/tmp/openducktor-missing-remote.git",
+        ],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    let clone_root = TempPath::new("pull-specific-remote-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+    fs::write(clone_repo.join("upstream.txt"), "upstream\n").expect("upstream file should write");
+    run_git_ok(&clone_repo, &["add", "upstream.txt"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "upstream update"]);
+    run_git_ok(&clone_repo, &["push", "origin", "main"]);
+
+    let git = GitCliPort::new();
+    let result = git
+        .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+        .expect("pull should fetch only the configured upstream remote");
+    assert!(matches!(result, GitPullResult::Pulled { .. }));
+    assert!(repo.path.join("upstream.txt").exists());
+}
+
+#[test]
 fn pull_branch_returns_up_to_date_when_no_upstream_commits_exist() {
     if !git_available() {
         return;
@@ -219,6 +271,54 @@ fn pull_branch_returns_up_to_date_when_no_upstream_commits_exist() {
             panic!("expected up-to-date outcome when upstream has no new commits");
         }
     }
+}
+
+#[test]
+fn pull_branch_succeeds_when_local_tracking_ref_was_pruned_before_fetch() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("pull-pruned-tracking-ref");
+    let remote = setup_bare_remote("pull-pruned-tracking-ref-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    let clone_root = TempPath::new("pull-pruned-tracking-ref-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+    fs::write(clone_repo.join("upstream.txt"), "upstream\n").expect("upstream file should write");
+    run_git_ok(&clone_repo, &["add", "upstream.txt"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "upstream update"]);
+    run_git_ok(&clone_repo, &["push", "origin", "main"]);
+
+    run_git_ok(
+        &repo.path,
+        &["update-ref", "-d", "refs/remotes/origin/main"],
+    );
+
+    let git = GitCliPort::new();
+    let result = git
+        .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+        .expect("pull should refetch the upstream tracking ref when it is missing locally");
+    assert!(matches!(result, GitPullResult::Pulled { .. }));
+    assert!(repo.path.join("upstream.txt").exists());
 }
 
 #[test]

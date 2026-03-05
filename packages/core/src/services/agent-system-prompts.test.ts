@@ -270,6 +270,27 @@ describe("kickoff and permission prompts", () => {
     expect(prompt).toContain("- src/main.ts");
     expect(prompt).toContain("Use taskId task-1");
   });
+
+  test("rejects git placeholders when the selected template does not receive git context", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "planner",
+        scenario: "planner_initial",
+        task: {
+          taskId: "task-2",
+        },
+        overrides: {
+          "kickoff.planner_initial": {
+            template: "Planner kickoff {{git.rebaseOutput}}",
+            baseVersion: 1,
+            enabled: true,
+          },
+        },
+      }),
+    ).toThrow(
+      'Prompt template "kickoff.planner_initial" is missing placeholder value "git.rebaseOutput".',
+    );
+  });
 });
 
 describe("listBuiltinAgentPromptTemplates", () => {

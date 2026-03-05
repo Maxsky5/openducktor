@@ -2,8 +2,14 @@ use anyhow::{anyhow, Result};
 use host_domain::{GitPullResult, GitPushResult};
 use std::path::Path;
 
-use super::util::{combine_output, normalize_non_empty, resolve_upstream_ref};
+use super::util::{combine_output, normalize_merge_ref, normalize_non_empty, resolve_upstream_ref};
 use super::GitCliPort;
+
+struct UpstreamTargetConfig {
+    remote: String,
+    merge_ref: String,
+    upstream_ref: String,
+}
 
 impl GitCliPort {
     fn is_non_fast_forward_push_rejection(output: &str) -> bool {
@@ -76,7 +82,7 @@ impl GitCliPort {
         }
 
         let upstream_target = self
-            .resolve_upstream_target_impl(repo_path)?
+            .resolve_upstream_target_config_impl(repo_path)?
             .ok_or_else(|| {
                 anyhow!("Cannot pull because current branch does not track an upstream branch")
             })?;
@@ -85,17 +91,31 @@ impl GitCliPort {
             return Err(anyhow!("Cannot pull with uncommitted changes"));
         }
 
-        let (fetch_ok, fetch_stdout, fetch_stderr) =
-            self.run_git_allow_failure(repo_path, &["fetch", "--prune"])?;
-        if !fetch_ok {
-            return Err(anyhow!(
-                "git fetch --prune failed: {}",
-                combine_output(fetch_stdout, fetch_stderr)
-            ));
+        if upstream_target.remote != "." {
+            let fetch_refspec = format!(
+                "+{}:{}",
+                upstream_target.merge_ref, upstream_target.upstream_ref
+            );
+            let fetch_args = [
+                "fetch",
+                "--prune",
+                "--",
+                upstream_target.remote.as_str(),
+                fetch_refspec.as_str(),
+            ];
+            let (fetch_ok, fetch_stdout, fetch_stderr) =
+                self.run_git_allow_failure(repo_path, &fetch_args)?;
+            if !fetch_ok {
+                return Err(anyhow!(
+                    "git fetch --prune {} failed: {}",
+                    upstream_target.remote,
+                    combine_output(fetch_stdout, fetch_stderr)
+                ));
+            }
         }
 
         let upstream_counts =
-            self.commits_ahead_behind_impl(repo_path, upstream_target.as_str())?;
+            self.commits_ahead_behind_impl(repo_path, upstream_target.upstream_ref.as_str())?;
         if upstream_counts.behind == 0 {
             return Ok(GitPullResult::UpToDate {
                 output: "No upstream commits to pull".to_string(),
@@ -107,12 +127,16 @@ impl GitCliPort {
         let command = if upstream_counts.ahead == 0 {
             (
                 "git merge --ff-only",
-                vec!["merge", "--ff-only", upstream_target.as_str()],
+                vec!["merge", "--ff-only", upstream_target.upstream_ref.as_str()],
             )
         } else {
             (
                 "git rebase --no-fork-point",
-                vec!["rebase", "--no-fork-point", upstream_target.as_str()],
+                vec![
+                    "rebase",
+                    "--no-fork-point",
+                    upstream_target.upstream_ref.as_str(),
+                ],
             )
         };
 
@@ -150,6 +174,18 @@ impl GitCliPort {
         self.ensure_repository(repo_path)?;
         let current_branch = self.get_current_branch_unchecked(repo_path)?;
         self.resolve_upstream_target_for_branch_impl(repo_path, current_branch.name.as_deref())
+    }
+
+    fn resolve_upstream_target_config_impl(
+        &self,
+        repo_path: &Path,
+    ) -> Result<Option<UpstreamTargetConfig>> {
+        self.ensure_repository(repo_path)?;
+        let current_branch = self.get_current_branch_unchecked(repo_path)?;
+        self.resolve_upstream_target_config_for_branch_impl(
+            repo_path,
+            current_branch.name.as_deref(),
+        )
     }
 
     pub(super) fn resolve_upstream_target_for_branch_impl(
@@ -195,5 +231,47 @@ impl GitCliPort {
         }
 
         Ok(Some(upstream_ref))
+    }
+
+    fn resolve_upstream_target_config_for_branch_impl(
+        &self,
+        repo_path: &Path,
+        branch_name: Option<&str>,
+    ) -> Result<Option<UpstreamTargetConfig>> {
+        let branch = match branch_name {
+            Some(name) => name,
+            None => return Ok(None),
+        };
+
+        let remote_key = format!("branch.{branch}.remote");
+        let merge_key = format!("branch.{branch}.merge");
+
+        let (remote_ok, remote_stdout, _) =
+            self.run_git_allow_failure(repo_path, &["config", "--get", remote_key.as_str()])?;
+        if !remote_ok {
+            return Ok(None);
+        }
+        let remote = remote_stdout.trim();
+        if remote.is_empty() {
+            return Ok(None);
+        }
+
+        let (merge_ok, merge_stdout, _) =
+            self.run_git_allow_failure(repo_path, &["config", "--get", merge_key.as_str()])?;
+        if !merge_ok {
+            return Ok(None);
+        }
+        let merge_ref = merge_stdout.trim();
+        if merge_ref.is_empty() {
+            return Ok(None);
+        }
+
+        let normalized_merge_ref = normalize_merge_ref(merge_ref);
+        let upstream_ref = resolve_upstream_ref(remote, normalized_merge_ref.as_str());
+        Ok(Some(UpstreamTargetConfig {
+            remote: remote.to_string(),
+            merge_ref: normalized_merge_ref,
+            upstream_ref,
+        }))
     }
 }

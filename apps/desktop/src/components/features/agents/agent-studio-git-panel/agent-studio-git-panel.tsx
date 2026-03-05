@@ -1,14 +1,5 @@
 import { ArrowDown, ArrowUp, LoaderCircle, RotateCcw, Sparkles } from "lucide-react";
-import {
-  memo,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -136,7 +127,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
     }
   }, [model.fileDiffs, model.selectedFile, model.setSelectedFile]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const autoOpenNonce = model.rebaseConflictAutoOpenNonce ?? 0;
     const closeNonce = model.rebaseConflictCloseNonce ?? 0;
 

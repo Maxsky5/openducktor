@@ -1,4 +1,8 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import {
+  agentRoleValues,
+  agentScenarioValues,
+  type RepoPromptOverrides,
+} from "@openducktor/contracts";
 import {
   type AgentKickoffScenario,
   type AgentPromptGitContext,
@@ -42,17 +46,14 @@ export const SCENARIO_LABELS: Record<AgentScenario, string> = {
   qa_review: "QA Review",
 };
 
+const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
+const AGENT_SCENARIO_SET = new Set<string>(agentScenarioValues);
+
 export const isRole = (value: string | null): value is AgentRole =>
-  value === "spec" || value === "planner" || value === "build" || value === "qa";
+  value != null && AGENT_ROLE_SET.has(value);
 
 export const isScenario = (value: string | null): value is AgentScenario =>
-  value === "spec_initial" ||
-  value === "planner_initial" ||
-  value === "build_implementation_start" ||
-  value === "build_after_qa_rejected" ||
-  value === "build_after_human_request_changes" ||
-  value === "build_rebase_conflict_resolution" ||
-  value === "qa_review";
+  value != null && AGENT_SCENARIO_SET.has(value);
 
 export const firstScenario = (role: AgentRole): AgentScenario => {
   const scenarios = SCENARIOS_BY_ROLE[role];

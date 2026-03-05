@@ -44,7 +44,7 @@ export type AgentStudioGitActionState = {
   commitError: string | null;
   pushError: string | null;
   rebaseError: string | null;
-  commitAll: (message: string) => Promise<void>;
+  commitAll: (message: string) => Promise<boolean>;
   pushBranch: () => Promise<void>;
   confirmForcePush: () => Promise<void>;
   cancelForcePush: () => void;
@@ -218,23 +218,23 @@ export function useAgentStudioGitActions({
   );
 
   const commitAll = useCallback(
-    async (message: string): Promise<void> => {
+    async (message: string): Promise<boolean> => {
       if (isCommitting) {
-        return;
+        return false;
       }
       if (!ensureGitActionsUnlocked("commit")) {
-        return;
+        return false;
       }
 
       if (!repoPath) {
         setCommitError("Cannot commit because no repository is selected.");
-        return;
+        return false;
       }
 
       const trimmedMessage = message.trim();
       if (trimmedMessage.length === 0) {
         setCommitError("Commit message cannot be empty.");
-        return;
+        return false;
       }
 
       setIsCommitting(true);
@@ -243,8 +243,10 @@ export function useAgentStudioGitActions({
         await host.gitCommitAll(repoPath, trimmedMessage, workingDir ?? undefined);
         clearActionErrors();
         await refreshDiffData();
+        return true;
       } catch (error) {
         setCommitError(toErrorMessage(error, "Commit failed."));
+        return false;
       } finally {
         setIsCommitting(false);
       }

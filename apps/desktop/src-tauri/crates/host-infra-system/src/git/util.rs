@@ -15,7 +15,7 @@ pub(super) fn path_to_string(path: &Path, label: &str) -> Result<String> {
         .ok_or_else(|| anyhow!("Invalid {label}: {}", path.display()))
 }
 
-fn normalize_merge_ref(merge_ref: &str) -> String {
+pub(super) fn normalize_merge_ref(merge_ref: &str) -> String {
     if merge_ref.starts_with("refs/") {
         merge_ref.to_string()
     } else {

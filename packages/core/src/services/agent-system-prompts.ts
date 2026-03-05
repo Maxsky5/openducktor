@@ -435,10 +435,14 @@ const buildPlaceholderValues = ({
     "task.specMarkdown": compact(task.specMarkdown),
     "task.planMarkdown": compact(task.planMarkdown),
     "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),
-    "git.currentBranch": compact(git?.currentBranch),
-    "git.targetBranch": compact(git?.targetBranch),
-    "git.conflictedFiles": compactList(git?.conflictedFiles),
-    "git.rebaseOutput": compact(git?.rebaseOutput),
+    ...(git
+      ? {
+          "git.currentBranch": compact(git.currentBranch),
+          "git.targetBranch": compact(git.targetBranch),
+          "git.conflictedFiles": compactList(git.conflictedFiles),
+          "git.rebaseOutput": compact(git.rebaseOutput),
+        }
+      : {}),
   };
 };
 

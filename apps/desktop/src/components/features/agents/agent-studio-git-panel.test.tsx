@@ -69,7 +69,7 @@ const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStud
     commitError: null,
     pushError: null,
     rebaseError: null,
-    commitAll: async () => {},
+    commitAll: async () => true,
     pushBranch: async () => {},
     rebaseOntoTarget: async () => {},
     pullFromUpstream: async () => {},
@@ -242,7 +242,7 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("enforces disabled safety states for rebase and commit controls", async () => {
-    const commitAll = mock(async (_message: string) => {});
+    const commitAll = mock(async (_message: string) => true);
 
     let renderer: TestRenderer.ReactTestRenderer | null = null;
     await act(async () => {
@@ -323,7 +323,7 @@ describe("AgentStudioGitPanel", () => {
 
   test("switches diff scope and validates commit-all message input", async () => {
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
-    const commitAll = mock(async (_message: string) => {});
+    const commitAll = mock(async (_message: string) => true);
     const refresh = mock(() => {});
 
     let renderer: TestRenderer.ReactTestRenderer | null = null;
@@ -506,7 +506,7 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("disables commit/push/rebase controls during detached branch and action in-flight", async () => {
-    const commitAll = mock(async () => {});
+    const commitAll = mock(async () => true);
     const pushBranch = mock(async () => {});
     const rebaseOntoTarget = mock(async () => {});
     const pullFromUpstream = mock(async () => {});

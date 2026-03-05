@@ -13,7 +13,7 @@ type CommitComposerProps = {
   isGitActionsLocked: boolean;
   gitActionsLockReason: string | null;
   commitError: string | null;
-  commitAll: ((message: string) => Promise<void>) | null;
+  commitAll: ((message: string) => Promise<boolean>) | null;
 };
 
 export function CommitComposer({
@@ -36,8 +36,10 @@ export function CommitComposer({
     if (!canCommit || commitAll == null) {
       return;
     }
-    await commitAll(commitMessage);
-    setCommitMessage("");
+    const wasCommitted = await commitAll(commitMessage);
+    if (wasCommitted) {
+      setCommitMessage("");
+    }
   };
 
   return (

@@ -57,7 +57,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("reuses an existing in-flight start promise", async () => {
     const inFlight = Promise.resolve("session-in-flight");
     const inFlightMap = new Map<string, Promise<string>>([
-      ["/tmp/repo::task-1::build::reuse_latest", inFlight],
+      ["/tmp/repo::task-1::build::reuse_latest::", inFlight],
     ]);
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
@@ -1151,7 +1151,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("requireModelReady falls back to null model when default-model loading fails", async () => {
+  test("requireModelReady propagates default-model loading failures", async () => {
     const defaultModelDeferred = createDeferred<AgentModelSelection | null>();
     let sessionsState: Record<string, AgentSessionState> = {};
     const setSessionsById = (
@@ -1206,7 +1206,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     try {
       const startPromise = start({ taskId: "task-1", role: "build", requireModelReady: true });
       defaultModelDeferred.reject(new Error("catalog unavailable"));
-      await expect(startPromise).resolves.toBe("session-created");
+      await expect(startPromise).rejects.toThrow(
+        "Failed to load the default model for build session start: catalog unavailable",
+      );
       expect(sessionsState["session-created"]?.selectedModel).toBeNull();
     } finally {
       defaultModelDeferred.resolve(null);

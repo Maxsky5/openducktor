@@ -17,6 +17,42 @@ type FileDiffListProps = {
   onToggleFile: (filePath: string) => void;
 };
 
+type DiffStyleToggleButtonProps = {
+  icon: typeof SplitSquareHorizontal;
+  isActive: boolean;
+  label: string;
+  onClick: () => void;
+};
+
+function DiffStyleToggleButton({
+  icon: Icon,
+  isActive,
+  label,
+  onClick,
+}: DiffStyleToggleButtonProps): ReactElement {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-pressed={isActive}
+          className={cn(
+            "p-1 transition-colors",
+            isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={onClick}
+        >
+          <Icon className="size-3" />
+          <span className="sr-only">{label}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <p>{label}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export const FileDiffList = memo(function FileDiffList({
   fileDiffs,
   conflictedFiles,
@@ -50,44 +86,18 @@ export const FileDiffList = memo(function FileDiffList({
             {totalDeletions > 0 ? <span className="text-red-400">-{totalDeletions}</span> : null}
           </span>
           <div className="flex items-center overflow-hidden rounded-md border border-border/50">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "p-1 transition-colors",
-                    diffStyle === "split"
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => setDiffStyle("split")}
-                >
-                  <SplitSquareHorizontal className="size-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>Side-by-side</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "p-1 transition-colors",
-                    diffStyle === "unified"
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => setDiffStyle("unified")}
-                >
-                  <AlignJustify className="size-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>Unified</p>
-              </TooltipContent>
-            </Tooltip>
+            <DiffStyleToggleButton
+              icon={SplitSquareHorizontal}
+              isActive={diffStyle === "split"}
+              label="Side-by-side"
+              onClick={() => setDiffStyle("split")}
+            />
+            <DiffStyleToggleButton
+              icon={AlignJustify}
+              isActive={diffStyle === "unified"}
+              label="Unified"
+              onClick={() => setDiffStyle("unified")}
+            />
           </div>
         </div>
       </div>

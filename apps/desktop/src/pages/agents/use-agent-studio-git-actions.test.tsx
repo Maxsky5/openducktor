@@ -93,7 +93,9 @@ describe("useAgentStudioGitActions", () => {
     try {
       await harness.mount();
 
-      await harness.run((state) => state.commitAll("   "));
+      await harness.run(async (state) => {
+        await state.commitAll("   ");
+      });
       expect(harness.getLatest().commitError).toBe("Commit message cannot be empty.");
       expect(gitCommitAllMock).toHaveBeenCalledTimes(0);
 

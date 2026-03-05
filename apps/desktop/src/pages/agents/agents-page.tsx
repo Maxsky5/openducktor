@@ -271,6 +271,10 @@ function AgentStudioSessionStartModal({
       request.scenario,
       request.startMode,
       request.reason,
+      request.selectedModel?.providerId ?? "",
+      request.selectedModel?.modelId ?? "",
+      request.selectedModel?.variant ?? "",
+      request.selectedModel?.opencodeAgent ?? "",
     ].join(":");
     if (initializedRequestKeyRef.current === requestKey) {
       return;

@@ -12,7 +12,6 @@ import {
   gitDiffScopeSchema,
   gitPullBranchRequestSchema,
   gitPullBranchResultSchema,
-  gitPushSummarySchema,
   gitRebaseBranchRequestSchema,
   gitRebaseBranchResultSchema,
   gitUpstreamAheadBehindSchema,
@@ -379,19 +378,13 @@ describe("runtime schemas", () => {
     ).toThrow();
   });
 
-  test("git schemas parse worktree and push payloads", () => {
+  test("git schemas parse worktree payloads", () => {
     const worktree = gitWorktreeSummarySchema.parse({
       branch: "feature/task-1",
       worktreePath: "/tmp/worktrees/task-1",
     });
-    const push = gitPushSummarySchema.parse({
-      remote: "origin",
-      branch: "feature/task-1",
-      output: "Everything up-to-date",
-    });
 
     expect(worktree.branch).toBe("feature/task-1");
-    expect(push.remote).toBe("origin");
   });
 
   test("git worktree status schema parses consolidated snapshot payload", () => {

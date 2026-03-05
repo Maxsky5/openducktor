@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
 import { assertAgentKickoffScenario, buildAgentSystemPrompt } from "@openducktor/core";
+import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
@@ -423,14 +424,14 @@ const maybeApplyDefaultModelSelection = async ({
   const tags = createSessionStartTags(startedCtx);
 
   if (requireModelReady) {
-    const resolvedModel = await captureOrchestratorFallback<AgentModelSelection | null>(
-      "start-session-await-default-model-selection",
-      async () => defaultModelSelectionPromise,
-      {
-        tags,
-        fallback: () => null,
-      },
-    );
+    let resolvedModel: AgentModelSelection | null;
+    try {
+      resolvedModel = await defaultModelSelectionPromise;
+    } catch (error) {
+      throw new Error(
+        `Failed to load the default model for ${startedCtx.role} session start: ${errorMessage(error)}`,
+      );
+    }
     throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
     applyResolvedModelSelection({
       resolvedModel,

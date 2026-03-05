@@ -245,15 +245,14 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
-  test("returns null default model when repo config is unavailable", async () => {
+  test("propagates repo config loading errors when default model lookup fails", async () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     host.workspaceGetRepoConfig = async () => {
       throw new Error("missing config");
     };
 
     try {
-      const selection = await loadRepoDefaultModel("/tmp/repo", "build");
-      expect(selection).toBeNull();
+      await expect(loadRepoDefaultModel("/tmp/repo", "build")).rejects.toThrow("missing config");
     } finally {
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     }
@@ -460,7 +459,7 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
-  test("loads task documents and falls back to empty strings on errors", async () => {
+  test("propagates task document loading errors", async () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
@@ -472,12 +471,7 @@ describe("agent-orchestrator-runtime", () => {
     host.qaGetReport = async () => ({ markdown: "qa", updatedAt: null });
 
     try {
-      const docs = await loadTaskDocuments("/tmp/repo", "task-1");
-      expect(docs).toEqual({
-        specMarkdown: "spec",
-        planMarkdown: "",
-        qaMarkdown: "qa",
-      });
+      await expect(loadTaskDocuments("/tmp/repo", "task-1")).rejects.toThrow("plan unavailable");
     } finally {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
