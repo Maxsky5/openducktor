@@ -10,6 +10,7 @@ import { FileDiffEntryWithMemo } from "./file-diff-entry";
 
 type FileDiffListProps = {
   fileDiffs: FileDiff[];
+  conflictedFiles: ReadonlySet<string>;
   diffStyle: PierreDiffStyle;
   setDiffStyle: (style: PierreDiffStyle) => void;
   expandedFiles: ReadonlySet<string>;
@@ -18,6 +19,7 @@ type FileDiffListProps = {
 
 export const FileDiffList = memo(function FileDiffList({
   fileDiffs,
+  conflictedFiles,
   diffStyle,
   setDiffStyle,
   expandedFiles,
@@ -32,6 +34,7 @@ export const FileDiffList = memo(function FileDiffList({
     }
     return { totalAdditions: additions, totalDeletions: deletions };
   }, [fileDiffs]);
+  const reserveConflictSlot = conflictedFiles.size > 0;
 
   return (
     <div className="divide-y divide-border/50">
@@ -99,6 +102,8 @@ export const FileDiffList = memo(function FileDiffList({
         <FileDiffEntryWithMemo
           key={diff.file}
           diff={diff}
+          isConflicted={conflictedFiles.has(diff.file)}
+          reserveConflictSlot={reserveConflictSlot}
           isExpanded={expandedFiles.has(diff.file)}
           onToggle={onToggleFile}
           diffStyle={diffStyle}

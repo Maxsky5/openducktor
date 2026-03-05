@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import { assertAgentKickoffScenario } from "@openducktor/core";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -89,12 +90,13 @@ export function useAgentStudioFreshSessionCreation({
       runOrchestratorSideEffect(
         "agent-studio-send-kickoff-message",
         (async () => {
+          const kickoffScenario = assertAgentKickoffScenario(nextScenario);
           const promptOverrides = activeRepo
             ? await loadEffectivePromptOverrides(activeRepo)
             : undefined;
           await sendAgentMessage(
             sessionId,
-            kickoffPromptForScenario(nextRole, nextScenario, taskId, {
+            kickoffPromptForScenario(nextRole, kickoffScenario, taskId, {
               overrides: promptOverrides ?? {},
               task: {
                 ...(selectedTask

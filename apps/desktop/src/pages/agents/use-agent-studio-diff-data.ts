@@ -30,6 +30,8 @@ export type DiffDataState = {
   fileDiffs: FileDiff[];
   /** File status from `git status`. */
   fileStatuses: FileStatus[];
+  /** Snapshot token for the current scope status/diff payloads. */
+  statusSnapshotKey?: string | null;
   /** Total changed files from lightweight worktree polling summaries. */
   uncommittedFileCount: number;
   /** Whether data is currently loading. */
@@ -231,7 +233,9 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
 
     if (canUseHashShortCircuit) {
       const hashesMatch = left.statusHash === right.statusHash && left.diffHash === right.diffHash;
-      if (hashesMatch && left.error === right.error) {
+      const contentReferencesMatch =
+        left.fileDiffs === right.fileDiffs && left.fileStatuses === right.fileStatuses;
+      if (hashesMatch && left.error === right.error && contentReferencesMatch) {
         return true;
       }
     }
@@ -348,6 +352,16 @@ const mergeSharedSummaryFields = (
   statusHash: source.statusHash,
 });
 
+const toStatusSnapshotKey = (snapshot: ScopeSnapshot): string | null => {
+  if (snapshot.fileStatuses.length === 0) {
+    return "<empty>";
+  }
+
+  return snapshot.fileStatuses
+    .map((fileStatus) => `${fileStatus.path}:${fileStatus.status}:${fileStatus.staged ? 1 : 0}`)
+    .join("|");
+};
+
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useAgentStudioDiffData({
@@ -358,6 +372,8 @@ export function useAgentStudioDiffData({
   enablePolling,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const [state, setState] = useState<DiffBatchState>(createInitialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [selectedFile, setSelectedFileState] = useState<string | null>(null);
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
   const [worktreeResolutionState, setWorktreeResolutionState] = useState<WorktreeResolutionState>(
@@ -590,12 +606,22 @@ export function useAgentStudioDiffData({
           return;
         }
 
+        const previousSummarySnapshot = stateRef.current.byScope[scope];
+        const nextSummaryFields = toScopeSummaryFields(summary);
+        const shouldReloadFullScope =
+          stateRef.current.loadedByScope[scope] &&
+          previousSummarySnapshot.fileStatuses.some(
+            (fileStatus) => fileStatus.status === "unmerged",
+          ) &&
+          (previousSummarySnapshot.hashVersion !== nextSummaryFields.hashVersion ||
+            previousSummarySnapshot.statusHash !== nextSummaryFields.statusHash ||
+            previousSummarySnapshot.diffHash !== nextSummaryFields.diffHash);
+
         setState((prev) => {
-          const summaryFields = toScopeSummaryFields(summary);
           const previousFetchedScopeSnapshot = prev.byScope[scope];
           const nextFetchedScopeSnapshot: ScopeSnapshot = {
             ...previousFetchedScopeSnapshot,
-            ...summaryFields,
+            ...nextSummaryFields,
           };
           let didChange = false;
           const nextByScope: Record<DiffScope, ScopeSnapshot> = {
@@ -617,7 +643,7 @@ export function useAgentStudioDiffData({
               const previousOtherScopeSnapshot = nextByScope[otherScope];
               const nextOtherScopeSnapshot = mergeSharedSummaryFields(
                 previousOtherScopeSnapshot,
-                summaryFields,
+                nextSummaryFields,
               );
 
               if (!scopeSnapshotEqual(previousOtherScopeSnapshot, nextOtherScopeSnapshot)) {
@@ -637,6 +663,16 @@ export function useAgentStudioDiffData({
             isLoading: false,
           };
         });
+
+        if (shouldReloadFullScope) {
+          void loadData(false, {
+            repoPath: path,
+            targetBranch: target,
+            workingDir,
+            scope,
+            mode: "full",
+          });
+        }
         return;
       }
 
@@ -868,6 +904,7 @@ export function useAgentStudioDiffData({
   }, [enablePolling, repoPath, shouldBlockDiffLoading, loadData]);
 
   const activeScopeState = state.byScope[diffScope];
+  const statusSnapshotKey = toStatusSnapshotKey(activeScopeState);
   const displayError = worktreeResolutionError ?? activeScopeState.error;
   const isLoading = state.isLoading || isWorktreeResolutionResolving;
   const refresh = useCallback((): void => {
@@ -918,6 +955,7 @@ export function useAgentStudioDiffData({
       upstreamAheadBehind: activeScopeState.upstreamAheadBehind,
       fileDiffs: activeScopeState.fileDiffs,
       fileStatuses: activeScopeState.fileStatuses,
+      statusSnapshotKey,
       uncommittedFileCount: activeScopeState.uncommittedFileCount,
       isLoading,
       error: displayError,
@@ -932,6 +970,7 @@ export function useAgentStudioDiffData({
       diffScope,
       isLoading,
       displayError,
+      statusSnapshotKey,
       activeScopeState,
       refresh,
       selectedFile,

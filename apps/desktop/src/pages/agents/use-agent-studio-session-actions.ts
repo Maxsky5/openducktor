@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -312,7 +313,8 @@ export function useAgentStudioSessionActions({
     Boolean(taskId) &&
     isActiveTaskHydrated &&
     !activeSession &&
-    selectedRoleAvailable;
+    selectedRoleAvailable &&
+    isAgentKickoffScenario(scenario);
   const kickoffLabel =
     role === "spec"
       ? "Start Spec"

@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use host_domain::{
-    GitCommitAllRequest, GitCommitAllResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitCommitAllRequest, GitCommitAllResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult,
 };
 use std::path::Path;
 
@@ -97,5 +98,27 @@ impl GitCliPort {
         }
 
         Err(anyhow!("git rebase failed: {}", output))
+    }
+
+    pub(super) fn rebase_abort_impl(
+        &self,
+        repo_path: &Path,
+        _request: GitRebaseAbortRequest,
+    ) -> Result<GitRebaseAbortResult> {
+        self.ensure_repository(repo_path)?;
+
+        let (abort_ok, abort_stdout, abort_stderr) =
+            self.run_git_allow_failure(repo_path, &["rebase", "--abort"])?;
+        let output = combine_output(abort_stdout, abort_stderr);
+        if !abort_ok {
+            let detail = if output.is_empty() {
+                "No output from git rebase --abort".to_string()
+            } else {
+                output
+            };
+            return Err(anyhow!("git rebase --abort failed: {}", detail));
+        }
+
+        Ok(GitRebaseAbortResult::Aborted { output })
     }
 }

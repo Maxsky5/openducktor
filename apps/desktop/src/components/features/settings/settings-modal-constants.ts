@@ -52,6 +52,7 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "system.scenario.build_implementation_start": "Builder Start Scenario",
   "system.scenario.build_after_qa_rejected": "Builder After QA Rejection",
   "system.scenario.build_after_human_request_changes": "Builder After Human Changes",
+  "system.scenario.build_rebase_conflict_resolution": "Builder Rebase Conflict Scenario",
   "system.scenario.qa_review": "QA Review Scenario",
   "kickoff.spec_initial": "Spec Kickoff",
   "kickoff.planner_initial": "Planner Kickoff",
@@ -59,6 +60,7 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "kickoff.build_after_qa_rejected": "Builder Kickoff After QA Rejection",
   "kickoff.build_after_human_request_changes": "Builder Kickoff After Human Changes",
   "kickoff.qa_review": "QA Kickoff",
+  "message.build_rebase_conflict_resolution": "Builder Rebase Conflict Message",
   "permission.read_only.reject": "Read-Only Permission Rejection",
 };
 
@@ -87,6 +89,8 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
     "Scenario-specific system instructions appended when Builder resumes after a QA rejection.",
   "system.scenario.build_after_human_request_changes":
     "Scenario-specific system instructions appended when Builder resumes after human-requested changes.",
+  "system.scenario.build_rebase_conflict_resolution":
+    "Scenario-specific system instructions appended when a fresh Builder session is started to resolve an in-progress rebase conflict.",
   "system.scenario.qa_review":
     "Scenario-specific system instructions appended when QA starts reviewing an implementation.",
   "kickoff.spec_initial": "Initial kickoff message sent when a Spec session is created.",
@@ -98,6 +102,8 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
   "kickoff.build_after_human_request_changes":
     "Initial kickoff message sent when Builder restarts after human-requested changes.",
   "kickoff.qa_review": "Initial kickoff message sent when a QA review session is created.",
+  "message.build_rebase_conflict_resolution":
+    "Reusable in-session message sent to Builder when a git rebase stops on conflicts.",
   "permission.read_only.reject":
     "Template used to reject mutating tool requests from read-only roles (spec, planner, qa).",
 };

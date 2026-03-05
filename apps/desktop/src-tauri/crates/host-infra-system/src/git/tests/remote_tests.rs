@@ -1,12 +1,12 @@
 use host_domain::GitPort;
-use host_domain::{GitPullRequest, GitPullResult};
+use host_domain::{GitPullRequest, GitPullResult, GitPushResult};
 use std::fs;
 
 use super::super::GitCliPort;
 use super::support::{git_available, run_git_ok, setup_bare_remote, setup_repo, TempPath};
 
 #[test]
-fn push_branch_pushes_to_remote_with_summary() {
+fn push_branch_pushes_to_remote_with_typed_result() {
     if !git_available() {
         return;
     }
@@ -26,11 +26,24 @@ fn push_branch_pushes_to_remote_with_summary() {
     run_git_ok(&repo.path, &["add", "push.txt"]);
     run_git_ok(&repo.path, &["commit", "-m", "push commit"]);
 
-    let summary = git
+    let result = git
         .push_branch(&repo.path, "origin", "feature/push", true, false)
         .expect("push should succeed");
-    assert_eq!(summary.remote, "origin");
-    assert_eq!(summary.branch, "feature/push");
+    match result {
+        GitPushResult::Pushed {
+            remote,
+            branch,
+            output,
+        } => {
+            assert_eq!(remote, "origin");
+            assert_eq!(branch, "feature/push");
+            assert!(
+                !output.trim().is_empty(),
+                "successful push should include actionable output"
+            );
+        }
+        other => panic!("expected pushed result, got {other:?}"),
+    }
 
     let ls_remote = run_git_ok(
         &repo.path,
@@ -40,6 +53,69 @@ fn push_branch_pushes_to_remote_with_summary() {
         ls_remote.contains("refs/heads/feature/push"),
         "remote should contain pushed branch"
     );
+}
+
+#[test]
+fn push_branch_returns_non_fast_forward_rejection() {
+    if !git_available() {
+        return;
+    }
+
+    let remote = setup_bare_remote("push-non-fast-forward-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+
+    let source = setup_repo("push-non-fast-forward-source");
+    run_git_ok(
+        &source.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&source.path, &["push", "-u", "origin", "main"]);
+
+    let clone_root = TempPath::new("push-non-fast-forward-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+
+    fs::write(source.path.join("source.txt"), "source\n").expect("source file should write");
+    run_git_ok(&source.path, &["add", "source.txt"]);
+    run_git_ok(&source.path, &["commit", "-m", "source change"]);
+    run_git_ok(&source.path, &["push", "origin", "main"]);
+
+    fs::write(clone_repo.join("clone.txt"), "clone\n").expect("clone file should write");
+    run_git_ok(&clone_repo, &["add", "clone.txt"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "clone change"]);
+
+    let git = GitCliPort::new();
+    let result = git
+        .push_branch(&clone_repo, "origin", "main", false, false)
+        .expect("non-fast-forward push should return typed rejection");
+
+    match result {
+        GitPushResult::RejectedNonFastForward {
+            remote,
+            branch,
+            output,
+        } => {
+            assert_eq!(remote, "origin");
+            assert_eq!(branch, "main");
+            assert!(
+                output.contains("non-fast-forward"),
+                "rejection should keep actionable git output"
+            );
+        }
+        other => panic!("expected non-fast-forward rejection, got {other:?}"),
+    }
 }
 
 #[test]
@@ -204,6 +280,178 @@ fn pull_branch_rebases_when_local_and_upstream_have_new_commits() {
     assert!(
         pulled_file.exists(),
         "rebased pull should include upstream commit changes"
+    );
+}
+
+#[test]
+fn pull_branch_preserves_multiple_local_commits_when_rebasing_diverged_history() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("pull-diverged-multiple-local");
+    let remote = setup_bare_remote("pull-diverged-multiple-local-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+    run_git_ok(&repo.path, &["push", "-u", "origin", "main"]);
+
+    fs::write(repo.path.join("local-one.txt"), "local one\n").expect("local-one file should write");
+    run_git_ok(&repo.path, &["add", "local-one.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "local change 1"]);
+
+    fs::write(repo.path.join("local-two.txt"), "local two\n").expect("local-two file should write");
+    run_git_ok(&repo.path, &["add", "local-two.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "local change 2"]);
+
+    let clone_root = TempPath::new("pull-diverged-multiple-local-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+    fs::write(clone_repo.join("upstream.txt"), "upstream\n").expect("upstream file should write");
+    run_git_ok(&clone_repo, &["add", "upstream.txt"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "upstream change"]);
+    run_git_ok(&clone_repo, &["push", "origin", "main"]);
+
+    let git = GitCliPort::new();
+    let result = git
+        .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+        .expect("diverged pull with multiple local commits should succeed");
+    assert!(matches!(result, GitPullResult::Pulled { .. }));
+
+    let head_subjects = run_git_ok(&repo.path, &["log", "--pretty=%s", "-n", "3"]);
+    let subject_lines = head_subjects.lines().collect::<Vec<_>>();
+    assert_eq!(
+        subject_lines.as_slice(),
+        ["local change 2", "local change 1", "upstream change"],
+        "pull --rebase should preserve both local commits above the fetched upstream change"
+    );
+
+    let head_with_parents = run_git_ok(&repo.path, &["rev-list", "--parents", "-n", "1", "HEAD"]);
+    let parent_count = head_with_parents.split_whitespace().count();
+    assert_eq!(
+        parent_count, 2,
+        "rebased pull should keep linear history instead of creating merge commit"
+    );
+
+    assert!(
+        repo.path.join("local-one.txt").exists(),
+        "first local commit should remain in the worktree after rebase pull"
+    );
+    assert!(
+        repo.path.join("local-two.txt").exists(),
+        "second local commit should remain in the worktree after rebase pull"
+    );
+    assert!(
+        repo.path.join("upstream.txt").exists(),
+        "upstream commit should remain in the worktree after rebase pull"
+    );
+}
+
+#[test]
+fn pull_branch_preserves_local_commits_after_upstream_force_push() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("pull-force-pushed-upstream");
+    let remote = setup_bare_remote("pull-force-pushed-upstream-remote");
+    let remote_path = remote.path.to_string_lossy().to_string();
+    run_git_ok(
+        &repo.path,
+        &["remote", "add", "origin", remote_path.as_str()],
+    );
+
+    let git = GitCliPort::new();
+    git.switch_branch(&repo.path, "feature/force-push-rebase", true)
+        .expect("feature branch should be created");
+    run_git_ok(
+        &repo.path,
+        &["push", "-u", "origin", "feature/force-push-rebase"],
+    );
+
+    fs::write(repo.path.join("local-meta.txt"), "local-meta\n")
+        .expect("local metadata file should write");
+    run_git_ok(&repo.path, &["add", "local-meta.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "local metadata"]);
+
+    fs::write(repo.path.join("feature-work.txt"), "builder work\n")
+        .expect("builder work file should write");
+    run_git_ok(&repo.path, &["add", "feature-work.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "builder work"]);
+    run_git_ok(&repo.path, &["push", "origin", "feature/force-push-rebase"]);
+
+    let clone_root = TempPath::new("pull-force-pushed-upstream-clone");
+    let clone_repo = clone_root.path.join("repo");
+    run_git_ok(
+        &clone_root.path,
+        &[
+            "clone",
+            remote_path.as_str(),
+            clone_repo.to_string_lossy().as_ref(),
+        ],
+    );
+    run_git_ok(
+        &clone_repo,
+        &["config", "user.email", "tests@openducktor.local"],
+    );
+    run_git_ok(&clone_repo, &["config", "user.name", "OpenDucktor Tests"]);
+    run_git_ok(&clone_repo, &["switch", "feature/force-push-rebase"]);
+    run_git_ok(&clone_repo, &["reset", "--hard", "HEAD~2"]);
+    fs::write(clone_repo.join("agents.md"), "other-clone-agents\n")
+        .expect("other clone agents file should write");
+    run_git_ok(&clone_repo, &["add", "agents.md"]);
+    run_git_ok(&clone_repo, &["commit", "-m", "other clone metadata"]);
+    run_git_ok(
+        &clone_repo,
+        &[
+            "push",
+            "--force-with-lease",
+            "origin",
+            "feature/force-push-rebase",
+        ],
+    );
+
+    let result = git
+        .pull_branch(&repo.path, GitPullRequest { working_dir: None })
+        .expect("pull should preserve local commits after upstream force push");
+    assert!(matches!(result, GitPullResult::Pulled { .. }));
+
+    let head_subjects = run_git_ok(&repo.path, &["log", "--pretty=%s", "-n", "3"]);
+    let subject_lines = head_subjects.lines().collect::<Vec<_>>();
+    assert_eq!(
+        subject_lines.as_slice(),
+        ["builder work", "local metadata", "other clone metadata"],
+        "force-pushed upstream should not cause rebase pull to drop local commits"
+    );
+
+    assert!(
+        repo.path.join("feature-work.txt").exists(),
+        "builder work file should still exist after pull"
+    );
+    assert!(
+        repo.path.join("local-meta.txt").exists(),
+        "local metadata file should still exist after pull"
+    );
+
+    let head_with_parents = run_git_ok(&repo.path, &["rev-list", "--parents", "-n", "1", "HEAD"]);
+    let parent_count = head_with_parents.split_whitespace().count();
+    assert_eq!(
+        parent_count, 2,
+        "force-pushed upstream pull should still keep linear history"
     );
 }
 

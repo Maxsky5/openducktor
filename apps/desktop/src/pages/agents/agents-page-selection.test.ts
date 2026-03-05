@@ -8,6 +8,8 @@ import {
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
   resolveAgentStudioActiveSession,
+  resolveAgentStudioBuilderSessionForTask,
+  resolveAgentStudioBuilderSessionsForTask,
   resolveAgentStudioTaskId,
   toContextStorageKey,
   toRightPanelStorageKey,
@@ -167,5 +169,85 @@ describe("agents-page-selection", () => {
     });
 
     expect(resolved?.sessionId).toBe("planner-1");
+  });
+
+  test("prefers the current build session when resolving conflict reuse", () => {
+    const activeBuildSession = createAgentSessionFixture({
+      sessionId: "build-active",
+      taskId: "task-1",
+      role: "build",
+    });
+    const olderBuildSession = createAgentSessionFixture({
+      sessionId: "build-older",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    const resolved = resolveAgentStudioBuilderSessionForTask({
+      taskId: "task-1",
+      viewActiveSession: activeBuildSession,
+      activeSession: null,
+      selectedSessionById: null,
+      viewSessionsForTask: [olderBuildSession],
+      sessionsForTask: [],
+    });
+
+    expect(resolved?.sessionId).toBe("build-active");
+  });
+
+  test("falls back to any existing build session for the viewed task", () => {
+    const buildSession = createAgentSessionFixture({
+      sessionId: "build-1",
+      taskId: "task-1",
+      role: "build",
+    });
+    const otherTaskBuildSession = createAgentSessionFixture({
+      sessionId: "build-2",
+      taskId: "task-2",
+      role: "build",
+    });
+
+    const resolved = resolveAgentStudioBuilderSessionForTask({
+      taskId: "task-1",
+      viewActiveSession: null,
+      activeSession: otherTaskBuildSession,
+      selectedSessionById: null,
+      viewSessionsForTask: [],
+      sessionsForTask: [buildSession, otherTaskBuildSession],
+    });
+
+    expect(resolved?.sessionId).toBe("build-1");
+  });
+
+  test("returns a deduplicated ordered list of build sessions for the viewed task", () => {
+    const activeBuildSession = createAgentSessionFixture({
+      sessionId: "build-active",
+      taskId: "task-1",
+      role: "build",
+    });
+    const duplicateBuildSession = createAgentSessionFixture({
+      sessionId: "build-active",
+      taskId: "task-1",
+      role: "build",
+    });
+    const secondaryBuildSession = createAgentSessionFixture({
+      sessionId: "build-secondary",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    const sessions = resolveAgentStudioBuilderSessionsForTask({
+      taskId: "task-1",
+      viewActiveSession: activeBuildSession,
+      activeSession: null,
+      selectedSessionById: duplicateBuildSession,
+      viewSessionsForTask: [secondaryBuildSession],
+      sessionsForTask: [activeBuildSession, secondaryBuildSession],
+    });
+
+    expect(sessions.map((session) => session.sessionId)).toEqual([
+      "build-active",
+      "build-secondary",
+    ]);
   });
 });

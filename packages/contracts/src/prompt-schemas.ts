@@ -13,6 +13,7 @@ export const agentPromptTemplateIdValues = [
   "system.scenario.build_implementation_start",
   "system.scenario.build_after_qa_rejected",
   "system.scenario.build_after_human_request_changes",
+  "system.scenario.build_rebase_conflict_resolution",
   "system.scenario.qa_review",
   "kickoff.spec_initial",
   "kickoff.planner_initial",
@@ -20,6 +21,7 @@ export const agentPromptTemplateIdValues = [
   "kickoff.build_after_qa_rejected",
   "kickoff.build_after_human_request_changes",
   "kickoff.qa_review",
+  "message.build_rebase_conflict_resolution",
   "permission.read_only.reject",
 ] as const;
 
@@ -40,6 +42,10 @@ export const agentPromptPlaceholderValues = [
   "task.specMarkdown",
   "task.planMarkdown",
   "task.latestQaReportMarkdown",
+  "git.currentBranch",
+  "git.targetBranch",
+  "git.conflictedFiles",
+  "git.rebaseOutput",
 ] as const;
 export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues);
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;

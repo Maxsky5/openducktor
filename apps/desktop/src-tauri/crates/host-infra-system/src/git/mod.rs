@@ -11,8 +11,8 @@ use anyhow::{Context, Result};
 use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
     GitDiffScope, GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult,
-    GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
-    GitWorktreeStatusSummaryData,
+    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 use std::path::Path;
 
@@ -97,7 +97,7 @@ impl GitPort for GitCliPort {
         branch: &str,
         set_upstream: bool,
         force_with_lease: bool,
-    ) -> Result<GitPushSummary> {
+    ) -> Result<GitPushResult> {
         self.push_branch_impl(repo_path, remote, branch, set_upstream, force_with_lease)
     }
 
@@ -157,5 +157,13 @@ impl GitPort for GitCliPort {
         request: GitRebaseBranchRequest,
     ) -> Result<GitRebaseBranchResult> {
         self.rebase_branch_impl(repo_path, request)
+    }
+
+    fn rebase_abort(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseAbortRequest,
+    ) -> Result<GitRebaseAbortResult> {
+        self.rebase_abort_impl(repo_path, request)
     }
 }

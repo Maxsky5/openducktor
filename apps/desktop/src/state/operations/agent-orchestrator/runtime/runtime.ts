@@ -107,8 +107,43 @@ export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPro
 };
 
 export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeDependencies) => {
-  return async (repoPath: string, taskId: string, role: AgentRole): Promise<RuntimeInfo> => {
+  return async (
+    repoPath: string,
+    taskId: string,
+    role: AgentRole,
+    options?: {
+      workingDirectoryOverride?: string | null;
+    },
+  ): Promise<RuntimeInfo> => {
+    const workingDirectoryOverride = options?.workingDirectoryOverride?.trim() ?? "";
+
     if (role === "build") {
+      if (workingDirectoryOverride) {
+        const matchingRun = runsRef.current.find(
+          (entry) =>
+            entry.repoPath === repoPath &&
+            entry.taskId === taskId &&
+            runningStates.has(entry.state) &&
+            entry.worktreePath === workingDirectoryOverride,
+        );
+        if (matchingRun) {
+          return {
+            runtimeId: null,
+            runId: matchingRun.runId,
+            baseUrl: toBaseUrl(matchingRun.port),
+            workingDirectory: workingDirectoryOverride,
+          };
+        }
+
+        const runtime = await host.opencodeRepoRuntimeEnsure(repoPath);
+        return {
+          runtimeId: runtime.runtimeId,
+          runId: null,
+          baseUrl: toBaseUrl(runtime.port),
+          workingDirectory: workingDirectoryOverride,
+        };
+      }
+
       let run = runsRef.current.find(
         (entry) =>
           entry.repoPath === repoPath && entry.taskId === taskId && runningStates.has(entry.state),
@@ -137,7 +172,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         runtimeId: runtime.runtimeId,
         runId: null,
         baseUrl: toBaseUrl(runtime.port),
-        workingDirectory: runtime.workingDirectory,
+        workingDirectory: workingDirectoryOverride || runtime.workingDirectory,
       };
     }
 
@@ -146,7 +181,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       runtimeId: runtime.runtimeId,
       runId: null,
       baseUrl: toBaseUrl(runtime.port),
-      workingDirectory: runtime.workingDirectory,
+      workingDirectory: workingDirectoryOverride || runtime.workingDirectory,
     };
   };
 };

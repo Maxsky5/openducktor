@@ -1,5 +1,12 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import { type AgentRole, type AgentScenario, buildAgentKickoffPrompt } from "@openducktor/core";
+import {
+  type AgentKickoffScenario,
+  type AgentPromptGitContext,
+  type AgentRole,
+  type AgentScenario,
+  buildAgentKickoffPrompt,
+  buildAgentMessagePrompt,
+} from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { AGENT_ROLE_LABELS } from "@/types";
 
@@ -31,6 +38,7 @@ export const SCENARIO_LABELS: Record<AgentScenario, string> = {
   build_implementation_start: "Start Implementation",
   build_after_qa_rejected: "Fix QA Rejection",
   build_after_human_request_changes: "Apply Human Changes",
+  build_rebase_conflict_resolution: "Resolve Rebase Conflict",
   qa_review: "QA Review",
 };
 
@@ -43,6 +51,7 @@ export const isScenario = (value: string | null): value is AgentScenario =>
   value === "build_implementation_start" ||
   value === "build_after_qa_rejected" ||
   value === "build_after_human_request_changes" ||
+  value === "build_rebase_conflict_resolution" ||
   value === "qa_review";
 
 export const firstScenario = (role: AgentRole): AgentScenario => {
@@ -56,7 +65,7 @@ export const firstScenario = (role: AgentRole): AgentScenario => {
 
 export const kickoffPromptForScenario = (
   role: AgentRole,
-  scenario: AgentScenario,
+  scenario: AgentKickoffScenario,
   taskId: string,
   options?: {
     overrides?: RepoPromptOverrides;
@@ -80,6 +89,36 @@ export const kickoffPromptForScenario = (
       taskId,
       ...(options?.task ?? {}),
     },
+    overrides: options?.overrides ?? {},
+  });
+};
+
+export const buildRebaseConflictResolutionPrompt = (
+  taskId: string,
+  options?: {
+    overrides?: RepoPromptOverrides;
+    task?: {
+      title?: string;
+      issueType?: "task" | "feature" | "bug" | "epic";
+      status?: string;
+      qaRequired?: boolean;
+      description?: string;
+      acceptanceCriteria?: string;
+      specMarkdown?: string;
+      planMarkdown?: string;
+      latestQaReportMarkdown?: string;
+    };
+    git?: AgentPromptGitContext;
+  },
+): string => {
+  return buildAgentMessagePrompt({
+    role: "build",
+    templateId: "message.build_rebase_conflict_resolution",
+    task: {
+      taskId,
+      ...(options?.task ?? {}),
+    },
+    ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
   });
 };

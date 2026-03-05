@@ -32,7 +32,7 @@ export const buildSessionStartModalDescription = ({
 export const toSessionStartPostAction = (
   reason: SessionStartRequestReason,
 ): SessionStartPostAction => {
-  if (reason === "composer_send") {
+  if (reason === "composer_send" || reason === "rebase_conflict_resolution") {
     return "send_message";
   }
   if (reason === "scenario_kickoff") {

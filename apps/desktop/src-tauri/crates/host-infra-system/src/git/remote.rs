@@ -1,11 +1,18 @@
 use anyhow::{anyhow, Result};
-use host_domain::{GitPullResult, GitPushSummary};
+use host_domain::{GitPullResult, GitPushResult};
 use std::path::Path;
 
 use super::util::{combine_output, normalize_non_empty, resolve_upstream_ref};
 use super::GitCliPort;
 
 impl GitCliPort {
+    fn is_non_fast_forward_push_rejection(output: &str) -> bool {
+        output
+            .lines()
+            .any(|line| line.contains("[rejected]") && line.contains("non-fast-forward"))
+            || output.contains("non-fast-forward")
+    }
+
     pub(super) fn push_branch_impl(
         &self,
         repo_path: &Path,
@@ -13,12 +20,12 @@ impl GitCliPort {
         branch: &str,
         set_upstream: bool,
         force_with_lease: bool,
-    ) -> Result<GitPushSummary> {
+    ) -> Result<GitPushResult> {
         self.ensure_repository(repo_path)?;
         let remote = normalize_non_empty(remote, "remote")?;
         let branch = normalize_non_empty(branch, "branch")?;
 
-        let mut args = vec!["push".to_string()];
+        let mut args = vec!["push".to_string(), "--porcelain".to_string()];
         if set_upstream {
             args.push("-u".to_string());
         }
@@ -38,6 +45,13 @@ impl GitCliPort {
             } else {
                 output
             };
+            if Self::is_non_fast_forward_push_rejection(detail.as_str()) {
+                return Ok(GitPushResult::RejectedNonFastForward {
+                    remote,
+                    branch,
+                    output: detail,
+                });
+            }
             return Err(anyhow!(
                 "git push failed for {}/{}: {}",
                 remote,
@@ -46,7 +60,7 @@ impl GitCliPort {
             ));
         }
 
-        Ok(GitPushSummary {
+        Ok(GitPushResult::Pushed {
             remote,
             branch,
             output,
@@ -90,17 +104,25 @@ impl GitCliPort {
 
         let before_head = self.run_git(repo_path, &["rev-parse", "HEAD"])?;
 
-        let pull_args: [&str; 2] = if upstream_counts.ahead == 0 {
-            ["pull", "--ff-only"]
+        let command = if upstream_counts.ahead == 0 {
+            (
+                "git merge --ff-only",
+                vec!["merge", "--ff-only", upstream_target.as_str()],
+            )
         } else {
-            ["pull", "--rebase"]
+            (
+                "git rebase --no-fork-point",
+                vec!["rebase", "--no-fork-point", upstream_target.as_str()],
+            )
         };
 
-        let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &pull_args)?;
+        let (command_name, command_args) = command;
+        let (ok, stdout, stderr) =
+            self.run_git_allow_failure(repo_path, command_args.as_slice())?;
         let output = combine_output(stdout, stderr);
         if !ok {
             let detail = if output.is_empty() {
-                "No output from git pull".to_string()
+                format!("No output from {command_name}")
             } else {
                 output
             };
@@ -113,7 +135,7 @@ impl GitCliPort {
                 });
             }
 
-            return Err(anyhow!("git pull failed: {}", detail));
+            return Err(anyhow!("{command_name} failed: {}", detail));
         }
 
         let after_head = self.run_git(repo_path, &["rev-parse", "HEAD"])?;

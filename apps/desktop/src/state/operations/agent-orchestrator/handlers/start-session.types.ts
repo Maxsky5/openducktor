@@ -16,6 +16,7 @@ export type StartAgentSessionInput = {
   sendKickoff?: boolean;
   startMode?: "reuse_latest" | "fresh";
   requireModelReady?: boolean;
+  workingDirectoryOverride?: string | null;
 };
 
 export type SessionStateById = Record<string, AgentSessionState>;
@@ -34,7 +35,14 @@ export type SessionDependencies = {
 
 export type RuntimeDependencies = {
   adapter: AgentEnginePort;
-  ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
+  ensureRuntime: (
+    repoPath: string,
+    taskId: string,
+    role: AgentRole,
+    options?: {
+      workingDirectoryOverride?: string | null;
+    },
+  ) => Promise<RuntimeInfo>;
 };
 
 export type TaskDependencies = {
@@ -106,6 +114,7 @@ export type StartSessionCreationInput = {
   scenario: AgentScenario | undefined;
   selectedModel: AgentModelSelection | null;
   startMode: "reuse_latest" | "fresh";
+  workingDirectoryOverride?: string | null;
 };
 
 export type ResolvedRuntimeAndModel = {

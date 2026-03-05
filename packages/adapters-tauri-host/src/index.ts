@@ -79,6 +79,7 @@ const GIT_METHODS = [
   "gitPullBranch",
   "gitCommitAll",
   "gitRebaseBranch",
+  "gitRebaseAbort",
   "gitGetStatus",
   "gitGetDiff",
   "gitCommitsAheadBehind",

@@ -260,6 +260,7 @@ fn startup_phase_command_registration(
         git_commit_all,
         git_pull_branch,
         git_rebase_branch,
+        git_rebase_abort,
         tasks_list,
         task_create,
         task_update,

@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
-import { buildAgentSystemPrompt } from "@openducktor/core";
+import { assertAgentKickoffScenario, buildAgentSystemPrompt } from "@openducktor/core";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
@@ -78,16 +78,23 @@ const resolveStartTask = ({
 const resolveRuntimeAndModel = async ({
   ctx,
   scenario,
+  workingDirectoryOverride,
   taskCard,
   deps,
 }: {
   ctx: StartSessionContext;
   scenario: AgentScenario | undefined;
+  workingDirectoryOverride?: string | null;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
   const docsPromise = deps.task.loadTaskDocuments(ctx.repoPath, ctx.taskId);
-  const runtimePromise = deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role);
+  const runtimePromise = deps.runtime.ensureRuntime(
+    ctx.repoPath,
+    ctx.taskId,
+    ctx.role,
+    workingDirectoryOverride !== undefined ? { workingDirectoryOverride } : undefined,
+  );
   const defaultModelSelectionPromise = deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
   const promptOverridesPromise = deps.model.loadRepoPromptOverrides(ctx.repoPath);
 
@@ -238,6 +245,9 @@ const createOrReuseSession = async ({
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
+    ...(input.workingDirectoryOverride !== undefined
+      ? { workingDirectoryOverride: input.workingDirectoryOverride }
+      : {}),
     taskCard,
     deps,
   });
@@ -460,12 +470,14 @@ const maybeSendKickoff = async ({
     return;
   }
 
+  const kickoffScenario = assertAgentKickoffScenario(startedCtx.resolvedScenario);
+
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   await task.sendAgentMessage(
     startedCtx.summary.sessionId,
     kickoffPromptWithTaskContext(
       startedCtx.role,
-      startedCtx.resolvedScenario,
+      kickoffScenario,
       {
         taskId: startedCtx.taskId,
         title: taskCard.title,
@@ -503,9 +515,11 @@ export const createStartAgentSession = ({
     sendKickoff = false,
     startMode = "reuse_latest",
     requireModelReady = false,
+    workingDirectoryOverride = null,
   }: StartAgentSessionInput): Promise<string> => {
     const repoPath = requireActiveRepo(repo.activeRepo);
-    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}`;
+    const normalizedWorkingDirectoryOverride = workingDirectoryOverride?.trim() ?? "";
+    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}::${normalizedWorkingDirectoryOverride}`;
     const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
@@ -532,6 +546,7 @@ export const createStartAgentSession = ({
           scenario,
           selectedModel,
           startMode,
+          workingDirectoryOverride,
         },
         deps: {
           session,

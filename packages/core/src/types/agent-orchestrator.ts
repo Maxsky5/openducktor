@@ -1,13 +1,27 @@
 import type {
+  AgentKickoffScenario as ContractsAgentKickoffScenario,
   AgentRole as ContractsAgentRole,
   AgentScenario as ContractsAgentScenario,
   AgentToolName as ContractsAgentToolName,
   TaskPriority,
 } from "@openducktor/contracts";
+import { isAgentKickoffScenario as isContractsAgentKickoffScenario } from "@openducktor/contracts";
 
 export type AgentRole = ContractsAgentRole;
 export type AgentScenario = ContractsAgentScenario;
+export type AgentKickoffScenario = ContractsAgentKickoffScenario;
 export type AgentToolName = ContractsAgentToolName;
+export const isAgentKickoffScenario = isContractsAgentKickoffScenario;
+
+export const assertAgentKickoffScenario = (
+  scenario: AgentScenario,
+): AgentKickoffScenario => {
+  if (!isContractsAgentKickoffScenario(scenario)) {
+    throw new Error(`Scenario "${scenario}" does not support kickoff prompts.`);
+  }
+
+  return scenario;
+};
 
 export type AgentModelSelection = {
   providerId: string;

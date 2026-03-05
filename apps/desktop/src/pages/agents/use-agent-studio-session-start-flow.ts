@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import { assertAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -121,6 +122,7 @@ export function useAgentStudioSessionStartFlow({
       return;
     }
 
+    const kickoffScenario = assertAgentKickoffScenario(scenario);
     const sessionId = await startSession("scenario_kickoff");
     if (!sessionId) {
       return;
@@ -129,7 +131,7 @@ export function useAgentStudioSessionStartFlow({
     const promptOverrides = activeRepo ? await loadEffectivePromptOverrides(activeRepo) : undefined;
     await sendAgentMessage(
       sessionId,
-      kickoffPromptForScenario(role, scenario, taskId, {
+      kickoffPromptForScenario(role, kickoffScenario, taskId, {
         overrides: promptOverrides ?? {},
         task: {
           ...(selectedTask

@@ -19,6 +19,9 @@ type GitInfoHeaderProps = Pick<
   | "isCommitting"
   | "isPushing"
   | "isRebasing"
+  | "isGitActionsLocked"
+  | "gitActionsLockReason"
+  | "showLockReasonBanner"
   | "pushError"
   | "rebaseError"
   | "setDiffScope"
@@ -41,6 +44,9 @@ export function GitInfoHeader({
   isCommitting,
   isPushing,
   isRebasing,
+  isGitActionsLocked,
+  gitActionsLockReason,
+  showLockReasonBanner,
   pushError,
   rebaseError,
   pushBranch,
@@ -62,18 +68,22 @@ export function GitInfoHeader({
   const hasUncommittedFiles = uncommittedFileCount > 0;
   const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
   const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
-  const pushBlockedByBehind = hasUpstreamBehind;
   const canRefresh = !isLoading && !isAnyActionInFlight;
   const canRebase =
-    !isDetachedHead && hasTargetBranch && !isAnyActionInFlight && rebaseOntoTarget != null;
+    !isDetachedHead &&
+    hasTargetBranch &&
+    !isAnyActionInFlight &&
+    !isGitActionsLocked &&
+    rebaseOntoTarget != null;
   const canPull =
     !isDetachedHead &&
     hasUpstreamBehind &&
     !hasUncommittedFiles &&
     !isAnyActionInFlight &&
+    !isGitActionsLocked &&
     pullFromUpstream != null;
   const canPush =
-    !isDetachedHead && !pushBlockedByBehind && !isAnyActionInFlight && pushBranch != null;
+    !isDetachedHead && !isAnyActionInFlight && !isGitActionsLocked && pushBranch != null;
 
   const handleScopeChange = (scope: DiffScope): void => {
     if (diffScope === scope) {
@@ -194,9 +204,11 @@ export function GitInfoHeader({
               <p>
                 {isRebasing
                   ? "Rebasing"
-                  : rebaseBehindCount != null && rebaseBehindCount > 0
-                    ? `Rebase onto target (${rebaseBehindCount} behind)`
-                    : "Rebase onto target"}
+                  : isGitActionsLocked
+                    ? (gitActionsLockReason ?? "Git actions are disabled.")
+                    : rebaseBehindCount != null && rebaseBehindCount > 0
+                      ? `Rebase onto target (${rebaseBehindCount} behind)`
+                      : "Rebase onto target"}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -230,11 +242,18 @@ export function GitInfoHeader({
               <p>
                 {isRebasing
                   ? "Pulling"
-                  : hasUncommittedFiles
-                    ? "Commit or stash changes before pulling"
-                    : pushBehindCount != null && pushBehindCount > 0
-                      ? `Pull (${pushBehindCount} behind)`
-                      : "Pull"}
+                  : isGitActionsLocked
+                    ? (gitActionsLockReason ?? "Git actions are disabled.")
+                    : hasUncommittedFiles
+                      ? "Commit or stash changes before pulling"
+                      : pushAheadCount != null &&
+                          pushAheadCount > 0 &&
+                          pushBehindCount != null &&
+                          pushBehindCount > 0
+                        ? `Pull with rebase (${pushBehindCount} behind; ${pushAheadCount} local commit${pushAheadCount === 1 ? "" : "s"} will be rewritten)`
+                        : pushBehindCount != null && pushBehindCount > 0
+                          ? `Pull (${pushBehindCount} behind)`
+                          : "Pull"}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -266,10 +285,10 @@ export function GitInfoHeader({
               <p>
                 {isPushing
                   ? "Pushing"
-                  : pushBlockedByBehind && hasUncommittedFiles
-                    ? "Commit or stash changes, then pull before pushing"
-                    : pushBlockedByBehind
-                      ? "Pull before pushing"
+                  : isGitActionsLocked
+                    ? (gitActionsLockReason ?? "Git actions are disabled.")
+                    : hasUpstreamBehind
+                      ? `Push branch (${pushBehindCount} behind; confirmation may be required)`
                       : pushAheadCount != null && pushAheadCount > 0
                         ? `Push branch (${pushAheadCount} ahead)`
                         : "Push branch"}
@@ -279,9 +298,18 @@ export function GitInfoHeader({
         </div>
       </div>
 
+      {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (
+        <div
+          className="border-y border-border bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+          data-testid="agent-studio-git-lock-reason"
+        >
+          {gitActionsLockReason}
+        </div>
+      ) : null}
+
       <div className="space-y-1">
         <div
-          className="inline-flex h-9 w-full items-center bg-muted p-1"
+          className="inline-flex h-9 w-full items-center bg-muted p-1 gap-1"
           role="tablist"
           aria-label="Git diff scope"
         >

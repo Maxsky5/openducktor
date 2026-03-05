@@ -11,7 +11,9 @@ import {
   type GitCurrentBranch,
   type GitPullBranchRequest,
   type GitPullBranchResult,
-  type GitPushSummary,
+  type GitPushBranchResult,
+  type GitRebaseAbortRequest,
+  type GitRebaseAbortResult,
   type GitRebaseBranchRequest,
   type GitRebaseBranchResult,
   type GitWorktreeStatus,
@@ -22,8 +24,9 @@ import {
   gitCurrentBranchSchema,
   gitDiffScopeSchema,
   gitPullBranchResultSchema,
-  gitPushSummarySchema,
+  gitPushBranchResultSchema,
   gitRebaseBranchResultSchema,
+  gitRebaseAbortResultSchema,
   gitWorktreeStatusSchema,
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
@@ -104,7 +107,7 @@ export const gitPushBranch = async (
     forceWithLease?: boolean;
     workingDir?: string;
   },
-): Promise<GitPushSummary> => {
+): Promise<GitPushBranchResult> => {
   const payload = await invokeFn<unknown>("git_push_branch", {
     repoPath,
     branch,
@@ -113,7 +116,7 @@ export const gitPushBranch = async (
     forceWithLease: options?.forceWithLease ?? false,
     workingDir: options?.workingDir ?? null,
   });
-  return gitPushSummarySchema.parse(payload);
+  return gitPushBranchResultSchema.parse(payload);
 };
 
 export const gitPullBranch = async (
@@ -242,6 +245,22 @@ export const gitRebaseBranch = async (
   return gitRebaseBranchResultSchema.parse(payload);
 };
 
+export const gitRebaseAbort = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  workingDir?: string,
+): Promise<GitRebaseAbortResult> => {
+  const request: GitRebaseAbortRequest = {
+    repoPath,
+    workingDir,
+  };
+  const payload = await invokeFn<unknown>("git_rebase_abort", {
+    repoPath: request.repoPath,
+    workingDir: request.workingDir ?? null,
+  });
+  return gitRebaseAbortResultSchema.parse(payload);
+};
+
 export class TauriGitClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -287,7 +306,7 @@ export class TauriGitClient {
       forceWithLease?: boolean;
       workingDir?: string;
     },
-  ): Promise<GitPushSummary> {
+  ): Promise<GitPushBranchResult> {
     return gitPushBranch(this.invokeFn, repoPath, branch, options);
   }
 
@@ -353,5 +372,9 @@ export class TauriGitClient {
     workingDir?: string,
   ): Promise<GitRebaseBranchResult> {
     return gitRebaseBranch(this.invokeFn, repoPath, targetBranch, workingDir);
+  }
+
+  async gitRebaseAbort(repoPath: string, workingDir?: string): Promise<GitRebaseAbortResult> {
+    return gitRebaseAbort(this.invokeFn, repoPath, workingDir);
   }
 }
