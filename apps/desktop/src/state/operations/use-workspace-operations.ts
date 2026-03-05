@@ -4,12 +4,17 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { host } from "./host";
 import {
+  BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
   BRANCH_SYNC_INTERVAL_MS,
+  type BranchProbeError,
+  type BranchProbeOutcome,
+  branchProbeErrorSignature,
+  classifyBranchProbeError,
   hasBranchIdentityChanged,
   normalizeRepoPath,
   shouldProbeExternalBranchChange,
+  shouldReportBranchProbeError,
   shouldSkipBranchSwitch,
-  swallowBranchProbeError,
 } from "./workspace-operations-model";
 
 type UseWorkspaceOperationsArgs = {
@@ -26,6 +31,7 @@ type UseWorkspaceOperationsResult = {
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
+  branchSyncDegraded: boolean;
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (repoPath: string) => Promise<void>;
   selectWorkspace: (repoPath: string) => Promise<void>;
@@ -46,12 +52,16 @@ export function useWorkspaceOperations({
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false);
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isSwitchingBranch, setIsSwitchingBranch] = useState(false);
+  const [branchSyncDegraded, setBranchSyncDegraded] = useState(false);
   const workspaceSwitchVersionRef = useRef(0);
   const branchRequestVersionRef = useRef(0);
   const branchSyncInFlightRef = useRef(false);
+  const lastProbeErrorToastAtRef = useRef<number | null>(null);
+  const lastProbeErrorSignatureRef = useRef<string | null>(null);
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
   const activeRepoRef = useRef(activeRepo);
+  const previousActiveRepoRef = useRef(activeRepo);
   const probeGatesRef = useRef({
     isSwitchingWorkspace,
     isLoadingBranches,
@@ -62,16 +72,13 @@ export function useWorkspaceOperations({
   probeGatesRef.current.isLoadingBranches = isLoadingBranches;
   probeGatesRef.current.isSwitchingBranch = isSwitchingBranch;
 
-  useEffect(() => {
-    activeRepoRef.current = activeRepo;
-  }, [activeRepo]);
-
   const applyBranchState = useCallback(
     (current: GitCurrentBranch, allBranches: GitBranch[]): void => {
       setActiveBranch(current);
       setBranches(allBranches);
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
+      setBranchSyncDegraded(false);
     },
     [],
   );
@@ -79,13 +86,27 @@ export function useWorkspaceOperations({
   const clearBranchData = useCallback((): void => {
     branchRequestVersionRef.current += 1;
     branchSyncInFlightRef.current = false;
+    lastProbeErrorToastAtRef.current = null;
+    lastProbeErrorSignatureRef.current = null;
     lastKnownBranchNameRef.current = null;
     lastKnownDetachedRef.current = null;
     setBranches([]);
     setActiveBranch(null);
+    setBranchSyncDegraded(false);
     setIsLoadingBranches(false);
     setIsSwitchingBranch(false);
   }, []);
+
+  useEffect(() => {
+    const previousActiveRepo = previousActiveRepoRef.current;
+
+    if (previousActiveRepo !== activeRepo) {
+      clearBranchData();
+    }
+
+    previousActiveRepoRef.current = activeRepo;
+    activeRepoRef.current = activeRepo;
+  }, [activeRepo, clearBranchData]);
 
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string): Promise<void> => {
@@ -185,7 +206,30 @@ export function useWorkspaceOperations({
     [activeBranch, activeRepo, applyBranchState],
   );
 
-  const probeExternalBranchChange = useCallback(async (): Promise<void> => {
+  const reportBranchProbeError = useCallback((error: BranchProbeError): void => {
+    const nowMs = Date.now();
+    const errorSignature = branchProbeErrorSignature(error);
+    const shouldReport = shouldReportBranchProbeError({
+      nowMs,
+      throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
+      errorSignature,
+      lastReportedAtMs: lastProbeErrorToastAtRef.current,
+      lastReportedSignature: lastProbeErrorSignatureRef.current,
+    });
+
+    if (!shouldReport) {
+      return;
+    }
+
+    lastProbeErrorToastAtRef.current = nowMs;
+    lastProbeErrorSignatureRef.current = errorSignature;
+
+    toast.error("Branch sync probe degraded", {
+      description: `[${error.stage}] ${error.message}`,
+    });
+  }, []);
+
+  const probeExternalBranchChange = useCallback(async (): Promise<BranchProbeOutcome> => {
     const repoPath = activeRepoRef.current;
     if (
       !shouldProbeExternalBranchChange({
@@ -196,11 +240,17 @@ export function useWorkspaceOperations({
         isSyncInFlight: branchSyncInFlightRef.current,
       })
     ) {
-      return;
+      return {
+        status: "skipped",
+        reason: "preconditions",
+      };
     }
 
     if (!repoPath) {
-      return;
+      return {
+        status: "skipped",
+        reason: "repo_missing",
+      };
     }
 
     branchSyncInFlightRef.current = true;
@@ -208,7 +258,10 @@ export function useWorkspaceOperations({
     try {
       const current = await host.gitGetCurrentBranch(repoPath);
       if (activeRepoRef.current !== repoPath) {
-        return;
+        return {
+          status: "skipped",
+          reason: "repo_changed",
+        };
       }
       const hasChanged = hasBranchIdentityChanged(
         current,
@@ -219,22 +272,46 @@ export function useWorkspaceOperations({
       if (hasChanged) {
         try {
           await refreshBranchesForRepo(repoPath);
+          return { status: "synced" };
         } catch (error) {
-          swallowBranchProbeError(error);
+          return {
+            status: "degraded",
+            error: classifyBranchProbeError(error, "branch_refresh"),
+          };
         }
       }
+
+      return { status: "unchanged" };
     } catch (error) {
-      swallowBranchProbeError(error);
+      if (activeRepoRef.current !== repoPath) {
+        return {
+          status: "skipped",
+          reason: "repo_changed",
+        };
+      }
+
+      return {
+        status: "degraded",
+        error: classifyBranchProbeError(error, "current_branch_probe"),
+      };
     } finally {
       branchSyncInFlightRef.current = false;
     }
   }, [refreshBranchesForRepo]);
 
-  useEffect(() => {
-    if (!activeRepo) {
-      clearBranchData();
+  const syncExternalBranchChange = useCallback(async (): Promise<void> => {
+    const outcome = await probeExternalBranchChange();
+
+    if (outcome.status === "degraded") {
+      setBranchSyncDegraded(true);
+      reportBranchProbeError(outcome.error);
+      return;
     }
-  }, [activeRepo, clearBranchData]);
+
+    if (outcome.status === "synced" || outcome.status === "unchanged") {
+      setBranchSyncDegraded(false);
+    }
+  }, [probeExternalBranchChange, reportBranchProbeError]);
 
   useEffect(() => {
     if (!activeRepo || typeof window === "undefined" || typeof document === "undefined") {
@@ -242,12 +319,12 @@ export function useWorkspaceOperations({
     }
 
     const handleFocus = (): void => {
-      void probeExternalBranchChange();
+      void syncExternalBranchChange();
     };
 
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === "visible") {
-        void probeExternalBranchChange();
+        void syncExternalBranchChange();
       }
     };
 
@@ -256,7 +333,7 @@ export function useWorkspaceOperations({
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "visible") {
-        void probeExternalBranchChange();
+        void syncExternalBranchChange();
       }
     }, BRANCH_SYNC_INTERVAL_MS);
 
@@ -265,7 +342,7 @@ export function useWorkspaceOperations({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(intervalId);
     };
-  }, [activeRepo, probeExternalBranchChange]);
+  }, [activeRepo, syncExternalBranchChange]);
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
     const data = await host.workspaceList();
@@ -348,6 +425,7 @@ export function useWorkspaceOperations({
     isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
+    branchSyncDegraded,
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,

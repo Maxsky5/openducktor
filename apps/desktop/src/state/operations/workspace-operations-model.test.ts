@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import {
+  BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
   BRANCH_SYNC_INTERVAL_MS,
+  branchProbeErrorSignature,
+  classifyBranchProbeError,
   hasBranchIdentityChanged,
   normalizeRepoPath,
   shouldProbeExternalBranchChange,
+  shouldReportBranchProbeError,
   shouldSkipBranchSwitch,
 } from "./workspace-operations-model";
 
@@ -53,5 +57,80 @@ describe("workspace-operations-model", () => {
 
   test("keeps polling interval contract", () => {
     expect(BRANCH_SYNC_INTERVAL_MS).toBe(30000);
+  });
+
+  test("classifies branch probe errors with typed code and stage", () => {
+    const authorization = classifyBranchProbeError(
+      new Error("Permission denied for workspace repository"),
+      "current_branch_probe",
+    );
+    expect(authorization.code).toBe("authorization_failed");
+    expect(authorization.stage).toBe("current_branch_probe");
+
+    const gitFailure = classifyBranchProbeError("git rev-parse failed", "branch_refresh");
+    expect(gitFailure.code).toBe("git_command_failed");
+    expect(gitFailure.stage).toBe("branch_refresh");
+
+    const runtimeUnavailable = classifyBranchProbeError(
+      new Error("Tauri runtime not available. Run inside the desktop shell."),
+      "current_branch_probe",
+    );
+    expect(runtimeUnavailable.code).toBe("runtime_unavailable");
+
+    const structuredAuthorization = classifyBranchProbeError(
+      {
+        code: "GIT_COMMAND_UNAUTHORIZED",
+        message: "Command failed",
+      },
+      "branch_refresh",
+    );
+    expect(structuredAuthorization.code).toBe("authorization_failed");
+  });
+
+  test("reports probe failures when stage/code signature changes or throttle interval elapses", () => {
+    const initialError = classifyBranchProbeError(
+      new Error("git fetch failed on origin/main"),
+      "current_branch_probe",
+    );
+    const initialSignature = branchProbeErrorSignature(initialError);
+    const sameClassDifferentMessageSignature = branchProbeErrorSignature(
+      classifyBranchProbeError(
+        new Error("git fetch failed on origin/develop"),
+        "current_branch_probe",
+      ),
+    );
+    const changedStageSignature = branchProbeErrorSignature(
+      classifyBranchProbeError(new Error("git fetch failed"), "branch_refresh"),
+    );
+
+    expect(
+      shouldReportBranchProbeError({
+        nowMs: 1000,
+        throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
+        errorSignature: initialSignature,
+        lastReportedAtMs: null,
+        lastReportedSignature: null,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldReportBranchProbeError({
+        nowMs: 5000,
+        throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
+        errorSignature: sameClassDifferentMessageSignature,
+        lastReportedAtMs: 1000,
+        lastReportedSignature: initialSignature,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldReportBranchProbeError({
+        nowMs: 7000,
+        throttleMs: BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
+        errorSignature: changedStageSignature,
+        lastReportedAtMs: 1000,
+        lastReportedSignature: initialSignature,
+      }),
+    ).toBe(true);
   });
 });

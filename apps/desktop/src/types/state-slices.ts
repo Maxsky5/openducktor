@@ -45,6 +45,7 @@ export type WorkspaceStateContextValue = {
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
+  branchSyncDegraded: boolean;
   workspaces: WorkspaceRecord[];
   activeRepo: string | null;
   activeWorkspace: WorkspaceRecord | null;
