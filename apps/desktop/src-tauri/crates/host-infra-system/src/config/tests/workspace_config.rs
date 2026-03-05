@@ -13,6 +13,7 @@ fn workspace_add_select_and_update_persist_state() {
 
     let repo_a_str = repo_a.to_string_lossy().to_string();
     let repo_b_str = repo_b.to_string_lossy().to_string();
+    let worktrees_path = root.join("worktrees").to_string_lossy().to_string();
     // Canonical form (resolved absolute path)
     let repo_a_canonical = fs::canonicalize(&repo_a)
         .unwrap()
@@ -33,7 +34,7 @@ fn workspace_add_select_and_update_persist_state() {
         .update_repo_config(
             &repo_a_str,
             RepoConfig {
-                worktree_base_path: Some("/tmp/worktrees".to_string()),
+                worktree_base_path: Some(worktrees_path.clone()),
                 branch_prefix: "duck".to_string(),
                 default_target_branch: "origin/main".to_string(),
                 trusted_hooks: true,
@@ -48,7 +49,7 @@ fn workspace_add_select_and_update_persist_state() {
     assert!(updated.has_config);
     assert_eq!(
         updated.configured_worktree_base_path.as_deref(),
-        Some("/tmp/worktrees")
+        Some(worktrees_path.as_str())
     );
 
     let workspaces = store.list_workspaces().expect("list workspaces");
@@ -67,7 +68,7 @@ fn workspace_add_select_and_update_persist_state() {
             .repos
             .get(&repo_a_canonical)
             .and_then(|entry| entry.worktree_base_path.as_deref()),
-        Some("/tmp/worktrees")
+        Some(worktrees_path.as_str())
     );
 }
 
