@@ -820,6 +820,20 @@ describe("openducktor-mcp lib", () => {
           ]),
         };
       }
+      if (command === "show") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Task 1",
+              status: "open",
+              issue_type: "feature",
+              metadata: {},
+            },
+          ]),
+        };
+      }
       if (command === "update" && args.includes("--metadata")) {
         metadataUpdateCalls += 1;
         return { ok: true, stdout: "{}" };
@@ -849,6 +863,7 @@ describe("openducktor-mcp lib", () => {
   test("qaApproved appends qa report metadata and transitions to human_review", async () => {
     let metadataPayload: Record<string, unknown> | null = null;
     let statusTransition: string | null = null;
+    let updateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
       const command = args[1];
@@ -886,13 +901,15 @@ describe("openducktor-mcp lib", () => {
           ]),
         };
       }
-      if (command === "update" && args.includes("--metadata")) {
-        const metadataArg = args[args.indexOf("--metadata") + 1];
-        metadataPayload = JSON.parse(metadataArg ?? "{}") as Record<string, unknown>;
-        return { ok: true, stdout: "{}" };
-      }
-      if (command === "update" && args.includes("--status")) {
-        statusTransition = args[args.indexOf("--status") + 1] ?? null;
+      if (command === "update") {
+        updateCalls += 1;
+        if (args.includes("--metadata")) {
+          const metadataArg = args[args.indexOf("--metadata") + 1];
+          metadataPayload = JSON.parse(metadataArg ?? "{}") as Record<string, unknown>;
+        }
+        if (args.includes("--status")) {
+          statusTransition = args[args.indexOf("--status") + 1] ?? null;
+        }
         return { ok: true, stdout: "{}" };
       }
       throw new Error(`Unexpected bd command: ${args.join(" ")}`);
@@ -917,6 +934,7 @@ describe("openducktor-mcp lib", () => {
 
     expect(result.task.status).toBe("human_review");
     expect(statusTransition).toBe("human_review");
+    expect(updateCalls).toBe(1);
 
     const metadataRoot = (metadataPayload ?? {}) as Record<string, unknown>;
     const namespaceValue = metadataRoot.openducktor;
@@ -1602,11 +1620,12 @@ describe("openducktor-mcp lib", () => {
     expect(statusUpdateCalls).toBe(0);
   });
 
-  test("qaApproved revalidates transition after report append and avoids stale status updates", async () => {
+  test("qaApproved applies metadata and status in a single update call", async () => {
     let status = "ai_review";
     let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
+    let updateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
       const command = args[1];
@@ -1645,13 +1664,15 @@ describe("openducktor-mcp lib", () => {
           ]),
         };
       }
-      if (command === "update" && args.includes("--metadata")) {
-        metadataUpdateCalls += 1;
-        status = "closed";
-        return { ok: true, stdout: "{}" };
-      }
-      if (command === "update" && args.includes("--status")) {
-        statusUpdateCalls += 1;
+      if (command === "update") {
+        updateCalls += 1;
+        if (args.includes("--metadata")) {
+          metadataUpdateCalls += 1;
+        }
+        if (args.includes("--status")) {
+          statusUpdateCalls += 1;
+          status = args[args.indexOf("--status") + 1] ?? status;
+        }
         return { ok: true, stdout: "{}" };
       }
       throw new Error(`Unexpected bd command: ${args.join(" ")}`);
@@ -1666,23 +1687,24 @@ describe("openducktor-mcp lib", () => {
       { runProcess },
     );
 
-    await expect(
-      store.qaApproved({
-        taskId: "task-1",
-        reportMarkdown: "## QA",
-      }),
-    ).rejects.toThrow("Transition not allowed");
+    const result = (await store.qaApproved({
+      taskId: "task-1",
+      reportMarkdown: "## QA",
+    })) as { task: { status: string } };
 
     expect(listCalls).toBe(1);
+    expect(result.task.status).toBe("human_review");
+    expect(updateCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
-    expect(statusUpdateCalls).toBe(0);
+    expect(statusUpdateCalls).toBe(1);
   });
 
-  test("qaRejected revalidates transition after report append and avoids stale status updates", async () => {
-    let status = "human_review";
+  test("qaRejected applies metadata and status in a single update call", async () => {
+    let status = "ai_review";
     let listCalls = 0;
     let metadataUpdateCalls = 0;
     let statusUpdateCalls = 0;
+    let updateCalls = 0;
 
     const { runProcess } = buildProcessRunner((args) => {
       const command = args[1];
@@ -1721,13 +1743,15 @@ describe("openducktor-mcp lib", () => {
           ]),
         };
       }
-      if (command === "update" && args.includes("--metadata")) {
-        metadataUpdateCalls += 1;
-        status = "closed";
-        return { ok: true, stdout: "{}" };
-      }
-      if (command === "update" && args.includes("--status")) {
-        statusUpdateCalls += 1;
+      if (command === "update") {
+        updateCalls += 1;
+        if (args.includes("--metadata")) {
+          metadataUpdateCalls += 1;
+        }
+        if (args.includes("--status")) {
+          statusUpdateCalls += 1;
+          status = args[args.indexOf("--status") + 1] ?? status;
+        }
         return { ok: true, stdout: "{}" };
       }
       throw new Error(`Unexpected bd command: ${args.join(" ")}`);
@@ -1742,15 +1766,15 @@ describe("openducktor-mcp lib", () => {
       { runProcess },
     );
 
-    await expect(
-      store.qaRejected({
-        taskId: "task-1",
-        reportMarkdown: "## QA",
-      }),
-    ).rejects.toThrow("Transition not allowed");
+    const result = (await store.qaRejected({
+      taskId: "task-1",
+      reportMarkdown: "## QA",
+    })) as { task: { status: string } };
 
     expect(listCalls).toBe(1);
+    expect(result.task.status).toBe("in_progress");
+    expect(updateCalls).toBe(1);
     expect(metadataUpdateCalls).toBe(1);
-    expect(statusUpdateCalls).toBe(0);
+    expect(statusUpdateCalls).toBe(1);
   });
 });

@@ -37,6 +37,9 @@ describe("OdtTaskStore composition", () => {
       getNamespaceData: () => {
         throw new Error("getNamespaceData should not be called by readTask");
       },
+      updateTask: async () => {
+        throw new Error("updateTask should not be called by readTask");
+      },
       writeNamespace: async () => {
         throw new Error("writeNamespace should not be called by readTask");
       },
@@ -47,6 +50,11 @@ describe("OdtTaskStore composition", () => {
         spec: { markdown: "spec", updatedAt: null },
         implementationPlan: { markdown: "plan", updatedAt: null },
         latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      }),
+      prepareQaReportWrite: () => ({
+        metadataRoot: {},
+        namespace: {},
+        root: {},
       }),
       persistSpec: async () => ({ updatedAt: "", revision: 1 }),
       persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),
@@ -94,6 +102,9 @@ describe("OdtTaskStore composition", () => {
       getNamespaceData: () => {
         throw new Error("getNamespaceData should not be called by readTask");
       },
+      updateTask: async () => {
+        throw new Error("updateTask should not be called by readTask");
+      },
       writeNamespace: async () => {
         throw new Error("writeNamespace should not be called by readTask");
       },
@@ -104,6 +115,11 @@ describe("OdtTaskStore composition", () => {
         spec: { markdown: "", updatedAt: null },
         implementationPlan: { markdown: "", updatedAt: null },
         latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      }),
+      prepareQaReportWrite: () => ({
+        metadataRoot: {},
+        namespace: {},
+        root: {},
       }),
       persistSpec: async () => ({ updatedAt: "", revision: 1 }),
       persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),
@@ -147,6 +163,9 @@ describe("OdtTaskStore composition", () => {
       getNamespaceData: () => {
         throw new Error("getNamespaceData should not be called by readTask");
       },
+      updateTask: async () => {
+        throw new Error("updateTask should not be called by readTask");
+      },
       writeNamespace: async () => {
         throw new Error("writeNamespace should not be called by readTask");
       },
@@ -157,6 +176,11 @@ describe("OdtTaskStore composition", () => {
         spec: { markdown: "", updatedAt: null },
         implementationPlan: { markdown: "", updatedAt: null },
         latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      }),
+      prepareQaReportWrite: () => ({
+        metadataRoot: {},
+        namespace: {},
+        root: {},
       }),
       persistSpec: async () => ({ updatedAt: "", revision: 1 }),
       persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),

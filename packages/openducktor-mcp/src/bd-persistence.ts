@@ -1,8 +1,13 @@
 import type { BdRuntimeClient } from "./bd-runtime-client";
 import { isNonTaskBeadsIssueType } from "./beads-task-parsing";
-import type { JsonObject, RawIssue, TaskCard } from "./contracts";
+import type { JsonObject, RawIssue, TaskCard, TaskStatus } from "./contracts";
 import { getNamespaceData, type NamespaceData } from "./metadata-docs";
 import { issueToTaskCard } from "./task-mapping";
+
+export type TaskUpdateInput = {
+  status?: TaskStatus;
+  metadataRoot?: JsonObject;
+};
 
 export type TaskPersistencePort = {
   metadataNamespace: string;
@@ -10,6 +15,7 @@ export type TaskPersistencePort = {
   ensureInitialized(): Promise<void>;
   showRawIssue(taskId: string): Promise<RawIssue>;
   listTasks(): Promise<TaskCard[]>;
+  updateTask(taskId: string, input: TaskUpdateInput): Promise<void>;
   getNamespaceData(issue: RawIssue): NamespaceData;
   writeNamespace(taskId: string, root: JsonObject, namespace: JsonObject): Promise<void>;
 };
@@ -61,12 +67,30 @@ export class BdPersistence implements TaskPersistencePort {
     return getNamespaceData(issue, this.metadataNamespace);
   }
 
+  async updateTask(taskId: string, input: TaskUpdateInput): Promise<void> {
+    const args = ["update", taskId];
+
+    if (input.status) {
+      args.push("--status", input.status);
+    }
+
+    if (input.metadataRoot) {
+      args.push("--metadata", JSON.stringify(input.metadataRoot));
+    }
+
+    if (args.length === 2) {
+      return;
+    }
+
+    await this.runBdJson(args);
+  }
+
   async writeNamespace(taskId: string, root: JsonObject, namespace: JsonObject): Promise<void> {
     const nextRoot = {
       ...root,
       [this.metadataNamespace]: namespace,
     };
 
-    await this.runBdJson(["update", taskId, "--metadata", JSON.stringify(nextRoot)]);
+    await this.updateTask(taskId, { metadataRoot: nextRoot });
   }
 }

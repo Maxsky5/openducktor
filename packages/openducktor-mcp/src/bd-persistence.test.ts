@@ -304,4 +304,34 @@ describe("BdPersistence", () => {
       },
     });
   });
+
+  test("updateTask writes status and metadata in a single bd update call", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => ({}),
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+    await persistence.updateTask("task-1", {
+      metadataRoot: { openducktor: { documents: { qaReports: [] } } },
+      status: "human_review",
+    });
+
+    expect(state.calls).toEqual([
+      [
+        "update",
+        "task-1",
+        "--status",
+        "human_review",
+        "--metadata",
+        JSON.stringify({ openducktor: { documents: { qaReports: [] } } }),
+      ],
+    ]);
+  });
 });
