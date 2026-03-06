@@ -3,6 +3,10 @@ import type { AgentRole } from "@openducktor/core";
 import { startTransition, useCallback, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  AGENT_STUDIO_QUERY_KEYS,
+  type AgentStudioQueryUpdate as QueryUpdate,
+} from "./agent-studio-navigation";
 import { firstScenario } from "./agents-page-constants";
 import {
   buildRoleEnabledMapForTask,
@@ -12,8 +16,6 @@ import {
 import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";
-
-type QueryUpdate = Record<string, string | undefined>;
 
 type TaskByIdMap = ReadonlyMap<string, TaskCard>;
 
@@ -42,34 +44,34 @@ const toTaskQueryUpdate = (params: {
   const sessionForTask = params.latestSessionByTaskId.get(params.taskId);
   if (sessionForTask) {
     return {
-      task: sessionForTask.taskId,
-      session: sessionForTask.sessionId,
-      agent: sessionForTask.role,
-      scenario: sessionForTask.scenario,
-      autostart: undefined,
-      start: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.task]: sessionForTask.taskId,
+      [AGENT_STUDIO_QUERY_KEYS.session]: sessionForTask.sessionId,
+      [AGENT_STUDIO_QUERY_KEYS.agent]: sessionForTask.role,
+      [AGENT_STUDIO_QUERY_KEYS.scenario]: sessionForTask.scenario,
+      [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
     };
   }
 
   const nextTask = params.taskById.get(params.taskId) ?? null;
   const nextRole = resolveDefaultRoleForTask(nextTask);
   return {
-    task: params.taskId,
-    session: undefined,
-    agent: nextRole,
-    scenario: firstScenario(nextRole),
-    autostart: undefined,
-    start: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
+    [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: nextRole,
+    [AGENT_STUDIO_QUERY_KEYS.scenario]: firstScenario(nextRole),
+    [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
 };
 
 const toClearTaskQueryUpdate = (): QueryUpdate => ({
-  task: undefined,
-  session: undefined,
-  agent: undefined,
-  scenario: undefined,
-  autostart: undefined,
-  start: undefined,
+  [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
+  [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
+  [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
+  [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
+  [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
+  [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
 });
 
 export function useAgentStudioTaskTabs(args: {

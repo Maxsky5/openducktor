@@ -39,6 +39,7 @@ import {
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "../shared/use-session-start-modal-coordinator";
+import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import { buildRebaseConflictResolutionPrompt, SCENARIO_LABELS } from "./agents-page-constants";
 import {
   resolveAgentStudioBuilderSessionForTask,
@@ -363,7 +364,7 @@ export function AgentsPage(): ReactElement {
     });
 
   const scheduleQueryUpdate = useCallback(
-    (updates: Record<string, string | undefined>): void => {
+    (updates: AgentStudioQueryUpdate): void => {
       startTransition(() => {
         updateQuery(updates);
       });
