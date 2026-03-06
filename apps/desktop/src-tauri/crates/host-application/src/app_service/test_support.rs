@@ -30,6 +30,7 @@ use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
 };
 use serde_json::Value;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs;
 #[cfg(unix)]
@@ -308,7 +309,12 @@ impl TaskStore for FakeTaskStore {
         _task_id: &str,
     ) -> Result<Vec<AgentSessionDocument>> {
         let state = self.state.lock().expect("task store lock poisoned");
-        Ok(state.agent_sessions.clone())
+        Ok(state
+            .agent_sessions
+            .iter()
+            .filter(|session| session.task_id.as_deref() == Some(_task_id))
+            .cloned()
+            .collect())
     }
 
     fn upsert_agent_session(
@@ -337,7 +343,12 @@ impl TaskStore for FakeTaskStore {
         let mut state = self.state.lock().expect("task store lock poisoned");
         state.metadata_get_calls.push(_task_id.to_string());
         let qa_report = state.latest_qa_report.clone();
-        let agent_sessions = state.agent_sessions.clone();
+        let agent_sessions = state
+            .agent_sessions
+            .iter()
+            .filter(|session| session.task_id.as_deref() == Some(_task_id))
+            .cloned()
+            .collect();
         Ok(TaskMetadata {
             spec: SpecDocument {
                 markdown: String::new(),
@@ -375,6 +386,11 @@ pub(crate) enum GitCall {
     RemoveWorktree {
         repo_path: String,
         worktree_path: String,
+        force: bool,
+    },
+    DeleteLocalBranch {
+        repo_path: String,
+        branch: String,
         force: bool,
     },
     PushBranch {
@@ -419,6 +435,9 @@ pub(crate) struct GitState {
     pub(crate) calls: Vec<GitCall>,
     pub(crate) branches: Vec<GitBranch>,
     pub(crate) current_branch: GitCurrentBranch,
+    pub(crate) current_branches_by_path: HashMap<String, GitCurrentBranch>,
+    pub(crate) remove_worktree_error: Option<String>,
+    pub(crate) delete_local_branch_error: Option<String>,
     pub(crate) worktree_status_data: Option<GitWorktreeStatusData>,
     pub(crate) last_push_remote: Option<String>,
     pub(crate) push_branch_result: GitPushResult,
@@ -444,10 +463,15 @@ impl GitPort for FakeGitPort {
 
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch> {
         let mut state = self.state.lock().expect("git state lock poisoned");
+        let repo_path = repo_path.to_string_lossy().to_string();
         state.calls.push(GitCall::GetCurrentBranch {
-            repo_path: repo_path.to_string_lossy().to_string(),
+            repo_path: repo_path.clone(),
         });
-        Ok(state.current_branch.clone())
+        Ok(state
+            .current_branches_by_path
+            .get(repo_path.as_str())
+            .cloned()
+            .unwrap_or_else(|| state.current_branch.clone()))
     }
 
     fn switch_branch(
@@ -493,6 +517,22 @@ impl GitPort for FakeGitPort {
             worktree_path: worktree_path.to_string_lossy().to_string(),
             force,
         });
+        if let Some(message) = state.remove_worktree_error.clone() {
+            return Err(anyhow!(message));
+        }
+        Ok(())
+    }
+
+    fn delete_local_branch(&self, repo_path: &Path, branch: &str, force: bool) -> Result<()> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::DeleteLocalBranch {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            branch: branch.to_string(),
+            force,
+        });
+        if let Some(message) = state.delete_local_branch_error.clone() {
+            return Err(anyhow!(message));
+        }
         Ok(())
     }
 
@@ -747,6 +787,9 @@ pub(crate) fn build_service_with_git_state_enforced(
         calls: Vec::new(),
         branches,
         current_branch,
+        current_branches_by_path: HashMap::new(),
+        remove_worktree_error: None,
+        delete_local_branch_error: None,
         worktree_status_data: None,
         last_push_remote: None,
         push_branch_result: GitPushResult::Pushed {
@@ -807,6 +850,9 @@ pub(crate) fn build_service_with_git_state(
         calls: Vec::new(),
         branches,
         current_branch,
+        current_branches_by_path: HashMap::new(),
+        remove_worktree_error: None,
+        delete_local_branch_error: None,
         worktree_status_data: None,
         last_push_remote: None,
         push_branch_result: GitPushResult::Pushed {
@@ -1232,6 +1278,9 @@ pub(crate) fn build_service_with_store(
         calls: Vec::new(),
         branches,
         current_branch,
+        current_branches_by_path: HashMap::new(),
+        remove_worktree_error: None,
+        delete_local_branch_error: None,
         worktree_status_data: None,
         last_push_remote: None,
         push_branch_result: GitPushResult::Pushed {
