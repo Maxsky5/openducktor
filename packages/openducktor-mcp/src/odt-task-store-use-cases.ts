@@ -1,17 +1,18 @@
 import type { TaskCard } from "./contracts";
 import type { EpicSubtaskReplacementService } from "./epic-subtask-replacement";
+import type { TaskDocumentsSnapshot } from "./metadata-docs";
 import { normalizePlanSubtasks } from "./plan-subtasks";
 import type { TaskDocumentPort } from "./task-document-store";
 import type { OdtTaskWorkflowRuntimePort } from "./task-workflow-runtime";
-import {
-  BuildBlockedInputSchema,
-  BuildCompletedInputSchema,
-  BuildResumedInputSchema,
-  QaApprovedInputSchema,
-  QaRejectedInputSchema,
-  ReadTaskInputSchema,
-  SetPlanInputSchema,
-  SetSpecInputSchema,
+import type {
+  BuildBlockedInput,
+  BuildCompletedInput,
+  BuildResumedInput,
+  QaApprovedInput,
+  QaRejectedInput,
+  ReadTaskInput,
+  SetPlanInput,
+  SetSpecInput,
 } from "./tool-schemas";
 import {
   assertNoValidationError,
@@ -20,19 +21,63 @@ import {
   validatePlanSubtaskRules,
 } from "./workflow-policy";
 
-export type OdtTaskStoreUseCase = {
-  execute(rawInput: unknown): Promise<unknown>;
+type PersistedDocumentResult = {
+  markdown: string;
+  updatedAt: string;
+  revision: number;
 };
 
 export type OdtTaskStoreUseCases = {
-  readTask: OdtTaskStoreUseCase;
-  setSpec: OdtTaskStoreUseCase;
-  setPlan: OdtTaskStoreUseCase;
-  buildBlocked: OdtTaskStoreUseCase;
-  buildResumed: OdtTaskStoreUseCase;
-  buildCompleted: OdtTaskStoreUseCase;
-  qaApproved: OdtTaskStoreUseCase;
-  qaRejected: OdtTaskStoreUseCase;
+  readTask: OdtTaskStoreUseCase<ReadTaskInput, ReadTaskResult>;
+  setSpec: OdtTaskStoreUseCase<SetSpecInput, SetSpecResult>;
+  setPlan: OdtTaskStoreUseCase<SetPlanInput, SetPlanResult>;
+  buildBlocked: OdtTaskStoreUseCase<BuildBlockedInput, BuildBlockedResult>;
+  buildResumed: OdtTaskStoreUseCase<BuildResumedInput, BuildResumedResult>;
+  buildCompleted: OdtTaskStoreUseCase<BuildCompletedInput, BuildCompletedResult>;
+  qaApproved: OdtTaskStoreUseCase<QaApprovedInput, QaApprovedResult>;
+  qaRejected: OdtTaskStoreUseCase<QaRejectedInput, QaRejectedResult>;
+};
+
+export type OdtTaskStoreUseCase<Input, Output> = {
+  execute(input: Input): Promise<Output>;
+};
+
+export type ReadTaskResult = {
+  task: TaskCard;
+  documents: TaskDocumentsSnapshot;
+};
+
+export type SetSpecResult = {
+  task: TaskCard;
+  document: PersistedDocumentResult;
+};
+
+export type SetPlanResult = {
+  task: TaskCard;
+  document: PersistedDocumentResult;
+  createdSubtaskIds: string[];
+};
+
+export type BuildBlockedResult = {
+  task: TaskCard;
+  reason: string;
+};
+
+export type BuildResumedResult = {
+  task: TaskCard;
+};
+
+export type BuildCompletedResult = {
+  task: TaskCard;
+  summary?: string;
+};
+
+export type QaApprovedResult = {
+  task: TaskCard;
+};
+
+export type QaRejectedResult = {
+  task: TaskCard;
 };
 
 type EpicSubtaskReplacementPort = Pick<
@@ -45,7 +90,7 @@ type ReadTaskUseCaseDeps = {
   documentStore: Pick<TaskDocumentPort, "parseDocs">;
 };
 
-export class ReadTaskUseCase implements OdtTaskStoreUseCase {
+export class ReadTaskUseCase implements OdtTaskStoreUseCase<ReadTaskInput, ReadTaskResult> {
   private readonly workflow: ReadTaskUseCaseDeps["workflow"];
   private readonly documentStore: ReadTaskUseCaseDeps["documentStore"];
 
@@ -54,9 +99,8 @@ export class ReadTaskUseCase implements OdtTaskStoreUseCase {
     this.documentStore = deps.documentStore;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: ReadTaskInput): Promise<ReadTaskResult> {
     await this.workflow.ensureInitialized();
-    const input = ReadTaskInputSchema.parse(rawInput);
     const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
 
     return {
@@ -74,7 +118,7 @@ type SetSpecUseCaseDeps = {
   documentStore: Pick<TaskDocumentPort, "persistSpec">;
 };
 
-export class SetSpecUseCase implements OdtTaskStoreUseCase {
+export class SetSpecUseCase implements OdtTaskStoreUseCase<SetSpecInput, SetSpecResult> {
   private readonly workflow: SetSpecUseCaseDeps["workflow"];
   private readonly documentStore: SetSpecUseCaseDeps["documentStore"];
 
@@ -83,9 +127,8 @@ export class SetSpecUseCase implements OdtTaskStoreUseCase {
     this.documentStore = deps.documentStore;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: SetSpecInput): Promise<SetSpecResult> {
     await this.workflow.ensureInitialized();
-    const input = SetSpecInputSchema.parse(rawInput);
     const markdown = input.markdown.trim();
 
     const context = await this.workflow.resolveTaskContext(input.taskId);
@@ -120,7 +163,7 @@ type SetPlanUseCaseDeps = {
   epicSubtaskReplacementService: EpicSubtaskReplacementPort;
 };
 
-export class SetPlanUseCase implements OdtTaskStoreUseCase {
+export class SetPlanUseCase implements OdtTaskStoreUseCase<SetPlanInput, SetPlanResult> {
   private readonly workflow: SetPlanUseCaseDeps["workflow"];
   private readonly documentStore: SetPlanUseCaseDeps["documentStore"];
   private readonly epicSubtaskReplacementService: SetPlanUseCaseDeps["epicSubtaskReplacementService"];
@@ -131,9 +174,8 @@ export class SetPlanUseCase implements OdtTaskStoreUseCase {
     this.epicSubtaskReplacementService = deps.epicSubtaskReplacementService;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: SetPlanInput): Promise<SetPlanResult> {
     await this.workflow.ensureInitialized();
-    const input = SetPlanInputSchema.parse(rawInput);
     const markdown = input.markdown.trim();
 
     const context = await this.workflow.resolveTaskContext(input.taskId);
@@ -179,16 +221,17 @@ type TransitionTaskUseCaseDeps = {
   workflow: Pick<OdtTaskWorkflowRuntimePort, "ensureInitialized" | "transitionTask">;
 };
 
-export class BuildBlockedUseCase implements OdtTaskStoreUseCase {
+export class BuildBlockedUseCase
+  implements OdtTaskStoreUseCase<BuildBlockedInput, BuildBlockedResult>
+{
   private readonly workflow: TransitionTaskUseCaseDeps["workflow"];
 
   constructor(deps: TransitionTaskUseCaseDeps) {
     this.workflow = deps.workflow;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: BuildBlockedInput): Promise<BuildBlockedResult> {
     await this.workflow.ensureInitialized();
-    const input = BuildBlockedInputSchema.parse(rawInput);
     const task = await this.workflow.transitionTask(input.taskId, "blocked");
     return {
       task,
@@ -197,16 +240,17 @@ export class BuildBlockedUseCase implements OdtTaskStoreUseCase {
   }
 }
 
-export class BuildResumedUseCase implements OdtTaskStoreUseCase {
+export class BuildResumedUseCase
+  implements OdtTaskStoreUseCase<BuildResumedInput, BuildResumedResult>
+{
   private readonly workflow: TransitionTaskUseCaseDeps["workflow"];
 
   constructor(deps: TransitionTaskUseCaseDeps) {
     this.workflow = deps.workflow;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: BuildResumedInput): Promise<BuildResumedResult> {
     await this.workflow.ensureInitialized();
-    const input = BuildResumedInputSchema.parse(rawInput);
     const task = await this.workflow.transitionTask(input.taskId, "in_progress");
     return { task };
   }
@@ -219,16 +263,17 @@ type BuildCompletedUseCaseDeps = {
   >;
 };
 
-export class BuildCompletedUseCase implements OdtTaskStoreUseCase {
+export class BuildCompletedUseCase
+  implements OdtTaskStoreUseCase<BuildCompletedInput, BuildCompletedResult>
+{
   private readonly workflow: BuildCompletedUseCaseDeps["workflow"];
 
   constructor(deps: BuildCompletedUseCaseDeps) {
     this.workflow = deps.workflow;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: BuildCompletedInput): Promise<BuildCompletedResult> {
     await this.workflow.ensureInitialized();
-    const input = BuildCompletedInputSchema.parse(rawInput);
 
     const context = await this.workflow.resolveTaskContext(input.taskId);
     const refreshedContext = await this.workflow.refreshTaskContext(context.task.id, context);
@@ -255,7 +300,7 @@ type QaUseCaseDeps = {
   documentStore: Pick<TaskDocumentPort, "appendQaReport">;
 };
 
-export class QaApprovedUseCase implements OdtTaskStoreUseCase {
+export class QaApprovedUseCase implements OdtTaskStoreUseCase<QaApprovedInput, QaApprovedResult> {
   private readonly workflow: QaUseCaseDeps["workflow"];
   private readonly documentStore: QaUseCaseDeps["documentStore"];
 
@@ -264,9 +309,8 @@ export class QaApprovedUseCase implements OdtTaskStoreUseCase {
     this.documentStore = deps.documentStore;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: QaApprovedInput): Promise<QaApprovedResult> {
     await this.workflow.ensureInitialized();
-    const input = QaApprovedInputSchema.parse(rawInput);
     const context = await this.workflow.resolveTaskContext(input.taskId);
     const { task, tasks } = context;
     this.workflow.assertTransitionAllowed(task, tasks, "human_review");
@@ -281,7 +325,7 @@ export class QaApprovedUseCase implements OdtTaskStoreUseCase {
   }
 }
 
-export class QaRejectedUseCase implements OdtTaskStoreUseCase {
+export class QaRejectedUseCase implements OdtTaskStoreUseCase<QaRejectedInput, QaRejectedResult> {
   private readonly workflow: QaUseCaseDeps["workflow"];
   private readonly documentStore: QaUseCaseDeps["documentStore"];
 
@@ -290,9 +334,8 @@ export class QaRejectedUseCase implements OdtTaskStoreUseCase {
     this.documentStore = deps.documentStore;
   }
 
-  async execute(rawInput: unknown): Promise<unknown> {
+  async execute(input: QaRejectedInput): Promise<QaRejectedResult> {
     await this.workflow.ensureInitialized();
-    const input = QaRejectedInputSchema.parse(rawInput);
     const context = await this.workflow.resolveTaskContext(input.taskId);
     const { task, tasks } = context;
     this.workflow.assertTransitionAllowed(task, tasks, "in_progress");

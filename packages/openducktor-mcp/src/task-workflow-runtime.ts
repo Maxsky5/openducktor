@@ -20,19 +20,21 @@ export type OdtTaskWorkflowRuntimePort = {
   transitionTask(taskId: string, nextStatus: TaskStatus, context?: TaskContext): Promise<TaskCard>;
 };
 
+type TaskLookupPort = Pick<TaskIndexCache, "invalidate" | "resolveTask">;
+
 export type OdtTaskWorkflowRuntimeDeps = {
   persistence: TaskPersistencePort;
-  taskIndexCache: TaskIndexCache;
+  taskLookup: TaskLookupPort;
 };
 
 class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
   readonly metadataNamespace: string;
   private readonly persistence: TaskPersistencePort;
-  private readonly taskIndexCache: TaskIndexCache;
+  private readonly taskLookup: TaskLookupPort;
 
   constructor(deps: OdtTaskWorkflowRuntimeDeps) {
     this.persistence = deps.persistence;
-    this.taskIndexCache = deps.taskIndexCache;
+    this.taskLookup = deps.taskLookup;
     this.metadataNamespace = deps.persistence.metadataNamespace;
   }
 
@@ -41,7 +43,7 @@ class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
   }
 
   async readTaskSnapshot(taskId: string): Promise<{ issue: RawIssue; task: TaskCard }> {
-    const resolvedTask = await this.taskIndexCache.resolveTask(taskId);
+    const resolvedTask = await this.taskLookup.resolveTask(taskId);
     const issue = await this.persistence.showRawIssue(resolvedTask.id);
     const task = issueToTaskCard(issue, this.metadataNamespace);
     return { issue, task };
@@ -76,7 +78,7 @@ class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
       listTasks: () => this.persistence.listTasks(),
       runBdJson: (args) => this.persistence.runBdJson(args),
       showRawIssue: (id) => this.persistence.showRawIssue(id),
-      invalidateTaskIndex: () => this.taskIndexCache.invalidate(),
+      invalidateTaskIndex: () => this.taskLookup.invalidate(),
       metadataNamespace: this.metadataNamespace,
     });
   }

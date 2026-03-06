@@ -8,6 +8,16 @@ import type { OdtStoreOptions } from "./store-context";
 import { type TaskDocumentPort, TaskDocumentStore } from "./task-document-store";
 import { TaskIndexCache } from "./task-index-cache";
 import { createOdtTaskWorkflowRuntime } from "./task-workflow-runtime";
+import {
+  BuildBlockedInputSchema,
+  BuildCompletedInputSchema,
+  BuildResumedInputSchema,
+  QaApprovedInputSchema,
+  QaRejectedInputSchema,
+  ReadTaskInputSchema,
+  SetPlanInputSchema,
+  SetSpecInputSchema,
+} from "./tool-schemas";
 
 export type OdtTaskStoreDeps = {
   runProcess?: BdRuntimeClientDeps["runProcess"];
@@ -52,7 +62,7 @@ export class OdtTaskStore {
     this.metadataNamespace = persistence.metadataNamespace;
     const workflow = createOdtTaskWorkflowRuntime({
       persistence,
-      taskIndexCache,
+      taskLookup: taskIndexCache,
     });
     this.useCases = createOdtTaskStoreUseCases({
       workflow,
@@ -72,35 +82,51 @@ export class OdtTaskStore {
     return new BdPersistence(bdClient, options.metadataNamespace);
   }
 
-  async readTask(rawInput: unknown): Promise<unknown> {
-    return this.useCases.readTask.execute(rawInput);
+  async readTask(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["readTask"]["execute"]>>> {
+    return this.useCases.readTask.execute(ReadTaskInputSchema.parse(rawInput));
   }
 
-  async setSpec(rawInput: unknown): Promise<unknown> {
-    return this.useCases.setSpec.execute(rawInput);
+  async setSpec(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setSpec"]["execute"]>>> {
+    return this.useCases.setSpec.execute(SetSpecInputSchema.parse(rawInput));
   }
 
-  async setPlan(rawInput: unknown): Promise<unknown> {
-    return this.useCases.setPlan.execute(rawInput);
+  async setPlan(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["setPlan"]["execute"]>>> {
+    return this.useCases.setPlan.execute(SetPlanInputSchema.parse(rawInput));
   }
 
-  async buildBlocked(rawInput: unknown): Promise<unknown> {
-    return this.useCases.buildBlocked.execute(rawInput);
+  async buildBlocked(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildBlocked"]["execute"]>>> {
+    return this.useCases.buildBlocked.execute(BuildBlockedInputSchema.parse(rawInput));
   }
 
-  async buildResumed(rawInput: unknown): Promise<unknown> {
-    return this.useCases.buildResumed.execute(rawInput);
+  async buildResumed(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildResumed"]["execute"]>>> {
+    return this.useCases.buildResumed.execute(BuildResumedInputSchema.parse(rawInput));
   }
 
-  async buildCompleted(rawInput: unknown): Promise<unknown> {
-    return this.useCases.buildCompleted.execute(rawInput);
+  async buildCompleted(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["buildCompleted"]["execute"]>>> {
+    return this.useCases.buildCompleted.execute(BuildCompletedInputSchema.parse(rawInput));
   }
 
-  async qaApproved(rawInput: unknown): Promise<unknown> {
-    return this.useCases.qaApproved.execute(rawInput);
+  async qaApproved(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["qaApproved"]["execute"]>>> {
+    return this.useCases.qaApproved.execute(QaApprovedInputSchema.parse(rawInput));
   }
 
-  async qaRejected(rawInput: unknown): Promise<unknown> {
-    return this.useCases.qaRejected.execute(rawInput);
+  async qaRejected(
+    rawInput: unknown,
+  ): Promise<Awaited<ReturnType<OdtTaskStoreUseCases["qaRejected"]["execute"]>>> {
+    return this.useCases.qaRejected.execute(QaRejectedInputSchema.parse(rawInput));
   }
 }
