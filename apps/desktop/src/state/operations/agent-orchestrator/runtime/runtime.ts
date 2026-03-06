@@ -91,6 +91,21 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           };
         }
 
+        const taskRun = runsRef.current.find(
+          (entry) =>
+            entry.repoPath === repoPath &&
+            entry.taskId === taskId &&
+            runningStates.has(entry.state),
+        );
+        if (taskRun && workingDirectoryOverride === repoPath) {
+          return {
+            runtimeId: null,
+            runId: taskRun.runId,
+            baseUrl: toBaseUrl(taskRun.port),
+            workingDirectory: taskRun.worktreePath,
+          };
+        }
+
         const runtime = await host.opencodeRepoRuntimeEnsure(repoPath);
         return {
           runtimeId: runtime.runtimeId,

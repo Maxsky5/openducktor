@@ -38,9 +38,7 @@ export type AgentScenario = z.infer<typeof agentScenarioSchema>;
 export const agentKickoffScenarioSchema = z.enum(agentKickoffScenarioValues);
 export type AgentKickoffScenario = z.infer<typeof agentKickoffScenarioSchema>;
 
-export const isAgentKickoffScenario = (
-  value: AgentScenario,
-): value is AgentKickoffScenario => {
+export const isAgentKickoffScenario = (value: AgentScenario): value is AgentKickoffScenario => {
   switch (value) {
     case "spec_initial":
     case "planner_initial":

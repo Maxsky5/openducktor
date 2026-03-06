@@ -1,12 +1,12 @@
 import {
-  isAgentKickoffScenario,
   type AgentPromptTemplateId,
+  isAgentKickoffScenario,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import {
-  type AgentKickoffScenario,
   AGENT_ROLE_TOOL_POLICY,
+  type AgentKickoffScenario,
   type AgentRole,
   type AgentScenario,
   type AgentToolName,
@@ -586,7 +586,9 @@ export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): st
   return buildAgentKickoffPromptBundle(input).prompt;
 };
 
-export const buildAgentMessagePromptBundle = (input: BuildAgentMessagePromptInput): BuiltAgentPrompt => {
+export const buildAgentMessagePromptBundle = (
+  input: BuildAgentMessagePromptInput,
+): BuiltAgentPrompt => {
   return buildPromptFromTemplates({
     templateIds: [input.templateId],
     role: input.role,

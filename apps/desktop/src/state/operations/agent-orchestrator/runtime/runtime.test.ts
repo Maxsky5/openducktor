@@ -245,6 +245,46 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
+  test("reuses the running build runtime when the override points at the repo root", async () => {
+    let repoRuntimeEnsureCalls = 0;
+
+    const originalRepoRuntimeEnsure = host.opencodeRepoRuntimeEnsure;
+    host.opencodeRepoRuntimeEnsure = async () => {
+      repoRuntimeEnsureCalls += 1;
+      return {
+        runtimeId: "runtime-shared",
+        repoPath: "/tmp/repo",
+        taskId: "task-1",
+        role: "planner",
+        port: 4666,
+        workingDirectory: "/tmp/repo/shared",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        lastMessage: null,
+      };
+    };
+
+    try {
+      const ensureRuntime = createEnsureRuntime({
+        runsRef: { current: [runningRunFixture] },
+        refreshTaskData: async () => {},
+      });
+
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "build", {
+        workingDirectoryOverride: "/tmp/repo",
+      });
+      expect(runtime).toEqual({
+        runtimeId: null,
+        runId: "run-1",
+        baseUrl: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      });
+      expect(repoRuntimeEnsureCalls).toBe(0);
+    } finally {
+      host.opencodeRepoRuntimeEnsure = originalRepoRuntimeEnsure;
+    }
+  });
+
   test("propagates repo config loading errors when default model lookup fails", async () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     host.workspaceGetRepoConfig = async () => {

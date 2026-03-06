@@ -13,9 +13,7 @@ export type AgentKickoffScenario = ContractsAgentKickoffScenario;
 export type AgentToolName = ContractsAgentToolName;
 export const isAgentKickoffScenario = isContractsAgentKickoffScenario;
 
-export const assertAgentKickoffScenario = (
-  scenario: AgentScenario,
-): AgentKickoffScenario => {
+export const assertAgentKickoffScenario = (scenario: AgentScenario): AgentKickoffScenario => {
   if (!isContractsAgentKickoffScenario(scenario)) {
     throw new Error(`Scenario "${scenario}" does not support kickoff prompts.`);
   }
