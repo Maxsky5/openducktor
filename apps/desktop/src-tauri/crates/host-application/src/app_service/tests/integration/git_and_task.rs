@@ -191,6 +191,53 @@ fn git_remove_worktree_forwards_force_flag() -> Result<()> {
 }
 
 #[test]
+fn git_remove_worktree_rejects_repository_root() {
+    let repo_path = "/tmp/odt-repo-remove-worktree-root";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let error = service
+        .git_remove_worktree(repo_path, repo_path, true)
+        .expect_err("repo root removal should be rejected");
+
+    assert!(error.to_string().contains("repository root"));
+    let git_state = git_state.lock().expect("git lock poisoned");
+    assert!(!git_state
+        .calls
+        .iter()
+        .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+}
+
+#[test]
+fn git_delete_local_branch_forwards_force_flag() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-delete-local-branch";
+    let (service, _task_state, git_state) = build_service_with_git_state(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    assert!(service.git_delete_local_branch(repo_path, "obp/task-123-cleanup", true)?);
+
+    let git_state = git_state.lock().expect("git lock poisoned");
+    assert!(git_state.calls.contains(&GitCall::DeleteLocalBranch {
+        repo_path: repo_path.to_string(),
+        branch: "obp/task-123-cleanup".to_string(),
+        force: true,
+    }));
+    Ok(())
+}
+
+#[test]
 fn git_push_branch_defaults_remote_to_origin() -> Result<()> {
     let repo_path = "/tmp/odt-repo-push";
     let working_dir = "/tmp/odt-repo-push-worktree";

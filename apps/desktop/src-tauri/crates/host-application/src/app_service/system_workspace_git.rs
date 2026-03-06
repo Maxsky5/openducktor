@@ -11,7 +11,8 @@ use host_infra_system::{
     PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
@@ -22,6 +23,10 @@ fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String 
         .filter(|value| !value.is_empty())
         .unwrap_or(repo_path)
         .to_string()
+}
+
+fn normalize_path_for_comparison(path: &str) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| Path::new(path).to_path_buf())
 }
 
 impl AppService {
@@ -317,8 +322,32 @@ impl AppService {
         if worktree.is_empty() {
             return Err(anyhow!("worktree path cannot be empty"));
         }
+
+        let normalized_repo = normalize_path_for_comparison(&repo_path);
+        let normalized_worktree = normalize_path_for_comparison(worktree);
+        if normalized_repo == normalized_worktree {
+            return Err(anyhow!("worktree path cannot be the repository root"));
+        }
+
         self.git_port
             .remove_worktree(Path::new(&repo_path), Path::new(worktree), force)?;
+        Ok(true)
+    }
+
+    pub fn git_delete_local_branch(
+        &self,
+        repo_path: &str,
+        branch: &str,
+        force: bool,
+    ) -> Result<bool> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let branch = branch.trim();
+        if branch.is_empty() {
+            return Err(anyhow!("branch cannot be empty"));
+        }
+
+        self.git_port
+            .delete_local_branch(Path::new(&repo_path), branch, force)?;
         Ok(true)
     }
 
@@ -461,6 +490,25 @@ mod tests {
             .expect_err("empty worktree path should fail");
 
         assert!(error.to_string().contains("worktree path cannot be empty"));
+    }
+
+    #[test]
+    fn module_git_remove_worktree_rejects_repository_root() {
+        let (service, _task_state, git_state) = build_service_with_state(vec![]);
+
+        let error = service
+            .git_remove_worktree("/tmp/odt-repo-module", "/tmp/odt-repo-module", true)
+            .expect_err("repository root should be rejected for worktree removal");
+
+        assert!(error
+            .to_string()
+            .contains("worktree path cannot be the repository root"));
+
+        let git_state = git_state.lock().expect("git state lock poisoned");
+        assert!(
+            git_state.calls.is_empty(),
+            "git port should not run when path is repository root"
+        );
     }
 
     #[test]

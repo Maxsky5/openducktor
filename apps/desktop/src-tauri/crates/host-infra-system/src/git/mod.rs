@@ -90,6 +90,10 @@ impl GitPort for GitCliPort {
         self.remove_worktree_impl(repo_path, worktree_path, force)
     }
 
+    fn delete_local_branch(&self, repo_path: &Path, branch: &str, force: bool) -> Result<()> {
+        self.delete_local_branch_impl(repo_path, branch, force)
+    }
+
     fn push_branch(
         &self,
         repo_path: &Path,
