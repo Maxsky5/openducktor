@@ -89,7 +89,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-active",
       agent: "spec",
-      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
@@ -137,7 +136,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
-      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
@@ -145,7 +143,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       task: "task-1",
       session: "session-spec",
       agent: "spec",
-      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });

@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useRef } from "react";
+import { errorMessage } from "@/lib/errors";
 import {
   type AgentStudioNavigationState,
   parsePersistedContext,
@@ -12,6 +13,28 @@ type UseRepoNavigationPersistenceArgs = {
   activeRepo: string | null;
   navigation: AgentStudioNavigationState;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
+};
+
+const readPersistedContextPayload = (storageKey: string): string | null => {
+  try {
+    return globalThis.localStorage.getItem(storageKey);
+  } catch (cause) {
+    throw new Error(
+      `Failed to read agent studio context storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
+};
+
+const writePersistedContextPayload = (storageKey: string, payload: string): void => {
+  try {
+    globalThis.localStorage.setItem(storageKey, payload);
+  } catch (cause) {
+    throw new Error(
+      `Failed to persist agent studio context storage key "${storageKey}": ${errorMessage(cause)}`,
+      { cause },
+    );
+  }
 };
 
 export function useRepoNavigationPersistence({
@@ -35,7 +58,7 @@ export function useRepoNavigationPersistence({
       pendingPersistTimeoutIdRef.current = null;
     }
 
-    globalThis.localStorage.setItem(pendingPersist.key, pendingPersist.payload);
+    writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
     pendingContextPersistRef.current = null;
   }, []);
 
@@ -66,7 +89,7 @@ export function useRepoNavigationPersistence({
         return current;
       }
 
-      const raw = globalThis.localStorage.getItem(toContextStorageKey(activeRepo));
+      const raw = readPersistedContextPayload(toContextStorageKey(activeRepo));
       if (!raw) {
         persistedContextPayloadRef.current = null;
         return current;
@@ -75,10 +98,6 @@ export function useRepoNavigationPersistence({
       persistedContextPayloadRef.current = raw;
 
       const persisted = parsePersistedContext(raw);
-      if (!persisted) {
-        return current;
-      }
-
       return restoreNavigationFromPersistedContext(current, persisted);
     });
   }, [activeRepo, setNavigation]);
@@ -108,7 +127,7 @@ export function useRepoNavigationPersistence({
         pendingPersistTimeoutIdRef.current = null;
         return;
       }
-      globalThis.localStorage.setItem(pendingPersist.key, pendingPersist.payload);
+      writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
       pendingContextPersistRef.current = null;
       pendingPersistTimeoutIdRef.current = null;
     }, 0);

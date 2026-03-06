@@ -1,5 +1,6 @@
+import { agentRoleValues } from "@openducktor/contracts";
 import { type AgentRole, isRecord } from "@openducktor/core";
-import { isRole } from "./agents-page-constants";
+import { errorMessage } from "@/lib/errors";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
@@ -9,7 +10,6 @@ export const AGENT_STUDIO_QUERY_KEYS = {
   task: "task",
   session: "session",
   agent: "agent",
-  scenario: "scenario",
   autostart: "autostart",
   start: "start",
 } as const;
@@ -44,6 +44,11 @@ export type PersistedAgentStudioContext = {
   role?: AgentRole;
   sessionId?: string;
 };
+
+const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
+
+const isRole = (value: string | null): value is AgentRole =>
+  value != null && AGENT_ROLE_SET.has(value);
 
 const readOptionalString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
@@ -132,22 +137,36 @@ export const isSameNavigationState = (
   );
 };
 
-export const parsePersistedContext = (raw: string): PersistedAgentStudioContext | null => {
+export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    return null;
+  } catch (cause) {
+    throw new Error(`Failed to parse persisted agent studio context: ${errorMessage(cause)}`, {
+      cause,
+    });
   }
 
   if (!isRecord(parsed)) {
-    return null;
+    throw new Error("Failed to parse persisted agent studio context: expected an object payload.");
   }
 
-  const taskId = readOptionalString(parsed[AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId]);
-  const roleValue = readOptionalString(parsed[AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role]) ?? null;
-  const role = isRole(roleValue) ? roleValue : undefined;
-  const sessionId = readOptionalString(parsed[AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionId]);
+  const taskId = parsePersistedContextString(parsed, AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId);
+  const roleValue = parsePersistedContextString(parsed, AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role);
+  const role: AgentRole | undefined = roleValue
+    ? (() => {
+        if (!isRole(roleValue)) {
+          throw new Error(
+            `Failed to parse persisted agent studio context: invalid role "${roleValue}".`,
+          );
+        }
+        return roleValue;
+      })()
+    : undefined;
+  const sessionId = parsePersistedContextString(
+    parsed,
+    AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionId,
+  );
 
   return {
     ...(taskId ? { taskId } : {}),
@@ -188,3 +207,22 @@ export const toTabsStorageKey = (repoPath: string): string =>
   `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${repoPath}`;
 
 export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
+
+const parsePersistedContextString = (
+  parsed: Record<string, unknown>,
+  key: (typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS)[keyof typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS],
+): string | undefined => {
+  const value = parsed[key];
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error(
+      `Failed to parse persisted agent studio context: field "${key}" must be a string.`,
+    );
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};

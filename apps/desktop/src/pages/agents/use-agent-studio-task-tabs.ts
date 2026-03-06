@@ -7,7 +7,6 @@ import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate as QueryUpdate,
 } from "./agent-studio-navigation";
-import { firstScenario } from "./agents-page-constants";
 import {
   buildRoleEnabledMapForTask,
   buildTaskTabs,
@@ -47,7 +46,6 @@ const toTaskQueryUpdate = (params: {
       [AGENT_STUDIO_QUERY_KEYS.task]: sessionForTask.taskId,
       [AGENT_STUDIO_QUERY_KEYS.session]: sessionForTask.sessionId,
       [AGENT_STUDIO_QUERY_KEYS.agent]: sessionForTask.role,
-      [AGENT_STUDIO_QUERY_KEYS.scenario]: sessionForTask.scenario,
       [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
       [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
     };
@@ -59,7 +57,6 @@ const toTaskQueryUpdate = (params: {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.agent]: nextRole,
-    [AGENT_STUDIO_QUERY_KEYS.scenario]: firstScenario(nextRole),
     [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
     [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
@@ -69,7 +66,6 @@ const toClearTaskQueryUpdate = (): QueryUpdate => ({
   [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
   [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
   [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-  [AGENT_STUDIO_QUERY_KEYS.scenario]: undefined,
   [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
   [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
 });

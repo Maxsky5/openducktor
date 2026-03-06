@@ -49,7 +49,6 @@ describe("use-agent-studio-session-action-helpers", () => {
       task: "task-1",
       session: "session-1",
       agent: "spec",
-      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });
@@ -74,7 +73,6 @@ describe("use-agent-studio-session-action-helpers", () => {
         task: "task-1",
         session: "session-1",
         agent: "build",
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       },
@@ -99,7 +97,6 @@ describe("use-agent-studio-session-action-helpers", () => {
       task: "task-existing",
       session: "session-existing",
       agent: "spec",
-      scenario: undefined,
       autostart: undefined,
       start: undefined,
     });

@@ -38,6 +38,39 @@ const createMemoryStorage = (): StorageLike => {
   };
 };
 
+const createThrowingStorage = (args: {
+  throwOnGetItem?: boolean;
+  throwOnSetItem?: boolean;
+  message?: string;
+}): StorageLike => {
+  const store = new Map<string, string>();
+  const message = args.message ?? "storage unavailable";
+  return {
+    getItem: (key) => {
+      if (args.throwOnGetItem) {
+        throw new Error(message);
+      }
+      return store.get(key) ?? null;
+    },
+    setItem: (key, value) => {
+      if (args.throwOnSetItem) {
+        throw new Error(message);
+      }
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  };
+};
+
 const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
     initialNavigation ?? {
@@ -138,6 +171,137 @@ describe("useRepoNavigationPersistence", () => {
         sessionId: "session-from-cleanup",
       });
     } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("throws actionable error when persisted context payload is malformed", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(toContextStorageKey("/repo"), "{not-json");
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+      });
+
+      await expect(harness.mount()).rejects.toThrow(
+        "Failed to parse persisted agent studio context",
+      );
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("throws actionable error when context storage read fails", async () => {
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: createThrowingStorage({
+        throwOnGetItem: true,
+        message: "read blocked",
+      }),
+    });
+
+    try {
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+      });
+
+      await expect(harness.mount()).rejects.toThrow(
+        `Failed to read agent studio context storage key "${toContextStorageKey("/repo")}": read blocked`,
+      );
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("throws actionable error when context storage persistence fails", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    let nextTimerId = 1;
+    const scheduledCallbacks = new Map<number, () => void>();
+
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+    globalThis.setTimeout = ((callback: TimerHandler) => {
+      const timerId = nextTimerId++;
+      if (typeof callback !== "function") {
+        throw new Error("Expected function timer callback");
+      }
+      scheduledCallbacks.set(timerId, callback as () => void);
+      return timerId as unknown as ReturnType<typeof globalThis.setTimeout>;
+    }) as unknown as typeof globalThis.setTimeout;
+    globalThis.clearTimeout = ((timerId?: ReturnType<typeof globalThis.setTimeout>) => {
+      if (typeof timerId === "number") {
+        scheduledCallbacks.delete(timerId);
+      }
+    }) as unknown as typeof globalThis.clearTimeout;
+
+    try {
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+      });
+
+      await harness.mount();
+      const initialFlush = scheduledCallbacks.get(1);
+      if (!initialFlush) {
+        throw new Error("Expected initial persistence callback to be scheduled");
+      }
+      initialFlush();
+      scheduledCallbacks.delete(1);
+
+      await harness.run((latest) => {
+        latest.setNavigation({
+          taskId: "task-from-cleanup",
+          sessionId: "session-from-cleanup",
+          role: "spec",
+        });
+      });
+
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: createThrowingStorage({
+          throwOnSetItem: true,
+          message: "write blocked",
+        }),
+      });
+
+      const pendingFlush = scheduledCallbacks.get(2);
+      if (!pendingFlush) {
+        throw new Error("Expected pending persistence callback to be scheduled");
+      }
+
+      expect(() => pendingFlush()).toThrow(
+        `Failed to persist agent studio context storage key "${toContextStorageKey("/repo")}": write blocked`,
+      );
+
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: memoryStorage,
+      });
+      await harness.unmount();
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,
         value: originalStorage,

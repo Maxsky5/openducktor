@@ -266,7 +266,6 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-2",
       session: "session-2",
       agent: "spec",
-      scenario: undefined,
       autostart: undefined,
     });
 
@@ -295,7 +294,6 @@ describe("useAgentStudioSessionActions", () => {
       task: "task-1",
       session: undefined,
       agent: "planner",
-      scenario: undefined,
       autostart: undefined,
     });
 
@@ -364,7 +362,6 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: undefined,
         agent: "planner",
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -392,7 +389,6 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: "session-plan",
         agent: "planner",
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -442,7 +438,6 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: undefined,
         agent: "spec",
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -617,7 +612,6 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: undefined,
         agent: "planner",
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
@@ -625,7 +619,6 @@ describe("useAgentStudioSessionActions", () => {
         task: "task-1",
         session: "session-spec",
         agent: "spec",
-        scenario: undefined,
         autostart: undefined,
         start: undefined,
       });
