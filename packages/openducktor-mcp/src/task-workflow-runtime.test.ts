@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { TaskStatus } from "./contracts";
 import { createOdtTaskWorkflowRuntime } from "./task-workflow-runtime";
 
 type TaskCardFixtureInput = {
   id: string;
   title: string;
-  status: "open" | "spec_ready" | "ready_for_dev";
+  status: TaskStatus;
   issueType: "feature" | "task";
   aiReviewEnabled: boolean;
 };
@@ -52,6 +53,9 @@ describe("task workflow runtime", () => {
             status: "spec_ready",
             metadata: { openducktor: { qaRequired: false } },
           }),
+        updateTask: async () => {
+          throw new Error("updateTask should not be called");
+        },
         getNamespaceData: () => {
           throw new Error("getNamespaceData should not be called");
         },
@@ -94,6 +98,9 @@ describe("task workflow runtime", () => {
         },
         listTasks: async () => [],
         showRawIssue: async () => makeIssue({ status: "spec_ready" }),
+        updateTask: async () => {
+          throw new Error("updateTask should not be called");
+        },
         getNamespaceData: () => {
           throw new Error("getNamespaceData should not be called");
         },
@@ -132,6 +139,9 @@ describe("task workflow runtime", () => {
         },
         listTasks: async () => [currentTask],
         showRawIssue: async () => makeIssue({ status: "ready_for_dev" }),
+        updateTask: async () => {
+          throw new Error("updateTask should not be called");
+        },
         getNamespaceData: () => {
           throw new Error("getNamespaceData should not be called");
         },
@@ -151,6 +161,60 @@ describe("task workflow runtime", () => {
       makeTask({ status: "ready_for_dev" }),
     );
     expect(runCalls).toEqual([["update", "task-1", "--status", "ready_for_dev"]]);
+    expect(invalidateCalls).toBe(1);
+  });
+
+  test("applyTaskUpdate writes metadata and status together and invalidates lookup state", async () => {
+    const updateCalls: Array<{ metadataRoot?: unknown; status?: string }> = [];
+    let invalidateCalls = 0;
+
+    const runtime = createOdtTaskWorkflowRuntime({
+      persistence: {
+        metadataNamespace: "openducktor",
+        ensureInitialized: async () => {},
+        runBdJson: async () => {
+          throw new Error("runBdJson should not be called");
+        },
+        listTasks: async () => [],
+        showRawIssue: async () =>
+          makeIssue({
+            status: "human_review",
+            metadata: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
+          }),
+        updateTask: async (taskId, input) => {
+          expect(taskId).toBe("task-1");
+          updateCalls.push({
+            metadataRoot: input.metadataRoot,
+            status: input.status,
+          });
+        },
+        getNamespaceData: () => {
+          throw new Error("getNamespaceData should not be called");
+        },
+        writeNamespace: async () => {
+          throw new Error("writeNamespace should not be called");
+        },
+      },
+      taskLookup: {
+        resolveTask: async () => makeTask(),
+        invalidate: () => {
+          invalidateCalls += 1;
+        },
+      },
+    });
+
+    await expect(
+      runtime.applyTaskUpdate("task-1", {
+        metadataRoot: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
+        status: "human_review",
+      }),
+    ).resolves.toEqual(makeTask({ status: "human_review" }));
+    expect(updateCalls).toEqual([
+      {
+        metadataRoot: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
+        status: "human_review",
+      },
+    ]);
     expect(invalidateCalls).toBe(1);
   });
 });

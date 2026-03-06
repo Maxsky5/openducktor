@@ -291,13 +291,9 @@ export class BuildCompletedUseCase
 type QaUseCaseDeps = {
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
-    | "ensureInitialized"
-    | "resolveTaskContext"
-    | "assertTransitionAllowed"
-    | "refreshTaskContext"
-    | "transitionTask"
+    "applyTaskUpdate" | "assertTransitionAllowed" | "ensureInitialized" | "readTaskSnapshot"
   >;
-  documentStore: Pick<TaskDocumentPort, "appendQaReport">;
+  documentStore: Pick<TaskDocumentPort, "prepareQaReportWrite">;
 };
 
 export class QaApprovedUseCase implements OdtTaskStoreUseCase<QaApprovedInput, QaApprovedResult> {
@@ -311,16 +307,17 @@ export class QaApprovedUseCase implements OdtTaskStoreUseCase<QaApprovedInput, Q
 
   async execute(input: QaApprovedInput): Promise<QaApprovedResult> {
     await this.workflow.ensureInitialized();
-    const context = await this.workflow.resolveTaskContext(input.taskId);
-    const { task, tasks } = context;
-    this.workflow.assertTransitionAllowed(task, tasks, "human_review");
-    await this.documentStore.appendQaReport(task.id, input.reportMarkdown.trim(), "approved");
-    const refreshedContext = await this.workflow.refreshTaskContext(task.id, context);
-    const updatedTask = await this.workflow.transitionTask(
-      task.id,
-      "human_review",
-      refreshedContext,
+    const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
+    this.workflow.assertTransitionAllowed(task, [task], "human_review");
+    const preparedWrite = this.documentStore.prepareQaReportWrite(
+      issue,
+      input.reportMarkdown.trim(),
+      "approved",
     );
+    const updatedTask = await this.workflow.applyTaskUpdate(task.id, {
+      metadataRoot: preparedWrite.metadataRoot,
+      status: "human_review",
+    });
     return { task: updatedTask };
   }
 }
@@ -336,16 +333,17 @@ export class QaRejectedUseCase implements OdtTaskStoreUseCase<QaRejectedInput, Q
 
   async execute(input: QaRejectedInput): Promise<QaRejectedResult> {
     await this.workflow.ensureInitialized();
-    const context = await this.workflow.resolveTaskContext(input.taskId);
-    const { task, tasks } = context;
-    this.workflow.assertTransitionAllowed(task, tasks, "in_progress");
-    await this.documentStore.appendQaReport(task.id, input.reportMarkdown.trim(), "rejected");
-    const refreshedContext = await this.workflow.refreshTaskContext(task.id, context);
-    const updatedTask = await this.workflow.transitionTask(
-      task.id,
-      "in_progress",
-      refreshedContext,
+    const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
+    this.workflow.assertTransitionAllowed(task, [task], "in_progress");
+    const preparedWrite = this.documentStore.prepareQaReportWrite(
+      issue,
+      input.reportMarkdown.trim(),
+      "rejected",
     );
+    const updatedTask = await this.workflow.applyTaskUpdate(task.id, {
+      metadataRoot: preparedWrite.metadataRoot,
+      status: "in_progress",
+    });
     return { task: updatedTask };
   }
 }

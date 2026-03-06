@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { RawIssue, TaskCard } from "./contracts";
 import {
+  BuildBlockedUseCase,
   BuildCompletedUseCase,
+  BuildResumedUseCase,
   QaApprovedUseCase,
+  QaRejectedUseCase,
   ReadTaskUseCase,
   SetPlanUseCase,
   SetSpecUseCase,
@@ -234,31 +237,135 @@ describe("odt task workflow use cases", () => {
     ]);
   });
 
-  test("QaApprovedUseCase rejects invalid transitions before writing qa metadata", async () => {
-    let appendCalled = false;
-    let refreshCalled = false;
-    let transitionCalled = false;
+  test("BuildBlockedUseCase returns the blocker reason and transitions to blocked", async () => {
+    const blockedTask = makeTask({ status: "blocked" });
+    const calls: string[] = [];
+
+    const useCase = new BuildBlockedUseCase({
+      workflow: {
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        transitionTask: async (taskId, nextStatus) => {
+          calls.push(`transition:${taskId}:${nextStatus}`);
+          return blockedTask;
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({ taskId: "task-1", reason: "Waiting on upstream change" }),
+    ).resolves.toEqual({
+      task: blockedTask,
+      reason: "Waiting on upstream change",
+    });
+    expect(calls).toEqual(["init", "transition:task-1:blocked"]);
+  });
+
+  test("BuildResumedUseCase transitions back to in_progress", async () => {
+    const resumedTask = makeTask({ status: "in_progress" });
+    const calls: string[] = [];
+
+    const useCase = new BuildResumedUseCase({
+      workflow: {
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        transitionTask: async (taskId, nextStatus) => {
+          calls.push(`transition:${taskId}:${nextStatus}`);
+          return resumedTask;
+        },
+      },
+    });
+
+    await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
+      task: resumedTask,
+    });
+    expect(calls).toEqual(["init", "transition:task-1:in_progress"]);
+  });
+
+  test("QaApprovedUseCase writes the qa report and status in a single task update", async () => {
+    const qaTask = makeTask({ status: "ai_review" });
+    const issue = makeIssue({ status: "ai_review" });
+    const approvedTask = makeTask({ status: "human_review" });
+    const calls: string[] = [];
+    let appliedUpdate: { metadataRoot?: unknown; status?: string } | null = null;
+
+    const useCase = new QaApprovedUseCase({
+      workflow: {
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue, task: qaTask };
+        },
+        assertTransitionAllowed: () => {
+          calls.push("assert");
+        },
+        applyTaskUpdate: async (taskId, input) => {
+          calls.push(`apply:${taskId}:${input.status ?? "none"}`);
+          appliedUpdate = input;
+          return approvedTask;
+        },
+      },
+      documentStore: {
+        prepareQaReportWrite: (rawIssue, markdown, verdict) => {
+          calls.push(`prepare:${rawIssue.id}:${verdict}:${markdown}`);
+          return {
+            metadataRoot: { openducktor: { documents: { qaReports: [{ verdict, markdown }] } } },
+            namespace: {},
+            root: {},
+          };
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
+    ).resolves.toEqual({ task: approvedTask });
+    expect(calls).toEqual([
+      "init",
+      "read:task-1",
+      "assert",
+      "prepare:task-1:approved:## QA review",
+      "apply:task-1:human_review",
+    ]);
+    expect(appliedUpdate).toEqual({
+      metadataRoot: {
+        openducktor: {
+          documents: { qaReports: [{ verdict: "approved", markdown: "## QA review" }] },
+        },
+      },
+      status: "human_review",
+    });
+  });
+
+  test("QaApprovedUseCase rejects invalid transitions before preparing qa metadata", async () => {
+    let prepareCalled = false;
+    let updateCalled = false;
     const currentTask = makeTask({ status: "open" });
 
     const useCase = new QaApprovedUseCase({
       workflow: {
         ensureInitialized: async () => {},
-        resolveTaskContext: async () => ({ task: currentTask, tasks: [currentTask] }),
+        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
         assertTransitionAllowed: () => {
           throw new Error("Transition not allowed");
         },
-        refreshTaskContext: async () => {
-          refreshCalled = true;
-          return { task: currentTask, tasks: [currentTask] };
-        },
-        transitionTask: async () => {
-          transitionCalled = true;
+        applyTaskUpdate: async () => {
+          updateCalled = true;
           return currentTask;
         },
       },
       documentStore: {
-        appendQaReport: async () => {
-          appendCalled = true;
+        prepareQaReportWrite: () => {
+          prepareCalled = true;
+          return {
+            metadataRoot: {},
+            namespace: {},
+            root: {},
+          };
         },
       },
     });
@@ -266,8 +373,43 @@ describe("odt task workflow use cases", () => {
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
     ).rejects.toThrow("Transition not allowed");
-    expect(appendCalled).toBe(false);
-    expect(refreshCalled).toBe(false);
-    expect(transitionCalled).toBe(false);
+    expect(prepareCalled).toBe(false);
+    expect(updateCalled).toBe(false);
+  });
+
+  test("QaRejectedUseCase rejects invalid transitions before preparing qa metadata", async () => {
+    let prepareCalled = false;
+    let updateCalled = false;
+    const currentTask = makeTask({ status: "open" });
+
+    const useCase = new QaRejectedUseCase({
+      workflow: {
+        ensureInitialized: async () => {},
+        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
+        assertTransitionAllowed: () => {
+          throw new Error("Transition not allowed");
+        },
+        applyTaskUpdate: async () => {
+          updateCalled = true;
+          return currentTask;
+        },
+      },
+      documentStore: {
+        prepareQaReportWrite: () => {
+          prepareCalled = true;
+          return {
+            metadataRoot: {},
+            namespace: {},
+            root: {},
+          };
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
+    ).rejects.toThrow("Transition not allowed");
+    expect(prepareCalled).toBe(false);
+    expect(updateCalled).toBe(false);
   });
 });

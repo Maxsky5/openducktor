@@ -9,7 +9,7 @@ type MarkdownDocumentKey = "spec" | "implementationPlan";
 type QaVerdict = "approved" | "rejected";
 
 type PersistLatestMarkdownInput = {
-  taskId: string;
+  issue: RawIssue;
   markdown: string;
   documentKey: MarkdownDocumentKey;
 };
@@ -46,6 +46,14 @@ const getNextRevision = (entries: Array<{ revision: number }>): number => {
   return maxRevision + 1;
 };
 
+type PreparedNamespaceWrite = {
+  metadataRoot: Record<string, unknown>;
+  namespace: Record<string, unknown>;
+  root: Record<string, unknown>;
+};
+
+export type PreparedQaReportWrite = PreparedNamespaceWrite;
+
 export type TaskDocumentPort = {
   parseDocs(issue: RawIssue): TaskDocumentsSnapshot;
   persistSpec(taskId: string, markdown: string): Promise<{ updatedAt: string; revision: number }>;
@@ -54,6 +62,11 @@ export type TaskDocumentPort = {
     markdown: string,
   ): Promise<{ updatedAt: string; revision: number }>;
   appendQaReport(taskId: string, markdown: string, verdict: QaVerdict): Promise<void>;
+  prepareQaReportWrite(
+    issue: RawIssue,
+    markdown: string,
+    verdict: QaVerdict,
+  ): PreparedQaReportWrite;
 };
 
 export type TaskDocumentPersistence = Pick<
@@ -78,8 +91,9 @@ export class TaskDocumentStore implements TaskDocumentPort {
     taskId: string,
     markdown: string,
   ): Promise<{ updatedAt: string; revision: number }> {
+    const issue = await this.persistence.showRawIssue(taskId);
     return this.persistLatestMarkdown({
-      taskId,
+      issue,
       markdown,
       documentKey: "spec",
     });
@@ -89,8 +103,9 @@ export class TaskDocumentStore implements TaskDocumentPort {
     taskId: string,
     markdown: string,
   ): Promise<{ updatedAt: string; revision: number }> {
+    const issue = await this.persistence.showRawIssue(taskId);
     return this.persistLatestMarkdown({
-      taskId,
+      issue,
       markdown,
       documentKey: "implementationPlan",
     });
@@ -98,6 +113,15 @@ export class TaskDocumentStore implements TaskDocumentPort {
 
   async appendQaReport(taskId: string, markdown: string, verdict: QaVerdict): Promise<void> {
     const issue = await this.persistence.showRawIssue(taskId);
+    const preparedWrite = this.prepareQaReportWrite(issue, markdown, verdict);
+    await this.persistence.writeNamespace(taskId, preparedWrite.root, preparedWrite.namespace);
+  }
+
+  prepareQaReportWrite(
+    issue: RawIssue,
+    markdown: string,
+    verdict: QaVerdict,
+  ): PreparedQaReportWrite {
     const { root, namespace, documents } = this.persistence.getNamespaceData(issue);
     const entries = parseQaEntries(documents.qaReports);
     const source = QA_REPORT_SOURCES[verdict];
@@ -112,24 +136,28 @@ export class TaskDocumentStore implements TaskDocumentPort {
       revision: nextRevision,
     };
 
-    const nextDocuments = {
-      ...documents,
-      qaReports: [...entries, entry],
-    };
-
     const nextNamespace = {
       ...namespace,
-      documents: nextDocuments,
+      documents: {
+        ...documents,
+        qaReports: [...entries, entry],
+      },
     };
 
-    await this.persistence.writeNamespace(taskId, root, nextNamespace);
+    return {
+      metadataRoot: {
+        ...root,
+        [this.persistence.metadataNamespace]: nextNamespace,
+      },
+      namespace: nextNamespace,
+      root,
+    };
   }
 
   private async persistLatestMarkdown(
     input: PersistLatestMarkdownInput,
   ): Promise<{ updatedAt: string; revision: number }> {
-    const issue = await this.persistence.showRawIssue(input.taskId);
-    const { root, namespace, documents } = this.persistence.getNamespaceData(issue);
+    const { root, namespace, documents } = this.persistence.getNamespaceData(input.issue);
     const source = MARKDOWN_DOCUMENT_SOURCES[input.documentKey];
     const nextRevision = getNextRevision(parseMarkdownEntries(documents[input.documentKey]));
 
@@ -152,7 +180,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
       documents: nextDocuments,
     };
 
-    await this.persistence.writeNamespace(input.taskId, root, nextNamespace);
+    await this.persistence.writeNamespace(input.issue.id, root, nextNamespace);
     return {
       updatedAt,
       revision: nextRevision,

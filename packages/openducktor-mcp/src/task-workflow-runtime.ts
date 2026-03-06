@@ -1,4 +1,4 @@
-import type { TaskPersistencePort } from "./bd-persistence";
+import type { TaskPersistencePort, TaskUpdateInput } from "./bd-persistence";
 import type { RawIssue, TaskCard, TaskStatus } from "./contracts";
 import type { TaskIndexCache } from "./task-index-cache";
 import { issueToTaskCard } from "./task-mapping";
@@ -13,6 +13,7 @@ import {
 export type OdtTaskWorkflowRuntimePort = {
   metadataNamespace: string;
   ensureInitialized(): Promise<void>;
+  applyTaskUpdate(taskId: string, input: TaskUpdateInput): Promise<TaskCard>;
   readTaskSnapshot(taskId: string): Promise<{ issue: RawIssue; task: TaskCard }>;
   resolveTaskContext(taskId: string): Promise<TaskContext>;
   refreshTaskContext(taskId: string, context?: TaskContext): Promise<TaskContext>;
@@ -40,6 +41,14 @@ class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
 
   async ensureInitialized(): Promise<void> {
     await this.persistence.ensureInitialized();
+  }
+
+  async applyTaskUpdate(taskId: string, input: TaskUpdateInput): Promise<TaskCard> {
+    await this.persistence.updateTask(taskId, input);
+
+    const refreshed = await this.persistence.showRawIssue(taskId);
+    this.taskLookup.invalidate();
+    return issueToTaskCard(refreshed, this.metadataNamespace);
   }
 
   async readTaskSnapshot(taskId: string): Promise<{ issue: RawIssue; task: TaskCard }> {
