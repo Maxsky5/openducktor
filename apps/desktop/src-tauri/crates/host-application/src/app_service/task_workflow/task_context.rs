@@ -1,4 +1,4 @@
-use super::AppService;
+use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::TaskCard;
 use std::path::Path;
@@ -37,14 +37,31 @@ impl LoadedTaskContext {
 }
 
 impl AppService {
+    pub(super) fn load_task_repo_context_from_resolved(
+        &self,
+        repo_path: String,
+    ) -> Result<TaskRepoContext> {
+        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
+        Ok(TaskRepoContext { repo_path, tasks })
+    }
+
     pub(super) fn resolve_task_repo_path(&self, repo_path: &str) -> Result<String> {
         self.resolve_initialized_repo_path(repo_path)
     }
 
     pub(super) fn load_task_repo_context(&self, repo_path: &str) -> Result<TaskRepoContext> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
-        Ok(TaskRepoContext { repo_path, tasks })
+        self.load_task_repo_context_from_resolved(repo_path)
+    }
+
+    pub(super) fn load_task_context_from_resolved(
+        &self,
+        repo_path: String,
+        task_id: &str,
+    ) -> Result<LoadedTaskContext> {
+        let repo = self.load_task_repo_context_from_resolved(repo_path)?;
+        let task = repo.cloned_task(task_id)?;
+        Ok(LoadedTaskContext { repo, task })
     }
 
     pub(super) fn load_task_context(
@@ -52,8 +69,7 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
     ) -> Result<LoadedTaskContext> {
-        let repo = self.load_task_repo_context(repo_path)?;
-        let task = repo.cloned_task(task_id)?;
-        Ok(LoadedTaskContext { repo, task })
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        self.load_task_context_from_resolved(repo_path, task_id)
     }
 }

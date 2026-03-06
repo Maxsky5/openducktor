@@ -1,9 +1,10 @@
-use super::{
+use anyhow::{anyhow, Context, Result};
+use crate::app_service::service_core::AppService;
+use crate::app_service::workflow_rules::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
     normalize_required_markdown, normalize_subtask_plan_inputs, normalize_title_key,
-    validate_parent_relationships_for_create, validate_plan_subtask_rules, AppService,
+    validate_parent_relationships_for_create, validate_plan_subtask_rules,
 };
-use anyhow::{anyhow, Context, Result};
 use host_domain::{CreateTaskInput, IssueType, PlanSubtaskInput, SpecDocument, TaskStatus};
 use std::collections::HashSet;
 
@@ -13,8 +14,9 @@ impl AppService {
     }
 
     pub fn set_spec(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<SpecDocument> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "spec")?;
-        let context = self.load_task_context(repo_path, task_id)?;
+        let context = self.load_task_context_from_resolved(repo_path, task_id)?;
         if !can_set_spec_from_status(&context.task.status) {
             return Err(anyhow!(
                 "set_spec is only allowed from open/spec_ready (current: {})",
@@ -45,8 +47,9 @@ impl AppService {
         task_id: &str,
         markdown: &str,
     ) -> Result<SpecDocument> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "spec")?;
-        let context = self.load_task_context(repo_path, task_id)?;
+        let context = self.load_task_context_from_resolved(repo_path, task_id)?;
 
         self.task_store
             .set_spec(context.repo_dir(), task_id, &markdown)
@@ -64,8 +67,9 @@ impl AppService {
         markdown: &str,
         subtasks: Option<Vec<PlanSubtaskInput>>,
     ) -> Result<SpecDocument> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "implementation plan")?;
-        let context = self.load_task_context(repo_path, task_id)?;
+        let context = self.load_task_context_from_resolved(repo_path, task_id)?;
         if !can_set_plan(&context.task) {
             return Err(anyhow!(
                 "set_plan is not allowed for issue type {} from status {}",
@@ -106,8 +110,9 @@ impl AppService {
         task_id: &str,
         markdown: &str,
     ) -> Result<SpecDocument> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "implementation plan")?;
-        let context = self.load_task_context(repo_path, task_id)?;
+        let context = self.load_task_context_from_resolved(repo_path, task_id)?;
 
         self.task_store
             .set_plan(context.repo_dir(), task_id, &markdown)

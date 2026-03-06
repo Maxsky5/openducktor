@@ -1,5 +1,6 @@
-use super::{validate_transition, AppService};
 use anyhow::{Context, Result};
+use crate::app_service::service_core::AppService;
+use crate::app_service::workflow_rules::validate_transition;
 use host_domain::{QaVerdict, SpecDocument, TaskCard, TaskStatus};
 
 impl AppService {

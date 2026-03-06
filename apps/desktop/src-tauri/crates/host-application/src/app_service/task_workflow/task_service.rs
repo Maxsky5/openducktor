@@ -1,8 +1,9 @@
-use super::{
-    default_qa_required_for_issue_type, validate_parent_relationships_for_create,
-    validate_parent_relationships_for_update, validate_transition, AppService, is_open_state,
-};
 use anyhow::{anyhow, Context, Result};
+use crate::app_service::service_core::AppService;
+use crate::app_service::workflow_rules::{
+    default_qa_required_for_issue_type, is_open_state, validate_parent_relationships_for_create,
+    validate_parent_relationships_for_update, validate_transition,
+};
 use host_domain::{CreateTaskInput, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch};
 
 impl AppService {
@@ -30,13 +31,14 @@ impl AppService {
         task_id: &str,
         patch: UpdateTaskPatch,
     ) -> Result<TaskCard> {
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
         if patch.status.is_some() {
             return Err(anyhow!(
                 "Status cannot be updated directly. Use workflow transitions."
             ));
         }
 
-        let mut context = self.load_task_repo_context(repo_path)?;
+        let mut context = self.load_task_repo_context_from_resolved(repo_path)?;
         let current = context.task(task_id)?;
         validate_parent_relationships_for_update(&context.tasks, current, &patch)?;
 
