@@ -1432,6 +1432,15 @@ mod tests {
             Ok(())
         }
 
+        fn delete_local_branch(
+            &self,
+            _repo_path: &Path,
+            _branch: &str,
+            _force: bool,
+        ) -> anyhow::Result<()> {
+            panic!("unexpected call: delete_local_branch");
+        }
+
         fn push_branch(
             &self,
             _repo_path: &Path,

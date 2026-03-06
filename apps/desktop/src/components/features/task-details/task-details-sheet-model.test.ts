@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import {
+  collectDeleteImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
@@ -50,6 +51,20 @@ describe("task-details-sheet-model", () => {
 
     expect(toSubtasks(parent, byId)).toEqual([subtask]);
     expect(toSubtasks(null, byId)).toEqual([]);
+  });
+
+  test("collects delete impact ids across descendant subtasks", () => {
+    const leaf = makeTask("T-3");
+    const child = makeTask("T-2", { subtaskIds: ["T-3"] });
+    const parent = makeTask("T-1", { subtaskIds: ["T-2", "T-999"] });
+    const byId = new Map<string, TaskCard>([
+      [parent.id, parent],
+      [child.id, child],
+      [leaf.id, leaf],
+    ]);
+
+    expect(collectDeleteImpactTaskIds(parent, byId)).toEqual(["T-1", "T-2", "T-999", "T-3"]);
+    expect(collectDeleteImpactTaskIds(null, byId)).toEqual([]);
   });
 
   test("routes workflow actions to matching callbacks", () => {

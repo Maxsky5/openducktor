@@ -66,6 +66,24 @@ impl GitCliPort {
 
         self.get_current_branch_impl(repo_path)
     }
+
+    pub(super) fn delete_local_branch_impl(
+        &self,
+        repo_path: &Path,
+        branch: &str,
+        force: bool,
+    ) -> Result<()> {
+        self.ensure_repository(repo_path)?;
+        let branch = normalize_non_empty(branch, "branch")?;
+
+        let delete_flag = if force { "-D" } else { "-d" };
+        self.run_git(
+            repo_path,
+            &["branch", delete_flag, "--end-of-options", branch.as_str()],
+        )?;
+
+        Ok(())
+    }
 }
 
 fn parse_branch_rows(output: &str) -> Vec<GitBranch> {

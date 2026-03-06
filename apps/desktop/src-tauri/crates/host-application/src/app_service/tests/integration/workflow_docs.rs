@@ -184,6 +184,8 @@ fn task_delete_blocks_when_subtasks_exist_without_confirmation() {
 #[test]
 fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
     let repo_path = "/tmp/odt-repo-task-delete-cascade";
+    fs::create_dir_all(repo_path)?;
+    init_git_repo(Path::new(repo_path))?;
     let parent = make_task("parent-1", "epic", TaskStatus::Open);
     let mut child = make_task("child-1", "task", TaskStatus::Open);
     child.parent_id = Some("parent-1".to_string());
@@ -195,6 +197,21 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
             detached: false,
         },
     );
+    service.workspace_add(repo_path)?;
+    service.workspace_update_repo_config(
+        repo_path,
+        RepoConfig {
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
 
     service.task_delete(repo_path, "parent-1", true)?;
 
@@ -202,6 +219,321 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
     assert_eq!(
         task_state.delete_calls,
         vec![("parent-1".to_string(), true)]
+    );
+    Ok(())
+}
+
+#[test]
+fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-task-delete-cleanup";
+    let worktree_path = "/tmp/odt-repo-task-delete-cleanup-worktree";
+    fs::create_dir_all(repo_path)?;
+    fs::create_dir_all(worktree_path)?;
+    init_git_repo(Path::new(repo_path))?;
+    let parent = make_task("parent-1", "epic", TaskStatus::Open);
+    let mut build_session = make_session("parent-1", "build-session");
+    build_session.working_directory = worktree_path.to_string();
+    let mut qa_session = make_session("parent-1", "qa-session");
+    qa_session.role = "qa".to_string();
+    qa_session.scenario = Some("qa_review".to_string());
+    qa_session.working_directory = format!("{worktree_path}/");
+    let mut planner_session = make_session("parent-1", "planner-session");
+    planner_session.role = "planner".to_string();
+    planner_session.scenario = Some("planner_initial".to_string());
+    planner_session.working_directory = repo_path.to_string();
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![parent],
+        vec![GitBranch {
+            name: "obp/parent-1-cleanup".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+    service.workspace_add(repo_path)?;
+    service.workspace_update_repo_config(
+        repo_path,
+        RepoConfig {
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    task_state
+        .lock()
+        .expect("task lock poisoned")
+        .agent_sessions = vec![build_session, qa_session, planner_session];
+
+    service.task_delete(repo_path, "parent-1", false)?;
+
+    let git_calls = git_state.lock().expect("git lock poisoned").calls.clone();
+    assert!(git_calls
+        .iter()
+        .any(|call| matches!(call, GitCall::GetBranches { .. })));
+    assert!(!git_calls
+        .iter()
+        .any(|call| matches!(call, GitCall::GetCurrentBranch { .. })));
+    assert_eq!(
+        git_calls
+            .iter()
+            .filter(|call| {
+                matches!(
+                    call,
+                    GitCall::RemoveWorktree {
+                        repo_path: _,
+                        worktree_path: call_worktree_path,
+                        force,
+                    } if call_worktree_path == worktree_path && *force
+                )
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        git_calls
+            .iter()
+            .filter(|call| {
+                matches!(
+                    call,
+                    GitCall::DeleteLocalBranch {
+                        repo_path: _,
+                        branch,
+                        force,
+                    } if branch == "obp/parent-1-cleanup" && *force
+                )
+            })
+            .count(),
+        1
+    );
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.delete_calls,
+        vec![("parent-1".to_string(), false)]
+    );
+    Ok(())
+}
+
+#[test]
+fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-task-delete-descendants";
+    let child_worktree_path = "/tmp/odt-repo-task-delete-descendants-child";
+    fs::create_dir_all(repo_path)?;
+    fs::create_dir_all(child_worktree_path)?;
+    init_git_repo(Path::new(repo_path))?;
+    let parent = make_task("parent-1", "epic", TaskStatus::Open);
+    let mut child = make_task("child-1", "task", TaskStatus::Open);
+    child.parent_id = Some("parent-1".to_string());
+    let mut child_session = make_session("child-1", "child-build-session");
+    child_session.working_directory = child_worktree_path.to_string();
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![parent, child],
+        vec![GitBranch {
+            name: "obp/child-1-cleanup".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+    service.workspace_add(repo_path)?;
+    service.workspace_update_repo_config(
+        repo_path,
+        RepoConfig {
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    task_state
+        .lock()
+        .expect("task lock poisoned")
+        .agent_sessions = vec![child_session];
+
+    service.task_delete(repo_path, "parent-1", true)?;
+
+    let git_calls = git_state.lock().expect("git lock poisoned").calls.clone();
+    assert!(git_calls.iter().any(|call| {
+        matches!(
+            call,
+            GitCall::RemoveWorktree {
+                repo_path: _,
+                worktree_path,
+                force,
+            } if worktree_path == child_worktree_path && *force
+        )
+    }));
+    assert!(git_calls.iter().any(|call| {
+        matches!(
+            call,
+            GitCall::DeleteLocalBranch {
+                repo_path: _,
+                branch,
+                force,
+            } if branch == "obp/child-1-cleanup" && *force
+        )
+    }));
+    Ok(())
+}
+
+#[test]
+fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
+    let repo_path = "/tmp/odt-repo-task-delete-worktree-failure";
+    let worktree_path = "/tmp/odt-repo-task-delete-worktree-failure-worktree";
+    fs::create_dir_all(repo_path).expect("repo directory should be created");
+    fs::create_dir_all(worktree_path).expect("worktree directory should be created");
+    init_git_repo(Path::new(repo_path)).expect("repo should be initialized");
+    let parent = make_task("parent-1", "epic", TaskStatus::Open);
+    let mut build_session = make_session("parent-1", "build-session");
+    build_session.working_directory = worktree_path.to_string();
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![parent],
+        vec![GitBranch {
+            name: "obp/parent-1-cleanup".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+    service
+        .workspace_add(repo_path)
+        .expect("workspace add should succeed");
+    service
+        .workspace_update_repo_config(
+            repo_path,
+            RepoConfig {
+                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+                branch_prefix: "obp".to_string(),
+                default_target_branch: "origin/main".to_string(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                worktree_file_copies: Vec::new(),
+                prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
+            },
+        )
+        .expect("repo config update should succeed");
+
+    task_state
+        .lock()
+        .expect("task lock poisoned")
+        .agent_sessions = vec![build_session];
+    let mut git_state = git_state.lock().expect("git lock poisoned");
+    git_state.remove_worktree_error = Some("remove failed".to_string());
+    drop(git_state);
+
+    let error = service
+        .task_delete(repo_path, "parent-1", false)
+        .expect_err("task delete should fail when worktree cleanup fails");
+
+    assert!(format!("{error:#}").contains("remove failed"));
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state.delete_calls.is_empty());
+}
+
+#[test]
+fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-task-delete-branch-retry";
+    let worktree_path = "/tmp/odt-repo-task-delete-branch-retry-worktree";
+    fs::create_dir_all(repo_path)?;
+    fs::create_dir_all(worktree_path)?;
+    init_git_repo(Path::new(repo_path))?;
+    let parent = make_task("parent-1", "epic", TaskStatus::Open);
+    let mut build_session = make_session("parent-1", "build-session");
+    build_session.working_directory = worktree_path.to_string();
+    let (service, task_state, git_state) = build_service_with_git_state(
+        vec![parent],
+        vec![GitBranch {
+            name: "obp/parent-1-cleanup".to_string(),
+            is_current: false,
+            is_remote: false,
+        }],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+    service.workspace_add(repo_path)?;
+    service.workspace_update_repo_config(
+        repo_path,
+        RepoConfig {
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    task_state
+        .lock()
+        .expect("task lock poisoned")
+        .agent_sessions = vec![build_session];
+    git_state
+        .lock()
+        .expect("git lock poisoned")
+        .delete_local_branch_error = Some("branch blocked".to_string());
+
+    let first_error = service
+        .task_delete(repo_path, "parent-1", false)
+        .expect_err("first delete should fail on branch cleanup");
+    assert!(format!("{first_error:#}").contains("branch blocked"));
+    fs::remove_dir_all(worktree_path)?;
+
+    git_state
+        .lock()
+        .expect("git lock poisoned")
+        .delete_local_branch_error = None;
+
+    service.task_delete(repo_path, "parent-1", false)?;
+
+    let git_calls = git_state.lock().expect("git lock poisoned").calls.clone();
+    assert_eq!(
+        git_calls
+            .iter()
+            .filter(|call| matches!(call, GitCall::RemoveWorktree { .. }))
+            .count(),
+        1
+    );
+    assert_eq!(
+        git_calls
+            .iter()
+            .filter(|call| matches!(call, GitCall::DeleteLocalBranch { .. }))
+            .count(),
+        2
+    );
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.delete_calls,
+        vec![("parent-1".to_string(), false)]
     );
     Ok(())
 }

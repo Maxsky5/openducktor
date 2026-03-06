@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useMemo } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
+  collectDeleteImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
@@ -9,6 +10,7 @@ import {
 } from "@/components/features/task-details/task-details-sheet-model";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
 import { useTaskDeleteDialog } from "@/components/features/task-details/use-task-delete-dialog";
+import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
 import {
   type DocumentSectionKey,
   type TaskDocumentState,
@@ -36,6 +38,9 @@ type TaskDetailsSheetViewModel = {
   isDeleteDialogOpen: boolean;
   isDeletePending: boolean;
   deleteError: string | null;
+  hasManagedSessionCleanup: boolean;
+  managedWorktreeCount: number;
+  impactError: string | null;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
@@ -75,6 +80,14 @@ export function useTaskDetailsSheetViewModel({
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = useTaskDocuments(taskId, open);
 
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
+  const deleteImpactTaskIds = useMemo(
+    () => collectDeleteImpactTaskIds(task, taskById),
+    [task, taskById],
+  );
+  const { hasManagedSessionCleanup, managedWorktreeCount, impactError } = useTaskDeleteImpact(
+    deleteImpactTaskIds,
+    open,
+  );
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
@@ -167,6 +180,9 @@ export function useTaskDetailsSheetViewModel({
     isDeleteDialogOpen,
     isDeletePending,
     deleteError,
+    hasManagedSessionCleanup,
+    managedWorktreeCount,
+    impactError,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,

@@ -235,6 +235,7 @@ pub trait GitPort: Send + Sync {
         create_branch: bool,
     ) -> Result<()>;
     fn remove_worktree(&self, repo_path: &Path, worktree_path: &Path, force: bool) -> Result<()>;
+    fn delete_local_branch(&self, repo_path: &Path, branch: &str, force: bool) -> Result<()>;
     fn push_branch(
         &self,
         repo_path: &Path,
