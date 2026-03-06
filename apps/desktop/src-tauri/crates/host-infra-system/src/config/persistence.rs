@@ -7,11 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::{
-    ffi::OsString,
-    fs::OpenOptions,
-    io::ErrorKind,
-    io::Write,
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    ffi::OsString, fs::OpenOptions, io::ErrorKind, io::Write, os::unix::fs::OpenOptionsExt,
     time::SystemTime,
 };
 
@@ -105,13 +101,6 @@ fn write_config_file_atomic(path: &Path, contents: &[u8]) -> Result<()> {
         {
             Ok(mut file) => {
                 let write_result = (|| -> Result<()> {
-                    file.set_permissions(fs::Permissions::from_mode(CONFIG_FILE_MODE))
-                        .with_context(|| {
-                            format!(
-                                "Failed setting secure permissions on config temp file {}",
-                                temp_path.display()
-                            )
-                        })?;
                     file.write_all(contents).with_context(|| {
                         format!("Failed writing config temp file {}", temp_path.display())
                     })?;
