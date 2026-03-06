@@ -1,6 +1,8 @@
 use super::{RepoConfig, TestStoreHarness};
 use serde_json::json;
 use std::fs;
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
 #[test]
 fn load_missing_returns_default_config() {
@@ -130,6 +132,14 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         serde_json::to_string_pretty(&payload).expect("serialize payload"),
     )
     .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
 
     let workspaces = store.list_workspaces().expect("list workspaces");
     assert_eq!(workspaces.len(), 1);

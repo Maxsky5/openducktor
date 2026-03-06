@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 mod constructors_and_io;
 mod normalization;
+mod permissions;
 mod runtime_config;
 mod trust_fingerprint;
 mod workspace_config;
