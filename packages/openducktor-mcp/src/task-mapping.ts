@@ -8,7 +8,7 @@ import type {
   RawIssue,
   TaskCard,
 } from "./contracts";
-import { toTaskStatus } from "./workflow-policy";
+import { parseBeadsTaskStatus } from "./workflow-policy";
 
 const ISSUE_TYPE_VALUES = issueTypeSchema.options.join(", ");
 
@@ -25,7 +25,7 @@ const describeInvalidValue = (value: unknown): string => {
   return String(value);
 };
 
-export const normalizeIssueType = (taskId: string, value: unknown): IssueType => {
+const parseBeadsIssueType = (taskId: string, value: unknown): IssueType => {
   const parsed = issueTypeSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
@@ -125,7 +125,7 @@ const normalizeParentId = (issue: RawIssue): string | undefined => {
 };
 
 export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): TaskCard => {
-  const issueType = normalizeIssueType(issue.id, issue.issue_type);
+  const issueType = parseBeadsIssueType(issue.id, issue.issue_type);
   const root = parseMetadataRoot(issue.metadata);
   const namespace = ensureObject(root[metadataNamespace]);
   const qaRequired =
@@ -138,7 +138,7 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
   return {
     id: issue.id,
     title: issue.title,
-    status: toTaskStatus(issue.id, issue.status),
+    status: parseBeadsTaskStatus(issue.id, issue.status),
     issueType,
     aiReviewEnabled: qaRequired,
     ...(parentId ? { parentId } : {}),

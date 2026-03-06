@@ -19,7 +19,7 @@ const describeInvalidValue = (value: unknown): string => {
   return String(value);
 };
 
-export const toTaskStatus = (taskId: string, value: unknown): TaskStatus => {
+export const parseBeadsTaskStatus = (taskId: string, value: unknown): TaskStatus => {
   if (typeof value !== "string" || !isTaskStatus(value)) {
     throw new Error(
       `Invalid Beads status for task ${taskId}: received ${describeInvalidValue(value)}. ` +

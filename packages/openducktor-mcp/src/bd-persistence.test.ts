@@ -193,6 +193,33 @@ describe("BdPersistence", () => {
     );
   });
 
+  test("listTasks surfaces invalid Beads issue types instead of coercing them", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => [
+          {
+            id: "task-3",
+            title: "Broken issue type",
+            status: "open",
+            issue_type: "decision",
+            metadata: {},
+          },
+        ],
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+
+    await expect(persistence.listTasks()).rejects.toThrow(
+      'Invalid Beads issue type for task task-3: received "decision".',
+    );
+  });
+
   test("writeNamespace updates metadata under namespace key", async () => {
     const state: FakeClientState = {
       calls: [],
