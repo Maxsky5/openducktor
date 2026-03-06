@@ -54,20 +54,20 @@ describe("runtime schemas", () => {
     });
   });
 
-  test("task card coerces unsupported issue types to task", () => {
-    const parsed = taskCardSchema.parse({
-      id: "task-2",
-      title: "Legacy type",
-      description: "",
-      status: "open",
-      priority: 2,
-      issueType: "decision",
-      labels: [],
-      updatedAt: "2026-01-01T00:00:00.000Z",
-      createdAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    expect(parsed.issueType).toBe("task");
+  test("task card rejects unsupported issue types", () => {
+    expect(() =>
+      taskCardSchema.parse({
+        id: "task-2",
+        title: "Legacy type",
+        description: "",
+        status: "open",
+        priority: 2,
+        issueType: "decision",
+        labels: [],
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    ).toThrow();
   });
 
   test("task card parses document summary flags and updated timestamps", () => {

@@ -166,6 +166,107 @@ describe("BdPersistence", () => {
     await expect(persistence.listTasks()).rejects.toThrow("bd list did not return an array");
   });
 
+  test("listTasks surfaces invalid Beads task status instead of coercing it", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => [
+          {
+            id: "task-2",
+            title: "Broken status",
+            status: { raw: "open" },
+            issue_type: "task",
+            metadata: {},
+          },
+        ],
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+
+    await expect(persistence.listTasks()).rejects.toThrow(
+      'Invalid Beads status for task task-2: received {"raw":"open"}.',
+    );
+  });
+
+  test("listTasks surfaces invalid Beads issue types instead of coercing them", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => [
+          {
+            id: "task-3",
+            title: "Broken issue type",
+            status: "open",
+            issue_type: "decision",
+            metadata: {},
+          },
+        ],
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+
+    await expect(persistence.listTasks()).rejects.toThrow(
+      'Invalid Beads issue type for task task-3: received "decision".',
+    );
+  });
+
+  test("listTasks ignores non-task Beads issue types before strict parsing", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => [
+          {
+            id: "task-4",
+            title: "Task 4",
+            status: "open",
+            issue_type: "task",
+            metadata: {},
+          },
+          {
+            id: "event-1",
+            title: "Calendar event",
+            status: "open",
+            issue_type: "event",
+            metadata: {},
+          },
+          {
+            id: "gate-1",
+            title: "Review gate",
+            status: "open",
+            issue_type: "gate",
+            metadata: {},
+          },
+        ],
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+
+    await expect(persistence.listTasks()).resolves.toEqual([
+      {
+        id: "task-4",
+        title: "Task 4",
+        status: "open",
+        issueType: "task",
+        aiReviewEnabled: true,
+      },
+    ]);
+  });
+
   test("writeNamespace updates metadata under namespace key", async () => {
     const state: FakeClientState = {
       calls: [],

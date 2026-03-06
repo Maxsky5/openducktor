@@ -1,8 +1,8 @@
 use super::{
-    default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace, normalize_issue_type,
-    normalize_labels, normalize_text_option, parse_agent_sessions, parse_markdown_entries,
-    parse_metadata_root, parse_qa_entries, BeadsTaskStore, CommandRunner, ProcessCommandRunner,
-    CUSTOM_STATUS_VALUES, TASK_LIST_CACHE_TTL_MS,
+    default_ai_review_enabled, metadata_bool_qa_required, metadata_namespace, normalize_labels,
+    normalize_text_option, parse_agent_sessions, parse_issue_type, parse_markdown_entries,
+    parse_metadata_root, parse_qa_entries, parse_task_status, BeadsTaskStore, CommandRunner,
+    ProcessCommandRunner, CUSTOM_STATUS_VALUES, TASK_LIST_CACHE_TTL_MS,
 };
 use anyhow::{anyhow, Result};
 use host_domain::{
@@ -377,11 +377,71 @@ fn show_task_uses_id_flag_when_loading_issue() -> Result<()> {
 }
 
 #[test]
-fn issue_type_and_ai_review_defaults_are_normalized() {
-    assert_eq!(normalize_issue_type("feature"), IssueType::Feature);
-    assert_eq!(normalize_issue_type("unknown-type"), IssueType::Task);
-    assert!(default_ai_review_enabled("epic"));
-    assert!(default_ai_review_enabled("unknown-type"));
+fn strict_issue_type_and_status_parsers_return_actionable_errors() {
+    assert_eq!(
+        parse_issue_type("task-1", "feature").expect("feature should parse"),
+        IssueType::Feature
+    );
+    assert_eq!(
+        parse_task_status("task-1", "blocked").expect("blocked should parse"),
+        TaskStatus::Blocked
+    );
+    assert!(default_ai_review_enabled(&IssueType::Epic));
+    assert!(default_ai_review_enabled(&IssueType::Bug));
+
+    let issue_type_error = parse_issue_type("task-1", "unknown-type")
+        .expect_err("unknown issue type should fail")
+        .to_string();
+    assert!(issue_type_error.contains("task-1"));
+    assert!(issue_type_error.contains("issue type"));
+    assert!(issue_type_error.contains("unknown-type"));
+
+    let status_error = parse_task_status("task-1", "backlog")
+        .expect_err("unknown status should fail")
+        .to_string();
+    assert!(status_error.contains("task-1"));
+    assert!(status_error.contains("status"));
+    assert!(status_error.contains("backlog"));
+}
+
+#[test]
+fn show_task_rejects_invalid_issue_type_with_task_context() {
+    let repo = RepoFixture::new("show-invalid-issue-type");
+    let issue = issue_value("task-bad-type", "open", "decision", None, json!([]), None);
+    let runner =
+        MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(json!([issue]).to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let error = store
+        .show_task(repo.path(), "task-bad-type")
+        .expect_err("invalid issue type should fail");
+    let message = error.to_string();
+    assert!(message.contains("task-bad-type"));
+    assert!(message.contains("issue type"));
+    assert!(message.contains("decision"));
+}
+
+#[test]
+fn list_tasks_rejects_invalid_status_with_task_context() {
+    let repo = RepoFixture::new("list-invalid-status");
+    let payload = json!([issue_value(
+        "task-bad-status",
+        "backlog",
+        "task",
+        None,
+        json!([]),
+        None
+    )]);
+    let runner = MockCommandRunner::with_steps(vec![MockStep::WithEnv(Ok(payload.to_string()))]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner);
+
+    let error = store
+        .list_tasks(repo.path())
+        .expect_err("invalid status should fail");
+    let message = error.to_string();
+    assert!(message.contains("task-bad-status"));
+    assert!(message.contains("status"));
+    assert!(message.contains("backlog"));
 }
 
 #[test]

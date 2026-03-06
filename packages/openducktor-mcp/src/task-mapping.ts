@@ -1,22 +1,8 @@
 import { z } from "zod";
-import type {
-  IssueType,
-  JsonObject,
-  MarkdownEntry,
-  QaEntry,
-  RawIssue,
-  TaskCard,
-} from "./contracts";
-import { toTaskStatus } from "./workflow-policy";
+import { parseBeadsIssueType, parseBeadsTaskStatus } from "./beads-task-parsing";
+import type { JsonObject, MarkdownEntry, QaEntry, RawIssue, TaskCard } from "./contracts";
 
-export const normalizeIssueType = (value: unknown): IssueType => {
-  if (value === "epic" || value === "feature" || value === "bug") {
-    return value;
-  }
-  return "task";
-};
-
-const defaultQaRequiredForIssueType = (_issueType: IssueType): boolean => true;
+const defaultQaRequiredForIssueType = (): boolean => true;
 
 export const parseMetadataRoot = (metadata: unknown): JsonObject => {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
@@ -104,20 +90,21 @@ const normalizeParentId = (issue: RawIssue): string | undefined => {
 };
 
 export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): TaskCard => {
+  const issueType = parseBeadsIssueType(issue.id, issue.issue_type);
   const root = parseMetadataRoot(issue.metadata);
   const namespace = ensureObject(root[metadataNamespace]);
   const qaRequired =
     typeof namespace.qaRequired === "boolean"
       ? namespace.qaRequired
-      : defaultQaRequiredForIssueType(normalizeIssueType(issue.issue_type));
+      : defaultQaRequiredForIssueType();
 
   const parentId = normalizeParentId(issue);
 
   return {
     id: issue.id,
     title: issue.title,
-    status: toTaskStatus(issue.status),
-    issueType: normalizeIssueType(issue.issue_type),
+    status: parseBeadsTaskStatus(issue.id, issue.status),
+    issueType,
     aiReviewEnabled: qaRequired,
     ...(parentId ? { parentId } : {}),
   };

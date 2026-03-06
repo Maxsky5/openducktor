@@ -1,16 +1,4 @@
-import { taskStatusSchema } from "@openducktor/contracts";
 import type { IssueType, PlanSubtaskInput, TaskCard, TaskStatus } from "./contracts";
-
-const TASK_STATUS_SET = new Set<string>(taskStatusSchema.options);
-
-const isTaskStatus = (value: string): value is TaskStatus => TASK_STATUS_SET.has(value);
-
-export const toTaskStatus = (value: unknown): TaskStatus => {
-  if (typeof value !== "string") {
-    return "open";
-  }
-  return isTaskStatus(value) ? value : "open";
-};
 
 const canSkipSpecAndPlanning = (task: TaskCard): boolean => {
   return task.issueType === "task" || task.issueType === "bug";

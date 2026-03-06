@@ -1,5 +1,5 @@
+import { issueTypeSchema } from "@openducktor/contracts";
 import type { PlanSubtaskInput } from "./contracts";
-import { normalizeIssueType } from "./task-mapping";
 
 export const normalizePlanSubtasks = (inputs: PlanSubtaskInput[]): PlanSubtaskInput[] => {
   const normalized: PlanSubtaskInput[] = [];
@@ -10,7 +10,7 @@ export const normalizePlanSubtasks = (inputs: PlanSubtaskInput[]): PlanSubtaskIn
       throw new Error("Subtask proposals require a non-empty title.");
     }
 
-    const issueType = normalizeIssueType(input.issueType);
+    const issueType = issueTypeSchema.parse(input.issueType ?? "task");
     if (issueType === "epic") {
       throw new Error("Epic subtasks are not allowed.");
     }

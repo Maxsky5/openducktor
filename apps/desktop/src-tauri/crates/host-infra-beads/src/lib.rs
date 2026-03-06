@@ -22,7 +22,8 @@ use metadata::{
 };
 #[cfg(test)]
 use normalize::{
-    default_ai_review_enabled, normalize_issue_type, normalize_labels, normalize_text_option,
+    default_ai_review_enabled, parse_issue_type, parse_task_status, normalize_labels,
+    normalize_text_option,
 };
 
 #[cfg(test)]

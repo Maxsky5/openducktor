@@ -29,12 +29,6 @@ export const taskActionSchema = z.enum([
 ]);
 export type TaskAction = z.infer<typeof taskActionSchema>;
 
-const issueTypeFallbackSchema = z.preprocess(
-  (value) =>
-    value === "task" || value === "feature" || value === "bug" || value === "epic" ? value : "task",
-  issueTypeSchema,
-);
-
 export const taskPrioritySchema = z.number().int().min(0).max(4);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
@@ -146,7 +140,7 @@ export const taskCardSchema = z.object({
   notes: z.string().optional().default(""),
   status: taskStatusSchema,
   priority: taskPrioritySchema.default(2),
-  issueType: issueTypeFallbackSchema.default("task"),
+  issueType: issueTypeSchema,
   aiReviewEnabled: z.boolean().optional().default(true),
   availableActions: z.array(taskActionSchema).default([]),
   labels: z.array(z.string()).default([]),

@@ -24,7 +24,8 @@ use crate::app_service::test_support::{
     create_orphanable_opencode, empty_patch, init_git_repo, lock_env, make_emitter, make_session,
     make_task, prepend_path, process_is_alive, remove_env_var, set_env_var, spawn_sleep_process,
     unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
-    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    wait_for_process_exit, write_executable_script, write_private_file, FakeTaskStore, GitCall,
+    TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -512,7 +513,7 @@ fn opencode_runtime_start_fails_on_invalid_startup_config_before_qa_worktree_set
         },
     )?;
 
-    fs::write(&config_path, "{ invalid json")?;
+    write_private_file(&config_path, "{ invalid json")?;
 
     let error = service
         .opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Qa)
@@ -559,7 +560,7 @@ fn opencode_runtime_start_reuses_existing_runtime_for_same_task_and_role() -> Re
     let first =
         service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)?;
     let config_path = root.join("config.json");
-    fs::write(&config_path, "{ invalid json")?;
+    write_private_file(&config_path, "{ invalid json")?;
     let second =
         service.opencode_runtime_start(repo_path.as_str(), "task-1", AgentRuntimeRole::Spec)?;
     assert_eq!(first.runtime_id, second.runtime_id);

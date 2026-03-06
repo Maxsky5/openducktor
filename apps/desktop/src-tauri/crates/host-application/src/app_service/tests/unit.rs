@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::test_support::{
-    make_task, unique_temp_path, FakeTaskStore, TaskStoreState,
+    make_task, unique_temp_path, write_private_file, FakeTaskStore, TaskStoreState,
 };
 use crate::app_service::{
     allows_transition, build_opencode_startup_event_payload, can_set_plan,
@@ -442,7 +442,7 @@ fn opencode_startup_readiness_policy_returns_actionable_error_on_invalid_config(
     let root = unique_temp_path("startup-policy-invalid-config");
     let config_path = root.join("runtime-config.json");
     fs::create_dir_all(&root)?;
-    fs::write(&config_path, "{ invalid json")?;
+    write_private_file(&config_path, "{ invalid json")?;
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -480,7 +480,7 @@ fn resolve_build_startup_policy_emits_config_failure_metrics() -> Result<()> {
     let root = unique_temp_path("build-startup-policy-invalid-config");
     let config_path = root.join("runtime-config.json");
     fs::create_dir_all(&root)?;
-    fs::write(&config_path, "{ invalid json")?;
+    write_private_file(&config_path, "{ invalid json")?;
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -507,7 +507,7 @@ fn resolve_runtime_startup_policy_emits_config_failure_metrics() -> Result<()> {
     let root = unique_temp_path("runtime-startup-policy-invalid-config");
     let config_path = root.join("runtime-config.json");
     fs::create_dir_all(&root)?;
-    fs::write(&config_path, "{ invalid json")?;
+    write_private_file(&config_path, "{ invalid json")?;
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {

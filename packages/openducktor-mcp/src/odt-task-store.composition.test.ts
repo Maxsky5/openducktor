@@ -73,4 +73,110 @@ describe("OdtTaskStore composition", () => {
     expect(result.task.aiReviewEnabled).toBe(false);
     expect(result.documents.spec.markdown).toBe("spec");
   });
+
+  test("readTask surfaces invalid Beads issue types from showRawIssue", async () => {
+    const issue: RawIssue = {
+      id: "task-1",
+      title: "Task 1",
+      status: "open",
+      issue_type: "decision",
+      metadata: {},
+    };
+
+    const persistence: TaskPersistencePort = {
+      metadataNamespace: "openducktor",
+      ensureInitialized: async () => {},
+      runBdJson: async () => {
+        throw new Error("runBdJson should not be called by readTask");
+      },
+      listTasks: async () => [makeTask()],
+      showRawIssue: async () => issue,
+      getNamespaceData: () => {
+        throw new Error("getNamespaceData should not be called by readTask");
+      },
+      writeNamespace: async () => {
+        throw new Error("writeNamespace should not be called by readTask");
+      },
+    };
+
+    const documentStore: TaskDocumentPort = {
+      parseDocs: () => ({
+        spec: { markdown: "", updatedAt: null },
+        implementationPlan: { markdown: "", updatedAt: null },
+        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      }),
+      persistSpec: async () => ({ updatedAt: "", revision: 1 }),
+      persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),
+      appendQaReport: async () => {},
+    };
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      {
+        persistence,
+        documentStore,
+      },
+    );
+
+    await expect(store.readTask({ taskId: "task-1" })).rejects.toThrow(
+      'Invalid Beads issue type for task task-1: received "decision".',
+    );
+  });
+
+  test("readTask surfaces invalid Beads statuses from showRawIssue", async () => {
+    const issue: RawIssue = {
+      id: "task-1",
+      title: "Task 1",
+      status: null,
+      issue_type: "feature",
+      metadata: {},
+    };
+
+    const persistence: TaskPersistencePort = {
+      metadataNamespace: "openducktor",
+      ensureInitialized: async () => {},
+      runBdJson: async () => {
+        throw new Error("runBdJson should not be called by readTask");
+      },
+      listTasks: async () => [makeTask()],
+      showRawIssue: async () => issue,
+      getNamespaceData: () => {
+        throw new Error("getNamespaceData should not be called by readTask");
+      },
+      writeNamespace: async () => {
+        throw new Error("writeNamespace should not be called by readTask");
+      },
+    };
+
+    const documentStore: TaskDocumentPort = {
+      parseDocs: () => ({
+        spec: { markdown: "", updatedAt: null },
+        implementationPlan: { markdown: "", updatedAt: null },
+        latestQaReport: { markdown: "", updatedAt: null, verdict: null },
+      }),
+      persistSpec: async () => ({ updatedAt: "", revision: 1 }),
+      persistImplementationPlan: async () => ({ updatedAt: "", revision: 1 }),
+      appendQaReport: async () => {},
+    };
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      {
+        persistence,
+        documentStore,
+      },
+    );
+
+    await expect(store.readTask({ taskId: "task-1" })).rejects.toThrow(
+      "Invalid Beads status for task task-1: received null.",
+    );
+  });
 });

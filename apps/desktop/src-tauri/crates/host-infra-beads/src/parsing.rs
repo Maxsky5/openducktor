@@ -1,11 +1,13 @@
-use anyhow::{anyhow, Result};
-use host_domain::{AgentWorkflows, TaskCard, TaskStatus};
+use anyhow::Result;
+use host_domain::{AgentWorkflows, TaskCard};
 
 use crate::metadata::{
     metadata_bool_qa_required, metadata_document_summary, metadata_namespace, parse_metadata_root,
 };
 use crate::model::RawIssue;
-use crate::normalize::{default_ai_review_enabled, normalize_issue_type, normalize_labels};
+use crate::normalize::{
+    default_ai_review_enabled, parse_issue_type, parse_task_status, normalize_labels,
+};
 use crate::store::BeadsTaskStore;
 
 impl BeadsTaskStore {
@@ -14,17 +16,15 @@ impl BeadsTaskStore {
         issue: RawIssue,
         metadata_namespace_key: &str,
     ) -> Result<TaskCard> {
-        let status = TaskStatus::from_cli_value(&issue.status)
-            .ok_or_else(|| anyhow!("Unknown task status from bd: {}", issue.status))?;
+        let issue_type = parse_issue_type(&issue.id, &issue.issue_type)?;
+        let status = parse_task_status(&issue.id, &issue.status)?;
 
         let metadata_root = parse_metadata_root(issue.metadata);
         let namespace = metadata_namespace(&metadata_root, metadata_namespace_key);
         let ai_review_enabled = namespace
             .and_then(metadata_bool_qa_required)
-            .unwrap_or_else(|| default_ai_review_enabled(&issue.issue_type));
+            .unwrap_or_else(|| default_ai_review_enabled(&issue_type));
         let document_summary = metadata_document_summary(namespace);
-
-        let normalized_issue_type = normalize_issue_type(&issue.issue_type);
 
         let parent_id = issue.parent.or_else(|| {
             issue.dependencies.iter().find_map(|dependency| {
@@ -46,7 +46,7 @@ impl BeadsTaskStore {
             notes: issue.notes,
             status,
             priority: issue.priority,
-            issue_type: normalized_issue_type,
+            issue_type,
             ai_review_enabled,
             available_actions: Vec::new(),
             labels: normalize_labels(issue.labels),
