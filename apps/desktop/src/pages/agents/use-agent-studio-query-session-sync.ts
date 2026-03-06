@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useEffect } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
 type UseAgentStudioQuerySessionSyncArgs = {
   isLoadingTasks: boolean;
@@ -13,7 +14,7 @@ type UseAgentStudioQuerySessionSyncArgs = {
   activeSession: AgentSessionState | null;
   roleFromQuery: AgentRole;
   isActiveTaskHydrated: boolean;
-  scheduleQueryUpdate: (updates: Record<string, string | undefined>) => void;
+  scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
 };
 
 export function useAgentStudioQuerySessionSync({
@@ -39,12 +40,11 @@ export function useAgentStudioQuerySessionSync({
       return;
     }
     scheduleQueryUpdate({
-      task: undefined,
-      session: undefined,
-      agent: undefined,
-      scenario: undefined,
-      autostart: undefined,
-      start: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
     });
   }, [isLoadingTasks, scheduleQueryUpdate, selectedSessionById, taskIdParam, tasks]);
 
@@ -52,7 +52,7 @@ export function useAgentStudioQuerySessionSync({
     if (!selectedSessionById || taskIdParam) {
       return;
     }
-    scheduleQueryUpdate({ task: selectedSessionById.taskId });
+    scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.task]: selectedSessionById.taskId });
   }, [scheduleQueryUpdate, selectedSessionById, taskIdParam]);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function useAgentStudioQuerySessionSync({
       return;
     }
     if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
-      scheduleQueryUpdate({ session: undefined });
+      scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.session]: undefined });
       return;
     }
     if (!taskId || !isActiveTaskHydrated) {
@@ -69,7 +69,7 @@ export function useAgentStudioQuerySessionSync({
     if (selectedSessionById && selectedSessionById.taskId === taskId) {
       return;
     }
-    scheduleQueryUpdate({ session: undefined });
+    scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.session]: undefined });
   }, [isActiveTaskHydrated, scheduleQueryUpdate, selectedSessionById, sessionParam, taskId]);
 
   useEffect(() => {
@@ -80,15 +80,15 @@ export function useAgentStudioQuerySessionSync({
       return;
     }
 
-    const updates: Record<string, string | undefined> = {};
+    const updates: AgentStudioQueryUpdate = {};
     if (taskIdParam !== activeSession.taskId) {
-      updates.task = activeSession.taskId;
+      updates[AGENT_STUDIO_QUERY_KEYS.task] = activeSession.taskId;
     }
     if (sessionParam !== activeSession.sessionId) {
-      updates.session = activeSession.sessionId;
+      updates[AGENT_STUDIO_QUERY_KEYS.session] = activeSession.sessionId;
     }
     if (roleFromQuery !== activeSession.role) {
-      updates.agent = activeSession.role;
+      updates[AGENT_STUDIO_QUERY_KEYS.agent] = activeSession.role;
     }
 
     if (Object.keys(updates).length === 0) {

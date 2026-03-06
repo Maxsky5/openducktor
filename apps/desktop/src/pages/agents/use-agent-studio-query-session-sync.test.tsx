@@ -63,7 +63,6 @@ describe("useAgentStudioQuerySessionSync", () => {
           task: undefined,
           session: undefined,
           agent: undefined,
-          scenario: undefined,
           autostart: undefined,
           start: undefined,
         },

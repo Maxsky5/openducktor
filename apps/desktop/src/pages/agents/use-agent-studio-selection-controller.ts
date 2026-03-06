@@ -2,12 +2,11 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { useMemo, useRef } from "react";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { firstScenario, SCENARIOS_BY_ROLE } from "./agents-page-constants";
 import { resolveAgentStudioActiveSession, resolveAgentStudioTaskId } from "./agents-page-selection";
 import { useAgentStudioTaskHydration } from "./use-agent-studio-task-hydration";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
-
-type QueryUpdate = Record<string, string | undefined>;
 
 type UseAgentStudioSelectionControllerArgs = {
   activeRepo: string | null;

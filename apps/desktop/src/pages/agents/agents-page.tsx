@@ -1,3 +1,4 @@
+import { AlertTriangle, RefreshCcw } from "lucide-react";
 import {
   type ReactElement,
   startTransition,
@@ -39,6 +40,7 @@ import {
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "../shared/use-session-start-modal-coordinator";
+import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import { buildRebaseConflictResolutionPrompt, SCENARIO_LABELS } from "./agents-page-constants";
 import {
   resolveAgentStudioBuilderSessionForTask,
@@ -355,15 +357,22 @@ export function AgentsPage(): ReactElement {
   const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
     useAgentStudioSessionStartRequest();
 
-  const { taskIdParam, sessionParam, hasExplicitRoleParam, roleFromQuery, updateQuery } =
-    useAgentStudioQuerySync({
-      activeRepo,
-      searchParams,
-      setSearchParams,
-    });
+  const {
+    taskIdParam,
+    sessionParam,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    navigationPersistenceError,
+    retryNavigationPersistence,
+    updateQuery,
+  } = useAgentStudioQuerySync({
+    activeRepo,
+    searchParams,
+    setSearchParams,
+  });
 
   const scheduleQueryUpdate = useCallback(
-    (updates: Record<string, string | undefined>): void => {
+    (updates: AgentStudioQueryUpdate): void => {
       startTransition(() => {
         updateQuery(updates);
       });
@@ -677,63 +686,86 @@ export function AgentsPage(): ReactElement {
       }),
     [diffModel, orchestration.agentStudioWorkspaceSidebarModel, orchestration.rightPanel.panelKind],
   );
+  const content = navigationPersistenceError ? (
+    <div className="flex h-full min-h-0 items-center justify-center bg-card p-4">
+      <div className="flex w-full max-w-2xl flex-col gap-4 rounded-xl border border-destructive-border bg-destructive-surface px-4 py-4 text-sm text-destructive-muted">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+          <div className="min-w-0 space-y-2">
+            <p className="font-medium text-destructive">
+              Agent Studio couldn&apos;t restore saved navigation context.
+            </p>
+            <p>{`Repository: ${activeRepo}`}</p>
+            <p className="break-words font-mono text-xs">{navigationPersistenceError.message}</p>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
+            onClick={retryNavigationPersistence}
+          >
+            <RefreshCcw className="size-3.5" />
+            Retry restore
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : (
+    <Tabs
+      value={orchestration.activeTabValue}
+      onValueChange={selection.handleSelectTab}
+      className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-card"
+    >
+      <AgentStudioTaskTabs
+        model={orchestration.agentStudioTaskTabsModel}
+        rightPanelToggleModel={orchestration.rightPanel.rightPanelToggleModel}
+      />
 
-  return (
-    <DiffWorkerProvider>
-      <Tabs
-        value={orchestration.activeTabValue}
-        onValueChange={selection.handleSelectTab}
-        className="h-full min-h-0 max-h-full gap-0 overflow-hidden bg-card"
-      >
-        <AgentStudioTaskTabs
-          model={orchestration.agentStudioTaskTabsModel}
-          rightPanelToggleModel={orchestration.rightPanel.rightPanelToggleModel}
+      <TabsContent value={orchestration.activeTabValue} className="m-0 min-h-0 flex-1 bg-card p-0">
+        {selection.viewTaskId ? (
+          <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
+            <ResizablePanel defaultSize={63} minSize={35}>
+              <AgentChat
+                header={<AgentStudioHeader model={orchestration.agentStudioHeaderModel} />}
+                model={orchestration.agentChatModel}
+              />
+            </ResizablePanel>
+            {orchestration.rightPanel.panelKind && orchestration.rightPanel.isPanelOpen ? (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={37} minSize={30}>
+                  {rightPanelModel ? <AgentStudioRightPanel model={rightPanelModel} /> : null}
+                </ResizablePanel>
+              </>
+            ) : null}
+          </ResizablePanelGroup>
+        ) : (
+          <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
+            Open a task tab to start a workspace.
+          </div>
+        )}
+      </TabsContent>
+      {pendingRebaseConflictResolutionRequest ? (
+        <RebaseConflictResolutionModal
+          request={pendingRebaseConflictResolutionRequest}
+          onCancel={() => resolvePendingRebaseConflictResolution(null)}
+          onConfirm={resolvePendingRebaseConflictResolution}
         />
-
-        <TabsContent
-          value={orchestration.activeTabValue}
-          className="m-0 min-h-0 flex-1 bg-card p-0"
-        >
-          {selection.viewTaskId ? (
-            <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
-              <ResizablePanel defaultSize={63} minSize={35}>
-                <AgentChat
-                  header={<AgentStudioHeader model={orchestration.agentStudioHeaderModel} />}
-                  model={orchestration.agentChatModel}
-                />
-              </ResizablePanel>
-              {orchestration.rightPanel.panelKind && orchestration.rightPanel.isPanelOpen ? (
-                <>
-                  <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={37} minSize={30}>
-                    {rightPanelModel ? <AgentStudioRightPanel model={rightPanelModel} /> : null}
-                  </ResizablePanel>
-                </>
-              ) : null}
-            </ResizablePanelGroup>
-          ) : (
-            <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
-              Open a task tab to start a workspace.
-            </div>
-          )}
-        </TabsContent>
-        {pendingRebaseConflictResolutionRequest ? (
-          <RebaseConflictResolutionModal
-            request={pendingRebaseConflictResolutionRequest}
-            onCancel={() => resolvePendingRebaseConflictResolution(null)}
-            onConfirm={resolvePendingRebaseConflictResolution}
-          />
-        ) : null}
-        {pendingSessionStartRequest ? (
-          <AgentStudioSessionStartModal
-            request={pendingSessionStartRequest}
-            activeRepo={activeRepo}
-            repoSettings={orchestration.repoSettings}
-            onCancel={() => resolvePendingSessionStart(null)}
-            onConfirm={resolvePendingSessionStart}
-          />
-        ) : null}
-      </Tabs>
-    </DiffWorkerProvider>
+      ) : null}
+      {pendingSessionStartRequest ? (
+        <AgentStudioSessionStartModal
+          request={pendingSessionStartRequest}
+          activeRepo={activeRepo}
+          repoSettings={orchestration.repoSettings}
+          onCancel={() => resolvePendingSessionStart(null)}
+          onConfirm={resolvePendingSessionStart}
+        />
+      ) : null}
+    </Tabs>
   );
+
+  return <DiffWorkerProvider>{content}</DiffWorkerProvider>;
 }

@@ -2,8 +2,12 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  AGENT_STUDIO_QUERY_KEYS,
+  type AgentStudioQueryUpdate as QueryUpdate,
+} from "./agent-studio-navigation";
 
-export type QueryUpdate = Record<string, string | undefined>;
+export type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 
 export type ReusableSessionDecision = {
   session: AgentSessionState;
@@ -39,11 +43,11 @@ export const buildSessionSelectionQueryUpdate = (params: {
   role: AgentRole;
 }): QueryUpdate => {
   return {
-    task: params.taskId,
-    session: params.sessionId,
-    agent: params.role,
-    autostart: undefined,
-    start: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
+    [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionId,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
+    [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
 };
 
@@ -70,11 +74,11 @@ export const buildPreviousSelectionQueryUpdate = (params: {
   role: AgentRole;
 }): QueryUpdate => {
   return {
-    task: params.activeSession?.taskId ?? params.taskId,
-    session: params.activeSession?.sessionId,
-    agent: params.role,
-    autostart: undefined,
-    start: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.task]: params.activeSession?.taskId ?? params.taskId,
+    [AGENT_STUDIO_QUERY_KEYS.session]: params.activeSession?.sessionId,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
+    [AGENT_STUDIO_QUERY_KEYS.autostart]: undefined,
+    [AGENT_STUDIO_QUERY_KEYS.start]: undefined,
   };
 };
 
