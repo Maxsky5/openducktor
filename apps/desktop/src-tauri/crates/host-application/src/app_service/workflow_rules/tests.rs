@@ -40,7 +40,7 @@ fn module_normalize_title_key_is_case_insensitive_and_trimmed() {
 fn module_derive_available_actions_exposes_resume_for_deferred_task() {
     let deferred = make_task("task-1", "task", TaskStatus::Deferred);
 
-    let actions = derive_available_actions(&deferred, &[deferred.clone()]);
+    let actions = derive_available_actions(&deferred, std::slice::from_ref(&deferred));
 
     assert!(actions.contains(&TaskAction::ResumeDeferred));
 }

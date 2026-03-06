@@ -5,6 +5,15 @@ description = "OpenDucktor Desktop"
 authors = ["OpenDucktor"]
 edition = "2021"
 
+[workspace]
+members = [
+  "crates/host-application",
+  "crates/host-domain",
+  "crates/host-infra-beads",
+  "crates/host-infra-system",
+]
+resolver = "2"
+
 [lib]
 name = "openducktor_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

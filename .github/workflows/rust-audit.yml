@@ -1,0 +1,60 @@
+name: Rust Security Audit
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/rust-audit.yml
+      - apps/desktop/src-tauri/Cargo.lock
+      - apps/desktop/src-tauri/**/Cargo.toml
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/rust-audit.yml
+      - apps/desktop/src-tauri/Cargo.lock
+      - apps/desktop/src-tauri/**/Cargo.toml
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+env:
+  CARGO_AUDIT_VERSION: 0.22.1
+
+jobs:
+  rust-audit:
+    name: Rust Security Audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo-audit binary
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        id: cargo-audit-cache
+        with:
+          path: |
+            ~/.cargo/bin/cargo-audit
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: cargo-audit-${{ runner.os }}-${{ runner.arch }}-${{ env.CARGO_AUDIT_VERSION }}
+
+      - name: Install cargo-audit
+        if: steps.cargo-audit-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --version $CARGO_AUDIT_VERSION --locked --no-default-features
+
+      - name: Audit Rust dependencies
+        run: cargo audit --file apps/desktop/src-tauri/Cargo.lock

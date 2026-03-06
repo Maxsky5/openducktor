@@ -60,7 +60,7 @@ pub(super) fn run_git_ok(cwd: &Path, args: &[&str]) -> String {
 
 pub(super) fn setup_repo(prefix: &str) -> TempPath {
     let repo = TempPath::new(prefix);
-    run_git_ok(&repo.path, &["init"]);
+    run_git_ok(&repo.path, &["init", "--initial-branch=main"]);
     run_git_ok(
         &repo.path,
         &["config", "user.email", "tests@openducktor.local"],
@@ -69,12 +69,11 @@ pub(super) fn setup_repo(prefix: &str) -> TempPath {
     fs::write(repo.path.join("README.md"), "# OpenDucktor\n").expect("seed file should write");
     run_git_ok(&repo.path, &["add", "README.md"]);
     run_git_ok(&repo.path, &["commit", "-m", "initial"]);
-    run_git_ok(&repo.path, &["branch", "-M", "main"]);
     repo
 }
 
 pub(super) fn setup_bare_remote(prefix: &str) -> TempPath {
     let remote = TempPath::new(prefix);
-    run_git_ok(&remote.path, &["init", "--bare"]);
+    run_git_ok(&remote.path, &["init", "--bare", "--initial-branch=main"]);
     remote
 }

@@ -59,7 +59,8 @@ pub(crate) use startup_metrics::{
     build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,
 };
 pub(crate) use startup_metrics::{
-    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    STARTUP_CONFIG_INVALID_REASON,
 };
 pub(crate) use workflow_rules::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,

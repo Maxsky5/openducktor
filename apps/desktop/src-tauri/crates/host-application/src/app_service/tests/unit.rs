@@ -23,7 +23,8 @@ use crate::app_service::{
     validate_parent_relationships_for_create, validate_parent_relationships_for_update,
     validate_plan_subtask_rules, validate_transition, wait_for_local_server,
     wait_for_local_server_with_process, AppService, OpencodeStartupMetricsSnapshot,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload,
 };
 
 #[test]
@@ -359,10 +360,12 @@ fn test_startup_policy(timeout: Duration) -> OpencodeStartupReadinessPolicy {
 fn opencode_startup_event_payload_contract_includes_correlation_and_metrics() {
     let policy = test_startup_policy(Duration::from_millis(8_000));
     let report = OpencodeStartupWaitReport::from_parts(7, Duration::from_millis(321));
-    let mut metrics = OpencodeStartupMetricsSnapshot::default();
-    metrics.total = 4;
-    metrics.ready = 3;
-    metrics.failed = 1;
+    let mut metrics = OpencodeStartupMetricsSnapshot {
+        total: 4,
+        ready: 3,
+        failed: 1,
+        ..OpencodeStartupMetricsSnapshot::default()
+    };
     metrics.failed_by_reason.insert("timeout".to_string(), 1);
     if let Some(bucket) = metrics.startup_ms_histogram.get_mut("<=500") {
         *bucket = 4;
@@ -371,18 +374,20 @@ fn opencode_startup_event_payload_contract_includes_correlation_and_metrics() {
         *bucket = 4;
     }
 
+    let event = StartupEventPayload::ready(
+        StartupEventContext::new(
+            "agent_runtime",
+            "/tmp/repo",
+            Some("task-42"),
+            "qa",
+            4242,
+            Some(StartupEventCorrelation::new("runtime_id", "runtime-abc")),
+            Some(policy),
+        ),
+        report,
+    );
     let payload = build_opencode_startup_event_payload(
-        "startup_ready",
-        "agent_runtime",
-        "/tmp/repo",
-        Some("task-42"),
-        "qa",
-        4242,
-        Some("runtime_id"),
-        Some("runtime-abc"),
-        Some(policy),
-        Some(report),
-        None,
+        &event,
         Some(metrics),
         vec!["startup_duration_high:321".to_string()],
     );

@@ -1,0 +1,59 @@
+[alias]
+rust-fetch = ["fetch", "--manifest-path", "apps/desktop/src-tauri/Cargo.toml", "--locked"]
+rust-lint-host = [
+  "clippy",
+  "--manifest-path",
+  "apps/desktop/src-tauri/Cargo.toml",
+  "--workspace",
+  "--exclude",
+  "openducktor-desktop",
+  "--all-targets",
+  "--locked",
+  "--",
+  "-D",
+  "warnings",
+]
+rust-test-host-unit = [
+  "test",
+  "--manifest-path",
+  "apps/desktop/src-tauri/Cargo.toml",
+  "--workspace",
+  "--exclude",
+  "openducktor-desktop",
+  "--lib",
+  "--locked",
+  "--",
+  "--skip",
+  "app_service::tests::integration::",
+]
+rust-test-host-integration = [
+  "test",
+  "--manifest-path",
+  "apps/desktop/src-tauri/Cargo.toml",
+  "-p",
+  "host-application",
+  "--locked",
+  "app_service::tests::integration::",
+]
+rust-lint-tauri = [
+  "clippy",
+  "--manifest-path",
+  "apps/desktop/src-tauri/Cargo.toml",
+  "-p",
+  "openducktor-desktop",
+  "--lib",
+  "--tests",
+  "--locked",
+  "--",
+  "-D",
+  "warnings",
+]
+rust-test-tauri = [
+  "test",
+  "--manifest-path",
+  "apps/desktop/src-tauri/Cargo.toml",
+  "-p",
+  "openducktor-desktop",
+  "--lib",
+  "--locked",
+]

@@ -1,7 +1,7 @@
 use super::super::{
     spawn_opencode_server, wait_for_local_server_with_process, AppService,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventCorrelation,
-    StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
 };
 use super::{RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Context, Result};
@@ -20,19 +20,20 @@ impl AppService {
         startup_error_context: &str,
     ) -> Result<OpencodeStartupReadinessPolicy> {
         self.opencode_startup_readiness_policy()
-            .map_err(|error| {
+            .inspect_err(|_| {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
-                    startup_scope,
-                    repo_path,
-                    Some(task_id),
-                    role.as_str(),
-                    0,
-                    None,
-                    None,
+                    StartupEventContext::new(
+                        startup_scope,
+                        repo_path,
+                        Some(task_id),
+                        role.as_str(),
+                        0,
+                        None,
+                        None,
+                    ),
                     OpencodeStartupWaitReport::zero(),
                     STARTUP_CONFIG_INVALID_REASON,
                 ));
-                error
             })
             .with_context(|| startup_error_context.to_string())
     }
@@ -65,16 +66,18 @@ impl AppService {
         let startup_cancel_epoch = self.startup_cancel_epoch();
         let startup_cancel_snapshot = self.startup_cancel_snapshot();
         self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
-            input.startup_scope,
-            input.repo_path,
-            Some(input.task_id),
-            input.role.as_str(),
-            port,
-            Some(StartupEventCorrelation::new(
-                "runtime_id",
-                runtime_id.as_str(),
-            )),
-            Some(startup_policy),
+            StartupEventContext::new(
+                input.startup_scope,
+                input.repo_path,
+                Some(input.task_id),
+                input.role.as_str(),
+                port,
+                Some(StartupEventCorrelation::new(
+                    "runtime_id",
+                    runtime_id.as_str(),
+                )),
+                Some(startup_policy),
+            ),
         ));
         let startup_report = match wait_for_local_server_with_process(
             &mut child,
@@ -86,16 +89,18 @@ impl AppService {
             Ok(report) => report,
             Err(error) => {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
-                    input.startup_scope,
-                    input.repo_path,
-                    Some(input.task_id),
-                    input.role.as_str(),
-                    port,
-                    Some(StartupEventCorrelation::new(
-                        "runtime_id",
-                        runtime_id.as_str(),
-                    )),
-                    Some(startup_policy),
+                    StartupEventContext::new(
+                        input.startup_scope,
+                        input.repo_path,
+                        Some(input.task_id),
+                        input.role.as_str(),
+                        port,
+                        Some(StartupEventCorrelation::new(
+                            "runtime_id",
+                            runtime_id.as_str(),
+                        )),
+                        Some(startup_policy),
+                    ),
                     error.report,
                     error.reason,
                 ));
@@ -109,16 +114,18 @@ impl AppService {
             }
         };
         self.emit_opencode_startup_event(StartupEventPayload::ready(
-            input.startup_scope,
-            input.repo_path,
-            Some(input.task_id),
-            input.role.as_str(),
-            port,
-            Some(StartupEventCorrelation::new(
-                "runtime_id",
-                runtime_id.as_str(),
-            )),
-            Some(startup_policy),
+            StartupEventContext::new(
+                input.startup_scope,
+                input.repo_path,
+                Some(input.task_id),
+                input.role.as_str(),
+                port,
+                Some(StartupEventCorrelation::new(
+                    "runtime_id",
+                    runtime_id.as_str(),
+                )),
+                Some(startup_policy),
+            ),
             startup_report,
         ));
 

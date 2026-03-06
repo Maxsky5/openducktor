@@ -307,7 +307,7 @@ fn tracked_guard_drop_refcounts_prevent_pid_reuse_untracking() -> Result<()> {
     );
     let remaining_after_first = read_opencode_process_registry(registry_path.as_path())?;
     assert!(remaining_after_first.iter().any(|instance| {
-        instance.parent_pid == parent_pid && instance.child_pids.iter().any(|pid| *pid == child_pid)
+        instance.parent_pid == parent_pid && instance.child_pids.contains(&child_pid)
     }));
 
     {
@@ -444,8 +444,7 @@ fn startup_reconcile_keeps_non_orphan_registered_opencode_processes() -> Result<
     assert!(process_is_alive(live_pid as i32));
     let remaining = read_opencode_process_registry(registry_path.as_path())?;
     assert!(remaining.iter().any(|instance| {
-        instance.parent_pid == live_parent_pid
-            && instance.child_pids.iter().any(|entry| *entry == live_pid)
+        instance.parent_pid == live_parent_pid && instance.child_pids.contains(&live_pid)
     }));
 
     terminate_child_process(&mut live_parent_process);

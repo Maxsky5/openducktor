@@ -2,22 +2,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct HookSet {
     #[serde(default)]
     pub pre_start: Vec<String>,
     #[serde(default)]
     pub post_complete: Vec<String>,
-}
-
-impl Default for HookSet {
-    fn default() -> Self {
-        Self {
-            pre_start: Vec::new(),
-            post_complete: Vec::new(),
-        }
-    }
 }
 
 pub fn hook_set_fingerprint(hooks: &HookSet) -> String {

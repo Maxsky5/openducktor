@@ -1,5 +1,6 @@
 use crate::document::{AgentWorkflows, TaskDocumentSummary};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -34,22 +35,26 @@ impl IssueType {
         }
     }
 
-    pub fn from_str(value: &str) -> Option<Self> {
-        match value {
-            "task" => Some(IssueType::Task),
-            "feature" => Some(IssueType::Feature),
-            "bug" => Some(IssueType::Bug),
-            "epic" => Some(IssueType::Epic),
-            _ => None,
-        }
-    }
-
     pub fn as_cli_value(&self) -> &'static str {
         self.as_str()
     }
 
     pub fn from_cli_value(value: &str) -> Option<Self> {
-        Self::from_str(value)
+        value.parse().ok()
+    }
+}
+
+impl FromStr for IssueType {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "task" => Ok(IssueType::Task),
+            "feature" => Ok(IssueType::Feature),
+            "bug" => Ok(IssueType::Bug),
+            "epic" => Ok(IssueType::Epic),
+            _ => Err(format!("Unsupported issue type: {value}")),
+        }
     }
 }
 
@@ -157,4 +162,25 @@ pub struct UpdateTaskPatch {
     pub labels: Option<Vec<String>>,
     pub assignee: Option<String>,
     pub parent_id: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::IssueType;
+    use std::str::FromStr;
+
+    #[test]
+    fn issue_type_accepts_known_cli_values() {
+        assert_eq!(IssueType::from_cli_value("task"), Some(IssueType::Task));
+        assert_eq!(IssueType::from_str("feature"), Ok(IssueType::Feature));
+    }
+
+    #[test]
+    fn issue_type_rejects_unknown_values() {
+        assert_eq!(IssueType::from_cli_value("unknown"), None);
+        assert_eq!(
+            IssueType::from_str("unknown"),
+            Err("Unsupported issue type: unknown".to_string())
+        );
+    }
 }

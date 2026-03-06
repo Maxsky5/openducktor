@@ -1,7 +1,8 @@
 use super::super::{
     emit_event, spawn_output_forwarder, terminate_child_process, AppService,
     OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, RunEmitter, RunProcess,
-    StartupEventCorrelation, StartupEventPayload, STARTUP_CONFIG_INVALID_REASON,
+    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    STARTUP_CONFIG_INVALID_REASON,
 };
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree, SpawnedBuildAgent};
 use super::BuildResponseAction;
@@ -145,19 +146,20 @@ impl AppService {
         run_id: &str,
     ) -> Result<OpencodeStartupReadinessPolicy> {
         self.opencode_startup_readiness_policy()
-            .map_err(|error| {
+            .inspect_err(|_| {
                 self.emit_opencode_startup_event(StartupEventPayload::failed(
-                    "build_runtime",
-                    repo_path,
-                    Some(task_id),
-                    "build",
-                    0,
-                    Some(StartupEventCorrelation::new("run_id", run_id)),
-                    None,
+                    StartupEventContext::new(
+                        "build_runtime",
+                        repo_path,
+                        Some(task_id),
+                        "build",
+                        0,
+                        Some(StartupEventCorrelation::new("run_id", run_id)),
+                        None,
+                    ),
                     OpencodeStartupWaitReport::zero(),
                     STARTUP_CONFIG_INVALID_REASON,
                 ));
-                error
             })
             .with_context(|| {
                 format!(

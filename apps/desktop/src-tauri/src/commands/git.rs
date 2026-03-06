@@ -1121,14 +1121,14 @@ mod tests {
     use host_application::AppService;
     use host_domain::GitPort;
     use host_domain::{
-        GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-        GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPullRequest,
-        GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-        GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-        GitWorktreeStatusData, GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, TaskStore,
-        TASK_METADATA_NAMESPACE,
+        AgentSessionDocument, CreateTaskInput, GitAheadBehind, GitBranch, GitCommitAllRequest,
+        GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus,
+        GitFileStatusCounts, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
+        GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+        GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSummary,
+        GitWorktreeStatusSummaryData, QaReportDocument, QaVerdict, SpecDocument, TaskCard,
+        TaskMetadata, TaskStore, UpdateTaskPatch,
     };
-    use host_infra_beads::BeadsTaskStore;
     use host_infra_system::AppConfigStore;
     use serde_json::{json, Value};
     use std::{
@@ -1199,6 +1199,142 @@ mod tests {
 
     struct CommandGitPort {
         state: Arc<Mutex<CommandGitPortState>>,
+    }
+
+    struct CommandTaskStore;
+
+    fn empty_spec_document() -> SpecDocument {
+        SpecDocument {
+            markdown: String::new(),
+            updated_at: None,
+        }
+    }
+
+    impl TaskStore for CommandTaskStore {
+        fn ensure_repo_initialized(&self, _repo_path: &Path) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn list_tasks(&self, _repo_path: &Path) -> anyhow::Result<Vec<TaskCard>> {
+            Ok(Vec::new())
+        }
+
+        fn create_task(
+            &self,
+            _repo_path: &Path,
+            _input: CreateTaskInput,
+        ) -> anyhow::Result<TaskCard> {
+            Err(anyhow!(
+                "unexpected task store create_task call in git command tests"
+            ))
+        }
+
+        fn update_task(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            _patch: UpdateTaskPatch,
+        ) -> anyhow::Result<TaskCard> {
+            Err(anyhow!(
+                "unexpected task store update_task call in git command tests"
+            ))
+        }
+
+        fn delete_task(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            _delete_subtasks: bool,
+        ) -> anyhow::Result<bool> {
+            Err(anyhow!(
+                "unexpected task store delete_task call in git command tests"
+            ))
+        }
+
+        fn get_spec(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<SpecDocument> {
+            Ok(empty_spec_document())
+        }
+
+        fn set_spec(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            markdown: &str,
+        ) -> anyhow::Result<SpecDocument> {
+            Ok(SpecDocument {
+                markdown: markdown.to_string(),
+                updated_at: None,
+            })
+        }
+
+        fn get_plan(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<SpecDocument> {
+            Ok(empty_spec_document())
+        }
+
+        fn set_plan(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            markdown: &str,
+        ) -> anyhow::Result<SpecDocument> {
+            Ok(SpecDocument {
+                markdown: markdown.to_string(),
+                updated_at: None,
+            })
+        }
+
+        fn get_latest_qa_report(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+        ) -> anyhow::Result<Option<QaReportDocument>> {
+            Ok(None)
+        }
+
+        fn append_qa_report(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            markdown: &str,
+            verdict: QaVerdict,
+        ) -> anyhow::Result<QaReportDocument> {
+            Ok(QaReportDocument {
+                markdown: markdown.to_string(),
+                verdict,
+                updated_at: String::new(),
+                revision: 0,
+            })
+        }
+
+        fn list_agent_sessions(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+        ) -> anyhow::Result<Vec<AgentSessionDocument>> {
+            Ok(Vec::new())
+        }
+
+        fn upsert_agent_session(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            _session: AgentSessionDocument,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn get_task_metadata(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+        ) -> anyhow::Result<TaskMetadata> {
+            Ok(TaskMetadata {
+                spec: empty_spec_document(),
+                plan: empty_spec_document(),
+                qa_report: None,
+                agent_sessions: Vec::new(),
+            })
+        }
     }
 
     impl CommandGitPort {
@@ -1430,7 +1566,7 @@ mod tests {
 
     fn init_repo(path: &Path) {
         fs::create_dir_all(path).expect("failed to create repo directory");
-        run_git(&["init"], path);
+        run_git(&["init", "--initial-branch=main"], path);
         fs::write(path.join("README.md"), "init\n").expect("failed to write seed file");
         run_git(&["add", "."], path);
         run_git(
@@ -1509,9 +1645,7 @@ mod tests {
             worktree_mutation_allowed,
         );
         let git_state = git_port.state.clone();
-        let task_store: Arc<dyn TaskStore> = Arc::new(BeadsTaskStore::with_metadata_namespace(
-            TASK_METADATA_NAMESPACE,
-        ));
+        let task_store: Arc<dyn TaskStore> = Arc::new(CommandTaskStore);
         let service = Arc::new(AppService::with_git_port(
             task_store,
             config_store,

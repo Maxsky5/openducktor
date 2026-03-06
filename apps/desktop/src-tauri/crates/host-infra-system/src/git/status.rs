@@ -264,8 +264,9 @@ fn parse_status_porcelain(output: &str) -> Vec<GitFileStatus> {
             if line.len() < 4 {
                 return None;
             }
-            let index = line.chars().nth(0)?;
-            let worktree = line.chars().nth(1)?;
+            let mut status_chars = line.chars();
+            let index = status_chars.next()?;
+            let worktree = status_chars.next()?;
             let path = line[3..].to_string();
 
             let (status, staged) = match (index, worktree) {
@@ -396,11 +397,7 @@ fn parse_diff_git_header_token(input: &str) -> Option<(String, &str)> {
                 return Some((token, remaining));
             }
 
-            if ch == '\\' && !escaped {
-                escaped = true;
-            } else {
-                escaped = false;
-            }
+            escaped = ch == '\\' && !escaped;
         }
         return None;
     }
