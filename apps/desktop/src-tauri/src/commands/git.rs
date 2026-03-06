@@ -506,6 +506,7 @@ fn parse_authorized_worktree_entries(stdout: &str) -> Vec<AuthorizedWorktreeList
 
         if line.starts_with("prunable") {
             current_prunable = true;
+            continue;
         }
     }
 

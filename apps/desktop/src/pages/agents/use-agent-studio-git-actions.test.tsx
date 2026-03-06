@@ -465,6 +465,19 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  test("does not request a lock banner when git actions are unlocked", async () => {
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().isGitActionsLocked).toBe(false);
+      expect(harness.getLatest().showLockReasonBanner).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reports clear pull error when branch is unavailable", async () => {
     const harness = createHookHarness(createBaseArgs({ branch: null }));
 

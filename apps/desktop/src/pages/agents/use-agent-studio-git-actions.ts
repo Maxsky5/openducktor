@@ -627,7 +627,7 @@ export function useAgentStudioGitActions({
     rebaseConflictAction,
     rebaseConflictAutoOpenNonce,
     rebaseConflictCloseNonce,
-    showLockReasonBanner: !isBuilderSessionWorking,
+    showLockReasonBanner: isGitActionsLocked && !isBuilderSessionWorking,
     isGitActionsLocked,
     gitActionsLockReason,
     rebaseConflict: activeRebaseConflict,
