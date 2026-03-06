@@ -25,6 +25,11 @@ struct AuthorizedWorktreeCacheEntry {
     worktrees: HashSet<PathBuf>,
 }
 
+struct AuthorizedWorktreeListEntry {
+    path: String,
+    prunable: bool,
+}
+
 static AUTHORIZED_WORKTREE_CACHE: OnceLock<Mutex<HashMap<String, AuthorizedWorktreeCacheEntry>>> =
     OnceLock::new();
 static AUTHORIZED_WORKTREE_MISS_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
@@ -452,16 +457,60 @@ fn list_authorized_worktrees(repo_path: &Path) -> Result<Vec<PathBuf>, String> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed_entries = parse_authorized_worktree_entries(stdout.as_ref());
     let mut worktrees = Vec::new();
-    for path in stdout
-        .lines()
-        .filter_map(|line| line.strip_prefix("worktree "))
-    {
-        let canonicalized = fs::canonicalize(path)
-            .map_err(|e| format!("failed to canonicalize authorized worktree path {path}: {e}"))?;
+    for entry in parsed_entries {
+        if entry.prunable {
+            continue;
+        }
+
+        let canonicalized = fs::canonicalize(entry.path.as_str()).map_err(|e| {
+            format!(
+                "failed to canonicalize authorized worktree path {}: {e}",
+                entry.path
+            )
+        })?;
         worktrees.push(canonicalized);
     }
     Ok(worktrees)
+}
+
+fn parse_authorized_worktree_entries(stdout: &str) -> Vec<AuthorizedWorktreeListEntry> {
+    let mut entries = Vec::new();
+    let mut current_path: Option<String> = None;
+    let mut current_prunable = false;
+
+    let flush_current = |entries: &mut Vec<AuthorizedWorktreeListEntry>,
+                         current_path: &mut Option<String>,
+                         current_prunable: &mut bool| {
+        if let Some(path) = current_path.take() {
+            entries.push(AuthorizedWorktreeListEntry {
+                path,
+                prunable: *current_prunable,
+            });
+        }
+        *current_prunable = false;
+    };
+
+    for line in stdout.lines() {
+        if line.is_empty() {
+            flush_current(&mut entries, &mut current_path, &mut current_prunable);
+            continue;
+        }
+
+        if let Some(path) = line.strip_prefix("worktree ") {
+            flush_current(&mut entries, &mut current_path, &mut current_prunable);
+            current_path = Some(path.to_string());
+            continue;
+        }
+
+        if line.starts_with("prunable") {
+            current_prunable = true;
+        }
+    }
+
+    flush_current(&mut entries, &mut current_path, &mut current_prunable);
+    entries
 }
 
 /// Resolve the effective path for a git operation. If `working_dir` is
@@ -2217,6 +2266,60 @@ mod tests {
             .to_string_lossy()
             .to_string();
         assert_eq!(resolved_two, expected_two);
+
+        clear_authorized_worktree_cache_for_repo(&repo);
+        fs::remove_dir_all(&root).expect("failed to remove test directory");
+    }
+
+    #[test]
+    fn resolve_working_dir_ignores_prunable_worktree_entries() {
+        let root = unique_test_dir("git-worktree-prunable");
+        let repo = root.join("repo");
+        let removed_worktree = root.join("repo-wt-removed");
+        let active_worktree = root.join("repo-wt-active");
+        init_repo(&repo);
+        clear_authorized_worktree_cache_for_repo(&repo);
+
+        let repo_str = repo.to_string_lossy().to_string();
+        let removed_worktree_str = removed_worktree.to_string_lossy().to_string();
+        let active_worktree_str = active_worktree.to_string_lossy().to_string();
+
+        run_git(
+            &[
+                "-C",
+                repo_str.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/prunable-removed",
+                removed_worktree_str.as_str(),
+            ],
+            &repo,
+        );
+        run_git(
+            &[
+                "-C",
+                repo_str.as_str(),
+                "worktree",
+                "add",
+                "-b",
+                "feature/prunable-active",
+                active_worktree_str.as_str(),
+            ],
+            &repo,
+        );
+
+        fs::remove_dir_all(&removed_worktree)
+            .expect("removed worktree directory should be deleted for prunable test");
+
+        let resolved_active =
+            resolve_working_dir(repo_str.as_str(), Some(active_worktree_str.as_str()))
+                .expect("active worktree should resolve even when another entry is prunable");
+        let expected_active = fs::canonicalize(&active_worktree)
+            .expect("active worktree should canonicalize")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(resolved_active, expected_active);
 
         clear_authorized_worktree_cache_for_repo(&repo);
         fs::remove_dir_all(&root).expect("failed to remove test directory");
