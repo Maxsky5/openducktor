@@ -1542,6 +1542,101 @@ fn qa_reports_support_latest_lookup_and_append_history() -> Result<()> {
 }
 
 #[test]
+fn record_qa_outcome_updates_status_and_metadata_in_one_update_call() -> Result<()> {
+    let repo = RepoFixture::new("qa-outcome");
+    let current = issue_value(
+        "task-1",
+        "ai_review",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "qaReports": [
+                        {
+                            "markdown": "Initial QA",
+                            "verdict": "rejected",
+                            "updatedAt": "2026-02-20T10:00:00Z",
+                            "updatedBy": "qa-agent",
+                            "sourceTool": "qa_rejected",
+                            "revision": 1
+                        }
+                    ]
+                }
+            }
+        })),
+    );
+    let updated = issue_value(
+        "task-1",
+        "human_review",
+        "task",
+        None,
+        json!([]),
+        Some(json!({
+            "openducktor": {
+                "documents": {
+                    "qaReports": [
+                        {
+                            "markdown": "Initial QA",
+                            "verdict": "rejected",
+                            "updatedAt": "2026-02-20T10:00:00Z",
+                            "updatedBy": "qa-agent",
+                            "sourceTool": "qa_rejected",
+                            "revision": 1
+                        },
+                        {
+                            "markdown": "Looks good",
+                            "verdict": "approved",
+                            "updatedAt": "2026-02-20T12:00:00Z",
+                            "updatedBy": "qa-agent",
+                            "sourceTool": "qa_approved",
+                            "revision": 2
+                        }
+                    ]
+                }
+            }
+        })),
+    );
+    let runner = MockCommandRunner::with_steps(vec![
+        MockStep::WithEnv(Ok(json!([current]).to_string())),
+        MockStep::WithEnv(Ok(updated.to_string())),
+        MockStep::WithEnv(Ok(json!([updated]).to_string())),
+    ]);
+    let store = BeadsTaskStore::with_test_runner("openducktor", runner.clone());
+
+    let task = store.record_qa_outcome(
+        repo.path(),
+        "task-1",
+        TaskStatus::HumanReview,
+        "  Looks good  ",
+        QaVerdict::Approved,
+    )?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let calls = runner.take_calls();
+    assert_eq!(calls.len(), 3);
+    let update_call = &calls[1];
+    assert!(update_call.args.iter().any(|entry| entry == "--status"));
+    assert!(update_call.args.iter().any(|entry| entry == "human_review"));
+
+    let metadata_root = metadata_from_call(update_call);
+    let reports = metadata_root["openducktor"]["documents"]["qaReports"]
+        .as_array()
+        .expect("qaReports should be an array");
+    assert_eq!(reports.len(), 2);
+    let newest = reports.last().expect("newest report missing");
+    assert_eq!(newest["markdown"], Value::String("Looks good".to_string()));
+    assert_eq!(newest["verdict"], Value::String("approved".to_string()));
+    assert_eq!(newest["revision"], Value::Number(2.into()));
+    assert_eq!(
+        newest["sourceTool"],
+        Value::String("qa_approved".to_string())
+    );
+    Ok(())
+}
+
+#[test]
 fn get_latest_qa_report_returns_latest_entry_when_present() -> Result<()> {
     let repo = RepoFixture::new("qa-latest");
     let with_reports = issue_value(

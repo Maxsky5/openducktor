@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
 use crate::app_service::service_core::AppService;
 use crate::app_service::workflow_rules::validate_transition;
+use anyhow::{Context, Result};
 use host_domain::{QaVerdict, SpecDocument, TaskCard, TaskStatus};
 
 impl AppService {
@@ -20,44 +20,61 @@ impl AppService {
     }
 
     pub fn qa_approved(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<TaskCard> {
-        let context = self.load_task_context(repo_path, task_id)?;
-        validate_transition(
-            &context.task,
-            &context.repo.tasks,
-            &context.task.status,
-            &TaskStatus::HumanReview,
-        )?;
-
-        self.task_store
-            .append_qa_report(context.repo_dir(), task_id, markdown, QaVerdict::Approved)
-            .with_context(|| format!("Failed to persist QA report for {task_id}"))?;
-
-        self.task_transition(
-            context.repo.repo_path.as_str(),
+        self.record_qa_outcome(
+            repo_path,
             task_id,
             TaskStatus::HumanReview,
-            Some("QA approved"),
+            markdown,
+            QaVerdict::Approved,
         )
     }
 
     pub fn qa_rejected(&self, repo_path: &str, task_id: &str, markdown: &str) -> Result<TaskCard> {
-        let context = self.load_task_context(repo_path, task_id)?;
+        self.record_qa_outcome(
+            repo_path,
+            task_id,
+            TaskStatus::InProgress,
+            markdown,
+            QaVerdict::Rejected,
+        )
+    }
+
+    fn record_qa_outcome(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        target_status: TaskStatus,
+        markdown: &str,
+        verdict: QaVerdict,
+    ) -> Result<TaskCard> {
+        let mut context = self.load_task_context(repo_path, task_id)?;
         validate_transition(
             &context.task,
             &context.repo.tasks,
             &context.task.status,
-            &TaskStatus::InProgress,
+            &target_status,
         )?;
 
-        self.task_store
-            .append_qa_report(context.repo_dir(), task_id, markdown, QaVerdict::Rejected)
-            .with_context(|| format!("Failed to persist QA report for {task_id}"))?;
+        let updated = self
+            .task_store
+            .record_qa_outcome(
+                context.repo_dir(),
+                task_id,
+                target_status,
+                markdown,
+                verdict,
+            )
+            .with_context(|| format!("Failed to persist QA outcome for {task_id}"))?;
 
-        self.task_transition(
-            context.repo.repo_path.as_str(),
-            task_id,
-            TaskStatus::InProgress,
-            Some("QA requested changes"),
-        )
+        if let Some(index) = context
+            .repo
+            .tasks
+            .iter()
+            .position(|entry| entry.id == task_id)
+        {
+            context.repo.tasks[index] = updated.clone();
+        }
+
+        Ok(self.enrich_task(updated, &context.repo.tasks))
     }
 }

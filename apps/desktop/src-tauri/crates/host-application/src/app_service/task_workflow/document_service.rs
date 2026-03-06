@@ -1,10 +1,11 @@
-use anyhow::{anyhow, Context, Result};
+use super::task_context::LoadedTaskContext;
 use crate::app_service::service_core::AppService;
 use crate::app_service::workflow_rules::{
     can_replace_epic_subtask_status, can_set_plan, can_set_spec_from_status,
     normalize_required_markdown, normalize_subtask_plan_inputs, normalize_title_key,
     validate_parent_relationships_for_create, validate_plan_subtask_rules,
 };
+use anyhow::{anyhow, Context, Result};
 use host_domain::{CreateTaskInput, IssueType, PlanSubtaskInput, SpecDocument, TaskStatus};
 use std::collections::HashSet;
 
@@ -69,7 +70,7 @@ impl AppService {
     ) -> Result<SpecDocument> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let markdown = normalize_required_markdown(markdown, "implementation plan")?;
-        let context = self.load_task_context_from_resolved(repo_path, task_id)?;
+        let mut context = self.load_task_context_from_resolved(repo_path, task_id)?;
         if !can_set_plan(&context.task) {
             return Err(anyhow!(
                 "set_plan is not allowed for issue type {} from status {}",
@@ -91,7 +92,7 @@ impl AppService {
             .with_context(|| format!("Failed to persist implementation plan for {task_id}"))?;
 
         if issue_type == IssueType::Epic {
-            self.replace_epic_plan_subtasks(context.repo.repo_path.as_str(), task_id, subtask_creates)?;
+            self.replace_epic_plan_subtasks(&mut context, subtask_creates)?;
         }
 
         self.task_transition(
@@ -121,24 +122,16 @@ impl AppService {
 
     fn replace_epic_plan_subtasks(
         &self,
-        repo_path: &str,
-        task_id: &str,
+        context: &mut LoadedTaskContext,
         subtask_creates: Vec<CreateTaskInput>,
     ) -> Result<()> {
-        let mut context = self.load_task_context(repo_path, task_id)?;
-        if !can_set_plan(&context.task) {
-            return Err(anyhow!(
-                "set_plan is not allowed for issue type {} from status {}",
-                context.task.issue_type.as_cli_value(),
-                context.task.status.as_cli_value()
-            ));
-        }
+        let task_id = context.task.id.clone();
 
         let existing_direct_subtasks = context
             .repo
             .tasks
             .iter()
-            .filter(|entry| entry.parent_id.as_deref() == Some(task_id))
+            .filter(|entry| entry.parent_id.as_deref() == Some(task_id.as_str()))
             .cloned()
             .collect::<Vec<_>>();
         let blocked_subtasks = existing_direct_subtasks
@@ -161,7 +154,9 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
         for existing_subtask_id in &existing_direct_subtask_ids {
             self.task_store
                 .delete_task(context.repo_dir(), existing_subtask_id, false)
-                .with_context(|| format!("Failed to delete replaced subtask {existing_subtask_id}"))?;
+                .with_context(|| {
+                    format!("Failed to delete replaced subtask {existing_subtask_id}")
+                })?;
         }
 
         if !existing_direct_subtask_ids.is_empty() {
@@ -184,7 +179,9 @@ Move subtasks to open/spec_ready/ready_for_dev first: {}",
 
             create_input.parent_id = Some(task_id.to_string());
             validate_parent_relationships_for_create(&context.repo.tasks, &create_input)?;
-            let created = self.task_store.create_task(context.repo_dir(), create_input)?;
+            let created = self
+                .task_store
+                .create_task(context.repo_dir(), create_input)?;
             context.repo.tasks.push(created);
         }
 

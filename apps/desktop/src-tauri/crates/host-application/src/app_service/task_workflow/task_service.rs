@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Context, Result};
 use crate::app_service::service_core::AppService;
 use crate::app_service::workflow_rules::{
     default_qa_required_for_issue_type, is_open_state, validate_parent_relationships_for_create,
     validate_parent_relationships_for_update, validate_transition,
 };
+use anyhow::{anyhow, Context, Result};
 use host_domain::{CreateTaskInput, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch};
 
 impl AppService {
@@ -112,7 +112,12 @@ impl AppService {
             },
         )?;
 
-        if let Some(index) = context.repo.tasks.iter().position(|entry| entry.id == task_id) {
+        if let Some(index) = context
+            .repo
+            .tasks
+            .iter()
+            .position(|entry| entry.id == task_id)
+        {
             context.repo.tasks[index] = updated.clone();
         }
 

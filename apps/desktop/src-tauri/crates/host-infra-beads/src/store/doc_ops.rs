@@ -202,4 +202,71 @@ impl BeadsTaskStore {
             revision: entry.revision,
         })
     }
+
+    pub(super) fn record_qa_outcome_impl(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        target_status: TaskStatus,
+        markdown: &str,
+        verdict: QaVerdict,
+    ) -> Result<TaskCard> {
+        let (mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
+        let mut documents_map = namespace_map
+            .get("documents")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+
+        let mut entries = documents_map
+            .get("qaReports")
+            .and_then(parse_qa_entries)
+            .unwrap_or_default();
+        let next_revision = entries.last().map(|entry| entry.revision + 1).unwrap_or(1);
+
+        let timestamp = now_rfc3339();
+        let entry = QaEntry {
+            markdown: markdown.trim().to_string(),
+            verdict: verdict.clone(),
+            updated_at: timestamp,
+            updated_by: "qa-agent".to_string(),
+            source_tool: match verdict {
+                QaVerdict::Approved => "qa_approved".to_string(),
+                QaVerdict::Rejected => "qa_rejected".to_string(),
+            },
+            revision: next_revision,
+        };
+
+        entries.push(entry);
+        documents_map.insert(
+            "qaReports".to_string(),
+            Value::Array(
+                entries
+                    .iter()
+                    .map(serde_json::to_value)
+                    .collect::<std::result::Result<Vec<_>, _>>()?,
+            ),
+        );
+        namespace_map.insert("documents".to_string(), Value::Object(documents_map));
+        root.insert(namespace_key, Value::Object(namespace_map));
+
+        let metadata_payload = serde_json::to_string(&Value::Object(root))?;
+        let status_value = target_status.as_cli_value().to_string();
+        self.run_bd_json(
+            repo_path,
+            &[
+                "update",
+                "--status",
+                status_value.as_str(),
+                "--metadata",
+                metadata_payload.as_str(),
+                "--",
+                task_id,
+            ],
+        )?;
+        self.invalidate_task_list_cache(repo_path)?;
+
+        self.show_task(repo_path, task_id)
+    }
 }

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     now_rfc3339, AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument,
-    TaskCard, TaskMetadata, TaskStore, UpdateTaskPatch,
+    TaskCard, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
 use serde_json::Value;
@@ -142,6 +142,17 @@ impl TaskStore for BeadsTaskStore {
         verdict: QaVerdict,
     ) -> Result<QaReportDocument> {
         self.append_qa_report_impl(repo_path, task_id, markdown, verdict)
+    }
+
+    fn record_qa_outcome(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        target_status: TaskStatus,
+        markdown: &str,
+        verdict: QaVerdict,
+    ) -> Result<TaskCard> {
+        self.record_qa_outcome_impl(repo_path, task_id, target_status, markdown, verdict)
     }
 
     fn list_agent_sessions(
