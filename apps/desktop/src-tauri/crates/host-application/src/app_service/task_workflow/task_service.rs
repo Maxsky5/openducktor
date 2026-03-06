@@ -75,14 +75,17 @@ impl AppService {
 
         let target_tasks =
             collect_task_delete_targets(&context.repo.tasks, task_id, delete_subtasks);
+        let target_task_ids = target_tasks
+            .iter()
+            .map(|task| task.id.as_str())
+            .collect::<Vec<_>>();
         let normalized_repo = normalize_path_for_comparison(context.repo.repo_path.as_str());
         let branch_prefix = self
             .config_store
             .repo_config(&context.repo.repo_path)?
             .branch_prefix;
         let mut removable_worktrees = Vec::new();
-        let mut seen_worktrees = HashSet::new();
-        let mut related_local_branches = HashSet::new();
+        let mut seen_worktree_keys = HashSet::new();
 
         for target_task in target_tasks {
             let sessions =
@@ -92,32 +95,29 @@ impl AppService {
                 if !is_managed_worktree_session(&session, &normalized_repo, worktree_path) {
                     continue;
                 }
-                if !seen_worktrees.insert(worktree_path.to_string()) {
+                let worktree_key = normalize_path_key(worktree_path);
+                if !seen_worktree_keys.insert(worktree_key) {
                     continue;
                 }
 
-                let current_branch = self
-                    .git_port
-                    .get_current_branch(Path::new(worktree_path))
-                    .with_context(|| {
-                        format!(
-                            "Failed to inspect current branch for task worktree {}",
-                            worktree_path
-                        )
-                    })?;
-                if let Some(branch_name) = current_branch.name {
-                    if is_related_task_branch(
-                        branch_name.as_str(),
-                        branch_prefix.as_str(),
-                        target_task.id.as_str(),
-                    ) {
-                        related_local_branches.insert(branch_name);
-                    }
+                if Path::new(worktree_path).exists() {
+                    removable_worktrees.push(worktree_path.to_string());
                 }
-
-                removable_worktrees.push(worktree_path.to_string());
             }
         }
+
+        let related_local_branches = self
+            .git_port
+            .get_branches(context.repo_dir())?
+            .into_iter()
+            .filter(|branch| !branch.is_remote)
+            .filter(|branch| {
+                target_task_ids.iter().any(|task_id| {
+                    is_related_task_branch(branch.name.as_str(), branch_prefix.as_str(), task_id)
+                })
+            })
+            .map(|branch| branch.name)
+            .collect::<HashSet<_>>();
 
         for worktree_path in &removable_worktrees {
             self.git_remove_worktree(context.repo.repo_path.as_str(), worktree_path, true)
@@ -331,7 +331,25 @@ fn collect_task_delete_targets<'a>(
 }
 
 fn normalize_path_for_comparison(path: &str) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path))
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return PathBuf::new();
+    }
+
+    fs::canonicalize(trimmed).unwrap_or_else(|_| {
+        let without_trailing_separators = trimmed.trim_end_matches(['/', '\\']);
+        if without_trailing_separators.is_empty() {
+            PathBuf::from(trimmed)
+        } else {
+            PathBuf::from(without_trailing_separators)
+        }
+    })
+}
+
+fn normalize_path_key(path: &str) -> String {
+    normalize_path_for_comparison(path)
+        .to_string_lossy()
+        .to_string()
 }
 
 fn is_managed_worktree_session(

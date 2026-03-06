@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
-  getConservativeTaskDeleteImpact,
   getManagedTaskDeleteImpact,
   getManagedTaskDeleteImpactFromTasks,
+  TASK_DELETE_IMPACT_ERROR_MESSAGE,
 } from "./use-task-delete-impact";
 
 const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
@@ -46,6 +46,7 @@ describe("getManagedTaskDeleteImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 2,
+      impactError: null,
     });
   });
 
@@ -63,6 +64,7 @@ describe("getManagedTaskDeleteImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
+      impactError: null,
     });
   });
 
@@ -75,13 +77,11 @@ describe("getManagedTaskDeleteImpact", () => {
     expect(impact).toEqual({
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 1,
+      impactError: null,
     });
   });
 
-  test("falls back to a conservative cleanup warning when impact lookup fails", () => {
-    expect(getConservativeTaskDeleteImpact()).toEqual({
-      hasManagedSessionCleanup: true,
-      managedWorktreeCount: 0,
-    });
+  test("includes a stable explicit error message for impact lookup failures", () => {
+    expect(TASK_DELETE_IMPACT_ERROR_MESSAGE).toBe("Unable to load linked worktree cleanup impact.");
   });
 });

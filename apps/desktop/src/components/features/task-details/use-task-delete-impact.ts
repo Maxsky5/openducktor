@@ -6,11 +6,13 @@ import { host } from "@/state/operations/host";
 export type TaskDeleteImpact = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
+  impactError: string | null;
 };
 
 const EMPTY_DELETE_IMPACT: TaskDeleteImpact = {
   hasManagedSessionCleanup: false,
   managedWorktreeCount: 0,
+  impactError: null,
 };
 
 const normalizePathForComparison = (path: string): string => {
@@ -48,6 +50,7 @@ export const getManagedTaskDeleteImpact = (
   return {
     hasManagedSessionCleanup: managedWorktrees.size > 0,
     managedWorktreeCount: managedWorktrees.size,
+    impactError: null,
   };
 };
 
@@ -56,10 +59,7 @@ export const getManagedTaskDeleteImpactFromTasks = (
   taskSessions: AgentSessionRecord[][],
 ): TaskDeleteImpact => getManagedTaskDeleteImpact(repoPath, taskSessions.flat());
 
-export const getConservativeTaskDeleteImpact = (): TaskDeleteImpact => ({
-  hasManagedSessionCleanup: true,
-  managedWorktreeCount: 0,
-});
+export const TASK_DELETE_IMPACT_ERROR_MESSAGE = "Unable to load linked worktree cleanup impact.";
 
 export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDeleteImpact {
   const { activeRepo } = useWorkspaceState();
@@ -83,7 +83,11 @@ export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDelet
         if (cancelled) {
           return;
         }
-        setImpact(getConservativeTaskDeleteImpact());
+        setImpact({
+          hasManagedSessionCleanup: false,
+          managedWorktreeCount: 0,
+          impactError: TASK_DELETE_IMPACT_ERROR_MESSAGE,
+        });
       });
 
     return () => {

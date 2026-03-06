@@ -40,6 +40,7 @@ type TaskDetailsSheetViewModel = {
   deleteError: string | null;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
+  impactError: string | null;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
@@ -83,7 +84,7 @@ export function useTaskDetailsSheetViewModel({
     () => collectDeleteImpactTaskIds(task, taskById),
     [task, taskById],
   );
-  const { hasManagedSessionCleanup, managedWorktreeCount } = useTaskDeleteImpact(
+  const { hasManagedSessionCleanup, managedWorktreeCount, impactError } = useTaskDeleteImpact(
     deleteImpactTaskIds,
     open,
   );
@@ -181,6 +182,7 @@ export function useTaskDetailsSheetViewModel({
     deleteError,
     hasManagedSessionCleanup,
     managedWorktreeCount,
+    impactError,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,

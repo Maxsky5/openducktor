@@ -20,6 +20,7 @@ type TaskDeleteConfirmDialogProps = {
   hasSubtasks: boolean;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
+  impactError: string | null;
   isDeletePending: boolean;
   deleteError: string | null;
 };
@@ -32,6 +33,9 @@ export const formatManagedSessionCleanupMessage = (managedWorktreeCount: number)
   return "Linked task worktrees and their related local branches will also be deleted if they exist. Any uncommitted changes in those worktrees will be lost.";
 };
 
+export const formatUnknownManagedSessionCleanupMessage = (): string =>
+  "Linked task worktrees and their related local branches may also be deleted. Any uncommitted changes in those worktrees will be lost.";
+
 export function TaskDeleteConfirmDialog({
   open,
   onOpenChange,
@@ -42,6 +46,7 @@ export function TaskDeleteConfirmDialog({
   hasSubtasks,
   hasManagedSessionCleanup,
   managedWorktreeCount,
+  impactError,
   isDeletePending,
   deleteError,
 }: TaskDeleteConfirmDialogProps): ReactElement {
@@ -62,9 +67,12 @@ export function TaskDeleteConfirmDialog({
           {hasSubtasks ? (
             <p>Direct subtasks will also be deleted to avoid orphaned children in the workflow.</p>
           ) : null}
-          {hasManagedSessionCleanup ? (
+          {impactError ? (
+            <p>{formatUnknownManagedSessionCleanupMessage()}</p>
+          ) : hasManagedSessionCleanup ? (
             <p>{formatManagedSessionCleanupMessage(managedWorktreeCount)}</p>
           ) : null}
+          {impactError ? <p className="text-destructive-muted">{impactError}</p> : null}
           {deleteError ? <p className="text-destructive-muted">{deleteError}</p> : null}
         </div>
 

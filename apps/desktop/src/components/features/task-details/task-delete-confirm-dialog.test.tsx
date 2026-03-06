@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { formatManagedSessionCleanupMessage } from "./task-delete-confirm-dialog";
+import {
+  formatManagedSessionCleanupMessage,
+  formatUnknownManagedSessionCleanupMessage,
+} from "./task-delete-confirm-dialog";
 
 describe("TaskDeleteConfirmDialog", () => {
   test("mentions worktree and related branch cleanup when managed sessions exist", () => {
@@ -10,16 +13,16 @@ describe("TaskDeleteConfirmDialog", () => {
     expect(message).toContain("uncommitted changes");
   });
 
-  test("omits worktree cleanup copy when no managed worktrees exist", () => {
+  test("uses exact-count wording when managed worktree count is known", () => {
     const message = formatManagedSessionCleanupMessage(1);
 
     expect(message).not.toContain("if they exist");
   });
 
-  test("falls back to a conservative warning when cleanup impact is unknown", () => {
-    const message = formatManagedSessionCleanupMessage(0);
+  test("uses explicit unknown-impact wording when cleanup impact cannot be loaded", () => {
+    const message = formatUnknownManagedSessionCleanupMessage();
 
-    expect(message).toContain("will also be deleted if they exist");
+    expect(message).toContain("may also be deleted");
     expect(message).toContain("related local branches");
     expect(message).toContain("uncommitted changes");
   });
