@@ -1,0 +1,43 @@
+name: Rust Security Audit
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/rust-audit.yml
+      - apps/desktop/src-tauri/Cargo.lock
+      - apps/desktop/src-tauri/**/Cargo.toml
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/rust-audit.yml
+      - apps/desktop/src-tauri/Cargo.lock
+      - apps/desktop/src-tauri/**/Cargo.toml
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-audit:
+    name: Rust Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Audit Rust dependencies
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: apps/desktop/src-tauri
