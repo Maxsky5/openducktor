@@ -34,6 +34,10 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
+use std::fs::Permissions;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -61,6 +65,13 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         updated_at: "2026-01-01T00:00:00Z".to_string(),
         created_at: "2026-01-01T00:00:00Z".to_string(),
     }
+}
+
+pub(crate) fn write_private_file(path: &Path, contents: &str) -> Result<()> {
+    fs::write(path, contents)?;
+    #[cfg(unix)]
+    fs::set_permissions(path, Permissions::from_mode(0o600))?;
+    Ok(())
 }
 
 #[derive(Debug, Default)]

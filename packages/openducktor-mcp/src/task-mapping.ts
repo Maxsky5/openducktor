@@ -1,43 +1,8 @@
-import { issueTypeSchema } from "@openducktor/contracts";
 import { z } from "zod";
-import type {
-  IssueType,
-  JsonObject,
-  MarkdownEntry,
-  QaEntry,
-  RawIssue,
-  TaskCard,
-} from "./contracts";
-import { parseBeadsTaskStatus } from "./workflow-policy";
+import { parseBeadsIssueType, parseBeadsTaskStatus } from "./beads-task-parsing";
+import type { JsonObject, MarkdownEntry, QaEntry, RawIssue, TaskCard } from "./contracts";
 
-const ISSUE_TYPE_VALUES = issueTypeSchema.options.join(", ");
-
-const describeInvalidValue = (value: unknown): string => {
-  if (typeof value === "string") {
-    return JSON.stringify(value);
-  }
-
-  const serialized = JSON.stringify(value);
-  if (typeof serialized === "string") {
-    return serialized;
-  }
-
-  return String(value);
-};
-
-const parseBeadsIssueType = (taskId: string, value: unknown): IssueType => {
-  const parsed = issueTypeSchema.safeParse(value);
-  if (!parsed.success) {
-    throw new Error(
-      `Invalid Beads issue type for task ${taskId}: received ${describeInvalidValue(value)}. ` +
-        `Expected one of: ${ISSUE_TYPE_VALUES}.`,
-    );
-  }
-
-  return parsed.data;
-};
-
-const defaultQaRequiredForIssueType = (_issueType: IssueType): boolean => true;
+const defaultQaRequiredForIssueType = (): boolean => true;
 
 export const parseMetadataRoot = (metadata: unknown): JsonObject => {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
@@ -131,7 +96,7 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
   const qaRequired =
     typeof namespace.qaRequired === "boolean"
       ? namespace.qaRequired
-      : defaultQaRequiredForIssueType(issueType);
+      : defaultQaRequiredForIssueType();
 
   const parentId = normalizeParentId(issue);
 

@@ -1,4 +1,5 @@
 import type { BdRuntimeClient } from "./bd-runtime-client";
+import { isNonTaskBeadsIssueType } from "./beads-task-parsing";
 import type { JsonObject, RawIssue, TaskCard } from "./contracts";
 import { getNamespaceData, type NamespaceData } from "./metadata-docs";
 import { issueToTaskCard } from "./task-mapping";
@@ -52,6 +53,7 @@ export class BdPersistence implements TaskPersistencePort {
 
     return payload
       .filter((entry) => entry && typeof entry === "object")
+      .filter((entry) => !isNonTaskBeadsIssueType((entry as RawIssue).issue_type))
       .map((entry) => issueToTaskCard(entry as RawIssue, this.metadataNamespace));
   }
 

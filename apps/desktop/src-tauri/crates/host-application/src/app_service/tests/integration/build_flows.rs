@@ -23,7 +23,8 @@ use crate::app_service::test_support::{
     create_orphanable_opencode, empty_patch, init_git_repo, lock_env, make_emitter, make_session,
     make_task, prepend_path, process_is_alive, remove_env_var, set_env_var, spawn_sleep_process,
     unique_temp_path, wait_for_orphaned_opencode_process, wait_for_path_exists,
-    wait_for_process_exit, write_executable_script, FakeTaskStore, GitCall, TaskStoreState,
+    wait_for_process_exit, write_executable_script, write_private_file, FakeTaskStore, GitCall,
+    TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -588,7 +589,7 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
         },
     )?;
 
-    fs::write(&config_path, "{ invalid json")?;
+    write_private_file(&config_path, "{ invalid json")?;
 
     let error = service
         .build_start(
