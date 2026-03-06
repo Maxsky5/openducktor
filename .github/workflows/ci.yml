@@ -63,6 +63,9 @@ jobs:
     name: Rust Workspace Quality
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
 
     steps:
       - name: Checkout

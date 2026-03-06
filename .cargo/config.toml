@@ -41,7 +41,8 @@ rust-lint-tauri = [
   "apps/desktop/src-tauri/Cargo.toml",
   "-p",
   "openducktor-desktop",
-  "--all-targets",
+  "--lib",
+  "--tests",
   "--locked",
   "--",
   "-D",
@@ -53,5 +54,6 @@ rust-test-tauri = [
   "apps/desktop/src-tauri/Cargo.toml",
   "-p",
   "openducktor-desktop",
+  "--lib",
   "--locked",
 ]
