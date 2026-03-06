@@ -122,9 +122,10 @@ cd apps/desktop/src-tauri && cargo check
 
 ## Dependency Hygiene
 
-- Blocking unused dependency check: `bun run deps:check`
-- Blocking high/critical advisory gate: `bun run deps:audit:high`
-- Blocking targeted vulnerability check (Hono GHSA-`xh87-mx6m-69f3`): `bun run deps:audit:hono`
+- All-in-one blocking hygiene check: `bun run deps:check`
+- Included unused dependency check: `bun run deps:unused:deps`
+- Included high/critical advisory gate: `bun run deps:audit:high`
+- Included targeted vulnerability check (Hono GHSA-`xh87-mx6m-69f3`): `bun run deps:audit:hono`
 - Non-blocking unused export report: `bun run deps:unused`
 - Outdated dependency report: `bun run deps:outdated`
 - Automated update PRs: `.github/dependabot.yml`
