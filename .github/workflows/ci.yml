@@ -73,6 +73,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+          targets: x86_64-pc-windows-gnu
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
@@ -104,6 +105,9 @@ jobs:
 
       - name: Lint Tauri app
         run: cargo rust-lint-tauri
+
+      - name: Cross-platform config build check
+        run: cargo check --locked --target x86_64-pc-windows-gnu -p host-infra-system
 
       - name: Run Tauri app tests
         run: cargo rust-test-tauri

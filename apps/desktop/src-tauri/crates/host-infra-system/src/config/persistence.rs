@@ -1,4 +1,6 @@
-use super::security::{enforce_directory_permissions, validate_config_access, CONFIG_FILE_MODE};
+#[cfg(unix)]
+use super::security::CONFIG_FILE_MODE;
+use super::security::{enforce_directory_permissions, validate_config_access};
 use anyhow::{anyhow, Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
