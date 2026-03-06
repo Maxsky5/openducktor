@@ -16,7 +16,7 @@ impl GitCliPort {
         output
             .lines()
             .any(|line| line.contains("[rejected]") && line.contains("non-fast-forward"))
-            || output.contains("non-fast-forward")
+            || (output.contains("rejected") && output.contains("non-fast-forward"))
     }
 
     pub(super) fn push_branch_impl(
@@ -273,5 +273,22 @@ impl GitCliPort {
             merge_ref: normalized_merge_ref,
             upstream_ref,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GitCliPort;
+
+    #[test]
+    fn non_fast_forward_detection_requires_rejection_signal_in_fallback_output() {
+        let output = "remote: hook blocked update because non-fast-forward updates are disallowed";
+        assert!(!GitCliPort::is_non_fast_forward_push_rejection(output));
+    }
+
+    #[test]
+    fn non_fast_forward_detection_accepts_combined_rejected_fallback_output() {
+        let output = "error: rejected because non-fast-forward updates were rejected";
+        assert!(GitCliPort::is_non_fast_forward_push_rejection(output));
     }
 }

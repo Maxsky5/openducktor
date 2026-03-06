@@ -79,12 +79,14 @@ const resolveStartTask = ({
 const resolveRuntimeAndModel = async ({
   ctx,
   scenario,
+  requireModelReady,
   workingDirectoryOverride,
   taskCard,
   deps,
 }: {
   ctx: StartSessionContext;
   scenario: AgentScenario | undefined;
+  requireModelReady: boolean;
   workingDirectoryOverride?: string | null;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
@@ -108,6 +110,18 @@ const resolveRuntimeAndModel = async ({
 
   const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard, docs);
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+
+  let resolvedDefaultModelSelection: AgentModelSelection | null = null;
+  if (requireModelReady) {
+    try {
+      resolvedDefaultModelSelection = await defaultModelSelectionPromise;
+    } catch (error) {
+      throw new Error(
+        `Failed to load the default model for ${ctx.role} session start: ${errorMessage(error)}`,
+      );
+    }
+    throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+  }
 
   const systemPrompt = buildAgentSystemPrompt({
     role: ctx.role,
@@ -134,6 +148,7 @@ const resolveRuntimeAndModel = async ({
     systemPrompt,
     promptOverrides,
     defaultModelSelectionPromise,
+    resolvedDefaultModelSelection,
   };
 };
 
@@ -246,6 +261,7 @@ const createOrReuseSession = async ({
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
+    requireModelReady: input.requireModelReady && input.selectedModel == null,
     ...(input.workingDirectoryOverride !== undefined
       ? { workingDirectoryOverride: input.workingDirectoryOverride }
       : {}),
@@ -279,7 +295,7 @@ const createOrReuseSession = async ({
 
   const initialSession = buildInitialSession({
     startedCtx,
-    selectedModel: input.selectedModel,
+    selectedModel: input.selectedModel ?? resolved.resolvedDefaultModelSelection,
     runtime: resolved.runtime,
     systemPrompt: resolved.systemPrompt,
     promptOverrides: resolved.promptOverrides,
@@ -310,6 +326,7 @@ const createOrReuseSession = async ({
     ctx: startedCtx,
     promptOverrides: resolved.promptOverrides,
     defaultModelSelectionPromise: resolved.defaultModelSelectionPromise,
+    resolvedDefaultModelSelection: resolved.resolvedDefaultModelSelection,
   };
 };
 
@@ -547,6 +564,7 @@ export const createStartAgentSession = ({
           scenario,
           selectedModel,
           startMode,
+          requireModelReady,
           workingDirectoryOverride,
         },
         deps: {
@@ -573,7 +591,7 @@ export const createStartAgentSession = ({
       });
 
       await maybeApplyDefaultModelSelection({
-        selectedModel,
+        selectedModel: selectedModel ?? startResult.resolvedDefaultModelSelection,
         requireModelReady,
         defaultModelSelectionPromise: startResult.defaultModelSelectionPromise,
         startedCtx: startResult.ctx,

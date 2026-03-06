@@ -1154,6 +1154,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("requireModelReady propagates default-model loading failures", async () => {
     const defaultModelDeferred = createDeferred<AgentModelSelection | null>();
     let sessionsState: Record<string, AgentSessionState> = {};
+    let persistedSessions = 0;
     const setSessionsById = (
       updater:
         | Record<string, AgentSessionState>
@@ -1164,14 +1165,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => ({
-      sessionId: "session-created",
-      externalSessionId: "external-created",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      role: "build",
-      scenario: "build_implementation_start",
-      status: "idle",
-    });
+    let startSessionCalls = 0;
+    adapter.startSession = async () => {
+      startSessionCalls += 1;
+      return {
+        sessionId: "session-created",
+        externalSessionId: "external-created",
+        startedAt: "2026-02-22T08:00:10.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
@@ -1199,7 +1204,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadSessionModelCatalog: async () => {},
       loadAgentSessions: async () => {},
       refreshTaskData: async () => {},
-      persistSessionSnapshot: async () => {},
+      persistSessionSnapshot: async () => {
+        persistedSessions += 1;
+      },
       sendAgentMessage: async () => {},
     });
 
@@ -1209,7 +1216,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       await expect(startPromise).rejects.toThrow(
         "Failed to load the default model for build session start: catalog unavailable",
       );
-      expect(sessionsState["session-created"]?.selectedModel).toBeNull();
+      expect(startSessionCalls).toBe(0);
+      expect(persistedSessions).toBe(0);
+      expect(sessionsState["session-created"]).toBeUndefined();
     } finally {
       defaultModelDeferred.resolve(null);
       adapter.startSession = originalStartSession;

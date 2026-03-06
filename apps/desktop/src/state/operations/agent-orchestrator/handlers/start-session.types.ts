@@ -114,6 +114,7 @@ export type StartSessionCreationInput = {
   scenario: AgentScenario | undefined;
   selectedModel: AgentModelSelection | null;
   startMode: "reuse_latest" | "fresh";
+  requireModelReady: boolean;
   workingDirectoryOverride?: string | null;
 };
 
@@ -124,6 +125,7 @@ export type ResolvedRuntimeAndModel = {
   systemPrompt: string;
   promptOverrides: RepoPromptOverrides;
   defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
+  resolvedDefaultModelSelection: AgentModelSelection | null;
 };
 
 export type StartOrReuseResult =
@@ -138,4 +140,5 @@ export type StartOrReuseResult =
       ctx: StartedSessionContext;
       promptOverrides: RepoPromptOverrides;
       defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
+      resolvedDefaultModelSelection: AgentModelSelection | null;
     };

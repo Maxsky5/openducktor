@@ -435,6 +435,7 @@ export function useAgentStudioGitActions({
       } catch (error) {
         const message = toErrorMessage(error, "Pull failed.");
         setRebaseError(message);
+        setPendingPullRebase(null);
         toast.error("Pull failed", { description: message });
       } finally {
         setIsRebasing(false);

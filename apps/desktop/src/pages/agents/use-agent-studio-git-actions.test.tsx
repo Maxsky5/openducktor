@@ -326,6 +326,43 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  test("clears pending pull confirmation when the confirmed pull fails", async () => {
+    const failure = new Error("auth failed");
+    gitPullBranchMock.mockImplementationOnce(async () => {
+      throw failure;
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        upstreamAheadBehind: { ahead: 2, behind: 1 },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (state) => {
+        await state.pullFromUpstream();
+      });
+      expect(harness.getLatest().pendingPullRebase).toEqual({
+        branch: "feature/task-10",
+        localAhead: 2,
+        upstreamBehind: 1,
+      });
+
+      await harness.run(async (state) => {
+        await state.confirmPullRebase();
+      });
+
+      expect(harness.getLatest().pendingPullRebase).toBeNull();
+      expect(harness.getLatest().rebaseError).toBe("auth failed");
+      expect(toastErrorMock).toHaveBeenCalledWith("Pull failed", {
+        description: "auth failed",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("can cancel pending pull rebase confirmation", async () => {
     const harness = createHookHarness(
       createBaseArgs({

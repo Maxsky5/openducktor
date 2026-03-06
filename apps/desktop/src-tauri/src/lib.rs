@@ -346,6 +346,7 @@ mod tests {
     use anyhow::anyhow;
     use serde_json::{json, Value};
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
 
     fn unique_temp_path(prefix: &str) -> PathBuf {
@@ -378,6 +379,7 @@ mod tests {
         let config_path = root.join("config.json");
         fs::create_dir_all(&root)?;
         fs::write(&config_path, "{ invalid json")?;
+        fs::set_permissions(&config_path, fs::Permissions::from_mode(0o600))?;
 
         let config_store = AppConfigStore::from_path(config_path.clone());
         let runtime_store = RuntimeConfigStore::from_user_settings_store(&config_store);
@@ -416,6 +418,7 @@ mod tests {
         let runtime_path = root.join("runtime-config.json");
         fs::create_dir_all(&root)?;
         fs::write(&runtime_path, "{ invalid json")?;
+        fs::set_permissions(&runtime_path, fs::Permissions::from_mode(0o600))?;
         let runtime_store = RuntimeConfigStore::from_user_settings_store(&config_store);
 
         let error = validate_startup_config(&config_store, &runtime_store)
