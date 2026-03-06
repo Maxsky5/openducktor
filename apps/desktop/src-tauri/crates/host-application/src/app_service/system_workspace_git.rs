@@ -2,9 +2,9 @@ use super::{read_opencode_version, resolve_opencode_binary_path, AppService, Cac
 use anyhow::{anyhow, Result};
 use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
-    GitCurrentBranch, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushSummary,
-    GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeSummary, RuntimeCheck, SystemCheck,
-    WorkspaceRecord,
+    GitCurrentBranch, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushResult,
+    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitWorktreeSummary, RuntimeCheck, SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
@@ -330,7 +330,7 @@ impl AppService {
         branch: &str,
         set_upstream: bool,
         force_with_lease: bool,
-    ) -> Result<GitPushSummary> {
+    ) -> Result<GitPushResult> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         let execution_path = resolve_execution_path(repo_path.as_str(), working_dir);
         let remote = remote
@@ -402,6 +402,23 @@ impl AppService {
         )
     }
 
+    pub fn git_rebase_abort(
+        &self,
+        repo_path: &str,
+        request: GitRebaseAbortRequest,
+    ) -> Result<GitRebaseAbortResult> {
+        let repo_path = self.resolve_initialized_repo_path(repo_path)?;
+        let execution_path =
+            resolve_execution_path(repo_path.as_str(), request.working_dir.as_deref());
+
+        self.git_port.rebase_abort(
+            Path::new(&execution_path),
+            GitRebaseAbortRequest {
+                working_dir: request.working_dir,
+            },
+        )
+    }
+
     pub fn git_get_status(&self, repo_path: &str) -> Result<Vec<GitFileStatus>> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
         self.git_port.get_status(Path::new(&repo_path))
@@ -432,7 +449,7 @@ mod tests {
     use super::super::CachedRuntimeCheck;
     use super::RUNTIME_CHECK_CACHE_TTL;
     use crate::app_service::test_support::build_service_with_state;
-    use host_domain::RuntimeCheck;
+    use host_domain::{GitPushResult, RuntimeCheck};
     use std::time::{Duration, Instant};
 
     #[test]
@@ -450,7 +467,7 @@ mod tests {
     fn module_git_push_branch_defaults_remote_to_origin() {
         let (service, _task_state, git_state) = build_service_with_state(vec![]);
 
-        let summary = service
+        let result = service
             .git_push_branch(
                 "/tmp/odt-repo-module",
                 None,
@@ -461,7 +478,10 @@ mod tests {
             )
             .expect("push summary should be returned");
 
-        assert_eq!(summary.remote, "origin");
+        match result {
+            GitPushResult::Pushed { remote, .. } => assert_eq!(remote, "origin"),
+            other => panic!("expected pushed result, got {other:?}"),
+        }
         let state = git_state.lock().expect("git state lock poisoned");
         assert_eq!(state.last_push_remote.as_deref(), Some("origin"));
     }

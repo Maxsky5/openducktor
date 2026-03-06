@@ -31,6 +31,9 @@ type EnsureSessionReadyDependencies = {
     repoPath: string,
     taskId: string,
     role: AgentSessionState["role"],
+    options?: {
+      workingDirectoryOverride?: string | null;
+    },
   ) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
@@ -117,7 +120,9 @@ export const createEnsureSessionReady = ({
 
     const [docs, runtime, promptOverrides] = await Promise.all([
       loadTaskDocuments(repoPath, session.taskId),
-      ensureRuntime(repoPath, session.taskId, session.role),
+      ensureRuntime(repoPath, session.taskId, session.role, {
+        workingDirectoryOverride: session.workingDirectory,
+      }),
       loadRepoPromptOverrides(repoPath),
     ]);
     assertNotStale();

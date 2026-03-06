@@ -25,11 +25,18 @@ pub struct GitWorktreeSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct GitPushSummary {
-    pub remote: String,
-    pub branch: String,
-    pub output: String,
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitPushResult {
+    Pushed {
+        remote: String,
+        branch: String,
+        output: String,
+    },
+    RejectedNonFastForward {
+        remote: String,
+        branch: String,
+        output: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -199,6 +206,18 @@ pub enum GitRebaseBranchResult {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRebaseAbortRequest {
+    pub working_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitRebaseAbortResult {
+    Aborted { output: String },
+}
+
 pub trait GitPort: Send + Sync {
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>>;
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch>;
@@ -223,7 +242,7 @@ pub trait GitPort: Send + Sync {
         branch: &str,
         set_upstream: bool,
         force_with_lease: bool,
-    ) -> Result<GitPushSummary>;
+    ) -> Result<GitPushResult>;
     fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult>;
     fn get_status(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>>;
     fn get_diff(&self, repo_path: &Path, target_branch: Option<&str>) -> Result<Vec<GitFileDiff>>;
@@ -252,11 +271,19 @@ pub trait GitPort: Send + Sync {
         repo_path: &Path,
         request: GitRebaseBranchRequest,
     ) -> Result<GitRebaseBranchResult>;
+    fn rebase_abort(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseAbortRequest,
+    ) -> Result<GitRebaseAbortResult>;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{GitCommitAllResult, GitPullResult, GitRebaseBranchResult};
+    use super::{
+        GitCommitAllResult, GitPullResult, GitPushResult, GitRebaseAbortResult,
+        GitRebaseBranchResult,
+    };
 
     #[test]
     fn git_commit_all_no_changes_is_first_class_variant() {
@@ -328,6 +355,38 @@ mod tests {
             GitPullResult::Conflicts {
                 conflicted_files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
                 output: "pull stopped due to conflicts".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_push_non_fast_forward_is_first_class_variant() {
+        let result = GitPushResult::RejectedNonFastForward {
+            remote: "origin".to_string(),
+            branch: "feature/rebase".to_string(),
+            output: "non-fast-forward".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitPushResult::RejectedNonFastForward {
+                remote: "origin".to_string(),
+                branch: "feature/rebase".to_string(),
+                output: "non-fast-forward".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn git_rebase_abort_is_first_class_variant() {
+        let result = GitRebaseAbortResult::Aborted {
+            output: "aborted".to_string(),
+        };
+
+        assert_eq!(
+            result,
+            GitRebaseAbortResult::Aborted {
+                output: "aborted".to_string(),
             }
         );
     }

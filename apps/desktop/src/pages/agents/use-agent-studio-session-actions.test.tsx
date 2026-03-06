@@ -741,4 +741,21 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.unmount();
   });
+
+  test("does not expose kickoff for internal rebase conflict scenario", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      scenario: "build_rebase_conflict_resolution",
+      selectedTask: createTask(),
+      activeSession: null,
+      sessionsForTask: [],
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().canKickoffNewSession).toBe(false);
+
+    await harness.unmount();
+  });
 });

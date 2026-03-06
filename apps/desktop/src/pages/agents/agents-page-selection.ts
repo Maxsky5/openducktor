@@ -162,3 +162,73 @@ export const resolveAgentStudioActiveSession = ({
   }
   return sessionsForTask[0] ?? null;
 };
+
+export const resolveAgentStudioBuilderSessionsForTask = ({
+  taskId,
+  viewActiveSession,
+  activeSession,
+  selectedSessionById,
+  viewSessionsForTask,
+  sessionsForTask,
+}: {
+  taskId: string;
+  viewActiveSession: AgentSessionState | null;
+  activeSession: AgentSessionState | null;
+  selectedSessionById: AgentSessionState | null;
+  viewSessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionState[];
+}): AgentSessionState[] => {
+  if (!taskId) {
+    return [];
+  }
+
+  const seenSessionIds = new Set<string>();
+  const candidates = [
+    viewActiveSession,
+    activeSession,
+    selectedSessionById,
+    ...viewSessionsForTask,
+    ...sessionsForTask,
+  ];
+  const sessions: AgentSessionState[] = [];
+
+  for (const session of candidates) {
+    if (!session || session.role !== "build" || session.taskId !== taskId) {
+      continue;
+    }
+    if (seenSessionIds.has(session.sessionId)) {
+      continue;
+    }
+    seenSessionIds.add(session.sessionId);
+    sessions.push(session);
+  }
+
+  return sessions;
+};
+
+export const resolveAgentStudioBuilderSessionForTask = ({
+  taskId,
+  viewActiveSession,
+  activeSession,
+  selectedSessionById,
+  viewSessionsForTask,
+  sessionsForTask,
+}: {
+  taskId: string;
+  viewActiveSession: AgentSessionState | null;
+  activeSession: AgentSessionState | null;
+  selectedSessionById: AgentSessionState | null;
+  viewSessionsForTask: AgentSessionState[];
+  sessionsForTask: AgentSessionState[];
+}): AgentSessionState | null => {
+  return (
+    resolveAgentStudioBuilderSessionsForTask({
+      taskId,
+      viewActiveSession,
+      activeSession,
+      selectedSessionById,
+      viewSessionsForTask,
+      sessionsForTask,
+    })[0] ?? null
+  );
+};

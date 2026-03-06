@@ -512,7 +512,15 @@ describe("TauriHostClient", () => {
         return { ok: true };
       }
       if (command === "git_push_branch") {
-        return { remote: "origin", branch: "feature/task-1", output: "Everything up-to-date" };
+        return {
+          outcome: "pushed",
+          remote: "origin",
+          branch: "feature/task-1",
+          output: "Everything up-to-date",
+        };
+      }
+      if (command === "git_rebase_abort") {
+        return { outcome: "aborted", output: "rebase aborted" };
       }
       if (command === "git_pull_branch") {
         return { outcome: "pulled", output: "updated from origin/feature/task-1" };
@@ -572,6 +580,7 @@ describe("TauriHostClient", () => {
     const removed = await client.gitRemoveWorktree("/repo", "/tmp/wt/task-1", { force: true });
     const committed = await client.gitCommitAll("/repo", "Build all changes");
     const rebased = await client.gitRebaseBranch("/repo", "origin/main", "/tmp/wt/task-1");
+    const aborted = await client.gitRebaseAbort("/repo", "/tmp/wt/task-1");
     const pulled = await client.gitPullBranch("/repo", "/tmp/wt/task-1");
     const pushed = await client.gitPushBranch("/repo", "feature/task-1", {
       remote: "origin",
@@ -599,7 +608,9 @@ describe("TauriHostClient", () => {
     expect(removed.ok).toBe(true);
     expect(committed.outcome).toBe("no_changes");
     expect(rebased.outcome).toBe("rebased");
+    expect(aborted.outcome).toBe("aborted");
     expect(pulled.outcome).toBe("pulled");
+    expect(pushed.outcome).toBe("pushed");
     expect(pushed.remote).toBe("origin");
     expect(worktreeStatus.currentBranch.name).toBe("feature/task-1");
     expect(worktreeStatus.targetAheadBehind.ahead).toBe(1);
@@ -613,6 +624,7 @@ describe("TauriHostClient", () => {
       "git_remove_worktree",
       "git_commit_all",
       "git_rebase_branch",
+      "git_rebase_abort",
       "git_pull_branch",
       "git_push_branch",
       "git_get_worktree_status",
@@ -650,19 +662,23 @@ describe("TauriHostClient", () => {
     });
     expect(calls[8].args).toEqual({
       repoPath: "/repo",
+      workingDir: "/tmp/wt/task-1",
+    });
+    expect(calls[9].args).toEqual({
+      repoPath: "/repo",
       branch: "feature/task-1",
       remote: "origin",
       setUpstream: true,
       forceWithLease: true,
       workingDir: "/tmp/wt/task-1",
     });
-    expect(calls[9].args).toEqual({
+    expect(calls[10].args).toEqual({
       repoPath: "/repo",
       targetBranch: "origin/main",
       diffScope: "target",
       workingDir: "/tmp/wt/task-1",
     });
-    expect(calls[10].args).toEqual({
+    expect(calls[11].args).toEqual({
       repoPath: "/repo",
       targetBranch: "origin/main",
       diffScope: "target",

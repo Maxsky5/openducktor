@@ -787,7 +787,7 @@ pub async fn git_push_branch(
     remote: Option<String>,
     set_upstream: Option<bool>,
     force_with_lease: Option<bool>,
-) -> Result<host_domain::GitPushSummary, String> {
+) -> Result<host_domain::GitPushResult, String> {
     let _ = state
         .service
         .ensure_repo_authorized(&repo_path)
@@ -1034,6 +1034,26 @@ pub async fn git_rebase_branch(
     ))
 }
 
+#[tauri::command]
+pub async fn git_rebase_abort(
+    state: State<'_, AppState>,
+    repo_path: String,
+    working_dir: Option<String>,
+) -> Result<host_domain::GitRebaseAbortResult, String> {
+    let _ = state
+        .service
+        .ensure_repo_authorized(&repo_path)
+        .map_err(|e| e.to_string())?;
+    let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
+
+    as_error(state.service.git_rebase_abort(
+        &repo_path,
+        host_domain::GitRebaseAbortRequest {
+            working_dir: Some(effective),
+        },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1053,9 +1073,10 @@ mod tests {
     use host_domain::{
         GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
         GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPullRequest,
-        GitPullResult, GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult,
-        GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSummary,
-        GitWorktreeStatusSummaryData, TaskStore, TASK_METADATA_NAMESPACE,
+        GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+        GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
+        GitWorktreeStatusData, GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, TaskStore,
+        TASK_METADATA_NAMESPACE,
     };
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::AppConfigStore;
@@ -1219,7 +1240,7 @@ mod tests {
             _branch: &str,
             _set_upstream: bool,
             _force_with_lease: bool,
-        ) -> anyhow::Result<GitPushSummary> {
+        ) -> anyhow::Result<GitPushResult> {
             panic!("unexpected call: push_branch");
         }
 
@@ -1229,6 +1250,14 @@ mod tests {
             _request: GitPullRequest,
         ) -> anyhow::Result<GitPullResult> {
             panic!("unexpected call: pull_branch");
+        }
+
+        fn rebase_abort(
+            &self,
+            _repo_path: &Path,
+            _request: GitRebaseAbortRequest,
+        ) -> anyhow::Result<GitRebaseAbortResult> {
+            panic!("unexpected call: rebase_abort");
         }
 
         fn get_status(&self, _repo_path: &Path) -> anyhow::Result<Vec<GitFileStatus>> {

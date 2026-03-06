@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
+import { assertAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
@@ -148,6 +149,10 @@ export function useKanbanSessionStartFlow({
         startMode: sessionStartIntent.startMode,
         sendKickoff: sessionStartIntent.postStartAction === "kickoff",
       };
+      const kickoffScenario =
+        startInBackground || intent.sendKickoff
+          ? assertAgentKickoffScenario(intent.scenario)
+          : null;
 
       const selection = sessionStartSelection;
       void (async () => {
@@ -189,7 +194,10 @@ export function useKanbanSessionStartFlow({
                 ? await loadEffectivePromptOverrides(activeRepo)
                 : undefined;
               const intentTask = tasks.find((entry) => entry.id === intent.taskId);
-              return kickoffPromptForScenario(intent.role, intent.scenario, intent.taskId, {
+              if (!kickoffScenario) {
+                throw new Error(`Scenario "${intent.scenario}" does not support kickoff prompts.`);
+              }
+              return kickoffPromptForScenario(intent.role, kickoffScenario, intent.taskId, {
                 overrides: promptOverrides ?? {},
                 task: {
                   ...(intentTask

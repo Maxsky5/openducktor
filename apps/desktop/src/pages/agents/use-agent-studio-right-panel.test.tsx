@@ -82,7 +82,7 @@ const diffModel: AgentStudioGitPanelModel = {
   commitError: null,
   pushError: null,
   rebaseError: null,
-  commitAll: async () => {},
+  commitAll: async () => true,
   pushBranch: async () => {},
   rebaseOntoTarget: async () => {},
 };

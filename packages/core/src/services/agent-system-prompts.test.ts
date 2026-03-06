@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildAgentKickoffPrompt,
   buildAgentKickoffPromptBundle,
+  buildAgentMessagePrompt,
   buildAgentSystemPrompt,
   buildAgentSystemPromptBundle,
   buildReadOnlyPermissionRejectionMessage,
@@ -228,12 +229,67 @@ describe("kickoff and permission prompts", () => {
     expect(prompt).not.toContain("Disabled custom kickoff");
   });
 
+  test("rejects scenarios without kickoff prompts", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "build",
+        scenario: "build_rebase_conflict_resolution" as never,
+        task: {
+          taskId: "task-2",
+        },
+      }),
+    ).toThrow('Scenario "build_rebase_conflict_resolution" does not define a kickoff prompt.');
+  });
+
   test("builds read-only permission rejection message", () => {
     expect(
       buildReadOnlyPermissionRejectionMessage({
         role: "qa",
       }),
     ).toBe("Rejected by OpenDucktor qa read-only policy.");
+  });
+
+  test("builds rebase conflict resolution message with git context", () => {
+    const prompt = buildAgentMessagePrompt({
+      role: "build",
+      templateId: "message.build_rebase_conflict_resolution",
+      task: {
+        taskId: "task-1",
+      },
+      git: {
+        currentBranch: "feature/task-1",
+        targetBranch: "origin/main",
+        conflictedFiles: ["src/main.ts", "src/lib.ts"],
+        rebaseOutput: "CONFLICT (content): Merge conflict in src/main.ts",
+      },
+    });
+
+    expect(prompt).toContain("Resolve the current git rebase conflict");
+    expect(prompt).toContain("feature/task-1");
+    expect(prompt).toContain("origin/main");
+    expect(prompt).toContain("- src/main.ts");
+    expect(prompt).toContain("Use taskId task-1");
+  });
+
+  test("rejects git placeholders when the selected template does not receive git context", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "planner",
+        scenario: "planner_initial",
+        task: {
+          taskId: "task-2",
+        },
+        overrides: {
+          "kickoff.planner_initial": {
+            template: "Planner kickoff {{git.rebaseOutput}}",
+            baseVersion: 1,
+            enabled: true,
+          },
+        },
+      }),
+    ).toThrow(
+      'Prompt template "kickoff.planner_initial" is missing placeholder value "git.rebaseOutput".',
+    );
   });
 });
 
@@ -244,7 +300,9 @@ describe("listBuiltinAgentPromptTemplates", () => {
 
     expect(ids).toContain("system.role.spec.base");
     expect(ids).toContain("system.scenario.spec_initial");
+    expect(ids).toContain("system.scenario.build_rebase_conflict_resolution");
     expect(ids).toContain("kickoff.spec_initial");
+    expect(ids).toContain("message.build_rebase_conflict_resolution");
     expect(ids).toContain("permission.read_only.reject");
   });
 });

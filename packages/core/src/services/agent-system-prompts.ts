@@ -1,10 +1,12 @@
 import {
   type AgentPromptTemplateId,
+  isAgentKickoffScenario,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
+  type AgentKickoffScenario,
   type AgentRole,
   type AgentScenario,
   type AgentToolName,
@@ -32,7 +34,7 @@ export type BuildAgentPromptInput = {
 
 export type BuildAgentKickoffPromptInput = {
   role: AgentRole;
-  scenario: AgentScenario;
+  scenario: AgentKickoffScenario;
   task: {
     taskId: string;
     title?: string;
@@ -48,6 +50,34 @@ export type BuildAgentKickoffPromptInput = {
   overrides?: RepoPromptOverrides;
 };
 
+export type AgentPromptGitContext = {
+  currentBranch?: string;
+  targetBranch?: string;
+  conflictedFiles?: string[];
+  rebaseOutput?: string;
+};
+
+export type AgentMessageTemplateId = Extract<AgentPromptTemplateId, `message.${string}`>;
+
+export type BuildAgentMessagePromptInput = {
+  role: AgentRole;
+  templateId: AgentMessageTemplateId;
+  task: {
+    taskId: string;
+    title?: string;
+    issueType?: "task" | "feature" | "bug" | "epic";
+    status?: string;
+    qaRequired?: boolean;
+    description?: string;
+    acceptanceCriteria?: string;
+    specMarkdown?: string;
+    planMarkdown?: string;
+    latestQaReportMarkdown?: string;
+  };
+  git?: AgentPromptGitContext;
+  overrides?: RepoPromptOverrides;
+};
+
 export type BuildReadOnlyPermissionRejectionMessageInput = {
   role: AgentRole;
   overrides?: RepoPromptOverrides;
@@ -58,7 +88,7 @@ export type MergePromptOverridesInput = {
   repoOverrides?: RepoPromptOverrides;
 };
 
-type AgentPromptPurpose = "system" | "kickoff" | "permission";
+type AgentPromptPurpose = "system" | "kickoff" | "message" | "permission";
 
 type AgentPromptTemplateDefinition = {
   id: AgentPromptTemplateId;
@@ -253,6 +283,14 @@ Address every QA rejection item before calling odt_build_completed again.`,
     template: `Scenario: Rework after human requested changes.
 Incorporate requested changes and provide a clean completion summary via odt_build_completed.`,
   },
+  "system.scenario.build_rebase_conflict_resolution": {
+    id: "system.scenario.build_rebase_conflict_resolution",
+    purpose: "system",
+    builtinVersion: 1,
+    template: `Scenario: Rebase conflict resolution.
+The worktree is paused in an in-progress git rebase. Resolve conflicts safely, continue the rebase, and rerun relevant checks.
+Do not call odt_build_completed unless the task itself is actually complete after the rebase is resolved.`,
+  },
   "system.scenario.qa_review": {
     id: "system.scenario.qa_review",
     purpose: "system",
@@ -303,6 +341,21 @@ Call odt_qa_approved or odt_qa_rejected exactly once per review pass.`,
     template:
       "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
+  "message.build_rebase_conflict_resolution": {
+    id: "message.build_rebase_conflict_resolution",
+    purpose: "message",
+    builtinVersion: 1,
+    template: `Resolve the current git rebase conflict in this worktree.
+- currentBranch: {{git.currentBranch}}
+- targetBranch: {{git.targetBranch}}
+- conflictedFiles:
+{{git.conflictedFiles}}
+- rebaseOutput:
+{{git.rebaseOutput}}
+
+Continue the rebase after resolving the conflicts, run the relevant checks for the touched code, and reply with a concise summary.
+Use taskId {{task.id}} for any odt_* tool calls.`,
+  },
   "permission.read_only.reject": {
     id: "permission.read_only.reject",
     purpose: "permission",
@@ -318,6 +371,18 @@ const compact = (value: string | undefined): string => {
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
 };
 
+const compactList = (values: string[] | undefined): string => {
+  const normalized = (values ?? [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  if (normalized.length === 0) {
+    return "(none)";
+  }
+
+  return normalized.map((value) => `- ${value}`).join("\n");
+};
+
 const toRoleBaseTemplateId = (role: AgentRole): AgentPromptTemplateId => {
   return `system.role.${role}.base`;
 };
@@ -326,8 +391,21 @@ const toSystemScenarioTemplateId = (scenario: AgentScenario): AgentPromptTemplat
   return `system.scenario.${scenario}`;
 };
 
+const KICKOFF_TEMPLATE_IDS: Record<AgentKickoffScenario, AgentPromptTemplateId> = {
+  spec_initial: "kickoff.spec_initial",
+  planner_initial: "kickoff.planner_initial",
+  build_implementation_start: "kickoff.build_implementation_start",
+  build_after_qa_rejected: "kickoff.build_after_qa_rejected",
+  build_after_human_request_changes: "kickoff.build_after_human_request_changes",
+  qa_review: "kickoff.qa_review",
+};
+
 const toKickoffTemplateId = (scenario: AgentScenario): AgentPromptTemplateId => {
-  return `kickoff.${scenario}`;
+  if (!isAgentKickoffScenario(scenario)) {
+    throw new Error(`Scenario "${scenario}" does not define a kickoff prompt.`);
+  }
+
+  return KICKOFF_TEMPLATE_IDS[scenario];
 };
 
 const buildToolListPlaceholder = (role: AgentRole): string => {
@@ -338,9 +416,11 @@ const buildToolListPlaceholder = (role: AgentRole): string => {
 const buildPlaceholderValues = ({
   role,
   task,
+  git,
 }: {
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
+  git?: AgentPromptGitContext;
 }): Record<string, string> => {
   return {
     role,
@@ -355,6 +435,14 @@ const buildPlaceholderValues = ({
     "task.specMarkdown": compact(task.specMarkdown),
     "task.planMarkdown": compact(task.planMarkdown),
     "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),
+    ...(git
+      ? {
+          "git.currentBranch": compact(git.currentBranch),
+          "git.targetBranch": compact(git.targetBranch),
+          "git.conflictedFiles": compactList(git.conflictedFiles),
+          "git.rebaseOutput": compact(git.rebaseOutput),
+        }
+      : {}),
   };
 };
 
@@ -428,14 +516,20 @@ const buildPromptFromTemplates = ({
   templateIds,
   role,
   task,
+  git,
   overrides,
 }: {
   templateIds: AgentPromptTemplateId[];
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
+  git?: AgentPromptGitContext;
   overrides: RepoPromptOverrides | undefined;
 }): BuiltAgentPrompt => {
-  const placeholderValues = buildPlaceholderValues({ role, task });
+  const placeholderValues = buildPlaceholderValues({
+    role,
+    task,
+    ...(git ? { git } : {}),
+  });
   const templates = templateIds.map((templateId) =>
     resolveTemplate({
       templateId,
@@ -490,6 +584,22 @@ export const buildAgentKickoffPromptBundle = (
 
 export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): string => {
   return buildAgentKickoffPromptBundle(input).prompt;
+};
+
+export const buildAgentMessagePromptBundle = (
+  input: BuildAgentMessagePromptInput,
+): BuiltAgentPrompt => {
+  return buildPromptFromTemplates({
+    templateIds: [input.templateId],
+    role: input.role,
+    task: input.task,
+    ...(input.git ? { git: input.git } : {}),
+    overrides: input.overrides,
+  });
+};
+
+export const buildAgentMessagePrompt = (input: BuildAgentMessagePromptInput): string => {
+  return buildAgentMessagePromptBundle(input).prompt;
 };
 
 export const buildReadOnlyPermissionRejectionMessageBundle = (

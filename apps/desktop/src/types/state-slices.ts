@@ -117,6 +117,7 @@ export type AgentStateContextValue = {
     sendKickoff?: boolean;
     startMode?: "reuse_latest" | "fresh";
     requireModelReady?: boolean;
+    workingDirectoryOverride?: string | null;
   }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;

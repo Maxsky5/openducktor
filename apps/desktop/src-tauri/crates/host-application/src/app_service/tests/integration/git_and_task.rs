@@ -203,7 +203,7 @@ fn git_push_branch_defaults_remote_to_origin() -> Result<()> {
         },
     );
 
-    let summary = service.git_push_branch(
+    let result = service.git_push_branch(
         repo_path,
         Some(working_dir),
         Some("   "),
@@ -211,8 +211,13 @@ fn git_push_branch_defaults_remote_to_origin() -> Result<()> {
         true,
         false,
     )?;
-    assert_eq!(summary.remote, "origin");
-    assert_eq!(summary.branch, "feature/x");
+    match result {
+        host_domain::GitPushResult::Pushed { remote, branch, .. } => {
+            assert_eq!(remote, "origin");
+            assert_eq!(branch, "feature/x");
+        }
+        other => panic!("expected pushed result, got {other:?}"),
+    }
 
     let git_state = git_state.lock().expect("git lock poisoned");
     assert!(git_state.calls.contains(&GitCall::PushBranch {

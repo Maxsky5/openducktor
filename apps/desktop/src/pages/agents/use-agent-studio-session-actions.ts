@@ -1,5 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -82,11 +83,12 @@ export function useAgentStudioSessionActions({
     Record<string, boolean>
   >({});
 
-  const activeSessionStatus = activeSession?.status ?? "stopped";
   const activeSessionId = activeSession?.sessionId ?? null;
   const isSessionWorking =
     Boolean(activeSession) &&
-    (activeSessionStatus === "running" || activeSessionStatus === "starting" || isSending);
+    ((activeSession?.status ?? "stopped") === "running" ||
+      (activeSession?.status ?? "stopped") === "starting" ||
+      isSending);
 
   const { isStarting, startSession, startScenarioKickoff, handleCreateSession } =
     useAgentStudioSessionStartFlow({
@@ -134,10 +136,10 @@ export function useAgentStudioSessionActions({
       return;
     }
 
-    setInput("");
     setIsSending(true);
     try {
       await sendAgentMessage(targetSessionId, message);
+      setInput("");
     } finally {
       setIsSending(false);
     }
@@ -183,25 +185,13 @@ export function useAgentStudioSessionActions({
   );
 
   useEffect(() => {
-    if (!isSending) {
-      return;
-    }
-    if (activeSessionStatus !== "starting" && activeSessionStatus !== "running") {
-      setIsSending(false);
-      return;
-    }
-    setIsSending(false);
-  }, [activeSessionStatus, isSending]);
-
-  useEffect(() => {
     setIsSubmittingQuestionByRequestId((current) => {
       if (activeSessionId === null && Object.keys(current).length === 0) {
         return current;
       }
       return {};
     });
-    setInput("");
-  }, [activeSessionId, setInput]);
+  }, [activeSessionId]);
 
   useEffect(() => {
     const activeRequestIds = new Set(
@@ -312,7 +302,8 @@ export function useAgentStudioSessionActions({
     Boolean(taskId) &&
     isActiveTaskHydrated &&
     !activeSession &&
-    selectedRoleAvailable;
+    selectedRoleAvailable &&
+    isAgentKickoffScenario(scenario);
   const kickoffLabel =
     role === "spec"
       ? "Start Spec"

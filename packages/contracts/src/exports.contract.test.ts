@@ -29,7 +29,6 @@ import type {
   GitFileStatusCounts,
   GitPullBranchRequest,
   GitPullBranchResult,
-  GitPushSummary,
   GitRebaseBranchRequest,
   GitRebaseBranchResult,
   GitUpstreamAheadBehind,
@@ -73,6 +72,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentScenarioSchema",
   "agentScenarioValues",
   "agentModelDefaultSchema",
+  "agentKickoffScenarioSchema",
+  "agentKickoffScenarioValues",
   "agentToolNameSchema",
   "agentToolNameValues",
   "agentRuntimeStartRoleSchema",
@@ -97,6 +98,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitDiffScopeSchema",
   "gitPullBranchRequestSchema",
   "gitPullBranchResultSchema",
+  "gitPushBranchResultSchema",
   "defaultSpecTemplateMarkdown",
   "extractPromptTemplatePlaceholders",
   "fileDiffSchema",
@@ -104,7 +106,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitFileStatusCountsSchema",
   "gitBranchSchema",
   "gitCurrentBranchSchema",
-  "gitPushSummarySchema",
   "gitUpstreamAheadBehindSchema",
   "gitWorktreeStatusSchema",
   "gitWorktreeStatusSummarySchema",
@@ -120,9 +121,12 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoHooksSchema",
   "gitRebaseBranchRequestSchema",
   "gitRebaseBranchResultSchema",
+  "gitRebaseAbortRequestSchema",
+  "gitRebaseAbortResultSchema",
   "runEventSchema",
   "runStateSchema",
   "runSummarySchema",
+  "isAgentKickoffScenario",
   "runtimeCheckSchema",
   "softGuardrailsSchema",
   "settingsSnapshotSchema",
@@ -172,7 +176,6 @@ type ExportedTypeContract = {
   GitDiffScope: GitDiffScope;
   GitPullBranchRequest: GitPullBranchRequest;
   GitPullBranchResult: GitPullBranchResult;
-  GitPushSummary: GitPushSummary;
   GitRebaseBranchRequest: GitRebaseBranchRequest;
   GitRebaseBranchResult: GitRebaseBranchResult;
   GitUpstreamAheadBehind: GitUpstreamAheadBehind;

@@ -1,12 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
+import { assertAgentKickoffScenario } from "@openducktor/core";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
-import {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "../../state/operations/agent-orchestrator/support/async-side-effects";
+import { runOrchestratorSideEffect } from "../../state/operations/agent-orchestrator/support/async-side-effects";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { kickoffPromptForScenario } from "./agents-page-constants";
 import { buildRoleEnabledMapForTask, type SessionCreateOption } from "./agents-page-session-tabs";
@@ -89,12 +89,13 @@ export function useAgentStudioFreshSessionCreation({
       runOrchestratorSideEffect(
         "agent-studio-send-kickoff-message",
         (async () => {
+          const kickoffScenario = assertAgentKickoffScenario(nextScenario);
           const promptOverrides = activeRepo
             ? await loadEffectivePromptOverrides(activeRepo)
             : undefined;
           await sendAgentMessage(
             sessionId,
-            kickoffPromptForScenario(nextRole, nextScenario, taskId, {
+            kickoffPromptForScenario(nextRole, kickoffScenario, taskId, {
               overrides: promptOverrides ?? {},
               task: {
                 ...(selectedTask
@@ -125,46 +126,32 @@ export function useAgentStudioFreshSessionCreation({
     [activeRepo, selectedTask, sendAgentMessage, taskId],
   );
 
-  const startFreshSessionWithFallback = useCallback(
+  const startFreshSession = useCallback(
     async (params: {
       nextRole: AgentRole;
       nextScenario: AgentScenario;
       selectedModel: AgentModelSelection | null;
       previousSelection: QueryUpdate;
     }): Promise<string | undefined> => {
-      const sessionId = await captureOrchestratorFallback<string | undefined>(
-        "agent-studio-start-fresh-session",
-        async () =>
-          startAgentSession({
-            taskId,
-            role: params.nextRole,
-            scenario: params.nextScenario,
-            selectedModel: params.selectedModel,
-            sendKickoff: false,
-            startMode: "fresh",
-            requireModelReady: true,
-          }),
-        {
-          tags: {
-            repoPath: activeRepo,
-            taskId,
-            role: params.nextRole,
-            scenario: params.nextScenario,
-          },
-          fallback: () => {
-            return undefined;
-          },
-        },
-      );
-
-      if (!sessionId) {
+      try {
+        return await startAgentSession({
+          taskId,
+          role: params.nextRole,
+          scenario: params.nextScenario,
+          selectedModel: params.selectedModel,
+          sendKickoff: false,
+          startMode: "fresh",
+          requireModelReady: true,
+        });
+      } catch (error) {
         updateQuery(params.previousSelection);
+        toast.error("Failed to start Builder session", {
+          description: errorMessage(error),
+        });
         return undefined;
       }
-
-      return sessionId;
     },
-    [activeRepo, startAgentSession, taskId, updateQuery],
+    [startAgentSession, taskId, updateQuery],
   );
 
   const runFreshSessionCreation = useCallback(
@@ -198,7 +185,7 @@ export function useAgentStudioFreshSessionCreation({
         }
 
         applyFreshSessionDraftQuery(params.nextRole);
-        const sessionId = await startFreshSessionWithFallback({
+        const sessionId = await startFreshSession({
           nextRole: params.nextRole,
           nextScenario: params.nextScenario,
           selectedModel,
@@ -224,7 +211,7 @@ export function useAgentStudioFreshSessionCreation({
       role,
       sendFreshSessionKickoff,
       setIsStarting,
-      startFreshSessionWithFallback,
+      startFreshSession,
       taskId,
     ],
   );

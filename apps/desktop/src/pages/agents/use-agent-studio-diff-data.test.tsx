@@ -839,6 +839,159 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("polling triggers a full reload when summary hashes show file status changes", async () => {
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    let intervalCallback: (() => void) | null = null;
+
+    const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
+      if (typeof callback !== "function") {
+        throw new Error("Expected polling callback function");
+      }
+      intervalCallback = () => {
+        callback();
+      };
+      return 1;
+    });
+    const clearIntervalMock = mock((_intervalId: number) => {});
+
+    let fullRequestCount = 0;
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        fullRequestCount += 1;
+
+        if (fullRequestCount === 1) {
+          return withSnapshotHashes({
+            currentBranch: { name: "feature/conflict", detached: false },
+            fileStatuses: [{ path: "AGENTS.md", status: "unmerged", staged: false }],
+            fileDiffs:
+              (diffScope ?? "target") === "target"
+                ? [
+                    {
+                      file: "AGENTS.md",
+                      type: "modified",
+                      additions: 3,
+                      deletions: 1,
+                      diff: "@@ -1 +1 @@",
+                    },
+                  ]
+                : [],
+            targetAheadBehind: { ahead: 1, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: workingDir ?? "/repo",
+              targetBranch,
+              diffScope: diffScope ?? "target",
+              observedAtMs: 1731000000000,
+            },
+          });
+        }
+
+        return withSnapshotHashes({
+          currentBranch: { name: "feature/resolved", detached: false },
+          fileStatuses: [{ path: "AGENTS.md", status: "M", staged: false }],
+          fileDiffs:
+            (diffScope ?? "target") === "target"
+              ? [
+                  {
+                    file: "AGENTS.md",
+                    type: "modified",
+                    additions: 5,
+                    deletions: 2,
+                    diff: "@@ -1 +1 @@\n-old\n+new\n",
+                  },
+                ]
+              : [],
+          targetAheadBehind: { ahead: 1, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: workingDir ?? "/repo",
+            targetBranch,
+            diffScope: diffScope ?? "target",
+            observedAtMs: 1731000000100,
+          },
+        });
+      },
+    );
+    gitGetWorktreeStatusSummaryMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatusSummary> =>
+        toWorktreeStatusSummary(
+          withSnapshotHashes({
+            currentBranch: { name: "feature/resolved", detached: false },
+            fileStatuses: [{ path: "AGENTS.md", status: "M", staged: false }],
+            fileDiffs:
+              (diffScope ?? "target") === "target"
+                ? [
+                    {
+                      file: "AGENTS.md",
+                      type: "modified",
+                      additions: 5,
+                      deletions: 2,
+                      diff: "@@ -1 +1 @@\n-old\n+new\n",
+                    },
+                  ]
+                : [],
+            targetAheadBehind: { ahead: 1, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: workingDir ?? "/repo",
+              targetBranch,
+              diffScope: diffScope ?? "target",
+              observedAtMs: 1731000000100,
+            },
+          }),
+        ),
+    );
+
+    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
+    globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      enablePolling: true,
+    });
+
+    const runTick = (): void => {
+      if (intervalCallback == null) {
+        throw new Error("Polling callback was not registered");
+      }
+      intervalCallback();
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(harness.getLatest().fileStatuses).toEqual([
+        { path: "AGENTS.md", status: "unmerged", staged: false },
+      ]);
+
+      await harness.run(() => {
+        runTick();
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusSummaryMock.mock.calls.length >= 1);
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      expect(harness.getLatest().fileStatuses).toEqual([
+        { path: "AGENTS.md", status: "M", staged: false },
+      ]);
+      expect(harness.getLatest().branch).toBe("feature/resolved");
+    } finally {
+      await harness.unmount();
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    }
+  });
+
   test("reloads inactive scope after repository context changes", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),

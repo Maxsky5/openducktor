@@ -21,6 +21,21 @@ mock.module("@/components/ui/tooltip", () => ({
     createElement("div", null, children),
 }));
 
+mock.module("@/components/ui/dialog", () => ({
+  Dialog: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
+    open === false ? null : createElement("div", null, children),
+  DialogContent: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) =>
+    createElement("div", props, children),
+  DialogHeader: ({ children }: { children: React.ReactNode }) =>
+    createElement("div", null, children),
+  DialogTitle: ({ children }: { children: React.ReactNode }) =>
+    createElement("div", null, children),
+  DialogDescription: ({ children }: { children: React.ReactNode }) =>
+    createElement("div", null, children),
+  DialogFooter: ({ children }: { children: React.ReactNode }) =>
+    createElement("div", null, children),
+}));
+
 mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
   PierreDiffPreloader: () => null,
   PierreDiffViewer: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
@@ -54,7 +69,7 @@ const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStud
     commitError: null,
     pushError: null,
     rebaseError: null,
-    commitAll: async () => {},
+    commitAll: async () => true,
     pushBranch: async () => {},
     rebaseOntoTarget: async () => {},
     pullFromUpstream: async () => {},
@@ -227,7 +242,7 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("enforces disabled safety states for rebase and commit controls", async () => {
-    const commitAll = mock(async (_message: string) => {});
+    const commitAll = mock(async (_message: string) => true);
 
     let renderer: TestRenderer.ReactTestRenderer | null = null;
     await act(async () => {
@@ -308,7 +323,7 @@ describe("AgentStudioGitPanel", () => {
 
   test("switches diff scope and validates commit-all message input", async () => {
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
-    const commitAll = mock(async (_message: string) => {});
+    const commitAll = mock(async (_message: string) => true);
     const refresh = mock(() => {});
 
     let renderer: TestRenderer.ReactTestRenderer | null = null;
@@ -491,7 +506,7 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("disables commit/push/rebase controls during detached branch and action in-flight", async () => {
-    const commitAll = mock(async () => {});
+    const commitAll = mock(async () => true);
     const pushBranch = mock(async () => {});
     const rebaseOntoTarget = mock(async () => {});
     const pullFromUpstream = mock(async () => {});
@@ -590,7 +605,7 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("shows upstream behind count in pull action and blocks push while behind", async () => {
+  test("shows upstream behind count and keeps normal push available", async () => {
     const pushBranch = mock(async () => {});
     const pullFromUpstream = mock(async () => {});
 
@@ -613,9 +628,11 @@ describe("AgentStudioGitPanel", () => {
     expect(
       findByTestId(root, "agent-studio-git-upstream-behind-count").children.join(""),
     ).toContain("3");
-    expect(hasVisibleText(root, "Pull (3 behind)")).toBe(true);
-    expect(hasVisibleText(root, "Pull before pushing")).toBe(true);
-    expect(Boolean(findByTestId(root, "agent-studio-git-push-button").props.disabled)).toBe(true);
+    expect(
+      hasVisibleText(root, "Pull with rebase (3 behind; 4 local commits will be rewritten)"),
+    ).toBe(true);
+    expect(hasVisibleText(root, "Push branch (3 behind; confirmation may be required)")).toBe(true);
+    expect(Boolean(findByTestId(root, "agent-studio-git-push-button").props.disabled)).toBe(false);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -647,11 +664,394 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(pullButton.props.disabled)).toBe(true);
     expect(pullButton.props.className).toContain("disabled:pointer-events-auto");
     expect(pullButton.props.className).toContain("disabled:cursor-not-allowed");
-    expect(Boolean(pushButton.props.disabled)).toBe(true);
-    expect(pushButton.props.className).toContain("disabled:pointer-events-auto");
-    expect(pushButton.props.className).toContain("disabled:cursor-not-allowed");
+    expect(Boolean(pushButton.props.disabled)).toBe(false);
     expect(hasVisibleText(root, "Commit or stash changes before pulling")).toBe(true);
-    expect(hasVisibleText(root, "Commit or stash changes, then pull before pushing")).toBe(true);
+    expect(hasVisibleText(root, "Push branch (2 behind; confirmation may be required)")).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("hides the generic lock banner when the conflict strip is already visible", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            isGitActionsLocked: true,
+            gitActionsLockReason: "Git actions are disabled while the Builder session is working.",
+            rebaseConflict: {
+              operation: "rebase",
+              currentBranch: "feature/task-11",
+              targetBranch: "origin/main",
+              conflictedFiles: ["src/main.ts", "src/routes.ts"],
+              output: "CONFLICT (content): Merge conflict in src/main.ts",
+              workingDir: "/tmp/worktree",
+            },
+            pendingForcePush: {
+              remote: "origin",
+              branch: "feature/task-11",
+              output: "non-fast-forward",
+            },
+            pendingPullRebase: {
+              branch: "feature/task-11",
+              localAhead: 2,
+              upstreamBehind: 1,
+            },
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-lock-reason")).toBe(0);
+    expect(findByTestId(root, "agent-studio-git-rebase-strip")).toBeTruthy();
+    expect(
+      getNodeText(findByTestId(root, "agent-studio-git-rebase-conflict-count-badge")),
+    ).toContain("2 conflicted files");
+    expect(findByTestId(root, "agent-studio-git-view-conflict-details-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-abort-rebase-strip-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-ask-builder-strip-button")).toBeTruthy();
+    expect(countByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBe(0);
+    expect(findByTestId(root, "agent-studio-git-force-push-modal")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-confirm-force-push-button")).toBeTruthy();
+    expect(getNodeText(findByTestId(root, "agent-studio-git-force-push-safety-note"))).toContain(
+      "--force-with-lease",
+    );
+    expect(getNodeText(findByTestId(root, "agent-studio-git-force-push-safety-note"))).toContain(
+      "fails instead of overwriting their work",
+    );
+    expect(getNodeText(findByTestId(root, "agent-studio-git-force-push-safety-note"))).toContain(
+      "--force",
+    );
+    expect(findByTestId(root, "agent-studio-git-pull-rebase-modal")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-confirm-pull-rebase-button")).toBeTruthy();
+    expect(getNodeText(findByTestId(root, "agent-studio-git-pull-rebase-safety-note"))).toContain(
+      "This will replay 2 local commits on top of 1 upstream commit",
+    );
+
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-view-conflict-details-button").props.onClick();
+      await flush();
+    });
+
+    expect(findByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-abort-rebase-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-ask-builder-button")).toBeTruthy();
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("renders the generic lock banner when git actions are locked without a conflict strip", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            isGitActionsLocked: true,
+            gitActionsLockReason: "Git actions are disabled while the Builder session is working.",
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(getNodeText(findByTestId(root, "agent-studio-git-lock-reason"))).toContain(
+      "Builder session is working",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("renders persisted pull-rebase conflicts in the strip without auto-opening the modal", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            rebaseConflict: {
+              operation: "pull_rebase",
+              currentBranch: "feature/task-11",
+              targetBranch: "tracked upstream branch",
+              conflictedFiles: ["AGENTS.md"],
+              output: "CONFLICT (content): Merge conflict in AGENTS.md",
+              workingDir: "/tmp/worktree",
+            },
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(getNodeText(findByTestId(root, "agent-studio-git-rebase-strip"))).toContain(
+      "Pull with rebase in progress",
+    );
+    expect(countByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBe(0);
+    expect(hasVisibleText(root, "tracked upstream branch")).toBe(true);
+
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-view-conflict-details-button").props.onClick();
+      await flush();
+    });
+
+    expect(getNodeText(findByTestId(root, "agent-studio-git-rebase-conflict-modal"))).toContain(
+      "Pull with rebase conflict detected",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("auto-opens the conflict modal only when the controller emits a fresh conflict-open signal", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      await flush();
+    });
+
+    const persistedConflictModel = baseModel({
+      rebaseConflict: {
+        operation: "rebase",
+        currentBranch: "feature/task-11",
+        targetBranch: "origin/main",
+        conflictedFiles: ["AGENTS.md"],
+        output: "CONFLICT (content): Merge conflict in AGENTS.md",
+        workingDir: "/tmp/worktree",
+      },
+    });
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, { model: persistedConflictModel }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBe(0);
+
+    const actionConflictModel = baseModel({
+      rebaseConflictAutoOpenNonce: 1,
+      rebaseConflict: {
+        operation: "rebase",
+        currentBranch: "feature/task-11",
+        targetBranch: "origin/main",
+        conflictedFiles: ["AGENTS.md"],
+        output: "CONFLICT (content): Merge conflict in AGENTS.md",
+        workingDir: "/tmp/worktree",
+      },
+    });
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, { model: actionConflictModel }),
+      );
+      await flush();
+    });
+
+    expect(findByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBeTruthy();
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("shows abort loading state and disables both conflict actions while abort is pending", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      await flush();
+    });
+
+    const abortPendingModel = baseModel({
+      isHandlingRebaseConflict: true,
+      rebaseConflictAction: "abort",
+      rebaseConflictAutoOpenNonce: 1,
+      rebaseConflict: {
+        operation: "rebase",
+        currentBranch: "feature/task-11",
+        targetBranch: "origin/main",
+        conflictedFiles: ["AGENTS.md"],
+        output: "CONFLICT (content): Merge conflict in AGENTS.md",
+        workingDir: "/tmp/worktree",
+      },
+    });
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, { model: abortPendingModel }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(getNodeText(findByTestId(root, "agent-studio-git-abort-rebase-button"))).toContain(
+      "Aborting...",
+    );
+    expect(Boolean(findByTestId(root, "agent-studio-git-abort-rebase-button").props.disabled)).toBe(
+      true,
+    );
+    expect(Boolean(findByTestId(root, "agent-studio-git-ask-builder-button").props.disabled)).toBe(
+      true,
+    );
+    expect(getNodeText(findByTestId(root, "agent-studio-git-abort-rebase-strip-button"))).toContain(
+      "Aborting...",
+    );
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-ask-builder-strip-button").props.disabled),
+    ).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("shows ask-builder loading state and disables both conflict actions while request is pending", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      await flush();
+    });
+
+    const askBuilderPendingModel = baseModel({
+      isHandlingRebaseConflict: true,
+      rebaseConflictAction: "ask_builder",
+      rebaseConflictAutoOpenNonce: 1,
+      rebaseConflict: {
+        operation: "rebase",
+        currentBranch: "feature/task-11",
+        targetBranch: "origin/main",
+        conflictedFiles: ["AGENTS.md"],
+        output: "CONFLICT (content): Merge conflict in AGENTS.md",
+        workingDir: "/tmp/worktree",
+      },
+    });
+
+    await act(async () => {
+      ensureRenderer(renderer).update(
+        createElement(AgentStudioGitPanel, { model: askBuilderPendingModel }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(getNodeText(findByTestId(root, "agent-studio-git-ask-builder-button"))).toContain(
+      "Sending to Builder...",
+    );
+    expect(Boolean(findByTestId(root, "agent-studio-git-abort-rebase-button").props.disabled)).toBe(
+      true,
+    );
+    expect(Boolean(findByTestId(root, "agent-studio-git-ask-builder-button").props.disabled)).toBe(
+      true,
+    );
+    expect(getNodeText(findByTestId(root, "agent-studio-git-ask-builder-strip-button"))).toContain(
+      "Sending to Builder...",
+    );
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-abort-rebase-strip-button").props.disabled),
+    ).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("closes the conflict modal before sending the ask-builder action", async () => {
+    const askBuilder = mock(async () => {});
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      await flush();
+    });
+
+    const conflictModel = baseModel({
+      askBuilderToResolveRebaseConflict: askBuilder,
+      rebaseConflictAutoOpenNonce: 1,
+      rebaseConflict: {
+        operation: "rebase",
+        currentBranch: "feature/task-11",
+        targetBranch: "origin/main",
+        conflictedFiles: ["AGENTS.md"],
+        output: "CONFLICT (content): Merge conflict in AGENTS.md",
+        workingDir: "/tmp/worktree",
+      },
+    });
+
+    await act(async () => {
+      ensureRenderer(renderer).update(createElement(AgentStudioGitPanel, { model: conflictModel }));
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(findByTestId(root, "agent-studio-git-rebase-conflict-modal")).toBeTruthy();
+
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-ask-builder-button").props.onClick();
+      await flush();
+    });
+
+    expect(askBuilder).toHaveBeenCalledTimes(1);
+    expect(countByTestId(getRoot(renderer), "agent-studio-git-rebase-conflict-modal")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("marks conflicted files in the uncommitted changes list", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            fileDiffs: [
+              {
+                file: "AGENTS.md",
+                type: "modified",
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+              {
+                file: "README.md",
+                type: "modified",
+                additions: 1,
+                deletions: 0,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            fileStatuses: [
+              { path: "AGENTS.md", staged: false, status: "unmerged" },
+              { path: "README.md", staged: false, status: "modified" },
+            ],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-file-conflict-indicator")).toBe(1);
+    expect(countByTestId(root, "agent-studio-git-file-conflict-slot")).toBe(1);
+    expect(getNodeText(findButtonByText(root, "AGENTS.md"))).toContain("M");
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -689,6 +1089,7 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-file-conflict-slot")).toBe(0);
     const fileRowButton = findButtonByText(root, "src/main.ts");
 
     const rootText = getNodeText(root);

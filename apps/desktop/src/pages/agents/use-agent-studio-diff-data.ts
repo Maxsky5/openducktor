@@ -6,12 +6,11 @@ import type {
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
+import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-resolution";
 
 const POLL_INTERVAL_MS = 30_000;
-const WORKTREE_RESOLUTION_TIMEOUT_MS = 5_000;
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -30,6 +29,8 @@ export type DiffDataState = {
   fileDiffs: FileDiff[];
   /** File status from `git status`. */
   fileStatuses: FileStatus[];
+  /** Snapshot token for the current scope status/diff payloads. */
+  statusSnapshotKey?: string | null;
   /** Total changed files from lightweight worktree polling summaries. */
   uncommittedFileCount: number;
   /** Whether data is currently loading. */
@@ -81,26 +82,6 @@ type ScopeSnapshot = {
   diffHash: string | null;
 };
 
-type WorktreeResolutionState =
-  | { status: "idle" }
-  | {
-      status: "resolving";
-      repoPath: string;
-      runId: string;
-    }
-  | {
-      status: "resolved";
-      repoPath: string;
-      runId: string;
-      path: string | null;
-    }
-  | {
-      status: "failed";
-      repoPath: string;
-      runId: string;
-      error: string;
-    };
-
 type LoadDataContext = {
   repoPath: string | null;
   targetBranch: string;
@@ -142,40 +123,6 @@ const createInitialState = (): DiffBatchState => ({
 
 const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
 const ALL_LOAD_DATA_MODES: LoadDataMode[] = ["full", "summary"];
-const IDLE_WORKTREE_RESOLUTION_STATE: WorktreeResolutionState = { status: "idle" };
-
-const buildWorktreeResolutionError = (runId: string, reason?: string): string => {
-  const baseMessage = `Failed to resolve run worktree path for session ${runId}`;
-  const retryMessage = "Use Refresh to retry.";
-  const normalizedReason = reason?.trim() ?? "";
-  if (normalizedReason.length === 0) {
-    return `${baseMessage}. ${retryMessage}`;
-  }
-
-  const reasonTerminator = /[.!?]$/.test(normalizedReason) ? "" : ".";
-  return `${baseMessage}: ${normalizedReason}${reasonTerminator} ${retryMessage}`;
-};
-
-const withTimeout = async <T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  timeoutMessage: string,
-): Promise<T> => {
-  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timeoutId = globalThis.setTimeout(() => {
-      reject(new Error(timeoutMessage));
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    if (timeoutId !== null) {
-      globalThis.clearTimeout(timeoutId);
-    }
-  }
-};
 
 // ─── Structural equality helpers ───────────────────────────────────────────────
 
@@ -231,7 +178,9 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
 
     if (canUseHashShortCircuit) {
       const hashesMatch = left.statusHash === right.statusHash && left.diffHash === right.diffHash;
-      if (hashesMatch && left.error === right.error) {
+      const contentReferencesMatch =
+        left.fileDiffs === right.fileDiffs && left.fileStatuses === right.fileStatuses;
+      if (hashesMatch && left.error === right.error && contentReferencesMatch) {
         return true;
       }
     }
@@ -348,6 +297,16 @@ const mergeSharedSummaryFields = (
   statusHash: source.statusHash,
 });
 
+const toStatusSnapshotKey = (snapshot: ScopeSnapshot): string | null => {
+  if (snapshot.fileStatuses.length === 0) {
+    return "<empty>";
+  }
+
+  return snapshot.fileStatuses
+    .map((fileStatus) => `${fileStatus.path}:${fileStatus.status}:${fileStatus.staged ? 1 : 0}`)
+    .join("|");
+};
+
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useAgentStudioDiffData({
@@ -358,12 +317,10 @@ export function useAgentStudioDiffData({
   enablePolling,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const [state, setState] = useState<DiffBatchState>(createInitialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [selectedFile, setSelectedFileState] = useState<string | null>(null);
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
-  const [worktreeResolutionState, setWorktreeResolutionState] = useState<WorktreeResolutionState>(
-    IDLE_WORKTREE_RESOLUTION_STATE,
-  );
-  const [worktreeResolutionRetryToken, setWorktreeResolutionRetryToken] = useState(0);
 
   const versionByScopeAndModeRef = useRef<Record<DiffScope, Record<LoadDataMode, number>>>({
     target: { full: 0, summary: 0 },
@@ -379,157 +336,18 @@ export function useAgentStudioDiffData({
 
   // Derive stable primitives
   const targetBranch = normalizeCanonicalTargetBranch(defaultTargetBranch);
-
-  // If session.workingDirectory is different from repoPath, use it directly.
-  // Otherwise, resolve the correct worktree path from RunSummary before polling git data.
-  const directWorktreePath =
-    sessionWorkingDirectory && sessionWorkingDirectory !== repoPath
-      ? sessionWorkingDirectory
-      : null;
-  const shouldResolveWorktreeFromRunSummary =
-    directWorktreePath === null && repoPath != null && sessionRunId != null;
-  const worktreeResolutionRepoPath = shouldResolveWorktreeFromRunSummary ? repoPath : null;
-  const worktreeResolutionRunId = shouldResolveWorktreeFromRunSummary ? sessionRunId : null;
-  const hasResolvedWorktreeForCurrentContext =
-    worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
-    worktreeResolutionState.status === "resolved" &&
-    worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
-    worktreeResolutionState.runId === worktreeResolutionRunId;
-  const resolvedWorktreePath = hasResolvedWorktreeForCurrentContext
-    ? worktreeResolutionState.path
-    : null;
-  const worktreePath = directWorktreePath ?? resolvedWorktreePath;
-  const shouldBlockDiffLoading =
-    worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
-    !hasResolvedWorktreeForCurrentContext;
-  const isWorktreeResolutionResolving =
-    worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
-    worktreeResolutionState.status === "resolving" &&
-    worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
-    worktreeResolutionState.runId === worktreeResolutionRunId;
-  const worktreeResolutionError =
-    worktreeResolutionRepoPath != null &&
-    worktreeResolutionRunId != null &&
-    worktreeResolutionState.status === "failed" &&
-    worktreeResolutionState.repoPath === worktreeResolutionRepoPath &&
-    worktreeResolutionState.runId === worktreeResolutionRunId
-      ? worktreeResolutionState.error
-      : null;
-  const worktreeResolutionRequestKey =
-    worktreeResolutionRepoPath != null && worktreeResolutionRunId != null
-      ? `${worktreeResolutionRepoPath}::${worktreeResolutionRunId}::${worktreeResolutionRetryToken}`
-      : null;
-
-  // Resolve worktree path from RunSummary when session.workingDirectory === repoPath.
-  // The Rust backend always stores the correct worktreePath in RunSummary, even if
-  // the session's workingDirectory was set to repoPath at creation time.
-  useEffect(() => {
-    if (!worktreeResolutionRequestKey || !worktreeResolutionRepoPath || !worktreeResolutionRunId) {
-      setWorktreeResolutionState((previous) =>
-        previous.status === "idle" ? previous : IDLE_WORKTREE_RESOLUTION_STATE,
-      );
-      return;
-    }
-
-    let isCurrent = true;
-    setWorktreeResolutionState((previous) => {
-      if (
-        previous.status === "resolving" &&
-        previous.repoPath === worktreeResolutionRepoPath &&
-        previous.runId === worktreeResolutionRunId
-      ) {
-        return previous;
-      }
-
-      return {
-        status: "resolving",
-        repoPath: worktreeResolutionRepoPath,
-        runId: worktreeResolutionRunId,
-      };
-    });
-
-    void (async () => {
-      try {
-        const runs = await withTimeout(
-          host.runsList(worktreeResolutionRepoPath),
-          WORKTREE_RESOLUTION_TIMEOUT_MS,
-          `Timed out after ${WORKTREE_RESOLUTION_TIMEOUT_MS}ms while loading runs list.`,
-        );
-        if (!isCurrent) {
-          return;
-        }
-
-        const matchingRun = runs.find((run) => run.runId === worktreeResolutionRunId);
-        if (!matchingRun) {
-          const missingRunError = buildWorktreeResolutionError(
-            worktreeResolutionRunId,
-            "Run not found in runs list response.",
-          );
-          setWorktreeResolutionState((previous) => {
-            if (
-              previous.status === "failed" &&
-              previous.repoPath === worktreeResolutionRepoPath &&
-              previous.runId === worktreeResolutionRunId &&
-              previous.error === missingRunError
-            ) {
-              return previous;
-            }
-
-            return {
-              status: "failed",
-              repoPath: worktreeResolutionRepoPath,
-              runId: worktreeResolutionRunId,
-              error: missingRunError,
-            };
-          });
-          return;
-        }
-
-        const nextPath =
-          matchingRun.worktreePath !== worktreeResolutionRepoPath ? matchingRun.worktreePath : null;
-
-        setWorktreeResolutionState((previous) => {
-          if (
-            previous.status === "resolved" &&
-            previous.repoPath === worktreeResolutionRepoPath &&
-            previous.runId === worktreeResolutionRunId &&
-            previous.path === nextPath
-          ) {
-            return previous;
-          }
-
-          return {
-            status: "resolved",
-            repoPath: worktreeResolutionRepoPath,
-            runId: worktreeResolutionRunId,
-            path: nextPath,
-          };
-        });
-      } catch (cause) {
-        if (!isCurrent) {
-          return;
-        }
-
-        const resolutionError = buildWorktreeResolutionError(
-          worktreeResolutionRunId,
-          errorMessage(cause),
-        );
-        setWorktreeResolutionState({
-          status: "failed",
-          repoPath: worktreeResolutionRepoPath,
-          runId: worktreeResolutionRunId,
-          error: resolutionError,
-        });
-      }
-    })();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [worktreeResolutionRepoPath, worktreeResolutionRequestKey, worktreeResolutionRunId]);
+  const {
+    worktreePath,
+    worktreeResolutionRunId,
+    shouldBlockDiffLoading,
+    isWorktreeResolutionResolving,
+    worktreeResolutionError,
+    retryWorktreeResolution,
+  } = useAgentStudioWorktreeResolution({
+    repoPath,
+    sessionWorkingDirectory,
+    sessionRunId,
+  });
 
   // Stable refs for use in callbacks (advanced-event-handler-refs)
   const repoPathRef = useRef(repoPath);
@@ -590,12 +408,22 @@ export function useAgentStudioDiffData({
           return;
         }
 
+        const previousSummarySnapshot = stateRef.current.byScope[scope];
+        const nextSummaryFields = toScopeSummaryFields(summary);
+        const shouldReloadFullScope =
+          stateRef.current.loadedByScope[scope] &&
+          previousSummarySnapshot.fileStatuses.some(
+            (fileStatus) => fileStatus.status === "unmerged",
+          ) &&
+          (previousSummarySnapshot.hashVersion !== nextSummaryFields.hashVersion ||
+            previousSummarySnapshot.statusHash !== nextSummaryFields.statusHash ||
+            previousSummarySnapshot.diffHash !== nextSummaryFields.diffHash);
+
         setState((prev) => {
-          const summaryFields = toScopeSummaryFields(summary);
           const previousFetchedScopeSnapshot = prev.byScope[scope];
           const nextFetchedScopeSnapshot: ScopeSnapshot = {
             ...previousFetchedScopeSnapshot,
-            ...summaryFields,
+            ...nextSummaryFields,
           };
           let didChange = false;
           const nextByScope: Record<DiffScope, ScopeSnapshot> = {
@@ -617,7 +445,7 @@ export function useAgentStudioDiffData({
               const previousOtherScopeSnapshot = nextByScope[otherScope];
               const nextOtherScopeSnapshot = mergeSharedSummaryFields(
                 previousOtherScopeSnapshot,
-                summaryFields,
+                nextSummaryFields,
               );
 
               if (!scopeSnapshotEqual(previousOtherScopeSnapshot, nextOtherScopeSnapshot)) {
@@ -637,6 +465,16 @@ export function useAgentStudioDiffData({
             isLoading: false,
           };
         });
+
+        if (shouldReloadFullScope) {
+          void loadData(false, {
+            repoPath: path,
+            targetBranch: target,
+            workingDir,
+            scope,
+            mode: "full",
+          });
+        }
         return;
       }
 
@@ -868,11 +706,12 @@ export function useAgentStudioDiffData({
   }, [enablePolling, repoPath, shouldBlockDiffLoading, loadData]);
 
   const activeScopeState = state.byScope[diffScope];
+  const statusSnapshotKey = toStatusSnapshotKey(activeScopeState);
   const displayError = worktreeResolutionError ?? activeScopeState.error;
   const isLoading = state.isLoading || isWorktreeResolutionResolving;
   const refresh = useCallback((): void => {
     if (worktreeResolutionError != null) {
-      setWorktreeResolutionRetryToken((previous) => previous + 1);
+      retryWorktreeResolution();
       return;
     }
 
@@ -881,7 +720,7 @@ export function useAgentStudioDiffData({
     }
 
     void loadData(true);
-  }, [loadData, shouldBlockDiffLoading, worktreeResolutionError]);
+  }, [loadData, retryWorktreeResolution, shouldBlockDiffLoading, worktreeResolutionError]);
 
   const setSelectedFile = useCallback(
     (path: string | null): void => {
@@ -918,6 +757,7 @@ export function useAgentStudioDiffData({
       upstreamAheadBehind: activeScopeState.upstreamAheadBehind,
       fileDiffs: activeScopeState.fileDiffs,
       fileStatuses: activeScopeState.fileStatuses,
+      statusSnapshotKey,
       uncommittedFileCount: activeScopeState.uncommittedFileCount,
       isLoading,
       error: displayError,
@@ -932,6 +772,7 @@ export function useAgentStudioDiffData({
       diffScope,
       isLoading,
       displayError,
+      statusSnapshotKey,
       activeScopeState,
       refresh,
       selectedFile,

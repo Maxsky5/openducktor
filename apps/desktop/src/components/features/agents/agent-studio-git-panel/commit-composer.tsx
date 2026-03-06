@@ -10,8 +10,10 @@ type CommitComposerProps = {
   isCommitting: boolean;
   isPushing: boolean;
   isRebasing: boolean;
+  isGitActionsLocked: boolean;
+  gitActionsLockReason: string | null;
   commitError: string | null;
-  commitAll: ((message: string) => Promise<void>) | null;
+  commitAll: ((message: string) => Promise<boolean>) | null;
 };
 
 export function CommitComposer({
@@ -20,20 +22,24 @@ export function CommitComposer({
   isCommitting,
   isPushing,
   isRebasing,
+  isGitActionsLocked,
+  gitActionsLockReason,
   commitError,
   commitAll,
 }: CommitComposerProps): ReactElement {
   const [commitMessage, setCommitMessage] = useState("");
   const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
-  const canWrite = commitAll != null && !isAnyActionInFlight;
+  const canWrite = commitAll != null && !isAnyActionInFlight && !isGitActionsLocked;
   const canCommit = canWrite && hasUncommittedFiles && commitMessage.trim().length > 0;
 
   const handleCommitSubmit = async (): Promise<void> => {
     if (!canCommit || commitAll == null) {
       return;
     }
-    await commitAll(commitMessage);
-    setCommitMessage("");
+    const wasCommitted = await commitAll(commitMessage);
+    if (wasCommitted) {
+      setCommitMessage("");
+    }
   };
 
   return (
@@ -57,7 +63,11 @@ export function CommitComposer({
         value={commitMessage}
         onChange={(event) => setCommitMessage(event.currentTarget.value)}
         placeholder={
-          hasUncommittedFiles ? "Describe what changed and why" : "No uncommitted files to commit"
+          isGitActionsLocked
+            ? (gitActionsLockReason ?? "Git actions are disabled.")
+            : hasUncommittedFiles
+              ? "Describe what changed and why"
+              : "No uncommitted files to commit"
         }
         className="min-h-20 resize-none border-input"
         disabled={!canWrite}
@@ -66,9 +76,11 @@ export function CommitComposer({
 
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] text-sidebar-foreground/70">
-          {hasUncommittedFiles
-            ? "This action commits all listed changes in one go."
-            : "Make a change first, then write a commit message."}
+          {isGitActionsLocked
+            ? (gitActionsLockReason ?? "Git actions are disabled.")
+            : hasUncommittedFiles
+              ? "This action commits all listed changes in one go."
+              : "Make a change first, then write a commit message."}
         </p>
         <Button
           type="button"

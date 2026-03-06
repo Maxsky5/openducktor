@@ -27,12 +27,21 @@ export const gitWorktreeSummarySchema = z.object({
 });
 export type GitWorktreeSummary = z.infer<typeof gitWorktreeSummarySchema>;
 
-export const gitPushSummarySchema = z.object({
-  remote: z.string(),
-  branch: z.string(),
-  output: z.string(),
-});
-export type GitPushSummary = z.infer<typeof gitPushSummarySchema>;
+export const gitPushBranchResultSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("pushed"),
+    remote: z.string(),
+    branch: z.string(),
+    output: z.string(),
+  }),
+  z.object({
+    outcome: z.literal("rejected_non_fast_forward"),
+    remote: z.string(),
+    branch: z.string(),
+    output: z.string(),
+  }),
+]);
+export type GitPushBranchResult = z.infer<typeof gitPushBranchResultSchema>;
 
 export const gitPullBranchRequestSchema = z.object({
   repoPath: z.string(),
@@ -183,3 +192,15 @@ export const gitRebaseBranchResultSchema = z.discriminatedUnion("outcome", [
   }),
 ]);
 export type GitRebaseBranchResult = z.infer<typeof gitRebaseBranchResultSchema>;
+
+export const gitRebaseAbortRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type GitRebaseAbortRequest = z.infer<typeof gitRebaseAbortRequestSchema>;
+
+export const gitRebaseAbortResultSchema = z.object({
+  outcome: z.literal("aborted"),
+  output: z.string(),
+});
+export type GitRebaseAbortResult = z.infer<typeof gitRebaseAbortResultSchema>;

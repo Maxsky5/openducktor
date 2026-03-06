@@ -1,5 +1,5 @@
 import type { FileDiff } from "@openducktor/contracts";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import {
@@ -19,6 +19,8 @@ const areFileDiffsEqual = (left: FileDiff, right: FileDiff): boolean =>
 
 type FileDiffEntryProps = {
   diff: FileDiff;
+  isConflicted: boolean;
+  reserveConflictSlot: boolean;
   isExpanded: boolean;
   onToggle: (filePath: string) => void;
   diffStyle: PierreDiffStyle;
@@ -26,6 +28,8 @@ type FileDiffEntryProps = {
 
 function FileDiffEntry({
   diff,
+  isConflicted,
+  reserveConflictSlot,
   isExpanded,
   onToggle,
   diffStyle,
@@ -53,20 +57,30 @@ function FileDiffEntry({
           <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
         )}
         <StatusIcon className={cn("size-3.5 shrink-0", statusColor)} />
+        {isConflicted ? (
+          <AlertTriangle
+            className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+            data-testid="agent-studio-git-file-conflict-indicator"
+          />
+        ) : reserveConflictSlot ? (
+          <span
+            className="inline-flex size-3.5 shrink-0 items-center justify-center"
+            data-testid="agent-studio-git-file-conflict-slot"
+          />
+        ) : null}
         <span className="flex-1 truncate">
           {dirName ? <span className="text-muted-foreground">{dirName}/</span> : null}
           <span className="font-medium">{fileName}</span>
         </span>
-        <Badge
-          variant="outline"
-          className={cn("ml-auto px-1 py-0 text-[10px] font-mono", statusColor)}
-        >
-          {statusBadge}
-        </Badge>
-        <span className="flex items-center gap-1 text-[10px] font-mono">
-          {diff.additions > 0 ? <span className="text-green-400">+{diff.additions}</span> : null}
-          {diff.deletions > 0 ? <span className="text-red-400">-{diff.deletions}</span> : null}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="flex items-center gap-1 text-[10px] font-mono">
+            {diff.additions > 0 ? <span className="text-green-400">+{diff.additions}</span> : null}
+            {diff.deletions > 0 ? <span className="text-red-400">-{diff.deletions}</span> : null}
+          </span>
+          <Badge variant="outline" className={cn("px-1 py-0 text-[10px] font-mono", statusColor)}>
+            {statusBadge}
+          </Badge>
+        </div>
       </button>
 
       {isExpanded ? (
@@ -88,6 +102,8 @@ export const FileDiffEntryWithMemo = memo(
   FileDiffEntry,
   (previous, next) =>
     previous.isExpanded === next.isExpanded &&
+    previous.isConflicted === next.isConflicted &&
+    previous.reserveConflictSlot === next.reserveConflictSlot &&
     previous.diffStyle === next.diffStyle &&
     previous.onToggle === next.onToggle &&
     areFileDiffsEqual(previous.diff, next.diff),

@@ -2,10 +2,7 @@ import type { RepoPromptOverrides, RunSummary } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { host } from "../../host";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
-import {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "../support/async-side-effects";
+import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { runningStates, toBaseUrl } from "../support/utils";
 
 export type RuntimeInfo = {
@@ -31,42 +28,9 @@ export const loadTaskDocuments = async (
   taskId: string,
 ): Promise<TaskDocuments> => {
   const [spec, plan, qa] = await Promise.all([
-    captureOrchestratorFallback(
-      "runtime-load-task-document",
-      async () => {
-        const spec = await host.specGet(repoPath, taskId);
-        return spec.markdown;
-      },
-      {
-        tags: { repoPath, taskId, document: "spec" },
-        logLevel: "warn",
-        fallback: () => "",
-      },
-    ),
-    captureOrchestratorFallback(
-      "runtime-load-task-document",
-      async () => {
-        const plan = await host.planGet(repoPath, taskId);
-        return plan.markdown;
-      },
-      {
-        tags: { repoPath, taskId, document: "plan" },
-        logLevel: "warn",
-        fallback: () => "",
-      },
-    ),
-    captureOrchestratorFallback(
-      "runtime-load-task-document",
-      async () => {
-        const qa = await host.qaGetReport(repoPath, taskId);
-        return qa.markdown;
-      },
-      {
-        tags: { repoPath, taskId, document: "qa" },
-        logLevel: "warn",
-        fallback: () => "",
-      },
-    ),
+    host.specGet(repoPath, taskId).then((spec) => spec.markdown),
+    host.planGet(repoPath, taskId).then((plan) => plan.markdown),
+    host.qaGetReport(repoPath, taskId).then((qa) => qa.markdown),
   ]);
 
   return {
@@ -80,15 +44,7 @@ export const loadRepoDefaultModel = async (
   repoPath: string,
   role: AgentRole,
 ): Promise<AgentModelSelection | null> => {
-  const config = await captureOrchestratorFallback(
-    "runtime-load-repo-config",
-    async () => host.workspaceGetRepoConfig(repoPath),
-    {
-      tags: { repoPath, role },
-      logLevel: "warn",
-      fallback: () => null,
-    },
-  );
+  const config = await host.workspaceGetRepoConfig(repoPath);
   const roleDefault = config?.agentDefaults?.[role];
   if (!roleDefault) {
     return null;
@@ -107,8 +63,58 @@ export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPro
 };
 
 export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeDependencies) => {
-  return async (repoPath: string, taskId: string, role: AgentRole): Promise<RuntimeInfo> => {
+  return async (
+    repoPath: string,
+    taskId: string,
+    role: AgentRole,
+    options?: {
+      workingDirectoryOverride?: string | null;
+    },
+  ): Promise<RuntimeInfo> => {
+    const workingDirectoryOverride = options?.workingDirectoryOverride?.trim() ?? "";
+
     if (role === "build") {
+      if (workingDirectoryOverride) {
+        const matchingRun = runsRef.current.find(
+          (entry) =>
+            entry.repoPath === repoPath &&
+            entry.taskId === taskId &&
+            runningStates.has(entry.state) &&
+            entry.worktreePath === workingDirectoryOverride,
+        );
+        if (matchingRun) {
+          return {
+            runtimeId: null,
+            runId: matchingRun.runId,
+            baseUrl: toBaseUrl(matchingRun.port),
+            workingDirectory: workingDirectoryOverride,
+          };
+        }
+
+        const taskRun = runsRef.current.find(
+          (entry) =>
+            entry.repoPath === repoPath &&
+            entry.taskId === taskId &&
+            runningStates.has(entry.state),
+        );
+        if (taskRun && workingDirectoryOverride === repoPath) {
+          return {
+            runtimeId: null,
+            runId: taskRun.runId,
+            baseUrl: toBaseUrl(taskRun.port),
+            workingDirectory: taskRun.worktreePath,
+          };
+        }
+
+        const runtime = await host.opencodeRepoRuntimeEnsure(repoPath);
+        return {
+          runtimeId: runtime.runtimeId,
+          runId: null,
+          baseUrl: toBaseUrl(runtime.port),
+          workingDirectory: workingDirectoryOverride,
+        };
+      }
+
       let run = runsRef.current.find(
         (entry) =>
           entry.repoPath === repoPath && entry.taskId === taskId && runningStates.has(entry.state),
@@ -137,7 +143,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         runtimeId: runtime.runtimeId,
         runId: null,
         baseUrl: toBaseUrl(runtime.port),
-        workingDirectory: runtime.workingDirectory,
+        workingDirectory: workingDirectoryOverride || runtime.workingDirectory,
       };
     }
 
@@ -146,7 +152,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       runtimeId: runtime.runtimeId,
       runId: null,
       baseUrl: toBaseUrl(runtime.port),
-      workingDirectory: runtime.workingDirectory,
+      workingDirectory: workingDirectoryOverride || runtime.workingDirectory,
     };
   };
 };

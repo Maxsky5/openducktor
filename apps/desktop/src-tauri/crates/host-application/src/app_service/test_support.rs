@@ -20,10 +20,11 @@ use host_domain::{
     AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
     GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
     GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult,
-    GitPushSummary, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
-    GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput,
-    QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, SpecDocument, TaskAction,
-    TaskCard, TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData,
+    GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict,
+    RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
+    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -346,6 +347,10 @@ pub(crate) enum GitCall {
         working_dir: Option<String>,
         target_branch: String,
     },
+    RebaseAbort {
+        repo_path: String,
+        working_dir: Option<String>,
+    },
     GetWorktreeStatus {
         repo_path: String,
         target_branch: String,
@@ -365,9 +370,11 @@ pub(crate) struct GitState {
     pub(crate) current_branch: GitCurrentBranch,
     pub(crate) worktree_status_data: Option<GitWorktreeStatusData>,
     pub(crate) last_push_remote: Option<String>,
+    pub(crate) push_branch_result: GitPushResult,
     pub(crate) pull_branch_result: GitPullResult,
     pub(crate) commit_all_result: GitCommitAllResult,
     pub(crate) rebase_branch_result: GitRebaseBranchResult,
+    pub(crate) rebase_abort_result: GitRebaseAbortResult,
 }
 
 #[derive(Clone)]
@@ -445,7 +452,7 @@ impl GitPort for FakeGitPort {
         branch: &str,
         set_upstream: bool,
         force_with_lease: bool,
-    ) -> Result<GitPushSummary> {
+    ) -> Result<GitPushResult> {
         let mut state = self.state.lock().expect("git state lock poisoned");
         state.calls.push(GitCall::PushBranch {
             repo_path: repo_path.to_string_lossy().to_string(),
@@ -455,11 +462,7 @@ impl GitPort for FakeGitPort {
             force_with_lease,
         });
         state.last_push_remote = Some(remote.to_string());
-        Ok(GitPushSummary {
-            remote: remote.to_string(),
-            branch: branch.to_string(),
-            output: "ok".to_string(),
-        })
+        Ok(state.push_branch_result.clone())
     }
 
     fn pull_branch(&self, repo_path: &Path, request: GitPullRequest) -> Result<GitPullResult> {
@@ -497,6 +500,19 @@ impl GitPort for FakeGitPort {
             target_branch: request.target_branch,
         });
         Ok(state.rebase_branch_result.clone())
+    }
+
+    fn rebase_abort(
+        &self,
+        repo_path: &Path,
+        request: GitRebaseAbortRequest,
+    ) -> Result<GitRebaseAbortResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::RebaseAbort {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            working_dir: request.working_dir,
+        });
+        Ok(state.rebase_abort_result.clone())
     }
 
     fn get_status(&self, _repo_path: &Path) -> Result<Vec<GitFileStatus>> {
@@ -681,6 +697,11 @@ pub(crate) fn build_service_with_git_state_enforced(
         current_branch,
         worktree_status_data: None,
         last_push_remote: None,
+        push_branch_result: GitPushResult::Pushed {
+            remote: "origin".to_string(),
+            branch: "feature/x".to_string(),
+            output: "ok".to_string(),
+        },
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
         },
@@ -690,6 +711,9 @@ pub(crate) fn build_service_with_git_state_enforced(
         },
         rebase_branch_result: GitRebaseBranchResult::Rebased {
             output: "rebase completed".to_string(),
+        },
+        rebase_abort_result: GitRebaseAbortResult::Aborted {
+            output: "rebase aborted".to_string(),
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -732,6 +756,11 @@ pub(crate) fn build_service_with_git_state(
         current_branch,
         worktree_status_data: None,
         last_push_remote: None,
+        push_branch_result: GitPushResult::Pushed {
+            remote: "origin".to_string(),
+            branch: "feature/x".to_string(),
+            output: "ok".to_string(),
+        },
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
         },
@@ -741,6 +770,9 @@ pub(crate) fn build_service_with_git_state(
         },
         rebase_branch_result: GitRebaseBranchResult::Rebased {
             output: "rebase completed".to_string(),
+        },
+        rebase_abort_result: GitRebaseAbortResult::Aborted {
+            output: "rebase aborted".to_string(),
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -1148,6 +1180,11 @@ pub(crate) fn build_service_with_store(
         current_branch,
         worktree_status_data: None,
         last_push_remote: None,
+        push_branch_result: GitPushResult::Pushed {
+            remote: "origin".to_string(),
+            branch: "feature/x".to_string(),
+            output: "ok".to_string(),
+        },
         pull_branch_result: GitPullResult::UpToDate {
             output: "Already up to date.".to_string(),
         },
@@ -1157,6 +1194,9 @@ pub(crate) fn build_service_with_store(
         },
         rebase_branch_result: GitRebaseBranchResult::Rebased {
             output: "rebase completed".to_string(),
+        },
+        rebase_abort_result: GitRebaseAbortResult::Aborted {
+            output: "rebase aborted".to_string(),
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {

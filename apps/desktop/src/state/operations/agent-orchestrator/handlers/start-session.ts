@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
-import { buildAgentSystemPrompt } from "@openducktor/core";
+import { assertAgentKickoffScenario, buildAgentSystemPrompt } from "@openducktor/core";
+import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
@@ -78,16 +79,25 @@ const resolveStartTask = ({
 const resolveRuntimeAndModel = async ({
   ctx,
   scenario,
+  requireModelReady,
+  workingDirectoryOverride,
   taskCard,
   deps,
 }: {
   ctx: StartSessionContext;
   scenario: AgentScenario | undefined;
+  requireModelReady: boolean;
+  workingDirectoryOverride?: string | null;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
   const docsPromise = deps.task.loadTaskDocuments(ctx.repoPath, ctx.taskId);
-  const runtimePromise = deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role);
+  const runtimePromise = deps.runtime.ensureRuntime(
+    ctx.repoPath,
+    ctx.taskId,
+    ctx.role,
+    workingDirectoryOverride !== undefined ? { workingDirectoryOverride } : undefined,
+  );
   const defaultModelSelectionPromise = deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
   const promptOverridesPromise = deps.model.loadRepoPromptOverrides(ctx.repoPath);
 
@@ -100,6 +110,18 @@ const resolveRuntimeAndModel = async ({
 
   const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard, docs);
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+
+  let resolvedDefaultModelSelection: AgentModelSelection | null = null;
+  if (requireModelReady) {
+    try {
+      resolvedDefaultModelSelection = await defaultModelSelectionPromise;
+    } catch (error) {
+      throw new Error(
+        `Failed to load the default model for ${ctx.role} session start: ${errorMessage(error)}`,
+      );
+    }
+    throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+  }
 
   const systemPrompt = buildAgentSystemPrompt({
     role: ctx.role,
@@ -126,6 +148,7 @@ const resolveRuntimeAndModel = async ({
     systemPrompt,
     promptOverrides,
     defaultModelSelectionPromise,
+    resolvedDefaultModelSelection,
   };
 };
 
@@ -238,6 +261,10 @@ const createOrReuseSession = async ({
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
+    requireModelReady: input.requireModelReady && input.selectedModel == null,
+    ...(input.workingDirectoryOverride !== undefined
+      ? { workingDirectoryOverride: input.workingDirectoryOverride }
+      : {}),
     taskCard,
     deps,
   });
@@ -268,7 +295,7 @@ const createOrReuseSession = async ({
 
   const initialSession = buildInitialSession({
     startedCtx,
-    selectedModel: input.selectedModel,
+    selectedModel: input.selectedModel ?? resolved.resolvedDefaultModelSelection,
     runtime: resolved.runtime,
     systemPrompt: resolved.systemPrompt,
     promptOverrides: resolved.promptOverrides,
@@ -299,6 +326,7 @@ const createOrReuseSession = async ({
     ctx: startedCtx,
     promptOverrides: resolved.promptOverrides,
     defaultModelSelectionPromise: resolved.defaultModelSelectionPromise,
+    resolvedDefaultModelSelection: resolved.resolvedDefaultModelSelection,
   };
 };
 
@@ -413,14 +441,14 @@ const maybeApplyDefaultModelSelection = async ({
   const tags = createSessionStartTags(startedCtx);
 
   if (requireModelReady) {
-    const resolvedModel = await captureOrchestratorFallback<AgentModelSelection | null>(
-      "start-session-await-default-model-selection",
-      async () => defaultModelSelectionPromise,
-      {
-        tags,
-        fallback: () => null,
-      },
-    );
+    let resolvedModel: AgentModelSelection | null;
+    try {
+      resolvedModel = await defaultModelSelectionPromise;
+    } catch (error) {
+      throw new Error(
+        `Failed to load the default model for ${startedCtx.role} session start: ${errorMessage(error)}`,
+      );
+    }
     throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
     applyResolvedModelSelection({
       resolvedModel,
@@ -460,12 +488,14 @@ const maybeSendKickoff = async ({
     return;
   }
 
+  const kickoffScenario = assertAgentKickoffScenario(startedCtx.resolvedScenario);
+
   throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
   await task.sendAgentMessage(
     startedCtx.summary.sessionId,
     kickoffPromptWithTaskContext(
       startedCtx.role,
-      startedCtx.resolvedScenario,
+      kickoffScenario,
       {
         taskId: startedCtx.taskId,
         title: taskCard.title,
@@ -503,9 +533,11 @@ export const createStartAgentSession = ({
     sendKickoff = false,
     startMode = "reuse_latest",
     requireModelReady = false,
+    workingDirectoryOverride = null,
   }: StartAgentSessionInput): Promise<string> => {
     const repoPath = requireActiveRepo(repo.activeRepo);
-    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}`;
+    const normalizedWorkingDirectoryOverride = workingDirectoryOverride?.trim() ?? "";
+    const inFlightKey = `${repoPath}::${taskId}::${role}::${startMode}::${normalizedWorkingDirectoryOverride}`;
     const existingInFlight = session.inFlightStartsByRepoTaskRef.current.get(inFlightKey);
     if (existingInFlight) {
       return existingInFlight;
@@ -532,6 +564,8 @@ export const createStartAgentSession = ({
           scenario,
           selectedModel,
           startMode,
+          requireModelReady,
+          workingDirectoryOverride,
         },
         deps: {
           session,
@@ -557,7 +591,7 @@ export const createStartAgentSession = ({
       });
 
       await maybeApplyDefaultModelSelection({
-        selectedModel,
+        selectedModel: selectedModel ?? startResult.resolvedDefaultModelSelection,
         requireModelReady,
         defaultModelSelectionPromise: startResult.defaultModelSelectionPromise,
         startedCtx: startResult.ctx,

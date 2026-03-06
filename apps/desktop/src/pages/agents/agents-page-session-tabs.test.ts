@@ -293,6 +293,7 @@ describe("agents-page-session-tabs", () => {
         build_implementation_start: "Implementation Start",
         build_after_human_request_changes: "After Human Request Changes",
         build_after_qa_rejected: "After QA Rejected",
+        build_rebase_conflict_resolution: "Resolve Rebase Conflict",
         qa_review: "QA Review",
       },
       roleLabelByRole: { ...AGENT_ROLE_LABELS },
@@ -345,6 +346,7 @@ describe("agents-page-session-tabs", () => {
         build_implementation_start: "Start Implementation",
         build_after_human_request_changes: "Apply Human Changes",
         build_after_qa_rejected: "Fix QA Rejection",
+        build_rebase_conflict_resolution: "Resolve Rebase Conflict",
         qa_review: "QA Review",
       },
     });
@@ -373,6 +375,7 @@ describe("agents-page-session-tabs", () => {
         build_implementation_start: "Start Implementation",
         build_after_human_request_changes: "Apply Human Changes",
         build_after_qa_rejected: "Fix QA Rejection",
+        build_rebase_conflict_resolution: "Resolve Rebase Conflict",
         qa_review: "QA Review",
       },
     });

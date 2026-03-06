@@ -19,6 +19,9 @@ type GitInfoHeaderProps = Pick<
   | "isCommitting"
   | "isPushing"
   | "isRebasing"
+  | "isGitActionsLocked"
+  | "gitActionsLockReason"
+  | "showLockReasonBanner"
   | "pushError"
   | "rebaseError"
   | "setDiffScope"
@@ -29,6 +32,73 @@ type GitInfoHeaderProps = Pick<
   pullFromUpstream: (() => Promise<void>) | null;
   onRefresh: () => void;
 };
+
+type GitActionIconButtonProps = {
+  testId: string;
+  srLabel: string;
+  icon: typeof RefreshCw;
+  onClick: (() => void) | null;
+  disabled: boolean;
+  tooltip: string;
+  badge?:
+    | {
+        testId: string;
+        value: number;
+        toneClassName: string;
+      }
+    | undefined;
+  isSpinning?: boolean;
+  wrapTrigger?: boolean;
+};
+
+function GitActionIconButton({
+  testId,
+  srLabel,
+  icon: Icon,
+  onClick,
+  disabled,
+  tooltip,
+  badge,
+  isSpinning = false,
+  wrapTrigger = false,
+}: GitActionIconButtonProps): ReactElement {
+  const button = (
+    <Button
+      type="button"
+      size="icon"
+      variant="ghost"
+      className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
+      onClick={onClick ?? undefined}
+      disabled={disabled}
+      data-testid={testId}
+    >
+      <Icon className={cn("size-3.5", isSpinning ? "animate-spin" : "")} />
+      {badge ? (
+        <span
+          className={cn(
+            "pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums",
+            badge.toneClassName,
+          )}
+          data-testid={badge.testId}
+        >
+          {badge.value}
+        </span>
+      ) : null}
+      <span className="sr-only">{srLabel}</span>
+    </Button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {wrapTrigger ? <span className="inline-flex">{button}</span> : button}
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function GitInfoHeader({
   branch,
@@ -41,6 +111,9 @@ export function GitInfoHeader({
   isCommitting,
   isPushing,
   isRebasing,
+  isGitActionsLocked,
+  gitActionsLockReason,
+  showLockReasonBanner,
   pushError,
   rebaseError,
   pushBranch,
@@ -62,18 +135,52 @@ export function GitInfoHeader({
   const hasUncommittedFiles = uncommittedFileCount > 0;
   const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
   const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
-  const pushBlockedByBehind = hasUpstreamBehind;
   const canRefresh = !isLoading && !isAnyActionInFlight;
   const canRebase =
-    !isDetachedHead && hasTargetBranch && !isAnyActionInFlight && rebaseOntoTarget != null;
+    !isDetachedHead &&
+    hasTargetBranch &&
+    !isAnyActionInFlight &&
+    !isGitActionsLocked &&
+    rebaseOntoTarget != null;
   const canPull =
     !isDetachedHead &&
     hasUpstreamBehind &&
     !hasUncommittedFiles &&
     !isAnyActionInFlight &&
+    !isGitActionsLocked &&
     pullFromUpstream != null;
   const canPush =
-    !isDetachedHead && !pushBlockedByBehind && !isAnyActionInFlight && pushBranch != null;
+    !isDetachedHead && !isAnyActionInFlight && !isGitActionsLocked && pushBranch != null;
+  const rebaseTooltip = isRebasing
+    ? "Rebasing"
+    : isGitActionsLocked
+      ? (gitActionsLockReason ?? "Git actions are disabled.")
+      : rebaseBehindCount != null && rebaseBehindCount > 0
+        ? `Rebase onto target (${rebaseBehindCount} behind)`
+        : "Rebase onto target";
+  const pullTooltip = isRebasing
+    ? "Pulling"
+    : isGitActionsLocked
+      ? (gitActionsLockReason ?? "Git actions are disabled.")
+      : hasUncommittedFiles
+        ? "Commit or stash changes before pulling"
+        : pushAheadCount != null &&
+            pushAheadCount > 0 &&
+            pushBehindCount != null &&
+            pushBehindCount > 0
+          ? `Pull with rebase (${pushBehindCount} behind; ${pushAheadCount} local commit${pushAheadCount === 1 ? "" : "s"} will be rewritten)`
+          : pushBehindCount != null && pushBehindCount > 0
+            ? `Pull (${pushBehindCount} behind)`
+            : "Pull";
+  const pushTooltip = isPushing
+    ? "Pushing"
+    : isGitActionsLocked
+      ? (gitActionsLockReason ?? "Git actions are disabled.")
+      : hasUpstreamBehind
+        ? `Push branch (${pushBehindCount} behind; confirmation may be required)`
+        : pushAheadCount != null && pushAheadCount > 0
+          ? `Push branch (${pushAheadCount} ahead)`
+          : "Push branch";
 
   const handleScopeChange = (scope: DiffScope): void => {
     if (diffScope === scope) {
@@ -147,141 +254,84 @@ export function GitInfoHeader({
         data-testid="agent-studio-git-action-row"
       >
         <div className="inline-flex items-center gap-0.5 px-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
-                onClick={onRefresh}
-                disabled={!canRefresh}
-                data-testid="agent-studio-git-refresh-button"
-              >
-                <RefreshCw className={cn("size-3.5", isLoading ? "animate-spin" : "")} />
-                <span className="sr-only">Refresh</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>{isLoading ? "Refreshing" : "Refresh changes"}</p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
-                onClick={() => void rebaseOntoTarget?.()}
-                disabled={!canRebase}
-                data-testid="agent-studio-git-rebase-button"
-              >
-                <Target className="size-3.5" />
-                {rebaseBehindCount != null && rebaseBehindCount > 0 ? (
-                  <span
-                    className="pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums text-rose-600 dark:text-rose-400"
-                    data-testid="agent-studio-git-behind-count"
-                  >
-                    {rebaseBehindCount}
-                  </span>
-                ) : null}
-                <span className="sr-only">Rebase onto target</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>
-                {isRebasing
-                  ? "Rebasing"
-                  : rebaseBehindCount != null && rebaseBehindCount > 0
-                    ? `Rebase onto target (${rebaseBehindCount} behind)`
-                    : "Rebase onto target"}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
-                  onClick={() => void pullFromUpstream?.()}
-                  disabled={!canPull}
-                  data-testid="agent-studio-git-pull-button"
-                >
-                  <ArrowDown className="size-3.5" />
-                  {pushBehindCount != null && pushBehindCount > 0 ? (
-                    <span
-                      className="pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums text-rose-600 dark:text-rose-400"
-                      data-testid="agent-studio-git-upstream-behind-count"
-                    >
-                      {pushBehindCount}
-                    </span>
-                  ) : null}
-                  <span className="sr-only">Pull from upstream</span>
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>
-                {isRebasing
-                  ? "Pulling"
-                  : hasUncommittedFiles
-                    ? "Commit or stash changes before pulling"
-                    : pushBehindCount != null && pushBehindCount > 0
-                      ? `Pull (${pushBehindCount} behind)`
-                      : "Pull"}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
-                onClick={() => void pushBranch?.()}
-                disabled={!canPush}
-                data-testid="agent-studio-git-push-button"
-              >
-                <ArrowUp className="size-3.5" />
-                {pushAheadCount != null && pushAheadCount > 0 ? (
-                  <span
-                    className="pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
-                    data-testid="agent-studio-git-ahead-count"
-                  >
-                    {pushAheadCount}
-                  </span>
-                ) : null}
-                <span className="sr-only">Push branch</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>
-                {isPushing
-                  ? "Pushing"
-                  : pushBlockedByBehind && hasUncommittedFiles
-                    ? "Commit or stash changes, then pull before pushing"
-                    : pushBlockedByBehind
-                      ? "Pull before pushing"
-                      : pushAheadCount != null && pushAheadCount > 0
-                        ? `Push branch (${pushAheadCount} ahead)`
-                        : "Push branch"}
-              </p>
-            </TooltipContent>
-          </Tooltip>
+          <GitActionIconButton
+            testId="agent-studio-git-refresh-button"
+            srLabel="Refresh"
+            icon={RefreshCw}
+            onClick={onRefresh}
+            disabled={!canRefresh}
+            tooltip={isLoading ? "Refreshing" : "Refresh changes"}
+            isSpinning={isLoading}
+          />
+          <GitActionIconButton
+            testId="agent-studio-git-rebase-button"
+            srLabel="Rebase onto target"
+            icon={Target}
+            onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
+            disabled={!canRebase}
+            tooltip={rebaseTooltip}
+            badge={
+              rebaseBehindCount != null && rebaseBehindCount > 0
+                ? {
+                    testId: "agent-studio-git-behind-count",
+                    value: rebaseBehindCount,
+                    toneClassName: "text-rose-600 dark:text-rose-400",
+                  }
+                : undefined
+            }
+          />
+          <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
+            <GitActionIconButton
+              testId="agent-studio-git-pull-button"
+              srLabel="Pull from upstream"
+              icon={ArrowDown}
+              onClick={pullFromUpstream ? () => void pullFromUpstream() : null}
+              disabled={!canPull}
+              tooltip={pullTooltip}
+              badge={
+                pushBehindCount != null && pushBehindCount > 0
+                  ? {
+                      testId: "agent-studio-git-upstream-behind-count",
+                      value: pushBehindCount,
+                      toneClassName: "text-rose-600 dark:text-rose-400",
+                    }
+                  : undefined
+              }
+              wrapTrigger
+            />
+          </span>
+          <GitActionIconButton
+            testId="agent-studio-git-push-button"
+            srLabel="Push branch"
+            icon={ArrowUp}
+            onClick={pushBranch ? () => void pushBranch() : null}
+            disabled={!canPush}
+            tooltip={pushTooltip}
+            badge={
+              pushAheadCount != null && pushAheadCount > 0
+                ? {
+                    testId: "agent-studio-git-ahead-count",
+                    value: pushAheadCount,
+                    toneClassName: "text-emerald-600 dark:text-emerald-400",
+                  }
+                : undefined
+            }
+          />
         </div>
       </div>
 
+      {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (
+        <div
+          className="border-y border-border bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+          data-testid="agent-studio-git-lock-reason"
+        >
+          {gitActionsLockReason}
+        </div>
+      ) : null}
+
       <div className="space-y-1">
         <div
-          className="inline-flex h-9 w-full items-center bg-muted p-1"
+          className="inline-flex h-9 w-full items-center bg-muted p-1 gap-1"
           role="tablist"
           aria-label="Git diff scope"
         >

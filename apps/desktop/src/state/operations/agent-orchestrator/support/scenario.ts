@@ -1,5 +1,6 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import {
+  type AgentKickoffScenario,
   type AgentRole,
   type AgentScenario,
   type BuildAgentKickoffPromptInput,
@@ -38,7 +39,11 @@ export const inferScenario = (
   return "build_implementation_start";
 };
 
-export const kickoffPrompt = (role: AgentRole, scenario: AgentScenario, taskId: string): string => {
+export const kickoffPrompt = (
+  role: AgentRole,
+  scenario: AgentKickoffScenario,
+  taskId: string,
+): string => {
   return buildAgentKickoffPrompt({
     role,
     scenario,
@@ -48,7 +53,7 @@ export const kickoffPrompt = (role: AgentRole, scenario: AgentScenario, taskId: 
 
 export const kickoffPromptWithTaskContext = (
   role: AgentRole,
-  scenario: AgentScenario,
+  scenario: AgentKickoffScenario,
   task: BuildAgentKickoffPromptInput["task"],
   overrides?: RepoPromptOverrides,
 ): string => {

@@ -1,6 +1,10 @@
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 
-export type SessionStartRequestReason = "create_session" | "composer_send" | "scenario_kickoff";
+export type SessionStartRequestReason =
+  | "create_session"
+  | "composer_send"
+  | "scenario_kickoff"
+  | "rebase_conflict_resolution";
 
 export type NewSessionStartRequest = {
   taskId: string;
