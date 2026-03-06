@@ -18,8 +18,18 @@ type TaskDeleteConfirmDialogProps = {
   taskId: string;
   subtasksCount: number;
   hasSubtasks: boolean;
+  hasManagedSessionCleanup: boolean;
+  managedWorktreeCount: number;
   isDeletePending: boolean;
   deleteError: string | null;
+};
+
+export const formatManagedSessionCleanupMessage = (managedWorktreeCount: number): string => {
+  if (managedWorktreeCount > 0) {
+    return `${managedWorktreeCount} linked task worktree${managedWorktreeCount === 1 ? "" : "s"} and their related local branches will also be deleted. Any uncommitted changes in those worktrees will be lost.`;
+  }
+
+  return "Linked task worktrees and their related local branches will also be deleted if they exist. Any uncommitted changes in those worktrees will be lost.";
 };
 
 export function TaskDeleteConfirmDialog({
@@ -30,6 +40,8 @@ export function TaskDeleteConfirmDialog({
   taskId,
   subtasksCount,
   hasSubtasks,
+  hasManagedSessionCleanup,
+  managedWorktreeCount,
   isDeletePending,
   deleteError,
 }: TaskDeleteConfirmDialogProps): ReactElement {
@@ -49,6 +61,9 @@ export function TaskDeleteConfirmDialog({
           <p className="font-medium">This action permanently removes the task from Beads.</p>
           {hasSubtasks ? (
             <p>Direct subtasks will also be deleted to avoid orphaned children in the workflow.</p>
+          ) : null}
+          {hasManagedSessionCleanup ? (
+            <p>{formatManagedSessionCleanupMessage(managedWorktreeCount)}</p>
           ) : null}
           {deleteError ? <p className="text-destructive-muted">{deleteError}</p> : null}
         </div>
