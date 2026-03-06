@@ -90,8 +90,16 @@ jobs:
       - name: Lint host crates
         run: cargo clippy --workspace --exclude openducktor-desktop --all-targets --locked -- -D warnings
 
-      - name: Run host crate tests
-        run: cargo test --workspace --exclude openducktor-desktop --locked
+      - name: Run host crate unit tests
+        run: "cargo test --workspace --exclude openducktor-desktop --lib --locked -- --skip app_service::tests::integration::"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Run host-application integration tests
+        run: "cargo test -p host-application --locked app_service::tests::integration::"
 
       - name: Install Linux dependencies for Tauri
         run: |
