@@ -1,0 +1,87 @@
+import type { TaskPersistencePort } from "./bd-persistence";
+import type { RawIssue, TaskCard, TaskStatus } from "./contracts";
+import type { TaskIndexCache } from "./task-index-cache";
+import { issueToTaskCard } from "./task-mapping";
+import {
+  assertTransitionAllowed as assertTaskTransitionAllowed,
+  refreshTaskContext,
+  resolveTaskContext,
+  type TaskContext,
+  transitionTask,
+} from "./task-transitions";
+
+export type OdtTaskWorkflowRuntimePort = {
+  metadataNamespace: string;
+  ensureInitialized(): Promise<void>;
+  readTaskSnapshot(taskId: string): Promise<{ issue: RawIssue; task: TaskCard }>;
+  resolveTaskContext(taskId: string): Promise<TaskContext>;
+  refreshTaskContext(taskId: string, context?: TaskContext): Promise<TaskContext>;
+  assertTransitionAllowed(task: TaskCard, tasks: TaskCard[], nextStatus: TaskStatus): void;
+  transitionTask(taskId: string, nextStatus: TaskStatus, context?: TaskContext): Promise<TaskCard>;
+};
+
+export type OdtTaskWorkflowRuntimeDeps = {
+  persistence: TaskPersistencePort;
+  taskIndexCache: TaskIndexCache;
+};
+
+class DefaultOdtTaskWorkflowRuntime implements OdtTaskWorkflowRuntimePort {
+  readonly metadataNamespace: string;
+  private readonly persistence: TaskPersistencePort;
+  private readonly taskIndexCache: TaskIndexCache;
+
+  constructor(deps: OdtTaskWorkflowRuntimeDeps) {
+    this.persistence = deps.persistence;
+    this.taskIndexCache = deps.taskIndexCache;
+    this.metadataNamespace = deps.persistence.metadataNamespace;
+  }
+
+  async ensureInitialized(): Promise<void> {
+    await this.persistence.ensureInitialized();
+  }
+
+  async readTaskSnapshot(taskId: string): Promise<{ issue: RawIssue; task: TaskCard }> {
+    const resolvedTask = await this.taskIndexCache.resolveTask(taskId);
+    const issue = await this.persistence.showRawIssue(resolvedTask.id);
+    const task = issueToTaskCard(issue, this.metadataNamespace);
+    return { issue, task };
+  }
+
+  async resolveTaskContext(taskId: string): Promise<TaskContext> {
+    return resolveTaskContext(taskId, () => this.persistence.listTasks());
+  }
+
+  async refreshTaskContext(taskId: string, context?: TaskContext): Promise<TaskContext> {
+    return refreshTaskContext({
+      taskId,
+      ...(context ? { context } : {}),
+      showRawIssue: (id) => this.persistence.showRawIssue(id),
+      metadataNamespace: this.metadataNamespace,
+    });
+  }
+
+  assertTransitionAllowed(task: TaskCard, tasks: TaskCard[], nextStatus: TaskStatus): void {
+    assertTaskTransitionAllowed(task, tasks, nextStatus);
+  }
+
+  async transitionTask(
+    taskId: string,
+    nextStatus: TaskStatus,
+    context?: TaskContext,
+  ): Promise<TaskCard> {
+    return transitionTask({
+      taskId,
+      nextStatus,
+      ...(context ? { context } : {}),
+      listTasks: () => this.persistence.listTasks(),
+      runBdJson: (args) => this.persistence.runBdJson(args),
+      showRawIssue: (id) => this.persistence.showRawIssue(id),
+      invalidateTaskIndex: () => this.taskIndexCache.invalidate(),
+      metadataNamespace: this.metadataNamespace,
+    });
+  }
+}
+
+export const createOdtTaskWorkflowRuntime = (
+  deps: OdtTaskWorkflowRuntimeDeps,
+): OdtTaskWorkflowRuntimePort => new DefaultOdtTaskWorkflowRuntime(deps);
