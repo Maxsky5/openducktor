@@ -4,7 +4,12 @@ use crate::app_service::workflow_rules::{
     validate_parent_relationships_for_update, validate_transition,
 };
 use anyhow::{anyhow, Context, Result};
-use host_domain::{CreateTaskInput, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch};
+use host_domain::{
+    AgentSessionDocument, CreateTaskInput, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch,
+};
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 impl AppService {
     pub fn tasks_list(&self, repo_path: &str) -> Result<Vec<TaskCard>> {
@@ -66,6 +71,66 @@ impl AppService {
                 "Task {task_id} has {} subtasks. Confirm subtask deletion to continue.",
                 direct_subtask_ids.len()
             ));
+        }
+
+        let target_tasks =
+            collect_task_delete_targets(&context.repo.tasks, task_id, delete_subtasks);
+        let normalized_repo = normalize_path_for_comparison(context.repo.repo_path.as_str());
+        let branch_prefix = self
+            .config_store
+            .repo_config(&context.repo.repo_path)?
+            .branch_prefix;
+        let mut removable_worktrees = Vec::new();
+        let mut seen_worktrees = HashSet::new();
+        let mut related_local_branches = HashSet::new();
+
+        for target_task in target_tasks {
+            let sessions =
+                self.agent_sessions_list(context.repo.repo_path.as_str(), target_task.id.as_str())?;
+            for session in sessions {
+                let worktree_path = session.working_directory.trim();
+                if !is_managed_worktree_session(&session, &normalized_repo, worktree_path) {
+                    continue;
+                }
+                if !seen_worktrees.insert(worktree_path.to_string()) {
+                    continue;
+                }
+
+                let current_branch = self
+                    .git_port
+                    .get_current_branch(Path::new(worktree_path))
+                    .with_context(|| {
+                        format!(
+                            "Failed to inspect current branch for task worktree {}",
+                            worktree_path
+                        )
+                    })?;
+                if let Some(branch_name) = current_branch.name {
+                    if is_related_task_branch(
+                        branch_name.as_str(),
+                        branch_prefix.as_str(),
+                        target_task.id.as_str(),
+                    ) {
+                        related_local_branches.insert(branch_name);
+                    }
+                }
+
+                removable_worktrees.push(worktree_path.to_string());
+            }
+        }
+
+        for worktree_path in &removable_worktrees {
+            self.git_remove_worktree(context.repo.repo_path.as_str(), worktree_path, true)
+                .with_context(|| format!("Failed to remove task worktree {worktree_path}"))?;
+        }
+
+        for branch_name in related_local_branches {
+            self.git_delete_local_branch(
+                context.repo.repo_path.as_str(),
+                branch_name.as_str(),
+                true,
+            )
+            .with_context(|| format!("Failed to delete related local branch {branch_name}"))?;
         }
 
         self.task_store
@@ -233,4 +298,58 @@ impl AppService {
             .get_task_metadata(std::path::Path::new(&repo_path), task_id)
             .with_context(|| format!("Failed to load task metadata for {task_id}"))
     }
+}
+
+fn collect_task_delete_targets<'a>(
+    tasks: &'a [TaskCard],
+    task_id: &str,
+    delete_subtasks: bool,
+) -> Vec<&'a TaskCard> {
+    let mut target_ids = HashSet::from([task_id.to_string()]);
+    if delete_subtasks {
+        loop {
+            let previous_len = target_ids.len();
+            for task in tasks {
+                if task
+                    .parent_id
+                    .as_deref()
+                    .is_some_and(|parent_id| target_ids.contains(parent_id))
+                {
+                    target_ids.insert(task.id.clone());
+                }
+            }
+            if target_ids.len() == previous_len {
+                break;
+            }
+        }
+    }
+
+    tasks
+        .iter()
+        .filter(|task| target_ids.contains(task.id.as_str()))
+        .collect()
+}
+
+fn normalize_path_for_comparison(path: &str) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path))
+}
+
+fn is_managed_worktree_session(
+    session: &AgentSessionDocument,
+    normalized_repo: &Path,
+    working_directory: &str,
+) -> bool {
+    matches!(session.role.as_str(), "build" | "qa")
+        && !working_directory.is_empty()
+        && normalize_path_for_comparison(working_directory) != normalized_repo
+}
+
+fn is_related_task_branch(branch_name: &str, branch_prefix: &str, task_id: &str) -> bool {
+    let clean_prefix = if branch_prefix.trim().is_empty() {
+        "obp"
+    } else {
+        branch_prefix.trim()
+    };
+    let task_prefix = format!("{clean_prefix}/{task_id}");
+    branch_name == task_prefix || branch_name.starts_with(&format!("{task_prefix}-"))
 }
