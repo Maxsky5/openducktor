@@ -14,6 +14,8 @@ use std::{ffi::OsString, fs::OpenOptions, io::ErrorKind, io::Write, time::System
 const CONFIG_DIR_MODE: u32 = 0o700;
 #[cfg(unix)]
 const CONFIG_FILE_MODE: u32 = 0o600;
+#[cfg(unix)]
+const MAX_TEMP_FILE_ATTEMPTS: u8 = 8;
 
 fn has_configured_worktree(repo: &RepoConfig) -> bool {
     repo.worktree_base_path.is_some()
@@ -39,6 +41,12 @@ fn resolve_default_path(file_name: &str) -> Result<PathBuf> {
     Ok(home.join(".openducktor").join(file_name))
 }
 
+fn should_enforce_private_parent_permissions(path: &Path, file_name: &str) -> bool {
+    resolve_default_path(file_name)
+        .map(|default_path| default_path == path)
+        .unwrap_or(false)
+}
+
 impl Default for AppConfigStore {
     fn default() -> Self {
         Self::new().expect("failed to initialize config store")
@@ -54,9 +62,8 @@ impl AppConfigStore {
     }
 
     pub fn from_path(path: PathBuf) -> Self {
-        let enforce_private_parent_permissions = resolve_default_path(USER_SETTINGS_FILENAME)
-            .map(|default_path| default_path == path)
-            .unwrap_or(false);
+        let enforce_private_parent_permissions =
+            should_enforce_private_parent_permissions(&path, USER_SETTINGS_FILENAME);
         Self {
             path,
             enforce_private_parent_permissions,
@@ -365,9 +372,8 @@ impl RuntimeConfigStore {
     }
 
     pub fn from_path(path: PathBuf) -> Self {
-        let enforce_private_parent_permissions = resolve_default_path(RUNTIME_SETTINGS_FILENAME)
-            .map(|default_path| default_path == path)
-            .unwrap_or(false);
+        let enforce_private_parent_permissions =
+            should_enforce_private_parent_permissions(&path, RUNTIME_SETTINGS_FILENAME);
         Self {
             path,
             enforce_private_parent_permissions,
@@ -443,7 +449,7 @@ fn write_config_file(path: &Path, contents: &[u8]) -> Result<()> {
 
 #[cfg(unix)]
 fn write_config_file_atomic(path: &Path, contents: &[u8]) -> Result<()> {
-    for attempt in 0..8_u8 {
+    for attempt in 0..MAX_TEMP_FILE_ATTEMPTS {
         let temp_path = create_temporary_config_path(path, attempt)?;
         match OpenOptions::new()
             .create_new(true)
@@ -504,8 +510,9 @@ fn write_config_file_atomic(path: &Path, contents: &[u8]) -> Result<()> {
     }
 
     Err(anyhow!(
-        "Failed creating unique temp file for config write at {} after 8 attempts",
-        path.display()
+        "Failed creating unique temp file for config write at {} after {} attempts",
+        path.display(),
+        MAX_TEMP_FILE_ATTEMPTS
     ))
 }
 
