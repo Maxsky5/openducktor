@@ -118,6 +118,8 @@ export function TaskDetailsSheet({
           taskId={viewModel.taskId}
           subtasksCount={viewModel.subtasks.length}
           hasSubtasks={viewModel.subtasks.length > 0}
+          hasManagedSessionCleanup={viewModel.hasManagedSessionCleanup}
+          managedWorktreeCount={viewModel.managedWorktreeCount}
           isDeletePending={viewModel.isDeletePending}
           deleteError={viewModel.deleteError}
         />
