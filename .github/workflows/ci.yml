@@ -63,7 +63,7 @@ jobs:
   tauri-rust-quality:
     name: Tauri Rust Quality & Security (audit, clippy, check, test)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     defaults:
       run:

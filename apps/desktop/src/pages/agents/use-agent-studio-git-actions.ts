@@ -36,6 +36,7 @@ export type AgentStudioGitActionState = {
   rebaseConflictAction: AgentStudioRebaseConflictAction;
   rebaseConflictAutoOpenNonce: number;
   rebaseConflictCloseNonce: number;
+  showLockReasonBanner: boolean;
   isGitActionsLocked: boolean;
   gitActionsLockReason: string | null;
   rebaseConflict: AgentStudioRebaseConflict | null;
@@ -626,6 +627,7 @@ export function useAgentStudioGitActions({
     rebaseConflictAction,
     rebaseConflictAutoOpenNonce,
     rebaseConflictCloseNonce,
+    showLockReasonBanner: isGitActionsLocked && !isBuilderSessionWorking,
     isGitActionsLocked,
     gitActionsLockReason,
     rebaseConflict: activeRebaseConflict,

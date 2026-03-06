@@ -748,13 +748,14 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("renders the generic lock banner when git actions are locked without a conflict strip", async () => {
+  test("hides the generic lock banner when builder locking is tooltip-only", async () => {
     let renderer: TestRenderer.ReactTestRenderer | null = null;
     await act(async () => {
       renderer = TestRenderer.create(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             isGitActionsLocked: true,
+            showLockReasonBanner: false,
             gitActionsLockReason: "Git actions are disabled while the Builder session is working.",
           }),
         }),
@@ -763,8 +764,33 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-lock-reason")).toBe(0);
+    expect(hasVisibleText(root, "Builder session is working")).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("renders the generic lock banner when explicitly requested", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            isGitActionsLocked: true,
+            showLockReasonBanner: true,
+            gitActionsLockReason: "Git actions are temporarily disabled.",
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
     expect(getNodeText(findByTestId(root, "agent-studio-git-lock-reason"))).toContain(
-      "Builder session is working",
+      "temporarily disabled",
     );
 
     await act(async () => {

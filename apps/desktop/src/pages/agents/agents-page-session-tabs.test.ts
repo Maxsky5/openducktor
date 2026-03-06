@@ -304,7 +304,7 @@ describe("agents-page-session-tabs", () => {
     expect(groups[0]?.options[0]?.label).toBe("Spec #2");
     expect(groups[0]?.options[1]?.value).toBe("spec-2");
     expect(groups[0]?.options[1]?.label).toBe("Spec #1");
-    expect(groups[0]?.options[0]?.secondaryLabel).toBe("SPEC");
+    expect(groups[0]?.options[0]?.secondaryLabel).toBeUndefined();
     expect(groups[1]?.label).toBe("Planner");
     expect(groups[1]?.options[0]?.value).toBe("planner-1");
     expect(groups[1]?.options[0]?.label).toBe("Planner #1");

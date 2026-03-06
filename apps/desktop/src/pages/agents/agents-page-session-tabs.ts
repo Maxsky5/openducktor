@@ -244,7 +244,6 @@ export const buildSessionSelectorGroups = (params: {
         return `${baseLabel} #${sessionNumber}`;
       })(),
       description: describeSessionOption(session),
-      secondaryLabel: role.toUpperCase(),
       searchKeywords: [role, session.scenario, session.sessionId],
     }));
     groups.push({
