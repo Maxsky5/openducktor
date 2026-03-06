@@ -78,7 +78,7 @@ where
 fn write_config_file(path: &Path, contents: &[u8]) -> Result<()> {
     #[cfg(unix)]
     {
-        return write_config_file_atomic(path, contents);
+        write_config_file_atomic(path, contents)
     }
 
     #[cfg(not(unix))]
