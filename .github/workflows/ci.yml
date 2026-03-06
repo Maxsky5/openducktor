@@ -60,8 +60,8 @@ jobs:
         run: bun run build
 
   tauri-rust-quality:
-    name: Tauri Rust Quality (clippy, check, test)
-    runs-on: ubuntu-latest
+    name: Rust Workspace Quality
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     defaults:
@@ -84,20 +84,22 @@ jobs:
           workspaces: |
             apps/desktop/src-tauri
 
-      - name: Install Linux dependencies for Tauri
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev librsvg2-dev patchelf
-          sudo apt-get install -y libayatana-appindicator3-dev || sudo apt-get install -y libappindicator3-dev
-
       - name: Pre-fetch Rust dependencies
         run: cargo fetch --locked
 
-      - name: Lint Rust
-        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Lint host crates
+        run: cargo clippy --workspace --exclude openducktor-desktop --all-targets --locked -- -D warnings
 
-      - name: Build check
-        run: cargo check --locked
+      - name: Run host crate tests
+        run: cargo test --workspace --exclude openducktor-desktop --locked
 
-      - name: Run Rust tests
-        run: cargo test --locked
+      - name: Install Linux dependencies for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev librsvg2-dev patchelf libayatana-appindicator3-dev
+
+      - name: Lint Tauri app
+        run: cargo clippy -p openducktor-desktop --all-targets --locked -- -D warnings
+
+      - name: Run Tauri app tests
+        run: cargo test -p openducktor-desktop --locked
