@@ -107,7 +107,7 @@ jobs:
         run: cargo rust-lint-tauri
 
       - name: Cross-platform config build check
-        run: cargo check --locked --target x86_64-pc-windows-gnu -p host-infra-system
+        run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --target x86_64-pc-windows-gnu -p host-infra-system
 
       - name: Run Tauri app tests
         run: cargo rust-test-tauri
