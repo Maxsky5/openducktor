@@ -1,7 +1,34 @@
 import { describe, expect, test } from "bun:test";
-import { parseMarkdownEntries, parseQaEntries } from "./task-mapping";
+import type { RawIssue } from "./contracts";
+import { issueToTaskCard, parseMarkdownEntries, parseQaEntries } from "./task-mapping";
 
 describe("task mapping entry parsers", () => {
+  test("issueToTaskCard rejects invalid Beads issue types with task context", () => {
+    const issue: RawIssue = {
+      id: "task-42",
+      title: "Broken issue type",
+      status: "open",
+      issue_type: "decision",
+    };
+
+    expect(() => issueToTaskCard(issue, "openducktor")).toThrow(
+      'Invalid Beads issue type for task task-42: received "decision".',
+    );
+  });
+
+  test("issueToTaskCard rejects invalid Beads statuses with task context", () => {
+    const issue: RawIssue = {
+      id: "task-99",
+      title: "Broken status",
+      status: 42,
+      issue_type: "task",
+    };
+
+    expect(() => issueToTaskCard(issue, "openducktor")).toThrow(
+      "Invalid Beads status for task task-99: received 42.",
+    );
+  });
+
   test("parseMarkdownEntries returns only valid markdown metadata entries", () => {
     const parsed = parseMarkdownEntries([
       {

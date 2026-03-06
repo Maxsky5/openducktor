@@ -2,14 +2,32 @@ import { taskStatusSchema } from "@openducktor/contracts";
 import type { IssueType, PlanSubtaskInput, TaskCard, TaskStatus } from "./contracts";
 
 const TASK_STATUS_SET = new Set<string>(taskStatusSchema.options);
+const TASK_STATUS_VALUES = taskStatusSchema.options.join(", ");
 
 const isTaskStatus = (value: string): value is TaskStatus => TASK_STATUS_SET.has(value);
 
-export const toTaskStatus = (value: unknown): TaskStatus => {
-  if (typeof value !== "string") {
-    return "open";
+const describeInvalidValue = (value: unknown): string => {
+  if (typeof value === "string") {
+    return JSON.stringify(value);
   }
-  return isTaskStatus(value) ? value : "open";
+
+  const serialized = JSON.stringify(value);
+  if (typeof serialized === "string") {
+    return serialized;
+  }
+
+  return String(value);
+};
+
+export const toTaskStatus = (taskId: string, value: unknown): TaskStatus => {
+  if (typeof value !== "string" || !isTaskStatus(value)) {
+    throw new Error(
+      `Invalid Beads status for task ${taskId}: received ${describeInvalidValue(value)}. ` +
+        `Expected one of: ${TASK_STATUS_VALUES}.`,
+    );
+  }
+
+  return value;
 };
 
 const canSkipSpecAndPlanning = (task: TaskCard): boolean => {

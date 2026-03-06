@@ -19,8 +19,8 @@ export type TaskCard = Pick<
 export type RawIssue = {
   id: string;
   title: string;
-  status: string;
-  issue_type?: string;
+  status: unknown;
+  issue_type?: unknown;
   parent?: string | null;
   dependencies?: Array<{
     type?: string;

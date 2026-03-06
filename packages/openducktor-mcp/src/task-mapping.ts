@@ -1,3 +1,4 @@
+import { issueTypeSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import type {
   IssueType,
@@ -9,11 +10,31 @@ import type {
 } from "./contracts";
 import { toTaskStatus } from "./workflow-policy";
 
-export const normalizeIssueType = (value: unknown): IssueType => {
-  if (value === "epic" || value === "feature" || value === "bug") {
-    return value;
+const ISSUE_TYPE_VALUES = issueTypeSchema.options.join(", ");
+
+const describeInvalidValue = (value: unknown): string => {
+  if (typeof value === "string") {
+    return JSON.stringify(value);
   }
-  return "task";
+
+  const serialized = JSON.stringify(value);
+  if (typeof serialized === "string") {
+    return serialized;
+  }
+
+  return String(value);
+};
+
+export const normalizeIssueType = (taskId: string, value: unknown): IssueType => {
+  const parsed = issueTypeSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid Beads issue type for task ${taskId}: received ${describeInvalidValue(value)}. ` +
+        `Expected one of: ${ISSUE_TYPE_VALUES}.`,
+    );
+  }
+
+  return parsed.data;
 };
 
 const defaultQaRequiredForIssueType = (_issueType: IssueType): boolean => true;
@@ -104,20 +125,21 @@ const normalizeParentId = (issue: RawIssue): string | undefined => {
 };
 
 export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): TaskCard => {
+  const issueType = normalizeIssueType(issue.id, issue.issue_type);
   const root = parseMetadataRoot(issue.metadata);
   const namespace = ensureObject(root[metadataNamespace]);
   const qaRequired =
     typeof namespace.qaRequired === "boolean"
       ? namespace.qaRequired
-      : defaultQaRequiredForIssueType(normalizeIssueType(issue.issue_type));
+      : defaultQaRequiredForIssueType(issueType);
 
   const parentId = normalizeParentId(issue);
 
   return {
     id: issue.id,
     title: issue.title,
-    status: toTaskStatus(issue.status),
-    issueType: normalizeIssueType(issue.issue_type),
+    status: toTaskStatus(issue.id, issue.status),
+    issueType,
     aiReviewEnabled: qaRequired,
     ...(parentId ? { parentId } : {}),
   };

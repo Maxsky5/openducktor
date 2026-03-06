@@ -166,6 +166,33 @@ describe("BdPersistence", () => {
     await expect(persistence.listTasks()).rejects.toThrow("bd list did not return an array");
   });
 
+  test("listTasks surfaces invalid Beads task status instead of coercing it", async () => {
+    const state: FakeClientState = {
+      calls: [],
+      ensureInitializedCalls: 0,
+    };
+    const client = createClient(
+      {
+        runBdJson: async () => [
+          {
+            id: "task-2",
+            title: "Broken status",
+            status: { raw: "open" },
+            issue_type: "task",
+            metadata: {},
+          },
+        ],
+      },
+      state,
+    );
+
+    const persistence = new BdPersistence(client, "openducktor");
+
+    await expect(persistence.listTasks()).rejects.toThrow(
+      'Invalid Beads status for task task-2: received {"raw":"open"}.',
+    );
+  });
+
   test("writeNamespace updates metadata under namespace key", async () => {
     const state: FakeClientState = {
       calls: [],
