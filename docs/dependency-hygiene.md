@@ -24,7 +24,7 @@ Dependabot and `knip` solve different problems:
 - Scope: all workspaces matching `@openducktor/*`
 - Check type: `dependencies`
 
-This check runs on pull requests and must pass.
+This check runs on pull requests and `main` pushes and must pass.
 
 Implementation notes:
 
@@ -49,7 +49,17 @@ Implementation notes:
 
 - Dedicated report workflow: `.github/workflows/dependency-hygiene-report.yml`
 
-## 4) Targeted Vulnerability Gate (Hono)
+## 4) High/Critical Vulnerability Gate
+
+- Command: `bun run deps:audit:high`
+- Backed by: `bun audit --json`
+- Scope: blocks any dependency that resolves to a high or critical advisory
+
+Implementation notes:
+
+- Included in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
+
+## 5) Targeted Vulnerability Gate (Hono)
 
 - Command: `bun run deps:audit:hono`
 - Backed by: `bun audit --json`
@@ -57,13 +67,12 @@ Implementation notes:
 
 Implementation notes:
 
-- Included in `.github/workflows/ci.yml` Bun quality job.
 - Included in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
 
 ## Cadence
 
 - Weekly (automated): Dependabot creates update PRs, and report CI publishes `bun run deps:unused:exports` plus `bun run deps:outdated` outputs.
-- Per PR (automated): CI runs `bun run deps:check` to catch dependency drift and the targeted Hono regression.
+- Per PR and on `main` pushes (automated): dependency hygiene CI runs `bun run deps:check` to catch dependency drift and vulnerability regressions without blocking lint/typecheck/test/build.
 - Monthly (manual): open a dependency refresh PR for safe patch/minor updates.
 - Urgent security advisories: process outside cadence and patch immediately.
 

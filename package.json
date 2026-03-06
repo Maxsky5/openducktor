@@ -24,6 +24,7 @@
   },
   "overrides": {
     "@hono/node-server": "^1.19.11",
+    "express-rate-limit": "^8.2.2",
     "hono": "^4.12.5",
     "rollup": "^4.59.0"
   },
