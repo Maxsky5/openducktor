@@ -80,7 +80,7 @@ const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
     },
   );
 
-  useRepoNavigationPersistence({
+  const { persistenceError, retryPersistenceRestore } = useRepoNavigationPersistence({
     activeRepo,
     navigation,
     setNavigation,
@@ -88,6 +88,8 @@ const useHookHarness = ({ activeRepo, initialNavigation }: HookArgs) => {
 
   return {
     navigation,
+    persistenceError,
+    retryPersistenceRestore,
     setNavigation,
   };
 };
@@ -178,7 +180,7 @@ describe("useRepoNavigationPersistence", () => {
     }
   });
 
-  test("throws actionable error when persisted context payload is malformed", async () => {
+  test("surfaces malformed persisted context as retryable error", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -193,9 +195,36 @@ describe("useRepoNavigationPersistence", () => {
         activeRepo: "/repo",
       });
 
-      await expect(harness.mount()).rejects.toThrow(
-        "Failed to parse persisted agent studio context",
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.persistenceError?.message.includes(
+            "Failed to parse persisted agent studio context",
+          ) === true,
       );
+
+      expect(harness.getLatest().navigation).toEqual({
+        taskId: "",
+        sessionId: null,
+        role: null,
+      });
+
+      memoryStorage.setItem(
+        toContextStorageKey("/repo"),
+        JSON.stringify({
+          taskId: "task-from-context",
+          role: "planner",
+          sessionId: "session-from-context",
+        }),
+      );
+
+      await harness.run((latest) => {
+        latest.retryPersistenceRestore();
+      });
+      await harness.waitFor((state) => state.navigation.taskId === "task-from-context");
+
+      expect(harness.getLatest().persistenceError).toBeNull();
+      await harness.unmount();
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,
@@ -204,7 +233,7 @@ describe("useRepoNavigationPersistence", () => {
     }
   });
 
-  test("throws actionable error when context storage read fails", async () => {
+  test("surfaces actionable error when context storage read fails", async () => {
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -219,9 +248,63 @@ describe("useRepoNavigationPersistence", () => {
         activeRepo: "/repo",
       });
 
-      await expect(harness.mount()).rejects.toThrow(
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.persistenceError?.message ===
+          `Failed to read agent studio context storage key "${toContextStorageKey("/repo")}": read blocked`,
+      );
+
+      expect(harness.getLatest().persistenceError?.message).toBe(
         `Failed to read agent studio context storage key "${toContextStorageKey("/repo")}": read blocked`,
       );
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
+  test("clears restore error when active repository changes", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(toContextStorageKey("/repo-a"), "{not-json");
+      memoryStorage.setItem(
+        toContextStorageKey("/repo-b"),
+        JSON.stringify({
+          taskId: "task-from-repo-b",
+          role: "planner",
+          sessionId: "session-from-repo-b",
+        }),
+      );
+
+      const harness = createHookHarness({
+        activeRepo: "/repo-a",
+      });
+
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.persistenceError?.message.includes(
+            "Failed to parse persisted agent studio context",
+          ) === true,
+      );
+
+      await harness.update({
+        activeRepo: "/repo-b",
+      });
+      await harness.waitFor((state) => state.navigation.taskId === "task-from-repo-b");
+
+      expect(harness.getLatest().persistenceError).toBeNull();
+      await harness.unmount();
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,

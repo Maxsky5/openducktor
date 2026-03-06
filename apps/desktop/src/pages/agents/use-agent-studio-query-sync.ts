@@ -19,6 +19,8 @@ export function useAgentStudioQuerySync({
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
+  navigationPersistenceError: Error | null;
+  retryNavigationPersistence: () => void;
   updateQuery: (updates: AgentStudioQueryUpdate) => void;
 } {
   const { navigation, setNavigation, updateQuery } = useNavigationUrlSync({
@@ -26,7 +28,7 @@ export function useAgentStudioQuerySync({
     setSearchParams,
   });
 
-  useRepoNavigationPersistence({
+  const { persistenceError, retryPersistenceRestore } = useRepoNavigationPersistence({
     activeRepo,
     navigation,
     setNavigation,
@@ -40,6 +42,8 @@ export function useAgentStudioQuerySync({
     sessionParam: navigation.sessionId,
     hasExplicitRoleParam,
     roleFromQuery,
+    navigationPersistenceError: persistenceError,
+    retryNavigationPersistence: retryPersistenceRestore,
     updateQuery,
   };
 }

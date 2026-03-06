@@ -97,35 +97,35 @@ export const applyQueryUpdateToNavigationState = (
   current: AgentStudioNavigationState,
   updates: AgentStudioQueryUpdate,
 ): AgentStudioNavigationState => {
-  let next = current;
+  const next = { ...current };
+  let hasChanged = false;
 
-  for (const [key, value] of Object.entries(updates)) {
-    if (key === AGENT_STUDIO_QUERY_KEYS.task) {
-      const taskId = readOptionalString(value) ?? "";
-      if (taskId !== next.taskId) {
-        next = { ...next, taskId };
-      }
-      continue;
-    }
-
-    if (key === AGENT_STUDIO_QUERY_KEYS.session) {
-      const sessionId = readOptionalString(value) ?? null;
-      if (sessionId !== next.sessionId) {
-        next = { ...next, sessionId };
-      }
-      continue;
-    }
-
-    if (key === AGENT_STUDIO_QUERY_KEYS.agent) {
-      const roleValue = readOptionalString(value) ?? null;
-      const role = isRole(roleValue) ? roleValue : null;
-      if (role !== next.role) {
-        next = { ...next, role };
-      }
+  if (AGENT_STUDIO_QUERY_KEYS.task in updates) {
+    const taskId = readOptionalString(updates.task) ?? "";
+    if (taskId !== next.taskId) {
+      next.taskId = taskId;
+      hasChanged = true;
     }
   }
 
-  return next;
+  if (AGENT_STUDIO_QUERY_KEYS.session in updates) {
+    const sessionId = readOptionalString(updates.session) ?? null;
+    if (sessionId !== next.sessionId) {
+      next.sessionId = sessionId;
+      hasChanged = true;
+    }
+  }
+
+  if (AGENT_STUDIO_QUERY_KEYS.agent in updates) {
+    const roleValue = readOptionalString(updates.agent) ?? null;
+    const role = isRole(roleValue) ? roleValue : null;
+    if (role !== next.role) {
+      next.role = role;
+      hasChanged = true;
+    }
+  }
+
+  return hasChanged ? next : current;
 };
 
 export const isSameNavigationState = (

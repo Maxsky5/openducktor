@@ -160,6 +160,57 @@ describe("useAgentStudioQuerySync", () => {
     }
   });
 
+  test("surfaces retryable persistence error for malformed repo context", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(toContextStorageKey("/repo"), "{not-json");
+
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        searchParams: new URLSearchParams(""),
+        setSearchParams: () => {},
+      });
+
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.navigationPersistenceError?.message.includes(
+            "Failed to parse persisted agent studio context",
+          ) === true,
+      );
+
+      expect(harness.getLatest().taskIdParam).toBe("");
+
+      memoryStorage.setItem(
+        toContextStorageKey("/repo"),
+        JSON.stringify({
+          taskId: "task-from-context",
+          role: "planner",
+          sessionId: "session-from-context",
+        }),
+      );
+
+      await harness.run((latest) => {
+        latest.retryNavigationPersistence();
+      });
+      await harness.waitFor((state) => state.taskIdParam === "task-from-context");
+
+      expect(harness.getLatest().navigationPersistenceError).toBeNull();
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
   test("does not override explicit task/session from URL with persisted context", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;

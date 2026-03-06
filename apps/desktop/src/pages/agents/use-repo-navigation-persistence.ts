@@ -1,8 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
   type AgentStudioNavigationState,
+  type PersistedAgentStudioContext,
   parsePersistedContext,
   restoreNavigationFromPersistedContext,
   serializePersistedContext,
@@ -13,6 +14,11 @@ type UseRepoNavigationPersistenceArgs = {
   activeRepo: string | null;
   navigation: AgentStudioNavigationState;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
+};
+
+type UseRepoNavigationPersistenceResult = {
+  persistenceError: Error | null;
+  retryPersistenceRestore: () => void;
 };
 
 const readPersistedContextPayload = (storageKey: string): string | null => {
@@ -41,11 +47,13 @@ export function useRepoNavigationPersistence({
   activeRepo,
   navigation,
   setNavigation,
-}: UseRepoNavigationPersistenceArgs): void {
+}: UseRepoNavigationPersistenceArgs): UseRepoNavigationPersistenceResult {
+  const lastActiveRepoRef = useRef<string | null>(activeRepo);
   const restoredContextRepoRef = useRef<string | null>(null);
   const persistedContextPayloadRef = useRef<string | null>(null);
   const pendingContextPersistRef = useRef<{ key: string; payload: string } | null>(null);
   const pendingPersistTimeoutIdRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const [persistenceError, setPersistenceError] = useState<Error | null>(null);
 
   const flushPendingContextPersist = useCallback((): void => {
     const pendingPersist = pendingContextPersistRef.current;
@@ -62,12 +70,30 @@ export function useRepoNavigationPersistence({
     pendingContextPersistRef.current = null;
   }, []);
 
+  const retryPersistenceRestore = useCallback((): void => {
+    restoredContextRepoRef.current = null;
+    persistedContextPayloadRef.current = null;
+    setPersistenceError(null);
+  }, []);
+
+  useEffect(() => {
+    if (lastActiveRepoRef.current === activeRepo) {
+      return;
+    }
+
+    lastActiveRepoRef.current = activeRepo;
+    if (persistenceError) {
+      setPersistenceError(null);
+    }
+  }, [activeRepo, persistenceError]);
+
   useEffect(() => {
     if (!activeRepo) {
       flushPendingContextPersist();
       restoredContextRepoRef.current = null;
       persistedContextPayloadRef.current = null;
       pendingContextPersistRef.current = null;
+      setPersistenceError(null);
       if (pendingPersistTimeoutIdRef.current !== null) {
         globalThis.clearTimeout(pendingPersistTimeoutIdRef.current);
         pendingPersistTimeoutIdRef.current = null;
@@ -79,28 +105,40 @@ export function useRepoNavigationPersistence({
     if (!activeRepo) {
       return;
     }
+    if (persistenceError) {
+      return;
+    }
     if (restoredContextRepoRef.current === activeRepo) {
       return;
     }
 
+    let raw: string | null;
+    let persisted: PersistedAgentStudioContext | null = null;
+    try {
+      raw = readPersistedContextPayload(toContextStorageKey(activeRepo));
+      if (raw) {
+        persisted = parsePersistedContext(raw);
+      }
+    } catch (cause) {
+      setPersistenceError(cause instanceof Error ? cause : new Error(errorMessage(cause)));
+      return;
+    }
+
     restoredContextRepoRef.current = activeRepo;
+    persistedContextPayloadRef.current = raw;
+
+    if (!persisted) {
+      return;
+    }
+
     setNavigation((current) => {
       if (current.taskId || current.sessionId) {
         return current;
       }
 
-      const raw = readPersistedContextPayload(toContextStorageKey(activeRepo));
-      if (!raw) {
-        persistedContextPayloadRef.current = null;
-        return current;
-      }
-
-      persistedContextPayloadRef.current = raw;
-
-      const persisted = parsePersistedContext(raw);
       return restoreNavigationFromPersistedContext(current, persisted);
     });
-  }, [activeRepo, setNavigation]);
+  }, [activeRepo, persistenceError, setNavigation]);
 
   useEffect(() => {
     if (!activeRepo || restoredContextRepoRef.current !== activeRepo) {
@@ -159,4 +197,9 @@ export function useRepoNavigationPersistence({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [flushPendingContextPersist]);
+
+  return {
+    persistenceError,
+    retryPersistenceRestore,
+  };
 }
