@@ -1,5 +1,7 @@
 mod migrate;
 mod normalize;
+mod persistence;
+mod security;
 mod store;
 mod types;
 
