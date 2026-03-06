@@ -695,11 +695,7 @@ export function AgentsPage(): ReactElement {
             <p className="font-medium text-destructive">
               Agent Studio couldn&apos;t restore saved navigation context.
             </p>
-            <p>
-              {activeRepo
-                ? `Repository: ${activeRepo}`
-                : "The persisted Agent Studio context is invalid for the current repository."}
-            </p>
+            <p>{`Repository: ${activeRepo}`}</p>
             <p className="break-words font-mono text-xs">{navigationPersistenceError.message}</p>
           </div>
         </div>

@@ -76,6 +76,21 @@ export function useRepoNavigationPersistence({
     setPersistenceError(null);
   }, []);
 
+  const surfacePersistenceWriteError = useCallback((cause: unknown): void => {
+    persistedContextPayloadRef.current = null;
+    pendingContextPersistRef.current = null;
+    pendingPersistTimeoutIdRef.current = null;
+    setPersistenceError(cause instanceof Error ? cause : new Error(errorMessage(cause)));
+  }, []);
+
+  const flushPendingContextPersistSafely = useCallback((): void => {
+    try {
+      flushPendingContextPersist();
+    } catch (cause) {
+      surfacePersistenceWriteError(cause);
+    }
+  }, [flushPendingContextPersist, surfacePersistenceWriteError]);
+
   useEffect(() => {
     if (lastActiveRepoRef.current === activeRepo) {
       return;
@@ -92,12 +107,7 @@ export function useRepoNavigationPersistence({
       flushPendingContextPersist();
       restoredContextRepoRef.current = null;
       persistedContextPayloadRef.current = null;
-      pendingContextPersistRef.current = null;
       setPersistenceError(null);
-      if (pendingPersistTimeoutIdRef.current !== null) {
-        globalThis.clearTimeout(pendingPersistTimeoutIdRef.current);
-        pendingPersistTimeoutIdRef.current = null;
-      }
     }
   }, [activeRepo, flushPendingContextPersist]);
 
@@ -141,7 +151,7 @@ export function useRepoNavigationPersistence({
   }, [activeRepo, persistenceError, setNavigation]);
 
   useEffect(() => {
-    if (!activeRepo || restoredContextRepoRef.current !== activeRepo) {
+    if (!activeRepo || persistenceError || restoredContextRepoRef.current !== activeRepo) {
       return;
     }
 
@@ -165,9 +175,13 @@ export function useRepoNavigationPersistence({
         pendingPersistTimeoutIdRef.current = null;
         return;
       }
-      writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
-      pendingContextPersistRef.current = null;
-      pendingPersistTimeoutIdRef.current = null;
+      try {
+        writePersistedContextPayload(pendingPersist.key, pendingPersist.payload);
+        pendingContextPersistRef.current = null;
+        pendingPersistTimeoutIdRef.current = null;
+      } catch (cause) {
+        surfacePersistenceWriteError(cause);
+      }
     }, 0);
     pendingPersistTimeoutIdRef.current = timeoutId;
 
@@ -176,7 +190,13 @@ export function useRepoNavigationPersistence({
         flushPendingContextPersist();
       }
     };
-  }, [activeRepo, flushPendingContextPersist, navigation]);
+  }, [
+    activeRepo,
+    flushPendingContextPersist,
+    navigation,
+    persistenceError,
+    surfacePersistenceWriteError,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") {
@@ -185,18 +205,18 @@ export function useRepoNavigationPersistence({
 
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") {
-        flushPendingContextPersist();
+        flushPendingContextPersistSafely();
       }
     };
 
-    window.addEventListener("pagehide", flushPendingContextPersist);
+    window.addEventListener("pagehide", flushPendingContextPersistSafely);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("pagehide", flushPendingContextPersist);
+      window.removeEventListener("pagehide", flushPendingContextPersistSafely);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [flushPendingContextPersist]);
+  }, [flushPendingContextPersistSafely]);
 
   return {
     persistenceError,

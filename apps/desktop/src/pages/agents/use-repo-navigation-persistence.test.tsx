@@ -313,7 +313,7 @@ describe("useRepoNavigationPersistence", () => {
     }
   });
 
-  test("throws actionable error when context storage persistence fails", async () => {
+  test("surfaces actionable error when context storage persistence fails and allows retry", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     const originalSetTimeout = globalThis.setTimeout;
@@ -373,7 +373,18 @@ describe("useRepoNavigationPersistence", () => {
         throw new Error("Expected pending persistence callback to be scheduled");
       }
 
-      expect(() => pendingFlush()).toThrow(
+      await harness.run(() => {
+        pendingFlush();
+      });
+      scheduledCallbacks.delete(2);
+
+      await harness.waitFor(
+        (state) =>
+          state.persistenceError?.message ===
+          `Failed to persist agent studio context storage key "${toContextStorageKey("/repo")}": write blocked`,
+      );
+
+      expect(harness.getLatest().persistenceError?.message).toBe(
         `Failed to persist agent studio context storage key "${toContextStorageKey("/repo")}": write blocked`,
       );
 
@@ -381,6 +392,33 @@ describe("useRepoNavigationPersistence", () => {
         configurable: true,
         value: memoryStorage,
       });
+
+      await harness.run((latest) => {
+        latest.retryPersistenceRestore();
+      });
+
+      const retryFlush = scheduledCallbacks.get(3);
+      if (!retryFlush) {
+        throw new Error("Expected retry persistence callback to be scheduled");
+      }
+
+      await harness.run(() => {
+        retryFlush();
+      });
+      scheduledCallbacks.delete(3);
+
+      const stored = memoryStorage.getItem(toContextStorageKey("/repo"));
+      if (!stored) {
+        throw new Error("Expected persisted context payload after retry");
+      }
+
+      expect(JSON.parse(stored)).toEqual({
+        taskId: "task-from-cleanup",
+        role: "spec",
+        sessionId: "session-from-cleanup",
+      });
+      expect(harness.getLatest().persistenceError).toBeNull();
+
       await harness.unmount();
     } finally {
       globalThis.setTimeout = originalSetTimeout;
