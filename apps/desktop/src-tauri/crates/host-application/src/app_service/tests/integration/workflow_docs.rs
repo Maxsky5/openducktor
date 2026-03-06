@@ -834,17 +834,15 @@ fn qa_approved_appends_report_and_transitions_to_human_review() -> Result<()> {
 
     let task_state = task_state.lock().expect("task lock poisoned");
     assert_eq!(
-        task_state.qa_append_calls,
+        task_state.qa_outcome_calls,
         vec![(
             "task-1".to_string(),
+            TaskStatus::HumanReview,
             "Looks good".to_string(),
             QaVerdict::Approved
         )]
     );
-    assert!(task_state
-        .updated_patches
-        .iter()
-        .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+    assert!(task_state.updated_patches.is_empty());
     Ok(())
 }
 
@@ -865,17 +863,15 @@ fn qa_rejected_appends_report_and_transitions_to_in_progress() -> Result<()> {
 
     let task_state = task_state.lock().expect("task lock poisoned");
     assert_eq!(
-        task_state.qa_append_calls,
+        task_state.qa_outcome_calls,
         vec![(
             "task-1".to_string(),
+            TaskStatus::InProgress,
             "Needs work".to_string(),
             QaVerdict::Rejected
         )]
     );
-    assert!(task_state
-        .updated_patches
-        .iter()
-        .any(|(_, patch)| patch.status == Some(TaskStatus::InProgress)));
+    assert!(task_state.updated_patches.is_empty());
     Ok(())
 }
 

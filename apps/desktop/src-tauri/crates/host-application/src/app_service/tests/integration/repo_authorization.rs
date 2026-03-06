@@ -1,5 +1,5 @@
 use anyhow::Result;
-use host_domain::{GitCurrentBranch, RunEvent, RunState, RunSummary, TaskStatus};
+use host_domain::{GitCurrentBranch, RunEvent, RunState, RunSummary, TaskStatus, UpdateTaskPatch};
 use host_infra_system::{HookSet, RepoConfig};
 use std::fs;
 use std::sync::{Arc, Mutex};
@@ -28,6 +28,95 @@ fn tasks_reject_repo_path_not_in_workspace_allowlist() {
     assert!(error.to_string().contains("workspace allowlist"));
     let state = task_state.lock().expect("task state lock poisoned");
     assert!(state.ensure_calls.is_empty());
+}
+
+#[test]
+fn task_update_rejects_unauthorized_repo_before_status_validation() {
+    let (service, task_state, _git_state) = build_service_with_git_state_enforced(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let error = service
+        .task_update(
+            "/tmp/odt-repo-unauthorized-task-update",
+            "task-1",
+            UpdateTaskPatch {
+                title: None,
+                description: None,
+                acceptance_criteria: None,
+                notes: None,
+                status: Some(TaskStatus::Closed),
+                priority: None,
+                issue_type: None,
+                ai_review_enabled: None,
+                labels: None,
+                assignee: None,
+                parent_id: None,
+            },
+        )
+        .expect_err("unconfigured repo path should be rejected before patch validation");
+
+    assert!(error.to_string().contains("workspace allowlist"));
+    let state = task_state.lock().expect("task state lock poisoned");
+    assert!(state.ensure_calls.is_empty());
+    assert!(state.updated_patches.is_empty());
+}
+
+#[test]
+fn spec_mutators_reject_unauthorized_repo_before_markdown_validation() {
+    let (service, task_state, _git_state) = build_service_with_git_state_enforced(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let set_spec_error = service
+        .set_spec("/tmp/odt-repo-unauthorized-spec", "task-1", "   ")
+        .expect_err("unconfigured repo path should be rejected before markdown validation");
+    assert!(set_spec_error.to_string().contains("workspace allowlist"));
+
+    let save_spec_error = service
+        .save_spec_document("/tmp/odt-repo-unauthorized-spec", "task-1", "   ")
+        .expect_err("unconfigured repo path should be rejected before markdown validation");
+    assert!(save_spec_error.to_string().contains("workspace allowlist"));
+
+    let state = task_state.lock().expect("task state lock poisoned");
+    assert!(state.ensure_calls.is_empty());
+    assert!(state.spec_set_calls.is_empty());
+}
+
+#[test]
+fn plan_mutators_reject_unauthorized_repo_before_markdown_validation() {
+    let (service, task_state, _git_state) = build_service_with_git_state_enforced(
+        vec![make_task("task-1", "task", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+        },
+    );
+
+    let set_plan_error = service
+        .set_plan("/tmp/odt-repo-unauthorized-plan", "task-1", "   ", None)
+        .expect_err("unconfigured repo path should be rejected before markdown validation");
+    assert!(set_plan_error.to_string().contains("workspace allowlist"));
+
+    let save_plan_error = service
+        .save_plan_document("/tmp/odt-repo-unauthorized-plan", "task-1", "   ")
+        .expect_err("unconfigured repo path should be rejected before markdown validation");
+    assert!(save_plan_error.to_string().contains("workspace allowlist"));
+
+    let state = task_state.lock().expect("task state lock poisoned");
+    assert!(state.ensure_calls.is_empty());
+    assert!(state.plan_set_calls.is_empty());
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use crate::document::{
     AgentSessionDocument, QaReportDocument, QaVerdict, SpecDocument, TaskMetadata,
 };
-use crate::task::{CreateTaskInput, TaskCard, UpdateTaskPatch};
+use crate::task::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
 use anyhow::Result;
 use std::path::Path;
 
@@ -32,6 +32,15 @@ pub trait TaskStore: Send + Sync {
         markdown: &str,
         verdict: QaVerdict,
     ) -> Result<QaReportDocument>;
+    /// Persist a QA report and its linked status transition together when possible.
+    fn record_qa_outcome(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        target_status: TaskStatus,
+        markdown: &str,
+        verdict: QaVerdict,
+    ) -> Result<TaskCard>;
     fn list_agent_sessions(
         &self,
         repo_path: &Path,

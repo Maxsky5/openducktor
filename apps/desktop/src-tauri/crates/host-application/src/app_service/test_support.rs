@@ -23,8 +23,8 @@ use host_domain::{
     GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
     GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData,
     GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict,
-    RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
-    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    QaWorkflowVerdict, RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard,
+    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -89,6 +89,7 @@ pub(crate) struct TaskStoreState {
     pub(crate) plan_set_calls: Vec<(String, String)>,
     pub(crate) metadata_get_calls: Vec<String>,
     pub(crate) qa_append_calls: Vec<(String, String, QaVerdict)>,
+    pub(crate) qa_outcome_calls: Vec<(String, TaskStatus, String, QaVerdict)>,
     pub(crate) latest_qa_report: Option<QaReportDocument>,
     pub(crate) agent_sessions: Vec<AgentSessionDocument>,
     pub(crate) upserted_sessions: Vec<(String, AgentSessionDocument)>,
@@ -260,6 +261,45 @@ impl TaskStore for FakeTaskStore {
             updated_at: "2026-01-01T00:00:00Z".to_string(),
             revision: 1,
         })
+    }
+
+    fn record_qa_outcome(
+        &self,
+        _repo_path: &Path,
+        _task_id: &str,
+        target_status: TaskStatus,
+        markdown: &str,
+        verdict: QaVerdict,
+    ) -> Result<TaskCard> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        state.qa_outcome_calls.push((
+            _task_id.to_string(),
+            target_status.clone(),
+            markdown.to_string(),
+            verdict.clone(),
+        ));
+        state.latest_qa_report = Some(QaReportDocument {
+            markdown: markdown.to_string(),
+            verdict: verdict.clone(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+            revision: 1,
+        });
+
+        let index = state
+            .tasks
+            .iter()
+            .position(|task| task.id == _task_id)
+            .ok_or_else(|| anyhow!("task not found: {_task_id}"))?;
+        let mut updated = state.tasks[index].clone();
+        updated.status = target_status;
+        updated.document_summary.qa_report.has = true;
+        updated.document_summary.qa_report.updated_at = Some("2026-01-01T00:00:00Z".to_string());
+        updated.document_summary.qa_report.verdict = match verdict {
+            QaVerdict::Approved => QaWorkflowVerdict::Approved,
+            QaVerdict::Rejected => QaWorkflowVerdict::Rejected,
+        };
+        state.tasks[index] = updated.clone();
+        Ok(updated)
     }
 
     fn list_agent_sessions(
@@ -698,6 +738,7 @@ pub(crate) fn build_service_with_git_state_enforced(
         plan_set_calls: Vec::new(),
         metadata_get_calls: Vec::new(),
         qa_append_calls: Vec::new(),
+        qa_outcome_calls: Vec::new(),
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
@@ -757,6 +798,7 @@ pub(crate) fn build_service_with_git_state(
         plan_set_calls: Vec::new(),
         metadata_get_calls: Vec::new(),
         qa_append_calls: Vec::new(),
+        qa_outcome_calls: Vec::new(),
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
@@ -1181,6 +1223,7 @@ pub(crate) fn build_service_with_store(
         plan_set_calls: Vec::new(),
         metadata_get_calls: Vec::new(),
         qa_append_calls: Vec::new(),
+        qa_outcome_calls: Vec::new(),
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),

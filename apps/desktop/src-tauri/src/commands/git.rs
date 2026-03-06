@@ -1127,7 +1127,7 @@ mod tests {
         GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
         GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSummary,
         GitWorktreeStatusSummaryData, QaReportDocument, QaVerdict, SpecDocument, TaskCard,
-        TaskMetadata, TaskStore, UpdateTaskPatch,
+        TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
     };
     use host_infra_system::AppConfigStore;
     use serde_json::{json, Value};
@@ -1304,6 +1304,19 @@ mod tests {
                 updated_at: String::new(),
                 revision: 0,
             })
+        }
+
+        fn record_qa_outcome(
+            &self,
+            _repo_path: &Path,
+            _task_id: &str,
+            _target_status: TaskStatus,
+            _markdown: &str,
+            _verdict: QaVerdict,
+        ) -> anyhow::Result<TaskCard> {
+            Err(anyhow!(
+                "unexpected task store record_qa_outcome call in git command tests"
+            ))
         }
 
         fn list_agent_sessions(
