@@ -6,7 +6,7 @@ use crate::metadata::{
 };
 use crate::model::RawIssue;
 use crate::normalize::{
-    default_ai_review_enabled, parse_issue_type, parse_task_status, normalize_labels,
+    default_ai_review_enabled, normalize_labels, parse_issue_type, parse_task_status,
 };
 use crate::store::BeadsTaskStore;
 

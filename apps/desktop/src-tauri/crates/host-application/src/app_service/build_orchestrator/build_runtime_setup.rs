@@ -1,8 +1,8 @@
 use super::super::{
     run_parsed_hook_command_allow_failure, spawn_opencode_server, terminate_child_process,
     validate_hook_trust, validate_transition, wait_for_local_server_with_process, AppService,
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventCorrelation,
-    StartupEventPayload, TrackedOpencodeProcessGuard,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupEventContext,
+    StartupEventCorrelation, StartupEventPayload, TrackedOpencodeProcessGuard,
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{TaskStatus, TASK_METADATA_NAMESPACE};
@@ -262,25 +262,29 @@ impl AppService {
         startup_policy: OpencodeStartupReadinessPolicy,
     ) {
         self.emit_opencode_startup_event(StartupEventPayload::wait_begin(
-            "build_runtime",
-            repo_path,
-            Some(task_id),
-            "build",
-            port,
-            Some(StartupEventCorrelation::new("run_id", run_id)),
-            Some(startup_policy),
+            StartupEventContext::new(
+                "build_runtime",
+                repo_path,
+                Some(task_id),
+                "build",
+                port,
+                Some(StartupEventCorrelation::new("run_id", run_id)),
+                Some(startup_policy),
+            ),
         ));
     }
 
     fn emit_build_runtime_failed(&self, failure: BuildRuntimeFailureEvent<'_>) {
         self.emit_opencode_startup_event(StartupEventPayload::failed(
-            "build_runtime",
-            failure.repo_path,
-            Some(failure.task_id),
-            "build",
-            failure.port,
-            Some(StartupEventCorrelation::new("run_id", failure.run_id)),
-            Some(failure.startup_policy),
+            StartupEventContext::new(
+                "build_runtime",
+                failure.repo_path,
+                Some(failure.task_id),
+                "build",
+                failure.port,
+                Some(StartupEventCorrelation::new("run_id", failure.run_id)),
+                Some(failure.startup_policy),
+            ),
             failure.startup_report,
             failure.reason,
         ));
@@ -296,13 +300,15 @@ impl AppService {
         startup_report: OpencodeStartupWaitReport,
     ) {
         self.emit_opencode_startup_event(StartupEventPayload::ready(
-            "build_runtime",
-            repo_path,
-            Some(task_id),
-            "build",
-            port,
-            Some(StartupEventCorrelation::new("run_id", run_id)),
-            Some(startup_policy),
+            StartupEventContext::new(
+                "build_runtime",
+                repo_path,
+                Some(task_id),
+                "build",
+                port,
+                Some(StartupEventCorrelation::new("run_id", run_id)),
+                Some(startup_policy),
+            ),
             startup_report,
         ));
     }

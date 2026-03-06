@@ -113,6 +113,7 @@ pub(crate) fn with_locked_opencode_process_registry<T>(
 
     let mut file = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(path)

@@ -212,7 +212,7 @@ fn spawn_opencode_server_with_binary(
     config_content: &str,
     port: u16,
 ) -> Result<Child> {
-    let mut command = Command::new(&opencode_binary);
+    let mut command = Command::new(opencode_binary);
     command
         .arg("serve")
         .arg("--hostname")

@@ -5,6 +5,8 @@ use std::path::Path;
 use crate::metadata::parse_metadata_root;
 use crate::store::BeadsTaskStore;
 
+type NamespaceLoadResult = (Map<String, Value>, String, Map<String, Value>);
+
 impl BeadsTaskStore {
     pub(crate) fn write_metadata(
         &self,
@@ -25,7 +27,7 @@ impl BeadsTaskStore {
         &self,
         repo_path: &Path,
         task_id: &str,
-    ) -> Result<(Map<String, Value>, String, Map<String, Value>)> {
+    ) -> Result<NamespaceLoadResult> {
         let issue = self.show_raw_issue(repo_path, task_id)?;
         let mut root = parse_metadata_root(issue.metadata);
         let namespace_key = self.current_metadata_namespace();

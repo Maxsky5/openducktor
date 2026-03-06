@@ -32,10 +32,10 @@ use host_infra_system::{
 use serde_json::Value;
 use std::ffi::OsString;
 use std::fs;
-use std::io::Write;
-use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::fs::Permissions;
+use std::io::Write;
+use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
