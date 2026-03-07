@@ -35,6 +35,32 @@ use crate::app_service::{
     RunProcess, TrackedOpencodeProcessGuard, OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 
+fn run_command_in(current_dir: &Path, program: &str, args: &[&str]) -> Result<()> {
+    let status = Command::new(program)
+        .current_dir(current_dir)
+        .args(args)
+        .status()
+        .with_context(|| {
+            format!(
+                "failed running {} in {} with args {:?}",
+                program,
+                current_dir.display(),
+                args
+            )
+        })?;
+    if status.success() {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "{} {:?} failed in {} with status {}",
+        program,
+        args,
+        current_dir.display(),
+        status
+    ))
+}
+
 #[test]
 fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let _env_lock = lock_env();
@@ -54,10 +80,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -148,6 +171,83 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
 }
 
 #[test]
+fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-target-branch");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
+    let remote = root.join("remote.git");
+    let remote_path = remote.to_string_lossy().to_string();
+    run_command_in(
+        root.as_path(),
+        "git",
+        &["init", "--bare", remote_path.as_str()],
+    )?;
+    run_command_in(
+        repo.as_path(),
+        "git",
+        &["remote", "add", "origin", remote_path.as_str()],
+    )?;
+    run_command_in(repo.as_path(), "git", &["push", "-u", "origin", "main"])?;
+
+    run_command_in(repo.as_path(), "git", &["checkout", "-b", "develop"])?;
+    fs::write(repo.join("develop-only.txt"), "develop\n")?;
+    run_command_in(repo.as_path(), "git", &["add", "develop-only.txt"])?;
+    run_command_in(repo.as_path(), "git", &["commit", "-m", "develop base"])?;
+    run_command_in(repo.as_path(), "git", &["push", "-u", "origin", "develop"])?;
+
+    run_command_in(repo.as_path(), "git", &["checkout", "main"])?;
+    fs::write(repo.join("main-only.txt"), "main\n")?;
+    run_command_in(repo.as_path(), "git", &["add", "main-only.txt"])?;
+    run_command_in(repo.as_path(), "git", &["commit", "-m", "main only"])?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let worktree_base = root.join("builder-worktrees");
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/develop".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
+    let emitter = make_emitter(events.clone());
+    let run = service.build_start(repo_path.as_str(), "task-1", emitter.clone())?;
+    let worktree_path = Path::new(run.worktree_path.as_str());
+    assert!(worktree_path.join("develop-only.txt").exists());
+    assert!(!worktree_path.join("main-only.txt").exists());
+
+    assert!(service.build_stop(run.run_id.as_str(), emitter.clone())?);
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
     let root = unique_temp_path("build-failure");
     let repo = root.join("repo");
@@ -158,10 +258,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::InProgress)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
 
@@ -251,10 +348,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             make_task("task-2", "bug", TaskStatus::Open),
         ],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -362,10 +456,7 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -409,10 +500,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -462,10 +550,7 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -517,10 +602,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -567,10 +649,7 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -634,10 +713,7 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
