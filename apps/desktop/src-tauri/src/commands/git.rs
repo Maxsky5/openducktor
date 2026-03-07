@@ -1757,10 +1757,7 @@ mod tests {
 
     fn sample_worktree_status_data(upstream: GitUpstreamAheadBehind) -> GitWorktreeStatusData {
         GitWorktreeStatusData {
-            current_branch: GitCurrentBranch {
-                name: Some("feature/command".to_string()),
-                detached: false,
-            },
+            current_branch: GitCurrentBranch { name: Some("feature/command".to_string()), detached: false, revision: None },
             file_statuses: vec![GitFileStatus {
                 path: "src/main.rs".to_string(),
                 status: "M".to_string(),
@@ -1785,10 +1782,7 @@ mod tests {
         upstream: GitUpstreamAheadBehind,
     ) -> GitWorktreeStatusSummaryData {
         GitWorktreeStatusSummaryData {
-            current_branch: GitCurrentBranch {
-                name: Some("feature/command".to_string()),
-                detached: false,
-            },
+            current_branch: GitCurrentBranch { name: Some("feature/command".to_string()), detached: false, revision: None },
             file_statuses: vec![GitFileStatus {
                 path: "src/main.rs".to_string(),
                 status: "M".to_string(),
@@ -2827,10 +2821,7 @@ mod tests {
     #[test]
     fn build_worktree_status_with_snapshot_preserves_payload_and_snapshot_fields() {
         let status_data = GitWorktreeStatusData {
-            current_branch: GitCurrentBranch {
-                name: Some("feature/snapshot".to_string()),
-                detached: false,
-            },
+            current_branch: GitCurrentBranch { name: Some("feature/snapshot".to_string()), detached: false, revision: None },
             file_statuses: vec![GitFileStatus {
                 path: "src/main.rs".to_string(),
                 status: "modified".to_string(),
@@ -2894,10 +2885,7 @@ mod tests {
 
     #[test]
     fn status_hash_changes_when_status_payload_changes() {
-        let current_branch = GitCurrentBranch {
-            name: Some("feature/task-1".to_string()),
-            detached: false,
-        };
+        let current_branch = GitCurrentBranch { name: Some("feature/task-1".to_string()), detached: false, revision: None };
         let file_statuses = vec![GitFileStatus {
             path: "src/main.rs".to_string(),
             status: "M".to_string(),
@@ -2934,10 +2922,7 @@ mod tests {
 
     #[test]
     fn status_hash_is_stable_for_identical_payload() {
-        let current_branch = GitCurrentBranch {
-            name: Some("feature/task-1".to_string()),
-            detached: false,
-        };
+        let current_branch = GitCurrentBranch { name: Some("feature/task-1".to_string()), detached: false, revision: None };
         let file_statuses = vec![GitFileStatus {
             path: "src/main.rs".to_string(),
             status: "M".to_string(),
@@ -3031,10 +3016,7 @@ mod tests {
     #[test]
     fn build_worktree_status_summary_with_snapshot_preserves_payload_and_snapshot_fields() {
         let built = build_worktree_status_summary_with_snapshot(
-            GitCurrentBranch {
-                name: Some("feature/snapshot".to_string()),
-                detached: false,
-            },
+            GitCurrentBranch { name: Some("feature/snapshot".to_string()), detached: false, revision: None },
             GitFileStatusCounts {
                 total: 4,
                 staged: 2,

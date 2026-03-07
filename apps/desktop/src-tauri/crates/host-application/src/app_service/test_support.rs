@@ -486,10 +486,7 @@ impl GitPort for FakeGitPort {
             branch: branch.to_string(),
             create,
         });
-        state.current_branch = GitCurrentBranch {
-            name: Some(branch.to_string()),
-            detached: false,
-        };
+        state.current_branch = GitCurrentBranch { name: Some(branch.to_string()), detached: false, revision: None };
         Ok(state.current_branch.clone())
     }
 
@@ -752,10 +749,7 @@ pub(crate) fn build_service_with_state(
     build_service_with_git_state(
         tasks,
         Vec::new(),
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     )
 }
 

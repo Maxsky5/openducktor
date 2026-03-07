@@ -15,6 +15,7 @@ pub struct GitBranch {
 pub struct GitCurrentBranch {
     pub name: Option<String>,
     pub detached: bool,
+    pub revision: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

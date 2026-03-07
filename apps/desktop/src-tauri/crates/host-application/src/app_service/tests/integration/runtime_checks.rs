@@ -57,10 +57,7 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
 
@@ -154,10 +151,7 @@ fn beads_check_reports_task_store_init_error() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
     task_state.lock().expect("task lock poisoned").ensure_error = Some("init failed".to_string());
@@ -183,10 +177,7 @@ fn beads_and_system_checks_report_missing_bd_binary() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let beads = service.beads_check("/tmp/does-not-matter")?;

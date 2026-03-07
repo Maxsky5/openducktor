@@ -7,6 +7,7 @@ import type {
 } from "@/pages/agents/use-agent-studio-git-actions";
 
 export type AgentStudioGitPanelModel = DiffDataState & {
+  contextMode?: "repository" | "worktree";
   isCommitting?: boolean;
   isPushing?: boolean;
   isRebasing?: boolean;

@@ -40,10 +40,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let run_id = "run-shutdown".to_string();
@@ -126,10 +123,7 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let root = unique_temp_path("shutdown-pending-opencode");
@@ -178,10 +172,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
 
@@ -367,10 +358,7 @@ fn startup_reconcile_terminates_orphaned_registered_opencode_processes() -> Resu
     let (_service, _task_state, _git_state) = build_service_with_store(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
 
@@ -434,10 +422,7 @@ fn startup_reconcile_keeps_non_orphan_registered_opencode_processes() -> Result<
     let (_service, _task_state, _git_state) = build_service_with_store(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
         config_store,
     );
 

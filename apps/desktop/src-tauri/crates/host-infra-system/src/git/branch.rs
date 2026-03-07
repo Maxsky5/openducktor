@@ -42,10 +42,21 @@ impl GitCliPort {
             .lines()
             .find(|line| !line.trim().is_empty())
             .map(|line| line.trim().to_string());
+        let (revision_ok, revision_stdout, _) =
+            self.run_git_allow_failure(repo_path, &["rev-parse", "HEAD"])?;
+        let revision = if revision_ok {
+            revision_stdout
+                .lines()
+                .find(|line| !line.trim().is_empty())
+                .map(|line| line.trim().to_string())
+        } else {
+            None
+        };
 
         Ok(GitCurrentBranch {
             detached: name.is_none(),
             name,
+            revision,
         })
     }
 

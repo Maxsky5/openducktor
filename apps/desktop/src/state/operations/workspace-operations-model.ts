@@ -64,7 +64,11 @@ export const hasBranchIdentityChanged = (
   current: GitCurrentBranch,
   lastKnownName: string | null,
   lastKnownDetached: boolean | null,
-): boolean => (current.name ?? null) !== lastKnownName || current.detached !== lastKnownDetached;
+  lastKnownRevision: string | null,
+): boolean =>
+  (current.name ?? null) !== lastKnownName ||
+  current.detached !== lastKnownDetached ||
+  (current.revision ?? null) !== lastKnownRevision;
 
 export const shouldSkipBranchSwitch = (
   activeBranch: GitCurrentBranch | null,

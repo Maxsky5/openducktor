@@ -16,11 +16,14 @@ const emptyDoc = {
 };
 
 const diffModel: AgentStudioGitPanelModel = {
+  contextMode: "worktree",
   branch: "feature/task-12",
   worktreePath: "/tmp/worktree/task-12",
   targetBranch: "origin/main",
   diffScope: "target",
   commitsAheadBehind: null,
+  upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
   fileDiffs: [],
   fileStatuses: [],
   uncommittedFileCount: 0,

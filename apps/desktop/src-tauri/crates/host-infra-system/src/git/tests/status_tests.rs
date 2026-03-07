@@ -161,6 +161,56 @@ fn get_worktree_status_reports_untracked_when_upstream_is_missing() {
 }
 
 #[test]
+fn get_worktree_status_supports_upstream_target_without_tracking_branch() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-target-upstream-untracked");
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "@{upstream}", GitDiffScope::Target)
+        .expect("worktree status should resolve without an upstream branch");
+
+    assert!(status.file_diffs.is_empty());
+    assert_eq!(status.target_ahead_behind.ahead, 0);
+    assert_eq!(status.target_ahead_behind.behind, 0);
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Untracked { ahead: 0 }
+    );
+}
+
+#[test]
+fn get_worktree_status_keeps_upstream_compare_empty_when_repo_is_dirty_and_untracked() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("worktree-status-target-upstream-dirty-untracked");
+    fs::write(repo.path.join("README.md"), "# OpenDucktor\nlocal change\n")
+        .expect("dirty file should write");
+
+    let git = GitCliPort::new();
+    let status = git
+        .get_worktree_status(&repo.path, "@{upstream}", GitDiffScope::Target)
+        .expect("worktree status should resolve without an upstream branch");
+
+    assert!(
+        !status.file_statuses.is_empty(),
+        "dirty repository status should still be reported"
+    );
+    assert!(
+        status.file_diffs.is_empty(),
+        "upstream compare should stay empty instead of falling back to uncommitted diff"
+    );
+    assert_eq!(
+        status.upstream_ahead_behind,
+        GitUpstreamAheadBehind::Untracked { ahead: 0 }
+    );
+}
+
+#[test]
 fn get_worktree_status_requires_non_empty_target_branch() {
     if !git_available() {
         return;

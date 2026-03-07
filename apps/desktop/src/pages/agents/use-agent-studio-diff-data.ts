@@ -24,7 +24,8 @@ export type DiffDataState = {
   diffScope: DiffScope;
   /** Commits ahead/behind the target branch. */
   commitsAheadBehind: CommitsAheadBehind | null;
-  upstreamAheadBehind?: CommitsAheadBehind | null;
+  upstreamAheadBehind: CommitsAheadBehind | null;
+  upstreamStatus: "tracking" | "untracked" | "error";
   /** Changed files with diff content. */
   fileDiffs: FileDiff[];
   /** File status from `git status`. */
@@ -57,6 +58,7 @@ export type UseAgentStudioDiffDataInput = {
   sessionRunId: string | null;
   /** Default target branch from repo settings. */
   defaultTargetBranch: string;
+  branchIdentityKey?: string | null;
   /** Whether to enable polling (only when builder session is active). */
   enablePolling: boolean;
 };
@@ -76,6 +78,7 @@ type ScopeSnapshot = {
   uncommittedFileCount: number;
   commitsAheadBehind: CommitsAheadBehind | null;
   upstreamAheadBehind: CommitsAheadBehind | null;
+  upstreamStatus: "tracking" | "untracked" | "error";
   error: string | null;
   hashVersion: number | null;
   statusHash: string | null;
@@ -88,6 +91,7 @@ type LoadDataContext = {
   workingDir: string | null;
   scope: DiffScope;
   mode?: LoadDataMode;
+  replayIfInFlight?: boolean;
 };
 
 type LoadDataMode = "full" | "summary";
@@ -103,6 +107,7 @@ const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   uncommittedFileCount: 0,
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
   error: null,
   hashVersion: null,
   statusHash: null,
@@ -192,6 +197,7 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
       left.uncommittedFileCount === right.uncommittedFileCount &&
       aheadBehindEqual(left.commitsAheadBehind, right.commitsAheadBehind) &&
       aheadBehindEqual(left.upstreamAheadBehind, right.upstreamAheadBehind) &&
+      left.upstreamStatus === right.upstreamStatus &&
       left.error === right.error &&
       hashMetadataEqual(left, right)
     );
@@ -201,6 +207,7 @@ const toUpstreamAndError = (
   upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"],
 ): {
   upstreamAheadBehind: CommitsAheadBehind | null;
+  upstreamStatus: "tracking" | "untracked" | "error";
   error: string | null;
 } => {
   if (upstreamAheadBehind.outcome === "tracking") {
@@ -209,6 +216,7 @@ const toUpstreamAndError = (
         ahead: upstreamAheadBehind.ahead,
         behind: upstreamAheadBehind.behind,
       },
+      upstreamStatus: "tracking",
       error: null,
     };
   }
@@ -219,18 +227,22 @@ const toUpstreamAndError = (
         ahead: upstreamAheadBehind.ahead,
         behind: 0,
       },
+      upstreamStatus: "untracked",
       error: null,
     };
   }
 
   return {
     upstreamAheadBehind: null,
+    upstreamStatus: "error",
     error: `Upstream status unavailable: ${upstreamAheadBehind.message}`,
   };
 };
 
 const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
-  const { upstreamAheadBehind, error } = toUpstreamAndError(snapshot.upstreamAheadBehind);
+  const { upstreamAheadBehind, upstreamStatus, error } = toUpstreamAndError(
+    snapshot.upstreamAheadBehind,
+  );
   return {
     branch: snapshot.currentBranch.name ?? null,
     fileDiffs: snapshot.fileDiffs,
@@ -238,6 +250,7 @@ const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
     uncommittedFileCount: snapshot.fileStatuses.length,
     commitsAheadBehind: snapshot.targetAheadBehind,
     upstreamAheadBehind,
+    upstreamStatus,
     error,
     hashVersion: snapshot.snapshot.hashVersion,
     statusHash: snapshot.snapshot.statusHash,
@@ -251,6 +264,7 @@ type ScopeSummaryFields = Pick<
   | "uncommittedFileCount"
   | "commitsAheadBehind"
   | "upstreamAheadBehind"
+  | "upstreamStatus"
   | "error"
   | "hashVersion"
   | "statusHash"
@@ -258,12 +272,15 @@ type ScopeSummaryFields = Pick<
 >;
 
 const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSummaryFields => {
-  const { upstreamAheadBehind, error } = toUpstreamAndError(summary.upstreamAheadBehind);
+  const { upstreamAheadBehind, upstreamStatus, error } = toUpstreamAndError(
+    summary.upstreamAheadBehind,
+  );
   return {
     branch: summary.currentBranch.name ?? null,
     uncommittedFileCount: summary.fileStatusCounts.total,
     commitsAheadBehind: summary.targetAheadBehind,
     upstreamAheadBehind,
+    upstreamStatus,
     error,
     hashVersion: summary.snapshot.hashVersion,
     statusHash: summary.snapshot.statusHash,
@@ -278,6 +295,7 @@ const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): 
   uncommittedFileCount: source.uncommittedFileCount,
   commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
+  upstreamStatus: source.upstreamStatus,
   error: source.error,
   hashVersion: source.hashVersion,
   statusHash: source.statusHash,
@@ -292,6 +310,7 @@ const mergeSharedSummaryFields = (
   uncommittedFileCount: source.uncommittedFileCount,
   commitsAheadBehind: source.commitsAheadBehind,
   upstreamAheadBehind: source.upstreamAheadBehind,
+  upstreamStatus: source.upstreamStatus,
   error: source.error,
   hashVersion: source.hashVersion,
   statusHash: source.statusHash,
@@ -314,6 +333,7 @@ export function useAgentStudioDiffData({
   sessionWorkingDirectory,
   sessionRunId,
   defaultTargetBranch,
+  branchIdentityKey = null,
   enablePolling,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const [state, setState] = useState<DiffBatchState>(createInitialState);
@@ -331,6 +351,10 @@ export function useAgentStudioDiffData({
   const inFlightScopeRequestRef = useRef<Record<DiffScope, Record<LoadDataMode, string | null>>>({
     target: { full: null, summary: null },
     uncommitted: { full: null, summary: null },
+  });
+  const queuedFullReloadByScopeRef = useRef<Record<DiffScope, boolean>>({
+    target: false,
+    uncommitted: false,
   });
   const requestContextKeyRef = useRef<string | null>(null);
 
@@ -370,9 +394,13 @@ export function useAgentStudioDiffData({
     const target = context?.targetBranch ?? targetBranchRef.current;
     const workingDir = context?.workingDir ?? workingDirRef.current;
     const mode = context?.mode ?? "full";
+    const replayIfInFlight = context?.replayIfInFlight === true;
     const requestKey = `${path}::${target}::${workingDir ?? ""}`;
 
     if (inFlightScopeRequestRef.current[scope][mode] === requestKey) {
+      if (mode === "full" && replayIfInFlight) {
+        queuedFullReloadByScopeRef.current[scope] = true;
+      }
       return;
     }
 
@@ -410,14 +438,11 @@ export function useAgentStudioDiffData({
 
         const previousSummarySnapshot = stateRef.current.byScope[scope];
         const nextSummaryFields = toScopeSummaryFields(summary);
-        const shouldReloadFullScope =
-          stateRef.current.loadedByScope[scope] &&
-          previousSummarySnapshot.fileStatuses.some(
-            (fileStatus) => fileStatus.status === "unmerged",
-          ) &&
-          (previousSummarySnapshot.hashVersion !== nextSummaryFields.hashVersion ||
-            previousSummarySnapshot.statusHash !== nextSummaryFields.statusHash ||
-            previousSummarySnapshot.diffHash !== nextSummaryFields.diffHash);
+        const hashesChanged =
+          previousSummarySnapshot.hashVersion !== nextSummaryFields.hashVersion ||
+          previousSummarySnapshot.statusHash !== nextSummaryFields.statusHash ||
+          previousSummarySnapshot.diffHash !== nextSummaryFields.diffHash;
+        const shouldReloadFullScope = stateRef.current.loadedByScope[scope] && hashesChanged;
 
         setState((prev) => {
           const previousFetchedScopeSnapshot = prev.byScope[scope];
@@ -437,6 +462,7 @@ export function useAgentStudioDiffData({
 
           if (requestSequence >= latestSharedSequenceRef.current) {
             latestSharedSequenceRef.current = requestSequence;
+            let nextLoadedByScope = prev.loadedByScope;
             for (const otherScope of ALL_SCOPES) {
               if (otherScope === scope) {
                 continue;
@@ -452,7 +478,35 @@ export function useAgentStudioDiffData({
                 nextByScope[otherScope] = nextOtherScopeSnapshot;
                 didChange = true;
               }
+
+              if (hashesChanged && prev.loadedByScope[otherScope]) {
+                const invalidatedOtherScopeSnapshot: ScopeSnapshot = {
+                  ...nextByScope[otherScope],
+                  fileDiffs: EMPTY_DIFFS,
+                };
+                if (!scopeSnapshotEqual(nextByScope[otherScope], invalidatedOtherScopeSnapshot)) {
+                  nextByScope[otherScope] = invalidatedOtherScopeSnapshot;
+                  didChange = true;
+                }
+                if (nextLoadedByScope[otherScope]) {
+                  nextLoadedByScope = {
+                    ...nextLoadedByScope,
+                    [otherScope]: false,
+                  };
+                  didChange = true;
+                }
+              }
             }
+
+            if (!didChange && !prev.isLoading) {
+              return prev;
+            }
+
+            return {
+              byScope: nextByScope,
+              loadedByScope: nextLoadedByScope,
+              isLoading: false,
+            };
           }
 
           if (!didChange && !prev.isLoading) {
@@ -593,13 +647,26 @@ export function useAgentStudioDiffData({
       if (inFlightScopeRequestRef.current[scope][mode] === requestKey) {
         inFlightScopeRequestRef.current[scope][mode] = null;
       }
+
+      if (mode === "full" && queuedFullReloadByScopeRef.current[scope]) {
+        queuedFullReloadByScopeRef.current[scope] = false;
+        globalThis.queueMicrotask(() => {
+          void loadData(false, {
+            repoPath: path,
+            targetBranch: target,
+            workingDir,
+            scope,
+            mode: "full",
+          });
+        });
+      }
     }
   }, []);
 
   useEffect(() => {
     const contextKey = `${repoPath ?? ""}::${targetBranch}::${worktreePath ?? ""}::${
       worktreeResolutionRunId ?? ""
-    }`;
+    }::${branchIdentityKey ?? ""}`;
     const hasContextChanged =
       requestContextKeyRef.current !== null && requestContextKeyRef.current !== contextKey;
     requestContextKeyRef.current = contextKey;
@@ -611,6 +678,7 @@ export function useAgentStudioDiffData({
             versionByScopeAndModeRef.current[scope][mode] += 1;
             inFlightScopeRequestRef.current[scope][mode] = null;
           }
+          queuedFullReloadByScopeRef.current[scope] = false;
         }
         requestSequenceRef.current = 0;
         latestSharedSequenceRef.current = 0;
@@ -634,6 +702,7 @@ export function useAgentStudioDiffData({
             versionByScopeAndModeRef.current[scope][mode] += 1;
             inFlightScopeRequestRef.current[scope][mode] = null;
           }
+          queuedFullReloadByScopeRef.current[scope] = false;
         }
         requestSequenceRef.current = 0;
         latestSharedSequenceRef.current = 0;
@@ -648,6 +717,7 @@ export function useAgentStudioDiffData({
         versionByScopeAndModeRef.current[scope][mode] += 1;
         inFlightScopeRequestRef.current[scope][mode] = null;
       }
+      queuedFullReloadByScopeRef.current[scope] = false;
     }
     requestSequenceRef.current = 0;
     latestSharedSequenceRef.current = 0;
@@ -659,6 +729,7 @@ export function useAgentStudioDiffData({
     worktreePath,
     targetBranch,
     worktreeResolutionRunId,
+    branchIdentityKey,
     shouldBlockDiffLoading,
     loadData,
   ]);
@@ -719,7 +790,13 @@ export function useAgentStudioDiffData({
       return;
     }
 
-    void loadData(true);
+    void loadData(true, {
+      repoPath: repoPathRef.current,
+      targetBranch: targetBranchRef.current,
+      workingDir: workingDirRef.current,
+      scope: diffScopeRef.current,
+      replayIfInFlight: true,
+    });
   }, [loadData, retryWorktreeResolution, shouldBlockDiffLoading, worktreeResolutionError]);
 
   const setSelectedFile = useCallback(
@@ -741,6 +818,7 @@ export function useAgentStudioDiffData({
         workingDir: workingDirRef.current,
         scope: diffScopeRef.current,
         mode: "full",
+        replayIfInFlight: true,
       });
     },
     [loadData, shouldBlockDiffLoading],
@@ -755,6 +833,7 @@ export function useAgentStudioDiffData({
       diffScope,
       commitsAheadBehind: activeScopeState.commitsAheadBehind,
       upstreamAheadBehind: activeScopeState.upstreamAheadBehind,
+      upstreamStatus: activeScopeState.upstreamStatus,
       fileDiffs: activeScopeState.fileDiffs,
       fileStatuses: activeScopeState.fileStatuses,
       statusSnapshotKey,
