@@ -32,6 +32,7 @@ import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { errorMessage } from "@/lib/errors";
 import { UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
+import { useDelegationEventsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
@@ -355,11 +356,14 @@ export function AgentsPage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
+  const [runCompletionRecoverySignal, setRunCompletionRecoverySignal] = useState(0);
+  const latestRunCompletionSignalVersionRef = useRef<number | null>(null);
   const [pendingRebaseConflictResolutionRequest, setPendingRebaseConflictResolutionRequest] =
     useState<PendingRebaseConflictResolutionRequest | null>(null);
   const pendingRebaseConflictResolutionResolverRef = useRef<
     ((decision: RebaseConflictResolutionDecision) => void) | null
   >(null);
+  const { runCompletionSignal } = useDelegationEventsContext();
   const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
     useAgentStudioSessionStartRequest();
 
@@ -429,6 +433,26 @@ export function AgentsPage(): ReactElement {
     clearComposerInput,
     onContextSwitchIntent: signalContextSwitchIntent,
   });
+
+  useEffect(() => {
+    const activeBuildRunId =
+      selection.viewActiveSession?.role === "build" ? selection.viewActiveSession.runId : null;
+
+    if (!runCompletionSignal || !activeBuildRunId) {
+      return;
+    }
+
+    if (runCompletionSignal.runId !== activeBuildRunId) {
+      return;
+    }
+
+    if (runCompletionSignal.version === latestRunCompletionSignalVersionRef.current) {
+      return;
+    }
+
+    latestRunCompletionSignalVersionRef.current = runCompletionSignal.version;
+    setRunCompletionRecoverySignal((current) => current + 1);
+  }, [runCompletionSignal, selection.viewActiveSession?.runId, selection.viewActiveSession?.role]);
 
   useAgentStudioQuerySessionSync({
     isLoadingTasks,
@@ -525,6 +549,7 @@ export function AgentsPage(): ReactElement {
     repoPath: activeRepo,
     sessionWorkingDirectory: selection.viewActiveSession?.workingDirectory ?? null,
     sessionRunId: selection.viewActiveSession?.runId ?? null,
+    runCompletionRecoverySignal,
     defaultTargetBranch: diffComparisonTarget,
     branchIdentityKey: repositoryBranchIdentityKey,
     enablePolling:

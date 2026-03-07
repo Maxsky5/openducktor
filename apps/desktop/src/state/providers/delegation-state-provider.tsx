@@ -1,10 +1,11 @@
 import type { RunEvent } from "@openducktor/contracts";
-import { type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
+import { type PropsWithChildren, type ReactElement, useCallback, useMemo, useState } from "react";
 import { buildDelegationStateValue } from "../app-state-context-values";
 import {
   DelegationEventsContext,
   type DelegationEventsContextValue,
   DelegationStateContext,
+  type RunCompletionSignal,
   useActiveRepoContext,
   useTaskControlContext,
 } from "../app-state-contexts";
@@ -14,6 +15,17 @@ export function DelegationStateProvider({ children }: PropsWithChildren): ReactE
   const { activeRepo } = useActiveRepoContext();
   const { refreshTaskData } = useTaskControlContext();
   const [events, setEvents] = useState<RunEvent[]>([]);
+  const [runCompletionSignal, setRunCompletionSignalState] = useState<RunCompletionSignal | null>(
+    null,
+  );
+  const setRunCompletionSignal = useCallback((runId: string, eventType: RunEvent["type"]) => {
+    setRunCompletionSignalState((previousRunCompletionSignal) => ({
+      runId,
+      eventType,
+      version: (previousRunCompletionSignal?.version ?? 0) + 1,
+    }));
+  }, []);
+
   const { delegateTask, delegateRespond, delegateStop, delegateCleanup } = useDelegationOperations({
     activeRepo,
     refreshTaskData,
@@ -34,8 +46,10 @@ export function DelegationStateProvider({ children }: PropsWithChildren): ReactE
   const delegationEventsValue = useMemo<DelegationEventsContextValue>(
     () => ({
       setEvents,
+      runCompletionSignal,
+      setRunCompletionSignal,
     }),
-    [],
+    [runCompletionSignal, setRunCompletionSignal],
   );
 
   return (

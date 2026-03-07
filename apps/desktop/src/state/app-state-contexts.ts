@@ -60,8 +60,16 @@ export type WorkspaceOperationsContextValue = {
   clearBranchData: () => void;
 };
 
+export type RunCompletionSignal = {
+  runId: string;
+  eventType: RunEvent["type"];
+  version: number;
+};
+
 export type DelegationEventsContextValue = {
   setEvents: Dispatch<SetStateAction<RunEvent[]>>;
+  runCompletionSignal: RunCompletionSignal | null;
+  setRunCompletionSignal: (runId: string, eventType: RunEvent["type"]) => void;
 };
 
 export const ActiveRepoContext = createContext<ActiveRepoContextValue | null>(null);

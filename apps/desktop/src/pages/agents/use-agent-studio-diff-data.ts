@@ -61,6 +61,8 @@ export type UseAgentStudioDiffDataInput = {
   branchIdentityKey?: string | null;
   /** Whether to enable polling (only when builder session is active). */
   enablePolling: boolean;
+  /** Optional run completion signal to force worktree-resolution refresh. */
+  runCompletionRecoverySignal?: number;
 };
 
 // ─── Batched internal state ────────────────────────────────────────────────────
@@ -335,6 +337,7 @@ export function useAgentStudioDiffData({
   defaultTargetBranch,
   branchIdentityKey = null,
   enablePolling,
+  runCompletionRecoverySignal,
 }: UseAgentStudioDiffDataInput): DiffDataState {
   const [state, setState] = useState<DiffBatchState>(createInitialState);
   const stateRef = useRef(state);
@@ -371,6 +374,7 @@ export function useAgentStudioDiffData({
     repoPath,
     sessionWorkingDirectory,
     sessionRunId,
+    ...(runCompletionRecoverySignal == null ? {} : { runCompletionRecoverySignal }),
   });
 
   // Stable refs for use in callbacks (advanced-event-handler-refs)

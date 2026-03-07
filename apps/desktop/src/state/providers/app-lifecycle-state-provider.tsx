@@ -23,11 +23,12 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
     hasCachedRepoOpencodeHealth,
   } = useChecksOperationsContext();
   const { refreshTaskData, clearTaskData, setIsLoadingTasks } = useTaskControlContext();
-  const { setEvents } = useDelegationEventsContext();
+  const { setEvents, setRunCompletionSignal } = useDelegationEventsContext();
 
   useAppLifecycle({
     activeRepo,
     setEvents,
+    setRunCompletionSignal,
     refreshWorkspaces,
     refreshBranches,
     refreshRuntimeCheck,

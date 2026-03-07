@@ -10,6 +10,7 @@ import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
 type UseAppLifecycleArgs = {
   activeRepo: string | null;
   setEvents: Dispatch<SetStateAction<RunEvent[]>>;
+  setRunCompletionSignal: (runId: string, eventType: RunEvent["type"]) => void;
   refreshWorkspaces: () => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
@@ -39,6 +40,7 @@ type UseAppLifecycleArgs = {
 export function useAppLifecycle({
   activeRepo,
   setEvents,
+  setRunCompletionSignal,
   refreshWorkspaces,
   refreshBranches,
   refreshRuntimeCheck,
@@ -82,6 +84,13 @@ export function useAppLifecycle({
       }
 
       setEvents((current) => prependRunEvent(current, parsed.data));
+      if (
+        parsed.data.type === "run_finished" ||
+        parsed.data.type === "ready_for_manual_done_confirmation" ||
+        parsed.data.type === "error"
+      ) {
+        setRunCompletionSignal(parsed.data.runId, parsed.data.type);
+      }
     })
       .then((cleanup) => {
         unsubscribe = cleanup;
@@ -95,7 +104,7 @@ export function useAppLifecycle({
     return () => {
       unsubscribe?.();
     };
-  }, [refreshRuntimeCheck, refreshWorkspaces, setEvents]);
+  }, [refreshRuntimeCheck, refreshWorkspaces, setEvents, setRunCompletionSignal]);
 
   useEffect(() => {
     if (!activeRepo) {

@@ -2164,6 +2164,175 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("run completion signal retries missing worktree resolution automatically", async () => {
+    let resolveAttempt = 0;
+    runsListMock.mockImplementation(async () => {
+      resolveAttempt += 1;
+      if (resolveAttempt === 1) {
+        return [{ runId: "run-2", worktreePath: "/repo/.worktrees/run-2" }];
+      }
+
+      return [{ runId: "run-1", worktreePath: "/repo/.worktrees/run-1" }];
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionRunId: "run-1",
+      runCompletionRecoverySignal: 0,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) =>
+        (state.error ?? "").includes("Run not found in runs list response."),
+      );
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        sessionRunId: "run-1",
+        runCompletionRecoverySignal: 1,
+      });
+
+      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(runsListMock).toHaveBeenCalledTimes(2);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        1,
+        "/repo",
+        "origin/main",
+        "target",
+        "/repo/.worktrees/run-1",
+      );
+      expect(harness.getLatest().error).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("run completion signal does not re-resolve after worktree resolution already succeeded", async () => {
+    runsListMock.mockResolvedValue([{ runId: "run-1", worktreePath: "/repo/.worktrees/run-1" }]);
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionRunId: "run-1",
+      runCompletionRecoverySignal: 0,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(runsListMock).toHaveBeenCalledTimes(1);
+
+      await harness.update({
+        ...createBaseArgs(),
+        sessionRunId: "run-1",
+        runCompletionRecoverySignal: 1,
+      });
+
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().worktreePath).toBe("/repo/.worktrees/run-1");
+      expect(harness.getLatest().error).toBeNull();
+      expect(runsListMock).toHaveBeenCalledTimes(1);
+      expect(gitGetWorktreeStatusMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("run completion signal queued during in-flight resolution retries automatically after failure", async () => {
+    const firstAttempt = createDeferred<Array<{ runId: string; worktreePath: string }>>();
+    let resolveAttempt = 0;
+    runsListMock.mockImplementation(async () => {
+      resolveAttempt += 1;
+      if (resolveAttempt === 1) {
+        return firstAttempt.promise;
+      }
+
+      return [{ runId: "run-1", worktreePath: "/repo/.worktrees/run-1" }];
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionRunId: "run-1",
+      runCompletionRecoverySignal: 0,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isLoading);
+      expect(runsListMock).toHaveBeenCalledTimes(1);
+
+      await harness.update({
+        ...createBaseArgs(),
+        sessionRunId: "run-1",
+        runCompletionRecoverySignal: 1,
+      });
+
+      firstAttempt.resolve([{ runId: "run-2", worktreePath: "/repo/.worktrees/run-2" }]);
+
+      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-1");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      expect(runsListMock).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().error).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("queued run completion signal does not leak to a different run context", async () => {
+    const firstAttempt = createDeferred<Array<{ runId: string; worktreePath: string }>>();
+    let resolveAttempt = 0;
+    runsListMock.mockImplementation(async () => {
+      resolveAttempt += 1;
+      if (resolveAttempt === 1) {
+        return firstAttempt.promise;
+      }
+
+      return [{ runId: "run-2", worktreePath: "/repo/.worktrees/run-2" }];
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      sessionRunId: "run-1",
+      runCompletionRecoverySignal: 0,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isLoading);
+      expect(runsListMock).toHaveBeenCalledTimes(1);
+
+      await harness.update({
+        ...createBaseArgs(),
+        sessionRunId: "run-1",
+        runCompletionRecoverySignal: 1,
+      });
+
+      await harness.update({
+        ...createBaseArgs(),
+        sessionRunId: "run-2",
+        runCompletionRecoverySignal: 1,
+      });
+
+      firstAttempt.resolve([{ runId: "run-3", worktreePath: "/repo/.worktrees/run-3" }]);
+
+      await harness.waitFor((state) => state.worktreePath === "/repo/.worktrees/run-2");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      expect(runsListMock).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().worktreePath).toBe("/repo/.worktrees/run-2");
+      expect(harness.getLatest().error).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("times out worktree resolution after 5 seconds and shows retry guidance", async () => {
     const pendingRunsList = createDeferred<Array<{ runId: string; worktreePath: string }>>();
     runsListMock.mockImplementation(async () => pendingRunsList.promise);
