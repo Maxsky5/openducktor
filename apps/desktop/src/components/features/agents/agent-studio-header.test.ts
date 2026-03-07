@@ -152,6 +152,22 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("disabled");
   });
 
+  test("disables create session while a session is starting without showing a loader", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          isCreatingSession: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('aria-label="Create session"');
+    expect(html).toContain('aria-label="Create session"');
+    expect(html).toContain('disabled="" title="Create session"');
+    expect(html).toContain('class="lucide lucide-plus size-4"');
+  });
+
   test("keeps unavailable workflow step clickable without existing session", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
