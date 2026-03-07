@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -138,6 +138,10 @@ beforeAll(async () => {
   ({ useAgentStudioDocuments } = await import("./use-agent-studio-documents"));
 });
 
+afterAll(() => {
+  mock.restore();
+});
+
 beforeEach(() => {
   setTaskDocumentsState();
   taskDocumentsHookCalls.length = 0;
@@ -180,6 +184,44 @@ describe("useAgentStudioDocuments", () => {
           updatedAt: "2026-02-22T08:30:00.000Z",
         }),
       });
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(6);
+      expect(reloadDocumentMock).toHaveBeenNthCalledWith(4, "spec");
+      expect(reloadDocumentMock).toHaveBeenNthCalledWith(5, "plan");
+      expect(reloadDocumentMock).toHaveBeenNthCalledWith(6, "qa");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reloads documents when document summary timestamps change without task updatedAt changing", async () => {
+    const baseArgs = createBaseArgs();
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      expect(reloadDocumentMock).toHaveBeenCalledTimes(3);
+
+      await harness.update({
+        ...baseArgs,
+        selectedTask: createTaskCardFixture({
+          id: "task-1",
+          updatedAt: baseArgs.selectedTask?.updatedAt ?? "2026-02-22T08:00:00.000Z",
+          documentSummary: {
+            spec: {
+              has: true,
+              updatedAt: "2026-02-22T08:45:00.000Z",
+            },
+            plan: {
+              has: false,
+            },
+            qaReport: {
+              has: false,
+              verdict: "not_reviewed",
+            },
+          },
+        }),
+      });
+
       expect(reloadDocumentMock).toHaveBeenCalledTimes(6);
       expect(reloadDocumentMock).toHaveBeenNthCalledWith(4, "spec");
       expect(reloadDocumentMock).toHaveBeenNthCalledWith(5, "plan");
@@ -281,6 +323,45 @@ describe("useAgentStudioDocuments", () => {
       expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
       expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
       expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reuses optimistic update when completion timestamp is unavailable", async () => {
+    setTaskDocumentsState({
+      planDoc: createDocumentState({
+        markdown: "",
+        updatedAt: null,
+        isLoading: false,
+      }),
+    });
+
+    const activeSession = createAgentSessionFixture({
+      sessionId: "session-3",
+      messages: [
+        createCompletedToolMessage({
+          tool: "odt_set_plan",
+          input: { markdown: "# Saved plan" },
+          output: "done",
+        }),
+      ],
+    });
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      selectedTask: null,
+      activeSession,
+    });
+
+    try {
+      await harness.mount();
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("plan", {
+        markdown: "# Saved plan",
+        updatedAt: expect.any(String),
+      });
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

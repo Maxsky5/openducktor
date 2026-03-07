@@ -82,7 +82,10 @@ const isReadOnlyShellSegment = (value: string): boolean => {
   return SAFE_READ_SHELL_PATTERNS.some((pattern) => pattern.test(segment));
 };
 
-const isReadOnlyShellCommand = (command: string): boolean => {
+export const isSafeReadToolName = (toolName: string): boolean =>
+  SAFE_READ_TOOL_NAMES.has(toolName.trim().toLowerCase());
+
+export const isReadOnlyShellCommand = (command: string): boolean => {
   const normalized = command.trim().toLowerCase();
   if (normalized.length === 0) {
     return false;
