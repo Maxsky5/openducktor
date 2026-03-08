@@ -42,7 +42,7 @@ const CATALOG: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [
+  profiles: [
     {
       name: "spec-agent",
       mode: "primary",
@@ -72,7 +72,7 @@ const ALTERNATE_CATALOG: AgentModelCatalog = {
   defaultModelsByProvider: {
     anthropic: "claude-opus",
   },
-  agents: [
+  profiles: [
     {
       name: "planner-agent",
       mode: "primary",
@@ -85,6 +85,7 @@ const ALTERNATE_CATALOG: AgentModelCatalog = {
 const createRepoSettings = (
   specDefault: RepoSettingsInput["agentDefaults"]["spec"] | null,
 ): RepoSettingsInput => ({
+  defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: "main",
@@ -104,10 +105,11 @@ const createActiveSession = (overrides = {}) =>
   createAgentSessionFixture({
     modelCatalog: CATALOG,
     selectedModel: {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     },
     ...overrides,
   });
@@ -160,10 +162,11 @@ describe("useAgentStudioModelSelection", () => {
     const harness = createHookHarness(
       createBaseProps({
         repoSettings: createRepoSettings({
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
-          opencodeAgent: "spec-agent",
+          profileId: "spec-agent",
         }),
       }),
     );
@@ -173,10 +176,11 @@ describe("useAgentStudioModelSelection", () => {
 
     const state = harness.getLatest();
     expect(state.selectedModelSelection).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
 
     await harness.unmount();
@@ -186,10 +190,11 @@ describe("useAgentStudioModelSelection", () => {
     const harness = createHookHarness(
       createBaseProps({
         repoSettings: createRepoSettings({
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
-          opencodeAgent: "build-agent",
+          profileId: "build-agent",
         }),
         loadCatalog: async () => {
           throw new Error("catalog unavailable");
@@ -202,16 +207,18 @@ describe("useAgentStudioModelSelection", () => {
       await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
 
       expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "build-agent",
+        profileId: "build-agent",
       });
       expect(harness.getLatest().selectionForNewSession).toEqual({
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "build-agent",
+        profileId: "build-agent",
       });
     } finally {
       await harness.unmount();
@@ -259,10 +266,11 @@ describe("useAgentStudioModelSelection", () => {
 
     const state = harness.getLatest();
     expect(state.selectedModelSelection).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "build-agent",
+      profileId: "build-agent",
     });
 
     await harness.unmount();
@@ -287,10 +295,11 @@ describe("useAgentStudioModelSelection", () => {
     });
 
     expect(updateAgentSessionModel).toHaveBeenCalledWith("session-1", {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
 
     await harness.unmount();
@@ -350,15 +359,17 @@ describe("useAgentStudioModelSelection", () => {
   test("invalidates composer catalog and ignores stale repo loads when active repo changes", async () => {
     const repoALoad = createDeferred<AgentModelCatalog>();
     const repoBLoad = createDeferred<AgentModelCatalog>();
-    const loadCatalog = mock((repoPath: string): Promise<AgentModelCatalog> => {
-      if (repoPath === "/repo-a") {
-        return repoALoad.promise;
-      }
-      if (repoPath === "/repo-b") {
-        return repoBLoad.promise;
-      }
-      return Promise.reject(new Error(`Unexpected repo path: ${repoPath}`));
-    });
+    const loadCatalog = mock(
+      (repoPath: string, _runtimeKind: string): Promise<AgentModelCatalog> => {
+        if (repoPath === "/repo-a") {
+          return repoALoad.promise;
+        }
+        if (repoPath === "/repo-b") {
+          return repoBLoad.promise;
+        }
+        return Promise.reject(new Error(`Unexpected repo path: ${repoPath}`));
+      },
+    );
 
     const harness = createHookHarness(
       createBaseProps({
@@ -379,8 +390,8 @@ describe("useAgentStudioModelSelection", () => {
       );
 
       expect(loadCatalog).toHaveBeenCalledTimes(2);
-      expect(loadCatalog.mock.calls[0]).toEqual(["/repo-a"]);
-      expect(loadCatalog.mock.calls[1]).toEqual(["/repo-b"]);
+      expect(loadCatalog.mock.calls[0]).toEqual(["/repo-a", "opencode"]);
+      expect(loadCatalog.mock.calls[1]).toEqual(["/repo-b", "opencode"]);
 
       await harness.run(async () => {
         repoALoad.resolve(CATALOG);
@@ -402,10 +413,11 @@ describe("useAgentStudioModelSelection", () => {
 
       const state = harness.getLatest();
       expect(state.selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-opus",
         variant: "extended",
-        opencodeAgent: "planner-agent",
+        profileId: "planner-agent",
       });
     } finally {
       repoALoad.resolve(CATALOG);
@@ -415,24 +427,27 @@ describe("useAgentStudioModelSelection", () => {
   });
 
   test("uses defaults from the newly selected repository after switching repos", async () => {
-    const loadCatalog = mock(async (repoPath: string): Promise<AgentModelCatalog> => {
-      if (repoPath === "/repo-a") {
-        return CATALOG;
-      }
-      if (repoPath === "/repo-b") {
-        return ALTERNATE_CATALOG;
-      }
-      throw new Error(`Unexpected repo path: ${repoPath}`);
-    });
+    const loadCatalog = mock(
+      async (repoPath: string, _runtimeKind: string): Promise<AgentModelCatalog> => {
+        if (repoPath === "/repo-a") {
+          return CATALOG;
+        }
+        if (repoPath === "/repo-b") {
+          return ALTERNATE_CATALOG;
+        }
+        throw new Error(`Unexpected repo path: ${repoPath}`);
+      },
+    );
 
     const harness = createHookHarness(
       createBaseProps({
         activeRepo: "/repo-a",
         repoSettings: createRepoSettings({
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
-          opencodeAgent: "build-agent",
+          profileId: "build-agent",
         }),
         loadCatalog,
       }),
@@ -455,10 +470,11 @@ describe("useAgentStudioModelSelection", () => {
         createBaseProps({
           activeRepo: "/repo-b",
           repoSettings: createRepoSettings({
+            runtimeKind: "opencode",
             providerId: "anthropic",
             modelId: "claude-opus",
             variant: "extended",
-            opencodeAgent: "planner-agent",
+            profileId: "planner-agent",
           }),
           loadCatalog,
         }),
@@ -467,16 +483,18 @@ describe("useAgentStudioModelSelection", () => {
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-opus");
 
       expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-opus",
         variant: "extended",
-        opencodeAgent: "planner-agent",
+        profileId: "planner-agent",
       });
       expect(harness.getLatest().selectionForNewSession).toEqual({
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-opus",
         variant: "extended",
-        opencodeAgent: "planner-agent",
+        profileId: "planner-agent",
       });
     } finally {
       await harness.unmount();
@@ -488,10 +506,11 @@ describe("useAgentStudioModelSelection", () => {
       createBaseProps({
         activeRepo: "/repo-a",
         repoSettings: createRepoSettings({
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
-          opencodeAgent: "build-agent",
+          profileId: "build-agent",
         }),
         loadCatalog: async () => {
           throw new Error("catalog unavailable");
@@ -511,10 +530,11 @@ describe("useAgentStudioModelSelection", () => {
         createBaseProps({
           activeRepo: "/repo-b",
           repoSettings: createRepoSettings({
+            runtimeKind: "opencode",
             providerId: "openai",
             modelId: "gpt-5",
             variant: "high",
-            opencodeAgent: "build-agent",
+            profileId: "build-agent",
           }),
           loadCatalog: async () => {
             throw new Error("catalog unavailable");
@@ -533,10 +553,11 @@ describe("useAgentStudioModelSelection", () => {
         createBaseProps({
           activeRepo: "/repo-b",
           repoSettings: createRepoSettings({
+            runtimeKind: "opencode",
             providerId: "anthropic",
             modelId: "claude-opus",
             variant: "extended",
-            opencodeAgent: "planner-agent",
+            profileId: "planner-agent",
           }),
           loadCatalog: async () => {
             throw new Error("catalog unavailable");
@@ -546,10 +567,11 @@ describe("useAgentStudioModelSelection", () => {
 
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-opus");
       expect(harness.getLatest().selectionForNewSession).toEqual({
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-opus",
         variant: "extended",
-        opencodeAgent: "planner-agent",
+        profileId: "planner-agent",
       });
     } finally {
       await harness.unmount();
@@ -611,6 +633,7 @@ describe("useAgentStudioModelSelection", () => {
     const activeSession = createActiveSession({
       modelCatalog: catalogWithContextFallback,
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-sonnet",
       },
@@ -641,6 +664,7 @@ describe("useAgentStudioModelSelection", () => {
   test("uses an older assistant message for context usage when the latest tokenized one is incomplete", async () => {
     const activeSession = createActiveSession({
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-sonnet",
       },

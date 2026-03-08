@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 
 const DEFAULT_SOFT_GUARDRAILS = {
@@ -29,10 +30,11 @@ export const repoHooksSchema = z.object({
 export type RepoHooks = z.infer<typeof repoHooksSchema>;
 
 export const agentModelDefaultSchema = z.object({
+  runtimeKind: runtimeKindSchema.default("opencode"),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
   variant: nullableToOptional(z.string().min(1)),
-  opencodeAgent: nullableToOptional(z.string().min(1)),
+  profileId: nullableToOptional(z.string().min(1)),
 });
 export type AgentModelDefault = z.infer<typeof agentModelDefaultSchema>;
 
@@ -45,6 +47,7 @@ export const repoAgentDefaultsSchema = z.object({
 export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 
 export const repoConfigSchema = z.object({
+  defaultRuntimeKind: runtimeKindSchema.default("opencode"),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default("obp"),
   defaultTargetBranch: z.string().default("origin/main"),

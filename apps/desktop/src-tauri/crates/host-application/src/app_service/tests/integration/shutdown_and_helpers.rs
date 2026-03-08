@@ -2,9 +2,9 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    RuntimeRole, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeKind, AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch,
+    GitCurrentBranch, GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, RuntimeRole, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -34,6 +34,29 @@ use crate::app_service::{
     RunProcess, RuntimeCleanupTarget, TrackedOpencodeProcessGuard,
     OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
+
+fn runtime_summary_fixture(
+    runtime_id: &str,
+    repo_path: &str,
+    task_id: &str,
+    role: RuntimeRole,
+    working_directory: &str,
+    port: u16,
+) -> AgentRuntimeSummary {
+    AgentRuntimeSummary {
+        kind: AgentRuntimeKind::Opencode,
+        runtime_id: runtime_id.to_string(),
+        repo_path: repo_path.to_string(),
+        task_id: task_id.to_string(),
+        role,
+        working_directory: working_directory.to_string(),
+        endpoint: AgentRuntimeKind::Opencode.endpoint_for_port(port),
+        port,
+        started_at: "2026-02-20T12:00:00Z".to_string(),
+        descriptor: AgentRuntimeKind::Opencode.descriptor(),
+        capabilities: AgentRuntimeKind::Opencode.descriptor().capabilities,
+    }
+}
 
 #[test]
 fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
@@ -85,15 +108,14 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
         .insert(
             runtime_id.clone(),
             AgentRuntimeProcess {
-                summary: AgentRuntimeSummary {
-                    runtime_id,
-                    repo_path: "/tmp/repo".to_string(),
-                    task_id: "task-1".to_string(),
-                    role: RuntimeRole::Qa,
-                    working_directory: "/tmp/worktree".to_string(),
-                    port: 1,
-                    started_at: "2026-02-20T12:00:00Z".to_string(),
-                },
+                summary: runtime_summary_fixture(
+                    runtime_id.as_str(),
+                    "/tmp/repo",
+                    "task-1",
+                    RuntimeRole::Qa,
+                    "/tmp/worktree",
+                    1,
+                ),
                 child: spawn_sleep_process(20),
                 _opencode_process_guard: None,
                 cleanup_target: Some(RuntimeCleanupTarget {
@@ -220,15 +242,14 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
         .insert(
             "runtime-shutdown-registry-error".to_string(),
             AgentRuntimeProcess {
-                summary: AgentRuntimeSummary {
-                    runtime_id: "runtime-shutdown-registry-error".to_string(),
-                    repo_path: "/tmp/repo".to_string(),
-                    task_id: "task-1".to_string(),
-                    role: RuntimeRole::Spec,
-                    working_directory: "/tmp/repo".to_string(),
-                    port: 1,
-                    started_at: "2026-02-20T12:00:00Z".to_string(),
-                },
+                summary: runtime_summary_fixture(
+                    "runtime-shutdown-registry-error",
+                    "/tmp/repo",
+                    "task-1",
+                    RuntimeRole::Spec,
+                    "/tmp/repo",
+                    1,
+                ),
                 child: runtime_child,
                 _opencode_process_guard: None,
                 cleanup_target: None,

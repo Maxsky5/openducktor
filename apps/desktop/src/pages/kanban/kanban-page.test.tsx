@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RepoPromptOverrides } from "@openducktor/contracts";
 import { isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -34,10 +34,12 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
 let latestSessionStartModalModel: Record<string, unknown> | null = null;
 let latestLocation = "/";
+const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
 
 let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
 
 const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
+  defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: "main",
@@ -47,17 +49,19 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
   worktreeFileCopies: [],
   agentDefaults: {
     spec: {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     },
     planner: null,
     build: {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "build-agent",
+      profileId: "build-agent",
     },
     qa: null,
   },
@@ -75,6 +79,15 @@ mock.module("@/state/operations/host", () => ({
     workspaceGetRepoConfig: workspaceGetRepoConfigMock,
     workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
   },
+}));
+
+mock.module("@/state/app-state-contexts", () => ({
+  useRuntimeDefinitionsContext: () => ({
+    runtimeDefinitions: RUNTIME_DEFINITIONS,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
+  }),
 }));
 
 mock.module("@/components/features/kanban", () => ({
@@ -103,6 +116,7 @@ mock.module("@/state", () => ({
   useAgentState: () => ({
     sessions: [
       {
+        runtimeKind: "opencode",
         sessionId: "session-spec",
         taskId: "TASK-123",
         role: "spec",
@@ -213,10 +227,11 @@ describe("KanbanPage session start modal flow", () => {
       }),
     );
     expect(updateAgentSessionModelMock).toHaveBeenCalledWith("session-1", {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "build-agent",
+      profileId: "build-agent",
     });
     expect(latestLocation).toContain("/agents?task=TASK-123");
 
@@ -426,10 +441,11 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         selectedModel: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "default",
-          opencodeAgent: "build-agent",
+          profileId: "build-agent",
         },
       }),
     );

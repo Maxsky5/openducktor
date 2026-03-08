@@ -212,6 +212,7 @@ describe("use-workspace-operations", () => {
     const clearActiveBeadsCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
     const runtimeDeferred = createDeferred<{
+      kind: "opencode";
       runtimeId: string;
       repoPath: string;
       taskId: string;
@@ -221,7 +222,21 @@ describe("use-workspace-operations", () => {
       startedAt: string;
     }>();
     const runtimeEnsure = mock(async () => runtimeDeferred.promise);
+    const workspaceGetRepoConfig = mock(async () => ({
+      defaultRuntimeKind: "opencode" as const,
+      branchPrefix: "obp",
+      defaultTargetBranch: "main",
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }));
     const runtimeValue = {
+      kind: "opencode",
       runtimeId: "runtime-1",
       repoPath: "/repo-a",
       taskId: "task-1",
@@ -236,11 +251,13 @@ describe("use-workspace-operations", () => {
 
     const original = {
       workspaceSelect: host.workspaceSelect,
-      opencodeRepoRuntimeEnsure: host.opencodeRepoRuntimeEnsure,
+      runtimeEnsure: host.runtimeEnsure,
+      workspaceGetRepoConfig: host.workspaceGetRepoConfig,
       workspaceList: host.workspaceList,
     };
     host.workspaceSelect = workspaceSelect;
-    host.opencodeRepoRuntimeEnsure = runtimeEnsure;
+    host.runtimeEnsure = runtimeEnsure;
+    host.workspaceGetRepoConfig = workspaceGetRepoConfig;
     host.workspaceList = workspaceList;
 
     const harness = createHookHarness({
@@ -266,17 +283,19 @@ describe("use-workspace-operations", () => {
       expect(workspaceList).toHaveBeenCalled();
       runtimeDeferred.resolve(runtimeValue);
       await selectPromise;
+      await Promise.resolve();
 
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).toHaveBeenCalled();
       expect(clearActiveBeadsCheck).toHaveBeenCalled();
       expect(workspaceSelect).toHaveBeenCalledWith("/repo-a");
-      expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a");
+      expect(runtimeEnsure).toHaveBeenCalledWith("opencode", "/repo-a");
     } finally {
       runtimeDeferred.resolve(runtimeValue);
       await harness.unmount();
       host.workspaceSelect = original.workspaceSelect;
-      host.opencodeRepoRuntimeEnsure = original.opencodeRepoRuntimeEnsure;
+      host.runtimeEnsure = original.runtimeEnsure;
+      host.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
       host.workspaceList = original.workspaceList;
     }
   });

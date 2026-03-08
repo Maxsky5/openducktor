@@ -3,7 +3,7 @@ use super::super::super::{
 };
 use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Result};
-use host_domain::{now_rfc3339, AgentRuntimeSummary};
+use host_domain::{now_rfc3339, AgentRuntimeKind, AgentRuntimeSummary};
 use std::collections::HashMap;
 use std::process::Child;
 use std::sync::MutexGuard;
@@ -26,13 +26,17 @@ impl AppService {
         } = input;
 
         let summary = AgentRuntimeSummary {
+            kind: AgentRuntimeKind::Opencode,
             runtime_id: spawned_server.runtime_id.clone(),
             repo_path: repo_key,
             task_id: task_id.to_string(),
             role,
             working_directory,
+            endpoint: AgentRuntimeKind::Opencode.endpoint_for_port(spawned_server.port),
             port: spawned_server.port,
             started_at: now_rfc3339(),
+            descriptor: AgentRuntimeKind::Opencode.descriptor(),
+            capabilities: AgentRuntimeKind::Opencode.descriptor().capabilities,
         };
 
         let mut runtimes = self
@@ -111,7 +115,10 @@ impl AppService {
         Ok(None)
     }
 
-    pub fn opencode_runtime_stop(&self, runtime_id: &str) -> Result<bool> {
+    pub(in crate::app_service::runtime_orchestrator) fn stop_registered_runtime(
+        &self,
+        runtime_id: &str,
+    ) -> Result<bool> {
         let mut runtimes = self
             .agent_runtimes
             .lock()

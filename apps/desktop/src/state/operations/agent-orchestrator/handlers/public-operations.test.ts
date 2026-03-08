@@ -17,7 +17,7 @@ const createSessionState = (
   startedAt,
   runtimeId: "runtime-1",
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:4444",
+  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",

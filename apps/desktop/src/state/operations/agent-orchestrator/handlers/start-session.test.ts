@@ -35,9 +35,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: "runtime-2",
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -70,9 +71,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: inFlightMap },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: "runtime-1",
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -106,6 +108,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         plannerStarted.resolve();
       }
       return {
+        runtimeKind: "opencode",
         sessionId: `${input.role}-session`,
         externalSessionId: `${input.role}-external`,
         startedAt: "2026-02-22T08:00:10.000Z",
@@ -129,9 +132,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: "runtime-1",
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -180,6 +184,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sessionsRef: {
         current: {
           newer: {
+            runtimeKind: "opencode",
             sessionId: "newer",
             externalSessionId: "external-newer",
             taskId: "task-1",
@@ -189,7 +194,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
             runId: "run-2",
-            baseUrl: "http://127.0.0.1:4444",
+            runtimeEndpoint: "http://127.0.0.1:4444",
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
             draftAssistantText: "",
@@ -208,9 +213,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: "runtime-2",
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -241,6 +247,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async () => {
       startCalls += 1;
       return {
+        runtimeKind: "opencode",
         sessionId: "fresh-session",
         externalSessionId: "fresh-ext",
         startedAt: "2026-02-22T09:00:00.000Z",
@@ -255,6 +262,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       persistedListCalls += 1;
       return [
         {
+          runtimeKind: "opencode",
           sessionId: "persisted-build",
           externalSessionId: "persisted-build-ext",
           taskId: "task-1",
@@ -265,7 +273,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           updatedAt: "2026-02-22T08:20:00.000Z",
           runtimeId: "runtime-1",
           runId: "run-2",
-          baseUrl: "http://127.0.0.1:4444",
+          runtimeEndpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         },
       ];
@@ -278,6 +286,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sessionsRef: {
         current: {
           existingBuild: {
+            runtimeKind: "opencode",
             sessionId: "existing-build",
             externalSessionId: "existing-build-ext",
             taskId: "task-1",
@@ -287,7 +296,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
             startedAt: "2026-02-22T08:10:00.000Z",
             runtimeId: null,
             runId: "run-1",
-            baseUrl: "http://127.0.0.1:4444",
+            runtimeEndpoint: "http://127.0.0.1:4444",
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
             draftAssistantText: "",
@@ -306,9 +315,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-2",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -342,6 +352,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async () => {
       startCalls += 1;
       return {
+        runtimeKind: "opencode",
         sessionId: "planner-created",
         externalSessionId: "planner-ext",
         startedAt: "2026-02-22T08:30:00.000Z",
@@ -357,6 +368,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         existingSpec: {
+          runtimeKind: "opencode",
           sessionId: "existing-spec",
           externalSessionId: "existing-spec-ext",
           taskId: "task-1",
@@ -366,7 +378,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startedAt: "2026-02-22T08:10:00.000Z",
           runtimeId: null,
           runId: "run-1",
-          baseUrl: "http://127.0.0.1:4444",
+          runtimeEndpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
           draftAssistantText: "",
@@ -391,9 +403,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-2",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -423,6 +436,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "persisted-2",
         externalSessionId: "external-2",
         taskId: "task-1",
@@ -433,10 +447,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
         updatedAt: "2026-02-22T08:20:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-2",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       },
       {
+        runtimeKind: "opencode",
         sessionId: "persisted-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -447,10 +462,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
         updatedAt: "2026-02-22T08:10:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       },
       {
+        runtimeKind: "opencode",
         sessionId: "persisted-spec-newer",
         externalSessionId: "external-spec-newer",
         taskId: "task-1",
@@ -461,7 +477,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         updatedAt: "2026-02-22T08:30:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-3",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       },
     ];
@@ -477,9 +493,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -526,9 +543,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -585,9 +603,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
+          kind: "opencode",
           runtimeId: null,
           runId: null,
-          baseUrl: "http://127.0.0.1:4444",
+          runtimeEndpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo",
         };
       },
@@ -632,9 +651,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -674,6 +694,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
+      runtimeKind: "opencode",
       sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
@@ -696,9 +717,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -734,6 +756,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async () => {
       previousRepoRef.current = "/tmp/other";
       return {
+        runtimeKind: "opencode",
         sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
@@ -760,9 +783,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -797,6 +821,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalStopSession = adapter.stopSession;
     adapter.startSession = async () => {
       return {
+        runtimeKind: "opencode",
         sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
@@ -825,9 +850,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         previousRepoRef.current = "/tmp/other";
       },
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -876,6 +902,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async () => {
       startCalls += 1;
       return {
+        runtimeKind: "opencode",
         sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
@@ -902,9 +929,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         attachCalls += 1;
       },
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -957,6 +985,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
+      runtimeKind: "opencode",
       sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
@@ -981,9 +1010,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
+          kind: "opencode",
           runtimeId: null,
           runId: "run-1",
-          baseUrl: "http://127.0.0.1:4444",
+          runtimeEndpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/worktree",
         };
       },
@@ -1024,6 +1054,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
+      runtimeKind: "opencode",
       sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
@@ -1046,9 +1077,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -1083,6 +1115,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("requireModelReady waits for and applies resolved default model before completion", async () => {
     const defaultModelDeferred = createDeferred<AgentModelSelection | null>();
     const resolvedModel: AgentModelSelection = {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
     };
@@ -1098,6 +1131,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
+      runtimeKind: "opencode",
       sessionId: "session-created",
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
@@ -1120,9 +1154,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -1169,6 +1204,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     adapter.startSession = async () => {
       startSessionCalls += 1;
       return {
+        runtimeKind: "opencode",
         sessionId: "session-created",
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
@@ -1192,9 +1228,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
       inFlightStartsByRepoTaskRef: { current: new Map() },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),

@@ -3,6 +3,7 @@ import {
   useActiveRepoContext,
   useChecksOperationsContext,
   useDelegationEventsContext,
+  useRuntimeDefinitionsContext,
   useTaskControlContext,
   useWorkspaceOperationsContext,
 } from "../app-state-contexts";
@@ -10,17 +11,18 @@ import { useAppLifecycle } from "../lifecycle/use-app-lifecycle";
 
 export function AppLifecycleStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeRepo } = useActiveRepoContext();
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { refreshWorkspaces, refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const {
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
-    refreshRepoOpencodeHealthForRepo,
+    refreshRepoRuntimeHealthForRepo,
     clearActiveBeadsCheck,
-    clearActiveRepoOpencodeHealth,
+    clearActiveRepoRuntimeHealth,
     setIsLoadingChecks,
     hasRuntimeCheck,
     hasCachedBeadsCheck,
-    hasCachedRepoOpencodeHealth,
+    hasCachedRepoRuntimeHealth,
   } = useChecksOperationsContext();
   const { refreshTaskData, clearTaskData, setIsLoadingTasks } = useTaskControlContext();
   const { setEvents, setRunCompletionSignal } = useDelegationEventsContext();
@@ -33,17 +35,18 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
     refreshBranches,
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
-    refreshRepoOpencodeHealthForRepo,
+    refreshRepoRuntimeHealthForRepo,
+    runtimeKinds: runtimeDefinitions.map((definition) => definition.kind),
     refreshTaskData,
     clearTaskData,
     clearBranchData,
     clearActiveBeadsCheck,
-    clearActiveRepoOpencodeHealth,
+    clearActiveRepoRuntimeHealth,
     setIsLoadingChecks,
     setIsLoadingTasks,
     hasRuntimeCheck,
     hasCachedBeadsCheck,
-    hasCachedRepoOpencodeHealth,
+    hasCachedRepoRuntimeHealth,
   });
 
   return <>{children}</>;

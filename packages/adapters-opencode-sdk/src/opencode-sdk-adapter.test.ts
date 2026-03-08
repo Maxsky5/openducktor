@@ -59,7 +59,7 @@ describe("opencode-sdk-adapter", () => {
       role: "spec",
       scenario: "spec_initial",
       systemPrompt: "system",
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
     });
 
     expect(summary.sessionId).toBe("session-1");

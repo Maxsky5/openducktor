@@ -149,7 +149,7 @@ describe("runtime schemas", () => {
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
-          opencodeAgent: "build",
+          profileId: "build",
         },
       },
     });
@@ -157,7 +157,7 @@ describe("runtime schemas", () => {
     expect(parsed.agentDefaults.spec?.providerId).toBe("openai");
     expect(parsed.agentDefaults.spec?.modelId).toBe("gpt-5");
     expect(parsed.agentDefaults.spec?.variant).toBe("high");
-    expect(parsed.agentDefaults.spec?.opencodeAgent).toBe("build");
+    expect(parsed.agentDefaults.spec?.profileId).toBe("build");
   });
 
   test("repo config parses prompt overrides and keeps base version metadata", () => {
@@ -212,14 +212,14 @@ describe("runtime schemas", () => {
           providerId: "openai",
           modelId: "gpt-5",
           variant: null,
-          opencodeAgent: null,
+          profileId: null,
         },
         planner: null,
       },
     });
 
     expect(parsed.agentDefaults.spec?.variant).toBeUndefined();
-    expect(parsed.agentDefaults.spec?.opencodeAgent).toBeUndefined();
+    expect(parsed.agentDefaults.spec?.profileId).toBeUndefined();
     expect(parsed.agentDefaults.planner).toBeUndefined();
   });
 
@@ -520,13 +520,13 @@ describe("runtime schemas", () => {
       endedAt: null,
       runtimeId: "runtime-1",
       runId: null,
-      baseUrl: "http://127.0.0.1:4173",
+      runtimeEndpoint: "http://127.0.0.1:4173",
       workingDirectory: "/repo",
       selectedModel: {
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "architect",
+        profileId: "architect",
       },
     });
 

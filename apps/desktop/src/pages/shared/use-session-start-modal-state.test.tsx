@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -15,6 +16,7 @@ const originalConsoleError = console.error;
 type HookArgs = Parameters<typeof useSessionStartModalState>[0];
 
 const CATALOG: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "openai/gpt-5",
@@ -38,7 +40,7 @@ const CATALOG: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [
+  profiles: [
     {
       name: "spec-agent",
       mode: "primary",
@@ -56,6 +58,7 @@ const CATALOG: AgentModelCatalog = {
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
 ): RepoSettingsInput => ({
+  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: "main",
@@ -65,17 +68,19 @@ const createRepoSettings = (
   worktreeFileCopies: [],
   agentDefaults: {
     spec: {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     },
     planner: null,
     build: {
+      runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "claude-sonnet",
       variant: "default",
-      opencodeAgent: "build-agent",
+      profileId: "build-agent",
     },
     qa: null,
     ...overrides,
@@ -88,6 +93,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeRepo: "/repo",
   repoSettings: createRepoSettings(),
+  runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
   initialCatalog: CATALOG,
   ...overrides,
 });
@@ -124,10 +130,11 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "claude-sonnet",
       variant: "default",
-      opencodeAgent: "build-agent",
+      profileId: "build-agent",
     });
 
     await harness.unmount();
@@ -138,10 +145,11 @@ describe("useSessionStartModalState", () => {
       createBaseProps({
         repoSettings: createRepoSettings({
           spec: {
+            runtimeKind: "opencode",
             providerId: "openai",
             modelId: "does-not-exist",
             variant: "legacy",
-            opencodeAgent: "spec-agent",
+            profileId: "spec-agent",
           },
         }),
       }),
@@ -162,10 +170,11 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
 
     await harness.unmount();
@@ -213,10 +222,11 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
 
     await harness.unmount();
@@ -240,11 +250,46 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
+
+    await harness.unmount();
+  });
+
+  test("falls back to repo default runtime when role runtime is missing", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        repoSettings: createRepoSettings({
+          spec: {
+            runtimeKind: undefined as never,
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "spec-agent",
+          },
+        }),
+      }),
+    );
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-5",
+        role: "spec",
+        scenario: "spec_initial",
+        startMode: "fresh",
+        postStartAction: "none",
+        title: "Start Spec Session",
+      });
+    });
+
+    expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
 
     await harness.unmount();
   });
@@ -263,20 +308,22 @@ describe("useSessionStartModalState", () => {
         startMode: "fresh",
         postStartAction: "none",
         selectedModel: {
+          runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet",
           variant: "default",
-          opencodeAgent: "build-agent",
+          profileId: "build-agent",
         },
         title: "Start Spec Session",
       });
     });
 
     expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "claude-sonnet",
       variant: "default",
-      opencodeAgent: "build-agent",
+      profileId: "build-agent",
     });
 
     await harness.unmount();

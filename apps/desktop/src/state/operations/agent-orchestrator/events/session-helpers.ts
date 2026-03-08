@@ -119,7 +119,7 @@ export const refreshTodosFromSessionRef = (context: SessionEventContext): void =
     "session-events-refresh-todos",
     context.loadSessionTodos(
       context.sessionId,
-      session.baseUrl,
+      session.runtimeEndpoint,
       session.workingDirectory,
       session.externalSessionId,
     ),

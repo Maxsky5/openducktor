@@ -3,6 +3,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { attachAgentSessionListener, type SessionEventAdapter } from "./session-events";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -12,7 +13,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
   runId: null,
-  baseUrl: "http://127.0.0.1:4321",
+  runtimeEndpoint: "http://127.0.0.1:4321",
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",

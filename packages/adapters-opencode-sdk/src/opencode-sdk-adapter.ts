@@ -71,7 +71,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     const client = this.createClient({
-      baseUrl: input.baseUrl,
+      runtimeEndpoint: requireRuntimeEndpoint(input.runtimeEndpoint, "start session"),
       workingDirectory: input.workingDirectory,
     });
     const created = await client.session.create({
@@ -108,7 +108,7 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     }
 
     const client = this.createClient({
-      baseUrl: input.baseUrl,
+      runtimeEndpoint: requireRuntimeEndpoint(input.runtimeEndpoint, "resume session"),
       workingDirectory: input.workingDirectory,
     });
     const detail = await client.session.get({
@@ -154,33 +154,37 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   }
 
   async listAvailableModels(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   }): Promise<AgentModelCatalog> {
     return listAvailableModels(this.createClient, input);
   }
 
   async listAvailableToolIds(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   }): Promise<string[]> {
     return listAvailableToolIds(this.createClient, input);
   }
 
   async getMcpStatus(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   }): Promise<Record<string, McpServerStatus>> {
     return getMcpStatus(this.createClient, input);
   }
 
   async connectMcpServer(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
     name: string;
   }): Promise<void> {
     await connectMcpServer(this.createClient, input);
     clearWorkflowToolCacheForDirectory(this.sessions, input.workingDirectory);
+  }
+
+  shouldRestartRuntimeForMcpStatusError(message: string): boolean {
+    return /configinvaliderror|opencode_config_content|loglevel|invalid option/i.test(message);
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
@@ -222,20 +226,28 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   }
 
   async loadSessionDiff(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     sessionId: string;
     messageId?: string;
   }): Promise<import("@openducktor/contracts").FileDiff[]> {
-    return loadSessionDiffOp(input.baseUrl, input.sessionId, input.messageId);
+    return loadSessionDiffOp(input.runtimeEndpoint, input.sessionId, input.messageId);
   }
 
   async loadFileStatus(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
   }): Promise<import("@openducktor/contracts").FileStatus[]> {
-    return loadFileStatusOp(input.baseUrl);
+    return loadFileStatusOp(input.runtimeEndpoint);
   }
 
   private emit(sessionId: string, event: AgentEvent): void {
     emitSessionEvent(this.listeners, sessionId, event);
   }
 }
+
+const requireRuntimeEndpoint = (runtimeEndpoint: string | undefined, action: string): string => {
+  const trimmed = runtimeEndpoint?.trim();
+  if (!trimmed) {
+    throw new Error(`OpenCode runtime endpoint is required to ${action}`);
+  }
+  return trimmed;
+};

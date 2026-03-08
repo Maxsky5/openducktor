@@ -42,8 +42,8 @@ Key boundary:
 3. For new sessions it concurrently loads task docs, resolves runtime, and loads repo default model.
 4. Runtime acquisition:
 - `build` role: `host.buildStart` creates worktree + OpenCode runtime.
-- `qa` role: `host.opencodeRuntimeStart(repo, task, "qa")` creates role/task runtime.
-- `spec`/`planner`: `host.opencodeRepoRuntimeEnsure(repo)` ensures shared workspace runtime.
+- `qa` role: `host.runtimeStart("opencode", repo, task, "qa")` creates role/task runtime.
+- `spec`/`planner`: `host.runtimeEnsure("opencode", repo)` ensures shared workspace runtime.
 5. Rust host spawns OpenCode with `OPENCODE_CONFIG_CONTENT` containing MCP server `openducktor` and env (`ODT_REPO_PATH`, `ODT_BEADS_DIR`, `ODT_METADATA_NAMESPACE`).
 6. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts/resumes session and subscribes to OpenCode stream events.
 7. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.

@@ -4,7 +4,7 @@ use host_domain::{
     BeadsCheck, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
     GitCurrentBranch, GitFileDiff, GitFileStatus, GitPullRequest, GitPullResult, GitPushResult,
     GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
-    GitWorktreeSummary, RuntimeCheck, SystemCheck, WorkspaceRecord,
+    GitWorktreeSummary, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
@@ -62,14 +62,18 @@ impl AppService {
         RuntimeCheck {
             git_ok,
             git_version: version_command("git", &["--version"]),
-            opencode_ok,
-            opencode_version: opencode_binary.as_ref().map(|binary| {
-                if let Some(version) = read_opencode_version(binary.as_str()) {
-                    format!("{version} ({binary})")
-                } else {
-                    format!("installed ({binary})")
-                }
-            }),
+            runtimes: vec![RuntimeHealth {
+                kind: "opencode".to_string(),
+                ok: opencode_ok,
+                version: opencode_binary.as_ref().map(|binary| {
+                    if let Some(version) = read_opencode_version(binary.as_str()) {
+                        format!("{version} ({binary})")
+                    } else {
+                        format!("installed ({binary})")
+                    }
+                }),
+                error: (!opencode_ok).then(|| "opencode not found in PATH".to_string()),
+            }],
             errors,
         }
     }
@@ -144,8 +148,7 @@ impl AppService {
         Ok(SystemCheck {
             git_ok: runtime.git_ok,
             git_version: runtime.git_version,
-            opencode_ok: runtime.opencode_ok,
-            opencode_version: runtime.opencode_version,
+            runtimes: runtime.runtimes,
             beads_ok: beads.beads_ok,
             beads_path: beads.beads_path,
             beads_error: beads.beads_error,

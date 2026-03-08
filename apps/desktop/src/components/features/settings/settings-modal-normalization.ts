@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@/components/features/settings/settings-model";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
+import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
 const trimNonEmpty = (value: string): string | null => {
   const trimmed = value.trim();
@@ -37,15 +38,8 @@ export const normalizePromptOverridesForSave = (
 };
 
 const normalizeAgentDefaultForSave = (
-  entry:
-    | {
-        providerId: string;
-        modelId: string;
-        variant?: string | undefined;
-        opencodeAgent?: string | undefined;
-      }
-    | undefined,
-) => {
+  entry: RepoConfig["agentDefaults"]["spec"],
+): RepoConfig["agentDefaults"]["spec"] => {
   if (!entry) {
     return undefined;
   }
@@ -57,13 +51,14 @@ const normalizeAgentDefaultForSave = (
   }
 
   const variant = trimNonEmpty(entry.variant ?? "");
-  const opencodeAgent = trimNonEmpty(entry.opencodeAgent ?? "");
+  const profileId = trimNonEmpty(entry.profileId ?? "");
 
   return {
+    runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
     ...(variant ? { variant } : {}),
-    ...(opencodeAgent ? { opencodeAgent } : {}),
+    ...(profileId ? { profileId } : {}),
   };
 };
 
@@ -74,6 +69,7 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   const qa = normalizeAgentDefaultForSave(repo.agentDefaults.qa);
 
   return {
+    defaultRuntimeKind: repo.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
     worktreeBasePath: trimNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeCanonicalTargetBranch(repo.defaultTargetBranch),

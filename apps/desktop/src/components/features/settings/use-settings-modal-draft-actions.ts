@@ -18,7 +18,7 @@ export type SettingsModalDraftActions = {
   ) => void;
   updateSelectedRepoAgentDefault: (
     role: "spec" | "planner" | "build" | "qa",
-    field: "providerId" | "modelId" | "variant" | "opencodeAgent",
+    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
   ) => void;
   clearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
@@ -81,7 +81,7 @@ export const useSettingsModalDraftActions = ({
   const updateSelectedRepoAgentDefault = useCallback(
     (
       role: "spec" | "planner" | "build" | "qa",
-      field: "providerId" | "modelId" | "variant" | "opencodeAgent",
+      field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
       value: string,
     ): void => {
       updateSelectedRepoConfig((repoConfig) => ({

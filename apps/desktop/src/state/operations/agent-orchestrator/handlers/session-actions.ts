@@ -36,13 +36,13 @@ type SessionActionsDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
   ) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
@@ -149,13 +149,13 @@ export const createAgentSessionActions = ({
     await ensureSessionReady(sessionId);
 
     const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
-    const userMessageMeta = selectedModel?.opencodeAgent
+    const userMessageMeta = selectedModel?.profileId
       ? {
           kind: "user" as const,
           ...(selectedModel.providerId ? { providerId: selectedModel.providerId } : {}),
           ...(selectedModel.modelId ? { modelId: selectedModel.modelId } : {}),
           ...(selectedModel.variant ? { variant: selectedModel.variant } : {}),
-          ...(selectedModel.opencodeAgent ? { opencodeAgent: selectedModel.opencodeAgent } : {}),
+          ...(selectedModel.profileId ? { profileId: selectedModel.profileId } : {}),
         }
       : undefined;
     turnStartedAtBySessionRef.current[sessionId] = Date.now();

@@ -3,10 +3,12 @@ import type {
   RunEvent,
   RunSummary,
   RuntimeCheck,
+  RuntimeDescriptor,
+  RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
 import { type Context, createContext, type Dispatch, type SetStateAction, useContext } from "react";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
   AgentStateContextValue,
   ChecksStateContextValue,
@@ -28,19 +30,26 @@ export type ActiveRepoContextValue = {
   setActiveRepo: Dispatch<SetStateAction<string | null>>;
 };
 
+export type RuntimeDefinitionsContextValue = {
+  runtimeDefinitions: RuntimeDescriptor[];
+  isLoadingRuntimeDefinitions: boolean;
+  runtimeDefinitionsError: string | null;
+  refreshRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+};
+
 export type ChecksOperationsContextValue = {
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
-  refreshRepoOpencodeHealthForRepo: (
+  refreshRepoRuntimeHealthForRepo: (
     repoPath: string,
     force?: boolean,
-  ) => Promise<RepoOpencodeHealthCheck>;
+  ) => Promise<RepoRuntimeHealthMap>;
   clearActiveBeadsCheck: () => void;
-  clearActiveRepoOpencodeHealth: () => void;
+  clearActiveRepoRuntimeHealth: () => void;
   setIsLoadingChecks: (value: boolean) => void;
   hasRuntimeCheck: () => boolean;
   hasCachedBeadsCheck: (repoPath: string) => boolean;
-  hasCachedRepoOpencodeHealth: (repoPath: string) => boolean;
+  hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
 };
 
 export type TaskDataContextValue = {
@@ -73,6 +82,7 @@ export type DelegationEventsContextValue = {
 };
 
 export const ActiveRepoContext = createContext<ActiveRepoContextValue | null>(null);
+export const RuntimeDefinitionsContext = createContext<RuntimeDefinitionsContextValue | null>(null);
 export const ChecksOperationsContext = createContext<ChecksOperationsContextValue | null>(null);
 export const TaskDataContext = createContext<TaskDataContextValue | null>(null);
 export const TaskControlContext = createContext<TaskControlContextValue | null>(null);
@@ -94,6 +104,9 @@ export const useActiveRepoContext = (): ActiveRepoContextValue =>
 
 export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
   useRequiredContext(ChecksOperationsContext, "useChecksOperationsContext");
+
+export const useRuntimeDefinitionsContext = (): RuntimeDefinitionsContextValue =>
+  useRequiredContext(RuntimeDefinitionsContext, "useRuntimeDefinitionsContext");
 
 export const useTaskDataContext = (): TaskDataContextValue =>
   useRequiredContext(TaskDataContext, "useTaskDataContext");

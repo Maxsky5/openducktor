@@ -36,7 +36,7 @@ describe("agent-chat-thread virtualization helpers", () => {
           meta: {
             kind: "assistant",
             agentRole: "spec",
-            opencodeAgent: "Hephaestus (Deep Agent)",
+            profileId: "Hephaestus (Deep Agent)",
             durationMs: 1_500,
           },
         }),
@@ -59,11 +59,13 @@ describe("agent-chat-thread virtualization helpers", () => {
 
   test("buildAgentChatVirtualRows keeps row keys distinct across sessions with repeated message ids", () => {
     const firstSession = buildSession({
+      runtimeKind: "opencode",
       sessionId: "session-a",
       messages: [buildMessage("assistant", "A", { id: "message-1" })],
       pendingQuestions: [],
     });
     const secondSession = buildSession({
+      runtimeKind: "opencode",
       sessionId: "session-b",
       messages: [buildMessage("assistant", "B", { id: "message-1" })],
       pendingQuestions: [],
@@ -140,7 +142,7 @@ describe("agent-chat-thread virtualization helpers", () => {
         meta: {
           kind: "assistant",
           agentRole: "spec",
-          opencodeAgent: "Hephaestus (Deep Agent)",
+          profileId: "Hephaestus (Deep Agent)",
           durationMs: 1_500,
         },
       }),

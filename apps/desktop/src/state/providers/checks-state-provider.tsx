@@ -1,41 +1,48 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { buildChecksStateValue } from "../app-state-context-values";
 import {
   ChecksOperationsContext,
   type ChecksOperationsContextValue,
   ChecksStateContext,
   useActiveRepoContext,
+  useRuntimeDefinitionsContext,
 } from "../app-state-contexts";
 import { useChecks } from "../operations";
 
 type ChecksStateProviderProps = PropsWithChildren<{
-  checkRepoOpencodeHealth: (repoPath: string) => Promise<RepoOpencodeHealthCheck>;
+  checkRepoRuntimeHealth: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ) => Promise<RepoRuntimeHealthCheck>;
 }>;
 
 export function ChecksStateProvider({
-  checkRepoOpencodeHealth,
+  checkRepoRuntimeHealth,
   children,
 }: ChecksStateProviderProps): ReactElement {
   const { activeRepo } = useActiveRepoContext();
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const {
     runtimeCheck,
     activeBeadsCheck,
-    activeRepoOpencodeHealth,
+    activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks,
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
-    refreshRepoOpencodeHealthForRepo,
+    refreshRepoRuntimeHealthForRepo,
     refreshChecks,
     hasRuntimeCheck,
     hasCachedBeadsCheck,
-    hasCachedRepoOpencodeHealth,
+    hasCachedRepoRuntimeHealth,
     clearActiveBeadsCheck,
-    clearActiveRepoOpencodeHealth,
+    clearActiveRepoRuntimeHealth,
   } = useChecks({
     activeRepo,
-    checkRepoOpencodeHealth,
+    runtimeDefinitions,
+    checkRepoRuntimeHealth,
   });
 
   const checksStateValue = useMemo(
@@ -43,33 +50,39 @@ export function ChecksStateProvider({
       buildChecksStateValue({
         runtimeCheck,
         beadsCheck: activeBeadsCheck,
-        opencodeHealth: activeRepoOpencodeHealth,
+        runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
         isLoadingChecks,
         refreshChecks,
       }),
-    [activeBeadsCheck, activeRepoOpencodeHealth, isLoadingChecks, refreshChecks, runtimeCheck],
+    [
+      activeBeadsCheck,
+      activeRepoRuntimeHealthByRuntime,
+      isLoadingChecks,
+      refreshChecks,
+      runtimeCheck,
+    ],
   );
 
   const checksOperationsValue = useMemo<ChecksOperationsContextValue>(
     () => ({
       refreshRuntimeCheck,
       refreshBeadsCheckForRepo,
-      refreshRepoOpencodeHealthForRepo,
+      refreshRepoRuntimeHealthForRepo,
       clearActiveBeadsCheck,
-      clearActiveRepoOpencodeHealth,
+      clearActiveRepoRuntimeHealth,
       setIsLoadingChecks,
       hasRuntimeCheck,
       hasCachedBeadsCheck,
-      hasCachedRepoOpencodeHealth,
+      hasCachedRepoRuntimeHealth,
     }),
     [
       clearActiveBeadsCheck,
-      clearActiveRepoOpencodeHealth,
+      clearActiveRepoRuntimeHealth,
       hasCachedBeadsCheck,
-      hasCachedRepoOpencodeHealth,
+      hasCachedRepoRuntimeHealth,
       hasRuntimeCheck,
       refreshBeadsCheckForRepo,
-      refreshRepoOpencodeHealthForRepo,
+      refreshRepoRuntimeHealthForRepo,
       refreshRuntimeCheck,
       setIsLoadingChecks,
     ],

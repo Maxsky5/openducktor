@@ -24,30 +24,30 @@ type CreateSessionLoadersArgs = {
 
 const LOCAL_RUNTIME_HOSTS = new Set(["127.0.0.1", "localhost"]);
 
-const validateLocalRuntimeBaseUrl = (baseUrl: string): string => {
-  const trimmedBaseUrl = baseUrl.trim();
+const validateLocalRuntimeBaseUrl = (runtimeEndpoint: string): string => {
+  const trimmedBaseUrl = runtimeEndpoint.trim();
   if (trimmedBaseUrl.length === 0) {
-    throw new Error("Session runtime baseUrl is required.");
+    throw new Error("Session runtime runtimeEndpoint is required.");
   }
 
   let parsed: URL;
   try {
     parsed = new URL(trimmedBaseUrl);
   } catch {
-    throw new Error(`Session runtime baseUrl is invalid: ${trimmedBaseUrl}`);
+    throw new Error(`Session runtime runtimeEndpoint is invalid: ${trimmedBaseUrl}`);
   }
 
   if (parsed.protocol !== "http:") {
-    throw new Error("Session runtime baseUrl must use the http protocol.");
+    throw new Error("Session runtime runtimeEndpoint must use the http protocol.");
   }
 
   if (!LOCAL_RUNTIME_HOSTS.has(parsed.hostname)) {
-    throw new Error("Session runtime baseUrl must target localhost or 127.0.0.1.");
+    throw new Error("Session runtime runtimeEndpoint must target localhost or 127.0.0.1.");
   }
 
   const numericPort = Number(parsed.port);
   if (!Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65_535) {
-    throw new Error("Session runtime baseUrl must include a valid port.");
+    throw new Error("Session runtime runtimeEndpoint must include a valid port.");
   }
 
   if (
@@ -57,7 +57,9 @@ const validateLocalRuntimeBaseUrl = (baseUrl: string): string => {
     parsed.username.length > 0 ||
     parsed.password.length > 0
   ) {
-    throw new Error("Session runtime baseUrl must not include credentials, query, hash, or path.");
+    throw new Error(
+      "Session runtime runtimeEndpoint must not include credentials, query, hash, or path.",
+    );
   }
 
   return trimmedBaseUrl;
@@ -87,8 +89,8 @@ const validateWorkingDirectory = (workingDirectory: string): string => {
   return trimmedWorkingDirectory;
 };
 
-const validateRuntimeInput = (baseUrl: string, workingDirectory: string) => ({
-  baseUrl: validateLocalRuntimeBaseUrl(baseUrl),
+const validateRuntimeInput = (runtimeEndpoint: string, workingDirectory: string) => ({
+  runtimeEndpoint: validateLocalRuntimeBaseUrl(runtimeEndpoint),
   workingDirectory: validateWorkingDirectory(workingDirectory),
 });
 
@@ -97,10 +99,14 @@ export const createLoadSessionModelCatalog = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
-  baseUrl: string,
+  runtimeEndpoint: string,
   workingDirectory: string,
 ) => Promise<void>) => {
-  return async (sessionId: string, baseUrl: string, workingDirectory: string): Promise<void> => {
+  return async (
+    sessionId: string,
+    runtimeEndpoint: string,
+    workingDirectory: string,
+  ): Promise<void> => {
     updateSession(
       sessionId,
       (current) => ({
@@ -111,7 +117,7 @@ export const createLoadSessionModelCatalog = ({
     );
 
     try {
-      const runtimeInput = validateRuntimeInput(baseUrl, workingDirectory);
+      const runtimeInput = validateRuntimeInput(runtimeEndpoint, workingDirectory);
       const catalog = await adapter.listAvailableModels(runtimeInput);
       updateSession(
         sessionId,
@@ -149,17 +155,17 @@ export const createLoadSessionTodos = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
-  baseUrl: string,
+  runtimeEndpoint: string,
   workingDirectory: string,
   externalSessionId: string,
 ) => Promise<void>) => {
   return async (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
     externalSessionId: string,
   ): Promise<void> => {
-    const runtimeInput = validateRuntimeInput(baseUrl, workingDirectory);
+    const runtimeInput = validateRuntimeInput(runtimeEndpoint, workingDirectory);
     const todos = await adapter.loadSessionTodos({
       ...runtimeInput,
       externalSessionId,

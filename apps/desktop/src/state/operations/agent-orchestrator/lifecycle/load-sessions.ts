@@ -1,6 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import {
@@ -49,13 +50,13 @@ type CreateLoadAgentSessionsArgs = {
   updateSession: UpdateSession;
   loadSessionTodos: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
   ) => Promise<void>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
@@ -94,13 +95,13 @@ export const createLoadAgentSessions = ({
 
     const warmSessionData = (
       targetSessionId: string,
-      baseUrl: string,
+      runtimeEndpoint: string,
       workingDirectory: string,
       externalSessionId: string,
     ): void => {
       runOrchestratorSideEffect(
         "load-sessions-warm-session-todos",
-        loadSessionTodos(targetSessionId, baseUrl, workingDirectory, externalSessionId),
+        loadSessionTodos(targetSessionId, runtimeEndpoint, workingDirectory, externalSessionId),
         {
           tags: {
             repoPath,
@@ -111,7 +112,7 @@ export const createLoadAgentSessions = ({
       );
       runOrchestratorSideEffect(
         "load-sessions-warm-session-model-catalog",
-        loadSessionModelCatalog(targetSessionId, baseUrl, workingDirectory),
+        loadSessionModelCatalog(targetSessionId, runtimeEndpoint, workingDirectory),
         {
           tags: {
             repoPath,
@@ -176,12 +177,12 @@ export const createLoadAgentSessions = ({
         requestedSession.taskId === taskId &&
         !requestedSession.modelCatalog &&
         !requestedSession.isLoadingModelCatalog &&
-        requestedSession.baseUrl &&
+        requestedSession.runtimeEndpoint &&
         requestedSession.workingDirectory
       ) {
         warmSessionData(
           requestedSession.sessionId,
-          requestedSession.baseUrl,
+          requestedSession.runtimeEndpoint,
           requestedSession.workingDirectory,
           requestedSession.externalSessionId,
         );
@@ -189,11 +190,17 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const requiresWorkspaceRuntime = recordsToHydrate.length > 0;
+    const hydrateRuntimeKind =
+      recordsToHydrate[0]?.runtimeKind ??
+      recordsToHydrate[0]?.selectedModel?.runtimeKind ??
+      DEFAULT_RUNTIME_KIND;
+    const requiresWorkspaceRuntime =
+      recordsToHydrate.length > 0 &&
+      recordsToHydrate.some((record) => !(record.runtimeEndpoint?.trim().length ?? 0));
     const workspaceRuntime = requiresWorkspaceRuntime
       ? await captureOrchestratorFallback(
           "load-sessions-ensure-workspace-runtime",
-          async () => host.opencodeRepoRuntimeEnsure(repoPath),
+          async () => host.runtimeEnsure(hydrateRuntimeKind, repoPath),
           {
             tags: { repoPath, taskId },
             logLevel: "warn",
@@ -201,6 +208,10 @@ export const createLoadAgentSessions = ({
           },
         )
       : null;
+    const workspaceRuntimeEndpoint = workspaceRuntime
+      ? (workspaceRuntime.endpoint ??
+        (typeof workspaceRuntime.port === "number" ? toBaseUrl(workspaceRuntime.port) : ""))
+      : "";
     if (isStaleRepoOperation()) {
       return;
     }
@@ -210,10 +221,14 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const baseUrl = workspaceRuntime ? toBaseUrl(workspaceRuntime.port) : (record.baseUrl ?? "");
-      if (!workspaceRuntime && baseUrl.length === 0) {
+      const runtimeEndpoint = record.runtimeEndpoint?.trim().length
+        ? (record.runtimeEndpoint ?? "")
+        : workspaceRuntime
+          ? workspaceRuntimeEndpoint
+          : "";
+      if (!workspaceRuntime && runtimeEndpoint.length === 0) {
         throw new Error(
-          `Cannot hydrate session ${record.sessionId}: runtime baseUrl is missing from metadata.`,
+          `Cannot hydrate session ${record.sessionId}: runtime runtimeEndpoint is missing from metadata.`,
         );
       }
       // Always use the persisted workingDirectory — it is the source of truth.
@@ -230,13 +245,14 @@ export const createLoadAgentSessions = ({
           record.sessionId,
           (current) => ({
             ...current,
-            baseUrl,
+            runtimeKind: record.runtimeKind ?? current.runtimeKind,
+            runtimeEndpoint,
             workingDirectory,
             promptOverrides: repoPromptOverrides,
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
+        warmSessionData(record.sessionId, runtimeEndpoint, workingDirectory, externalSessionId);
         return;
       }
 
@@ -244,7 +260,7 @@ export const createLoadAgentSessions = ({
         "load-sessions-load-history",
         async () => {
           const history = await adapter.loadSessionHistory({
-            baseUrl,
+            runtimeEndpoint,
             workingDirectory,
             externalSessionId,
             limit: INITIAL_SESSION_HISTORY_LIMIT,
@@ -319,7 +335,7 @@ export const createLoadAgentSessions = ({
           record.sessionId,
           (current) => ({
             ...current,
-            baseUrl,
+            runtimeEndpoint,
             workingDirectory,
             promptOverrides: repoPromptOverrides,
             messages: upsertMessage(current.messages, {
@@ -331,7 +347,7 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
+        warmSessionData(record.sessionId, runtimeEndpoint, workingDirectory, externalSessionId);
         return;
       }
 
@@ -339,7 +355,8 @@ export const createLoadAgentSessions = ({
         record.sessionId,
         (current) => ({
           ...current,
-          baseUrl,
+          runtimeKind: record.runtimeKind ?? current.runtimeKind,
+          runtimeEndpoint,
           workingDirectory,
           promptOverrides: repoPromptOverrides,
           messages: [
@@ -352,7 +369,7 @@ export const createLoadAgentSessions = ({
         }),
         { persist: false },
       );
-      warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
+      warmSessionData(record.sessionId, runtimeEndpoint, workingDirectory, externalSessionId);
     };
 
     for (

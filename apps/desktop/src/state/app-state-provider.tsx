@@ -1,4 +1,3 @@
-import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import type {
   AgentStateContextValue,
@@ -9,6 +8,7 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
+import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
 import {
   AgentStateContext,
   ChecksStateContext,
@@ -19,8 +19,8 @@ import {
   WorkspaceStateContext,
 } from "./app-state-contexts";
 import {
-  configureOpencodeCatalogOperations,
-  createHostOpencodeCatalogOperations,
+  configureRuntimeCatalogOperations,
+  createHostRuntimeCatalogOperations,
 } from "./operations";
 import {
   AgentStudioStateProvider,
@@ -34,18 +34,21 @@ import {
 } from "./providers";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
-  const agentEngine = useMemo(() => new OpencodeSdkAdapter(), []);
-  const opencodeCatalogOperations = useMemo(() => {
-    const ops = createHostOpencodeCatalogOperations(agentEngine);
-    configureOpencodeCatalogOperations(ops);
+  const runtimeRegistry = useMemo(() => createAgentRuntimeRegistry(), []);
+  const agentEngine = useMemo(() => runtimeRegistry.createAgentEngine(), [runtimeRegistry]);
+  const runtimeCatalogOperations = useMemo(() => {
+    const ops = createHostRuntimeCatalogOperations(runtimeRegistry.getAdapter);
+    configureRuntimeCatalogOperations(ops);
     return ops;
-  }, [agentEngine]);
+  }, [runtimeRegistry]);
 
   return (
     <AppRuntimeProvider>
       <SpecStateProvider>
         <ChecksStateProvider
-          checkRepoOpencodeHealth={opencodeCatalogOperations.checkRepoOpencodeHealth}
+          checkRepoRuntimeHealth={(repoPath, runtimeKind) =>
+            runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind)
+          }
         >
           <TasksStateProvider>
             <AgentStudioStateProvider agentEngine={agentEngine}>

@@ -1,5 +1,6 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
@@ -33,19 +34,24 @@ type EnsureSessionReadyDependencies = {
     role: AgentSessionState["role"],
     options?: {
       workingDirectoryOverride?: string | null;
+      runtimeKind?: AgentSessionState["selectedModel"] extends infer T
+        ? T extends { runtimeKind?: infer K }
+          ? K | null
+          : never
+        : never;
     },
   ) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
   ) => Promise<void>;
 };
@@ -122,6 +128,9 @@ export const createEnsureSessionReady = ({
       loadTaskDocuments(repoPath, session.taskId),
       ensureRuntime(repoPath, session.taskId, session.role, {
         workingDirectoryOverride: session.workingDirectory,
+        ...(session.selectedModel?.runtimeKind
+          ? { runtimeKind: session.selectedModel.runtimeKind }
+          : {}),
       }),
       loadRepoPromptOverrides(repoPath),
     ]);
@@ -148,12 +157,14 @@ export const createEnsureSessionReady = ({
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,
       repoPath,
+      runtimeKind:
+        runtime.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
       scenario: session.scenario,
       systemPrompt,
-      baseUrl: runtime.baseUrl,
+      runtimeEndpoint: runtime.runtimeEndpoint,
     });
 
     if (isStaleRepoOperation()) {
@@ -181,7 +192,7 @@ export const createEnsureSessionReady = ({
       pendingQuestions: [],
       runtimeId: runtime.runtimeId,
       runId: runtime.runId,
-      baseUrl: runtime.baseUrl,
+      runtimeEndpoint: runtime.runtimeEndpoint,
       workingDirectory: runtime.workingDirectory,
       promptOverrides,
     }));
@@ -196,7 +207,7 @@ export const createEnsureSessionReady = ({
         "ensure-ready-warm-session-todos",
         loadSessionTodos(
           sessionId,
-          runtime.baseUrl,
+          runtime.runtimeEndpoint,
           runtime.workingDirectory,
           targetSession.externalSessionId,
         ),
@@ -213,7 +224,7 @@ export const createEnsureSessionReady = ({
       if (!targetSession.modelCatalog && !targetSession.isLoadingModelCatalog) {
         runOrchestratorSideEffect(
           "ensure-ready-warm-session-model-catalog",
-          loadSessionModelCatalog(sessionId, runtime.baseUrl, runtime.workingDirectory),
+          loadSessionModelCatalog(sessionId, runtime.runtimeEndpoint, runtime.workingDirectory),
           {
             tags: {
               repoPath,

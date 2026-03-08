@@ -57,6 +57,11 @@ pub async fn workspace_update_repo_config(
     let existing = as_error(state.service.workspace_get_repo_config_optional(&repo_path))?;
 
     let repo_config = RepoConfig {
+        default_runtime_kind: config.default_runtime_kind.or_else(|| {
+            existing
+                .as_ref()
+                .map(|entry| entry.default_runtime_kind.clone())
+        }).unwrap_or_else(|| "opencode".to_string()),
         worktree_base_path: config.worktree_base_path.or_else(|| {
             existing
                 .as_ref()
@@ -136,6 +141,9 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
     .await?;
 
     let final_repo_config = RepoConfig {
+        default_runtime_kind: settings
+            .default_runtime_kind
+            .unwrap_or(existing.default_runtime_kind),
         worktree_base_path: settings.worktree_base_path.or(existing.worktree_base_path),
         branch_prefix: settings.branch_prefix.unwrap_or(existing.branch_prefix),
         default_target_branch: settings

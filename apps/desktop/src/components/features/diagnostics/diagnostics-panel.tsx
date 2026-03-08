@@ -10,12 +10,15 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";
 
 export function DiagnosticsPanel(): ReactElement {
   const { activeRepo, activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
-  const { runtimeCheck, beadsCheck, opencodeHealth, refreshChecks, isLoadingChecks } =
+  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
+    useRuntimeDefinitionsContext();
+  const { runtimeCheck, beadsCheck, runtimeHealthByRuntime, refreshChecks, isLoadingChecks } =
     useChecksState();
   const [isOpen, setOpen] = useState(false);
   const autoOpenedByRepoRef = useRef<Set<string>>(new Set());
@@ -25,12 +28,25 @@ export function DiagnosticsPanel(): ReactElement {
       buildDiagnosticsPanelModel({
         activeRepo,
         activeWorkspace,
+        runtimeDefinitions,
+        isLoadingRuntimeDefinitions,
+        runtimeDefinitionsError,
         runtimeCheck,
         beadsCheck,
-        opencodeHealth,
+        runtimeHealthByRuntime,
         isLoadingChecks,
       }),
-    [activeRepo, activeWorkspace, runtimeCheck, beadsCheck, opencodeHealth, isLoadingChecks],
+    [
+      activeRepo,
+      activeWorkspace,
+      beadsCheck,
+      isLoadingChecks,
+      isLoadingRuntimeDefinitions,
+      runtimeCheck,
+      runtimeDefinitions,
+      runtimeDefinitionsError,
+      runtimeHealthByRuntime,
+    ],
   );
 
   useEffect(() => {

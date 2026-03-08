@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
@@ -9,9 +10,12 @@ describe("DiagnosticsPanelSections", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: null,
       activeWorkspace: null,
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: null,
       beadsCheck: null,
-      opencodeHealth: null,
+      runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
 
@@ -30,11 +34,15 @@ describe("DiagnosticsPanelSections", () => {
         hasConfig: true,
         configuredWorktreeBasePath: "/Users/dev/worktrees",
       },
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        opencodeOk: true,
-        opencodeVersion: "1.2.9 (/Users/dev/.opencode/bin/opencode)",
+        runtimes: [
+          { kind: "opencode", ok: true, version: "1.2.9 (/Users/dev/.opencode/bin/opencode)" },
+        ],
         errors: [],
       },
       beadsCheck: {
@@ -42,26 +50,32 @@ describe("DiagnosticsPanelSections", () => {
         beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
         beadsError: null,
       },
-      opencodeHealth: {
-        runtimeOk: true,
-        runtimeError: null,
-        runtime: {
-          runtimeId: "runtime-1",
-          repoPath: "/Users/dev/fairnest",
-          taskId: "repo-main",
-          role: "spec",
-          workingDirectory: "/Users/dev/fairnest",
-          port: 49700,
-          startedAt: "2026-02-20T12:00:00.000Z",
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: true,
+          runtimeError: null,
+          runtime: {
+            kind: "opencode",
+            runtimeId: "runtime-1",
+            repoPath: "/Users/dev/fairnest",
+            taskId: "repo-main",
+            role: "spec",
+            workingDirectory: "/Users/dev/fairnest",
+            port: 49700,
+            endpoint: "http://127.0.0.1:49700",
+            startedAt: "2026-02-20T12:00:00.000Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            capabilities: OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          },
+          mcpOk: true,
+          mcpError: null,
+          mcpServerName: "openducktor",
+          mcpServerStatus: "connected",
+          mcpServerError: null,
+          availableToolIds: ["openducktor_odt_read_task"],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: [],
         },
-        mcpOk: true,
-        mcpError: null,
-        mcpServerName: "openducktor",
-        mcpServerStatus: "connected",
-        mcpServerError: null,
-        availableToolIds: ["openducktor_odt_read_task"],
-        checkedAt: "2026-02-20T12:01:00.000Z",
-        errors: [],
       },
       isLoadingChecks: false,
     });
@@ -88,11 +102,13 @@ describe("DiagnosticsPanelSections", () => {
         hasConfig: false,
         configuredWorktreeBasePath: null,
       },
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        opencodeOk: false,
-        opencodeVersion: null,
+        runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["opencode not found in PATH"],
       },
       beadsCheck: {
@@ -100,18 +116,20 @@ describe("DiagnosticsPanelSections", () => {
         beadsPath: null,
         beadsError: "beads init failed",
       },
-      opencodeHealth: {
-        runtimeOk: false,
-        runtimeError: "runtime failed",
-        runtime: null,
-        mcpOk: false,
-        mcpError: "mcp unavailable",
-        mcpServerName: "openducktor",
-        mcpServerStatus: null,
-        mcpServerError: "server unavailable",
-        availableToolIds: [],
-        checkedAt: "2026-02-20T12:01:00.000Z",
-        errors: [],
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: false,
+          runtimeError: "runtime failed",
+          runtime: null,
+          mcpOk: false,
+          mcpError: "mcp unavailable",
+          mcpServerName: "openducktor",
+          mcpServerStatus: null,
+          mcpServerError: "server unavailable",
+          availableToolIds: [],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: [],
+        },
       },
       isLoadingChecks: false,
     });

@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -7,7 +8,8 @@ import {
   toPrimaryAgentOptions,
 } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { loadRepoOpencodeCatalog } from "@/state/operations";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { loadRepoRuntimeCatalog } from "@/state/operations";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -31,7 +33,7 @@ type UseAgentStudioModelSelectionArgs = {
   role: AgentRole;
   repoSettings: RepoSettingsInput | null;
   updateAgentSessionModel: (sessionId: string, selection: AgentModelSelection | null) => void;
-  loadCatalog?: (repoPath: string) => Promise<AgentModelCatalog>;
+  loadCatalog?: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
 };
 
 export type AgentStudioModelSelectionState = {
@@ -44,7 +46,7 @@ export type AgentStudioModelSelectionState = {
   variantOptions: ComboboxOption[];
   activeSessionAgentColors: Record<string, string>;
   activeSessionContextUsage: AgentStudioContextUsage;
-  handleSelectAgent: (opencodeAgent: string) => void;
+  handleSelectAgent: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
@@ -62,7 +64,7 @@ export function useAgentStudioModelSelection({
   role,
   repoSettings,
   updateAgentSessionModel,
-  loadCatalog = loadRepoOpencodeCatalog,
+  loadCatalog = loadRepoRuntimeCatalog,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
   const previousActiveRepoRef = useRef<string | null>(activeRepo);
   const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
@@ -76,6 +78,24 @@ export function useAgentStudioModelSelection({
   const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
     Record<AgentRole, boolean>
   >(emptyDraftSelectionTouchedByRole);
+  const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
+    return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
+  }, [repoSettings?.agentDefaults, role]);
+  const composerRuntimeKind = useMemo<RuntimeKind>(() => {
+    return (
+      activeSession?.selectedModel?.runtimeKind ??
+      draftSelectionByRole[role]?.runtimeKind ??
+      roleDefaultSelection?.runtimeKind ??
+      repoSettings?.defaultRuntimeKind ??
+      DEFAULT_RUNTIME_KIND
+    );
+  }, [
+    activeSession?.selectedModel?.runtimeKind,
+    draftSelectionByRole,
+    repoSettings?.defaultRuntimeKind,
+    role,
+    roleDefaultSelection?.runtimeKind,
+  ]);
 
   useEffect(() => {
     if (previousActiveRepoRef.current === activeRepo) {
@@ -114,7 +134,7 @@ export function useAgentStudioModelSelection({
     let cancelled = false;
     setComposerCatalog(null);
     setIsLoadingComposerCatalog(true);
-    void loadCatalog(activeRepo)
+    void loadCatalog(activeRepo, composerRuntimeKind)
       .then((catalog) => {
         if (!cancelled) {
           setComposerCatalog(catalog);
@@ -134,11 +154,7 @@ export function useAgentStudioModelSelection({
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, loadCatalog]);
-
-  const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
-    return toRoleDefaultSelection(repoSettings?.agentDefaults[role]);
-  }, [repoSettings?.agentDefaults, role]);
+  }, [activeRepo, composerRuntimeKind, loadCatalog]);
   const isDraftSelectionTouched = draftSelectionTouchedByRole[role];
 
   useEffect(() => {
@@ -264,7 +280,7 @@ export function useAgentStudioModelSelection({
     if (options.length > 0) {
       return options;
     }
-    const fallbackAgent = selectedModelSelection?.opencodeAgent;
+    const fallbackAgent = selectedModelSelection?.profileId;
     const fallbackAgentColor = resolveAgentAccentColor(fallbackAgent);
     if (fallbackAgent && fallbackAgent.trim().length > 0) {
       return [
@@ -277,7 +293,7 @@ export function useAgentStudioModelSelection({
       ];
     }
     return [];
-  }, [selectedModelSelection?.opencodeAgent, selectionCatalog]);
+  }, [selectedModelSelection?.profileId, selectionCatalog]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
     const options = toModelOptions(selectionCatalog);
@@ -336,13 +352,15 @@ export function useAgentStudioModelSelection({
       return {};
     }
     const map: Record<string, string> = {};
-    for (const descriptor of selectionCatalog.agents) {
-      if (!descriptor.name) {
+    for (const descriptor of selectionCatalog.profiles ?? selectionCatalog.agents ?? []) {
+      const descriptorId = descriptor.id ?? descriptor.name;
+      const descriptorLabel = descriptor.label ?? descriptor.name;
+      if (!descriptorId || !descriptorLabel) {
         continue;
       }
-      const color = resolveAgentAccentColor(descriptor.name, descriptor.color);
+      const color = resolveAgentAccentColor(descriptorLabel, descriptor.color);
       if (color) {
-        map[descriptor.name] = color;
+        map[descriptorId] = color;
       }
     }
     return map;
@@ -365,7 +383,7 @@ export function useAgentStudioModelSelection({
   }, [activeSessionMessages, activeSessionModelDescriptorByKey, selectedModelEntry?.contextWindow]);
 
   const handleSelectAgent = useCallback(
-    (opencodeAgent: string) => {
+    (profileId: string) => {
       const baseSelection =
         selectedModelSelection ??
         (() => {
@@ -374,6 +392,7 @@ export function useAgentStudioModelSelection({
             return null;
           }
           return {
+            runtimeKind: composerRuntimeKind,
             providerId: firstModel.providerId,
             modelId: firstModel.modelId,
             ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
@@ -384,10 +403,10 @@ export function useAgentStudioModelSelection({
       }
       applySelection({
         ...baseSelection,
-        opencodeAgent,
+        profileId,
       });
     },
-    [applySelection, selectedModelSelection, selectionCatalog],
+    [applySelection, composerRuntimeKind, selectedModelSelection, selectionCatalog],
   );
 
   const handleSelectModel = useCallback(
@@ -400,15 +419,16 @@ export function useAgentStudioModelSelection({
         return;
       }
       applySelection({
+        runtimeKind: composerRuntimeKind,
         providerId: model.providerId,
         modelId: model.modelId,
         ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-        ...(selectedModelSelection?.opencodeAgent
-          ? { opencodeAgent: selectedModelSelection.opencodeAgent }
+        ...(selectedModelSelection?.profileId
+          ? { profileId: selectedModelSelection.profileId }
           : {}),
       });
     },
-    [applySelection, selectedModelSelection?.opencodeAgent, selectionCatalog],
+    [applySelection, composerRuntimeKind, selectedModelSelection?.profileId, selectionCatalog],
   );
 
   const handleSelectVariant = useCallback(

@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
@@ -20,11 +21,16 @@ export type SessionStartModalModel = {
   backgroundConfirmLabel?: string;
   cancelLabel?: string;
   selectedModelSelection: AgentModelSelection | null;
+  selectedRuntimeKind: RuntimeKind;
+  runtimeOptions: ComboboxOption[];
+  supportsProfiles: boolean;
+  supportsVariants: boolean;
   isSelectionCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
+  onSelectRuntime: (runtimeKind: string) => void;
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
@@ -43,11 +49,16 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     backgroundConfirmLabel = "Run in background",
     cancelLabel = "Cancel",
     selectedModelSelection,
+    selectedRuntimeKind,
+    runtimeOptions,
+    supportsProfiles,
+    supportsVariants,
     isSelectionCatalogLoading,
     agentOptions,
     modelOptions,
     modelGroups,
     variantOptions,
+    onSelectRuntime,
     onSelectAgent,
     onSelectModel,
     onSelectVariant,
@@ -57,7 +68,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onConfirm,
   } = model;
 
-  const selectedAgent = selectedModelSelection?.opencodeAgent ?? "";
+  const selectedAgent = selectedModelSelection?.profileId ?? "";
   const selectedModel = selectedModelSelection
     ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
     : "";
@@ -91,17 +102,38 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         >
           <fieldset className="space-y-4" disabled={isStarting}>
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor="session-start-agent">
-                Agent
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="session-start-runtime"
+              >
+                Agent Runtime
               </label>
               <Combobox
-                value={selectedAgent}
-                options={agentOptions}
-                placeholder="Select agent"
+                value={selectedRuntimeKind}
+                options={runtimeOptions}
+                placeholder="Select runtime"
                 disabled={isSelectionCatalogLoading}
-                onValueChange={onSelectAgent}
+                onValueChange={onSelectRuntime}
               />
             </div>
+
+            {supportsProfiles ? (
+              <div className="grid gap-1.5">
+                <label
+                  className="text-sm font-medium text-foreground"
+                  htmlFor="session-start-agent"
+                >
+                  Agent
+                </label>
+                <Combobox
+                  value={selectedAgent}
+                  options={agentOptions}
+                  placeholder="Select agent"
+                  disabled={isSelectionCatalogLoading}
+                  onValueChange={onSelectAgent}
+                />
+              </div>
+            ) : null}
 
             <div className="grid gap-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="session-start-model">
@@ -117,21 +149,23 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               />
             </div>
 
-            <div className="grid gap-1.5">
-              <label
-                className="text-sm font-medium text-foreground"
-                htmlFor="session-start-variant"
-              >
-                Variant
-              </label>
-              <Combobox
-                value={selectedVariant}
-                options={variantOptions}
-                placeholder="Select variant"
-                disabled={isSelectionCatalogLoading || !selectedModelSelection}
-                onValueChange={onSelectVariant}
-              />
-            </div>
+            {supportsVariants ? (
+              <div className="grid gap-1.5">
+                <label
+                  className="text-sm font-medium text-foreground"
+                  htmlFor="session-start-variant"
+                >
+                  Variant
+                </label>
+                <Combobox
+                  value={selectedVariant}
+                  options={variantOptions}
+                  placeholder="Select variant"
+                  disabled={isSelectionCatalogLoading || !selectedModelSelection}
+                  onValueChange={onSelectVariant}
+                />
+              </div>
+            ) : null}
           </fieldset>
 
           <DialogFooter className="mt-5 flex w-full items-center justify-between sm:justify-between">

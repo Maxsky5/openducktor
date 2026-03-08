@@ -3,6 +3,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assistant-meta";
 
 const sessionFixture: AgentSessionState = {
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -12,7 +13,7 @@ const sessionFixture: AgentSessionState = {
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:4444",
+  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "Draft answer",
@@ -33,9 +34,10 @@ const sessionFixture: AgentSessionState = {
       },
     ],
     defaultModelsByProvider: { openai: "gpt-5" },
-    agents: [],
+    profiles: [],
   },
   selectedModel: {
+    runtimeKind: "opencode",
     providerId: "openai",
     modelId: "gpt-5",
     variant: "high",

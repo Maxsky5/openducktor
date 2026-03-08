@@ -1,5 +1,11 @@
-import type { BeadsCheck, RuntimeCheck, WorkspaceRecord } from "@openducktor/contracts";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
+import type {
+  BeadsCheck,
+  RuntimeCheck,
+  RuntimeDescriptor,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
+import { runtimeLabelFor } from "@/lib/agent-runtime";
+import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import {
   buildDiagnosticsSummary,
   type DiagnosticsSummary,
@@ -14,7 +20,8 @@ export type DiagnosticKeyValueRowModel = {
   valueClassName?: string;
 };
 
-type DiagnosticsSectionModel = {
+export type DiagnosticsSectionModel = {
+  key: string;
   title: string;
   badge: {
     label: string;
@@ -30,53 +37,60 @@ export type DiagnosticsPanelModel = {
   isSummaryChecking: boolean;
   summaryState: DiagnosticsSummary;
   criticalReasons: string[];
-  sections: {
-    repository: DiagnosticsSectionModel;
-    cliTools: DiagnosticsSectionModel;
-    opencodeRuntime: DiagnosticsSectionModel;
-    openducktorMcp: DiagnosticsSectionModel;
-    beadsStore: DiagnosticsSectionModel;
-  };
+  sections: DiagnosticsSectionModel[];
 };
 
 type BuildDiagnosticsPanelModelInput = {
   activeRepo: string | null;
   activeWorkspace: WorkspaceRecord | null;
+  runtimeDefinitions: RuntimeDescriptor[];
+  isLoadingRuntimeDefinitions: boolean;
+  runtimeDefinitionsError: string | null;
   runtimeCheck: RuntimeCheck | null;
   beadsCheck: BeadsCheck | null;
-  opencodeHealth: RepoOpencodeHealthCheck | null;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
 };
 
 export const buildDiagnosticsPanelModel = (
   input: BuildDiagnosticsPanelModelInput,
 ): DiagnosticsPanelModel => {
-  const { activeRepo, activeWorkspace, runtimeCheck, beadsCheck, opencodeHealth, isLoadingChecks } =
-    input;
-
-  const runtimeHealthy = runtimeCheck ? runtimeCheck.gitOk && runtimeCheck.opencodeOk : null;
-  const beadsHealthy = beadsCheck ? beadsCheck.beadsOk : null;
-  const opencodeServerHealthy = opencodeHealth ? opencodeHealth.runtimeOk : null;
-  const openducktorMcpHealthy = opencodeHealth ? opencodeHealth.mcpOk : null;
-  const runtimeCritical = runtimeHealthy === false;
-  const beadsCritical = beadsHealthy === false;
-  const opencodeServerCritical = opencodeServerHealthy === false;
-  const openducktorMcpCritical = openducktorMcpHealthy === false;
-  const worktreeConfigured = activeWorkspace?.hasConfig ?? false;
+  const {
+    activeRepo,
+    activeWorkspace,
+    runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    runtimeCheck,
+    beadsCheck,
+    runtimeHealthByRuntime,
+    isLoadingChecks,
+  } = input;
   const repoName = activeRepo?.split("/").filter(Boolean).at(-1) ?? "No repository";
+  const worktreeConfigured = activeWorkspace?.hasConfig ?? false;
+  const runtimeEntries = runtimeDefinitions.map((definition) => ({
+    definition,
+    cliHealth: runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null,
+    runtimeHealth: runtimeHealthByRuntime[definition.kind] ?? null,
+  }));
 
   const criticalReasons: string[] = [];
   if (activeRepo) {
-    if (runtimeCritical) {
-      criticalReasons.push("Runtime checks failing");
+    if (runtimeDefinitionsError) {
+      criticalReasons.push(runtimeDefinitionsError);
     }
-    if (opencodeServerCritical) {
-      criticalReasons.push("OpenCode server unavailable");
+    if (runtimeCheck && (!runtimeCheck.gitOk || runtimeCheck.runtimes.some((entry) => !entry.ok))) {
+      criticalReasons.push("Runtime CLI checks failing");
     }
-    if (openducktorMcpCritical) {
-      criticalReasons.push("OpenDucktor MCP unavailable");
+    for (const { definition, runtimeHealth } of runtimeEntries) {
+      if (runtimeHealth?.runtimeOk === false) {
+        criticalReasons.push(`${definition.label} runtime unavailable`);
+      }
+      if (definition.capabilities.supportsMcpStatus && runtimeHealth?.mcpOk === false) {
+        criticalReasons.push(`${definition.label} OpenDucktor MCP unavailable`);
+      }
     }
-    if (beadsCritical) {
+    if (beadsCheck?.beadsOk === false) {
       criticalReasons.push("Beads store unavailable");
     }
   }
@@ -88,16 +102,14 @@ export const buildDiagnosticsPanelModel = (
 
   const isSummaryChecking =
     Boolean(activeRepo) &&
-    (isLoadingChecks || runtimeCheck === null || beadsCheck === null || opencodeHealth === null);
-
-  const summaryState = buildDiagnosticsSummary({
-    hasActiveRepo: Boolean(activeRepo),
-    isChecking: isSummaryChecking,
-    hasCriticalIssues: criticalReasons.length > 0,
-    hasSetupIssues: setupReasons.length > 0,
-  });
+    (isLoadingRuntimeDefinitions ||
+      isLoadingChecks ||
+      runtimeCheck === null ||
+      beadsCheck === null ||
+      runtimeDefinitions.some((definition) => !(definition.kind in runtimeHealthByRuntime)));
 
   const repositorySection: DiagnosticsSectionModel = {
+    key: "repository",
     title: "Repository",
     badge: {
       label: worktreeConfigured ? "Configured" : "Needs setup",
@@ -116,9 +128,7 @@ export const buildDiagnosticsPanelModel = (
             label: "Worktree directory",
             value: activeWorkspace.configuredWorktreeBasePath ?? "Not configured",
             breakAll: true,
-            valueClassName: activeWorkspace.configuredWorktreeBasePath
-              ? "text-muted-foreground"
-              : "text-muted-foreground",
+            valueClassName: "text-muted-foreground",
           },
         ]
       : [],
@@ -126,109 +136,135 @@ export const buildDiagnosticsPanelModel = (
     ...(activeWorkspace ? {} : { emptyMessage: "Select a repository to load diagnostics." }),
   };
 
+  const cliRuntimeRows =
+    runtimeDefinitions.length > 0
+      ? runtimeEntries.map(({ definition, cliHealth }) => ({
+          label: runtimeLabelFor({ runtimeDefinitions, runtimeKind: definition.kind }),
+          value: cliHealth?.ok ? (cliHealth.version ?? "detected") : "missing",
+        }))
+      : (runtimeCheck?.runtimes ?? []).map((runtimeEntry) => ({
+          label: runtimeEntry.kind,
+          value: runtimeEntry.ok ? (runtimeEntry.version ?? "detected") : "missing",
+        }));
+
   const cliToolsSection: DiagnosticsSectionModel = {
+    key: "cli-tools",
     title: "CLI Tools",
     badge: {
-      label: runtimeHealthy === null ? "Checking" : runtimeHealthy ? "Available" : "Issue",
-      variant: healthVariant(runtimeHealthy),
+      label:
+        runtimeCheck === null
+          ? "Checking"
+          : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok)
+            ? "Available"
+            : "Issue",
+      variant: healthVariant(
+        runtimeCheck === null
+          ? null
+          : runtimeCheck.gitOk && runtimeCheck.runtimes.every((entry) => entry.ok),
+      ),
     },
     rows: runtimeCheck
-      ? [
-          { label: "Git", value: runtimeCheck.gitVersion ?? "missing" },
-          {
-            label: "OpenCode",
-            value: runtimeCheck.opencodeOk
-              ? (runtimeCheck.opencodeVersion ?? "detected")
-              : "missing",
-          },
-        ]
+      ? [{ label: "Git", value: runtimeCheck.gitVersion ?? "missing" }, ...cliRuntimeRows]
       : [],
-    errors: runtimeCheck ? runtimeCheck.errors : [],
+    errors: runtimeDefinitionsError
+      ? [runtimeDefinitionsError, ...(runtimeCheck?.errors ?? [])]
+      : (runtimeCheck?.errors ?? []),
     ...(runtimeCheck ? {} : { emptyMessage: "Runtime checks are loading..." }),
   };
 
-  const opencodeRuntimeSection: DiagnosticsSectionModel = {
-    title: "OpenCode Runtime",
-    badge: {
-      label:
-        opencodeServerHealthy === null
-          ? "Checking"
-          : opencodeServerHealthy
-            ? "Running"
-            : "Unavailable",
-      variant: healthVariant(opencodeServerHealthy),
-    },
-    rows: opencodeHealth?.runtime
-      ? [
-          {
-            label: "Runtime ID",
-            value: opencodeHealth.runtime.runtimeId,
-            mono: true,
-            valueClassName: "text-muted-foreground",
-          },
-          {
-            label: "Endpoint",
-            value: `http://127.0.0.1:${opencodeHealth.runtime.port}`,
-            mono: true,
-            valueClassName: "text-muted-foreground",
-          },
-          {
-            label: "Working directory",
-            value: opencodeHealth.runtime.workingDirectory,
-            breakAll: true,
-            valueClassName: "text-muted-foreground",
-          },
-        ]
-      : [],
-    errors: opencodeHealth?.runtimeError ? [opencodeHealth.runtimeError] : [],
-    ...(activeRepo ? {} : { emptyMessage: "Select a repository first." }),
-  };
-
-  const openducktorMcpSection: DiagnosticsSectionModel = {
-    title: "OpenDucktor MCP",
-    badge: {
-      label:
-        openducktorMcpHealthy === null
-          ? "Checking"
-          : openducktorMcpHealthy
-            ? "Connected"
-            : "Unavailable",
-      variant: healthVariant(openducktorMcpHealthy),
-    },
-    rows: activeRepo
-      ? [
-          {
-            label: "Server name",
-            value: opencodeHealth?.mcpServerName ?? "openducktor",
-            mono: true,
-          },
-          {
-            label: "Status",
-            value: opencodeHealth?.mcpServerStatus ?? "unavailable",
-            valueClassName: opencodeHealth?.mcpServerStatus
-              ? "font-medium"
-              : "text-muted-foreground",
-          },
-          {
-            label: "Tools detected",
-            value: String(opencodeHealth?.availableToolIds.length ?? 0),
-            mono: true,
-            valueClassName: "text-muted-foreground",
-          },
-        ]
-      : [],
-    errors:
-      opencodeHealth?.mcpServerError || opencodeHealth?.mcpError
-        ? [opencodeHealth.mcpServerError ?? opencodeHealth.mcpError ?? ""]
+  const runtimeSections = runtimeEntries.flatMap(({ definition, runtimeHealth }) => {
+    const runtimeSection: DiagnosticsSectionModel = {
+      key: `runtime:${definition.kind}`,
+      title: `${definition.label} Runtime`,
+      badge: {
+        label:
+          runtimeHealth === null ? "Checking" : runtimeHealth.runtimeOk ? "Running" : "Unavailable",
+        variant: healthVariant(runtimeHealth?.runtimeOk ?? null),
+      },
+      rows: runtimeHealth?.runtime
+        ? [
+            {
+              label: "Runtime ID",
+              value: runtimeHealth.runtime.runtimeId,
+              mono: true,
+              valueClassName: "text-muted-foreground",
+            },
+            {
+              label: "Endpoint",
+              value: resolveRuntimeEndpoint(runtimeHealth.runtime),
+              mono: true,
+              valueClassName: "text-muted-foreground",
+            },
+            {
+              label: "Working directory",
+              value: runtimeHealth.runtime.workingDirectory,
+              breakAll: true,
+              valueClassName: "text-muted-foreground",
+            },
+          ]
         : [],
-    ...(activeRepo ? {} : { emptyMessage: "Select a repository first." }),
-  };
+      errors: runtimeHealth?.runtimeError ? [runtimeHealth.runtimeError] : [],
+      ...(activeRepo
+        ? runtimeHealth === null
+          ? { emptyMessage: "Runtime health is loading..." }
+          : {}
+        : { emptyMessage: "Select a repository first." }),
+    };
+
+    if (!definition.capabilities.supportsMcpStatus) {
+      return [runtimeSection];
+    }
+
+    const mcpSection: DiagnosticsSectionModel = {
+      key: `mcp:${definition.kind}`,
+      title: `${definition.label} MCP`,
+      badge: {
+        label:
+          runtimeHealth === null ? "Checking" : runtimeHealth.mcpOk ? "Connected" : "Unavailable",
+        variant: healthVariant(runtimeHealth?.mcpOk ?? null),
+      },
+      rows: activeRepo
+        ? [
+            {
+              label: "Server name",
+              value: runtimeHealth?.mcpServerName ?? "openducktor",
+              mono: true,
+            },
+            {
+              label: "Status",
+              value: runtimeHealth?.mcpServerStatus ?? "unavailable",
+              valueClassName: runtimeHealth?.mcpServerStatus
+                ? "font-medium"
+                : "text-muted-foreground",
+            },
+            {
+              label: "Tools detected",
+              value: String(runtimeHealth?.availableToolIds.length ?? 0),
+              mono: true,
+              valueClassName: "text-muted-foreground",
+            },
+          ]
+        : [],
+      errors:
+        runtimeHealth?.mcpServerError || runtimeHealth?.mcpError
+          ? [runtimeHealth.mcpServerError ?? runtimeHealth.mcpError ?? ""]
+          : [],
+      ...(activeRepo
+        ? runtimeHealth === null
+          ? { emptyMessage: "MCP health is loading..." }
+          : {}
+        : { emptyMessage: "Select a repository first." }),
+    };
+
+    return [runtimeSection, mcpSection];
+  });
 
   const beadsStoreSection: DiagnosticsSectionModel = {
+    key: "beads-store",
     title: "Beads Store",
     badge: {
-      label: beadsHealthy === null ? "Checking" : beadsHealthy ? "Ready" : "Unavailable",
-      variant: healthVariant(beadsHealthy),
+      label: beadsCheck === null ? "Checking" : beadsCheck.beadsOk ? "Ready" : "Unavailable",
+      variant: healthVariant(beadsCheck?.beadsOk ?? null),
     },
     rows:
       activeRepo && beadsCheck?.beadsPath
@@ -248,14 +284,26 @@ export const buildDiagnosticsPanelModel = (
   return {
     repoName,
     isSummaryChecking,
-    summaryState,
+    summaryState: buildDiagnosticsSummary({
+      hasActiveRepo: Boolean(activeRepo),
+      isChecking: isSummaryChecking,
+      hasCriticalIssues: criticalReasons.length > 0,
+      hasSetupIssues: setupReasons.length > 0,
+    }),
     criticalReasons,
-    sections: {
-      repository: repositorySection,
-      cliTools: cliToolsSection,
-      opencodeRuntime: opencodeRuntimeSection,
-      openducktorMcp: openducktorMcpSection,
-      beadsStore: beadsStoreSection,
-    },
+    sections: [repositorySection, cliToolsSection, ...runtimeSections, beadsStoreSection],
   };
+};
+
+const resolveRuntimeEndpoint = (runtime: RepoRuntimeHealthCheck["runtime"]): string => {
+  if (!runtime) {
+    return "unavailable";
+  }
+  if (runtime.endpoint?.trim()) {
+    return runtime.endpoint;
+  }
+  if (typeof runtime.port === "number") {
+    return `http://127.0.0.1:${runtime.port}`;
+  }
+  return "unavailable";
 };

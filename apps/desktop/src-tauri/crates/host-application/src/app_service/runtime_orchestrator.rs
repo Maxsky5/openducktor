@@ -4,7 +4,10 @@ mod startup;
 
 use super::AppService;
 use anyhow::{anyhow, Result};
-use host_domain::{AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeRole};
+use host_domain::{
+    AgentRuntimeKind, AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeDescriptor,
+    RuntimeRole,
+};
 use std::collections::HashSet;
 use std::process::Child;
 
@@ -52,6 +55,43 @@ pub(super) struct SpawnedRuntimeServer {
 }
 
 impl AppService {
+    pub fn runtime_definitions_list(&self) -> Vec<RuntimeDescriptor> {
+        vec![AgentRuntimeKind::Opencode.descriptor()]
+    }
+
+    pub fn runtime_list(
+        &self,
+        runtime_kind: &str,
+        repo_path: Option<&str>,
+    ) -> Result<Vec<AgentRuntimeSummary>> {
+        Self::ensure_supported_runtime_kind(runtime_kind)?;
+        self.list_registered_runtimes(repo_path)
+    }
+
+    pub fn runtime_ensure(
+        &self,
+        runtime_kind: &str,
+        repo_path: &str,
+    ) -> Result<AgentRuntimeSummary> {
+        Self::ensure_supported_runtime_kind(runtime_kind)?;
+        self.ensure_workspace_runtime(repo_path)
+    }
+
+    pub fn runtime_start(
+        &self,
+        runtime_kind: &str,
+        repo_path: &str,
+        task_id: &str,
+        role: AgentRuntimeRole,
+    ) -> Result<AgentRuntimeSummary> {
+        Self::ensure_supported_runtime_kind(runtime_kind)?;
+        self.start_task_runtime(repo_path, task_id, role)
+    }
+
+    pub fn runtime_stop(&self, runtime_id: &str) -> Result<bool> {
+        self.stop_registered_runtime(runtime_id)
+    }
+
     pub fn runs_list(&self, repo_path: Option<&str>) -> Result<Vec<RunSummary>> {
         let repo_key_filter = repo_path
             .map(|path| self.ensure_repo_authorized(path))
@@ -91,7 +131,7 @@ impl AppService {
         Ok(list)
     }
 
-    pub fn opencode_repo_runtime_ensure(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
+    fn ensure_workspace_runtime(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
 
@@ -148,7 +188,7 @@ impl AppService {
         })
     }
 
-    pub fn opencode_runtime_start(
+    fn start_task_runtime(
         &self,
         repo_path: &str,
         task_id: &str,
@@ -206,6 +246,13 @@ impl AppService {
         let spawned_server = self.spawn_runtime_server(&input)?;
         self.attach_runtime_session(input, spawned_server)
     }
+
+    fn ensure_supported_runtime_kind(runtime_kind: &str) -> Result<()> {
+        match runtime_kind.trim() {
+            "opencode" => Ok(()),
+            other => Err(anyhow!("Unsupported agent runtime kind: {other}")),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -224,11 +271,11 @@ mod tests {
     }
 
     #[test]
-    fn module_opencode_runtime_stop_reports_missing_runtime() {
+    fn module_runtime_stop_reports_missing_runtime() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
         let error = service
-            .opencode_runtime_stop("missing-runtime")
+            .runtime_stop("missing-runtime")
             .expect_err("stopping unknown runtime should fail");
 
         assert!(error

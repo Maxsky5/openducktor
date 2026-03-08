@@ -8,6 +8,7 @@ import type {
   AgentSessionContext,
   AgentSessionTodoItem,
   AgentStreamPart,
+  RuntimeKind,
 } from "../types/agent-orchestrator";
 
 export type StartAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
@@ -26,14 +27,16 @@ export type SendAgentUserMessageInput = {
 };
 
 export type LoadAgentSessionHistoryInput = {
-  baseUrl: string;
+  runtimeKind?: RuntimeKind;
+  runtimeEndpoint: string;
   workingDirectory: string;
   externalSessionId: string;
   limit?: number;
 };
 
 export type LoadAgentSessionTodosInput = {
-  baseUrl: string;
+  runtimeKind?: RuntimeKind;
+  runtimeEndpoint: string;
   workingDirectory: string;
   externalSessionId: string;
 };
@@ -65,6 +68,7 @@ export type EventUnsubscribe = () => void;
 export type AgentSessionSummary = {
   sessionId: string;
   externalSessionId: string;
+  runtimeKind?: string;
   role: AgentRole;
   scenario: AgentScenario;
   startedAt: string;
@@ -75,7 +79,8 @@ export interface AgentEnginePort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   listAvailableModels(input: {
-    baseUrl: string;
+    runtimeKind?: RuntimeKind;
+    runtimeEndpoint: string;
     workingDirectory: string;
   }): Promise<AgentModelCatalog>;
   hasSession(sessionId: string): boolean;
@@ -87,9 +92,13 @@ export interface AgentEnginePort {
   subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe;
   stopSession(sessionId: string): Promise<void>;
   loadSessionDiff(input: {
-    baseUrl: string;
+    runtimeKind?: RuntimeKind;
+    runtimeEndpoint: string;
     sessionId: string;
     messageId?: string;
   }): Promise<FileDiff[]>;
-  loadFileStatus(input: { baseUrl: string }): Promise<FileStatus[]>;
+  loadFileStatus(input: {
+    runtimeKind?: RuntimeKind;
+    runtimeEndpoint: string;
+  }): Promise<FileStatus[]>;
 }

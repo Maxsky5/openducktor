@@ -5,6 +5,7 @@ import type {
   AgentScenario,
   AgentSessionHistoryMessage,
 } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../../agent-tool-messages";
 import { normalizePersistedSelection } from "./models";
@@ -14,11 +15,35 @@ type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => ({
   sessionId: session.sessionId,
+  externalSessionId: session.externalSessionId,
+  taskId: session.taskId,
   role: session.role,
   scenario: session.scenario,
+  status: session.status,
   startedAt: session.startedAt,
+  runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+  ...(session.runtimeId ? { runtimeId: session.runtimeId } : {}),
+  ...(session.runId ? { runId: session.runId } : {}),
+  ...(session.runtimeEndpoint ? { runtimeEndpoint: session.runtimeEndpoint } : {}),
+  ...(session.runtimeEndpoint
+    ? {
+        runtimeTransport: {
+          endpoint: session.runtimeEndpoint,
+          workingDirectory: session.workingDirectory,
+        },
+      }
+    : {}),
   workingDirectory: session.workingDirectory,
-  selectedModel: session.selectedModel ?? undefined,
+  selectedModel: session.selectedModel
+    ? {
+        runtimeKind:
+          session.selectedModel.runtimeKind ?? session.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        providerId: session.selectedModel.providerId,
+        modelId: session.selectedModel.modelId,
+        ...(session.selectedModel.variant ? { variant: session.selectedModel.variant } : {}),
+        ...(session.selectedModel.profileId ? { profileId: session.selectedModel.profileId } : {}),
+      }
+    : undefined,
 });
 
 export const defaultScenarioForRole = (role: AgentRole): AgentScenario => {
@@ -49,9 +74,10 @@ export const fromPersistedSessionRecord = (
     scenario: session.scenario ?? defaultScenarioForRole(session.role),
     status: normalizedStatus,
     startedAt: session.startedAt,
+    runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     runtimeId: session.runtimeId ?? null,
     runId: session.runId ?? null,
-    baseUrl: session.baseUrl ?? "",
+    runtimeEndpoint: session.runtimeEndpoint ?? "",
     workingDirectory: session.workingDirectory,
     messages: [],
     draftAssistantText: "",
@@ -132,7 +158,7 @@ const assistantMessageMeta = (
     ...(selectedModel?.providerId ? { providerId: selectedModel.providerId } : {}),
     ...(selectedModel?.modelId ? { modelId: selectedModel.modelId } : {}),
     ...(selectedModel?.variant ? { variant: selectedModel.variant } : {}),
-    ...(selectedModel?.opencodeAgent ? { opencodeAgent: selectedModel.opencodeAgent } : {}),
+    ...(selectedModel?.profileId ? { profileId: selectedModel.profileId } : {}),
     ...(typeof durationMs === "number" && durationMs > 0 ? { durationMs } : {}),
     ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;

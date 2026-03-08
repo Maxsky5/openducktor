@@ -88,6 +88,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = (await import("../../host")).host.agentSessionsList;
     (await import("../../host")).host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -98,7 +99,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -149,6 +150,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -159,7 +161,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -175,8 +177,140 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-1"]?.messages).toEqual([]);
   });
 
+  test("hydrates requested session through its persisted runtime kind when endpoint is missing", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    let observedRuntimeEndpoint = "";
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async ({ runtimeEndpoint }) => {
+          observedRuntimeEndpoint = runtimeEndpoint;
+          return [];
+        },
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: () => {},
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
+    const ensuredRuntimeKinds: string[] = [];
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "claude-code",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        runtimeId: "runtime-1",
+        runtimeEndpoint: "",
+        workingDirectory: "/tmp/repo",
+        selectedModel: {
+          runtimeKind: "claude-code",
+          providerId: "anthropic",
+          modelId: "claude-3-7-sonnet",
+        },
+      },
+    ];
+    hostModule.host.runtimeEnsure = async (runtimeKind) => {
+      ensuredRuntimeKinds.push(runtimeKind);
+      return {
+        kind: runtimeKind,
+        runtimeId: "runtime-claude",
+        repoPath: "/tmp/repo",
+        taskId: "repo-main",
+        role: "spec",
+        workingDirectory: "/tmp/repo",
+        endpoint: "http://127.0.0.1:4555",
+        port: 4555,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: {
+          kind: runtimeKind,
+          label: "Claude Code",
+          description: "Claude Code runtime",
+          capabilities: {
+            supportsSessionLifecycle: true,
+            supportsStreamingEvents: true,
+            supportsModelCatalog: true,
+            supportsProfiles: false,
+            supportsVariants: false,
+            supportsWorkflowTools: true,
+            supportsPermissionRequests: true,
+            supportsQuestionRequests: true,
+            supportsHistory: true,
+            supportsTodos: true,
+            supportsDiff: true,
+            supportsFileStatus: true,
+            supportsDiagnostics: true,
+            supportsWorkspaceRuntime: true,
+            supportsTaskRuntime: true,
+            supportsBuildRuntime: true,
+            supportsMcpStatus: true,
+            supportsMcpConnect: true,
+            provisioningMode: "host_managed",
+          },
+        },
+        capabilities: {
+          supportsSessionLifecycle: true,
+          supportsStreamingEvents: true,
+          supportsModelCatalog: true,
+          supportsProfiles: false,
+          supportsVariants: false,
+          supportsWorkflowTools: true,
+          supportsPermissionRequests: true,
+          supportsQuestionRequests: true,
+          supportsHistory: true,
+          supportsTodos: true,
+          supportsDiff: true,
+          supportsFileStatus: true,
+          supportsDiagnostics: true,
+          supportsWorkspaceRuntime: true,
+          supportsTaskRuntime: true,
+          supportsBuildRuntime: true,
+          supportsMcpStatus: true,
+          supportsMcpConnect: true,
+          provisioningMode: "host_managed",
+        },
+      };
+    };
+
+    try {
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeEnsure = originalEnsure;
+    }
+
+    expect(ensuredRuntimeKinds).toEqual(["claude-code"]);
+    expect(observedRuntimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.runtimeKind).toBe("claude-code");
+  });
+
   test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
     const existingSession: AgentSessionState = {
+      runtimeKind: "opencode",
       sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
@@ -186,7 +320,7 @@ describe("agent-orchestrator-load-sessions", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeId: "runtime-1",
       runId: "run-1",
-      baseUrl: "http://127.0.0.1:4444",
+      runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo",
       messages: [],
       draftAssistantText: "",
@@ -251,6 +385,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -261,7 +396,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -334,6 +469,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
       listDeferred.resolve([
         {
+          runtimeKind: "opencode",
           sessionId: "session-stale",
           externalSessionId: "external-stale",
           taskId: "task-1",
@@ -344,7 +480,7 @@ describe("agent-orchestrator-load-sessions", () => {
           updatedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: "runtime-1",
           runId: "run-1",
-          baseUrl: "http://127.0.0.1:4444",
+          runtimeEndpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo",
         },
       ]);
@@ -417,6 +553,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     hostModule.host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -427,7 +564,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];

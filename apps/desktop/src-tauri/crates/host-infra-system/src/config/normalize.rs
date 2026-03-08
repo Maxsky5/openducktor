@@ -36,7 +36,7 @@ fn normalize_agent_model_default(value: &mut Option<AgentModelDefault>) {
     entry.provider_id = entry.provider_id.trim().to_string();
     entry.model_id = entry.model_id.trim().to_string();
     entry.variant = normalize_optional_non_empty(entry.variant.take());
-    entry.opencode_agent = normalize_optional_non_empty(entry.opencode_agent.take());
+    entry.profile_id = normalize_optional_non_empty(entry.profile_id.take());
 
     if entry.provider_id.is_empty() || entry.model_id.is_empty() {
         *value = None;

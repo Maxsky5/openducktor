@@ -5,6 +5,7 @@ import type {
   RunEvent,
   RunSummary,
   RuntimeCheck,
+  RuntimeKind,
   SettingsSnapshot,
   TaskCard,
   TaskCreateInput,
@@ -14,16 +15,18 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
-import type { RepoOpencodeHealthCheck } from "./diagnostics";
+import type { RepoRuntimeHealthMap } from "./diagnostics";
 
 export type RepoAgentDefaultInput = {
+  runtimeKind?: RuntimeKind;
   providerId: string;
   modelId: string;
   variant: string;
-  opencodeAgent: string;
+  profileId: string;
 };
 
 export type RepoSettingsInput = {
+  defaultRuntimeKind: RuntimeKind;
   worktreeBasePath: string;
   branchPrefix: string;
   /** Default branch used for ahead/behind comparison, rebase, and PR creation. */
@@ -64,7 +67,7 @@ export type WorkspaceStateContextValue = {
 export type ChecksStateContextValue = {
   runtimeCheck: RuntimeCheck | null;
   beadsCheck: BeadsCheck | null;
-  opencodeHealth: RepoOpencodeHealthCheck | null;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
 };
@@ -112,6 +115,7 @@ export type AgentStateContextValue = {
   startAgentSession: (input: {
     taskId: string;
     role: AgentRole;
+    runtimeKind?: RuntimeKind;
     scenario?: AgentScenario;
     selectedModel?: AgentModelSelection | null;
     sendKickoff?: boolean;

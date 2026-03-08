@@ -6,8 +6,11 @@ import {
   beadsCheckSchema,
   type RunSummary,
   type RuntimeCheck,
+  type RuntimeDescriptor,
+  type RuntimeKind,
   runSummarySchema,
   runtimeCheckSchema,
+  runtimeDescriptorSchema,
   type SystemCheck,
   systemCheckSchema,
   type TaskCard,
@@ -40,21 +43,29 @@ export const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<R
   return parseArray(runSummarySchema, payload);
 };
 
-export const opencodeRuntimeList = async (
+export const runtimeList = async (
   invokeFn: InvokeFn,
+  runtimeKind: RuntimeKind,
   repoPath?: string,
 ): Promise<AgentRuntimeSummary[]> => {
-  const payload = await invokeFn<unknown>("opencode_runtime_list", { repoPath });
+  const payload = await invokeFn<unknown>("runtime_list", { repoPath, runtimeKind });
   return parseArray(agentRuntimeSummarySchema, payload);
 };
 
-export const opencodeRuntimeStart = async (
+export const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
+  const payload = await invokeFn<unknown>("runtime_definitions_list", {});
+  return parseArray(runtimeDescriptorSchema, payload);
+};
+
+export const runtimeStart = async (
   invokeFn: InvokeFn,
+  runtimeKind: RuntimeKind,
   repoPath: string,
   taskId: string,
   role: RuntimeRole,
 ): Promise<AgentRuntimeSummary> => {
-  const payload = await invokeFn<unknown>("opencode_runtime_start", {
+  const payload = await invokeFn<unknown>("runtime_start", {
+    runtimeKind,
     repoPath,
     taskId,
     role,
@@ -62,20 +73,22 @@ export const opencodeRuntimeStart = async (
   return agentRuntimeSummarySchema.parse(payload);
 };
 
-export const opencodeRuntimeStop = async (
+export const runtimeStop = async (
   invokeFn: InvokeFn,
   runtimeId: string,
 ): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("opencode_runtime_stop", {
+  return invokeFn<{ ok: boolean }>("runtime_stop", {
     runtimeId,
   });
 };
 
-export const opencodeRepoRuntimeEnsure = async (
+export const runtimeEnsure = async (
   invokeFn: InvokeFn,
+  runtimeKind: RuntimeKind,
   repoPath: string,
 ): Promise<AgentRuntimeSummary> => {
-  const payload = await invokeFn<unknown>("opencode_repo_runtime_ensure", {
+  const payload = await invokeFn<unknown>("runtime_ensure", {
+    runtimeKind,
     repoPath,
   });
   return agentRuntimeSummarySchema.parse(payload);
@@ -196,24 +209,29 @@ export class TauriAgentClient {
     return runsList(this.invokeFn, repoPath);
   }
 
-  async opencodeRuntimeList(repoPath?: string): Promise<AgentRuntimeSummary[]> {
-    return opencodeRuntimeList(this.invokeFn, repoPath);
+  async runtimeList(runtimeKind: RuntimeKind, repoPath?: string): Promise<AgentRuntimeSummary[]> {
+    return runtimeList(this.invokeFn, runtimeKind, repoPath);
   }
 
-  async opencodeRuntimeStart(
+  async runtimeDefinitionsList(): Promise<RuntimeDescriptor[]> {
+    return runtimeDefinitionsList(this.invokeFn);
+  }
+
+  async runtimeStart(
+    runtimeKind: RuntimeKind,
     repoPath: string,
     taskId: string,
     role: RuntimeRole,
   ): Promise<AgentRuntimeSummary> {
-    return opencodeRuntimeStart(this.invokeFn, repoPath, taskId, role);
+    return runtimeStart(this.invokeFn, runtimeKind, repoPath, taskId, role);
   }
 
-  async opencodeRuntimeStop(runtimeId: string): Promise<{ ok: boolean }> {
-    return opencodeRuntimeStop(this.invokeFn, runtimeId);
+  async runtimeStop(runtimeId: string): Promise<{ ok: boolean }> {
+    return runtimeStop(this.invokeFn, runtimeId);
   }
 
-  async opencodeRepoRuntimeEnsure(repoPath: string): Promise<AgentRuntimeSummary> {
-    return opencodeRepoRuntimeEnsure(this.invokeFn, repoPath);
+  async runtimeEnsure(runtimeKind: RuntimeKind, repoPath: string): Promise<AgentRuntimeSummary> {
+    return runtimeEnsure(this.invokeFn, runtimeKind, repoPath);
   }
 
   async buildStart(repoPath: string, taskId: string): Promise<RunSummary> {

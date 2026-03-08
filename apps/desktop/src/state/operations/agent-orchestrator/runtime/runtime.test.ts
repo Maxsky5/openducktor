@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
 import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { host } from "../../host";
@@ -23,6 +23,22 @@ const runningRunFixture: RunSummary = {
 };
 
 describe("agent-orchestrator-runtime", () => {
+  beforeEach(() => {
+    host.workspaceGetRepoConfig = async () => ({
+      defaultRuntimeKind: "opencode",
+      branchPrefix: "obp",
+      defaultTargetBranch: "main",
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    });
+  });
+
   test("reuses running build run without starting another", async () => {
     let refreshCalls = 0;
     let buildStartCalls = 0;
@@ -43,9 +59,10 @@ describe("agent-orchestrator-runtime", () => {
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "build");
       expect(runtime).toEqual({
+        runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
       expect(buildStartCalls).toBe(0);
@@ -132,15 +149,17 @@ describe("agent-orchestrator-runtime", () => {
       refreshDeferred.resolve();
 
       expect(raceResult).toEqual({
+        runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
       await expect(runtimePromise).resolves.toEqual({
+        runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
     } finally {
@@ -154,23 +173,23 @@ describe("agent-orchestrator-runtime", () => {
     let repoRuntimeEnsureCalls = 0;
 
     const originalBuildStart = host.buildStart;
-    const originalRepoRuntimeEnsure = host.opencodeRepoRuntimeEnsure;
+    const originalRepoRuntimeEnsure = host.runtimeEnsure;
     host.buildStart = async () => {
       buildStartCalls += 1;
       return runningRunFixture;
     };
-    host.opencodeRepoRuntimeEnsure = async () => {
+    host.runtimeEnsure = async () => {
       repoRuntimeEnsureCalls += 1;
       return {
+        kind: "opencode",
         runtimeId: "runtime-shared",
         repoPath: "/tmp/repo",
         taskId: "task-1",
         role: "planner",
+        endpoint: "http://127.0.0.1:4666",
         port: 4666,
         workingDirectory: "/tmp/repo/shared",
-        status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
-        lastMessage: null,
       };
     };
 
@@ -184,16 +203,17 @@ describe("agent-orchestrator-runtime", () => {
         workingDirectoryOverride: "/tmp/repo/worktree",
       });
       expect(runtime).toEqual({
+        runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
       expect(buildStartCalls).toBe(0);
       expect(repoRuntimeEnsureCalls).toBe(0);
     } finally {
       host.buildStart = originalBuildStart;
-      host.opencodeRepoRuntimeEnsure = originalRepoRuntimeEnsure;
+      host.runtimeEnsure = originalRepoRuntimeEnsure;
     }
   });
 
@@ -202,23 +222,23 @@ describe("agent-orchestrator-runtime", () => {
     let repoRuntimeEnsureCalls = 0;
 
     const originalBuildStart = host.buildStart;
-    const originalRepoRuntimeEnsure = host.opencodeRepoRuntimeEnsure;
+    const originalRepoRuntimeEnsure = host.runtimeEnsure;
     host.buildStart = async () => {
       buildStartCalls += 1;
       return runningRunFixture;
     };
-    host.opencodeRepoRuntimeEnsure = async () => {
+    host.runtimeEnsure = async () => {
       repoRuntimeEnsureCalls += 1;
       return {
+        kind: "opencode",
         runtimeId: "runtime-shared",
         repoPath: "/tmp/repo",
         taskId: "task-1",
         role: "planner",
+        endpoint: "http://127.0.0.1:4666",
         port: 4666,
         workingDirectory: "/tmp/repo/shared",
-        status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
-        lastMessage: null,
       };
     };
 
@@ -232,35 +252,36 @@ describe("agent-orchestrator-runtime", () => {
         workingDirectoryOverride: "/tmp/repo/conflict-worktree",
       });
       expect(runtime).toEqual({
+        runtimeKind: "opencode",
         runtimeId: "runtime-shared",
         runId: null,
-        baseUrl: "http://127.0.0.1:4666",
+        runtimeEndpoint: "http://127.0.0.1:4666",
         workingDirectory: "/tmp/repo/conflict-worktree",
       });
       expect(buildStartCalls).toBe(0);
       expect(repoRuntimeEnsureCalls).toBe(1);
     } finally {
       host.buildStart = originalBuildStart;
-      host.opencodeRepoRuntimeEnsure = originalRepoRuntimeEnsure;
+      host.runtimeEnsure = originalRepoRuntimeEnsure;
     }
   });
 
   test("reuses the running build runtime when the override points at the repo root", async () => {
     let repoRuntimeEnsureCalls = 0;
 
-    const originalRepoRuntimeEnsure = host.opencodeRepoRuntimeEnsure;
-    host.opencodeRepoRuntimeEnsure = async () => {
+    const originalRepoRuntimeEnsure = host.runtimeEnsure;
+    host.runtimeEnsure = async () => {
       repoRuntimeEnsureCalls += 1;
       return {
+        kind: "opencode",
         runtimeId: "runtime-shared",
         repoPath: "/tmp/repo",
         taskId: "task-1",
         role: "planner",
+        endpoint: "http://127.0.0.1:4666",
         port: 4666,
         workingDirectory: "/tmp/repo/shared",
-        status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
-        lastMessage: null,
       };
     };
 
@@ -274,14 +295,15 @@ describe("agent-orchestrator-runtime", () => {
         workingDirectoryOverride: "/tmp/repo",
       });
       expect(runtime).toEqual({
+        runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
       expect(repoRuntimeEnsureCalls).toBe(0);
     } finally {
-      host.opencodeRepoRuntimeEnsure = originalRepoRuntimeEnsure;
+      host.runtimeEnsure = originalRepoRuntimeEnsure;
     }
   });
 
@@ -301,6 +323,7 @@ describe("agent-orchestrator-runtime", () => {
   test("maps repo role defaults into model selection", async () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     host.workspaceGetRepoConfig = async () => ({
+      defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: "main",
       trustedHooks: false,
@@ -312,10 +335,11 @@ describe("agent-orchestrator-runtime", () => {
       promptOverrides: {},
       agentDefaults: {
         build: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
-          opencodeAgent: "builder",
+          profileId: "builder",
         },
       },
     });
@@ -323,10 +347,11 @@ describe("agent-orchestrator-runtime", () => {
     try {
       const selection = await loadRepoDefaultModel("/tmp/repo", "build");
       expect(selection).toEqual({
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "builder",
+        profileId: "builder",
       });
     } finally {
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
@@ -337,6 +362,7 @@ describe("agent-orchestrator-runtime", () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     host.workspaceGetRepoConfig = async () => ({
+      defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: "main",
       trustedHooks: false,
@@ -407,6 +433,7 @@ describe("agent-orchestrator-runtime", () => {
     );
 
     host.workspaceGetRepoConfig = async () => ({
+      defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: "main",
       trustedHooks: false,
@@ -436,8 +463,9 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("uses qa runtime for qa role", async () => {
-    const originalOpencodeRuntimeStart = host.opencodeRuntimeStart;
-    host.opencodeRuntimeStart = async () => ({
+    const originalRuntimeStart = host.runtimeStart;
+    host.runtimeStart = async () => ({
+      kind: "opencode",
       runtimeId: "runtime-qa",
       repoPath: "/tmp/repo",
       taskId: "task-1",
@@ -457,19 +485,21 @@ describe("agent-orchestrator-runtime", () => {
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "qa");
       expect(runtime).toEqual({
+        runtimeKind: "opencode",
         runtimeId: "runtime-qa",
         runId: null,
-        baseUrl: "http://127.0.0.1:4555",
+        runtimeEndpoint: "http://127.0.0.1:4555",
         workingDirectory: "/tmp/repo/qa",
       });
     } finally {
-      host.opencodeRuntimeStart = originalOpencodeRuntimeStart;
+      host.runtimeStart = originalRuntimeStart;
     }
   });
 
   test("uses shared repo runtime for non-build non-qa roles", async () => {
-    const originalRepoRuntimeEnsure = host.opencodeRepoRuntimeEnsure;
-    host.opencodeRepoRuntimeEnsure = async () => ({
+    const originalRepoRuntimeEnsure = host.runtimeEnsure;
+    host.runtimeEnsure = async () => ({
+      kind: "opencode",
       runtimeId: "runtime-shared",
       repoPath: "/tmp/repo",
       taskId: "task-1",
@@ -489,13 +519,14 @@ describe("agent-orchestrator-runtime", () => {
 
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "planner");
       expect(runtime).toEqual({
+        runtimeKind: "opencode",
         runtimeId: "runtime-shared",
         runId: null,
-        baseUrl: "http://127.0.0.1:4666",
+        runtimeEndpoint: "http://127.0.0.1:4666",
         workingDirectory: "/tmp/repo/shared",
       });
     } finally {
-      host.opencodeRepoRuntimeEnsure = originalRepoRuntimeEnsure;
+      host.runtimeEnsure = originalRepoRuntimeEnsure;
     }
   });
 

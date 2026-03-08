@@ -48,7 +48,7 @@ const resolveAssistantAgentColor = (
     return undefined;
   }
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  const agentName = assistantMeta?.opencodeAgent ?? sessionSelectedModel?.opencodeAgent;
+  const agentName = assistantMeta?.profileId ?? sessionSelectedModel?.profileId;
   if (!agentName) {
     return undefined;
   }
@@ -61,7 +61,7 @@ const resolveUserAgentColor = (
   sessionAgentColors: Record<string, string> | undefined,
 ): string | undefined => {
   const messageMeta = message.meta?.kind === "user" ? message.meta : null;
-  const agentName = messageMeta?.opencodeAgent ?? sessionSelectedModel?.opencodeAgent;
+  const agentName = messageMeta?.profileId ?? sessionSelectedModel?.profileId;
   if (!agentName) {
     return undefined;
   }

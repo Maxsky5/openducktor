@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
 import { assertAgentKickoffScenario, buildAgentSystemPrompt } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -81,6 +82,7 @@ const resolveRuntimeAndModel = async ({
   scenario,
   requireModelReady,
   workingDirectoryOverride,
+  requestedRuntimeKind,
   taskCard,
   deps,
 }: {
@@ -88,16 +90,15 @@ const resolveRuntimeAndModel = async ({
   scenario: AgentScenario | undefined;
   requireModelReady: boolean;
   workingDirectoryOverride?: string | null;
+  requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
   const docsPromise = deps.task.loadTaskDocuments(ctx.repoPath, ctx.taskId);
-  const runtimePromise = deps.runtime.ensureRuntime(
-    ctx.repoPath,
-    ctx.taskId,
-    ctx.role,
-    workingDirectoryOverride !== undefined ? { workingDirectoryOverride } : undefined,
-  );
+  const runtimePromise = deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+    ...(workingDirectoryOverride !== undefined ? { workingDirectoryOverride } : {}),
+    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
+  });
   const defaultModelSelectionPromise = deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
   const promptOverridesPromise = deps.model.loadRepoPromptOverrides(ctx.repoPath);
 
@@ -168,13 +169,14 @@ const buildInitialSession = ({
   sessionId: startedCtx.summary.sessionId,
   externalSessionId: startedCtx.summary.externalSessionId,
   taskId: startedCtx.taskId,
+  runtimeKind: runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
   role: startedCtx.role,
   scenario: startedCtx.resolvedScenario,
   status: "idle",
   startedAt: startedCtx.summary.startedAt,
   runtimeId: runtime.runtimeId,
   runId: runtime.runId,
-  baseUrl: runtime.baseUrl,
+  runtimeEndpoint: runtime.runtimeEndpoint,
   workingDirectory: runtime.workingDirectory,
   messages: [
     {
@@ -262,6 +264,7 @@ const createOrReuseSession = async ({
     ctx,
     scenario: input.scenario,
     requireModelReady: input.requireModelReady && input.selectedModel == null,
+    requestedRuntimeKind: input.selectedModel?.runtimeKind ?? null,
     ...(input.workingDirectoryOverride !== undefined
       ? { workingDirectoryOverride: input.workingDirectoryOverride }
       : {}),
@@ -271,12 +274,14 @@ const createOrReuseSession = async ({
 
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
+    runtimeKind:
+      resolved.runtime.runtimeKind ?? input.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
     scenario: resolved.resolvedScenario,
     systemPrompt: resolved.systemPrompt,
-    baseUrl: resolved.runtime.baseUrl,
+    runtimeEndpoint: resolved.runtime.runtimeEndpoint,
   });
 
   const startedCtx: StartedSessionContext = {
@@ -367,7 +372,7 @@ const warmSessionData = ({
     "start-session-warm-session-todos",
     model.loadSessionTodos(
       startedCtx.summary.sessionId,
-      runtimeInfo.baseUrl,
+      runtimeInfo.runtimeEndpoint,
       runtimeInfo.workingDirectory,
       startedCtx.summary.externalSessionId,
     ),
@@ -383,7 +388,7 @@ const warmSessionData = ({
     "start-session-warm-session-model-catalog",
     model.loadSessionModelCatalog(
       startedCtx.summary.sessionId,
-      runtimeInfo.baseUrl,
+      runtimeInfo.runtimeEndpoint,
       runtimeInfo.workingDirectory,
     ),
     { tags },

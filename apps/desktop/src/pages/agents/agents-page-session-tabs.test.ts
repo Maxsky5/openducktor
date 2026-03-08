@@ -21,6 +21,7 @@ import {
 } from "./agents-page-session-tabs";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "ext-session-1",
   taskId: "task-1",
@@ -30,7 +31,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   startedAt: "2026-02-20T10:00:00.000Z",
   runtimeId: null,
   runId: null,
-  baseUrl: "https://example.test",
+  runtimeEndpoint: "https://example.test",
   workingDirectory: "/tmp/work",
   messages: [],
   draftAssistantText: "",
@@ -269,18 +270,21 @@ describe("agents-page-session-tabs", () => {
     const groups = buildSessionSelectorGroups({
       sessionsForTask: [
         buildSession({
+          runtimeKind: "opencode",
           sessionId: "spec-1",
           role: "spec",
           scenario: "spec_initial",
           startedAt: "2026-02-22T09:20:00.000Z",
         }),
         buildSession({
+          runtimeKind: "opencode",
           sessionId: "spec-2",
           role: "spec",
           scenario: "spec_initial",
           startedAt: "2026-02-22T08:20:00.000Z",
         }),
         buildSession({
+          runtimeKind: "opencode",
           sessionId: "planner-1",
           role: "planner",
           scenario: "planner_initial",
@@ -314,6 +318,7 @@ describe("agents-page-session-tabs", () => {
     const sessions = [
       buildSession({ sessionId: "spec-1", role: "spec", startedAt: "2026-02-20T08:00:00.000Z" }),
       buildSession({
+        runtimeKind: "opencode",
         sessionId: "planner-1",
         role: "planner",
         startedAt: "2026-02-20T10:00:00.000Z",

@@ -28,7 +28,7 @@ describe("app-lifecycle-model", () => {
       shouldLoadChecks({
         hasRuntimeCheck: true,
         hasCachedBeadsCheck: true,
-        hasCachedRepoOpencodeHealth: true,
+        hasCachedRepoRuntimeHealth: true,
       }),
     ).toBe(false);
 
@@ -36,7 +36,7 @@ describe("app-lifecycle-model", () => {
       shouldLoadChecks({
         hasRuntimeCheck: false,
         hasCachedBeadsCheck: true,
-        hasCachedRepoOpencodeHealth: true,
+        hasCachedRepoRuntimeHealth: true,
       }),
     ).toBe(true);
 
@@ -44,7 +44,7 @@ describe("app-lifecycle-model", () => {
       shouldLoadChecks({
         hasRuntimeCheck: true,
         hasCachedBeadsCheck: false,
-        hasCachedRepoOpencodeHealth: true,
+        hasCachedRepoRuntimeHealth: true,
       }),
     ).toBe(true);
   });

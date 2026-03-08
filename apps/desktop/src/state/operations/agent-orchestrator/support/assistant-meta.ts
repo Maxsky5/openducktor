@@ -25,9 +25,7 @@ export const toAssistantMessageMeta = (
     ...(session.selectedModel?.providerId ? { providerId: session.selectedModel.providerId } : {}),
     ...(session.selectedModel?.modelId ? { modelId: session.selectedModel.modelId } : {}),
     ...(session.selectedModel?.variant ? { variant: session.selectedModel.variant } : {}),
-    ...(session.selectedModel?.opencodeAgent
-      ? { opencodeAgent: session.selectedModel.opencodeAgent }
-      : {}),
+    ...(session.selectedModel?.profileId ? { profileId: session.selectedModel.profileId } : {}),
     ...(typeof durationMs === "number" ? { durationMs } : {}),
     ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
     ...(typeof selectedModelDescriptor?.contextWindow === "number"

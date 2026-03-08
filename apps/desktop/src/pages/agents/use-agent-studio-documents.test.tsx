@@ -272,6 +272,7 @@ describe("useAgentStudioDocuments", () => {
     });
 
     const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "session-1",
       messages: [
         createCompletedToolMessage({
@@ -308,6 +309,7 @@ describe("useAgentStudioDocuments", () => {
     });
 
     const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "session-2",
       messages: [createCompletedToolMessage({ tool: "odt_set_plan", input: {}, output: "done" })],
     });
@@ -397,6 +399,7 @@ describe("useAgentStudioDocuments", () => {
       });
 
       const activeSession = createAgentSessionFixture({
+        runtimeKind: "opencode",
         sessionId: scenario.sessionId,
         messages: [createCompletedToolMessage({ tool: scenario.tool, input: {}, output: "done" })],
       });
@@ -447,6 +450,7 @@ describe("useAgentStudioDocuments", () => {
       ...baseArgs,
       selectedTask: null,
       activeSession: createAgentSessionFixture({
+        runtimeKind: "opencode",
         sessionId: "session-A",
         messages: [toolMessage],
       }),
@@ -460,6 +464,7 @@ describe("useAgentStudioDocuments", () => {
         ...baseArgs,
         selectedTask: null,
         activeSession: createAgentSessionFixture({
+          runtimeKind: "opencode",
           sessionId: "session-B",
           messages: [toolMessage],
         }),

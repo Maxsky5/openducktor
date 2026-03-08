@@ -31,13 +31,14 @@ const catalogFixture: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [],
+  profiles: [],
 };
 
 const createSession = (
   overrides: Partial<AgentSessionState> = {},
   todos: AgentSessionTodoItem[] = [],
 ): AgentSessionState => ({
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -47,7 +48,7 @@ const createSession = (
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:4444",
+  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",
@@ -107,6 +108,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session?.isLoadingModelCatalog).toBe(false);
     expect(session?.modelCatalog).toEqual(catalogFixture);
     expect(session?.selectedModel).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -133,7 +135,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(session?.messages[0]?.content).toContain("Model catalog unavailable: catalog failed");
   });
 
-  test("rejects invalid model catalog runtime baseUrl before adapter call", async () => {
+  test("rejects invalid model catalog runtime runtimeEndpoint before adapter call", async () => {
     const harness = createStateHarness(createSession());
     let listAvailableModelsCalled = false;
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
@@ -153,7 +155,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     expect(listAvailableModelsCalled).toBe(false);
     expect(session?.isLoadingModelCatalog).toBe(false);
     expect(session?.messages[0]?.content).toContain(
-      "Model catalog unavailable: Session runtime baseUrl must use the http protocol.",
+      "Model catalog unavailable: Session runtime runtimeEndpoint must use the http protocol.",
     );
   });
 

@@ -1,3 +1,4 @@
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { asUnknownRecord, readArrayProp, readRecordProp, readUnknownProp } from "./guards";
 
@@ -25,7 +26,7 @@ export const normalizeModelInput = (
       modelID: model.modelId,
     },
     ...(model.variant ? { variant: model.variant } : {}),
-    ...(model.opencodeAgent ? { agent: model.opencodeAgent } : {}),
+    ...(model.profileId ? { agent: model.profileId } : {}),
   };
 };
 
@@ -69,7 +70,12 @@ export const toToolIdList = (payload: unknown): string[] => {
 export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
   const payloadRecord = asUnknownRecord(payload);
   if (!payloadRecord) {
-    return { models: [], defaultModelsByProvider: {}, agents: [] };
+    return {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [],
+      defaultModelsByProvider: {},
+      profiles: [],
+    };
   }
 
   const providers = readArrayProp(payloadRecord, "providers") ?? [];
@@ -125,8 +131,9 @@ export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog =>
   });
 
   return {
+    runtime: OPENCODE_RUNTIME_DESCRIPTOR,
     models,
     defaultModelsByProvider: defaults,
-    agents: [],
+    profiles: [],
   };
 };

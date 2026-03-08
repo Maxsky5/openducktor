@@ -23,6 +23,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   repos: {
     "/repo-a": {
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/a",
       branchPrefix: "obp",
       defaultTargetBranch: "origin/main",
@@ -39,6 +40,7 @@ const createSnapshot = (): SettingsSnapshot => ({
       agentDefaults: {},
     },
     "/repo-b": {
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/b",
       branchPrefix: "obp",
       defaultTargetBranch: "origin/main",

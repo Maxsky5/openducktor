@@ -3,9 +3,14 @@ import type {
   AgentRole as ContractsAgentRole,
   AgentScenario as ContractsAgentScenario,
   AgentToolName as ContractsAgentToolName,
+  RuntimeCapabilities,
+  RuntimeDescriptor,
+  RuntimeKind,
   TaskPriority,
 } from "@openducktor/contracts";
 import { isAgentKickoffScenario as isContractsAgentKickoffScenario } from "@openducktor/contracts";
+
+export type { RuntimeKind } from "@openducktor/contracts";
 
 export type AgentRole = ContractsAgentRole;
 export type AgentScenario = ContractsAgentScenario;
@@ -22,10 +27,11 @@ export const assertAgentKickoffScenario = (scenario: AgentScenario): AgentKickof
 };
 
 export type AgentModelSelection = {
+  runtimeKind?: RuntimeKind;
   providerId: string;
   modelId: string;
   variant?: string;
-  opencodeAgent?: string;
+  profileId?: string;
 };
 
 export type AgentModelDescriptor = {
@@ -40,7 +46,9 @@ export type AgentModelDescriptor = {
 };
 
 export type AgentDescriptor = {
-  name: string;
+  id?: string;
+  label?: string;
+  name?: string;
   description?: string;
   mode: "subagent" | "primary" | "all";
   hidden?: boolean;
@@ -49,10 +57,14 @@ export type AgentDescriptor = {
 };
 
 export type AgentModelCatalog = {
+  runtime?: RuntimeDescriptor;
   models: AgentModelDescriptor[];
   defaultModelsByProvider: Record<string, string>;
-  agents: AgentDescriptor[];
+  profiles?: AgentDescriptor[];
+  agents?: AgentDescriptor[];
 };
+
+export type AgentRuntimeCapabilities = RuntimeCapabilities;
 
 export type AgentSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 export type AgentSessionTodoPriority = "high" | "medium" | "low";
@@ -123,12 +135,14 @@ export type AgentToolCall =
 export type AgentSessionContext = {
   sessionId: string;
   repoPath: string;
+  runtimeKind: RuntimeKind;
+  runtimeId?: string;
   workingDirectory: string;
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
   systemPrompt: string;
-  baseUrl: string;
+  runtimeEndpoint?: string;
   model?: AgentModelSelection;
 };
 

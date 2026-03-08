@@ -2,6 +2,7 @@ import type { GitBranch, GitCurrentBranch, WorkspaceRecord } from "@openducktor/
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import { host } from "./host";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
@@ -385,14 +386,19 @@ export function useWorkspaceOperations({
 
       try {
         await host.workspaceSelect(repoPath);
-        void host.opencodeRepoRuntimeEnsure(repoPath).catch((error) => {
-          if (workspaceSwitchVersionRef.current !== switchVersion) {
-            return;
-          }
-          toast.error("OpenCode server unavailable", {
-            description: errorMessage(error),
+        void host
+          .workspaceGetRepoConfig(repoPath)
+          .then((repoConfig) =>
+            host.runtimeEnsure(repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND, repoPath),
+          )
+          .catch((error) => {
+            if (workspaceSwitchVersionRef.current !== switchVersion) {
+              return;
+            }
+            toast.error("Runtime unavailable", {
+              description: errorMessage(error),
+            });
           });
-        });
         if (workspaceSwitchVersionRef.current !== switchVersion) {
           return;
         }

@@ -20,12 +20,13 @@ const catalogFixture: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [{ name: "xhigh", mode: "all" }],
+  profiles: [{ name: "xhigh", mode: "all" }],
 };
 
 describe("agent-orchestrator/support/models", () => {
   test("picks and normalizes model selections", () => {
     expect(pickDefaultModel(catalogFixture)).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -33,32 +34,36 @@ describe("agent-orchestrator/support/models", () => {
 
     expect(
       normalizeSelectionForCatalog(catalogFixture, {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "missing",
-        opencodeAgent: "xhigh",
+        profileId: "xhigh",
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "xhigh",
+      profileId: "xhigh",
     });
   });
 
   test("normalizes persisted selection", () => {
     expect(
       normalizePersistedSelection({
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "low",
-        opencodeAgent: "xhigh",
+        profileId: "xhigh",
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "low",
-      opencodeAgent: "xhigh",
+      profileId: "xhigh",
     });
   });
 });

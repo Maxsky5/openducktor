@@ -3,7 +3,7 @@ import type { RunEvent } from "@openducktor/contracts";
 type ChecksLoadingArgs = {
   hasRuntimeCheck: boolean;
   hasCachedBeadsCheck: boolean;
-  hasCachedRepoOpencodeHealth: boolean;
+  hasCachedRepoRuntimeHealth: boolean;
 };
 
 export const MAX_RUN_EVENTS = 500;
@@ -14,6 +14,6 @@ export const prependRunEvent = (current: RunEvent[], next: RunEvent): RunEvent[]
 export const shouldLoadChecks = ({
   hasRuntimeCheck,
   hasCachedBeadsCheck,
-  hasCachedRepoOpencodeHealth,
+  hasCachedRepoRuntimeHealth,
 }: ChecksLoadingArgs): boolean =>
-  !hasRuntimeCheck || !hasCachedBeadsCheck || !hasCachedRepoOpencodeHealth;
+  !hasRuntimeCheck || !hasCachedBeadsCheck || !hasCachedRepoRuntimeHealth;

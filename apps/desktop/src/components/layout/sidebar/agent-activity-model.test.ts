@@ -4,6 +4,7 @@ import { summarizeAgentActivity } from "./agent-activity-model";
 
 const buildSession = (
   overrides: {
+    runtimeKind?: string;
     sessionId?: string;
     taskId?: string;
     role?: AgentSessionState["role"];
@@ -14,6 +15,7 @@ const buildSession = (
     pendingQuestions?: number;
   } = {},
 ) => ({
+  runtimeKind: overrides.runtimeKind ?? "opencode",
   sessionId: overrides.sessionId ?? "session-1",
   externalSessionId: `external-${overrides.sessionId ?? "session-1"}`,
   taskId: overrides.taskId ?? "task-1",
@@ -23,7 +25,7 @@ const buildSession = (
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
   runtimeId: null,
   runId: null,
-  baseUrl: "http://localhost:4096",
+  runtimeEndpoint: "http://localhost:4096",
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",

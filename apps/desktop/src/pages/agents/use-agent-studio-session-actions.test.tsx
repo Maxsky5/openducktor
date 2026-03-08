@@ -33,10 +33,11 @@ const createBaseArgs = (): HookArgs => {
     agentStudioReady: true,
     isActiveTaskHydrated: true,
     selectionForNewSession: {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "spec",
+      profileId: "spec",
     },
     input: "  hello world  ",
     setInput: () => {},
@@ -96,20 +97,22 @@ describe("useAgentStudioSessionActions", () => {
       role: "spec",
       scenario: "spec_initial",
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
-        opencodeAgent: "spec",
+        profileId: "spec",
       },
       sendKickoff: false,
       startMode: "reuse_latest",
       requireModelReady: true,
     });
     expect(updateAgentSessionModel).toHaveBeenCalledWith("session-new", {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "spec",
+      profileId: "spec",
     });
     expect(setInput).toHaveBeenCalledWith("");
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", "hello world");
@@ -142,10 +145,11 @@ describe("useAgentStudioSessionActions", () => {
 
   test("onSend requests model selection before creating a new session", async () => {
     const requestedSelection = {
+      runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "claude-sonnet-4",
       variant: "thinking",
-      opencodeAgent: "spec",
+      profileId: "spec",
     } as const;
     const requestNewSessionStart = mock(async () => ({ selectedModel: requestedSelection }));
     const startAgentSession = mock(async () => "session-new");
@@ -170,10 +174,11 @@ describe("useAgentStudioSessionActions", () => {
       startMode: "reuse_latest",
       reason: "composer_send",
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
-        opencodeAgent: "spec",
+        profileId: "spec",
       },
     });
     expect(startAgentSession).toHaveBeenCalledWith({
@@ -218,6 +223,7 @@ describe("useAgentStudioSessionActions", () => {
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const existingSpecSession = createSession({
+      runtimeKind: "opencode",
       sessionId: "session-existing",
       role: "spec",
       scenario: "spec_initial",
@@ -370,10 +376,11 @@ describe("useAgentStudioSessionActions", () => {
         role: "planner",
         scenario: "planner_initial",
         selectedModel: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "default",
-          opencodeAgent: "spec",
+          profileId: "spec",
         },
         sendKickoff: false,
         startMode: "fresh",
@@ -450,10 +457,11 @@ describe("useAgentStudioSessionActions", () => {
   test("handleCreateSession requests model selection with create_session reason", async () => {
     const requestNewSessionStart = mock(async () => ({
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-sonnet-4",
         variant: "thinking",
-        opencodeAgent: "planner",
+        profileId: "planner",
       },
     }));
     const startAgentSession = mock(async () => "session-plan");
@@ -498,10 +506,11 @@ describe("useAgentStudioSessionActions", () => {
       startMode: "fresh",
       reason: "create_session",
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
-        opencodeAgent: "spec",
+        profileId: "spec",
       },
     });
     expect(startAgentSession).toHaveBeenCalledWith(
@@ -509,10 +518,11 @@ describe("useAgentStudioSessionActions", () => {
         role: "planner",
         scenario: "planner_initial",
         selectedModel: {
+          runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet-4",
           variant: "thinking",
-          opencodeAgent: "planner",
+          profileId: "planner",
         },
       }),
     );
@@ -692,10 +702,11 @@ describe("useAgentStudioSessionActions", () => {
   test("startScenarioKickoff requests session selection with kickoff reason", async () => {
     const requestNewSessionStart = mock(async () => ({
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
-        opencodeAgent: "spec",
+        profileId: "spec",
       },
     }));
     const startAgentSession = mock(async () => "session-spec");
@@ -721,10 +732,11 @@ describe("useAgentStudioSessionActions", () => {
       startMode: "reuse_latest",
       reason: "scenario_kickoff",
       selectedModel: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
-        opencodeAgent: "spec",
+        profileId: "spec",
       },
     });
     expect(sendAgentMessage).toHaveBeenCalledWith(

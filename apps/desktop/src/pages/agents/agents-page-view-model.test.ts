@@ -42,6 +42,7 @@ const createTaskCard = (id: string): TaskCard => ({
 });
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -51,7 +52,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   startedAt: "2026-02-22T12:00:00.000Z",
   runtimeId: null,
   runId: null,
-  baseUrl: "http://localhost:1234",
+  runtimeEndpoint: "http://localhost:1234",
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",

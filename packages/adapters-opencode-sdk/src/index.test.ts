@@ -345,12 +345,12 @@ const startDefaultSession = async (
     role,
     scenario,
     systemPrompt: "system prompt",
-    baseUrl: "http://127.0.0.1:12345",
+    runtimeEndpoint: "http://127.0.0.1:12345",
   });
 };
 
 const defaultLoadSessionTodosInput = {
-  baseUrl: "http://127.0.0.1:12345",
+  runtimeEndpoint: "http://127.0.0.1:12345",
   workingDirectory: "/repo",
   externalSessionId: "session-opencode-1",
 };
@@ -406,7 +406,7 @@ describe("OpencodeSdkAdapter", () => {
       role: "planner",
       scenario: "planner_initial",
       systemPrompt: "system",
-      baseUrl: "http://127.0.0.1:12000",
+      runtimeEndpoint: "http://127.0.0.1:12000",
     });
 
     expect(summary.sessionId).toBe("session-1");
@@ -485,7 +485,7 @@ describe("OpencodeSdkAdapter", () => {
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "hephaestus",
+        profileId: "hephaestus",
       },
     });
 
@@ -592,7 +592,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "/repo",
       externalSessionId: "session-opencode-1",
       limit: 100,
@@ -974,7 +974,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "/repo",
       externalSessionId: "session-opencode-1",
     });
@@ -987,7 +987,7 @@ describe("OpencodeSdkAdapter", () => {
     ]);
     expect(createClientCalls).toEqual([
       {
-        baseUrl: "http://127.0.0.1:12345",
+        runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     ]);
@@ -1036,7 +1036,7 @@ describe("OpencodeSdkAdapter", () => {
     ]);
     expect(createClientCalls).toEqual([
       {
-        baseUrl: "http://127.0.0.1:12345",
+        runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     ]);
@@ -1066,7 +1066,7 @@ describe("OpencodeSdkAdapter", () => {
     ]);
     expect(createClientCalls).toEqual([
       {
-        baseUrl: "http://127.0.0.1:12345",
+        runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
     ]);
@@ -1089,7 +1089,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "   ",
       externalSessionId: "session-opencode-1",
     });
@@ -1102,7 +1102,7 @@ describe("OpencodeSdkAdapter", () => {
     ]);
     expect(createClientCalls).toEqual([
       {
-        baseUrl: "http://127.0.0.1:12345",
+        runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "   ",
       },
     ]);
@@ -1121,7 +1121,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "  /repo  ",
       externalSessionId: "session-opencode-1",
     });
@@ -1154,7 +1154,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "/repo",
     });
 
@@ -1165,9 +1165,10 @@ describe("OpencodeSdkAdapter", () => {
       contextWindow: 400_000,
       outputLimit: 32_000,
     });
-    expect(catalog.agents).toHaveLength(1);
-    expect(catalog.agents[0]).toMatchObject({
-      name: "Hephaestus",
+    expect(catalog.profiles).toHaveLength(1);
+    expect(catalog.profiles[0]).toMatchObject({
+      id: "Hephaestus",
+      label: "Hephaestus",
       mode: "primary",
       color: "#f59e0b",
     });
@@ -1183,7 +1184,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const tools = await adapter.listAvailableToolIds({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "/repo",
     });
 
@@ -1204,7 +1205,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const status = await adapter.getMcpStatus({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "/repo",
     });
 
@@ -1223,7 +1224,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     await adapter.connectMcpServer({
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeEndpoint: "http://127.0.0.1:12345",
       workingDirectory: "/repo",
       name: "openducktor",
     });

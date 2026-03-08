@@ -1,8 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { BeadsCheck, RuntimeCheck } from "@openducktor/contracts";
+import {
+  type BeadsCheck,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeCheck,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
@@ -18,8 +23,7 @@ const flush = async (): Promise<void> => {
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
   gitOk: true,
   gitVersion: "2.45.0",
-  opencodeOk: true,
-  opencodeVersion: "0.12.0",
+  runtimes: [{ kind: "opencode", ok: true, version: "0.12.0" }],
   errors: [],
   ...overrides,
 });
@@ -32,8 +36,8 @@ const makeBeadsCheck = (overrides: Partial<BeadsCheck> = {}): BeadsCheck => ({
 });
 
 const makeRepoHealth = (
-  overrides: Partial<RepoOpencodeHealthCheck> = {},
-): RepoOpencodeHealthCheck => ({
+  overrides: Partial<RepoRuntimeHealthCheck> = {},
+): RepoRuntimeHealthCheck => ({
   runtimeOk: true,
   runtimeError: null,
   runtime: null,
@@ -50,9 +54,13 @@ const makeRepoHealth = (
 
 const toastError = mock((_message: string, _options?: { description?: string }) => {});
 const toastSuccess = mock((_message: string, _options?: { description?: string }) => {});
-let repoHealthHandler = async (_repoPath: string): Promise<RepoOpencodeHealthCheck> =>
-  makeRepoHealth();
-const checkRepoOpencodeHealthMock = mock((repoPath: string) => repoHealthHandler(repoPath));
+let repoHealthHandler = async (
+  _repoPath: string,
+  _runtimeKind: RuntimeKind,
+): Promise<RepoRuntimeHealthCheck> => makeRepoHealth();
+const checkRepoRuntimeHealthMock = mock((repoPath: string, runtimeKind: RuntimeKind) =>
+  repoHealthHandler(repoPath, runtimeKind),
+);
 
 mock.module("sonner", () => ({
   toast: {
@@ -65,8 +73,8 @@ mock.module("sonner", () => ({
 type UseChecksHook = typeof import("./use-checks")["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
 type HookResult = ReturnType<UseChecksHook>;
-type HookHarnessArgs = Omit<HookArgs, "checkRepoOpencodeHealth"> & {
-  checkRepoOpencodeHealth?: HookArgs["checkRepoOpencodeHealth"];
+type HookHarnessArgs = Omit<HookArgs, "checkRepoRuntimeHealth"> & {
+  checkRepoRuntimeHealth?: HookArgs["checkRepoRuntimeHealth"];
 };
 
 let useChecks: UseChecksHook;
@@ -75,9 +83,10 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
   let latest: HookResult | null = null;
   let currentArgs: HookArgs = {
     ...initialArgs,
-    checkRepoOpencodeHealth:
-      initialArgs.checkRepoOpencodeHealth ??
-      ((repoPath: string) => checkRepoOpencodeHealthMock(repoPath)),
+    checkRepoRuntimeHealth:
+      initialArgs.checkRepoRuntimeHealth ??
+      ((repoPath: string, runtimeKind: RuntimeKind) =>
+        checkRepoRuntimeHealthMock(repoPath, runtimeKind)),
   };
 
   const Harness = ({ args }: { args: HookArgs }) => {
@@ -98,8 +107,8 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
       currentArgs = {
         ...currentArgs,
         ...nextArgs,
-        checkRepoOpencodeHealth:
-          nextArgs.checkRepoOpencodeHealth ?? currentArgs.checkRepoOpencodeHealth,
+        checkRepoRuntimeHealth:
+          nextArgs.checkRepoRuntimeHealth ?? currentArgs.checkRepoRuntimeHealth,
       };
       await act(async () => {
         renderer?.update(createElement(Harness, { args: currentArgs }));
@@ -137,7 +146,7 @@ beforeAll(async () => {
 beforeEach(() => {
   toastError.mockClear();
   toastSuccess.mockClear();
-  checkRepoOpencodeHealthMock.mockClear();
+  checkRepoRuntimeHealthMock.mockClear();
   repoHealthHandler = async () => makeRepoHealth();
 });
 
@@ -155,7 +164,10 @@ describe("use-checks", () => {
     host.runtimeCheck = runtimeCheck;
     host.beadsCheck = beadsCheck;
 
-    const harness = createHookHarness({ activeRepo: null });
+    const harness = createHookHarness({
+      activeRepo: null,
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
 
     try {
       await harness.mount();
@@ -165,7 +177,7 @@ describe("use-checks", () => {
 
       expect(runtimeCheck).not.toHaveBeenCalled();
       expect(beadsCheck).not.toHaveBeenCalled();
-      expect(checkRepoOpencodeHealthMock).not.toHaveBeenCalled();
+      expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
       expect(toastError).not.toHaveBeenCalled();
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
@@ -185,7 +197,10 @@ describe("use-checks", () => {
     };
     host.runtimeCheck = runtimeCheck;
 
-    const harness = createHookHarness({ activeRepo: "/repo-a" });
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
 
     try {
       await harness.mount();
@@ -218,31 +233,36 @@ describe("use-checks", () => {
     };
     host.beadsCheck = beadsCheck;
 
-    const harness = createHookHarness({ activeRepo: "/repo-a" });
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
 
     try {
       await harness.mount();
       await harness.run(async (value) => {
         await value.refreshBeadsCheckForRepo("/repo-b");
-        await value.refreshRepoOpencodeHealthForRepo("/repo-b");
+        await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
 
       expect(harness.getLatest().activeBeadsCheck).toBeNull();
-      expect(harness.getLatest().activeRepoOpencodeHealth).toBeNull();
+      expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode).toBeNull();
       expect(harness.getLatest().hasCachedBeadsCheck("/repo-b")).toBe(true);
-      expect(harness.getLatest().hasCachedRepoOpencodeHealth("/repo-b")).toBe(true);
+      expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
 
       await harness.updateArgs({ activeRepo: "/repo-b" });
       expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-b/.beads");
-      expect(harness.getLatest().activeRepoOpencodeHealth?.availableToolIds).toEqual(["/repo-b"]);
+      expect(
+        harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.availableToolIds,
+      ).toEqual(["/repo-b"]);
 
       await harness.run(async (value) => {
         await value.refreshBeadsCheckForRepo("/repo-b");
-        await value.refreshRepoOpencodeHealthForRepo("/repo-b");
+        await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
 
       expect(beadsCheck).toHaveBeenCalledTimes(1);
-      expect(checkRepoOpencodeHealthMock).toHaveBeenCalledTimes(1);
+      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
       host.beadsCheck = original.beadsCheck;
@@ -268,7 +288,10 @@ describe("use-checks", () => {
     host.runtimeCheck = runtimeCheck;
     host.beadsCheck = beadsCheck;
 
-    const harness = createHookHarness({ activeRepo: "/repo-a" });
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
 
     try {
       await harness.mount();
@@ -306,7 +329,10 @@ describe("use-checks", () => {
     };
     host.runtimeCheck = runtimeCheck;
 
-    const harness = createHookHarness({ activeRepo: "/repo-a" });
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
 
     try {
       await harness.mount();

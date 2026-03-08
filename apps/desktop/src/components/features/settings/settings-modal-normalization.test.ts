@@ -14,6 +14,7 @@ import {
 } from "./settings-modal-normalization";
 
 const createRepoConfig = (): RepoConfig => ({
+  defaultRuntimeKind: "opencode",
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  ",
   defaultTargetBranch: "main",
@@ -38,16 +39,18 @@ const createRepoConfig = (): RepoConfig => ({
   },
   agentDefaults: {
     spec: {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec",
+      profileId: "spec",
     },
     planner: {
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "",
       variant: "high",
-      opencodeAgent: "planner",
+      profileId: "planner",
     },
     build: undefined,
     qa: undefined,
@@ -140,6 +143,7 @@ describe("settings-modal-normalization", () => {
   test("normalizes repo config and removes incomplete agent defaults", () => {
     const normalized = normalizeRepoConfigForSave(createRepoConfig());
 
+    expect(normalized.defaultRuntimeKind).toBe("opencode");
     expect(normalized.branchPrefix).toBe("obp");
     expect(normalized.defaultTargetBranch).toBe("origin/main");
     expect(normalized.worktreeBasePath).toBe("/tmp/worktrees");
@@ -162,10 +166,11 @@ describe("settings-modal-normalization", () => {
     });
     expect(normalized.agentDefaults).toEqual({
       spec: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "spec",
+        profileId: "spec",
       },
     });
   });

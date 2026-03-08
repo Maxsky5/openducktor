@@ -14,7 +14,7 @@ const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
 
 const ORCHESTRATOR_SESSION_DEFAULTS: Partial<AgentSessionState> = {
   startedAt: "2026-02-22T08:00:00.000Z",
-  baseUrl: "http://127.0.0.1:4444",
+  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo/worktree",
 };
 

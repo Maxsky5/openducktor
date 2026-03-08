@@ -94,14 +94,14 @@ export const loadSessionHistory = async (
   createClient: ClientFactory,
   now: () => string,
   input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
     externalSessionId: string;
     limit?: number;
   },
 ): Promise<AgentSessionHistoryMessage[]> => {
   const client = createClient({
-    baseUrl: input.baseUrl,
+    runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
   const response = await client.session.messages({
@@ -145,7 +145,7 @@ export const loadSessionHistory = async (
 export const loadSessionTodos = async (
   createClient: ClientFactory,
   input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
     externalSessionId: string;
   },
@@ -153,7 +153,7 @@ export const loadSessionTodos = async (
   try {
     const trimmedWorkingDirectory = input.workingDirectory.trim();
     const client = createClient({
-      baseUrl: input.baseUrl,
+      runtimeEndpoint: input.runtimeEndpoint,
       workingDirectory: input.workingDirectory,
     });
     const response = await client.session.todo({

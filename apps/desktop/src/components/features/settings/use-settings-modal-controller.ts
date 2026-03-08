@@ -3,16 +3,18 @@ import type {
   GitBranch,
   RepoConfig,
   RepoPromptOverrides,
+  RuntimeDescriptor,
+  RuntimeKind,
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { ComboboxOption } from "@/components/ui/combobox";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-repo-settings";
 import { useWorkspaceState } from "@/state";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
 import { normalizeSnapshotForSave } from "./settings-modal-normalization";
@@ -24,14 +26,18 @@ import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-sta
 
 export type SettingsModalController = {
   isLoadingSettings: boolean;
+  isLoadingRuntimeDefinitions: boolean;
   isLoadingCatalog: boolean;
   isSaving: boolean;
   isPickingWorktreeBasePath: boolean;
   settingsError: string | null;
-  catalogError: string | null;
+  runtimeDefinitionsError: string | null;
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
-  catalog: AgentModelCatalog | null;
+  runtimeDefinitions: RuntimeDescriptor[];
+  getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
+  getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
+  isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   repoPaths: string[];
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
@@ -45,12 +51,6 @@ export type SettingsModalController = {
   globalPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   selectedRepoPromptRoleTabErrorCounts: Record<PromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
-  modelOptions: ComboboxOption[];
-  agentOptions: ComboboxOption[];
-  modelGroups: {
-    label: string;
-    options: ComboboxOption[];
-  }[];
   setSelectedRepoPath: (next: string) => void;
   retrySelectedRepoBranchesLoad: () => void;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
@@ -62,7 +62,7 @@ export type SettingsModalController = {
   ) => void;
   updateSelectedRepoAgentDefault: (
     role: "spec" | "planner" | "build" | "qa",
-    field: "providerId" | "modelId" | "variant" | "opencodeAgent",
+    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
   ) => void;
   clearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
@@ -72,6 +72,8 @@ export type SettingsModalController = {
 
 export const useSettingsModalController = (open: boolean): SettingsModalController => {
   const { activeRepo, loadSettingsSnapshot, saveSettingsSnapshot } = useWorkspaceState();
+  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
+    useRuntimeDefinitionsContext();
 
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingWorktreeBasePath, setIsPickingWorktreeBasePath] = useState(false);
@@ -103,11 +105,16 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     selectedRepoPath,
   });
 
-  const { catalog, catalogError, isLoadingCatalog, modelOptions, agentOptions, modelGroups } =
-    useSettingsModalCatalogState({
-      open,
-      selectedRepoPath,
-    });
+  const {
+    getCatalogForRuntime,
+    getCatalogErrorForRuntime,
+    isCatalogLoadingForRuntime,
+    isLoadingCatalog,
+  } = useSettingsModalCatalogState({
+    open,
+    selectedRepoPath,
+    runtimeDefinitions,
+  });
 
   const {
     promptValidationState,
@@ -213,14 +220,18 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
 
   return {
     isLoadingSettings,
+    isLoadingRuntimeDefinitions,
     isLoadingCatalog,
     isSaving,
     isPickingWorktreeBasePath,
     settingsError,
-    catalogError,
+    runtimeDefinitionsError,
     saveError,
     snapshotDraft,
-    catalog,
+    runtimeDefinitions,
+    getCatalogForRuntime,
+    getCatalogErrorForRuntime,
+    isCatalogLoadingForRuntime,
     repoPaths,
     selectedRepoPath,
     selectedRepoConfig,
@@ -234,9 +245,6 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
     settingsSectionErrorCountById,
-    modelOptions,
-    agentOptions,
-    modelGroups,
     setSelectedRepoPath,
     retrySelectedRepoBranchesLoad,
     updateSelectedRepoConfig,

@@ -1,6 +1,7 @@
 import {
   type RepoConfig,
   type RepoPromptOverrides,
+  type RuntimeKind,
   repoConfigSchema,
   type SettingsSnapshot,
   settingsSnapshotSchema,
@@ -14,7 +15,7 @@ export type AgentDefaultConfig = {
   providerId: string;
   modelId: string;
   variant?: string;
-  opencodeAgent?: string;
+  profileId?: string;
 };
 
 export type WorkspaceAgentDefaults = {
@@ -25,6 +26,7 @@ export type WorkspaceAgentDefaults = {
 };
 
 export type WorkspaceRepoConfigInput = {
+  defaultRuntimeKind?: RuntimeKind;
   worktreeBasePath?: string;
   branchPrefix?: string;
   defaultTargetBranch?: string;

@@ -1,7 +1,9 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
 export const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelection | null => {
+  const runtimeKind = catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND;
   if (catalog.models.length === 0) {
     return null;
   }
@@ -10,6 +12,7 @@ export const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelectio
     const providerDefault = catalog.defaultModelsByProvider[model.providerId];
     if (providerDefault && providerDefault === model.modelId) {
       return {
+        runtimeKind,
         providerId: model.providerId,
         modelId: model.modelId,
         ...(model.variants[0] ? { variant: model.variants[0] } : {}),
@@ -23,6 +26,7 @@ export const pickDefaultModel = (catalog: AgentModelCatalog): AgentModelSelectio
   }
 
   return {
+    runtimeKind,
     providerId: first.providerId,
     modelId: first.modelId,
     ...(first.variants[0] ? { variant: first.variants[0] } : {}),
@@ -45,12 +49,14 @@ export const normalizeSelectionForCatalog = (
   }
 
   const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
+  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
   const hasAgent = Boolean(
-    selection.opencodeAgent &&
-      catalog.agents.some((agent) => agent.name === selection.opencodeAgent),
+    selection.profileId &&
+      catalogProfiles.some((agent) => (agent.id ?? agent.name) === selection.profileId),
   );
 
   return {
+    runtimeKind: selection.runtimeKind ?? catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND,
     providerId: model.providerId,
     modelId: model.modelId,
     ...(hasVariant
@@ -58,7 +64,7 @@ export const normalizeSelectionForCatalog = (
       : model.variants[0]
         ? { variant: model.variants[0] }
         : {}),
-    ...(hasAgent ? { opencodeAgent: selection.opencodeAgent } : {}),
+    ...(hasAgent ? { profileId: selection.profileId } : {}),
   };
 };
 
@@ -69,9 +75,10 @@ export const normalizePersistedSelection = (
     return null;
   }
   return {
+    runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
     ...(selection.variant ? { variant: selection.variant } : {}),
-    ...(selection.opencodeAgent ? { opencodeAgent: selection.opencodeAgent } : {}),
+    ...(selection.profileId ? { profileId: selection.profileId } : {}),
   };
 };

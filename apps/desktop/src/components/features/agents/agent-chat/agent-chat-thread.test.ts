@@ -142,7 +142,7 @@ describe("AgentChatThread", () => {
                 meta: {
                   kind: "assistant",
                   agentRole: "spec",
-                  opencodeAgent: "Hephaestus (Deep Agent)",
+                  profileId: "Hephaestus (Deep Agent)",
                   durationMs: 1_500,
                 },
               }),

@@ -5,7 +5,7 @@ use host_domain::AgentRuntimeSummary;
 use std::collections::{HashMap, HashSet};
 
 impl AppService {
-    pub fn opencode_runtime_list(
+    pub(in crate::app_service::runtime_orchestrator) fn list_registered_runtimes(
         &self,
         repo_path: Option<&str>,
     ) -> Result<Vec<AgentRuntimeSummary>> {

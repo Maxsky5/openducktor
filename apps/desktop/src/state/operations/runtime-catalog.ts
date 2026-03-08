@@ -1,28 +1,35 @@
-import type { McpServerStatus } from "@openducktor/adapters-opencode-sdk";
-import type { AgentRuntimeSummary } from "@openducktor/contracts";
+import type { AgentRuntimeSummary, RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
+type RuntimeMcpServerStatus = {
+  status: string;
+  error?: string | null;
+};
+
 type ListCatalogInput = {
-  baseUrl: string;
+  runtimeKind: RuntimeKind;
+  runtimeEndpoint: string;
   workingDirectory: string;
 };
 
-export type OpencodeCatalogAdapter = Pick<AgentEnginePort, "listAvailableModels"> & {
+export type RuntimeCatalogAdapter = Pick<AgentEnginePort, "listAvailableModels"> & {
   listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
-  getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, McpServerStatus>>;
+  getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, RuntimeMcpServerStatus>>;
   connectMcpServer: (input: ListCatalogInput & { name: string }) => Promise<void>;
+  shouldRestartRuntimeForMcpStatusError: (message: string) => boolean;
 };
 
-type OpencodeCatalogDependencies = {
-  ensureRuntime: (repoPath: string) => Promise<AgentRuntimeSummary>;
+type RuntimeCatalogDependencies = {
+  ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<AgentRuntimeSummary>;
   stopRuntime: (runtimeId: string) => Promise<{ ok: boolean }>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
   listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
-  getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, McpServerStatus>>;
+  getMcpStatus: (input: ListCatalogInput) => Promise<Record<string, RuntimeMcpServerStatus>>;
   connectMcpServer: (input: ListCatalogInput & { name: string }) => Promise<void>;
+  shouldRestartRuntimeForMcpStatusError: (runtimeKind: RuntimeKind, message: string) => boolean;
 };
 
 type RuntimeProbeResult =
@@ -33,7 +40,7 @@ type RuntimeProbeResult =
     }
   | {
       ok: false;
-      result: RepoOpencodeHealthCheck;
+      result: RepoRuntimeHealthCheck;
     };
 
 type McpProbeResult =
@@ -41,11 +48,11 @@ type McpProbeResult =
       ok: true;
       runtime: AgentRuntimeSummary;
       runtimeInput: ListCatalogInput;
-      statusByServer: Record<string, McpServerStatus>;
+      statusByServer: Record<string, RuntimeMcpServerStatus>;
     }
   | {
       ok: false;
-      result: RepoOpencodeHealthCheck;
+      result: RepoRuntimeHealthCheck;
     };
 
 type NormalizedMcpStatus = {
@@ -54,14 +61,15 @@ type NormalizedMcpStatus = {
 };
 
 const ODT_MCP_SERVER_NAME = "openducktor";
-const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 const toNowIso = (): string => new Date().toISOString();
-const toRuntimeInput = (runtime: AgentRuntimeSummary): ListCatalogInput => ({
-  baseUrl: toBaseUrl(runtime.port),
+const toRuntimeInput = (
+  runtime: AgentRuntimeSummary,
+  runtimeKind: RuntimeKind,
+): ListCatalogInput => ({
+  runtimeKind,
+  runtimeEndpoint: resolveRuntimeEndpoint(runtime),
   workingDirectory: runtime.workingDirectory,
 });
-const isOpencodeConfigInvalidError = (message: string): boolean =>
-  /configinvaliderror|opencode_config_content|loglevel|invalid option/i.test(message);
 const shouldReconnectMcp = (status: string | null): boolean => {
   return status !== null && status !== "connected";
 };
@@ -69,8 +77,8 @@ const shouldReconnectMcp = (status: string | null): boolean => {
 const toRuntimeUnavailableHealthCheck = (
   runtimeError: string,
   checkedAt: string,
-): RepoOpencodeHealthCheck => {
-  const unavailableMessage = "OpenCode runtime is unavailable, so MCP cannot be verified.";
+): RepoRuntimeHealthCheck => {
+  const unavailableMessage = "Runtime is unavailable, so MCP cannot be verified.";
   return {
     runtimeOk: false,
     runtimeError,
@@ -90,7 +98,7 @@ const toMcpStatusFailedHealthCheck = (
   runtime: AgentRuntimeSummary,
   mcpError: string,
   checkedAt: string,
-): RepoOpencodeHealthCheck => {
+): RepoRuntimeHealthCheck => {
   return {
     runtimeOk: true,
     runtimeError: null,
@@ -106,7 +114,7 @@ const toMcpStatusFailedHealthCheck = (
   };
 };
 
-const toRepoOpencodeHealthCheck = ({
+const toRepoRuntimeHealthCheck = ({
   runtime,
   availableToolIds,
   mcpServerStatus,
@@ -116,7 +124,7 @@ const toRepoOpencodeHealthCheck = ({
   runtime: AgentRuntimeSummary;
   availableToolIds: string[];
   checkedAt: string;
-} & NormalizedMcpStatus): RepoOpencodeHealthCheck => {
+} & NormalizedMcpStatus): RepoRuntimeHealthCheck => {
   const mcpOk = mcpServerStatus === "connected";
   const mcpError = mcpOk ? null : (mcpServerError ?? "OpenDucktor MCP is unavailable.");
 
@@ -136,13 +144,13 @@ const toRepoOpencodeHealthCheck = ({
 };
 
 const resolveMcpStatusError = (
-  statusByServer: Record<string, McpServerStatus>,
+  statusByServer: Record<string, RuntimeMcpServerStatus>,
 ): { status: string | null; error: string | null } => {
   const serverStatus = statusByServer[ODT_MCP_SERVER_NAME];
   if (!serverStatus) {
     return {
       status: null,
-      error: `MCP server '${ODT_MCP_SERVER_NAME}' is not configured for this OpenCode runtime.`,
+      error: `MCP server '${ODT_MCP_SERVER_NAME}' is not configured for this runtime.`,
     };
   }
   if (serverStatus.status === "connected") {
@@ -154,14 +162,18 @@ const resolveMcpStatusError = (
   };
 };
 
-export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencies) => {
-  const probeRuntime = async (repoPath: string, checkedAt: string): Promise<RuntimeProbeResult> => {
+export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies) => {
+  const probeRuntime = async (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    checkedAt: string,
+  ): Promise<RuntimeProbeResult> => {
     try {
-      const runtime = await deps.ensureRuntime(repoPath);
+      const runtime = await deps.ensureRuntime(runtimeKind, repoPath);
       return {
         ok: true,
         runtime,
-        runtimeInput: toRuntimeInput(runtime),
+        runtimeInput: toRuntimeInput(runtime, runtimeKind),
       };
     } catch (error) {
       const runtimeError = errorMessage(error);
@@ -174,6 +186,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
 
   const probeMcpStatusWithRetryStrategy = async (
     repoPath: string,
+    runtimeKind: RuntimeKind,
     runtimeProbe: Extract<RuntimeProbeResult, { ok: true }>,
     checkedAt: string,
   ): Promise<McpProbeResult> => {
@@ -187,12 +200,12 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
       };
     } catch (error) {
       const rawMessage = errorMessage(error);
-      if (!isOpencodeConfigInvalidError(rawMessage)) {
+      if (!deps.shouldRestartRuntimeForMcpStatusError(runtimeKind, rawMessage)) {
         return {
           ok: false,
           result: toMcpStatusFailedHealthCheck(
             runtimeProbe.runtime,
-            `Failed to query OpenCode MCP status: ${rawMessage}`,
+            `Failed to query runtime MCP status: ${rawMessage}`,
             checkedAt,
           ),
         };
@@ -201,8 +214,8 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
       let restartedRuntime: AgentRuntimeSummary | null = null;
       try {
         await deps.stopRuntime(runtimeProbe.runtime.runtimeId);
-        restartedRuntime = await deps.ensureRuntime(repoPath);
-        const restartedRuntimeInput = toRuntimeInput(restartedRuntime);
+        restartedRuntime = await deps.ensureRuntime(runtimeKind, repoPath);
+        const restartedRuntimeInput = toRuntimeInput(restartedRuntime, runtimeKind);
         const statusByServer = await deps.getMcpStatus(restartedRuntimeInput);
         return {
           ok: true,
@@ -215,7 +228,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
           ok: false,
           result: toMcpStatusFailedHealthCheck(
             restartedRuntime ?? runtimeProbe.runtime,
-            `Failed to query OpenCode MCP status: ${errorMessage(retryError)}`,
+            `Failed to query runtime MCP status: ${errorMessage(retryError)}`,
             checkedAt,
           ),
         };
@@ -225,7 +238,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
 
   const normalizeMcpStatus = async (
     runtimeInput: ListCatalogInput,
-    statusByServer: Record<string, McpServerStatus>,
+    statusByServer: Record<string, RuntimeMcpServerStatus>,
   ): Promise<NormalizedMcpStatus> => {
     let { status: mcpServerStatus, error: mcpServerError } = resolveMcpStatusError(statusByServer);
 
@@ -255,36 +268,55 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
 
   const catalogCache = new Map<string, AgentModelCatalog>();
 
-  const fetchCatalog = async (repoPath: string): Promise<AgentModelCatalog> => {
-    const runtime = await deps.ensureRuntime(repoPath);
+  const toCatalogCacheKey = (repoPath: string, runtimeKind: RuntimeKind): string =>
+    `${runtimeKind}::${repoPath}`;
+
+  const fetchCatalog = async (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<AgentModelCatalog> => {
+    const runtime = await deps.ensureRuntime(runtimeKind, repoPath);
     return deps.listAvailableModels({
-      baseUrl: toBaseUrl(runtime.port),
+      runtimeKind,
+      runtimeEndpoint: resolveRuntimeEndpoint(runtime),
       workingDirectory: runtime.workingDirectory,
     });
   };
 
-  const loadRepoOpencodeCatalog = async (repoPath: string): Promise<AgentModelCatalog> => {
-    const cached = catalogCache.get(repoPath);
+  const loadRepoRuntimeCatalog = async (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<AgentModelCatalog> => {
+    const cacheKey = toCatalogCacheKey(repoPath, runtimeKind);
+    const cached = catalogCache.get(cacheKey);
     if (cached) {
-      void fetchCatalog(repoPath)
-        .then((fresh) => catalogCache.set(repoPath, fresh))
+      void fetchCatalog(repoPath, runtimeKind)
+        .then((fresh) => catalogCache.set(cacheKey, fresh))
         .catch(() => {});
       return cached;
     }
 
-    const catalog = await fetchCatalog(repoPath);
-    catalogCache.set(repoPath, catalog);
+    const catalog = await fetchCatalog(repoPath, runtimeKind);
+    catalogCache.set(cacheKey, catalog);
     return catalog;
   };
 
-  const checkRepoOpencodeHealth = async (repoPath: string): Promise<RepoOpencodeHealthCheck> => {
+  const checkRepoRuntimeHealth = async (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<RepoRuntimeHealthCheck> => {
     const checkedAt = toNowIso();
-    const runtimeProbe = await probeRuntime(repoPath, checkedAt);
+    const runtimeProbe = await probeRuntime(repoPath, runtimeKind, checkedAt);
     if (!runtimeProbe.ok) {
       return runtimeProbe.result;
     }
 
-    const mcpProbe = await probeMcpStatusWithRetryStrategy(repoPath, runtimeProbe, checkedAt);
+    const mcpProbe = await probeMcpStatusWithRetryStrategy(
+      repoPath,
+      runtimeKind,
+      runtimeProbe,
+      checkedAt,
+    );
     if (!mcpProbe.ok) {
       return mcpProbe.result;
     }
@@ -299,7 +331,7 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
     );
     const availableToolIds = await availableToolIdsPromise;
 
-    return toRepoOpencodeHealthCheck({
+    return toRepoRuntimeHealthCheck({
       runtime: mcpProbe.runtime,
       availableToolIds,
       checkedAt,
@@ -308,44 +340,62 @@ export const createOpencodeCatalogOperations = (deps: OpencodeCatalogDependencie
   };
 
   return {
-    loadRepoOpencodeCatalog,
-    checkRepoOpencodeHealth,
+    loadRepoRuntimeCatalog,
+    checkRepoRuntimeHealth,
   };
 };
 
-export type OpencodeCatalogOperations = ReturnType<typeof createOpencodeCatalogOperations>;
+export type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations>;
 
-export const createHostOpencodeCatalogOperations = (
-  adapter: OpencodeCatalogAdapter,
-): OpencodeCatalogOperations =>
-  createOpencodeCatalogOperations({
-    ensureRuntime: (repoPath) => host.opencodeRepoRuntimeEnsure(repoPath),
-    stopRuntime: (runtimeId) => host.opencodeRuntimeStop(runtimeId),
-    listAvailableModels: (input) => adapter.listAvailableModels(input),
-    listAvailableToolIds: (input) => adapter.listAvailableToolIds(input),
-    getMcpStatus: (input) => adapter.getMcpStatus(input),
-    connectMcpServer: (input) => adapter.connectMcpServer(input),
+export const createHostRuntimeCatalogOperations = (
+  getAdapter: (runtimeKind: RuntimeKind) => RuntimeCatalogAdapter,
+): RuntimeCatalogOperations =>
+  createRuntimeCatalogOperations({
+    ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(runtimeKind, repoPath),
+    stopRuntime: (runtimeId) => host.runtimeStop(runtimeId),
+    listAvailableModels: (input) => getAdapter(input.runtimeKind).listAvailableModels(input),
+    listAvailableToolIds: (input) => getAdapter(input.runtimeKind).listAvailableToolIds(input),
+    getMcpStatus: (input) => getAdapter(input.runtimeKind).getMcpStatus(input),
+    connectMcpServer: (input) => getAdapter(input.runtimeKind).connectMcpServer(input),
+    shouldRestartRuntimeForMcpStatusError: (runtimeKind, message) =>
+      getAdapter(runtimeKind).shouldRestartRuntimeForMcpStatusError(message),
   });
 
-let configuredOpencodeCatalogOperations: OpencodeCatalogOperations | null = null;
+let configuredRuntimeCatalogOperations: RuntimeCatalogOperations | null = null;
 
-export const configureOpencodeCatalogOperations = (operations: OpencodeCatalogOperations): void => {
-  configuredOpencodeCatalogOperations = operations;
+export const configureRuntimeCatalogOperations = (operations: RuntimeCatalogOperations): void => {
+  configuredRuntimeCatalogOperations = operations;
 };
 
-const getConfiguredOpencodeCatalogOperations = (): OpencodeCatalogOperations => {
-  if (!configuredOpencodeCatalogOperations) {
+const getConfiguredRuntimeCatalogOperations = (): RuntimeCatalogOperations => {
+  if (!configuredRuntimeCatalogOperations) {
     throw new Error(
-      "OpenCode catalog operations are not configured. Initialize them from AppStateProvider before use.",
+      "Runtime catalog operations are not configured. Initialize them from AppStateProvider before use.",
     );
   }
-  return configuredOpencodeCatalogOperations;
+  return configuredRuntimeCatalogOperations;
 };
 
-export const loadRepoOpencodeCatalog = (repoPath: string): Promise<AgentModelCatalog> => {
-  return getConfiguredOpencodeCatalogOperations().loadRepoOpencodeCatalog(repoPath);
+export const loadRepoRuntimeCatalog = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+): Promise<AgentModelCatalog> => {
+  return getConfiguredRuntimeCatalogOperations().loadRepoRuntimeCatalog(repoPath, runtimeKind);
 };
 
-export const checkRepoOpencodeHealth = (repoPath: string): Promise<RepoOpencodeHealthCheck> => {
-  return getConfiguredOpencodeCatalogOperations().checkRepoOpencodeHealth(repoPath);
+export const checkRepoRuntimeHealth = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+): Promise<RepoRuntimeHealthCheck> => {
+  return getConfiguredRuntimeCatalogOperations().checkRepoRuntimeHealth(repoPath, runtimeKind);
+};
+
+const resolveRuntimeEndpoint = (runtime: AgentRuntimeSummary): string => {
+  if (runtime.endpoint?.trim()) {
+    return runtime.endpoint;
+  }
+  if (typeof runtime.port === "number") {
+    return `http://127.0.0.1:${runtime.port}`;
+  }
+  throw new Error("Runtime endpoint is missing from runtime summary.");
 };

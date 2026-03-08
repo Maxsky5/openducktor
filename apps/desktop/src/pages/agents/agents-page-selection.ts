@@ -1,4 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export {
@@ -63,15 +64,18 @@ export const pickDefaultSelectionForCatalog = (
     return null;
   }
 
-  const primaryAgent = catalog.agents.find((entry) => !entry.hidden && entry.mode === "primary");
-  const fallbackAgent = catalog.agents.find((entry) => !entry.hidden && entry.mode !== "subagent");
-  const selectedAgent = primaryAgent?.name ?? fallbackAgent?.name ?? undefined;
+  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
+  const primaryAgent = catalogProfiles.find((entry) => !entry.hidden && entry.mode === "primary");
+  const fallbackAgent = catalogProfiles.find((entry) => !entry.hidden && entry.mode !== "subagent");
+  const selectedAgent =
+    primaryAgent?.id ?? primaryAgent?.name ?? fallbackAgent?.id ?? fallbackAgent?.name ?? undefined;
 
   return {
+    runtimeKind: catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND,
     providerId: selectedModel.providerId,
     modelId: selectedModel.modelId,
     ...(selectedModel.variants[0] ? { variant: selectedModel.variants[0] } : {}),
-    ...(selectedAgent ? { opencodeAgent: selectedAgent } : {}),
+    ...(selectedAgent ? { profileId: selectedAgent } : {}),
   };
 };
 
@@ -90,15 +94,19 @@ export const normalizeSelectionForCatalog = (
   }
 
   const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
+  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
   const hasAgent = Boolean(
-    selection.opencodeAgent &&
-      catalog.agents.some(
+    selection.profileId &&
+      catalogProfiles.some(
         (agent) =>
-          agent.name === selection.opencodeAgent && !agent.hidden && agent.mode !== "subagent",
+          (agent.id ?? agent.name) === selection.profileId &&
+          !agent.hidden &&
+          agent.mode !== "subagent",
       ),
   );
 
   return {
+    runtimeKind: selection.runtimeKind ?? catalog.runtime?.kind ?? DEFAULT_RUNTIME_KIND,
     providerId: model.providerId,
     modelId: model.modelId,
     ...(hasVariant
@@ -106,7 +114,7 @@ export const normalizeSelectionForCatalog = (
       : model.variants[0]
         ? { variant: model.variants[0] }
         : {}),
-    ...(hasAgent ? { opencodeAgent: selection.opencodeAgent } : {}),
+    ...(hasAgent ? { profileId: selection.profileId } : {}),
   };
 };
 
@@ -123,8 +131,9 @@ export const isSameSelection = (
   return (
     a.providerId === b.providerId &&
     a.modelId === b.modelId &&
+    a.runtimeKind === b.runtimeKind &&
     (a.variant ?? "") === (b.variant ?? "") &&
-    (a.opencodeAgent ?? "") === (b.opencodeAgent ?? "")
+    (a.profileId ?? "") === (b.profileId ?? "")
   );
 };
 

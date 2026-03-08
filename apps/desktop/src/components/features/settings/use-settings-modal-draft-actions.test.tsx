@@ -18,6 +18,7 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   globalPromptOverrides: {},
   repos: {
     "/repo-a": {
+      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/a",
       branchPrefix: "obp",
       defaultTargetBranch: "origin/main",
@@ -98,7 +99,7 @@ describe("useSettingsModalDraftActions", () => {
     await harness.run((state) => {
       state.updateSelectedRepoAgentDefault("build", "providerId", "openai");
       state.updateSelectedRepoAgentDefault("build", "modelId", "gpt-5");
-      state.updateSelectedRepoAgentDefault("build", "opencodeAgent", "builder");
+      state.updateSelectedRepoAgentDefault("build", "profileId", "builder");
       state.clearSelectedRepoAgentDefault("build");
     });
 

@@ -37,13 +37,17 @@ export function SettingsModalContent({
 }: SettingsModalContentProps): ReactElement {
   const {
     isLoadingSettings,
+    isLoadingRuntimeDefinitions,
     isLoadingCatalog,
     isSaving,
     isPickingWorktreeBasePath,
     settingsError,
-    catalogError,
+    runtimeDefinitionsError,
     snapshotDraft,
-    catalog,
+    runtimeDefinitions,
+    getCatalogForRuntime,
+    getCatalogErrorForRuntime,
+    isCatalogLoadingForRuntime,
     repoPaths,
     selectedRepoPath,
     selectedRepoConfig,
@@ -55,9 +59,6 @@ export function SettingsModalContent({
     selectedRepoPromptValidationErrorCount,
     globalPromptRoleTabErrorCounts,
     selectedRepoPromptRoleTabErrorCounts,
-    modelOptions,
-    agentOptions,
-    modelGroups,
     setSelectedRepoPath,
     retrySelectedRepoBranchesLoad,
     updateSelectedRepoConfig,
@@ -150,14 +151,15 @@ export function SettingsModalContent({
         {repositorySection === "agents" ? (
           <RepositoryAgentsSection
             selectedRepoConfig={selectedRepoConfig}
+            runtimeDefinitions={runtimeDefinitions}
+            isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
             isLoadingCatalog={isLoadingCatalog}
             isLoadingSettings={isLoadingSettings}
             isSaving={isSaving}
-            catalogError={catalogError}
-            catalog={catalog}
-            modelOptions={modelOptions}
-            agentOptions={agentOptions}
-            modelGroups={modelGroups}
+            runtimeDefinitionsError={runtimeDefinitionsError}
+            getCatalogForRuntime={getCatalogForRuntime}
+            getCatalogErrorForRuntime={getCatalogErrorForRuntime}
+            isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
             onUpdateSelectedRepoAgentDefault={updateSelectedRepoAgentDefault}
             onClearSelectedRepoAgentDefault={clearSelectedRepoAgentDefault}

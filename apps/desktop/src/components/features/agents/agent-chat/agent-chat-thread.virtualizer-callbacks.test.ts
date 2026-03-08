@@ -161,6 +161,7 @@ describe("AgentChatThread virtualizer callbacks", () => {
     const { AgentChatThread } = await import("./agent-chat-thread");
 
     const firstSession = buildSession({
+      runtimeKind: "opencode",
       sessionId: "session-a",
       messages: Array.from({ length: 45 }, (_, index) =>
         buildMessage("assistant", `Session A Message ${index + 1}`, {
@@ -169,6 +170,7 @@ describe("AgentChatThread virtualizer callbacks", () => {
       ),
     });
     const secondSession = buildSession({
+      runtimeKind: "opencode",
       sessionId: "session-b",
       messages: Array.from({ length: 45 }, (_, index) =>
         buildMessage("assistant", `Session B Message ${index + 1}`, {

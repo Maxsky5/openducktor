@@ -1,3 +1,4 @@
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -12,7 +13,13 @@ import {
   toPrimaryAgentOptions,
 } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { loadRepoOpencodeCatalog } from "@/state/operations";
+import {
+  DEFAULT_RUNTIME_KIND,
+  findRuntimeDefinition,
+  resolveRuntimeKindSelection,
+  toAgentRuntimeOptions,
+} from "@/lib/agent-runtime";
+import { loadRepoRuntimeCatalog } from "@/state/operations";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   isSameSelection,
@@ -39,14 +46,19 @@ export type SessionStartModalIntent = {
 type UseSessionStartModalStateArgs = {
   activeRepo: string | null;
   repoSettings: RepoSettingsInput | null;
+  runtimeDefinitions: RuntimeDescriptor[];
   initialCatalog?: AgentModelCatalog | null;
-  loadCatalog?: (repoPath: string) => Promise<AgentModelCatalog>;
+  loadCatalog?: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
 };
 
 type UseSessionStartModalStateResult = {
   intent: SessionStartModalIntent | null;
   isOpen: boolean;
   selection: AgentModelSelection | null;
+  selectedRuntimeKind: RuntimeKind;
+  runtimeOptions: ComboboxOption[];
+  supportsProfiles: boolean;
+  supportsVariants: boolean;
   isCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -54,7 +66,8 @@ type UseSessionStartModalStateResult = {
   variantOptions: ComboboxOption[];
   openStartModal: (nextIntent: SessionStartModalIntent) => void;
   closeStartModal: () => void;
-  handleSelectAgent: (opencodeAgent: string) => void;
+  handleSelectRuntime: (runtimeKind: string) => void;
+  handleSelectAgent: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
@@ -69,10 +82,12 @@ const roleDefaultSelectionFor = (
   }
 
   return {
+    runtimeKind:
+      roleDefault.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
     ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-    ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
+    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
   };
 };
 
@@ -81,28 +96,57 @@ const resolveInitialSelection = (
   role: AgentRole,
   catalog: AgentModelCatalog | null,
   selectedModel: AgentModelSelection | null,
+  runtimeKind: RuntimeKind,
 ): AgentModelSelection | null => {
-  const requestedSelection = normalizeSelectionForCatalog(catalog, selectedModel);
+  const requestedSelection =
+    selectedModel && (selectedModel.runtimeKind ?? DEFAULT_RUNTIME_KIND) === runtimeKind
+      ? normalizeSelectionForCatalog(catalog, selectedModel)
+      : null;
   const roleDefault = roleDefaultSelectionFor(repoSettings, role);
+  const runtimeRoleDefault =
+    roleDefault && (roleDefault.runtimeKind ?? DEFAULT_RUNTIME_KIND) === runtimeKind
+      ? roleDefault
+      : null;
+  const catalogDefault = pickDefaultSelectionForCatalog(catalog);
   return (
     requestedSelection ??
-    normalizeSelectionForCatalog(catalog, roleDefault) ??
-    pickDefaultSelectionForCatalog(catalog) ??
+    normalizeSelectionForCatalog(catalog, runtimeRoleDefault) ??
+    (catalogDefault ? { ...catalogDefault, runtimeKind } : null) ??
     selectedModel ??
-    roleDefault
+    runtimeRoleDefault
   );
 };
 
 export function useSessionStartModalState({
   activeRepo,
   repoSettings,
+  runtimeDefinitions,
   initialCatalog,
-  loadCatalog = loadRepoOpencodeCatalog,
+  loadCatalog = loadRepoRuntimeCatalog,
 }: UseSessionStartModalStateArgs): UseSessionStartModalStateResult {
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
+  const [selectedRuntimeKind, setSelectedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const [catalog, setCatalog] = useState<AgentModelCatalog | null>(initialCatalog ?? null);
   const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const runtimeOptions = useMemo(
+    () => toAgentRuntimeOptions(runtimeDefinitions),
+    [runtimeDefinitions],
+  );
+  const selectedRuntimeDescriptor = useMemo(
+    () => findRuntimeDefinition(runtimeDefinitions, selectedRuntimeKind),
+    [runtimeDefinitions, selectedRuntimeKind],
+  );
+
+  useEffect(() => {
+    const nextRuntimeKind = resolveRuntimeKindSelection({
+      runtimeDefinitions,
+      requestedRuntimeKind: selectedRuntimeKind,
+    });
+    if (nextRuntimeKind !== selectedRuntimeKind) {
+      setSelectedRuntimeKind(nextRuntimeKind);
+    }
+  }, [runtimeDefinitions, selectedRuntimeKind]);
 
   useEffect(() => {
     if (initialCatalog !== undefined) {
@@ -121,7 +165,7 @@ export function useSessionStartModalState({
     setCatalog(null);
     setIsCatalogLoading(true);
     void Promise.resolve()
-      .then(() => loadCatalog(activeRepo))
+      .then(() => loadCatalog(activeRepo, selectedRuntimeKind))
       .then((nextCatalog) => {
         if (!cancelled) {
           setCatalog(nextCatalog);
@@ -141,7 +185,7 @@ export function useSessionStartModalState({
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, initialCatalog, loadCatalog]);
+  }, [activeRepo, initialCatalog, loadCatalog, selectedRuntimeKind]);
 
   const closeStartModal = useCallback(() => {
     setIntent(null);
@@ -150,6 +194,15 @@ export function useSessionStartModalState({
 
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
+      const initialRuntimeKind = resolveRuntimeKindSelection({
+        runtimeDefinitions,
+        requestedRuntimeKind:
+          nextIntent.selectedModel?.runtimeKind ??
+          roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
+          repoSettings?.defaultRuntimeKind ??
+          DEFAULT_RUNTIME_KIND,
+      });
+      setSelectedRuntimeKind(initialRuntimeKind);
       setIntent(nextIntent);
       setSelection(
         resolveInitialSelection(
@@ -157,10 +210,11 @@ export function useSessionStartModalState({
           nextIntent.role,
           catalog,
           nextIntent.selectedModel ?? null,
+          initialRuntimeKind,
         ),
       );
     },
-    [catalog, repoSettings],
+    [catalog, repoSettings, runtimeDefinitions],
   );
 
   const activeRole = intent?.role ?? null;
@@ -177,11 +231,35 @@ export function useSessionStartModalState({
         activeRole,
         catalog,
         intent?.selectedModel ?? null,
+        selectedRuntimeKind,
       );
       const next = normalizedCurrent ?? fallback;
       return isSameSelection(current, next) ? current : next;
     });
-  }, [activeRole, catalog, intent?.selectedModel, repoSettings]);
+  }, [activeRole, catalog, intent?.selectedModel, repoSettings, selectedRuntimeKind]);
+
+  const handleSelectRuntime = useCallback(
+    (runtimeKindValue: string): void => {
+      const runtimeKind = resolveRuntimeKindSelection({
+        runtimeDefinitions,
+        requestedRuntimeKind: runtimeKindValue as RuntimeKind,
+      });
+      setSelectedRuntimeKind(runtimeKind);
+      setSelection((current) => {
+        if (!activeRole) {
+          return current ? { ...current, runtimeKind } : current;
+        }
+        return resolveInitialSelection(
+          repoSettings,
+          activeRole,
+          null,
+          current ? { ...current, runtimeKind } : (intent?.selectedModel ?? null),
+          runtimeKind,
+        );
+      });
+    },
+    [activeRole, intent?.selectedModel, repoSettings, runtimeDefinitions],
+  );
 
   const selectedModelEntry = useMemo(() => {
     if (!catalog || !selection) {
@@ -200,7 +278,7 @@ export function useSessionStartModalState({
       return options;
     }
 
-    const fallbackAgent = selection?.opencodeAgent;
+    const fallbackAgent = selection?.profileId;
     if (!fallbackAgent) {
       return [];
     }
@@ -213,7 +291,7 @@ export function useSessionStartModalState({
         ...(accentColor ? { accentColor } : {}),
       },
     ];
-  }, [catalog, selection?.opencodeAgent]);
+  }, [catalog, selection?.profileId]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
     const options = toModelOptions(catalog);
@@ -254,7 +332,7 @@ export function useSessionStartModalState({
   }, [selectedModelEntry, selection?.variant]);
 
   const handleSelectAgent = useCallback(
-    (opencodeAgent: string): void => {
+    (profileId: string): void => {
       const baseSelection =
         selection ??
         (activeRole
@@ -263,6 +341,7 @@ export function useSessionStartModalState({
               activeRole,
               catalog,
               intent?.selectedModel ?? null,
+              selectedRuntimeKind,
             )
           : null) ??
         pickDefaultSelectionForCatalog(catalog);
@@ -272,10 +351,10 @@ export function useSessionStartModalState({
 
       setSelection({
         ...baseSelection,
-        opencodeAgent,
+        profileId,
       });
     },
-    [activeRole, catalog, intent?.selectedModel, repoSettings, selection],
+    [activeRole, catalog, intent?.selectedModel, repoSettings, selection, selectedRuntimeKind],
   );
 
   const handleSelectModel = useCallback(
@@ -290,13 +369,14 @@ export function useSessionStartModalState({
       }
 
       setSelection((current) => ({
+        runtimeKind: selectedRuntimeKind,
         providerId: model.providerId,
         modelId: model.modelId,
         ...(model.variants[0] ? { variant: model.variants[0] } : {}),
-        ...(current?.opencodeAgent ? { opencodeAgent: current.opencodeAgent } : {}),
+        ...(current?.profileId ? { profileId: current.profileId } : {}),
       }));
     },
-    [catalog],
+    [catalog, selectedRuntimeKind],
   );
 
   const handleSelectVariant = useCallback((variant: string): void => {
@@ -315,6 +395,10 @@ export function useSessionStartModalState({
     intent,
     isOpen: intent !== null,
     selection,
+    selectedRuntimeKind,
+    runtimeOptions,
+    supportsProfiles: selectedRuntimeDescriptor?.capabilities.supportsProfiles ?? false,
+    supportsVariants: selectedRuntimeDescriptor?.capabilities.supportsVariants ?? false,
     isCatalogLoading,
     agentOptions,
     modelOptions,
@@ -322,6 +406,7 @@ export function useSessionStartModalState({
     variantOptions,
     openStartModal,
     closeStartModal,
+    handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
     handleSelectVariant,

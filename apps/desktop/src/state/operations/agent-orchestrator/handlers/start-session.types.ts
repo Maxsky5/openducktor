@@ -41,6 +41,7 @@ export type RuntimeDependencies = {
     role: AgentRole,
     options?: {
       workingDirectoryOverride?: string | null;
+      runtimeKind?: AgentModelSelection["runtimeKind"] | null;
     },
   ) => Promise<RuntimeInfo>;
 };
@@ -57,13 +58,13 @@ export type ModelDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    baseUrl: string,
+    runtimeEndpoint: string,
     workingDirectory: string,
   ) => Promise<void>;
 };

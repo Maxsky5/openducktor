@@ -5,6 +5,7 @@ import { createTaskCardFixture } from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -14,7 +15,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:4444",
+  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -44,9 +45,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       updateSession: () => {},
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -113,9 +115,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -192,9 +195,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -258,9 +262,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -276,6 +281,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       actions.updateAgentSessionModel("session-1", {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
       });
@@ -354,9 +360,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -400,10 +407,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         "session-1": buildSession({
           status: "idle",
           selectedModel: {
+            runtimeKind: "opencode",
             providerId: "openai",
             modelId: "gpt-5.3-codex",
             variant: "high",
-            opencodeAgent: "Hephaestus (Deep Agent)",
+            profileId: "Hephaestus (Deep Agent)",
           },
         }),
       },
@@ -429,9 +437,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -458,7 +467,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(latest.meta.providerId).toBe("openai");
       expect(latest.meta.modelId).toBe("gpt-5.3-codex");
       expect(latest.meta.variant).toBe("high");
-      expect(latest.meta.opencodeAgent).toBe("Hephaestus (Deep Agent)");
+      expect(latest.meta.profileId).toBe("Hephaestus (Deep Agent)");
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;
@@ -515,9 +524,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -592,9 +602,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -655,9 +666,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       attachSessionListener: () => {},
       ensureRuntime: async () => ({
+        kind: "opencode",
         runtimeId: null,
         runId: null,
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       }),
       loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
