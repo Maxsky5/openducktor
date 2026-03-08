@@ -11,11 +11,6 @@ export type {
 import { useAgentStudioDiffController } from "./use-agent-studio-diff-controller";
 import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-resolution";
 
-type SelectedFileState = {
-  path: string | null;
-  contextResetVersion: number;
-};
-
 export function useAgentStudioDiffData({
   repoPath,
   sessionWorkingDirectory,
@@ -50,9 +45,13 @@ export function useAgentStudioDiffData({
     }`;
   }, [branchIdentityKey, repoPath, targetBranch, worktreePath, worktreeResolutionRunId]);
 
+  const [selectedFileState, setSelectedFileState] = useState<string | null>(null);
+  const handleContextReset = useCallback((): void => {
+    setSelectedFileState(null);
+  }, []);
+
   const {
     activeScopeState,
-    contextResetVersion,
     diffScope,
     refreshActiveScope,
     reloadActiveScope,
@@ -66,15 +65,10 @@ export function useAgentStudioDiffData({
     requestContextKey,
     enablePolling,
     shouldBlockDiffLoading,
+    onContextReset: handleContextReset,
   });
 
-  const [selectedFileState, setSelectedFileState] = useState<SelectedFileState>({
-    path: null,
-    contextResetVersion: 0,
-  });
-
-  const selectedFile =
-    selectedFileState.contextResetVersion === contextResetVersion ? selectedFileState.path : null;
+  const selectedFile = selectedFileState;
 
   const refresh = useCallback((): void => {
     if (worktreeResolutionError != null) {
@@ -96,10 +90,7 @@ export function useAgentStudioDiffData({
 
   const setSelectedFile = useCallback(
     (path: string | null): void => {
-      setSelectedFileState({
-        path,
-        contextResetVersion,
-      });
+      setSelectedFileState(path);
 
       if (path === null || shouldBlockDiffLoading) {
         return;
@@ -107,7 +98,7 @@ export function useAgentStudioDiffData({
 
       reloadActiveScope();
     },
-    [contextResetVersion, reloadActiveScope, shouldBlockDiffLoading],
+    [reloadActiveScope, shouldBlockDiffLoading],
   );
 
   const displayError = worktreeResolutionError ?? activeScopeState.error;
