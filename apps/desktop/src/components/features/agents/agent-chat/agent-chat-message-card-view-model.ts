@@ -41,14 +41,13 @@ export type AgentChatMessageCardViewModel = {
 
 const resolveAssistantAgentColor = (
   message: AgentChatMessage,
-  sessionSelectedModel: AgentModelSelection | null,
   sessionAgentColors: Record<string, string> | undefined,
 ): string | undefined => {
   if (message.role !== "assistant") {
     return undefined;
   }
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  const agentName = assistantMeta?.profileId ?? sessionSelectedModel?.profileId;
+  const agentName = assistantMeta?.profileId;
   if (!agentName) {
     return undefined;
   }
@@ -57,11 +56,10 @@ const resolveAssistantAgentColor = (
 
 const resolveUserAgentColor = (
   message: AgentChatMessage,
-  sessionSelectedModel: AgentModelSelection | null,
   sessionAgentColors: Record<string, string> | undefined,
 ): string | undefined => {
   const messageMeta = message.meta?.kind === "user" ? message.meta : null;
-  const agentName = messageMeta?.profileId ?? sessionSelectedModel?.profileId;
+  const agentName = messageMeta?.profileId;
   if (!agentName) {
     return undefined;
   }
@@ -127,12 +125,8 @@ export const buildAgentChatMessageCardViewModel = ({
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
   const isRichCardMessage = isToolMessage || isSubtaskMessage || isSystemPromptMessage;
   const assistantRole = assistantRoleFromMessage(message, sessionRole);
-  const assistantAccentColor = resolveAssistantAgentColor(
-    message,
-    sessionSelectedModel,
-    sessionAgentColors,
-  );
-  const userAccentColor = resolveUserAgentColor(message, sessionSelectedModel, sessionAgentColors);
+  const assistantAccentColor = resolveAssistantAgentColor(message, sessionAgentColors);
+  const userAccentColor = resolveUserAgentColor(message, sessionAgentColors);
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";

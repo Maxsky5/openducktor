@@ -239,6 +239,7 @@ export type AgentEvent =
       timestamp: string;
       message: string;
       totalTokens?: number;
+      model?: AgentModelSelection;
     }
   | {
       type: "assistant_part";

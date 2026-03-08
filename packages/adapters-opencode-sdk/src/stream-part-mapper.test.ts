@@ -96,6 +96,47 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps completed tool metadata structured error as tool error part", () => {
+    const part = createToolPart({
+      id: "tool-1b",
+      tool: "openducktor_odt_set_spec",
+      status: "completed",
+      input: { taskId: "task-1" },
+      output: "completed",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message: "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+          },
+        },
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1b",
+      partId: "tool-1b",
+      callId: "call-tool-1b",
+      tool: "openducktor_odt_set_spec",
+      status: "error",
+      input: { taskId: "task-1" },
+      error: "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message:
+              "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+          },
+        },
+      },
+    });
+  });
+
   test("maps pending tool with end timing as completed", () => {
     const part = createToolPart({
       id: "tool-2",

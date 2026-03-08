@@ -156,7 +156,10 @@ pub(crate) fn allows_transition(task: &TaskCard, from: &TaskStatus, to: &TaskSta
 }
 
 pub(crate) fn can_set_spec_from_status(status: &TaskStatus) -> bool {
-    matches!(status, TaskStatus::Open | TaskStatus::SpecReady)
+    matches!(
+        status,
+        TaskStatus::Open | TaskStatus::SpecReady | TaskStatus::ReadyForDev
+    )
 }
 
 pub(crate) fn can_set_plan(task: &TaskCard) -> bool {

@@ -131,12 +131,11 @@ describe("agent-chat-message-card-model", () => {
       expect(
         isToolMessageFailure(
           createToolMeta({
-            tool: "odt_set_plan",
             status: "completed",
-            output: "MCP error -32602: Input validation error",
+            output: "MCP error -32602: ignored because status stayed completed",
           }),
         ),
-      ).toBe(true);
+      ).toBe(false);
 
       expect(
         isToolMessageFailure(
@@ -200,9 +199,16 @@ describe("agent-chat-message-card-model", () => {
       expect(
         getToolLifecyclePhase(
           createToolMeta({
-            tool: "odt_set_spec",
-            status: "completed",
-            output: "MCP error 400",
+            status: "error",
+            error: "Input validation error",
+          }),
+        ),
+      ).toBe("failed");
+      expect(
+        getToolLifecyclePhase(
+          createToolMeta({
+            status: "error",
+            error: "Cannot update spec while task is closed.",
           }),
         ),
       ).toBe("failed");

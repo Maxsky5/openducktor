@@ -54,6 +54,32 @@ describe("agent-orchestrator/support/assistant-meta", () => {
     expect(meta.totalTokens).toBe(42);
   });
 
+  test("merges partial message metadata over session selection", () => {
+    const meta = toAssistantMessageMeta(
+      {
+        ...sessionFixture,
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+      },
+      1200,
+      42,
+      {
+        providerId: "anthropic",
+        modelId: "claude-3-7-sonnet",
+      },
+    );
+
+    expect(meta.providerId).toBe("anthropic");
+    expect(meta.modelId).toBe("claude-3-7-sonnet");
+    expect(meta.profileId).toBe("Hephaestus");
+    expect(meta.variant).toBe("high");
+  });
+
   test("finalizes draft assistant text into a message", () => {
     const finalized = finalizeDraftAssistantMessage(
       sessionFixture,

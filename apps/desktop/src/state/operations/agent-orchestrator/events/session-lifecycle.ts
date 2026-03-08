@@ -150,7 +150,7 @@ export const handleAssistantMessage = (
               role: "assistant",
               content: event.message,
               timestamp: event.timestamp,
-              meta: toAssistantMessageMeta(current, durationMs, event.totalTokens),
+              meta: toAssistantMessageMeta(current, durationMs, event.totalTokens, event.model),
             },
           ],
     };

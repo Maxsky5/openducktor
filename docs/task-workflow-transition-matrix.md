@@ -36,7 +36,7 @@ Human actions:
 | Trigger | From | Guards | To |
 |---|---|---|---|
 | `task_create` | n/a | always | `open` |
-| `odt_set_spec` | `open`, `spec_ready` | non-empty markdown | `spec_ready` |
+| `odt_set_spec` | `open`, `spec_ready`, `ready_for_dev` | non-empty markdown | `spec_ready` when starting from `open`, otherwise unchanged |
 | `odt_set_plan` (feature/epic) | `spec_ready`, `ready_for_dev` | non-empty markdown | `ready_for_dev` |
 | `odt_set_plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev` | non-empty markdown | `ready_for_dev` |
 | `odt_set_plan` (epic with subtasks) | `spec_ready`, `ready_for_dev` | plan includes subtask proposals | `ready_for_dev` |

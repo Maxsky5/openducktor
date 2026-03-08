@@ -32,7 +32,7 @@ The backend is the single source of truth for which actions are currently allowe
 
 ### `set_spec`
 - Purpose: author or revise the specification markdown.
-- Transition: `open -> spec_ready`, or stays `spec_ready` when already in `spec_ready`.
+- Transition: `open -> spec_ready`, or stays in place when already `spec_ready` or `ready_for_dev`.
 
 ### `set_plan`
 - Purpose: author or revise implementation plan markdown.

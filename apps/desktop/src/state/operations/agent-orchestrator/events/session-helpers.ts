@@ -1,24 +1,12 @@
-import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { isTodoToolName, settleDanglingTodoToolMessages } from "../../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { finalizeDraftAssistantMessage } from "../support/utils";
 import type { SessionEventContext, SessionPart } from "./session-event-types";
 
-const MCP_TOOL_ERROR_PREFIX = /^\s*mcp\s+error\b/i;
-
 export const inferToolPartStatus = (
   part: Extract<SessionPart, { kind: "tool" }>,
-  output: string | undefined,
 ): Extract<SessionPart, { kind: "tool" }>["status"] => {
-  if (
-    part.status === "completed" &&
-    isOdtWorkflowMutationToolName(part.tool) &&
-    typeof output === "string" &&
-    MCP_TOOL_ERROR_PREFIX.test(output)
-  ) {
-    return "error";
-  }
   return part.status;
 };
 

@@ -1,4 +1,5 @@
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import { mergeModelSelection } from "./models";
 
 const resolveSelectedModelDescriptor = (session: AgentSessionState) => {
   if (!session.selectedModel || !session.modelCatalog) {
@@ -17,15 +18,18 @@ export const toAssistantMessageMeta = (
   session: AgentSessionState,
   durationMs?: number,
   totalTokens?: number,
+  model?: AgentSessionState["selectedModel"],
 ): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
-  const selectedModelDescriptor = resolveSelectedModelDescriptor(session);
+  const effectiveModel = mergeModelSelection(session.selectedModel, model ?? undefined);
+  const selectedModelDescriptor =
+    model === undefined ? resolveSelectedModelDescriptor(session) : null;
   return {
     kind: "assistant",
     agentRole: session.role,
-    ...(session.selectedModel?.providerId ? { providerId: session.selectedModel.providerId } : {}),
-    ...(session.selectedModel?.modelId ? { modelId: session.selectedModel.modelId } : {}),
-    ...(session.selectedModel?.variant ? { variant: session.selectedModel.variant } : {}),
-    ...(session.selectedModel?.profileId ? { profileId: session.selectedModel.profileId } : {}),
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
     ...(typeof durationMs === "number" ? { durationMs } : {}),
     ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
     ...(typeof selectedModelDescriptor?.contextWindow === "number"
@@ -42,6 +46,7 @@ export const finalizeDraftAssistantMessage = (
   timestamp: string,
   durationMs?: number,
   totalTokens?: number,
+  model?: AgentSessionState["selectedModel"],
 ): AgentSessionState => {
   const draft = session.draftAssistantText.trim();
   if (draft.length === 0) {
@@ -57,7 +62,7 @@ export const finalizeDraftAssistantMessage = (
     if (existing && (!existing.meta || existing.meta.kind !== "assistant")) {
       nextMessages[lastIndex] = {
         ...existing,
-        meta: toAssistantMessageMeta(session, durationMs, totalTokens),
+        meta: toAssistantMessageMeta(session, durationMs, totalTokens, model),
       };
     }
     return {
@@ -77,7 +82,7 @@ export const finalizeDraftAssistantMessage = (
         role: "assistant",
         content: draft,
         timestamp,
-        meta: toAssistantMessageMeta(session, durationMs, totalTokens),
+        meta: toAssistantMessageMeta(session, durationMs, totalTokens, model),
       },
     ],
   };

@@ -238,6 +238,195 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("applies selected model immediately when reusing an in-memory session", async () => {
+    const selectedModel: AgentModelSelection = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    };
+    let persistedSessions = 0;
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        reused: {
+          runtimeKind: "opencode",
+          sessionId: "reused",
+          externalSessionId: "external-reused",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          runtimeId: null,
+          runId: "run-2",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+          messages: [],
+          draftAssistantText: "",
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+        },
+      },
+    };
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      sessionsRef.current =
+        typeof updater === "function" ? updater(sessionsRef.current) : updater;
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter: new OpencodeSdkAdapter(),
+      setSessionsById,
+      sessionsRef,
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-2",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {
+        persistedSessions += 1;
+      },
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          selectedModel,
+        }),
+      ).resolves.toBe("reused");
+      expect(sessionsRef.current.reused?.selectedModel).toEqual(selectedModel);
+      expect(persistedSessions).toBe(1);
+    } finally {
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("starts a fresh session instead of reusing when selected runtime differs in memory", async () => {
+    const selectedModel: AgentModelSelection = {
+      runtimeKind: "claude-code",
+      providerId: "anthropic",
+      modelId: "claude-3-7-sonnet",
+      profileId: "Hephaestus",
+    };
+    let startCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => {
+      startCalls += 1;
+      expect(input.model).toEqual(selectedModel);
+      return {
+        runtimeKind: "claude-code",
+        sessionId: "fresh-runtime-session",
+        externalSessionId: "fresh-runtime-external",
+        startedAt: "2026-02-22T08:30:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: {
+        current: {
+          reused: {
+            runtimeKind: "opencode",
+            sessionId: "reused",
+            externalSessionId: "external-reused",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "idle",
+            startedAt: "2026-02-22T08:10:00.000Z",
+            runtimeId: null,
+            runId: "run-2",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              profileId: "Ares",
+            },
+            isLoadingModelCatalog: false,
+          },
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "claude-code",
+        runtimeId: "runtime-claude",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:5555",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build", selectedModel })).resolves.toBe(
+        "fresh-runtime-session",
+      );
+      expect(startCalls).toBe(1);
+    } finally {
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("startMode fresh bypasses same-role reuse and starts a new session", async () => {
     let startCalls = 0;
     let persistedListCalls = 0;
@@ -516,6 +705,99 @@ describe("agent-orchestrator/handlers/start-session", () => {
       await expect(start({ taskId: "task-1", role: "build" })).resolves.toBe("persisted-2");
       expect(loadAgentSessionsCalls).toBe(1);
     } finally {
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("starts a fresh session instead of reusing persisted session when selected runtime differs", async () => {
+    const selectedModel: AgentModelSelection = {
+      runtimeKind: "claude-code",
+      providerId: "anthropic",
+      modelId: "claude-3-7-sonnet",
+      profileId: "Hephaestus",
+    };
+    let loadAgentSessionsCalls = 0;
+    let startCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => {
+      startCalls += 1;
+      expect(input.model).toEqual(selectedModel);
+      return {
+        runtimeKind: "claude-code",
+        sessionId: "fresh-runtime-session",
+        externalSessionId: "fresh-runtime-external",
+        startedAt: "2026-02-22T08:40:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "persisted-opencode",
+        externalSessionId: "external-opencode",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-02-22T08:20:00.000Z",
+        updatedAt: "2026-02-22T08:20:00.000Z",
+        runtimeId: "runtime-1",
+        runId: "run-2",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          profileId: "Ares",
+        },
+      },
+    ];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "claude-code",
+        runtimeId: "runtime-claude",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:5555",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {
+        loadAgentSessionsCalls += 1;
+      },
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build", selectedModel })).resolves.toBe(
+        "fresh-runtime-session",
+      );
+      expect(loadAgentSessionsCalls).toBe(0);
+      expect(startCalls).toBe(1);
+    } finally {
+      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
@@ -1181,6 +1463,81 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(sessionsState["session-created"]?.selectedModel).toEqual(resolvedModel);
     } finally {
       defaultModelDeferred.resolve(null);
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("passes the selected model to adapter session creation", async () => {
+    const selectedModel: AgentModelSelection = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    };
+    let observedStartInput: { model?: AgentModelSelection } | null = null;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => {
+      observedStartInput = input;
+      return {
+        runtimeKind: "opencode",
+        sessionId: "session-created",
+        externalSessionId: "external-created",
+        startedAt: "2026-02-22T08:00:10.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          selectedModel,
+          startMode: "fresh",
+        }),
+      ).resolves.toBe("session-created");
+      if (observedStartInput === null) {
+        throw new Error("Expected adapter.startSession to receive input.");
+      }
+      expect(observedStartInput).toMatchObject({ model: selectedModel });
+    } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }

@@ -1,4 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { AgentModelSelection } from "@openducktor/core";
 import { asUnknownRecord, readRecordProp, readUnknownProp } from "./guards";
 
 export const readTextFromParts = (parts: Part[]): string => {
@@ -23,6 +24,31 @@ export const readTextFromMessageInfo = (info: unknown): string => {
 };
 
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
+
+export const readMessageModelSelection = (
+  info: unknown,
+): AgentModelSelection | undefined => {
+  const record = asUnknownRecord(info);
+  if (!record) {
+    return undefined;
+  }
+
+  const nestedModel = readRecordProp(record, "model");
+  const providerId = readUnknownProp(record, "providerID") ?? readUnknownProp(nestedModel, "providerID");
+  const modelId = readUnknownProp(record, "modelID") ?? readUnknownProp(nestedModel, "modelID");
+  const variant = readUnknownProp(record, "variant");
+  const profileId = readUnknownProp(record, "agent");
+  if (typeof providerId !== "string" || typeof modelId !== "string") {
+    return undefined;
+  }
+
+  return {
+    providerId,
+    modelId,
+    ...(typeof variant === "string" && variant.trim().length > 0 ? { variant } : {}),
+    ...(typeof profileId === "string" && profileId.trim().length > 0 ? { profileId } : {}),
+  };
+};
 
 type TokenBreakdown = {
   input?: number;

@@ -59,9 +59,31 @@ const readToolOutputText = (value: unknown): string | undefined => {
   return outputTextFromMcpPayload(value) ?? toDisplayText(value);
 };
 
-const isToolOutputError = (value: unknown): boolean => {
-  const isError = readUnknownProp(value, "isError");
-  return isError === true;
+const readStructuredToolError = (value: unknown): string | undefined => {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const isError = readUnknownProp(record, "isError");
+  const directError = readUnknownProp(record, "error");
+  const directErrorMessage = readUnknownProp(directError, "message");
+  const structuredContent = readUnknownProp(record, "structuredContent");
+  const structuredError = readUnknownProp(structuredContent, "error");
+  const structuredErrorMessage = readUnknownProp(structuredError, "message");
+  const structuredOk = readUnknownProp(structuredContent, "ok");
+
+  if (typeof directErrorMessage === "string" && directErrorMessage.trim().length > 0) {
+    return directErrorMessage.trim();
+  }
+  if (typeof structuredErrorMessage === "string" && structuredErrorMessage.trim().length > 0) {
+    return structuredErrorMessage.trim();
+  }
+  if (isError === true || structuredOk === false) {
+    return outputTextFromMcpPayload(value) ?? toDisplayText(value) ?? "Tool failed";
+  }
+
+  return undefined;
 };
 
 const normalizeMetadata = (value: unknown): Record<string, unknown> | undefined => {
@@ -156,11 +178,13 @@ const buildToolStreamPart = (
 
   const outputValue = readUnknownProp(toolState, "output");
   const output = readToolOutputText(outputValue);
-  if (isToolOutputError(outputValue) || (error && error.trim().length > 0)) {
+  const structuredError =
+    readStructuredToolError(outputValue) ?? readStructuredToolError(metadata);
+  if (structuredError || (error && error.trim().length > 0)) {
     return {
       ...base,
       status: "error",
-      error: output ?? error ?? "Tool failed",
+      error: structuredError ?? output ?? error ?? "Tool failed",
     };
   }
 

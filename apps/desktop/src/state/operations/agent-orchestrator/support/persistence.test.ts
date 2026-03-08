@@ -84,6 +84,12 @@ describe("agent-orchestrator/support/persistence", () => {
           role: "user",
           timestamp: "2026-02-22T08:00:00.000Z",
           text: "Please implement this",
+          model: {
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "Ares",
+            variant: "high",
+          },
           parts: [
             {
               kind: "text",
@@ -101,6 +107,12 @@ describe("agent-orchestrator/support/persistence", () => {
           timestamp: "2026-02-22T08:00:02.000Z",
           text: "Done",
           totalTokens: 123,
+          model: {
+            providerId: "anthropic",
+            modelId: "claude-3-7-sonnet",
+            profileId: "Hephaestus",
+            variant: "max",
+          },
           parts: [
             {
               kind: "reasoning",
@@ -159,5 +171,55 @@ describe("agent-orchestrator/support/persistence", () => {
     }
     expect(assistant.meta.agentRole).toBe("build");
     expect(assistant.meta.totalTokens).toBe(123);
+    expect(assistant.meta.providerId).toBe("anthropic");
+    expect(assistant.meta.modelId).toBe("claude-3-7-sonnet");
+    expect(assistant.meta.profileId).toBe("Hephaestus");
+    expect(assistant.meta.variant).toBe("max");
+
+    const user = messages.find((entry) => entry.role === "user");
+    if (!user || user.meta?.kind !== "user") {
+      throw new Error("Expected user message with user meta");
+    }
+    expect(user.meta.providerId).toBe("openai");
+    expect(user.meta.modelId).toBe("gpt-5");
+    expect(user.meta.profileId).toBe("Ares");
+    expect(user.meta.variant).toBe("high");
+  });
+
+  test("preserves session-selected agent when history model metadata is partial", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "Done",
+          model: {
+            providerId: "anthropic",
+            modelId: "claude-3-7-sonnet",
+          },
+          parts: [],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+      },
+    );
+
+    const assistant = messages.find((entry) => entry.role === "assistant");
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+    expect(assistant.meta.providerId).toBe("anthropic");
+    expect(assistant.meta.modelId).toBe("claude-3-7-sonnet");
+    expect(assistant.meta.profileId).toBe("Hephaestus");
+    expect(assistant.meta.variant).toBe("high");
   });
 });

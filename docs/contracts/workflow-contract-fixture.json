@@ -203,7 +203,8 @@
   },
   "setSpecAllowedStatuses": [
     "open",
-    "spec_ready"
+    "spec_ready",
+    "ready_for_dev"
   ],
   "setPlanAllowedStatuses": {
     "epic": [

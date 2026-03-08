@@ -8,6 +8,7 @@ import {
 } from "../guards";
 import {
   extractMessageTotalTokens,
+  readMessageModelSelection,
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../message-normalizers";
@@ -146,6 +147,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
   }
 
   const totalTokens = extractMessageTotalTokens(infoRecord, normalizedParts);
+  const assistantModel = readMessageModelSelection(infoRecord);
   const session = runtime.getSession(runtime.sessionId);
   const emittedAssistantMessageIds = session?.emittedAssistantMessageIds;
   if (emittedAssistantMessageIds?.has(messageId)) {
@@ -158,6 +160,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     timestamp: runtime.now(),
     message: visible,
     ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+    ...(assistantModel ? { model: assistantModel } : {}),
   });
   emittedAssistantMessageIds?.add(messageId);
   return true;
