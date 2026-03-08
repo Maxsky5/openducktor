@@ -2,6 +2,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
+import { AgentRuntimeCombobox } from "@/components/features/agents/agent-runtime-combobox";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
 import {
@@ -108,11 +109,11 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               >
                 Agent Runtime
               </label>
-              <Combobox
+              <AgentRuntimeCombobox
                 value={selectedRuntimeKind}
-                options={runtimeOptions}
-                placeholder="Select runtime"
+                runtimeOptions={runtimeOptions}
                 disabled={isSelectionCatalogLoading}
+                className="sm:min-w-[20rem]"
                 onValueChange={onSelectRuntime}
               />
             </div>
@@ -130,6 +131,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                   options={agentOptions}
                   placeholder="Select agent"
                   disabled={isSelectionCatalogLoading}
+                  className="sm:min-w-[20rem]"
                   onValueChange={onSelectAgent}
                 />
               </div>
@@ -145,6 +147,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 groups={modelGroups}
                 placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
                 disabled={isSelectionCatalogLoading}
+                className="sm:min-w-[28rem]"
                 onValueChange={onSelectModel}
               />
             </div>
@@ -162,6 +165,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                   options={variantOptions}
                   placeholder="Select variant"
                   disabled={isSelectionCatalogLoading || !selectedModelSelection}
+                  className="sm:min-w-[16rem]"
                   onValueChange={onSelectVariant}
                 />
               </div>

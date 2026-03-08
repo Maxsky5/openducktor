@@ -2,6 +2,7 @@ import type { RepoConfig, RuntimeDescriptor, RuntimeKind } from "@openducktor/co
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
 import {
+  AgentRuntimeCombobox,
   toModelGroupsByProvider,
   toModelOptions,
   toPrimaryAgentOptions,
@@ -67,6 +68,10 @@ export function RepositoryAgentsSection({
   }
 
   const runtimeOptions = toAgentRuntimeOptions(runtimeDefinitions);
+  const runtimeDropdownClassName = "sm:min-w-[18rem]";
+  const agentDropdownClassName = "sm:min-w-[18rem]";
+  const modelDropdownClassName = "sm:min-w-[26rem]";
+  const variantDropdownClassName = "sm:min-w-[16rem]";
   const selectedDefaultRuntimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions,
     requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
@@ -99,11 +104,11 @@ export function RepositoryAgentsSection({
       <div className="grid gap-2 rounded-md border border-border bg-card p-3 md:max-w-sm">
         <div className="grid gap-1">
           <Label className="text-xs">Default Agent Runtime</Label>
-          <Combobox
+          <AgentRuntimeCombobox
             value={selectedDefaultRuntimeKind}
-            options={runtimeOptions}
-            placeholder="Select runtime"
+            runtimeOptions={runtimeOptions}
             disabled={isSaving || isLoadingRuntimeDefinitions || runtimeOptions.length === 0}
+            className={runtimeDropdownClassName}
             onValueChange={(defaultRuntimeKind) =>
               onUpdateSelectedRepoConfig((repoConfig) => ({
                 ...repoConfig,
@@ -175,13 +180,13 @@ export function RepositoryAgentsSection({
               <div className="grid gap-2 md:grid-cols-4">
                 <div className="grid min-w-0 gap-1">
                   <Label className="text-xs">Agent Runtime</Label>
-                  <Combobox
+                  <AgentRuntimeCombobox
                     value={runtimeKind}
-                    options={runtimeOptions}
-                    placeholder="Select runtime"
+                    runtimeOptions={runtimeOptions}
                     disabled={
                       isSaving || isLoadingRuntimeDefinitions || runtimeOptions.length === 0
                     }
+                    className={runtimeDropdownClassName}
                     onValueChange={(runtimeKind) =>
                       onUpdateSelectedRepoConfig((repoConfig) => ({
                         ...repoConfig,
@@ -208,6 +213,7 @@ export function RepositoryAgentsSection({
                       options={agentOptions}
                       placeholder={isRoleCatalogLoading ? "Loading agents..." : "Select agent"}
                       disabled={isRoleCatalogLoading || isSaving || agentOptions.length === 0}
+                      className={agentDropdownClassName}
                       onValueChange={(profileId) =>
                         onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
                       }
@@ -223,6 +229,7 @@ export function RepositoryAgentsSection({
                     groups={modelGroups}
                     placeholder={isRoleCatalogLoading ? "Loading models..." : "Select model"}
                     disabled={isRoleCatalogLoading || isSaving || modelOptions.length === 0}
+                    className={modelDropdownClassName}
                     onValueChange={(selectedModelKey) => {
                       const model = findCatalogModel(catalog, selectedModelKey);
                       if (!model) {
@@ -261,6 +268,7 @@ export function RepositoryAgentsSection({
                         !modelKey ||
                         roleVariantOptions.length === 0
                       }
+                      className={variantDropdownClassName}
                       onValueChange={(variant) =>
                         onUpdateSelectedRepoAgentDefault(role, "variant", variant)
                       }
