@@ -245,6 +245,45 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("prefers structured error message for tool parts already marked as error", () => {
+    const part = createToolPart({
+      id: "tool-4b",
+      status: "error",
+      input: {},
+      error: "Generic failure",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message: "Specific structured failure",
+          },
+        },
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-4b",
+      partId: "tool-4b",
+      callId: "call-tool-4b",
+      tool: "todowrite",
+      status: "error",
+      input: {},
+      error: "Specific structured failure",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message: "Specific structured failure",
+          },
+        },
+      },
+    });
+  });
+
   test("normalizes tool statuses across known and fallback values", () => {
     const scenarios = [
       { rawStatus: "completed", hasEndedTiming: false, expectedStatus: "completed" },

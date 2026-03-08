@@ -169,16 +169,19 @@ const buildToolStreamPart = (
   }
 
   const error = toDisplayText(readUnknownProp(toolState, "error"));
+  const outputValue = readUnknownProp(toolState, "output");
+  const structuredError = readStructuredToolError(outputValue) ?? readStructuredToolError(metadata);
   if (normalizedStatus === "error") {
-    return {
-      ...base,
-      ...(error ? { error } : {}),
-    };
+    const resolvedError = structuredError ?? error;
+    return resolvedError
+      ? {
+          ...base,
+          error: resolvedError,
+        }
+      : base;
   }
 
-  const outputValue = readUnknownProp(toolState, "output");
   const output = readToolOutputText(outputValue);
-  const structuredError = readStructuredToolError(outputValue) ?? readStructuredToolError(metadata);
   if (structuredError || (error && error.trim().length > 0)) {
     return {
       ...base,

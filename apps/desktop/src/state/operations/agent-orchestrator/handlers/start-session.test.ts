@@ -801,6 +801,100 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("reuses persisted session when runtime kind is only present on selected model", async () => {
+    let loadAgentSessionsCalls = 0;
+    let startCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => {
+      startCalls += 1;
+      return {
+        runtimeKind: "claude-code",
+        sessionId: "fresh-runtime-session",
+        externalSessionId: "fresh-runtime-external",
+        startedAt: "2026-02-22T08:40:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () =>
+      [
+        {
+          sessionId: "persisted-claude",
+          externalSessionId: "external-claude",
+          taskId: "task-1",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-02-22T08:20:00.000Z",
+          updatedAt: "2026-02-22T08:20:00.000Z",
+          runtimeId: "runtime-1",
+          runId: "run-2",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+          selectedModel: {
+            runtimeKind: "claude-code",
+            providerId: "anthropic",
+            modelId: "claude-3-7-sonnet",
+            profileId: "Hephaestus",
+          },
+        },
+      ] as unknown as Awaited<ReturnType<typeof host.agentSessionsList>>;
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "claude-code",
+        runtimeId: "runtime-claude",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:5555",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {
+        loadAgentSessionsCalls += 1;
+      },
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(
+        start({
+          taskId: "task-1",
+          role: "build",
+          selectedModel: {
+            runtimeKind: "claude-code",
+            providerId: "anthropic",
+            modelId: "claude-3-7-sonnet",
+          },
+        }),
+      ).resolves.toBe("persisted-claude");
+      expect(loadAgentSessionsCalls).toBe(1);
+      expect(startCalls).toBe(0);
+    } finally {
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("throws when task is missing after reuse checks", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];

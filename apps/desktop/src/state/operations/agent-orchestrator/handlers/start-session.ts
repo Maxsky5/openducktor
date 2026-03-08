@@ -339,7 +339,10 @@ const createOrReuseSession = async ({
     if (
       latestPersistedSession &&
       canReuseSessionForSelectedModel({
-        sessionRuntimeKind: latestPersistedSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        sessionRuntimeKind:
+          latestPersistedSession.runtimeKind ??
+          latestPersistedSession.selectedModel?.runtimeKind ??
+          DEFAULT_RUNTIME_KIND,
         selectedModel: input.selectedModel,
       })
     ) {
