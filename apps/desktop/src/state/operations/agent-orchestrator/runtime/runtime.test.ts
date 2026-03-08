@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
-import { agentPromptTemplateIdValues } from "@openducktor/contracts";
+import { agentPromptTemplateIdValues, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { host } from "../../host";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
@@ -12,6 +12,11 @@ import {
 
 const runningRunFixture: RunSummary = {
   runId: "run-1",
+  runtimeKind: "opencode",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
   repoPath: "/tmp/repo",
   taskId: "task-1",
   branch: "obp/task-1",
@@ -198,10 +203,13 @@ describe("agent-orchestrator-runtime", () => {
         repoPath: "/tmp/repo",
         taskId: "task-1",
         role: "planner",
-        endpoint: "http://127.0.0.1:4666",
-        port: 4666,
         workingDirectory: "/tmp/repo/shared",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4666",
+        },
         startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       };
     };
 
@@ -251,10 +259,13 @@ describe("agent-orchestrator-runtime", () => {
         repoPath: "/tmp/repo",
         taskId: "task-1",
         role: "planner",
-        endpoint: "http://127.0.0.1:4666",
-        port: 4666,
         workingDirectory: "/tmp/repo/shared",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4666",
+        },
         startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       };
     };
 
@@ -298,10 +309,13 @@ describe("agent-orchestrator-runtime", () => {
         repoPath: "/tmp/repo",
         taskId: "task-1",
         role: "planner",
-        endpoint: "http://127.0.0.1:4666",
-        port: 4666,
         workingDirectory: "/tmp/repo/shared",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4666",
+        },
         startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       };
     };
 
@@ -494,11 +508,13 @@ describe("agent-orchestrator-runtime", () => {
       repoPath: "/tmp/repo",
       taskId: "task-1",
       role: "qa",
-      port: 4555,
       workingDirectory: "/tmp/repo/qa",
-      status: "running",
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4555",
+      },
       startedAt: "2026-02-22T08:00:00.000Z",
-      lastMessage: null,
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     try {
@@ -532,11 +548,13 @@ describe("agent-orchestrator-runtime", () => {
       repoPath: "/tmp/repo",
       taskId: "task-1",
       role: "planner",
-      port: 4666,
       workingDirectory: "/tmp/repo/shared",
-      status: "running",
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4666",
+      },
       startedAt: "2026-02-22T08:00:00.000Z",
-      lastMessage: null,
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     try {

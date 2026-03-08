@@ -13,9 +13,12 @@ const runtimeFixture: RuntimeSummary = {
   taskId: "task-1",
   role: "workspace",
   workingDirectory: "/tmp/repo/worktree",
-  endpoint: "http://127.0.0.1:4444",
-  port: 4444,
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
   startedAt: "2026-02-22T08:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 };
 
 const catalogFixture: AgentModelCatalog = {
@@ -174,7 +177,10 @@ describe("opencode-catalog", () => {
     const restartedRuntime: RuntimeSummary = {
       ...runtimeFixture,
       runtimeId: "runtime-2",
-      port: 5555,
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:5555",
+      },
     };
     const ensureRuntime = mock(async (_runtimeKind: string, repoPath: string) => {
       if (repoPath !== "/tmp/repo") {
@@ -220,7 +226,7 @@ describe("opencode-catalog", () => {
     expect(getMcpStatus).toHaveBeenCalledTimes(2);
     expect(getMcpStatus.mock.calls[1]?.[0]).toEqual({
       runtimeKind: "opencode",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeEndpoint: "http://127.0.0.1:5555",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(result.runtime).toEqual(restartedRuntime);
@@ -234,7 +240,10 @@ describe("opencode-catalog", () => {
     const restartedRuntime: RuntimeSummary = {
       ...runtimeFixture,
       runtimeId: "runtime-2",
-      port: 5555,
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:5555",
+      },
     };
     const ensureRuntime = mock(async (_runtimeKind: string, repoPath: string) => {
       if (repoPath !== "/tmp/repo") {
@@ -272,7 +281,7 @@ describe("opencode-catalog", () => {
     expect(getMcpStatus).toHaveBeenCalledTimes(2);
     expect(getMcpStatus.mock.calls[1]?.[0]).toEqual({
       runtimeKind: "opencode",
-      runtimeEndpoint: "http://127.0.0.1:4444",
+      runtimeEndpoint: "http://127.0.0.1:5555",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(result.runtimeOk).toBe(true);

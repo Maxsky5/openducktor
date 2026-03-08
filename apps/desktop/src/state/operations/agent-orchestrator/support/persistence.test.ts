@@ -19,7 +19,6 @@ const recordFixture: AgentSessionRecord = {
   updatedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo/worktree",
   selectedModel: {
     runtimeKind: "opencode",
@@ -45,6 +44,8 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(persisted.scenario).toBe("build_implementation_start");
     expect(persisted.runtimeKind).toBe("opencode");
     expect(persisted.endedAt).toBeUndefined();
+    expect("runtimeEndpoint" in persisted).toBe(false);
+    expect("runtimeTransport" in persisted).toBe(false);
   });
 
   test("preserves non-default runtime kind across persistence", () => {

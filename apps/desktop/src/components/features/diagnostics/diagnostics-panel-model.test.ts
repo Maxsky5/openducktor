@@ -12,11 +12,12 @@ const runtimeSummary: AgentRuntimeSummary = {
   taskId: "repo-main",
   role: "spec",
   workingDirectory: "/repo",
-  port: 49700,
-  endpoint: "http://127.0.0.1:49700",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:49700",
+  },
   startedAt: "2026-02-20T12:00:00.000Z",
   descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-  capabilities: OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
 };
 
 describe("buildDiagnosticsPanelModel", () => {

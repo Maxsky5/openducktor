@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
@@ -215,11 +216,15 @@ describe("use-workspace-operations", () => {
       kind: "opencode";
       runtimeId: string;
       repoPath: string;
-      taskId: string;
+      taskId: null;
       role: "workspace";
       workingDirectory: string;
-      port: number;
+      runtimeRoute: {
+        type: "local_http";
+        endpoint: string;
+      };
       startedAt: string;
+      descriptor: typeof OPENCODE_RUNTIME_DESCRIPTOR;
     }>();
     const runtimeEnsure = mock(async () => runtimeDeferred.promise);
     const workspaceGetRepoConfig = mock(async () => ({
@@ -239,11 +244,15 @@ describe("use-workspace-operations", () => {
       kind: "opencode",
       runtimeId: "runtime-1",
       repoPath: "/repo-a",
-      taskId: "task-1",
+      taskId: null,
       role: "workspace",
       workingDirectory: "/tmp/repo-a",
-      port: 3030,
+      runtimeRoute: {
+        type: "local_http" as const,
+        endpoint: "http://127.0.0.1:3030",
+      },
       startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     } as const;
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],

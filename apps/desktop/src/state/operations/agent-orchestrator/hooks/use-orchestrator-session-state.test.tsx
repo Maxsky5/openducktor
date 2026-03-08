@@ -41,6 +41,11 @@ const taskFixture: TaskCard = {
 
 const runFixture: RunSummary = {
   runId: "run-1",
+  runtimeKind: "opencode",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
   repoPath: "/tmp/repo-a",
   taskId: "task-1",
   branch: "obp/task-1",

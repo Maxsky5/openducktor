@@ -55,12 +55,16 @@ const persistedSessionFixture: AgentSessionRecord = {
   updatedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo",
 };
 
 const runningRunFixture: RunSummary = {
   runId: "run-1",
+  runtimeKind: "opencode",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
   repoPath: "/tmp/repo",
   taskId: "task-1",
   branch: "obp/task-1",
@@ -440,17 +444,7 @@ describe("use-agent-orchestrator-operations", () => {
         promptOverrides: {},
         agentDefaults: {},
       });
-      host.buildStart = async () => ({
-        runId: "run-1",
-        repoPath: "/tmp/repo",
-        taskId: "task-1",
-        branch: "obp/task-1",
-        worktreePath: "/tmp/repo/worktree",
-        port: 4444,
-        state: "running",
-        lastMessage: null,
-        startedAt: "2026-02-22T08:00:00.000Z",
-      });
+      host.buildStart = async () => runningRunFixture;
 
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
@@ -730,15 +724,9 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.buildStart = async () => ({
-        runId: "run-1",
+        ...runningRunFixture,
         repoPath: "/tmp/repo-a",
-        taskId: "task-1",
-        branch: "obp/task-1",
         worktreePath: "/tmp/repo-a/worktree",
-        port: 4444,
-        state: "running",
-        lastMessage: null,
-        startedAt: "2026-02-22T08:00:00.000Z",
       });
       host.workspaceGetRepoConfig = async () => ({
         defaultRuntimeKind: "opencode" as const,
