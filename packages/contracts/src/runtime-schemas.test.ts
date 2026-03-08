@@ -19,6 +19,7 @@ import {
   gitWorktreeStatusSnapshotSchema,
   gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
+  OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
   runEventSchema,
   taskCardSchema,
@@ -488,17 +489,22 @@ describe("runtime schemas", () => {
 
   test("agent runtime summary parses host payload", () => {
     const parsed = agentRuntimeSummarySchema.parse({
+      kind: "opencode",
       runtimeId: "runtime-1",
       repoPath: "/repo",
       taskId: "task-1",
       role: "planner",
       workingDirectory: "/repo",
-      port: 4100,
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:4100",
+      },
       startedAt: "2026-01-01T00:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     expect(parsed.runtimeId).toBe("runtime-1");
-    expect(parsed.port).toBe(4100);
+    expect(parsed.runtimeRoute.endpoint).toBe("http://127.0.0.1:4100");
   });
 
   test("agent runtime role schemas enforce summary vs start boundaries", () => {
@@ -520,7 +526,6 @@ describe("runtime schemas", () => {
       endedAt: null,
       runtimeId: "runtime-1",
       runId: null,
-      runtimeEndpoint: "http://127.0.0.1:4173",
       workingDirectory: "/repo",
       selectedModel: {
         providerId: "openai",

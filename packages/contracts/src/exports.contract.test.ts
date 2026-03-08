@@ -137,6 +137,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeDescriptorSchema",
   "runtimeHealthSchema",
   "runtimeKindSchema",
+  "runtimeRouteSchema",
   "runtimeProvisioningModeSchema",
   "runtimeRefSchema",
   "runtimeTransportSchema",

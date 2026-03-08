@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  runtimeCapabilitiesSchema,
-  runtimeDescriptorSchema,
-  runtimeKindSchema,
-} from "./agent-runtime-schemas";
+import { runtimeDescriptorSchema, runtimeKindSchema } from "./agent-runtime-schemas";
 
 export const runtimeHealthSchema = z.object({
   kind: runtimeKindSchema,
@@ -50,8 +46,18 @@ export const runStateSchema = z.enum([
 ]);
 export type RunState = z.infer<typeof runStateSchema>;
 
+export const runtimeRouteSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("local_http"),
+    endpoint: z.string().trim().min(1),
+  }),
+]);
+export type RuntimeRoute = z.infer<typeof runtimeRouteSchema>;
+
 export const runSummarySchema = z.object({
   runId: z.string(),
+  runtimeKind: runtimeKindSchema,
+  runtimeRoute: runtimeRouteSchema,
   repoPath: z.string(),
   taskId: z.string(),
   branch: z.string(),
@@ -63,24 +69,28 @@ export const runSummarySchema = z.object({
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
-export const agentRuntimeSummaryRoleSchema = z.enum(["workspace", "spec", "planner", "qa"]);
+export const agentRuntimeSummaryRoleSchema = z.enum([
+  "workspace",
+  "spec",
+  "planner",
+  "build",
+  "qa",
+]);
 export type AgentRuntimeSummaryRole = z.infer<typeof agentRuntimeSummaryRoleSchema>;
 
 export const agentRuntimeStartRoleSchema = z.enum(["spec", "planner", "qa"]);
 export type AgentRuntimeStartRole = z.infer<typeof agentRuntimeStartRoleSchema>;
 
 export const agentRuntimeSummarySchema = z.object({
-  kind: runtimeKindSchema.default("opencode"),
+  kind: runtimeKindSchema,
   runtimeId: z.string(),
   repoPath: z.string(),
-  taskId: z.string(),
+  taskId: z.string().nullable(),
   role: agentRuntimeSummaryRoleSchema,
   workingDirectory: z.string(),
-  endpoint: z.string().nullable().optional(),
-  port: z.number().int().positive().optional(),
+  runtimeRoute: runtimeRouteSchema,
   startedAt: z.string(),
-  descriptor: runtimeDescriptorSchema.optional(),
-  capabilities: runtimeCapabilitiesSchema.optional(),
+  descriptor: runtimeDescriptorSchema,
 });
 export type AgentRuntimeSummary = z.infer<typeof agentRuntimeSummarySchema>;
 

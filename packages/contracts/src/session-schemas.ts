@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { runtimeKindSchema, runtimeTransportSchema } from "./agent-runtime-schemas";
+import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema, agentScenarioSchema } from "./agent-workflow-schemas";
 
 export const agentSessionStatusSchema = z.enum(["starting", "running", "idle", "error", "stopped"]);
@@ -38,8 +38,6 @@ export const agentSessionRecordSchema = z.object({
   runtimeKind: runtimeKindSchema.default("opencode"),
   runtimeId: optionalStringFromNullable,
   runId: optionalStringFromNullable,
-  runtimeEndpoint: optionalStringFromNullable,
-  runtimeTransport: optionalFromNullable(runtimeTransportSchema),
   workingDirectory: z.string(),
   selectedModel: optionalFromNullable(agentSessionModelSelectionSchema),
 });
