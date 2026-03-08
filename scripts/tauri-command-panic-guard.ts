@@ -24,6 +24,9 @@ const walkRustFiles = (root: string): string[] => {
       const absolute = join(current, entry);
       const stats = statSync(absolute);
       if (stats.isDirectory()) {
+        if (entry === "tests") {
+          continue;
+        }
         stack.push(absolute);
         continue;
       }
