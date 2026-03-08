@@ -34,13 +34,10 @@ impl BeadsTaskStore {
             return Err(anyhow!("Agent session workingDirectory is required"));
         }
 
-        session.external_session_id = None;
         session.task_id = None;
         session.status = None;
         session.updated_at = None;
         session.ended_at = None;
-        session.runtime_id = None;
-        session.run_id = None;
 
         Ok(session)
     }

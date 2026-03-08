@@ -34,6 +34,7 @@ export type AttachAgentSessionListenerParams = {
   refreshTaskData: (repoPath: string) => Promise<void>;
   loadSessionTodos: (
     sessionId: string,
+    runtimeKind: string,
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;

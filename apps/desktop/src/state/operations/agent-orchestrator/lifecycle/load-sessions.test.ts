@@ -98,9 +98,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
-        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -160,9 +157,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
-        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -226,7 +220,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
         selectedModel: {
           runtimeKind: "claude-code",
@@ -379,9 +372,7 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
       },
     ];
     hostModule.host.runsList = async () => [
@@ -481,8 +472,6 @@ describe("agent-orchestrator-load-sessions", () => {
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
-          runtimeId: "runtime-1",
-          runId: "run-1",
           workingDirectory: "/tmp/repo",
         },
       ]);
@@ -564,8 +553,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
         workingDirectory: "/tmp/repo",
       },
     ];

@@ -33,7 +33,7 @@ pub(crate) struct RunProcess {
 }
 
 pub(crate) struct AgentRuntimeProcess {
-    pub(super) summary: AgentRuntimeSummary,
+    pub(super) summary: RuntimeInstanceSummary,
     pub(super) child: Child,
     pub(super) _opencode_process_guard: Option<TrackedOpencodeProcessGuard>,
     pub(super) cleanup_target: Option<RuntimeCleanupTarget>,

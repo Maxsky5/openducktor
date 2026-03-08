@@ -49,11 +49,13 @@ type EnsureSessionReadyDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
+    runtimeKind: string,
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
+    runtimeKind: string,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
 };
@@ -137,6 +139,11 @@ export const createEnsureSessionReady = ({
       loadRepoPromptOverrides(repoPath),
     ]);
     assertNotStale();
+    const resolvedRuntimeKind =
+      runtime.runtimeKind ??
+      session.selectedModel?.runtimeKind ??
+      session.runtimeKind ??
+      DEFAULT_RUNTIME_KIND;
     const systemPrompt = buildAgentSystemPrompt({
       role: session.role,
       scenario: session.scenario,
@@ -159,8 +166,7 @@ export const createEnsureSessionReady = ({
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,
       repoPath,
-      runtimeKind:
-        runtime.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      runtimeKind: resolvedRuntimeKind,
       runtimeConnection: resolveRuntimeConnection(runtime),
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
@@ -192,6 +198,7 @@ export const createEnsureSessionReady = ({
       status: "idle",
       pendingPermissions: [],
       pendingQuestions: [],
+      runtimeKind: resolvedRuntimeKind,
       runtimeId: runtime.runtimeId,
       runId: runtime.runId,
       runtimeEndpoint: runtime.runtimeEndpoint,
@@ -206,9 +213,19 @@ export const createEnsureSessionReady = ({
     const activeSession = sessionsRef.current[sessionId];
     const runtimeConnection = resolveRuntimeConnection(runtime);
     const warmSessionData = (targetSession: AgentSessionState): void => {
+      const targetRuntimeKind =
+        targetSession.runtimeKind ?? targetSession.selectedModel?.runtimeKind;
+      if (!targetRuntimeKind) {
+        throw new Error(`Runtime kind is required to warm session '${sessionId}'.`);
+      }
       runOrchestratorSideEffect(
         "ensure-ready-warm-session-todos",
-        loadSessionTodos(sessionId, runtimeConnection, targetSession.externalSessionId),
+        loadSessionTodos(
+          sessionId,
+          targetRuntimeKind,
+          runtimeConnection,
+          targetSession.externalSessionId,
+        ),
         {
           tags: {
             repoPath,
@@ -222,7 +239,7 @@ export const createEnsureSessionReady = ({
       if (!targetSession.modelCatalog && !targetSession.isLoadingModelCatalog) {
         runOrchestratorSideEffect(
           "ensure-ready-warm-session-model-catalog",
-          loadSessionModelCatalog(sessionId, runtimeConnection),
+          loadSessionModelCatalog(sessionId, targetRuntimeKind, runtimeConnection),
           {
             tags: {
               repoPath,

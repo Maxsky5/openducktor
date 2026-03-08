@@ -2,9 +2,10 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeKind, AgentRuntimeRole, AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput,
-    GitBranch, GitCurrentBranch, GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent,
-    RunState, RunSummary, RuntimeRole, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeKind, AgentRuntimeRole, AgentSessionDocument, CreateTaskInput, GitBranch,
+    GitCurrentBranch, GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, RuntimeRole, TaskAction, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -44,8 +45,8 @@ fn runtime_summary_fixture(
     role: RuntimeRole,
     working_directory: &str,
     port: u16,
-) -> AgentRuntimeSummary {
-    AgentRuntimeSummary {
+) -> RuntimeInstanceSummary {
+    RuntimeInstanceSummary {
         kind: AgentRuntimeKind::Opencode,
         runtime_id: runtime_id.to_string(),
         repo_path: repo_path.to_string(),

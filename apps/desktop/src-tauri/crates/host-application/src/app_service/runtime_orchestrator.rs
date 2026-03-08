@@ -5,7 +5,7 @@ mod startup;
 use super::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{
-    AgentRuntimeKind, AgentRuntimeRole, AgentRuntimeSummary, RunSummary, RuntimeDescriptor,
+    AgentRuntimeKind, AgentRuntimeRole, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
     RuntimeRole,
 };
 use std::collections::HashSet;
@@ -38,7 +38,7 @@ pub(super) struct RuntimeStartInput<'a> {
 }
 
 pub(super) enum RuntimePrerequisiteResolution {
-    Existing(AgentRuntimeSummary),
+    Existing(RuntimeInstanceSummary),
     Ready(RuntimePrerequisites),
 }
 
@@ -63,17 +63,21 @@ impl AppService {
         &self,
         runtime_kind: &str,
         repo_path: Option<&str>,
-    ) -> Result<Vec<AgentRuntimeSummary>> {
-        Self::ensure_supported_runtime_kind(runtime_kind)?;
-        self.list_registered_runtimes(repo_path)
+    ) -> Result<Vec<RuntimeInstanceSummary>> {
+        let supported_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        Ok(self
+            .list_registered_runtimes(repo_path)?
+            .into_iter()
+            .filter(|runtime| runtime.kind == supported_kind)
+            .collect())
     }
 
     pub fn runtime_ensure(
         &self,
         runtime_kind: &str,
         repo_path: &str,
-    ) -> Result<AgentRuntimeSummary> {
-        Self::ensure_supported_runtime_kind(runtime_kind)?;
+    ) -> Result<RuntimeInstanceSummary> {
+        Self::resolve_supported_runtime_kind(runtime_kind)?;
         self.ensure_workspace_runtime(repo_path)
     }
 
@@ -83,8 +87,8 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
         role: AgentRuntimeRole,
-    ) -> Result<AgentRuntimeSummary> {
-        Self::ensure_supported_runtime_kind(runtime_kind)?;
+    ) -> Result<RuntimeInstanceSummary> {
+        Self::resolve_supported_runtime_kind(runtime_kind)?;
         self.start_task_runtime(repo_path, task_id, role)
     }
 
@@ -131,7 +135,7 @@ impl AppService {
         Ok(list)
     }
 
-    fn ensure_workspace_runtime(&self, repo_path: &str) -> Result<AgentRuntimeSummary> {
+    fn ensure_workspace_runtime(&self, repo_path: &str) -> Result<RuntimeInstanceSummary> {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
 
@@ -193,7 +197,7 @@ impl AppService {
         repo_path: &str,
         task_id: &str,
         role: AgentRuntimeRole,
-    ) -> Result<AgentRuntimeSummary> {
+    ) -> Result<RuntimeInstanceSummary> {
         let repo_key = self.resolve_initialized_repo_path(repo_path)?;
         let repo_path = repo_key.as_str();
         let runtime_role = RuntimeRole::from(role);
@@ -242,14 +246,14 @@ impl AppService {
     fn spawn_and_register_runtime(
         &self,
         input: RuntimeStartInput<'_>,
-    ) -> Result<AgentRuntimeSummary> {
+    ) -> Result<RuntimeInstanceSummary> {
         let spawned_server = self.spawn_runtime_server(&input)?;
         self.attach_runtime_session(input, spawned_server)
     }
 
-    fn ensure_supported_runtime_kind(runtime_kind: &str) -> Result<()> {
+    pub(super) fn resolve_supported_runtime_kind(runtime_kind: &str) -> Result<AgentRuntimeKind> {
         match runtime_kind.trim() {
-            "opencode" => Ok(()),
+            "opencode" => Ok(AgentRuntimeKind::Opencode),
             other => Err(anyhow!("Unsupported agent runtime kind: {other}")),
         }
     }

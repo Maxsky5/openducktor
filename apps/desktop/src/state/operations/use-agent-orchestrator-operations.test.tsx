@@ -53,8 +53,6 @@ const persistedSessionFixture: AgentSessionRecord = {
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   updatedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: "runtime-1",
-  runId: "run-1",
   workingDirectory: "/tmp/repo",
 };
 

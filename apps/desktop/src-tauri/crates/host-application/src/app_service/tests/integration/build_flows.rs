@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeKind, AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch,
+    AgentRuntimeKind, RuntimeInstanceSummary, AgentSessionDocument, CreateTaskInput, GitBranch,
     GitCurrentBranch, GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
     RunSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
@@ -107,7 +107,7 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
     let emitter = make_emitter(events.clone());
 
-    let run = service.build_start(repo_path.as_str(), "task-1", emitter.clone())?;
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
     assert!(matches!(run.state, RunState::Running));
     assert_eq!(service.runs_list(Some(repo_path.as_str()))?.len(), 1);
 
@@ -245,7 +245,7 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
     let emitter = make_emitter(events.clone());
-    let run = service.build_start(repo_path.as_str(), "task-1", emitter.clone())?;
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
     let worktree_path = Path::new(run.worktree_path.as_str());
     assert!(worktree_path.join("develop-only.txt").exists());
     assert!(!worktree_path.join("main-only.txt").exists());
@@ -398,6 +398,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
         .build_start(
             repo_path.as_str(),
             "task-1",
+            "opencode",
             make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
         .expect_err("pre-start failure should fail");
@@ -427,7 +428,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
     let emitter = make_emitter(events.clone());
-    let run = service.build_start(repo_path.as_str(), "task-2", emitter.clone())?;
+    let run = service.build_start(repo_path.as_str(), "task-2", "opencode", emitter.clone())?;
     let cleaned =
         service.build_cleanup(run.run_id.as_str(), CleanupMode::Success, emitter.clone())?;
     assert!(!cleaned, "post-hook failure should report false");
@@ -507,6 +508,7 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
         .build_start(
             repo_path.as_str(),
             "task-1",
+            "opencode",
             make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
         .expect_err("build_start should require worktree base");
@@ -559,6 +561,7 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
         .build_start(
             repo_path.as_str(),
             "task-1",
+            "opencode",
             make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
         .expect_err("hooks should be rejected when not trusted");
@@ -611,6 +614,7 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
         .build_start(
             repo_path.as_str(),
             "task-1",
+            "opencode",
             make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
         .expect_err("existing worktree path should be rejected");
@@ -668,6 +672,7 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
         .build_start(
             repo_path.as_str(),
             "task-1",
+            "opencode",
             make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
         .expect_err("startup failure should bubble up");
@@ -722,6 +727,7 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
         .build_start(
             repo_path.as_str(),
             "task-1",
+            "opencode",
             make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
         .expect_err("invalid config should fail build start before worktree preparation");
@@ -790,6 +796,7 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
             service.build_start(
                 repo_path.as_str(),
                 "task-1",
+                "opencode",
                 make_emitter(Arc::new(Mutex::new(Vec::new()))),
             )
         });

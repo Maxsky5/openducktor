@@ -40,7 +40,7 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 
 - Treat runtime definitions, runtime routes, and runtime connections as different layers.
 - Shared host-visible runtime/run payloads live in `packages/contracts/src/run-schemas.ts`; update Rust host types in `apps/desktop/src-tauri/crates/host-domain/src/runtime.rs` in the same change.
-- `AgentRuntimeSummary` is live runtime-instance metadata only: keep `kind`, `runtimeId`, `repoPath`, nullable `taskId`, `role`, `workingDirectory`, `runtimeRoute`, `startedAt`, and `descriptor`. Do not reintroduce top-level `endpoint`, `port`, or duplicate `capabilities` fields there.
+- `RuntimeInstanceSummary` is live runtime-instance metadata only: keep `kind`, `runtimeId`, `repoPath`, nullable `taskId`, `role`, `workingDirectory`, `runtimeRoute`, `startedAt`, and `descriptor`. Do not reintroduce top-level `endpoint`, `port`, or duplicate `capabilities` fields there.
 - Request-scoped agent engine operations use `runtimeConnection` objects, not raw shared `runtimeEndpoint` strings. Build adapter-local client inputs from the connection at the adapter boundary.
 - Persisted session records/documents must not store live runtime route data (`runtimeEndpoint`, `baseUrl`, `runtimeTransport`). Persist durable identifiers plus `workingDirectory`, then resolve a live route during hydration.
 - Keep runtime routing fail-fast. Never fall back from a session/build runtime to the repo default runtime when loading session history, todos, diff, or file status.

@@ -1,6 +1,6 @@
 use crate::{as_error, run_service_blocking, AppState};
 use host_domain::{
-    AgentRuntimeRole, AgentRuntimeSummary, BeadsCheck, RuntimeCheck, RuntimeDescriptor, SystemCheck,
+    AgentRuntimeRole, RuntimeInstanceSummary, BeadsCheck, RuntimeCheck, RuntimeDescriptor, SystemCheck,
 };
 use tauri::State;
 
@@ -44,7 +44,7 @@ pub async fn runtime_list(
     state: State<'_, AppState>,
     runtime_kind: String,
     repo_path: Option<String>,
-) -> Result<Vec<AgentRuntimeSummary>, String> {
+) -> Result<Vec<RuntimeInstanceSummary>, String> {
     as_error(
         state
             .service
@@ -59,7 +59,7 @@ pub async fn runtime_start(
     repo_path: String,
     task_id: String,
     role: AgentRuntimeRole,
-) -> Result<AgentRuntimeSummary, String> {
+) -> Result<RuntimeInstanceSummary, String> {
     let service = state.service.clone();
     let result = run_service_blocking("runtime_start", move || {
         service.runtime_start(&runtime_kind, &repo_path, &task_id, role)
@@ -86,7 +86,7 @@ pub async fn runtime_ensure(
     state: State<'_, AppState>,
     runtime_kind: String,
     repo_path: String,
-) -> Result<AgentRuntimeSummary, String> {
+) -> Result<RuntimeInstanceSummary, String> {
     let service = state.service.clone();
     let result = run_service_blocking("runtime_ensure", move || {
         service.runtime_ensure(&runtime_kind, &repo_path)

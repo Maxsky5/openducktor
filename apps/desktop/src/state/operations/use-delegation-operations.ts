@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { loadRepoDefaultRuntimeKind } from "./agent-orchestrator/runtime/runtime";
 import { host } from "./host";
 import { requireActiveRepo } from "./task-operations-model";
 
@@ -25,8 +26,9 @@ export function useDelegationOperations({
   const delegateTask = useCallback(
     async (taskId: string): Promise<void> => {
       const repo = requireActiveRepo(activeRepo);
+      const runtimeKind = await loadRepoDefaultRuntimeKind(repo, "build");
 
-      await host.buildStart(repo, taskId);
+      await host.buildStart(repo, taskId, runtimeKind);
       await refreshTaskData(repo);
     },
     [activeRepo, refreshTaskData],

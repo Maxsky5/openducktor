@@ -7,7 +7,7 @@ use super::super::{
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree, SpawnedBuildAgent};
 use super::BuildResponseAction;
 use anyhow::{anyhow, Context, Result};
-use host_domain::{now_rfc3339, RunEvent, RunState, RunSummary, TaskStatus};
+use host_domain::{now_rfc3339, AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
 use std::process::{ChildStderr, ChildStdout};
 use uuid::Uuid;
 
@@ -26,8 +26,10 @@ impl AppService {
         &self,
         repo_path: &str,
         task_id: &str,
+        runtime_kind: &str,
         emitter: RunEmitter,
     ) -> Result<RunSummary> {
+        let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
         let run_id = format!("run-{}", Uuid::new_v4().simple());
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
         let startup_policy = self.resolve_build_startup_policy(
@@ -45,6 +47,7 @@ impl AppService {
         )?;
 
         self.initiate_build_mode(
+            runtime_kind,
             prerequisites,
             prepared_worktree,
             spawned_agent,
@@ -253,6 +256,7 @@ impl AppService {
 
     fn initiate_build_mode(
         &self,
+        runtime_kind: AgentRuntimeKind,
         prerequisites: BuildPrerequisites,
         prepared_worktree: PreparedBuildWorktree,
         mut spawned_agent: SpawnedBuildAgent,
@@ -279,16 +283,15 @@ impl AppService {
 
         let summary = RunSummary {
             run_id: run_id_string.clone(),
-            runtime_kind: host_domain::AgentRuntimeKind::Opencode,
-            runtime_route: host_domain::AgentRuntimeKind::Opencode
-                .route_for_port(spawned_agent.port),
+            runtime_kind,
+            runtime_route: runtime_kind.route_for_port(spawned_agent.port),
             repo_path: prerequisites.repo_path.clone(),
             task_id: task_id_string.clone(),
             branch: prerequisites.branch.clone(),
             worktree_path: worktree_path.clone(),
             port: spawned_agent.port,
             state: RunState::Running,
-            last_message: Some("Opencode server running".to_string()),
+            last_message: Some(format!("{} runtime running", runtime_kind.as_str())),
             started_at: now_rfc3339(),
         };
 

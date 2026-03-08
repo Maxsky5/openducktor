@@ -238,8 +238,6 @@ fn make_session(session_id: &str, started_at: &str, status: &str) -> AgentSessio
         updated_at: Some(started_at.to_string()),
         ended_at: None,
         runtime_kind: "opencode".to_string(),
-        runtime_id: Some("runtime-1".to_string()),
-        run_id: None,
         working_directory: "/repo".to_string(),
         selected_model: None,
     }
@@ -1753,6 +1751,10 @@ fn upsert_agent_session_updates_existing_session_without_duplication() -> Result
         .find(|entry| entry["sessionId"] == Value::String("session-1".to_string()))
         .expect("session-1 missing");
     assert!(session_1.get("status").is_none());
+    assert_eq!(
+        session_1.get("externalSessionId").and_then(Value::as_str),
+        Some("external-session-1")
+    );
     assert_eq!(
         session_1.get("scenario").and_then(Value::as_str),
         Some("build_default")

@@ -59,11 +59,13 @@ export type ModelDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
+    runtimeKind: string,
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
+    runtimeKind: string,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
 };

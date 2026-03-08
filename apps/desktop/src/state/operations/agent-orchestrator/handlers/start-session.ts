@@ -475,11 +475,16 @@ const warmSessionData = ({
 }): void => {
   const tags = createSessionStartTags(startedCtx);
   const runtimeConnection = resolveRuntimeConnection(runtimeInfo);
+  const runtimeKind = runtimeInfo.runtimeKind ?? startedCtx.summary.runtimeKind;
+  if (!runtimeKind) {
+    throw new Error(`Runtime kind is required to warm session '${startedCtx.summary.sessionId}'.`);
+  }
 
   runOrchestratorSideEffect(
     "start-session-warm-session-todos",
     model.loadSessionTodos(
       startedCtx.summary.sessionId,
+      runtimeKind,
       runtimeConnection,
       startedCtx.summary.externalSessionId,
     ),
@@ -493,7 +498,7 @@ const warmSessionData = ({
 
   runOrchestratorSideEffect(
     "start-session-warm-session-model-catalog",
-    model.loadSessionModelCatalog(startedCtx.summary.sessionId, runtimeConnection),
+    model.loadSessionModelCatalog(startedCtx.summary.sessionId, runtimeKind, runtimeConnection),
     { tags },
   );
 };

@@ -101,9 +101,14 @@ export const createLoadSessionModelCatalog = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
+  runtimeKind: string,
   runtimeConnection: AgentRuntimeConnection,
 ) => Promise<void>) => {
-  return async (sessionId: string, runtimeConnection: AgentRuntimeConnection): Promise<void> => {
+  return async (
+    sessionId: string,
+    runtimeKind: string,
+    runtimeConnection: AgentRuntimeConnection,
+  ): Promise<void> => {
     updateSession(
       sessionId,
       (current) => ({
@@ -116,6 +121,7 @@ export const createLoadSessionModelCatalog = ({
     try {
       const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
       const catalog = await adapter.listAvailableModels({
+        runtimeKind,
         runtimeConnection: validatedRuntimeConnection,
       });
       updateSession(
@@ -154,16 +160,19 @@ export const createLoadSessionTodos = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
+  runtimeKind: string,
   runtimeConnection: AgentRuntimeConnection,
   externalSessionId: string,
 ) => Promise<void>) => {
   return async (
     sessionId: string,
+    runtimeKind: string,
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ): Promise<void> => {
     const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
     const todos = await adapter.loadSessionTodos({
+      runtimeKind,
       runtimeConnection: validatedRuntimeConnection,
       externalSessionId,
     });

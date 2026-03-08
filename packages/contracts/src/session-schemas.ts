@@ -36,8 +36,6 @@ export const agentSessionRecordSchema = z.object({
   updatedAt: optionalStringFromNullable,
   endedAt: optionalStringFromNullable,
   runtimeKind: runtimeKindSchema.default("opencode"),
-  runtimeId: optionalStringFromNullable,
-  runId: optionalStringFromNullable,
   workingDirectory: z.string(),
   selectedModel: optionalFromNullable(agentSessionModelSelectionSchema),
 });

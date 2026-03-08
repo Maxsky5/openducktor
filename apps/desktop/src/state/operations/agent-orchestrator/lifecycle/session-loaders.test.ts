@@ -102,7 +102,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    const loadPromise = loadSessionModelCatalog("session-1", runtimeConnection);
+    const loadPromise = loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
 
     expect(harness.getState()["session-1"]?.isLoadingModelCatalog).toBe(true);
 
@@ -132,7 +132,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("session-1", runtimeConnection);
+    await loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
 
     const session = harness.getState()["session-1"];
     expect(session?.isLoadingModelCatalog).toBe(false);
@@ -154,7 +154,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("session-1", {
+    await loadSessionModelCatalog("session-1", "opencode", {
       endpoint: "https://example.com:4444",
       workingDirectory: "/tmp/repo",
     });
@@ -186,7 +186,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionTodos("session-1", runtimeConnection, "external-1");
+    await loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
 
     const mergedTodos = harness.getState()["session-1"]?.todos ?? [];
     expect(mergedTodos.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
@@ -211,6 +211,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     await expect(
       loadSessionTodos(
         "session-1",
+        "opencode",
         {
           endpoint: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo/../escape",

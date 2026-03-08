@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitAheadBehind, GitBranch,
+    RuntimeInstanceSummary, AgentSessionDocument, CreateTaskInput, GitAheadBehind, GitBranch,
     GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff,
     GitFileStatus, GitPort, GitPullRequest, GitPullResult, GitRebaseBranchRequest,
     GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData, PlanSubtaskInput,

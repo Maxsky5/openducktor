@@ -85,7 +85,9 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   }
 
   listAvailableModels(input: Parameters<AgentEnginePort["listAvailableModels"]>[0]) {
-    return this.getAdapter(input.runtimeKind ?? this.defaultRuntimeKind).listAvailableModels(input);
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "model catalog"),
+    ).listAvailableModels(input);
   }
 
   hasSession(sessionId: string): boolean {
@@ -93,11 +95,15 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   }
 
   loadSessionHistory(input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) {
-    return this.getAdapter(input.runtimeKind ?? this.defaultRuntimeKind).loadSessionHistory(input);
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "session history"),
+    ).loadSessionHistory(input);
   }
 
   loadSessionTodos(input: Parameters<AgentEnginePort["loadSessionTodos"]>[0]) {
-    return this.getAdapter(input.runtimeKind ?? this.defaultRuntimeKind).loadSessionTodos(input);
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "session todos"),
+    ).loadSessionTodos(input);
   }
 
   sendUserMessage(input: Parameters<AgentEnginePort["sendUserMessage"]>[0]) {
@@ -126,11 +132,25 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   }
 
   loadSessionDiff(input: Parameters<AgentEnginePort["loadSessionDiff"]>[0]) {
-    return this.getAdapter(input.runtimeKind ?? this.defaultRuntimeKind).loadSessionDiff(input);
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "session diff"),
+    ).loadSessionDiff(input);
   }
 
   loadFileStatus(input: Parameters<AgentEnginePort["loadFileStatus"]>[0]) {
-    return this.getAdapter(input.runtimeKind ?? this.defaultRuntimeKind).loadFileStatus(input);
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "file status"),
+    ).loadFileStatus(input);
+  }
+
+  private requireInputRuntimeKind(
+    runtimeKind: RuntimeKind | undefined,
+    operation: string,
+  ): RuntimeKind {
+    if (runtimeKind) {
+      return runtimeKind;
+    }
+    throw new Error(`Runtime kind is required for ${operation} requests.`);
   }
 
   private resolveRuntimeKind(

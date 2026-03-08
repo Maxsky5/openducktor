@@ -17,14 +17,14 @@ use super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind,
-    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
-    GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult,
-    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
-    GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatusData,
-    GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict,
-    QaWorkflowVerdict, RunEvent, RunState, RunSummary, SpecDocument, TaskAction, TaskCard,
-    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind, GitBranch,
+    GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff,
+    GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult, GitPushResult,
+    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType,
+    PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
+    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -899,8 +899,6 @@ pub(crate) fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocum
         updated_at: Some("2026-02-20T12:00:10Z".to_string()),
         ended_at: None,
         runtime_kind: "opencode".to_string(),
-        runtime_id: Some("runtime-1".to_string()),
-        run_id: Some("run-1".to_string()),
         working_directory: "/tmp/repo".to_string(),
         selected_model: None,
     }

@@ -17,8 +17,6 @@ const recordFixture: AgentSessionRecord = {
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   updatedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: "runtime-1",
-  runId: "run-1",
   workingDirectory: "/tmp/repo/worktree",
   selectedModel: {
     runtimeKind: "opencode",
@@ -32,6 +30,8 @@ describe("agent-orchestrator/support/persistence", () => {
     const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.runtimeKind).toBe("opencode");
+    expect(hydrated.runtimeId).toBeNull();
+    expect(hydrated.runId).toBeNull();
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
   });
 
@@ -44,6 +44,8 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(persisted.scenario).toBe("build_implementation_start");
     expect(persisted.runtimeKind).toBe("opencode");
     expect(persisted.endedAt).toBeUndefined();
+    expect("runtimeId" in persisted).toBe(false);
+    expect("runId" in persisted).toBe(false);
     expect("runtimeEndpoint" in persisted).toBe(false);
     expect("runtimeTransport" in persisted).toBe(false);
   });
