@@ -1,4 +1,4 @@
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -89,9 +89,11 @@ const validateWorkingDirectory = (workingDirectory: string): string => {
   return trimmedWorkingDirectory;
 };
 
-const validateRuntimeInput = (runtimeEndpoint: string, workingDirectory: string) => ({
-  runtimeEndpoint: validateLocalRuntimeBaseUrl(runtimeEndpoint),
-  workingDirectory: validateWorkingDirectory(workingDirectory),
+const validateRuntimeConnection = (
+  runtimeConnection: AgentRuntimeConnection,
+): AgentRuntimeConnection => ({
+  endpoint: validateLocalRuntimeBaseUrl(runtimeConnection.endpoint ?? ""),
+  workingDirectory: validateWorkingDirectory(runtimeConnection.workingDirectory),
 });
 
 export const createLoadSessionModelCatalog = ({
@@ -99,14 +101,9 @@ export const createLoadSessionModelCatalog = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
-  runtimeEndpoint: string,
-  workingDirectory: string,
+  runtimeConnection: AgentRuntimeConnection,
 ) => Promise<void>) => {
-  return async (
-    sessionId: string,
-    runtimeEndpoint: string,
-    workingDirectory: string,
-  ): Promise<void> => {
+  return async (sessionId: string, runtimeConnection: AgentRuntimeConnection): Promise<void> => {
     updateSession(
       sessionId,
       (current) => ({
@@ -117,8 +114,10 @@ export const createLoadSessionModelCatalog = ({
     );
 
     try {
-      const runtimeInput = validateRuntimeInput(runtimeEndpoint, workingDirectory);
-      const catalog = await adapter.listAvailableModels(runtimeInput);
+      const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
+      const catalog = await adapter.listAvailableModels({
+        runtimeConnection: validatedRuntimeConnection,
+      });
       updateSession(
         sessionId,
         (current) => ({
@@ -155,19 +154,17 @@ export const createLoadSessionTodos = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
-  runtimeEndpoint: string,
-  workingDirectory: string,
+  runtimeConnection: AgentRuntimeConnection,
   externalSessionId: string,
 ) => Promise<void>) => {
   return async (
     sessionId: string,
-    runtimeEndpoint: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ): Promise<void> => {
-    const runtimeInput = validateRuntimeInput(runtimeEndpoint, workingDirectory);
+    const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
     const todos = await adapter.loadSessionTodos({
-      ...runtimeInput,
+      runtimeConnection: validatedRuntimeConnection,
       externalSessionId,
     });
     updateSession(

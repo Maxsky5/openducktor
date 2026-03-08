@@ -85,6 +85,11 @@ const createStateHarness = (session: AgentSessionState) => {
   };
 };
 
+const runtimeConnection = {
+  endpoint: "http://127.0.0.1:4444",
+  workingDirectory: "/tmp/repo",
+} as const;
+
 describe("agent-orchestrator/lifecycle/session-loaders", () => {
   test("loads model catalog and clears loading state", async () => {
     const deferredCatalog = createDeferred<AgentModelCatalog>();
@@ -97,7 +102,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    const loadPromise = loadSessionModelCatalog("session-1", "http://127.0.0.1:4444", "/tmp/repo");
+    const loadPromise = loadSessionModelCatalog("session-1", runtimeConnection);
 
     expect(harness.getState()["session-1"]?.isLoadingModelCatalog).toBe(true);
 
@@ -127,7 +132,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("session-1", "http://127.0.0.1:4444", "/tmp/repo");
+    await loadSessionModelCatalog("session-1", runtimeConnection);
 
     const session = harness.getState()["session-1"];
     expect(session?.isLoadingModelCatalog).toBe(false);
@@ -149,7 +154,10 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("session-1", "https://example.com:4444", "/tmp/repo");
+    await loadSessionModelCatalog("session-1", {
+      endpoint: "https://example.com:4444",
+      workingDirectory: "/tmp/repo",
+    });
 
     const session = harness.getState()["session-1"];
     expect(listAvailableModelsCalled).toBe(false);
@@ -178,7 +186,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionTodos("session-1", "http://127.0.0.1:4444", "/tmp/repo", "external-1");
+    await loadSessionTodos("session-1", runtimeConnection, "external-1");
 
     const mergedTodos = harness.getState()["session-1"]?.todos ?? [];
     expect(mergedTodos.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
@@ -201,7 +209,14 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
 
     await expect(
-      loadSessionTodos("session-1", "http://127.0.0.1:4444", "/tmp/repo/../escape", "external-1"),
+      loadSessionTodos(
+        "session-1",
+        {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/../escape",
+        },
+        "external-1",
+      ),
     ).rejects.toThrow("Session runtime workingDirectory must not contain traversal segments.");
     expect(loadSessionTodosCalled).toBe(false);
   });

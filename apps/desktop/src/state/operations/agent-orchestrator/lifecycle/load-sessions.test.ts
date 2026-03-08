@@ -193,8 +193,8 @@ describe("agent-orchestrator-load-sessions", () => {
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
       adapter: {
-        loadSessionHistory: async ({ runtimeEndpoint }) => {
-          observedRuntimeEndpoint = runtimeEndpoint;
+        loadSessionHistory: async ({ runtimeConnection }) => {
+          observedRuntimeEndpoint = runtimeConnection.endpoint ?? "";
           return [];
         },
       },

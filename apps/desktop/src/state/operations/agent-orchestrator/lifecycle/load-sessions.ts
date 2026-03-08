@@ -1,5 +1,9 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
+import {
+  type AgentEnginePort,
+  type AgentRuntimeConnection,
+  buildAgentSystemPrompt,
+} from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
@@ -50,14 +54,12 @@ type CreateLoadAgentSessionsArgs = {
   updateSession: UpdateSession;
   loadSessionTodos: (
     sessionId: string,
-    runtimeEndpoint: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    runtimeEndpoint: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
@@ -95,13 +97,12 @@ export const createLoadAgentSessions = ({
 
     const warmSessionData = (
       targetSessionId: string,
-      runtimeEndpoint: string,
-      workingDirectory: string,
+      runtimeConnection: AgentRuntimeConnection,
       externalSessionId: string,
     ): void => {
       runOrchestratorSideEffect(
         "load-sessions-warm-session-todos",
-        loadSessionTodos(targetSessionId, runtimeEndpoint, workingDirectory, externalSessionId),
+        loadSessionTodos(targetSessionId, runtimeConnection, externalSessionId),
         {
           tags: {
             repoPath,
@@ -112,7 +113,7 @@ export const createLoadAgentSessions = ({
       );
       runOrchestratorSideEffect(
         "load-sessions-warm-session-model-catalog",
-        loadSessionModelCatalog(targetSessionId, runtimeEndpoint, workingDirectory),
+        loadSessionModelCatalog(targetSessionId, runtimeConnection),
         {
           tags: {
             repoPath,
@@ -180,10 +181,13 @@ export const createLoadAgentSessions = ({
         requestedSession.runtimeEndpoint &&
         requestedSession.workingDirectory
       ) {
+        const runtimeConnection = {
+          endpoint: requestedSession.runtimeEndpoint,
+          workingDirectory: requestedSession.workingDirectory,
+        } satisfies AgentRuntimeConnection;
         warmSessionData(
           requestedSession.sessionId,
-          requestedSession.runtimeEndpoint,
-          requestedSession.workingDirectory,
+          runtimeConnection,
           requestedSession.externalSessionId,
         );
       }
@@ -234,6 +238,10 @@ export const createLoadAgentSessions = ({
       // Always use the persisted workingDirectory — it is the source of truth.
       // Build sessions store the worktree path; other roles store repoPath.
       const workingDirectory = record.workingDirectory;
+      const runtimeConnection = {
+        endpoint: runtimeEndpoint,
+        workingDirectory,
+      } satisfies AgentRuntimeConnection;
       const externalSessionId = record.externalSessionId ?? record.sessionId;
       const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
       const existingSession = sessionsRef.current[record.sessionId];
@@ -252,7 +260,7 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, runtimeEndpoint, workingDirectory, externalSessionId);
+        warmSessionData(record.sessionId, runtimeConnection, externalSessionId);
         return;
       }
 
@@ -260,8 +268,7 @@ export const createLoadAgentSessions = ({
         "load-sessions-load-history",
         async () => {
           const history = await adapter.loadSessionHistory({
-            runtimeEndpoint,
-            workingDirectory,
+            runtimeConnection,
             externalSessionId,
             limit: INITIAL_SESSION_HISTORY_LIMIT,
           });
@@ -347,7 +354,7 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, runtimeEndpoint, workingDirectory, externalSessionId);
+        warmSessionData(record.sessionId, runtimeConnection, externalSessionId);
         return;
       }
 
@@ -369,7 +376,7 @@ export const createLoadAgentSessions = ({
         }),
         { persist: false },
       );
-      warmSessionData(record.sessionId, runtimeEndpoint, workingDirectory, externalSessionId);
+      warmSessionData(record.sessionId, runtimeConnection, externalSessionId);
     };
 
     for (
