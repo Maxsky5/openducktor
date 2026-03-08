@@ -44,6 +44,7 @@ const taskFixture: TaskCard = {
 };
 
 const persistedSessionFixture: AgentSessionRecord = {
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -54,12 +55,16 @@ const persistedSessionFixture: AgentSessionRecord = {
   updatedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo",
 };
 
 const runningRunFixture: RunSummary = {
   runId: "run-1",
+  runtimeKind: "opencode",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
   repoPath: "/tmp/repo",
   taskId: "task-1",
   branch: "obp/task-1",
@@ -256,7 +261,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
       OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -341,7 +346,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
       OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -427,6 +432,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
+        defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: "main",
         trustedHooks: false,
@@ -438,21 +444,12 @@ describe("use-agent-orchestrator-operations", () => {
         promptOverrides: {},
         agentDefaults: {},
       });
-      host.buildStart = async () => ({
-        runId: "run-1",
-        repoPath: "/tmp/repo",
-        taskId: "task-1",
-        branch: "obp/task-1",
-        worktreePath: "/tmp/repo/worktree",
-        port: 4444,
-        state: "running",
-        lastMessage: null,
-        startedAt: "2026-02-22T08:00:00.000Z",
-      });
+      host.buildStart = async () => runningRunFixture;
 
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
         return {
+          runtimeKind: "opencode",
           sessionId: "session-in-memory",
           externalSessionId: "external-in-memory",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -465,7 +462,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -521,6 +518,7 @@ describe("use-agent-orchestrator-operations", () => {
       let startCalls = 0;
       let persistedListCalls = 0;
       const startDeferred = createDeferred<{
+        runtimeKind: "opencode";
         sessionId: string;
         externalSessionId: string;
         startedAt: string;
@@ -550,6 +548,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
+        defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: "main",
         trustedHooks: false,
@@ -570,7 +569,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -592,6 +591,7 @@ describe("use-agent-orchestrator-operations", () => {
           const secondStart = operations.startAgentSession({ taskId: "task-1", role: "build" });
 
           startDeferred.resolve({
+            runtimeKind: "opencode",
             sessionId: "session-concurrent",
             externalSessionId: "external-concurrent",
             startedAt: "2026-02-22T08:00:00.000Z",
@@ -649,6 +649,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
         return {
+          runtimeKind: "opencode",
           sessionId: "session-unexpected",
           externalSessionId: "external-unexpected",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -662,7 +663,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
 
       const harness = createHookHarness({
@@ -723,17 +724,12 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.buildStart = async () => ({
-        runId: "run-1",
+        ...runningRunFixture,
         repoPath: "/tmp/repo-a",
-        taskId: "task-1",
-        branch: "obp/task-1",
         worktreePath: "/tmp/repo-a/worktree",
-        port: 4444,
-        state: "running",
-        lastMessage: null,
-        startedAt: "2026-02-22T08:00:00.000Z",
       });
       host.workspaceGetRepoConfig = async () => ({
+        defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: "main",
         trustedHooks: false,
@@ -749,6 +745,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
         return {
+          runtimeKind: "opencode",
           sessionId: "session-should-not-start",
           externalSessionId: "external-should-not-start",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -829,6 +826,7 @@ describe("use-agent-orchestrator-operations", () => {
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
       host.workspaceGetRepoConfig = async () => ({
+        defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: "main",
         trustedHooks: false,
@@ -845,6 +843,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
         return {
+          runtimeKind: "opencode",
           sessionId: "session-kickoff",
           externalSessionId: "external-kickoff",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -858,7 +857,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -959,6 +958,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.resumeSession = async () => {
         resumeCalls += 1;
         return {
+          runtimeKind: "opencode",
           sessionId: "session-1",
           externalSessionId: "external-1",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -973,7 +973,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
       OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -1107,6 +1107,7 @@ describe("use-agent-orchestrator-operations", () => {
         return runningRunFixture;
       };
       host.workspaceGetRepoConfig = async () => ({
+        defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
         defaultTargetBranch: "main",
         trustedHooks: false,
@@ -1122,6 +1123,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.startSession = async (input) => {
         startWorkingDirectory = input.workingDirectory;
         return {
+          runtimeKind: "opencode",
           sessionId: "session-updated-runs",
           externalSessionId: "external-updated-runs",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -1134,7 +1136,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -1205,7 +1207,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
       OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
       OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -1286,6 +1288,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
         return {
+          runtimeKind: "opencode",
           sessionId: "session-unexpected",
           externalSessionId: "external-unexpected",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -1299,7 +1302,7 @@ describe("use-agent-orchestrator-operations", () => {
       OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
         models: [],
         defaultModelsByProvider: {},
-        agents: [],
+        profiles: [],
       });
 
       const harness = createHookHarness({

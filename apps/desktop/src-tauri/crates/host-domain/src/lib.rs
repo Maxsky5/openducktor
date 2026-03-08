@@ -19,10 +19,11 @@ pub use git::{
     GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 pub use runtime::{
-    AgentRuntimeRole, AgentRuntimeSummary, RunEvent, RunState, RunSummary, RuntimeRole,
+    AgentRuntimeKind, AgentRuntimeRole, AgentRuntimeSummary, RunEvent, RunState, RunSummary,
+    RuntimeCapabilities, RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRole,
 };
 pub use store::TaskStore;
-pub use system::{BeadsCheck, RuntimeCheck, SystemCheck, WorkspaceRecord};
+pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
 pub use task::{
     CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
 };

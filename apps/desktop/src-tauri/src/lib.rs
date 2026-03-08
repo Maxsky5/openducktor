@@ -116,6 +116,7 @@ struct BuildCompletePayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RepoConfigPayload {
+    default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
     default_target_branch: Option<String>,
@@ -127,6 +128,7 @@ struct RepoConfigPayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RepoSettingsPayload {
+    default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
     default_target_branch: Option<String>,
@@ -177,7 +179,7 @@ fn validate_startup_config(
     })?;
     runtime_config_store.load().with_context(|| {
         format!(
-            "Failed loading OpenCode runtime config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
+            "Failed loading runtime config from {}. Fix invalid JSON in this file or delete it so OpenDucktor can recreate defaults.",
             runtime_config_store.path().display()
         )
     })?;
@@ -288,10 +290,11 @@ fn startup_phase_command_registration(
         human_request_changes,
         human_approve,
         runs_list,
-        opencode_runtime_list,
-        opencode_runtime_start,
-        opencode_runtime_stop,
-        opencode_repo_runtime_ensure,
+        runtime_definitions_list,
+        runtime_list,
+        runtime_start,
+        runtime_stop,
+        runtime_ensure,
         agent_sessions_list,
         agent_session_upsert,
         get_theme,
@@ -427,7 +430,7 @@ mod tests {
 
         assert!(
             message.contains(&format!(
-                "Failed loading OpenCode runtime config from {}",
+                "Failed loading runtime config from {}",
                 runtime_path.display()
             )),
             "error should include runtime config path and startup context: {message}"

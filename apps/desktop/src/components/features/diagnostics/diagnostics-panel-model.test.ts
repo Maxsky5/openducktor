@@ -1,15 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentRuntimeSummary } from "@openducktor/contracts";
+import type { AgentRuntimeSummary, RuntimeDescriptor } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 
+const runtimeDefinitions: RuntimeDescriptor[] = [OPENCODE_RUNTIME_DESCRIPTOR];
+
 const runtimeSummary: AgentRuntimeSummary = {
+  kind: "opencode",
   runtimeId: "runtime-1",
   repoPath: "/repo",
   taskId: "repo-main",
   role: "spec",
   workingDirectory: "/repo",
-  port: 49700,
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:49700",
+  },
   startedAt: "2026-02-20T12:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 };
 
 describe("buildDiagnosticsPanelModel", () => {
@@ -17,18 +25,21 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: null,
       activeWorkspace: null,
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: null,
       beadsCheck: null,
-      opencodeHealth: null,
+      runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
 
     expect(model.summaryState.label).toBe("No repository selected");
     expect(model.criticalReasons).toEqual([]);
-    expect(model.sections.repository.emptyMessage).toBe("Select a repository to load diagnostics.");
-    expect(model.sections.opencodeRuntime.emptyMessage).toBe("Select a repository first.");
-    expect(model.sections.openducktorMcp.emptyMessage).toBe("Select a repository first.");
-    expect(model.sections.beadsStore.emptyMessage).toBe("Select a repository first.");
+    expect(model.sections[0]?.emptyMessage).toBe("Select a repository to load diagnostics.");
+    expect(model.sections[2]?.emptyMessage).toBe("Select a repository first.");
+    expect(model.sections[3]?.emptyMessage).toBe("Select a repository first.");
+    expect(model.sections[4]?.emptyMessage).toBe("Select a repository first.");
   });
 
   test("returns checking summary while diagnostics are loading", () => {
@@ -40,9 +51,12 @@ describe("buildDiagnosticsPanelModel", () => {
         hasConfig: true,
         configuredWorktreeBasePath: "/worktrees",
       },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: null,
       beadsCheck: null,
-      opencodeHealth: null,
+      runtimeHealthByRuntime: {},
       isLoadingChecks: true,
     });
 
@@ -59,11 +73,13 @@ describe("buildDiagnosticsPanelModel", () => {
         hasConfig: false,
         configuredWorktreeBasePath: null,
       },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        opencodeOk: true,
-        opencodeVersion: "1.2.9",
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
       beadsCheck: {
@@ -71,32 +87,34 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
         beadsError: null,
       },
-      opencodeHealth: {
-        runtimeOk: true,
-        runtimeError: null,
-        runtime: runtimeSummary,
-        mcpOk: true,
-        mcpError: null,
-        mcpServerName: "openducktor",
-        mcpServerStatus: "connected",
-        mcpServerError: null,
-        availableToolIds: [],
-        checkedAt: "2026-02-20T12:01:00.000Z",
-        errors: [],
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: true,
+          runtimeError: null,
+          runtime: runtimeSummary,
+          mcpOk: true,
+          mcpError: null,
+          mcpServerName: "openducktor",
+          mcpServerStatus: "connected",
+          mcpServerError: null,
+          availableToolIds: [],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: [],
+        },
       },
       isLoadingChecks: false,
     });
 
     expect(model.summaryState.label).toBe("Setup needed");
-    expect(model.sections.repository.badge.label).toBe("Needs setup");
-    expect(model.sections.repository.rows).toEqual(
+    expect(model.sections[0]?.badge.label).toBe("Needs setup");
+    expect(model.sections[0]?.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Worktree directory", value: "Not configured" }),
       ]),
     );
   });
 
-  test("builds keyed rows for repository and mcp sections", () => {
+  test("builds keyed rows for repository and runtime mcp sections", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/Users/dev/fairnest",
       activeWorkspace: {
@@ -105,11 +123,15 @@ describe("buildDiagnosticsPanelModel", () => {
         hasConfig: true,
         configuredWorktreeBasePath: "/Users/dev/worktrees",
       },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        opencodeOk: true,
-        opencodeVersion: "1.2.9 (/Users/dev/.opencode/bin/opencode)",
+        runtimes: [
+          { kind: "opencode", ok: true, version: "1.2.9 (/Users/dev/.opencode/bin/opencode)" },
+        ],
         errors: [],
       },
       beadsCheck: {
@@ -117,34 +139,34 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
         beadsError: null,
       },
-      opencodeHealth: {
-        runtimeOk: true,
-        runtimeError: null,
-        runtime: runtimeSummary,
-        mcpOk: true,
-        mcpError: null,
-        mcpServerName: "openducktor",
-        mcpServerStatus: "connected",
-        mcpServerError: null,
-        availableToolIds: ["openducktor_odt_read_task", "openducktor_odt_set_spec"],
-        checkedAt: "2026-02-20T12:01:00.000Z",
-        errors: [],
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: true,
+          runtimeError: null,
+          runtime: runtimeSummary,
+          mcpOk: true,
+          mcpError: null,
+          mcpServerName: "openducktor",
+          mcpServerStatus: "connected",
+          mcpServerError: null,
+          availableToolIds: ["openducktor_odt_read_task", "openducktor_odt_set_spec"],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: [],
+        },
       },
       isLoadingChecks: false,
     });
 
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
     expect(model.summaryState.label).toBe("Healthy");
-    expect(model.sections.repository.rows).toEqual(
+    expect(model.sections[0]?.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Repository" }),
         expect.objectContaining({ label: "Repository path" }),
-        expect.objectContaining({
-          label: "Worktree directory",
-          value: "/Users/dev/worktrees",
-        }),
+        expect.objectContaining({ label: "Worktree directory", value: "/Users/dev/worktrees" }),
       ]),
     );
-    expect(model.sections.openducktorMcp.rows).toEqual(
+    expect(mcpSection?.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Server name", value: "openducktor" }),
         expect.objectContaining({ label: "Status", value: "connected" }),
@@ -162,11 +184,13 @@ describe("buildDiagnosticsPanelModel", () => {
         hasConfig: false,
         configuredWorktreeBasePath: null,
       },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        opencodeOk: false,
-        opencodeVersion: null,
+        runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["opencode not found in PATH"],
       },
       beadsCheck: {
@@ -174,35 +198,41 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: null,
         beadsError: "beads init failed",
       },
-      opencodeHealth: {
-        runtimeOk: false,
-        runtimeError: "runtime failed",
-        runtime: null,
-        mcpOk: false,
-        mcpError: "mcp unavailable",
-        mcpServerName: "openducktor",
-        mcpServerStatus: null,
-        mcpServerError: "server unavailable",
-        availableToolIds: [],
-        checkedAt: "2026-02-20T12:01:00.000Z",
-        errors: ["runtime failed", "mcp unavailable"],
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: false,
+          runtimeError: "runtime failed",
+          runtime: null,
+          mcpOk: false,
+          mcpError: "mcp unavailable",
+          mcpServerName: "openducktor",
+          mcpServerStatus: null,
+          mcpServerError: "server unavailable",
+          availableToolIds: [],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: ["runtime failed", "mcp unavailable"],
+        },
       },
       isLoadingChecks: false,
     });
 
+    const runtimeSection = model.sections.find((section) => section.key === "runtime:opencode");
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+    const beadsSection = model.sections.find((section) => section.key === "beads-store");
+
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(
       expect.arrayContaining([
-        "Runtime checks failing",
-        "OpenCode server unavailable",
-        "OpenDucktor MCP unavailable",
+        "Runtime CLI checks failing",
+        "OpenCode runtime unavailable",
+        "OpenCode OpenDucktor MCP unavailable",
         "Beads store unavailable",
       ]),
     );
-    expect(model.sections.cliTools.errors).toEqual(["opencode not found in PATH"]);
-    expect(model.sections.opencodeRuntime.errors).toEqual(["runtime failed"]);
-    expect(model.sections.openducktorMcp.errors).toEqual(["server unavailable"]);
-    expect(model.sections.beadsStore.errors).toEqual(["beads init failed"]);
+    expect(model.sections[1]?.errors).toEqual(["opencode not found in PATH"]);
+    expect(runtimeSection?.errors).toEqual(["runtime failed"]);
+    expect(mcpSection?.errors).toEqual(["server unavailable"]);
+    expect(beadsSection?.errors).toEqual(["beads init failed"]);
   });
 
   test("falls back to mcpError when server error is absent", () => {
@@ -214,11 +244,13 @@ describe("buildDiagnosticsPanelModel", () => {
         hasConfig: true,
         configuredWorktreeBasePath: "/worktrees",
       },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
-        opencodeOk: true,
-        opencodeVersion: "1.2.9",
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
       beadsCheck: {
@@ -226,22 +258,25 @@ describe("buildDiagnosticsPanelModel", () => {
         beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
         beadsError: null,
       },
-      opencodeHealth: {
-        runtimeOk: true,
-        runtimeError: null,
-        runtime: runtimeSummary,
-        mcpOk: false,
-        mcpError: "mcp unavailable",
-        mcpServerName: "openducktor",
-        mcpServerStatus: null,
-        mcpServerError: null,
-        availableToolIds: [],
-        checkedAt: "2026-02-20T12:01:00.000Z",
-        errors: [],
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: true,
+          runtimeError: null,
+          runtime: runtimeSummary,
+          mcpOk: false,
+          mcpError: "mcp unavailable",
+          mcpServerName: "openducktor",
+          mcpServerStatus: null,
+          mcpServerError: null,
+          availableToolIds: [],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: [],
+        },
       },
       isLoadingChecks: false,
     });
 
-    expect(model.sections.openducktorMcp.errors).toEqual(["mcp unavailable"]);
+    const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
+    expect(mcpSection?.errors).toEqual(["mcp unavailable"]);
   });
 });

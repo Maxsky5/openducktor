@@ -47,6 +47,7 @@ describe("app-state-context-values", () => {
       refreshBranches: async () => {},
       switchBranch: async () => {},
       loadRepoSettings: async () => ({
+        defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "",
         branchPrefix: "odt",
         defaultTargetBranch: "main",
@@ -71,7 +72,7 @@ describe("app-state-context-values", () => {
     const checksValue: ChecksStateContextValue = {
       runtimeCheck: null,
       beadsCheck: null,
-      opencodeHealth: null,
+      runtimeHealthByRuntime: {},
       isLoadingChecks: false,
       refreshChecks: async () => {},
     };

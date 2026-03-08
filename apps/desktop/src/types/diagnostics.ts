@@ -1,6 +1,6 @@
 import type { AgentRuntimeSummary } from "@openducktor/contracts";
 
-export type RepoOpencodeHealthCheck = {
+export type RepoRuntimeHealthCheck = {
   runtimeOk: boolean;
   runtimeError: string | null;
   runtime: AgentRuntimeSummary | null;
@@ -13,3 +13,5 @@ export type RepoOpencodeHealthCheck = {
   checkedAt: string;
   errors: string[];
 };
+
+export type RepoRuntimeHealthMap = Record<string, RepoRuntimeHealthCheck | null>;

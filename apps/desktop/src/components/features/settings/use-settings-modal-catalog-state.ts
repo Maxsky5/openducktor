@@ -1,82 +1,101 @@
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useEffect, useMemo, useState } from "react";
-import {
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { errorMessage } from "@/lib/errors";
-import { loadRepoOpencodeCatalog } from "@/state/operations";
+import { loadRepoRuntimeCatalog } from "@/state/operations";
 
 type UseSettingsModalCatalogStateArgs = {
   open: boolean;
   selectedRepoPath: string | null;
+  runtimeDefinitions: RuntimeDescriptor[];
 };
 
 export type SettingsModalCatalogState = {
-  catalog: AgentModelCatalog | null;
-  catalogError: string | null;
+  catalogsByRuntime: Record<string, AgentModelCatalog | null>;
+  catalogErrorsByRuntime: Record<string, string | null>;
   isLoadingCatalog: boolean;
-  modelOptions: ComboboxOption[];
-  agentOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
+  loadingRuntimeKinds: RuntimeKind[];
+  getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
+  getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
+  isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
 };
 
 export const useSettingsModalCatalogState = ({
   open,
   selectedRepoPath,
+  runtimeDefinitions,
 }: UseSettingsModalCatalogStateArgs): SettingsModalCatalogState => {
-  const [catalog, setCatalog] = useState<AgentModelCatalog | null>(null);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
-
-  const modelOptions = useMemo<ComboboxOption[]>(() => toModelOptions(catalog), [catalog]);
-  const agentOptions = useMemo<ComboboxOption[]>(() => toPrimaryAgentOptions(catalog), [catalog]);
-  const modelGroups = useMemo<ComboboxGroup[]>(() => toModelGroupsByProvider(catalog), [catalog]);
+  const [catalogsByRuntime, setCatalogsByRuntime] = useState<
+    Record<string, AgentModelCatalog | null>
+  >({});
+  const [catalogErrorsByRuntime, setCatalogErrorsByRuntime] = useState<
+    Record<string, string | null>
+  >({});
+  const [loadingRuntimeKinds, setLoadingRuntimeKinds] = useState<RuntimeKind[]>([]);
+  const runtimeKinds = useMemo(
+    () => runtimeDefinitions.map((definition) => definition.kind),
+    [runtimeDefinitions],
+  );
 
   useEffect(() => {
-    if (!open || !selectedRepoPath) {
-      setCatalog(null);
-      setCatalogError(null);
-      setIsLoadingCatalog(false);
+    if (!open || !selectedRepoPath || runtimeKinds.length === 0) {
+      setCatalogsByRuntime({});
+      setCatalogErrorsByRuntime({});
+      setLoadingRuntimeKinds([]);
       return;
     }
 
     let cancelled = false;
-    setCatalog(null);
-    setCatalogError(null);
-    setIsLoadingCatalog(true);
+    setCatalogErrorsByRuntime({});
+    setLoadingRuntimeKinds(runtimeKinds);
 
-    void loadRepoOpencodeCatalog(selectedRepoPath)
-      .then((nextCatalog) => {
-        if (!cancelled) {
-          setCatalog(nextCatalog);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setCatalog(null);
-          setCatalogError(errorMessage(error));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingCatalog(false);
-        }
-      });
+    for (const runtimeKind of runtimeKinds) {
+      void loadRepoRuntimeCatalog(selectedRepoPath, runtimeKind)
+        .then((nextCatalog) => {
+          if (cancelled) {
+            return;
+          }
+          setCatalogsByRuntime((current) => ({
+            ...current,
+            [runtimeKind]: nextCatalog,
+          }));
+          setCatalogErrorsByRuntime((current) => ({
+            ...current,
+            [runtimeKind]: null,
+          }));
+        })
+        .catch((error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+          setCatalogsByRuntime((current) => ({
+            ...current,
+            [runtimeKind]: null,
+          }));
+          setCatalogErrorsByRuntime((current) => ({
+            ...current,
+            [runtimeKind]: errorMessage(error),
+          }));
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLoadingRuntimeKinds((current) => current.filter((entry) => entry !== runtimeKind));
+          }
+        });
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [open, selectedRepoPath]);
+  }, [open, runtimeKinds, selectedRepoPath]);
 
   return {
-    catalog,
-    catalogError,
-    isLoadingCatalog,
-    modelOptions,
-    agentOptions,
-    modelGroups,
+    catalogsByRuntime,
+    catalogErrorsByRuntime,
+    isLoadingCatalog: loadingRuntimeKinds.length > 0,
+    loadingRuntimeKinds,
+    getCatalogForRuntime: (runtimeKind) => catalogsByRuntime[runtimeKind] ?? null,
+    getCatalogErrorForRuntime: (runtimeKind) => catalogErrorsByRuntime[runtimeKind] ?? null,
+    isCatalogLoadingForRuntime: (runtimeKind) => loadingRuntimeKinds.includes(runtimeKind),
   };
 };

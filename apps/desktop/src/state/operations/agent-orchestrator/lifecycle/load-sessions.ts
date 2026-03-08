@@ -1,6 +1,18 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
+import type {
+  AgentRuntimeSummary,
+  RepoPromptOverrides,
+  RunSummary,
+  RuntimeKind,
+  RuntimeRoute,
+  TaskCard,
+} from "@openducktor/contracts";
+import {
+  type AgentEnginePort,
+  type AgentRuntimeConnection,
+  buildAgentSystemPrompt,
+} from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import {
@@ -14,7 +26,6 @@ import {
   historyToChatMessages,
   normalizePersistedSelection,
   now,
-  toBaseUrl,
   upsertMessage,
 } from "../support/utils";
 
@@ -38,6 +49,13 @@ type SessionHistoryLoadResult =
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 
+const resolveRuntimeRouteEndpoint = (runtimeRoute: RuntimeRoute): string => {
+  switch (runtimeRoute.type) {
+    case "local_http":
+      return runtimeRoute.endpoint;
+  }
+};
+
 type CreateLoadAgentSessionsArgs = {
   activeRepo: string | null;
   adapter: SessionHistoryAdapter;
@@ -49,14 +67,12 @@ type CreateLoadAgentSessionsArgs = {
   updateSession: UpdateSession;
   loadSessionTodos: (
     sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
@@ -94,13 +110,12 @@ export const createLoadAgentSessions = ({
 
     const warmSessionData = (
       targetSessionId: string,
-      baseUrl: string,
-      workingDirectory: string,
+      runtimeConnection: AgentRuntimeConnection,
       externalSessionId: string,
     ): void => {
       runOrchestratorSideEffect(
         "load-sessions-warm-session-todos",
-        loadSessionTodos(targetSessionId, baseUrl, workingDirectory, externalSessionId),
+        loadSessionTodos(targetSessionId, runtimeConnection, externalSessionId),
         {
           tags: {
             repoPath,
@@ -111,7 +126,7 @@ export const createLoadAgentSessions = ({
       );
       runOrchestratorSideEffect(
         "load-sessions-warm-session-model-catalog",
-        loadSessionModelCatalog(targetSessionId, baseUrl, workingDirectory),
+        loadSessionModelCatalog(targetSessionId, runtimeConnection),
         {
           tags: {
             repoPath,
@@ -176,31 +191,134 @@ export const createLoadAgentSessions = ({
         requestedSession.taskId === taskId &&
         !requestedSession.modelCatalog &&
         !requestedSession.isLoadingModelCatalog &&
-        requestedSession.baseUrl &&
+        requestedSession.runtimeEndpoint &&
         requestedSession.workingDirectory
       ) {
+        const runtimeConnection = {
+          endpoint: requestedSession.runtimeEndpoint,
+          workingDirectory: requestedSession.workingDirectory,
+        } satisfies AgentRuntimeConnection;
         warmSessionData(
           requestedSession.sessionId,
-          requestedSession.baseUrl,
-          requestedSession.workingDirectory,
+          runtimeConnection,
           requestedSession.externalSessionId,
         );
       }
       return;
     }
 
-    const requiresWorkspaceRuntime = recordsToHydrate.length > 0;
-    const workspaceRuntime = requiresWorkspaceRuntime
+    const runtimeKindsToHydrate = Array.from(
+      new Set(
+        recordsToHydrate.map(
+          (record) =>
+            record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        ),
+      ),
+    );
+    const runtimeLists = await Promise.all(
+      runtimeKindsToHydrate.map(async (runtimeKind) => {
+        const runtimes = await captureOrchestratorFallback(
+          "load-sessions-list-runtimes",
+          async () => host.runtimeList(runtimeKind, repoPath),
+          {
+            tags: { repoPath, taskId, runtimeKind },
+            logLevel: "warn",
+            fallback: () => [] as AgentRuntimeSummary[],
+          },
+        );
+        return [runtimeKind, runtimes] as const;
+      }),
+    );
+    const runtimesById = new Map<string, AgentRuntimeSummary>();
+    for (const [, runtimes] of runtimeLists) {
+      for (const runtime of runtimes) {
+        runtimesById.set(runtime.runtimeId, runtime);
+      }
+    }
+
+    const liveRuns = recordsToHydrate.some((record) => (record.runId?.trim().length ?? 0) > 0)
       ? await captureOrchestratorFallback(
-          "load-sessions-ensure-workspace-runtime",
-          async () => host.opencodeRepoRuntimeEnsure(repoPath),
+          "load-sessions-list-runs",
+          async () => host.runsList(repoPath),
           {
             tags: { repoPath, taskId },
             logLevel: "warn",
-            fallback: () => null,
+            fallback: () => [] as RunSummary[],
           },
         )
-      : null;
+      : [];
+    const runsById = new Map(liveRuns.map((run) => [run.runId, run] as const));
+    const ensuredWorkspaceRuntimes = new Map<RuntimeKind, AgentRuntimeSummary | null>();
+
+    const ensureWorkspaceRuntime = async (
+      runtimeKind: RuntimeKind,
+    ): Promise<AgentRuntimeSummary | null> => {
+      if (ensuredWorkspaceRuntimes.has(runtimeKind)) {
+        return ensuredWorkspaceRuntimes.get(runtimeKind) ?? null;
+      }
+      const runtime = await captureOrchestratorFallback(
+        "load-sessions-ensure-workspace-runtime",
+        async () => host.runtimeEnsure(runtimeKind, repoPath),
+        {
+          tags: { repoPath, taskId, runtimeKind },
+          logLevel: "warn",
+          fallback: () => null,
+        },
+      );
+      if (runtime) {
+        runtimesById.set(runtime.runtimeId, runtime);
+      }
+      ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
+      return runtime;
+    };
+
+    const resolveLiveRuntimeEndpoint = async (
+      record: (typeof recordsToHydrate)[number],
+    ): Promise<{ ok: true; endpoint: string } | { ok: false; reason: string }> => {
+      const runtimeKind =
+        record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
+      const runId = record.runId?.trim();
+      if (runId) {
+        const run = runsById.get(runId);
+        if (!run) {
+          return {
+            ok: false,
+            reason: `Build runtime ${runId} is no longer available.`,
+          };
+        }
+        return {
+          ok: true,
+          endpoint: resolveRuntimeRouteEndpoint(run.runtimeRoute),
+        };
+      }
+
+      const runtimeId = record.runtimeId?.trim();
+      if (runtimeId) {
+        const runtime = runtimesById.get(runtimeId);
+        if (!runtime) {
+          return {
+            ok: false,
+            reason: `Runtime ${runtimeId} is no longer available.`,
+          };
+        }
+        return {
+          ok: true,
+          endpoint: resolveRuntimeRouteEndpoint(runtime.runtimeRoute),
+        };
+      }
+
+      const workspaceRuntime = await ensureWorkspaceRuntime(runtimeKind);
+      if (!workspaceRuntime) {
+        return {
+          ok: false,
+          reason: `Runtime ${runtimeKind} is unavailable for session hydration.`,
+        };
+      }
+      return {
+        ok: true,
+        endpoint: resolveRuntimeRouteEndpoint(workspaceRuntime.runtimeRoute),
+      };
+    };
     if (isStaleRepoOperation()) {
       return;
     }
@@ -210,18 +328,39 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const baseUrl = workspaceRuntime ? toBaseUrl(workspaceRuntime.port) : (record.baseUrl ?? "");
-      if (!workspaceRuntime && baseUrl.length === 0) {
-        throw new Error(
-          `Cannot hydrate session ${record.sessionId}: runtime baseUrl is missing from metadata.`,
-        );
-      }
-      // Always use the persisted workingDirectory — it is the source of truth.
-      // Build sessions store the worktree path; other roles store repoPath.
+      const existingSession = sessionsRef.current[record.sessionId];
       const workingDirectory = record.workingDirectory;
+      const runtimeResolution = await resolveLiveRuntimeEndpoint(record);
+      if (!runtimeResolution.ok) {
+        updateSession(
+          record.sessionId,
+          (current) => ({
+            ...current,
+            runtimeKind: record.runtimeKind ?? current.runtimeKind,
+            runtimeEndpoint: "",
+            workingDirectory,
+            promptOverrides: repoPromptOverrides,
+            messages:
+              existingSession && existingSession.messages.length > 0
+                ? current.messages
+                : upsertMessage(current.messages, {
+                    id: `history-unavailable:${record.sessionId}`,
+                    role: "system",
+                    content: `Session runtime unavailable: ${runtimeResolution.reason}`,
+                    timestamp: now(),
+                  }),
+          }),
+          { persist: false },
+        );
+        return;
+      }
+      const runtimeEndpoint = runtimeResolution.endpoint;
+      const runtimeConnection = {
+        endpoint: runtimeEndpoint,
+        workingDirectory,
+      } satisfies AgentRuntimeConnection;
       const externalSessionId = record.externalSessionId ?? record.sessionId;
       const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
-      const existingSession = sessionsRef.current[record.sessionId];
       if (existingSession && existingSession.messages.length > 0) {
         if (isStaleRepoOperation()) {
           return;
@@ -230,13 +369,14 @@ export const createLoadAgentSessions = ({
           record.sessionId,
           (current) => ({
             ...current,
-            baseUrl,
+            runtimeKind: record.runtimeKind ?? current.runtimeKind,
+            runtimeEndpoint,
             workingDirectory,
             promptOverrides: repoPromptOverrides,
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
+        warmSessionData(record.sessionId, runtimeConnection, externalSessionId);
         return;
       }
 
@@ -244,8 +384,7 @@ export const createLoadAgentSessions = ({
         "load-sessions-load-history",
         async () => {
           const history = await adapter.loadSessionHistory({
-            baseUrl,
-            workingDirectory,
+            runtimeConnection,
             externalSessionId,
             limit: INITIAL_SESSION_HISTORY_LIMIT,
           });
@@ -319,7 +458,7 @@ export const createLoadAgentSessions = ({
           record.sessionId,
           (current) => ({
             ...current,
-            baseUrl,
+            runtimeEndpoint,
             workingDirectory,
             promptOverrides: repoPromptOverrides,
             messages: upsertMessage(current.messages, {
@@ -331,7 +470,7 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
+        warmSessionData(record.sessionId, runtimeConnection, externalSessionId);
         return;
       }
 
@@ -339,7 +478,8 @@ export const createLoadAgentSessions = ({
         record.sessionId,
         (current) => ({
           ...current,
-          baseUrl,
+          runtimeKind: record.runtimeKind ?? current.runtimeKind,
+          runtimeEndpoint,
           workingDirectory,
           promptOverrides: repoPromptOverrides,
           messages: [
@@ -352,7 +492,7 @@ export const createLoadAgentSessions = ({
         }),
         { persist: false },
       );
-      warmSessionData(record.sessionId, baseUrl, workingDirectory, externalSessionId);
+      warmSessionData(record.sessionId, runtimeConnection, externalSessionId);
     };
 
     for (

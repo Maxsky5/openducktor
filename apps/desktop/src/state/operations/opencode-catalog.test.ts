@@ -1,21 +1,28 @@
 import { describe, expect, mock, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { createOpencodeCatalogOperations } from "./opencode-catalog";
+import { createRuntimeCatalogOperations } from "./runtime-catalog";
 
-type CatalogDependencies = Parameters<typeof createOpencodeCatalogOperations>[0];
+type CatalogDependencies = Parameters<typeof createRuntimeCatalogOperations>[0];
 type RuntimeSummary = Awaited<ReturnType<CatalogDependencies["ensureRuntime"]>>;
 
 const runtimeFixture: RuntimeSummary = {
+  kind: "opencode",
   runtimeId: "runtime-1",
   repoPath: "/tmp/repo",
   taskId: "task-1",
   role: "workspace",
   workingDirectory: "/tmp/repo/worktree",
-  port: 4444,
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
   startedAt: "2026-02-22T08:00:00.000Z",
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
 };
 
 const catalogFixture: AgentModelCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
     {
       id: "openai/gpt-5",
@@ -29,7 +36,7 @@ const catalogFixture: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [{ name: "build", mode: "primary" }],
+  profiles: [{ id: "build", label: "build", mode: "primary" }],
 };
 
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
@@ -46,6 +53,7 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
     },
   }),
   connectMcpServer: async () => {},
+  shouldRestartRuntimeForMcpStatusError: () => false,
   ...overrides,
 });
 
@@ -53,17 +61,20 @@ describe("opencode-catalog", () => {
   test("loads repo model catalog from runtime coordinates", async () => {
     const ensureRuntime = mock(async () => runtimeFixture);
     const listAvailableModels = mock(async () => catalogFixture);
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         ensureRuntime,
         listAvailableModels,
       }),
     );
 
-    await expect(operations.loadRepoOpencodeCatalog("/tmp/repo")).resolves.toEqual(catalogFixture);
-    expect(ensureRuntime).toHaveBeenCalledWith("/tmp/repo");
+    await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).resolves.toEqual(
+      catalogFixture,
+    );
+    expect(ensureRuntime).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(listAvailableModels).toHaveBeenCalledWith({
-      baseUrl: "http://127.0.0.1:4444",
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo/worktree",
     });
   });
@@ -77,7 +88,7 @@ describe("opencode-catalog", () => {
         env: null,
       },
     }));
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         ensureRuntime: async () => {
           throw new Error("runtime unavailable");
@@ -86,7 +97,7 @@ describe("opencode-catalog", () => {
       }),
     );
 
-    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
     expect(result.runtimeOk).toBe(false);
     expect(result.mcpOk).toBe(false);
     expect(result.availableToolIds).toEqual([]);
@@ -95,7 +106,7 @@ describe("opencode-catalog", () => {
     expect(result.mcpServerName).toBe("openducktor");
     expect(result.errors).toEqual([
       "runtime unavailable",
-      "OpenCode runtime is unavailable, so MCP cannot be verified.",
+      "Runtime is unavailable, so MCP cannot be verified.",
     ]);
     expect(Date.parse(result.checkedAt)).not.toBeNaN();
     expect(getMcpStatus).not.toHaveBeenCalled();
@@ -103,13 +114,13 @@ describe("opencode-catalog", () => {
 
   test("is healthy when openducktor mcp is connected", async () => {
     const connectMcpServer = mock(async () => {});
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         connectMcpServer,
       }),
     );
 
-    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
     expect(result.runtimeOk).toBe(true);
     expect(result.mcpOk).toBe(true);
@@ -121,7 +132,7 @@ describe("opencode-catalog", () => {
   });
 
   test("reports MCP status failures when status query throws", async () => {
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         getMcpStatus: async () => {
           throw new Error("status unavailable");
@@ -129,13 +140,13 @@ describe("opencode-catalog", () => {
       }),
     );
 
-    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
     expect(result.runtimeOk).toBe(true);
     expect(result.mcpOk).toBe(false);
     expect(result.runtime).toEqual(runtimeFixture);
-    expect(result.mcpError).toBe("Failed to query OpenCode MCP status: status unavailable");
-    expect(result.errors).toEqual(["Failed to query OpenCode MCP status: status unavailable"]);
+    expect(result.mcpError).toBe("Failed to query runtime MCP status: status unavailable");
+    expect(result.errors).toEqual(["Failed to query runtime MCP status: status unavailable"]);
   });
 
   test("reports missing openducktor server in MCP status map", async () => {
@@ -145,70 +156,77 @@ describe("opencode-catalog", () => {
         status: "connected",
       },
     }));
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         getMcpStatus,
         connectMcpServer,
       }),
     );
 
-    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
     expect(getMcpStatus).toHaveBeenCalledTimes(1);
     expect(connectMcpServer).not.toHaveBeenCalled();
     expect(result.mcpOk).toBe(false);
     expect(result.mcpServerStatus).toBeNull();
-    expect(result.mcpError).toBe(
-      "MCP server 'openducktor' is not configured for this OpenCode runtime.",
-    );
-    expect(result.errors).toEqual([
-      "MCP server 'openducktor' is not configured for this OpenCode runtime.",
-    ]);
+    expect(result.mcpError).toBe("MCP server 'openducktor' is not configured for this runtime.");
+    expect(result.errors).toEqual(["MCP server 'openducktor' is not configured for this runtime."]);
   });
 
   test("restarts runtime and retries MCP status on config-invalid failures", async () => {
     const restartedRuntime: RuntimeSummary = {
       ...runtimeFixture,
       runtimeId: "runtime-2",
-      port: 5555,
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:5555",
+      },
     };
-    const ensureRuntime = mock(async (repoPath: string) => {
+    const ensureRuntime = mock(async (_runtimeKind: string, repoPath: string) => {
       if (repoPath !== "/tmp/repo") {
         throw new Error("unexpected repo path");
       }
       return ensureRuntime.mock.calls.length === 1 ? runtimeFixture : restartedRuntime;
     });
     const stopRuntime = mock(async () => ({ ok: true }));
-    const getMcpStatus = mock(async (_input: { baseUrl: string; workingDirectory: string }) => {
-      if (getMcpStatus.mock.calls.length === 1) {
-        throw new Error("ConfigInvalidError: invalid option loglevel");
-      }
-      return {
-        openducktor: {
-          status: "connected",
-          command: null,
-          args: null,
-          env: null,
-        },
-      };
-    });
+    const getMcpStatus = mock(
+      async (_input: {
+        runtimeKind: string;
+        runtimeEndpoint: string;
+        workingDirectory: string;
+      }) => {
+        if (getMcpStatus.mock.calls.length === 1) {
+          throw new Error("ConfigInvalidError: invalid option loglevel");
+        }
+        return {
+          openducktor: {
+            status: "connected",
+            command: null,
+            args: null,
+            env: null,
+          },
+        };
+      },
+    );
     const listAvailableToolIds = mock(async () => ["odt_read_task", "odt_set_plan"]);
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         ensureRuntime,
         stopRuntime,
         getMcpStatus,
         listAvailableToolIds,
+        shouldRestartRuntimeForMcpStatusError: () => true,
       }),
     );
 
-    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
     expect(ensureRuntime).toHaveBeenCalledTimes(2);
     expect(stopRuntime).toHaveBeenCalledWith("runtime-1");
     expect(getMcpStatus).toHaveBeenCalledTimes(2);
     expect(getMcpStatus.mock.calls[1]?.[0]).toEqual({
-      baseUrl: "http://127.0.0.1:5555",
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:5555",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(result.runtime).toEqual(restartedRuntime);
@@ -222,76 +240,91 @@ describe("opencode-catalog", () => {
     const restartedRuntime: RuntimeSummary = {
       ...runtimeFixture,
       runtimeId: "runtime-2",
-      port: 5555,
+      runtimeRoute: {
+        type: "local_http",
+        endpoint: "http://127.0.0.1:5555",
+      },
     };
-    const ensureRuntime = mock(async (repoPath: string) => {
+    const ensureRuntime = mock(async (_runtimeKind: string, repoPath: string) => {
       if (repoPath !== "/tmp/repo") {
         throw new Error("unexpected repo path");
       }
       return ensureRuntime.mock.calls.length === 1 ? runtimeFixture : restartedRuntime;
     });
     const stopRuntime = mock(async () => ({ ok: true }));
-    const getMcpStatus = mock(async (_input: { baseUrl: string; workingDirectory: string }) => {
-      if (getMcpStatus.mock.calls.length === 1) {
-        throw new Error("ConfigInvalidError: invalid option loglevel");
-      }
-      throw new Error("status still unavailable");
-    });
+    const getMcpStatus = mock(
+      async (_input: {
+        runtimeKind: string;
+        runtimeEndpoint: string;
+        workingDirectory: string;
+      }) => {
+        if (getMcpStatus.mock.calls.length === 1) {
+          throw new Error("ConfigInvalidError: invalid option loglevel");
+        }
+        throw new Error("status still unavailable");
+      },
+    );
 
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         ensureRuntime,
         stopRuntime,
         getMcpStatus,
+        shouldRestartRuntimeForMcpStatusError: () => true,
       }),
     );
 
-    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
     expect(ensureRuntime).toHaveBeenCalledTimes(2);
     expect(stopRuntime).toHaveBeenCalledWith("runtime-1");
     expect(getMcpStatus).toHaveBeenCalledTimes(2);
     expect(getMcpStatus.mock.calls[1]?.[0]).toEqual({
-      baseUrl: "http://127.0.0.1:5555",
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:5555",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(result.runtimeOk).toBe(true);
     expect(result.runtime).toEqual(restartedRuntime);
     expect(result.mcpOk).toBe(false);
-    expect(result.mcpError).toBe("Failed to query OpenCode MCP status: status still unavailable");
-    expect(result.errors).toEqual([
-      "Failed to query OpenCode MCP status: status still unavailable",
-    ]);
+    expect(result.mcpError).toBe("Failed to query runtime MCP status: status still unavailable");
+    expect(result.errors).toEqual(["Failed to query runtime MCP status: status still unavailable"]);
     expect(result.availableToolIds).toEqual([]);
   });
 
   test("reconnects MCP when disconnected and falls back on tool-id lookup errors", async () => {
-    const getMcpStatus = mock(async (_input: { baseUrl: string; workingDirectory: string }) => {
-      if (getMcpStatus.mock.calls.length === 1) {
+    const getMcpStatus = mock(
+      async (_input: {
+        runtimeKind: string;
+        runtimeEndpoint: string;
+        workingDirectory: string;
+      }) => {
+        if (getMcpStatus.mock.calls.length === 1) {
+          return {
+            openducktor: {
+              status: "disconnected",
+              error: "not connected",
+              command: null,
+              args: null,
+              env: null,
+            },
+          };
+        }
         return {
           openducktor: {
-            status: "disconnected",
-            error: "not connected",
+            status: "connected",
             command: null,
             args: null,
             env: null,
           },
         };
-      }
-      return {
-        openducktor: {
-          status: "connected",
-          command: null,
-          args: null,
-          env: null,
-        },
-      };
-    });
+      },
+    );
     const connectMcpServer = mock(async () => {});
     const listAvailableToolIds = mock(async () => {
       throw new Error("tool list unavailable");
     });
-    const operations = createOpencodeCatalogOperations(
+    const operations = createRuntimeCatalogOperations(
       createDeps({
         getMcpStatus,
         connectMcpServer,
@@ -299,10 +332,11 @@ describe("opencode-catalog", () => {
       }),
     );
 
-    const result = await operations.checkRepoOpencodeHealth("/tmp/repo");
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
     expect(connectMcpServer).toHaveBeenCalledWith({
-      baseUrl: "http://127.0.0.1:4444",
+      runtimeKind: "opencode",
+      runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo/worktree",
       name: "openducktor",
     });

@@ -1,4 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { normalizeSelectionForCatalog, pickDefaultSelectionForCatalog } from "./agents-page-utils";
@@ -18,10 +19,11 @@ export const toRoleDefaultSelection = (
     return null;
   }
   return {
+    runtimeKind: roleDefault.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
     ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-    ...(roleDefault.opencodeAgent ? { opencodeAgent: roleDefault.opencodeAgent } : {}),
+    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
   };
 };
 

@@ -159,6 +159,7 @@ mod tests {
         config_store.update_repo_config(
             repo_path.as_str(),
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
                 branch_prefix: "odt".to_string(),
                 default_target_branch: "origin/main".to_string(),
@@ -193,6 +194,7 @@ mod tests {
         config_store.update_repo_config(
             repo_path.as_str(),
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "odt".to_string(),
                 default_target_branch: "origin/main".to_string(),
@@ -230,6 +232,7 @@ mod tests {
         config_store.update_repo_config(
             repo_path.as_str(),
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
                 branch_prefix: "odt".to_string(),
                 default_target_branch: "origin/main".to_string(),
@@ -270,6 +273,7 @@ mod tests {
         config_store.update_repo_config(
             repo_path.as_str(),
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
                 branch_prefix: "odt".to_string(),
                 default_target_branch: "origin/main".to_string(),

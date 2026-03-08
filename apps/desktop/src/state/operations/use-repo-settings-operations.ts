@@ -1,6 +1,7 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback } from "react";
 import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
+import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
 import { requireActiveRepo } from "./task-operations-model";
@@ -25,10 +26,11 @@ export function useRepoSettingsOperations({
     (
       entry:
         | {
+            runtimeKind?: string;
             providerId: string;
             modelId: string;
             variant?: string | undefined;
-            opencodeAgent?: string | undefined;
+            profileId?: string | undefined;
           }
         | null
         | undefined,
@@ -37,10 +39,11 @@ export function useRepoSettingsOperations({
         return null;
       }
       return {
+        runtimeKind: entry.runtimeKind ?? DEFAULT_RUNTIME_KIND,
         providerId: entry.providerId,
         modelId: entry.modelId,
         variant: entry.variant ?? "",
-        opencodeAgent: entry.opencodeAgent ?? "",
+        profileId: entry.profileId ?? "",
       };
     },
     [],
@@ -49,21 +52,25 @@ export function useRepoSettingsOperations({
   const toConfigDefault = useCallback(
     (
       entry: {
+        runtimeKind?: string;
         providerId: string;
         modelId: string;
         variant: string;
-        opencodeAgent: string;
+        profileId: string;
       } | null,
     ) => {
       if (!entry || !entry.providerId.trim() || !entry.modelId.trim()) {
         return undefined;
       }
 
+      const runtimeKind = entry.runtimeKind?.trim() || DEFAULT_RUNTIME_KIND;
+
       return {
+        runtimeKind,
         providerId: entry.providerId.trim(),
         modelId: entry.modelId.trim(),
         ...(entry.variant.trim() ? { variant: entry.variant.trim() } : {}),
-        ...(entry.opencodeAgent.trim() ? { opencodeAgent: entry.opencodeAgent.trim() } : {}),
+        ...(entry.profileId.trim() ? { profileId: entry.profileId.trim() } : {}),
       };
     },
     [],
@@ -74,6 +81,7 @@ export function useRepoSettingsOperations({
 
     const config = await host.workspaceGetRepoConfig(repo);
     return {
+      defaultRuntimeKind: config.defaultRuntimeKind,
       worktreeBasePath: config.worktreeBasePath ?? "",
       branchPrefix: config.branchPrefix,
       defaultTargetBranch: normalizeCanonicalTargetBranch(config.defaultTargetBranch),
@@ -109,6 +117,7 @@ export function useRepoSettingsOperations({
       };
 
       await host.workspaceSaveRepoSettings(repo, {
+        defaultRuntimeKind: input.defaultRuntimeKind,
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         defaultTargetBranch: normalizedTargetBranch,

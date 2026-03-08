@@ -38,7 +38,7 @@ const catalogFixture: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [
+  profiles: [
     { name: "spec", mode: "primary" },
     { name: "qa", mode: "all" },
     { name: "hidden-subagent", mode: "subagent", hidden: true },
@@ -62,22 +62,25 @@ describe("agents-page-selection", () => {
 
   test("picks default model + primary agent", () => {
     expect(pickDefaultSelectionForCatalog(catalogFixture)).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "spec",
+      profileId: "spec",
     });
   });
 
   test("normalizes variant and removes unsupported agent", () => {
     expect(
       normalizeSelectionForCatalog(catalogFixture, {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "not-supported",
-        opencodeAgent: "hidden-subagent",
+        profileId: "hidden-subagent",
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
@@ -85,6 +88,7 @@ describe("agents-page-selection", () => {
 
     expect(
       normalizeSelectionForCatalog(catalogFixture, {
+        runtimeKind: "opencode",
         providerId: "unknown",
         modelId: "missing",
       }),
@@ -95,8 +99,8 @@ describe("agents-page-selection", () => {
     expect(isSameSelection(null, null)).toBe(true);
     expect(
       isSameSelection(
-        { providerId: "openai", modelId: "gpt-5", variant: "default", opencodeAgent: "spec" },
-        { providerId: "openai", modelId: "gpt-5", variant: "default", opencodeAgent: "spec" },
+        { providerId: "openai", modelId: "gpt-5", variant: "default", profileId: "spec" },
+        { providerId: "openai", modelId: "gpt-5", variant: "default", profileId: "spec" },
       ),
     ).toBe(true);
     expect(
@@ -109,6 +113,7 @@ describe("agents-page-selection", () => {
 
   test("prefers explicit task id over session-derived task id", () => {
     const session = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "session-1",
       taskId: "task-from-session",
     });
@@ -129,11 +134,13 @@ describe("agents-page-selection", () => {
 
   test("keeps active session unresolved when explicit session param does not belong to active task", () => {
     const plannerSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "planner-1",
       taskId: "task-1",
       role: "planner",
     });
     const buildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-1",
       taskId: "task-1",
       role: "build",
@@ -151,11 +158,13 @@ describe("agents-page-selection", () => {
 
   test("falls back by role when no explicit session param is present", () => {
     const plannerSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "planner-1",
       taskId: "task-1",
       role: "planner",
     });
     const buildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-1",
       taskId: "task-1",
       role: "build",
@@ -173,11 +182,13 @@ describe("agents-page-selection", () => {
 
   test("prefers the current build session when resolving conflict reuse", () => {
     const activeBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
     const olderBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-older",
       taskId: "task-1",
       role: "build",
@@ -197,11 +208,13 @@ describe("agents-page-selection", () => {
 
   test("falls back to any existing build session for the viewed task", () => {
     const buildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-1",
       taskId: "task-1",
       role: "build",
     });
     const otherTaskBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-2",
       taskId: "task-2",
       role: "build",
@@ -221,16 +234,19 @@ describe("agents-page-selection", () => {
 
   test("returns a deduplicated ordered list of build sessions for the viewed task", () => {
     const activeBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
     const duplicateBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
     const secondaryBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "build-secondary",
       taskId: "task-1",
       role: "build",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema, agentScenarioSchema } from "./agent-workflow-schemas";
 
 export const agentSessionStatusSchema = z.enum(["starting", "running", "idle", "error", "stopped"]);
@@ -14,10 +15,11 @@ const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
 export const agentSessionModelSelectionSchema = z.object({
+  runtimeKind: runtimeKindSchema.default("opencode"),
   providerId: z.string(),
   modelId: z.string(),
   variant: optionalFromNullable(z.string()),
-  opencodeAgent: optionalFromNullable(z.string()),
+  profileId: optionalFromNullable(z.string()),
 });
 export type AgentSessionModelSelection = z.infer<typeof agentSessionModelSelectionSchema>;
 
@@ -33,9 +35,9 @@ export const agentSessionRecordSchema = z.object({
   startedAt: z.string(),
   updatedAt: optionalStringFromNullable,
   endedAt: optionalStringFromNullable,
+  runtimeKind: runtimeKindSchema.default("opencode"),
   runtimeId: optionalStringFromNullable,
   runId: optionalStringFromNullable,
-  baseUrl: optionalStringFromNullable,
   workingDirectory: z.string(),
   selectedModel: optionalFromNullable(agentSessionModelSelectionSchema),
 });

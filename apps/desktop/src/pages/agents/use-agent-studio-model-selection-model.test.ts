@@ -34,7 +34,7 @@ const CATALOG: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [
+  profiles: [
     {
       name: "spec-agent",
       mode: "primary",
@@ -73,25 +73,28 @@ describe("use-agent-studio-model-selection-model", () => {
     expect(toRoleDefaultSelection(null)).toBeNull();
     expect(
       toRoleDefaultSelection({
+        runtimeKind: "opencode",
         providerId: "",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "spec-agent",
+        profileId: "spec-agent",
       }),
     ).toBeNull();
 
     expect(
       toRoleDefaultSelection({
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        opencodeAgent: "spec-agent",
+        profileId: "spec-agent",
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
   });
 
@@ -100,14 +103,16 @@ describe("use-agent-studio-model-selection-model", () => {
       resolveDraftSelection({
         catalog: CATALOG,
         existingSelection: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "missing-variant",
-          opencodeAgent: "hidden-subagent",
+          profileId: "hidden-subagent",
         },
         roleDefaultSelection: null,
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
@@ -118,11 +123,13 @@ describe("use-agent-studio-model-selection-model", () => {
         catalog: CATALOG,
         existingSelection: null,
         roleDefaultSelection: {
+          runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet",
         },
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "anthropic",
       modelId: "claude-sonnet",
     });
@@ -134,10 +141,11 @@ describe("use-agent-studio-model-selection-model", () => {
         roleDefaultSelection: null,
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
   });
 
@@ -146,37 +154,42 @@ describe("use-agent-studio-model-selection-model", () => {
       resolveSessionSelection({
         catalog: CATALOG,
         selectedModel: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",
-          opencodeAgent: "spec-agent",
+          profileId: "spec-agent",
         },
         roleDefaultSelection: {
+          runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet",
         },
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
 
     expect(
       resolveSessionSelection({
         catalog: CATALOG,
         selectedModel: {
+          runtimeKind: "opencode",
           providerId: "missing",
           modelId: "model",
         },
         roleDefaultSelection: null,
       }),
     ).toEqual({
+      runtimeKind: "opencode",
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      opencodeAgent: "spec-agent",
+      profileId: "spec-agent",
     });
   });
 

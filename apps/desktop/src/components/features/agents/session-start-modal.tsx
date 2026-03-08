@@ -1,6 +1,8 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
+import { AgentRuntimeCombobox } from "@/components/features/agents/agent-runtime-combobox";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
 import {
@@ -20,11 +22,16 @@ export type SessionStartModalModel = {
   backgroundConfirmLabel?: string;
   cancelLabel?: string;
   selectedModelSelection: AgentModelSelection | null;
+  selectedRuntimeKind: RuntimeKind;
+  runtimeOptions: ComboboxOption[];
+  supportsProfiles: boolean;
+  supportsVariants: boolean;
   isSelectionCatalogLoading: boolean;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
+  onSelectRuntime: (runtimeKind: string) => void;
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
@@ -43,11 +50,16 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     backgroundConfirmLabel = "Run in background",
     cancelLabel = "Cancel",
     selectedModelSelection,
+    selectedRuntimeKind,
+    runtimeOptions,
+    supportsProfiles,
+    supportsVariants,
     isSelectionCatalogLoading,
     agentOptions,
     modelOptions,
     modelGroups,
     variantOptions,
+    onSelectRuntime,
     onSelectAgent,
     onSelectModel,
     onSelectVariant,
@@ -57,12 +69,38 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onConfirm,
   } = model;
 
-  const selectedAgent = selectedModelSelection?.opencodeAgent ?? "";
+  const selectedAgent = selectedModelSelection?.profileId ?? "";
   const selectedModel = selectedModelSelection
     ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
     : "";
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const confirmDisabled = isStarting || isSelectionCatalogLoading || !selectedModelSelection;
+  const agentDisabled = isSelectionCatalogLoading || !supportsProfiles || agentOptions.length === 0;
+  const variantDisabled =
+    isSelectionCatalogLoading ||
+    !selectedModelSelection ||
+    !supportsVariants ||
+    variantOptions.length === 0;
+
+  let agentHelperText: string | null = null;
+  if (isSelectionCatalogLoading) {
+    agentHelperText = "Loading agents for the selected runtime.";
+  } else if (!supportsProfiles) {
+    agentHelperText = "This runtime manages agent selection automatically.";
+  } else if (agentOptions.length === 0) {
+    agentHelperText = "No agent profiles are available for this runtime.";
+  }
+
+  let variantHelperText: string | null = null;
+  if (isSelectionCatalogLoading) {
+    variantHelperText = "Checking model compatibility.";
+  } else if (!selectedModelSelection) {
+    variantHelperText = "Select a model first to unlock variant choices.";
+  } else if (!supportsVariants) {
+    variantHelperText = "This runtime does not expose variants for the current selection.";
+  } else if (variantOptions.length === 0) {
+    variantHelperText = "This model does not expose named variants.";
+  }
 
   return (
     <Dialog
@@ -81,6 +119,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         </DialogHeader>
 
         <form
+          className="pt-2"
           onSubmit={(event) => {
             event.preventDefault();
             if (confirmDisabled) {
@@ -91,16 +130,36 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         >
           <fieldset className="space-y-4" disabled={isStarting}>
             <div className="grid gap-1.5">
+              <label
+                className="text-sm font-medium text-foreground"
+                htmlFor="session-start-runtime"
+              >
+                Agent Runtime
+              </label>
+              <AgentRuntimeCombobox
+                value={selectedRuntimeKind}
+                runtimeOptions={runtimeOptions}
+                disabled={isSelectionCatalogLoading}
+                className="sm:min-w-[20rem]"
+                onValueChange={onSelectRuntime}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="session-start-agent">
                 Agent
               </label>
               <Combobox
                 value={selectedAgent}
                 options={agentOptions}
-                placeholder="Select agent"
-                disabled={isSelectionCatalogLoading}
+                placeholder={supportsProfiles ? "Select agent" : "Agent handled by runtime"}
+                disabled={agentDisabled}
+                className="sm:min-w-[20rem]"
                 onValueChange={onSelectAgent}
               />
+              {agentHelperText ? (
+                <p className="text-xs text-muted-foreground">{agentHelperText}</p>
+              ) : null}
             </div>
 
             <div className="grid gap-1.5">
@@ -113,6 +172,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 groups={modelGroups}
                 placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
                 disabled={isSelectionCatalogLoading}
+                className="sm:min-w-[28rem]"
                 onValueChange={onSelectModel}
               />
             </div>
@@ -127,10 +187,14 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               <Combobox
                 value={selectedVariant}
                 options={variantOptions}
-                placeholder="Select variant"
-                disabled={isSelectionCatalogLoading || !selectedModelSelection}
+                placeholder={selectedModelSelection ? "Select variant" : "Select model first"}
+                disabled={variantDisabled}
+                className="sm:min-w-[16rem]"
                 onValueChange={onSelectVariant}
               />
+              {variantHelperText ? (
+                <p className="text-xs text-muted-foreground">{variantHelperText}</p>
+              ) : null}
             </div>
           </fieldset>
 

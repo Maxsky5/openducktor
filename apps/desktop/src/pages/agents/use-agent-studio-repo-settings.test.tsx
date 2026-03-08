@@ -15,6 +15,7 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioRepoSettings>[0];
 
 const createSettings = (): RepoSettingsInput => ({
+  defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "/worktrees",
   branchPrefix: "codex/",
   defaultTargetBranch: "main",

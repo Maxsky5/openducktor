@@ -19,12 +19,14 @@ describe("KanbanTaskCard active sessions", () => {
           task,
           activeSessions: [
             {
+              runtimeKind: "opencode",
               sessionId: "session-build",
               role: "build",
               scenario: "build_implementation_start",
               status: "running",
             },
             {
+              runtimeKind: "opencode",
               sessionId: "session-qa",
               role: "qa",
               scenario: "qa_review",

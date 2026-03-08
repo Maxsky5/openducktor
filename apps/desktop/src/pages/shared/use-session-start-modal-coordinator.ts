@@ -1,5 +1,6 @@
 import type { AgentModelCatalog, AgentRole, AgentScenario } from "@openducktor/core";
 import { useCallback } from "react";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "../agents/agents-page-constants";
@@ -67,9 +68,11 @@ export function useSessionStartModalCoordinator({
   repoSettings,
   initialCatalog,
 }: UseSessionStartModalCoordinatorArgs): UseSessionStartModalCoordinatorResult {
+  const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
     activeRepo,
     repoSettings,
+    runtimeDefinitions,
     ...(initialCatalog !== undefined ? { initialCatalog } : {}),
   });
 

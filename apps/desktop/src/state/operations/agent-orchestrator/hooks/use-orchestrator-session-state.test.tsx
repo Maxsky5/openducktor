@@ -41,6 +41,11 @@ const taskFixture: TaskCard = {
 
 const runFixture: RunSummary = {
   runId: "run-1",
+  runtimeKind: "opencode",
+  runtimeRoute: {
+    type: "local_http",
+    endpoint: "http://127.0.0.1:4444",
+  },
   repoPath: "/tmp/repo-a",
   taskId: "task-1",
   branch: "obp/task-1",
@@ -52,6 +57,7 @@ const runFixture: RunSummary = {
 };
 
 const createSessionFixture = (): AgentSessionState => ({
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -61,7 +67,7 @@ const createSessionFixture = (): AgentSessionState => ({
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:4444",
+  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo-a",
   messages: [],
   draftAssistantText: "",

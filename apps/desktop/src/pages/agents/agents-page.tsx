@@ -32,7 +32,10 @@ import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { errorMessage } from "@/lib/errors";
 import { UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
-import { useDelegationEventsContext } from "@/state/app-state-contexts";
+import {
+  useDelegationEventsContext,
+  useRuntimeDefinitionsContext,
+} from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
@@ -258,6 +261,10 @@ function AgentStudioSessionStartModal({
     intent,
     isOpen,
     selection,
+    selectedRuntimeKind,
+    runtimeOptions,
+    supportsProfiles,
+    supportsVariants,
     isCatalogLoading,
     agentOptions,
     modelOptions,
@@ -265,6 +272,7 @@ function AgentStudioSessionStartModal({
     variantOptions,
     openStartModal,
     closeStartModal,
+    handleSelectRuntime,
     handleSelectAgent,
     handleSelectModel,
     handleSelectVariant,
@@ -283,7 +291,7 @@ function AgentStudioSessionStartModal({
       request.selectedModel?.providerId ?? "",
       request.selectedModel?.modelId ?? "",
       request.selectedModel?.variant ?? "",
-      request.selectedModel?.opencodeAgent ?? "",
+      request.selectedModel?.profileId ?? "",
     ].join(":");
     if (initializedRequestKeyRef.current === requestKey) {
       return;
@@ -314,11 +322,16 @@ function AgentStudioSessionStartModal({
           }),
         confirmLabel: "Start session",
         selectedModelSelection: selection,
+        selectedRuntimeKind,
+        runtimeOptions,
+        supportsProfiles,
+        supportsVariants,
         isSelectionCatalogLoading: isCatalogLoading,
         agentOptions,
         modelOptions,
         modelGroups,
         variantOptions,
+        onSelectRuntime: handleSelectRuntime,
         onSelectAgent: handleSelectAgent,
         onSelectModel: handleSelectModel,
         onSelectVariant: handleSelectVariant,
@@ -340,7 +353,9 @@ function AgentStudioSessionStartModal({
 
 export function AgentsPage(): ReactElement {
   const { activeRepo, activeBranch, loadRepoSettings } = useWorkspaceState();
-  const { opencodeHealth, isLoadingChecks, refreshChecks } = useChecksState();
+  const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
+    useRuntimeDefinitionsContext();
+  const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const { isLoadingTasks, tasks } = useTasksState();
   const {
     sessions,
@@ -467,18 +482,47 @@ export function AgentsPage(): ReactElement {
     scheduleQueryUpdate,
   });
 
-  const agentStudioReady = Boolean(
-    activeRepo && opencodeHealth?.runtimeOk && opencodeHealth?.mcpOk,
+  const healthyRuntimeDefinition = useMemo(
+    () =>
+      runtimeDefinitions.find((definition) => {
+        const runtimeHealth = runtimeHealthByRuntime[definition.kind];
+        return Boolean(
+          runtimeHealth?.runtimeOk &&
+            (!definition.capabilities.supportsMcpStatus || runtimeHealth.mcpOk),
+        );
+      }) ?? null,
+    [runtimeDefinitions, runtimeHealthByRuntime],
   );
+  const blockedRuntimeDefinition = useMemo(
+    () =>
+      runtimeDefinitions.find((definition) => {
+        const runtimeHealth = runtimeHealthByRuntime[definition.kind];
+        return Boolean(
+          runtimeHealth &&
+            (!runtimeHealth.runtimeOk ||
+              (definition.capabilities.supportsMcpStatus && !runtimeHealth.mcpOk)),
+        );
+      }) ?? null,
+    [runtimeDefinitions, runtimeHealthByRuntime],
+  );
+  const blockedRuntimeHealth = blockedRuntimeDefinition
+    ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
+    : null;
+
+  const agentStudioReady = Boolean(activeRepo && healthyRuntimeDefinition);
   const agentStudioBlockedReason = !activeRepo
     ? "Select a repository to use Agent Studio."
-    : opencodeHealth?.runtimeError
-      ? opencodeHealth.runtimeError
-      : opencodeHealth?.mcpError
-        ? opencodeHealth.mcpError
+    : runtimeDefinitionsError
+      ? runtimeDefinitionsError
+      : isLoadingRuntimeDefinitions
+        ? "Loading runtime definitions..."
         : isLoadingChecks
-          ? "Checking OpenCode and OpenDucktor MCP health..."
-          : "OpenCode runtime or OpenDucktor MCP is not ready.";
+          ? "Checking runtime and OpenDucktor MCP health..."
+          : (blockedRuntimeHealth?.runtimeError ??
+            blockedRuntimeHealth?.mcpError ??
+            (runtimeDefinitions.length === 0
+              ? "No agent runtimes are available."
+              : "No configured runtime is ready for Agent Studio."));
 
   const orchestrationWorkspace = {
     activeRepo,

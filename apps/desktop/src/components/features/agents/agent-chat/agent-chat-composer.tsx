@@ -52,12 +52,12 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     !taskId || isSelectionCatalogLoading || isStarting || !agentStudioReady || isReadOnly;
 
   const composerAccentColor = useMemo(() => {
-    const agentName = selectedModelSelection?.opencodeAgent;
+    const agentName = selectedModelSelection?.profileId;
     if (!agentName) {
       return undefined;
     }
     return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
-  }, [selectedModelSelection?.opencodeAgent, sessionAgentColors]);
+  }, [selectedModelSelection?.profileId, sessionAgentColors]);
 
   return (
     <form
@@ -98,7 +98,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
             <div className="relative">
               <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Combobox
-                value={selectedModelSelection?.opencodeAgent ?? ""}
+                value={selectedModelSelection?.profileId ?? ""}
                 options={agentOptions}
                 className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
                 placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}

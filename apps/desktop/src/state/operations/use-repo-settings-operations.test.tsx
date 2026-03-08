@@ -61,6 +61,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
 };
 
 const inputFixture: RepoSettingsInput = {
+  defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  codex/  ",
   defaultTargetBranch: "  develop  ",
@@ -70,14 +71,15 @@ const inputFixture: RepoSettingsInput = {
   worktreeFileCopies: ["  .env  ", "  .env.local  "],
   agentDefaults: {
     spec: {
+      runtimeKind: "opencode",
       providerId: " openai ",
       modelId: " gpt-5 ",
       variant: "  mini ",
-      opencodeAgent: " spec ",
+      profileId: " spec ",
     },
     planner: null,
-    build: { providerId: "", modelId: "", variant: "", opencodeAgent: "" },
-    qa: { providerId: "anthropic", modelId: "claude-4", variant: "", opencodeAgent: "" },
+    build: { providerId: "", modelId: "", variant: "", profileId: "" },
+    qa: { providerId: "anthropic", modelId: "claude-4", variant: "", profileId: "" },
   },
 };
 
@@ -115,6 +117,7 @@ describe("use-repo-settings-operations", () => {
     const workspaceGetRepoConfig = mock(
       async () =>
         ({
+          defaultRuntimeKind: "opencode" as const,
           worktreeBasePath: undefined,
           branchPrefix: "codex/",
           trustedHooks: false,
@@ -123,7 +126,7 @@ describe("use-repo-settings-operations", () => {
             spec: { providerId: "openai", modelId: "gpt-5" },
             planner: undefined,
             build: { providerId: "anthropic", modelId: "claude-4", variant: "v1" },
-            qa: { providerId: "xai", modelId: "grok", opencodeAgent: "qa" },
+            qa: { providerId: "xai", modelId: "grok", profileId: "qa" },
           },
         }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>,
     );
@@ -141,6 +144,7 @@ describe("use-repo-settings-operations", () => {
 
       expect(workspaceGetRepoConfig).toHaveBeenCalledWith("/repo-a");
       expect(loaded).toEqual({
+        defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "",
         branchPrefix: "codex/",
         defaultTargetBranch: "origin/main",
@@ -149,15 +153,28 @@ describe("use-repo-settings-operations", () => {
         postCompleteHooks: ["b"],
         worktreeFileCopies: [],
         agentDefaults: {
-          spec: { providerId: "openai", modelId: "gpt-5", variant: "", opencodeAgent: "" },
+          spec: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "",
+            profileId: "",
+          },
           planner: null,
           build: {
+            runtimeKind: "opencode",
             providerId: "anthropic",
             modelId: "claude-4",
             variant: "v1",
-            opencodeAgent: "",
+            profileId: "",
           },
-          qa: { providerId: "xai", modelId: "grok", variant: "", opencodeAgent: "qa" },
+          qa: {
+            runtimeKind: "opencode",
+            providerId: "xai",
+            modelId: "grok",
+            variant: "",
+            profileId: "qa",
+          },
         },
       });
     } finally {
@@ -184,9 +201,24 @@ describe("use-repo-settings-operations", () => {
 
     try {
       await harness.mount();
-      await harness.getLatest().saveRepoSettings(inputFixture);
+      const specDefault = inputFixture.agentDefaults.spec;
+      if (!specDefault) {
+        throw new Error("Expected spec default fixture");
+      }
+      const input = {
+        ...inputFixture,
+        agentDefaults: {
+          ...inputFixture.agentDefaults,
+          spec: {
+            ...specDefault,
+            runtimeKind: "claude-code",
+          },
+        },
+      };
+      await harness.getLatest().saveRepoSettings(input);
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
+        defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
         defaultTargetBranch: "origin/develop",
@@ -198,12 +230,14 @@ describe("use-repo-settings-operations", () => {
         worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {
+            runtimeKind: "claude-code",
             providerId: "openai",
             modelId: "gpt-5",
             variant: "mini",
-            opencodeAgent: "spec",
+            profileId: "spec",
           },
           qa: {
+            runtimeKind: "opencode",
             providerId: "anthropic",
             modelId: "claude-4",
           },
@@ -345,6 +379,7 @@ describe("use-repo-settings-operations", () => {
     const snapshot = {
       repos: {
         "/repo-a": {
+          defaultRuntimeKind: "opencode" as const,
           worktreeBasePath: "/tmp/worktrees",
           branchPrefix: "odt",
           defaultTargetBranch: "origin/main",

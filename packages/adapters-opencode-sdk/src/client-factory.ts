@@ -6,7 +6,7 @@ export const nowIso = (): string => new Date().toISOString();
 export const buildDefaultFactory = (): ClientFactory => {
   return (input) =>
     createOpencodeClient({
-      baseUrl: input.baseUrl,
+      baseUrl: input.runtimeEndpoint,
       directory: input.workingDirectory,
     });
 };

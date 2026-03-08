@@ -12,18 +12,21 @@ describe("use-kanban-session-start-flow helpers", () => {
   test("findLatestSessionByRoleForTask returns the most recent matching session", () => {
     const sessions = [
       createAgentSessionFixture({
+        runtimeKind: "opencode",
         sessionId: "spec-older",
         taskId: "TASK-1",
         role: "spec",
         startedAt: "2026-02-10T10:00:00.000Z",
       }),
       createAgentSessionFixture({
+        runtimeKind: "opencode",
         sessionId: "build-latest",
         taskId: "TASK-1",
         role: "build",
         startedAt: "2026-02-12T10:00:00.000Z",
       }),
       createAgentSessionFixture({
+        runtimeKind: "opencode",
         sessionId: "spec-latest",
         taskId: "TASK-1",
         role: "spec",

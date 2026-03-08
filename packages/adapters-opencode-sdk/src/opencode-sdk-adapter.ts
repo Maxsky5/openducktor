@@ -1,18 +1,25 @@
-import type {
-  AgentEnginePort,
-  AgentEvent,
-  AgentModelCatalog,
-  AgentSessionHistoryMessage,
-  AgentSessionSummary,
-  AgentSessionTodoItem,
-  EventUnsubscribe,
-  LoadAgentSessionHistoryInput,
-  LoadAgentSessionTodosInput,
-  ReplyPermissionInput,
-  ReplyQuestionInput,
-  ResumeAgentSessionInput,
-  SendAgentUserMessageInput,
-  StartAgentSessionInput,
+import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  type AgentCatalogPort,
+  type AgentEvent,
+  type AgentModelCatalog,
+  type AgentSessionHistoryMessage,
+  type AgentSessionPort,
+  type AgentSessionSummary,
+  type AgentSessionTodoItem,
+  type AgentWorkspaceInspectionPort,
+  type EventUnsubscribe,
+  type ListAgentModelsInput,
+  type LoadAgentFileStatusInput,
+  type LoadAgentSessionDiffInput,
+  type LoadAgentSessionHistoryInput,
+  type LoadAgentSessionTodosInput,
+  type ReplyPermissionInput,
+  type ReplyQuestionInput,
+  type ResumeAgentSessionInput,
+  type SendAgentUserMessageInput,
+  type StartAgentSessionInput,
+  toRuntimeClientInput,
 } from "@openducktor/core";
 import {
   connectMcpServer,
@@ -56,7 +63,9 @@ import type {
 } from "./types";
 import { buildRoleScopedOdtPermissionRules } from "./workflow-tool-permissions";
 
-export class OpencodeSdkAdapter implements AgentEnginePort {
+export class OpencodeSdkAdapter
+  implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
+{
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly listeners: SessionEventListeners = new Map();
   private readonly now: () => string;
@@ -69,11 +78,18 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     this.logEvent = options.logEvent;
   }
 
+  getRuntimeDefinition(): RuntimeDescriptor {
+    return OPENCODE_RUNTIME_DESCRIPTOR;
+  }
+
+  listRuntimeDefinitions(): RuntimeDescriptor[] {
+    return [this.getRuntimeDefinition()];
+  }
+
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
-    const client = this.createClient({
-      baseUrl: input.baseUrl,
-      workingDirectory: input.workingDirectory,
-    });
+    const client = this.createClient(
+      toRuntimeClientInput(input.runtimeConnection, "start session"),
+    );
     const created = await client.session.create({
       directory: input.workingDirectory,
       title: `${input.role.toUpperCase()} ${input.taskId}`,
@@ -107,10 +123,9 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
       return existing.summary;
     }
 
-    const client = this.createClient({
-      baseUrl: input.baseUrl,
-      workingDirectory: input.workingDirectory,
-    });
+    const client = this.createClient(
+      toRuntimeClientInput(input.runtimeConnection, "resume session"),
+    );
     const detail = await client.session.get({
       directory: input.workingDirectory,
       sessionID: input.externalSessionId,
@@ -146,41 +161,52 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
   async loadSessionHistory(
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
-    return loadSessionHistory(this.createClient, this.now, input);
+    return loadSessionHistory(this.createClient, this.now, {
+      ...toRuntimeClientInput(input.runtimeConnection, "load session history"),
+      externalSessionId: input.externalSessionId,
+      ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+    });
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
-    return loadSessionTodos(this.createClient, input);
+    return loadSessionTodos(this.createClient, {
+      ...toRuntimeClientInput(input.runtimeConnection, "load session todos"),
+      externalSessionId: input.externalSessionId,
+    });
   }
 
-  async listAvailableModels(input: {
-    baseUrl: string;
-    workingDirectory: string;
-  }): Promise<AgentModelCatalog> {
-    return listAvailableModels(this.createClient, input);
+  async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
+    return listAvailableModels(
+      this.createClient,
+      toRuntimeClientInput(input.runtimeConnection, "list available models"),
+    );
   }
 
   async listAvailableToolIds(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   }): Promise<string[]> {
     return listAvailableToolIds(this.createClient, input);
   }
 
   async getMcpStatus(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   }): Promise<Record<string, McpServerStatus>> {
     return getMcpStatus(this.createClient, input);
   }
 
   async connectMcpServer(input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
     name: string;
   }): Promise<void> {
     await connectMcpServer(this.createClient, input);
     clearWorkflowToolCacheForDirectory(this.sessions, input.workingDirectory);
+  }
+
+  shouldRestartRuntimeForMcpStatusError(message: string): boolean {
+    return /configinvaliderror|opencode_config_content|loglevel|invalid option/i.test(message);
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
@@ -221,18 +247,22 @@ export class OpencodeSdkAdapter implements AgentEnginePort {
     clearSessionListeners(this.listeners, sessionId);
   }
 
-  async loadSessionDiff(input: {
-    baseUrl: string;
-    sessionId: string;
-    messageId?: string;
-  }): Promise<import("@openducktor/contracts").FileDiff[]> {
-    return loadSessionDiffOp(input.baseUrl, input.sessionId, input.messageId);
+  async loadSessionDiff(
+    input: LoadAgentSessionDiffInput,
+  ): Promise<import("@openducktor/contracts").FileDiff[]> {
+    return loadSessionDiffOp(
+      toRuntimeClientInput(input.runtimeConnection, "load session diff").runtimeEndpoint,
+      input.sessionId,
+      input.messageId,
+    );
   }
 
-  async loadFileStatus(input: {
-    baseUrl: string;
-  }): Promise<import("@openducktor/contracts").FileStatus[]> {
-    return loadFileStatusOp(input.baseUrl);
+  async loadFileStatus(
+    input: LoadAgentFileStatusInput,
+  ): Promise<import("@openducktor/contracts").FileStatus[]> {
+    return loadFileStatusOp(
+      toRuntimeClientInput(input.runtimeConnection, "load file status").runtimeEndpoint,
+    );
   }
 
   private emit(sessionId: string, event: AgentEvent): void {

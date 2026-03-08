@@ -3,6 +3,7 @@ import type {
   AgentEnginePort,
   AgentModelSelection,
   AgentRole,
+  AgentRuntimeConnection,
   AgentScenario,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
@@ -41,6 +42,7 @@ export type RuntimeDependencies = {
     role: AgentRole,
     options?: {
       workingDirectoryOverride?: string | null;
+      runtimeKind?: AgentModelSelection["runtimeKind"] | null;
     },
   ) => Promise<RuntimeInfo>;
 };
@@ -57,14 +59,12 @@ export type ModelDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
 };
 

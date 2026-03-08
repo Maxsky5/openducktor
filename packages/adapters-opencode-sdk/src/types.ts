@@ -28,7 +28,7 @@ export type SessionRecord = {
 };
 
 export type ClientFactory = (input: {
-  baseUrl: string;
+  runtimeEndpoint: string;
   workingDirectory: string;
 }) => OpencodeClient;
 

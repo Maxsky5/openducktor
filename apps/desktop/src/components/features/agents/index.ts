@@ -15,6 +15,8 @@ export {
   isNearBottom,
   useAgentChatLayout,
 } from "./agent-chat";
+export { AgentRuntimeCombobox } from "./agent-runtime-combobox";
+export { AgentRuntimeIcon } from "./agent-runtime-icon";
 export type { AgentStudioHeaderModel } from "./agent-studio-header";
 export { AgentStudioHeader } from "./agent-studio-header";
 export type {

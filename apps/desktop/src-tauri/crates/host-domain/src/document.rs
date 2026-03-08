@@ -117,8 +117,13 @@ pub struct AgentSessionModelSelection {
     pub model_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variant: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub opencode_agent: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "profileId",
+        alias = "opencodeAgent"
+    )]
+    pub profile_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,15 +144,19 @@ pub struct AgentSessionDocument {
     pub updated_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<String>,
+    #[serde(default = "default_runtime_kind")]
+    pub runtime_kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_url: Option<String>,
     pub working_directory: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_model: Option<AgentSessionModelSelection>,
+}
+
+fn default_runtime_kind() -> String {
+    "opencode".to_string()
 }
 
 /// Consolidated task metadata returned in a single CLI call.

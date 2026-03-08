@@ -8,6 +8,7 @@ import {
 } from "./persistence";
 
 const recordFixture: AgentSessionRecord = {
+  runtimeKind: "opencode",
   sessionId: "session-1",
   externalSessionId: "external-1",
   taskId: "task-1",
@@ -18,9 +19,9 @@ const recordFixture: AgentSessionRecord = {
   updatedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo/worktree",
   selectedModel: {
+    runtimeKind: "opencode",
     providerId: "openai",
     modelId: "gpt-5",
   },
@@ -30,6 +31,7 @@ describe("agent-orchestrator/support/persistence", () => {
   test("normalizes persisted running status to stopped", () => {
     const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
     expect(hydrated.status).toBe("stopped");
+    expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
   });
 
@@ -40,7 +42,30 @@ describe("agent-orchestrator/support/persistence", () => {
     };
     const persisted = toPersistedSessionRecord(session);
     expect(persisted.scenario).toBe("build_implementation_start");
+    expect(persisted.runtimeKind).toBe("opencode");
     expect(persisted.endedAt).toBeUndefined();
+    expect("runtimeEndpoint" in persisted).toBe(false);
+    expect("runtimeTransport" in persisted).toBe(false);
+  });
+
+  test("preserves non-default runtime kind across persistence", () => {
+    const customRuntimeRecord: AgentSessionRecord = {
+      ...recordFixture,
+      runtimeKind: "claude-code",
+      selectedModel: {
+        runtimeKind: "claude-code",
+        providerId: "anthropic",
+        modelId: "claude-3-7-sonnet",
+      },
+    };
+
+    const hydrated = fromPersistedSessionRecord(customRuntimeRecord, "task-1");
+    expect(hydrated.runtimeKind).toBe("claude-code");
+    expect(hydrated.selectedModel?.runtimeKind).toBe("claude-code");
+
+    const persisted = toPersistedSessionRecord(hydrated);
+    expect(persisted.runtimeKind).toBe("claude-code");
+    expect(persisted.selectedModel?.runtimeKind).toBe("claude-code");
   });
 
   test("maps empty history to empty chat messages", () => {
@@ -110,6 +135,7 @@ describe("agent-orchestrator/support/persistence", () => {
       {
         role: "build",
         selectedModel: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
           variant: "high",

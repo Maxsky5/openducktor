@@ -36,7 +36,7 @@ export type AgentChatMessageMeta =
       providerId?: string;
       modelId?: string;
       variant?: string;
-      opencodeAgent?: string;
+      profileId?: string;
       durationMs?: number;
       totalTokens?: number;
       contextWindow?: number;
@@ -47,7 +47,7 @@ export type AgentChatMessageMeta =
       providerId?: string;
       modelId?: string;
       variant?: string;
-      opencodeAgent?: string;
+      profileId?: string;
     }
   | {
       kind: "step";
@@ -94,13 +94,14 @@ export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
   taskId: string;
+  runtimeKind?: string;
   role: AgentRole;
   scenario: AgentScenario;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
   runtimeId: string | null;
   runId: string | null;
-  baseUrl: string;
+  runtimeEndpoint: string;
   workingDirectory: string;
   messages: AgentChatMessage[];
   draftAssistantText: string;

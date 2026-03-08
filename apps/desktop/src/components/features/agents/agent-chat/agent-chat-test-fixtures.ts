@@ -60,14 +60,15 @@ const baseCatalog: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5.3-codex",
   },
-  agents: [{ name: "Hephaestus (Deep Agent)", mode: "primary", color: "#f59e0b" }],
+  profiles: [{ name: "Hephaestus (Deep Agent)", mode: "primary", color: "#f59e0b" }],
 };
 
 const baseSelection: AgentModelSelection = {
+  runtimeKind: "opencode",
   providerId: "openai",
   modelId: "gpt-5.3-codex",
   variant: "high",
-  opencodeAgent: "Hephaestus (Deep Agent)",
+  profileId: "Hephaestus (Deep Agent)",
 };
 
 const baseMessage: AgentChatMessage = {
@@ -80,7 +81,7 @@ const baseMessage: AgentChatMessage = {
     agentRole: "spec",
     providerId: "openai",
     modelId: "gpt-5.3-codex",
-    opencodeAgent: "Hephaestus (Deep Agent)",
+    profileId: "Hephaestus (Deep Agent)",
     durationMs: 1_200,
   },
 };
@@ -95,7 +96,7 @@ const baseSession: AgentSessionState = {
   startedAt: "2026-02-20T10:00:30.000Z",
   runtimeId: "runtime-1",
   runId: "run-1",
-  baseUrl: "http://127.0.0.1:49480",
+  runtimeEndpoint: "http://127.0.0.1:49480",
   workingDirectory: "/repo",
   messages: [baseMessage],
   draftAssistantText: "",

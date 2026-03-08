@@ -12,6 +12,7 @@ import {
 describe("use-agent-studio-session-action-helpers", () => {
   test("resolveReusableSessionForStart returns active session when present", () => {
     const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "session-active",
       role: "spec",
       scenario: "spec_initial",

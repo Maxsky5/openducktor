@@ -123,6 +123,7 @@ describe("useAgentStudioQuerySessionSync", () => {
   test("aligns query params with resolved active session when session param is present", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "session-1",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
@@ -159,6 +160,7 @@ describe("useAgentStudioQuerySessionSync", () => {
   test("does not repin session when query intentionally omits session", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
       sessionId: "session-1",
       externalSessionId: "ext-session-1",
       taskId: "task-1",

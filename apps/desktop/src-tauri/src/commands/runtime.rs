@@ -1,5 +1,7 @@
 use crate::{as_error, run_service_blocking, AppState};
-use host_domain::{AgentRuntimeRole, AgentRuntimeSummary, BeadsCheck, RuntimeCheck, SystemCheck};
+use host_domain::{
+    AgentRuntimeRole, AgentRuntimeSummary, BeadsCheck, RuntimeCheck, RuntimeDescriptor, SystemCheck,
+};
 use tauri::State;
 
 #[tauri::command]
@@ -31,49 +33,63 @@ pub async fn beads_check(
 }
 
 #[tauri::command]
-pub async fn opencode_runtime_list(
+pub async fn runtime_definitions_list(
     state: State<'_, AppState>,
-    repo_path: Option<String>,
-) -> Result<Vec<AgentRuntimeSummary>, String> {
-    as_error(state.service.opencode_runtime_list(repo_path.as_deref()))
+) -> Result<Vec<RuntimeDescriptor>, String> {
+    Ok(state.service.runtime_definitions_list())
 }
 
 #[tauri::command]
-pub async fn opencode_runtime_start(
+pub async fn runtime_list(
     state: State<'_, AppState>,
+    runtime_kind: String,
+    repo_path: Option<String>,
+) -> Result<Vec<AgentRuntimeSummary>, String> {
+    as_error(
+        state
+            .service
+            .runtime_list(&runtime_kind, repo_path.as_deref()),
+    )
+}
+
+#[tauri::command]
+pub async fn runtime_start(
+    state: State<'_, AppState>,
+    runtime_kind: String,
     repo_path: String,
     task_id: String,
     role: AgentRuntimeRole,
 ) -> Result<AgentRuntimeSummary, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("opencode_runtime_start", move || {
-        service.opencode_runtime_start(&repo_path, &task_id, role)
+    let result = run_service_blocking("runtime_start", move || {
+        service.runtime_start(&runtime_kind, &repo_path, &task_id, role)
     })
     .await;
     as_error(result)
 }
 
 #[tauri::command]
-pub async fn opencode_runtime_stop(
+pub async fn runtime_stop(
     state: State<'_, AppState>,
     runtime_id: String,
 ) -> Result<serde_json::Value, String> {
     as_error(
         state
             .service
-            .opencode_runtime_stop(&runtime_id)
+            .runtime_stop(&runtime_id)
             .map(|ok| serde_json::json!({ "ok": ok })),
     )
 }
 
 #[tauri::command]
-pub async fn opencode_repo_runtime_ensure(
+pub async fn runtime_ensure(
     state: State<'_, AppState>,
+    runtime_kind: String,
     repo_path: String,
 ) -> Result<AgentRuntimeSummary, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("opencode_repo_runtime_ensure", move || {
-        service.opencode_repo_runtime_ensure(&repo_path)
+    let result = run_service_blocking("runtime_ensure", move || {
+        service.runtime_ensure(&runtime_kind, &repo_path)
     })
     .await;
     as_error(result)
@@ -87,34 +103,38 @@ mod tests {
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
-    struct OpencodeRuntimeStartPayload {
+    struct RuntimeStartPayload {
+        runtime_kind: String,
         repo_path: String,
         task_id: String,
         role: AgentRuntimeRole,
     }
 
     #[test]
-    fn opencode_runtime_start_payload_accepts_spec_role() {
+    fn runtime_start_payload_accepts_spec_role() {
         let payload = json!({
+            "runtimeKind": "opencode",
             "repoPath": "/repo",
             "taskId": "task-1",
             "role": "spec",
         });
-        let parsed: OpencodeRuntimeStartPayload =
+        let parsed: RuntimeStartPayload =
             serde_json::from_value(payload).expect("payload should deserialize");
+        assert_eq!(parsed.runtime_kind, "opencode");
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.task_id, "task-1");
         assert_eq!(parsed.role, AgentRuntimeRole::Spec);
     }
 
     #[test]
-    fn opencode_runtime_start_payload_rejects_workspace_role() {
+    fn runtime_start_payload_rejects_workspace_role() {
         let payload = json!({
+            "runtimeKind": "opencode",
             "repoPath": "/repo",
             "taskId": "task-1",
             "role": "workspace",
         });
-        let error = serde_json::from_value::<OpencodeRuntimeStartPayload>(payload)
+        let error = serde_json::from_value::<RuntimeStartPayload>(payload)
             .expect_err("workspace role should be rejected at command boundary");
         let message = error.to_string();
         assert!(message.contains("unknown variant `workspace`"));

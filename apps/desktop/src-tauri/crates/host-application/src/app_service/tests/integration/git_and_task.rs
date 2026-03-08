@@ -55,7 +55,11 @@ fn git_get_branches_initializes_repo_and_returns_git_data() -> Result<()> {
     let (service, task_state, git_state) = build_service_with_git_state(
         vec![],
         expected.clone(),
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let branches = service.git_get_branches(repo_path)?;
@@ -81,7 +85,11 @@ fn git_get_current_branch_uses_repo_init_cache() -> Result<()> {
     let (service, task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("feature/demo".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("feature/demo".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let first = service.git_get_current_branch(repo_path)?;
@@ -114,7 +122,11 @@ fn git_switch_branch_forwards_create_flag() -> Result<()> {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let branch = service.git_switch_branch(repo_path, "feature/new-ui", true)?;
@@ -136,7 +148,11 @@ fn git_create_worktree_rejects_empty_path() {
     let (service, task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -161,7 +177,11 @@ fn git_remove_worktree_forwards_force_flag() -> Result<()> {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     assert!(service.git_remove_worktree(repo_path, "/tmp/wt-1", true)?);
@@ -181,7 +201,11 @@ fn git_remove_worktree_rejects_repository_root() {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -202,7 +226,11 @@ fn git_delete_local_branch_forwards_force_flag() -> Result<()> {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     assert!(service.git_delete_local_branch(repo_path, "obp/task-123-cleanup", true)?);
@@ -223,7 +251,11 @@ fn git_push_branch_defaults_remote_to_origin() -> Result<()> {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let result = service.git_push_branch(
@@ -259,7 +291,11 @@ fn git_pull_branch_forwards_working_dir_and_returns_result() -> Result<()> {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     {
@@ -298,7 +334,11 @@ fn git_commit_all_rejects_empty_message() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -320,7 +360,11 @@ fn git_commit_all_returns_committed_and_trims_message() -> Result<()> {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     {
@@ -366,7 +410,11 @@ fn git_commit_all_returns_no_changes() -> Result<()> {
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     {
@@ -415,7 +463,11 @@ fn git_rebase_branch_rejects_empty_target_branch() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -437,7 +489,11 @@ fn git_rebase_branch_forwards_trimmed_target_branch_and_can_conflict() -> Result
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     {
@@ -488,11 +544,19 @@ fn git_port_get_worktree_status_returns_configured_payload_from_fake_port() -> R
     let (service, _task_state, git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let expected = GitWorktreeStatusData {
-        current_branch: GitCurrentBranch { name: Some("feature/composite".to_string()), detached: false, revision: None },
+        current_branch: GitCurrentBranch {
+            name: Some("feature/composite".to_string()),
+            detached: false,
+            revision: None,
+        },
         file_statuses: vec![GitFileStatus {
             path: "src/main.rs".to_string(),
             status: "modified".to_string(),

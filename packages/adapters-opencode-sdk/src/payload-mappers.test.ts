@@ -12,7 +12,7 @@ describe("payload-mappers", () => {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      opencodeAgent: "hephaestus",
+      profileId: "hephaestus",
     });
 
     expect(mapped).toEqual({

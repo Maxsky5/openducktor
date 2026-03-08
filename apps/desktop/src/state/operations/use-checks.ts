@@ -1,44 +1,73 @@
-import type { BeadsCheck, RuntimeCheck } from "@openducktor/contracts";
+import type {
+  BeadsCheck,
+  RuntimeCheck,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { RepoOpencodeHealthCheck } from "@/types/diagnostics";
+import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { host } from "./host";
 
 type UseChecksArgs = {
   activeRepo: string | null;
-  checkRepoOpencodeHealth: (repoPath: string) => Promise<RepoOpencodeHealthCheck>;
+  runtimeDefinitions: RuntimeDescriptor[];
+  checkRepoRuntimeHealth: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ) => Promise<RepoRuntimeHealthCheck>;
 };
 
 type UseChecksResult = {
   runtimeCheck: RuntimeCheck | null;
   activeBeadsCheck: BeadsCheck | null;
-  activeRepoOpencodeHealth: RepoOpencodeHealthCheck | null;
+  activeRepoRuntimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   setIsLoadingChecks: (value: boolean) => void;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
   refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
-  refreshRepoOpencodeHealthForRepo: (
+  refreshRepoRuntimeHealthForRepo: (
     repoPath: string,
     force?: boolean,
-  ) => Promise<RepoOpencodeHealthCheck>;
+  ) => Promise<RepoRuntimeHealthMap>;
   refreshChecks: () => Promise<void>;
   hasRuntimeCheck: () => boolean;
   hasCachedBeadsCheck: (repoPath: string) => boolean;
-  hasCachedRepoOpencodeHealth: (repoPath: string) => boolean;
+  hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
   clearActiveBeadsCheck: () => void;
-  clearActiveRepoOpencodeHealth: () => void;
+  clearActiveRepoRuntimeHealth: () => void;
 };
 
-export function useChecks({ activeRepo, checkRepoOpencodeHealth }: UseChecksArgs): UseChecksResult {
+const toRuntimeHealthCacheKey = (repoPath: string, runtimeKind: RuntimeKind): string =>
+  `${runtimeKind}::${repoPath}`;
+
+const buildRuntimeHealthMap = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  cache: Map<string, RepoRuntimeHealthCheck>,
+  repoPath: string,
+): RepoRuntimeHealthMap => {
+  return Object.fromEntries(
+    runtimeDefinitions.map((definition) => [
+      definition.kind,
+      cache.get(toRuntimeHealthCacheKey(repoPath, definition.kind)) ?? null,
+    ]),
+  );
+};
+
+export function useChecks({
+  activeRepo,
+  runtimeDefinitions,
+  checkRepoRuntimeHealth,
+}: UseChecksArgs): UseChecksResult {
   const [runtimeCheck, setRuntimeCheck] = useState<RuntimeCheck | null>(null);
   const [activeBeadsCheck, setActiveBeadsCheck] = useState<BeadsCheck | null>(null);
-  const [activeRepoOpencodeHealth, setActiveRepoOpencodeHealth] =
-    useState<RepoOpencodeHealthCheck | null>(null);
+  const [activeRepoRuntimeHealthByRuntime, setActiveRepoRuntimeHealthByRuntime] =
+    useState<RepoRuntimeHealthMap>({});
   const [isLoadingChecks, setIsLoadingChecks] = useState(false);
   const runtimeCheckRef = useRef<RuntimeCheck | null>(null);
   const beadsCheckCacheRef = useRef<Map<string, BeadsCheck>>(new Map());
-  const opencodeHealthCacheRef = useRef<Map<string, RepoOpencodeHealthCheck>>(new Map());
+  const runtimeHealthCacheRef = useRef<Map<string, RepoRuntimeHealthCheck>>(new Map());
 
   const refreshRuntimeCheck = useCallback(async (force = false): Promise<RuntimeCheck> => {
     if (!force && runtimeCheckRef.current) {
@@ -70,23 +99,50 @@ export function useChecks({ activeRepo, checkRepoOpencodeHealth }: UseChecksArgs
     [activeRepo],
   );
 
-  const refreshRepoOpencodeHealthForRepo = useCallback(
-    async (repoPath: string, force = false): Promise<RepoOpencodeHealthCheck> => {
-      const cached = opencodeHealthCacheRef.current.get(repoPath);
-      if (cached && !force) {
+  const refreshRepoRuntimeHealthForRepo = useCallback(
+    async (repoPath: string, force = false): Promise<RepoRuntimeHealthMap> => {
+      if (runtimeDefinitions.length === 0) {
+        if (repoPath === activeRepo) {
+          setActiveRepoRuntimeHealthByRuntime({});
+        }
+        return {};
+      }
+
+      const hasAllCached = runtimeDefinitions.every((definition) =>
+        runtimeHealthCacheRef.current.has(toRuntimeHealthCacheKey(repoPath, definition.kind)),
+      );
+      if (hasAllCached && !force) {
+        const cached = buildRuntimeHealthMap(
+          runtimeDefinitions,
+          runtimeHealthCacheRef.current,
+          repoPath,
+        );
+        if (repoPath === activeRepo) {
+          setActiveRepoRuntimeHealthByRuntime(cached);
+        }
         return cached;
       }
 
-      const check = await checkRepoOpencodeHealth(repoPath);
-      opencodeHealthCacheRef.current.set(repoPath, check);
+      const checks = await Promise.all(
+        runtimeDefinitions.map(async (definition) => {
+          const check = await checkRepoRuntimeHealth(repoPath, definition.kind);
+          runtimeHealthCacheRef.current.set(
+            toRuntimeHealthCacheKey(repoPath, definition.kind),
+            check,
+          );
+          return [definition.kind, check] as const;
+        }),
+      );
+
+      const runtimeHealthByRuntime = Object.fromEntries(checks) as RepoRuntimeHealthMap;
 
       if (repoPath === activeRepo) {
-        setActiveRepoOpencodeHealth(check);
+        setActiveRepoRuntimeHealthByRuntime(runtimeHealthByRuntime);
       }
 
-      return check;
+      return runtimeHealthByRuntime;
     },
-    [activeRepo, checkRepoOpencodeHealth],
+    [activeRepo, checkRepoRuntimeHealth, runtimeDefinitions],
   );
 
   const refreshChecks = useCallback(async (): Promise<void> => {
@@ -98,18 +154,32 @@ export function useChecks({ activeRepo, checkRepoOpencodeHealth }: UseChecksArgs
     try {
       const runtime = await refreshRuntimeCheck(true);
       const beads = await refreshBeadsCheckForRepo(activeRepo, true);
-      const opencodeHealth = await refreshRepoOpencodeHealthForRepo(activeRepo, true);
+      const runtimeHealthByRuntime = await refreshRepoRuntimeHealthForRepo(activeRepo, true);
+      const runtimesHealthy = runtime.runtimes.every((runtimeEntry) => runtimeEntry.ok);
+      const runtimeHealthEntries = runtimeDefinitions.map(
+        (definition) => runtimeHealthByRuntime[definition.kind],
+      );
+      const runtimeServersHealthy = runtimeHealthEntries.every(
+        (entry) => entry?.runtimeOk !== false,
+      );
+      const runtimeMcpHealthy = runtimeDefinitions.every((definition) => {
+        const health = runtimeHealthByRuntime[definition.kind];
+        if (!definition.capabilities.supportsMcpStatus) {
+          return true;
+        }
+        return health?.mcpOk !== false;
+      });
       if (
         !runtime.gitOk ||
-        !runtime.opencodeOk ||
+        !runtimesHealthy ||
         !beads.beadsOk ||
-        !opencodeHealth.runtimeOk ||
-        !opencodeHealth.mcpOk
+        !runtimeServersHealthy ||
+        !runtimeMcpHealthy
       ) {
         const details = [
           ...runtime.errors,
           ...(beads.beadsError ? [`beads: ${beads.beadsError}`] : []),
-          ...opencodeHealth.errors,
+          ...runtimeHealthEntries.flatMap((entry) => entry?.errors ?? []),
         ].join(" | ");
         toast.error("Diagnostics check failed", { description: details });
       }
@@ -118,15 +188,26 @@ export function useChecks({ activeRepo, checkRepoOpencodeHealth }: UseChecksArgs
     } finally {
       setIsLoadingChecks(false);
     }
-  }, [activeRepo, refreshBeadsCheckForRepo, refreshRepoOpencodeHealthForRepo, refreshRuntimeCheck]);
+  }, [
+    activeRepo,
+    refreshBeadsCheckForRepo,
+    refreshRepoRuntimeHealthForRepo,
+    refreshRuntimeCheck,
+    runtimeDefinitions,
+  ]);
 
   const hasCachedBeadsCheck = useCallback((repoPath: string): boolean => {
     return beadsCheckCacheRef.current.has(repoPath);
   }, []);
 
-  const hasCachedRepoOpencodeHealth = useCallback((repoPath: string): boolean => {
-    return opencodeHealthCacheRef.current.has(repoPath);
-  }, []);
+  const hasCachedRepoRuntimeHealth = useCallback(
+    (repoPath: string, runtimeKinds: RuntimeKind[]): boolean => {
+      return runtimeKinds.every((runtimeKind) =>
+        runtimeHealthCacheRef.current.has(toRuntimeHealthCacheKey(repoPath, runtimeKind)),
+      );
+    },
+    [],
+  );
 
   const hasRuntimeCheck = useCallback((): boolean => {
     return runtimeCheckRef.current !== null;
@@ -136,35 +217,37 @@ export function useChecks({ activeRepo, checkRepoOpencodeHealth }: UseChecksArgs
     setActiveBeadsCheck(null);
   }, []);
 
-  const clearActiveRepoOpencodeHealth = useCallback(() => {
-    setActiveRepoOpencodeHealth(null);
+  const clearActiveRepoRuntimeHealth = useCallback(() => {
+    setActiveRepoRuntimeHealthByRuntime({});
   }, []);
 
   useEffect(() => {
     if (!activeRepo) {
       setActiveBeadsCheck(null);
-      setActiveRepoOpencodeHealth(null);
+      setActiveRepoRuntimeHealthByRuntime({});
       return;
     }
 
     setActiveBeadsCheck(beadsCheckCacheRef.current.get(activeRepo) ?? null);
-    setActiveRepoOpencodeHealth(opencodeHealthCacheRef.current.get(activeRepo) ?? null);
-  }, [activeRepo]);
+    setActiveRepoRuntimeHealthByRuntime(
+      buildRuntimeHealthMap(runtimeDefinitions, runtimeHealthCacheRef.current, activeRepo),
+    );
+  }, [activeRepo, runtimeDefinitions]);
 
   return {
     runtimeCheck,
     activeBeadsCheck,
-    activeRepoOpencodeHealth,
+    activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks,
     refreshRuntimeCheck,
     refreshBeadsCheckForRepo,
-    refreshRepoOpencodeHealthForRepo,
+    refreshRepoRuntimeHealthForRepo,
     refreshChecks,
     hasRuntimeCheck,
     hasCachedBeadsCheck,
-    hasCachedRepoOpencodeHealth,
+    hasCachedRepoRuntimeHealth,
     clearActiveBeadsCheck,
-    clearActiveRepoOpencodeHealth,
+    clearActiveRepoRuntimeHealth,
   };
 }

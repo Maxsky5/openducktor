@@ -32,7 +32,7 @@ const catalogFixture: AgentModelCatalog = {
   defaultModelsByProvider: {
     openai: "gpt-5",
   },
-  agents: [{ name: "build", mode: "all" }],
+  profiles: [{ name: "build", mode: "all" }],
 };
 
 const emptyDefaults = {
@@ -45,20 +45,21 @@ const emptyDefaults = {
 describe("settings-modal-model", () => {
   test("normalizes null defaults to empty values", () => {
     expect(ensureAgentDefault(null)).toEqual({
+      runtimeKind: "opencode",
       providerId: "",
       modelId: "",
       variant: "",
-      opencodeAgent: "",
+      profileId: "",
     });
   });
 
   test("updates and clears role defaults immutably", () => {
     const withModel = updateRoleDefault(emptyDefaults, "build", "modelId", "gpt-5");
-    const withAgent = updateRoleDefault(withModel, "build", "opencodeAgent", "builder");
+    const withAgent = updateRoleDefault(withModel, "build", "profileId", "builder");
     const cleared = clearRoleDefault(withAgent, "build");
 
     expect(withModel.build?.modelId).toBe("gpt-5");
-    expect(withAgent.build?.opencodeAgent).toBe("builder");
+    expect(withAgent.build?.profileId).toBe("builder");
     expect(cleared.build).toBeNull();
     expect(cleared.spec).toBeNull();
   });
@@ -67,10 +68,11 @@ describe("settings-modal-model", () => {
     const defaults = {
       ...emptyDefaults,
       planner: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
-        opencodeAgent: "planner",
+        profileId: "planner",
       },
     };
 
@@ -86,10 +88,11 @@ describe("settings-modal-model", () => {
     const defaults = {
       ...emptyDefaults,
       spec: {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
         variant: "default",
-        opencodeAgent: "spec",
+        profileId: "spec",
       },
     };
 

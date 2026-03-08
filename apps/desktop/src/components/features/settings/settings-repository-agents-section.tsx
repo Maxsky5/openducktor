@@ -1,33 +1,44 @@
-import type { RepoConfig } from "@openducktor/contracts";
+import type { RepoConfig, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
 import {
+  AgentRuntimeCombobox,
+  toModelGroupsByProvider,
+  toModelOptions,
+  toPrimaryAgentOptions,
+} from "@/components/features/agents";
+import {
   ensureAgentDefault,
   findCatalogModel,
-  getMissingRequiredRoleLabels,
   ROLE_DEFAULTS,
   selectedModelKeyForRole,
   toRoleVariantOptions,
 } from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxGroup } from "@/components/ui/combobox";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import {
+  findRuntimeDefinition,
+  resolveRuntimeKindSelection,
+  toAgentRuntimeOptions,
+} from "@/lib/agent-runtime";
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
+  runtimeDefinitions: RuntimeDescriptor[];
+  isLoadingRuntimeDefinitions: boolean;
   isLoadingCatalog: boolean;
   isLoadingSettings: boolean;
   isSaving: boolean;
-  catalogError: string | null;
-  catalog: AgentModelCatalog | null;
-  modelOptions: ComboboxOption[];
-  agentOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
+  runtimeDefinitionsError: string | null;
+  getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
+  getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
+  isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   onUpdateSelectedRepoAgentDefault: (
     role: "spec" | "planner" | "build" | "qa",
-    field: "providerId" | "modelId" | "variant" | "opencodeAgent",
+    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
     value: string,
   ) => void;
   onClearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
@@ -35,14 +46,15 @@ type RepositoryAgentsSectionProps = {
 
 export function RepositoryAgentsSection({
   selectedRepoConfig,
+  runtimeDefinitions,
+  isLoadingRuntimeDefinitions,
   isLoadingCatalog,
   isLoadingSettings,
   isSaving,
-  catalogError,
-  catalog,
-  modelOptions,
-  agentOptions,
-  modelGroups,
+  runtimeDefinitionsError,
+  getCatalogForRuntime,
+  getCatalogErrorForRuntime,
+  isCatalogLoadingForRuntime,
   onUpdateSelectedRepoConfig,
   onUpdateSelectedRepoAgentDefault,
   onClearSelectedRepoAgentDefault,
@@ -55,7 +67,30 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const missingRoleLabels = getMissingRequiredRoleLabels(selectedRepoConfig.agentDefaults);
+  const runtimeOptions = toAgentRuntimeOptions(runtimeDefinitions);
+  const runtimeDropdownClassName = "sm:min-w-[18rem]";
+  const agentDropdownClassName = "sm:min-w-[18rem]";
+  const modelDropdownClassName = "sm:min-w-[26rem]";
+  const variantDropdownClassName = "sm:min-w-[16rem]";
+  const selectedDefaultRuntimeKind = resolveRuntimeKindSelection({
+    runtimeDefinitions,
+    requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
+  });
+  const missingRoleLabels = ROLE_DEFAULTS.filter(({ role }) => {
+    const value = selectedRepoConfig.agentDefaults[role];
+    const runtimeKind = resolveRuntimeKindSelection({
+      runtimeDefinitions,
+      requestedRuntimeKind: value?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind,
+    });
+    const runtimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+    return !(
+      value &&
+      value.providerId.trim().length > 0 &&
+      value.modelId.trim().length > 0 &&
+      (!runtimeDefinition?.capabilities.supportsProfiles ||
+        (value.profileId?.trim().length ?? 0) > 0)
+    );
+  }).map(({ label }) => label);
 
   return (
     <div className="grid gap-4 p-4">
@@ -66,12 +101,36 @@ export function RepositoryAgentsSection({
         </p>
       </div>
 
+      <div className="grid gap-2 rounded-md border border-border bg-card p-3 md:max-w-sm">
+        <div className="grid gap-1">
+          <Label className="text-xs">Default Agent Runtime</Label>
+          <AgentRuntimeCombobox
+            value={selectedDefaultRuntimeKind}
+            runtimeOptions={runtimeOptions}
+            disabled={isSaving || isLoadingRuntimeDefinitions || runtimeOptions.length === 0}
+            className={runtimeDropdownClassName}
+            onValueChange={(defaultRuntimeKind) =>
+              onUpdateSelectedRepoConfig((repoConfig) => ({
+                ...repoConfig,
+                defaultRuntimeKind,
+              }))
+            }
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Used when a role does not define its own runtime.
+        </p>
+      </div>
+
       {isLoadingCatalog ? (
         <p className="text-xs text-muted-foreground">Loading available agents and models...</p>
       ) : null}
-      {catalogError ? (
+      {isLoadingRuntimeDefinitions ? (
+        <p className="text-xs text-muted-foreground">Loading available runtimes...</p>
+      ) : null}
+      {runtimeDefinitionsError ? (
         <p className="text-xs text-warning-muted">
-          Failed to load OpenCode catalog: {catalogError}
+          Failed to load runtime definitions: {runtimeDefinitionsError}
         </p>
       ) : null}
       {missingRoleLabels.length > 0 ? (
@@ -83,6 +142,17 @@ export function RepositoryAgentsSection({
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
           const value = ensureAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
+          const runtimeKind = resolveRuntimeKindSelection({
+            runtimeDefinitions,
+            requestedRuntimeKind: value.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind,
+          });
+          const runtimeDescriptor = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+          const catalog = getCatalogForRuntime(runtimeKind);
+          const catalogError = getCatalogErrorForRuntime(runtimeKind);
+          const isRoleCatalogLoading = isCatalogLoadingForRuntime(runtimeKind);
+          const agentOptions = toPrimaryAgentOptions(catalog);
+          const modelOptions = toModelOptions(catalog);
+          const modelGroups = toModelGroupsByProvider(catalog) as ComboboxGroup[];
           const roleVariantOptions = toRoleVariantOptions(
             catalog,
             selectedRepoConfig.agentDefaults,
@@ -107,19 +177,49 @@ export function RepositoryAgentsSection({
                 </Button>
               </div>
 
-              <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="grid gap-2 md:grid-cols-4">
                 <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Agent</Label>
-                  <Combobox
-                    value={value.opencodeAgent}
-                    options={agentOptions}
-                    placeholder={isLoadingCatalog ? "Loading agents..." : "Select agent"}
-                    disabled={isLoadingCatalog || isSaving || agentOptions.length === 0}
-                    onValueChange={(opencodeAgent) =>
-                      onUpdateSelectedRepoAgentDefault(role, "opencodeAgent", opencodeAgent)
+                  <Label className="text-xs">Agent Runtime</Label>
+                  <AgentRuntimeCombobox
+                    value={runtimeKind}
+                    runtimeOptions={runtimeOptions}
+                    disabled={
+                      isSaving || isLoadingRuntimeDefinitions || runtimeOptions.length === 0
+                    }
+                    className={runtimeDropdownClassName}
+                    onValueChange={(runtimeKind) =>
+                      onUpdateSelectedRepoConfig((repoConfig) => ({
+                        ...repoConfig,
+                        agentDefaults: {
+                          ...repoConfig.agentDefaults,
+                          [role]: {
+                            runtimeKind,
+                            providerId: "",
+                            modelId: "",
+                            variant: "",
+                            profileId: "",
+                          },
+                        },
+                      }))
                     }
                   />
                 </div>
+
+                {runtimeDescriptor?.capabilities.supportsProfiles ? (
+                  <div className="grid min-w-0 gap-1">
+                    <Label className="text-xs">Agent</Label>
+                    <Combobox
+                      value={value.profileId}
+                      options={agentOptions}
+                      placeholder={isRoleCatalogLoading ? "Loading agents..." : "Select agent"}
+                      disabled={isRoleCatalogLoading || isSaving || agentOptions.length === 0}
+                      className={agentDropdownClassName}
+                      onValueChange={(profileId) =>
+                        onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
+                      }
+                    />
+                  </div>
+                ) : null}
 
                 <div className="grid min-w-0 gap-1">
                   <Label className="text-xs">Model</Label>
@@ -127,8 +227,9 @@ export function RepositoryAgentsSection({
                     value={modelKey}
                     options={modelOptions}
                     groups={modelGroups}
-                    placeholder={isLoadingCatalog ? "Loading models..." : "Select model"}
-                    disabled={isLoadingCatalog || isSaving || modelOptions.length === 0}
+                    placeholder={isRoleCatalogLoading ? "Loading models..." : "Select model"}
+                    disabled={isRoleCatalogLoading || isSaving || modelOptions.length === 0}
+                    className={modelDropdownClassName}
                     onValueChange={(selectedModelKey) => {
                       const model = findCatalogModel(catalog, selectedModelKey);
                       if (!model) {
@@ -141,6 +242,7 @@ export function RepositoryAgentsSection({
                           ...repoConfig.agentDefaults,
                           [role]: {
                             ...ensureAgentDefault(repoConfig.agentDefaults[role] ?? null),
+                            runtimeKind,
                             providerId: model.providerId,
                             modelId: model.modelId,
                             variant: model.variants[0] ?? "",
@@ -151,23 +253,35 @@ export function RepositoryAgentsSection({
                   />
                 </div>
 
-                <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Variant</Label>
-                  <Combobox
-                    value={value.variant}
-                    options={roleVariantOptions}
-                    placeholder={
-                      roleVariantOptions.length > 0 ? "Select variant" : "No variants for model"
-                    }
-                    disabled={
-                      isLoadingCatalog || isSaving || !modelKey || roleVariantOptions.length === 0
-                    }
-                    onValueChange={(variant) =>
-                      onUpdateSelectedRepoAgentDefault(role, "variant", variant)
-                    }
-                  />
-                </div>
+                {runtimeDescriptor?.capabilities.supportsVariants ? (
+                  <div className="grid min-w-0 gap-1">
+                    <Label className="text-xs">Variant</Label>
+                    <Combobox
+                      value={value.variant}
+                      options={roleVariantOptions}
+                      placeholder={
+                        roleVariantOptions.length > 0 ? "Select variant" : "No variants for model"
+                      }
+                      disabled={
+                        isRoleCatalogLoading ||
+                        isSaving ||
+                        !modelKey ||
+                        roleVariantOptions.length === 0
+                      }
+                      className={variantDropdownClassName}
+                      onValueChange={(variant) =>
+                        onUpdateSelectedRepoAgentDefault(role, "variant", variant)
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
+
+              {catalogError ? (
+                <p className="text-xs text-warning-muted">
+                  Failed to load runtime catalog: {catalogError}
+                </p>
+              ) : null}
             </div>
           );
         })}

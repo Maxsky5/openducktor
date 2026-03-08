@@ -65,6 +65,7 @@ describe("agent-orchestrator/handlers/start-session-support", () => {
       isStaleRepoOperation: () => false,
       resolvedScenario: "build_implementation_start",
       summary: {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         role: "build",

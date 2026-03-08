@@ -7,6 +7,7 @@ import {
 } from "./use-task-delete-impact";
 
 const makeSession = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
+  runtimeKind: "opencode",
   sessionId: overrides.sessionId ?? "session-1",
   role: overrides.role ?? "build",
   scenario: overrides.scenario ?? "build_implementation_start",
@@ -19,22 +20,26 @@ describe("getManagedTaskDeleteImpact", () => {
   test("counts unique build and qa worktrees outside the repo root", () => {
     const impact = getManagedTaskDeleteImpact("/repo", [
       makeSession({
+        runtimeKind: "opencode",
         sessionId: "build-1",
         role: "build",
         workingDirectory: "/repo/worktrees/task-1",
       }),
       makeSession({
+        runtimeKind: "opencode",
         sessionId: "qa-1",
         role: "qa",
         scenario: "qa_review",
         workingDirectory: "/repo/worktrees/task-1",
       }),
       makeSession({
+        runtimeKind: "opencode",
         sessionId: "build-2",
         role: "build",
         workingDirectory: "/repo/worktrees/task-2",
       }),
       makeSession({
+        runtimeKind: "opencode",
         sessionId: "planner-1",
         role: "planner",
         scenario: "planner_initial",
@@ -54,6 +59,7 @@ describe("getManagedTaskDeleteImpact", () => {
     const impact = getManagedTaskDeleteImpact("/repo/", [
       makeSession({ sessionId: "build-root", workingDirectory: "/repo" }),
       makeSession({
+        runtimeKind: "opencode",
         sessionId: "qa-root",
         role: "qa",
         scenario: "qa_review",

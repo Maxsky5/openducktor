@@ -56,10 +56,14 @@ describe("opencode-sdk-adapter", () => {
       repoPath: "/repo",
       workingDirectory: "/repo",
       taskId: "task-1",
+      runtimeKind: "opencode",
       role: "spec",
       scenario: "spec_initial",
       systemPrompt: "system",
-      baseUrl: "http://127.0.0.1:12345",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
     });
 
     expect(summary.sessionId).toBe("session-1");

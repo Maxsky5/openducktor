@@ -19,7 +19,9 @@ export const toSessionInput = (
     role: input.role,
     scenario: input.scenario,
     systemPrompt: input.systemPrompt,
-    baseUrl: input.baseUrl,
+    runtimeKind: input.runtimeKind,
+    ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
+    ...(input.runtimeConnection ? { runtimeConnection: input.runtimeConnection } : {}),
     ...(input.model ? { model: input.model } : {}),
     sessionId: input.sessionId,
   };

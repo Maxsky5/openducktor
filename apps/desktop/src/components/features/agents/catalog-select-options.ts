@@ -14,17 +14,20 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
     return [];
   }
 
-  const primaryAgents = catalog.agents.filter(isPrimaryCatalogAgent);
+  const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
+  const primaryAgents = catalogProfiles.filter(isPrimaryCatalogAgent);
   const fallbackAgents =
     primaryAgents.length > 0
       ? primaryAgents
-      : catalog.agents.filter((entry) => isVisibleAgent(entry) && entry.mode !== "subagent");
+      : catalogProfiles.filter((entry) => isVisibleAgent(entry) && entry.mode !== "subagent");
 
   return fallbackAgents.map((entry) => {
-    const accentColor = resolveAgentAccentColor(entry.name, entry.color);
+    const label = entry.label ?? entry.name ?? entry.id ?? "Unknown";
+    const value = entry.id ?? entry.name ?? label;
+    const accentColor = resolveAgentAccentColor(label, entry.color);
     return {
-      value: entry.name,
-      label: entry.name,
+      value,
+      label,
       ...(entry.description ? { description: entry.description } : {}),
       ...(accentColor ? { accentColor } : {}),
     };

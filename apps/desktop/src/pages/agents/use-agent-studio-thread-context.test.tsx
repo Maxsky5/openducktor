@@ -46,6 +46,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: createSession({
+    runtimeKind: "opencode",
     sessionId: "session-a",
     externalSessionId: "external-a",
     role: "spec",
@@ -103,12 +104,14 @@ describe("useAgentStudioThreadContext", () => {
 
   test("switches thread session on the next animation frame when active session changes", async () => {
     const sessionA = createSession({
+      runtimeKind: "opencode",
       sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
       scenario: "spec_initial",
     });
     const sessionB = createSession({
+      runtimeKind: "opencode",
       sessionId: "session-b",
       externalSessionId: "external-b",
       role: "planner",
@@ -138,6 +141,7 @@ describe("useAgentStudioThreadContext", () => {
 
   test("clears context-switch intent after nested animation frames when no switch is observed", async () => {
     const session = createSession({
+      runtimeKind: "opencode",
       sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
@@ -166,6 +170,7 @@ describe("useAgentStudioThreadContext", () => {
 
   test("keeps context-switch intent active while hydration is observed and clears once hydrated", async () => {
     const session = createSession({
+      runtimeKind: "opencode",
       sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",
@@ -204,6 +209,7 @@ describe("useAgentStudioThreadContext", () => {
 
   test("cancels pending animation frame on unmount cleanup", async () => {
     const session = createSession({
+      runtimeKind: "opencode",
       sessionId: "session-a",
       externalSessionId: "external-a",
       role: "spec",

@@ -15,7 +15,10 @@ import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-type RunningTaskSession = Pick<AgentSessionState, "sessionId" | "role" | "scenario" | "status">;
+type RunningTaskSession = Pick<
+  AgentSessionState,
+  "sessionId" | "runtimeKind" | "role" | "scenario" | "status"
+>;
 
 type KanbanTaskCardProps = {
   task: TaskCard;

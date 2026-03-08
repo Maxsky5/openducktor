@@ -1,5 +1,10 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentModelSelection,
+  AgentRole,
+  AgentRuntimeConnection,
+} from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
@@ -36,14 +41,12 @@ type SessionActionsDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    baseUrl: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   clearTurnDuration: (sessionId: string) => void;
@@ -149,13 +152,13 @@ export const createAgentSessionActions = ({
     await ensureSessionReady(sessionId);
 
     const selectedModel = sessionsRef.current[sessionId]?.selectedModel ?? undefined;
-    const userMessageMeta = selectedModel?.opencodeAgent
+    const userMessageMeta = selectedModel?.profileId
       ? {
           kind: "user" as const,
           ...(selectedModel.providerId ? { providerId: selectedModel.providerId } : {}),
           ...(selectedModel.modelId ? { modelId: selectedModel.modelId } : {}),
           ...(selectedModel.variant ? { variant: selectedModel.variant } : {}),
-          ...(selectedModel.opencodeAgent ? { opencodeAgent: selectedModel.opencodeAgent } : {}),
+          ...(selectedModel.profileId ? { profileId: selectedModel.profileId } : {}),
         }
       : undefined;
     turnStartedAtBySessionRef.current[sessionId] = Date.now();

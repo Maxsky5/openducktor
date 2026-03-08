@@ -88,7 +88,7 @@ export const getAssistantFooterData = (
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   const parts: string[] = [];
 
-  const agentLabel = assistantMeta?.opencodeAgent ?? sessionSelectedModel?.opencodeAgent;
+  const agentLabel = assistantMeta?.profileId ?? sessionSelectedModel?.profileId;
   if (typeof agentLabel === "string" && agentLabel.trim().length > 0) {
     parts.push(agentLabel.trim());
   }

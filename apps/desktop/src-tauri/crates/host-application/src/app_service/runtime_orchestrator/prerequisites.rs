@@ -74,10 +74,12 @@ impl AppService {
                     }),
                 }
             }
-            AgentRuntimeRole::Spec | AgentRuntimeRole::Planner => RuntimePrerequisites {
-                working_directory: repo_key.to_string(),
-                cleanup_target: None,
-            },
+            AgentRuntimeRole::Build | AgentRuntimeRole::Spec | AgentRuntimeRole::Planner => {
+                RuntimePrerequisites {
+                    working_directory: repo_key.to_string(),
+                    cleanup_target: None,
+                }
+            }
         };
 
         Ok(RuntimePrerequisiteResolution::Ready(prerequisites))

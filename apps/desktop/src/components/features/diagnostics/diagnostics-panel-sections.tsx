@@ -29,7 +29,7 @@ const buildRenderEntries = <T,>(
 const renderSection = ({
   section,
 }: {
-  section: DiagnosticsPanelModel["sections"][keyof DiagnosticsPanelModel["sections"]];
+  section: DiagnosticsPanelModel["sections"][number];
 }): ReactElement => {
   const rowEntries = buildRenderEntries(section.rows, (row) => `${row.label}:${row.value}`);
   const errorEntries = buildRenderEntries(section.errors, (error) => error);
@@ -56,17 +56,9 @@ const renderSection = ({
 };
 
 export function DiagnosticsPanelSections({ model }: DiagnosticsPanelSectionsProps): ReactElement {
-  const orderedSections = [
-    model.sections.repository,
-    model.sections.cliTools,
-    model.sections.opencodeRuntime,
-    model.sections.openducktorMcp,
-    model.sections.beadsStore,
-  ] as const;
-
   return (
     <div className="space-y-3">
-      {orderedSections.map((section) => (
+      {model.sections.map((section) => (
         <Fragment key={section.title}>{renderSection({ section })}</Fragment>
       ))}
     </div>

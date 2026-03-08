@@ -724,13 +724,14 @@ describe("agent-chat-message-card-model", () => {
             kind: "assistant",
             agentRole: "build",
             modelId: "gpt-5",
-            opencodeAgent: "builder",
+            profileId: "builder",
           },
         }),
         {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-4",
-          opencodeAgent: "fallback",
+          profileId: "fallback",
         },
       );
       expect(footer.infoParts).toEqual(["builder", "gpt-5"]);
@@ -738,18 +739,20 @@ describe("agent-chat-message-card-model", () => {
 
     test("falls back to session model labels when assistant metadata is absent", () => {
       const footer = getAssistantFooterData(createMessage(), {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-4o-mini",
-        opencodeAgent: "planner-agent",
+        profileId: "planner-agent",
       });
       expect(footer.infoParts).toEqual(["planner-agent", "gpt-4o-mini"]);
     });
 
     test("returns empty parts for non-assistant messages and blank metadata", () => {
       const nonAssistant = getAssistantFooterData(createMessage({ role: "tool" }), {
+        runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-4o-mini",
-        opencodeAgent: "planner-agent",
+        profileId: "planner-agent",
       });
       expect(nonAssistant.infoParts).toEqual([]);
 
@@ -759,13 +762,14 @@ describe("agent-chat-message-card-model", () => {
             kind: "assistant",
             agentRole: "spec",
             modelId: "   ",
-            opencodeAgent: " ",
+            profileId: " ",
           },
         }),
         {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "fallback-model",
-          opencodeAgent: "fallback-agent",
+          profileId: "fallback-agent",
         },
       );
       expect(blankMeta.infoParts).toEqual([]);

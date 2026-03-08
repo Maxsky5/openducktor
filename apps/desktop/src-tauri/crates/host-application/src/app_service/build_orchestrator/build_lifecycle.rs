@@ -279,6 +279,9 @@ impl AppService {
 
         let summary = RunSummary {
             run_id: run_id_string.clone(),
+            runtime_kind: host_domain::AgentRuntimeKind::Opencode,
+            runtime_route: host_domain::AgentRuntimeKind::Opencode
+                .route_for_port(spawned_agent.port),
             repo_path: prerequisites.repo_path.clone(),
             task_id: task_id_string.clone(),
             branch: prerequisites.branch.clone(),

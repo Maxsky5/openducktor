@@ -1,3 +1,4 @@
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { TauriHostClient as TauriHostClientType } from "./index";
 import { createTauriHostClient } from "./index";
@@ -58,7 +59,7 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
       endedAt: null,
       runtimeId: "runtime-1",
       runId: null,
-      baseUrl: "http://127.0.0.1:4173",
+      runtimeEndpoint: "http://127.0.0.1:4173",
       workingDirectory: "/repo",
       selectedModel: null,
     },
@@ -163,10 +164,11 @@ describe("TauriHostClient", () => {
       "runtimeCheck",
       "beadsCheck",
       "runsList",
-      "opencodeRuntimeList",
-      "opencodeRuntimeStart",
-      "opencodeRuntimeStop",
-      "opencodeRepoRuntimeEnsure",
+      "runtimeDefinitionsList",
+      "runtimeList",
+      "runtimeStart",
+      "runtimeStop",
+      "runtimeEnsure",
       "buildStart",
       "buildBlocked",
       "buildResumed",
@@ -296,8 +298,7 @@ describe("TauriHostClient", () => {
         return {
           gitOk: true,
           gitVersion: "2.45.0",
-          opencodeOk: true,
-          opencodeVersion: "0.12.0",
+          runtimes: [{ kind: "opencode", ok: true, version: "0.12.0" }],
           errors: [],
         };
       }
@@ -433,6 +434,7 @@ describe("TauriHostClient", () => {
     const result = await client.workspaceSaveSettingsSnapshot({
       repos: {
         "/repo": {
+          defaultRuntimeKind: "opencode",
           branchPrefix: "obp",
           defaultTargetBranch: "origin/main",
           trustedHooks: false,
@@ -453,6 +455,7 @@ describe("TauriHostClient", () => {
           snapshot: {
             repos: {
               "/repo": {
+                defaultRuntimeKind: "opencode",
                 branchPrefix: "obp",
                 defaultTargetBranch: "origin/main",
                 trustedHooks: false,
@@ -821,63 +824,111 @@ describe("TauriHostClient", () => {
     await expect(client.tasksList("/repo")).rejects.toThrow();
   });
 
-  test("opencode runtime commands use expected IPC routes", async () => {
+  test("runtime commands use expected IPC routes", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "opencode_runtime_start") {
+      if (command === "runtime_definitions_list") {
+        return [
+          {
+            kind: "opencode",
+            label: "OpenCode",
+            description: "OpenCode local runtime with OpenDucktor MCP integration.",
+            capabilities: {
+              supportsSessionLifecycle: true,
+              supportsStreamingEvents: true,
+              supportsModelCatalog: true,
+              supportsProfiles: true,
+              supportsVariants: true,
+              supportsWorkflowTools: true,
+              supportsPermissionRequests: true,
+              supportsQuestionRequests: true,
+              supportsHistory: true,
+              supportsTodos: true,
+              supportsDiff: true,
+              supportsFileStatus: true,
+              supportsDiagnostics: true,
+              supportsWorkspaceRuntime: true,
+              supportsTaskRuntime: true,
+              supportsBuildRuntime: true,
+              supportsMcpStatus: true,
+              supportsMcpConnect: true,
+              provisioningMode: "host_managed",
+            },
+          },
+        ];
+      }
+      if (command === "runtime_start") {
         return {
+          kind: "opencode",
           runtimeId: "runtime-1",
           repoPath: "/repo",
           taskId: "task-1",
           role: "planner",
           workingDirectory: "/repo",
-          port: 4173,
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4173",
+          },
           startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
-      if (command === "opencode_runtime_list") {
+      if (command === "runtime_list") {
         return [
           {
+            kind: "opencode",
             runtimeId: "runtime-1",
             repoPath: "/repo",
             taskId: "task-1",
             role: "planner",
             workingDirectory: "/repo",
-            port: 4173,
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4173",
+            },
             startedAt: "2026-02-17T12:00:00Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
           },
         ];
       }
-      if (command === "opencode_repo_runtime_ensure") {
+      if (command === "runtime_ensure") {
         return {
+          kind: "opencode",
           runtimeId: "runtime-main",
           repoPath: "/repo",
-          taskId: "__workspace__",
+          taskId: null,
           role: "workspace",
           workingDirectory: "/repo",
-          port: 4180,
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4180",
+          },
           startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
-      if (command === "opencode_runtime_stop") {
+      if (command === "runtime_stop") {
         return { ok: true };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const runtime = await client.opencodeRuntimeStart("/repo", "task-1", "planner");
-    const runtimes = await client.opencodeRuntimeList("/repo");
-    const ensured = await client.opencodeRepoRuntimeEnsure("/repo");
-    const stopped = await client.opencodeRuntimeStop("runtime-1");
+    const definitions = await client.runtimeDefinitionsList();
+    const runtime = await client.runtimeStart("opencode", "/repo", "task-1", "planner");
+    const runtimes = await client.runtimeList("opencode", "/repo");
+    const ensured = await client.runtimeEnsure("opencode", "/repo");
+    const stopped = await client.runtimeStop("runtime-1");
 
+    expect(definitions[0]?.kind).toBe("opencode");
     expect(runtime.runtimeId).toBe("runtime-1");
     expect(runtimes).toHaveLength(1);
     expect(ensured.runtimeId).toBe("runtime-main");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
-      "opencode_runtime_start",
-      "opencode_runtime_list",
-      "opencode_repo_runtime_ensure",
-      "opencode_runtime_stop",
+      "runtime_definitions_list",
+      "runtime_start",
+      "runtime_list",
+      "runtime_ensure",
+      "runtime_stop",
     ]);
   });
 
@@ -901,7 +952,7 @@ describe("TauriHostClient", () => {
               endedAt: null,
               runtimeId: "runtime-1",
               runId: null,
-              baseUrl: "http://127.0.0.1:4173",
+              runtimeEndpoint: "http://127.0.0.1:4173",
               workingDirectory: "/repo",
               selectedModel: null,
             },
@@ -952,7 +1003,7 @@ describe("TauriHostClient", () => {
               endedAt: null,
               runtimeId: "runtime-1",
               runId: null,
-              baseUrl: "http://127.0.0.1:4173",
+              runtimeEndpoint: "http://127.0.0.1:4173",
               workingDirectory: "/repo",
               selectedModel: null,
             },
@@ -968,7 +1019,7 @@ describe("TauriHostClient", () => {
               endedAt: null,
               runtimeId: "runtime-1",
               runId: null,
-              baseUrl: "http://127.0.0.1:4173",
+              runtimeEndpoint: "http://127.0.0.1:4173",
               workingDirectory: "/repo",
               selectedModel: null,
             },
@@ -984,7 +1035,7 @@ describe("TauriHostClient", () => {
               endedAt: null,
               runtimeId: "runtime-1",
               runId: null,
-              baseUrl: "http://127.0.0.1:4173",
+              runtimeEndpoint: "http://127.0.0.1:4173",
               workingDirectory: "/repo",
               selectedModel: null,
             },
@@ -999,7 +1050,7 @@ describe("TauriHostClient", () => {
     expect(sessions).toHaveLength(3);
     expect(sessions[0]?.scenario).toBe("spec_initial");
     expect(sessions[1]?.scenario).toBe("planner_initial");
-    expect(sessions[2]?.scenario).toBeUndefined();
+    expect(sessions[2]?.scenario).toBe(undefined);
   });
 
   test("spec, plan, qa, and session reads share one metadata IPC call per task", async () => {

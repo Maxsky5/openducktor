@@ -237,9 +237,9 @@ fn make_session(session_id: &str, started_at: &str, status: &str) -> AgentSessio
         started_at: started_at.to_string(),
         updated_at: Some(started_at.to_string()),
         ended_at: None,
+        runtime_kind: "opencode".to_string(),
         runtime_id: Some("runtime-1".to_string()),
         run_id: None,
-        base_url: Some("http://127.0.0.1:4173".to_string()),
         working_directory: "/repo".to_string(),
         selected_model: None,
     }

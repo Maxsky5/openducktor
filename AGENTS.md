@@ -36,6 +36,16 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 - TS port: `AgentEnginePort` in `packages/core/src/ports/agent-engine.ts`
 - Rust trait: `TaskStore` defined in `apps/desktop/src-tauri/crates/host-domain/src/store.rs` and re-exported by `apps/desktop/src-tauri/crates/host-domain/src/lib.rs`
 
+### Runtime abstraction rules
+
+- Treat runtime definitions, runtime routes, and runtime connections as different layers.
+- Shared host-visible runtime/run payloads live in `packages/contracts/src/run-schemas.ts`; update Rust host types in `apps/desktop/src-tauri/crates/host-domain/src/runtime.rs` in the same change.
+- `AgentRuntimeSummary` is live runtime-instance metadata only: keep `kind`, `runtimeId`, `repoPath`, nullable `taskId`, `role`, `workingDirectory`, `runtimeRoute`, `startedAt`, and `descriptor`. Do not reintroduce top-level `endpoint`, `port`, or duplicate `capabilities` fields there.
+- Request-scoped agent engine operations use `runtimeConnection` objects, not raw shared `runtimeEndpoint` strings. Build adapter-local client inputs from the connection at the adapter boundary.
+- Persisted session records/documents must not store live runtime route data (`runtimeEndpoint`, `baseUrl`, `runtimeTransport`). Persist durable identifiers plus `workingDirectory`, then resolve a live route during hydration.
+- Keep runtime routing fail-fast. Never fall back from a session/build runtime to the repo default runtime when loading session history, todos, diff, or file status.
+- Keep runtime capability definitions in runtime descriptors (`packages/contracts/src/agent-runtime-schemas.ts` and Rust descriptor equivalents). Do not duplicate capability booleans onto runtime-instance summaries.
+
 ## Commands
 
 Run from repo root unless stated otherwise:
@@ -108,6 +118,7 @@ Prefer light shades for backgrounds (`bg-sky-50`) and dark for text (`text-sky-7
 - Use operation-specific loading flags (`isLoadingTasks`, `isLoadingChecks`), not generic busy flags.
 - Centralize shared types under `apps/desktop/src/types`; use feature-level `constants.ts` over magic strings.
 - For async form submissions: disable the full form scope, show in-button loading, and preserve pending/error/success feedback.
+- Avoid nested ternaries in app and test code. Prefer named booleans, helper functions, lookup maps, or explicit `if`/`else` control flow so state rules stay readable.
 
 ## Backend / Tauri
 

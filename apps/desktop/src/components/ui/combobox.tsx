@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -19,6 +19,7 @@ export type ComboboxOption = {
   searchKeywords?: string[];
   description?: string;
   accentColor?: string;
+  icon?: ReactNode;
   secondaryLabel?: string;
 };
 
@@ -27,7 +28,7 @@ export type ComboboxGroup = {
   options: ComboboxOption[];
 };
 
-type ComboboxProps = {
+export type ComboboxProps = {
   value: string;
   onValueChange: (value: string) => void;
   options: ComboboxOption[];
@@ -147,11 +148,12 @@ export function Combobox({
   }, [resolvedGroups, options]);
 
   const renderOptionLabel = (
-    option: Pick<ComboboxOption, "accentColor" | "label">,
+    option: Pick<ComboboxOption, "accentColor" | "icon" | "label">,
     shouldWrap: boolean,
     containerClassName?: string,
   ): ReactElement => (
     <span className={cn(comboboxOptionLabelRowVariants({ wrap: shouldWrap }), containerClassName)}>
+      {option.icon ? <span className="shrink-0 text-muted-foreground">{option.icon}</span> : null}
       {option.accentColor ? (
         <span
           className="size-2 shrink-0 rounded-full"

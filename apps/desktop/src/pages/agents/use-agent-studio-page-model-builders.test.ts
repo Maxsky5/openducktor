@@ -86,6 +86,7 @@ describe("use-agent-studio-page-model-builders", () => {
 
   test("buildWorkflowModelContext derives role availability and fallback session selector", () => {
     const plannerSession = createSession({
+      runtimeKind: "opencode",
       sessionId: "planner-session",
       role: "planner",
       scenario: "planner_initial",
@@ -118,6 +119,7 @@ describe("use-agent-studio-page-model-builders", () => {
 
   test("buildWorkflowModelContext includes follow-up build scenarios from QA and human feedback", () => {
     const activeSession = createSession({
+      runtimeKind: "opencode",
       sessionId: "spec-session",
       role: "spec",
       scenario: "spec_initial",

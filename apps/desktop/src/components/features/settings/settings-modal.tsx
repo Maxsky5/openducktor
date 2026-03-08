@@ -102,7 +102,7 @@ export function SettingsModal({
           hasPromptValidationErrors={controller.hasPromptValidationErrors}
           settingsError={controller.settingsError}
           saveError={controller.saveError}
-          catalogError={controller.catalogError}
+          catalogError={controller.runtimeDefinitionsError}
           section={section}
           repositorySection={repositorySection}
           promptValidationState={controller.promptValidationState}

@@ -31,10 +31,11 @@ const createBaseArgs = (): HookArgs => ({
   isActiveTaskHydrated: true,
   isSessionWorking: false,
   selectionForNewSession: {
+    runtimeKind: "opencode",
     providerId: "openai",
     modelId: "gpt-5",
     variant: "default",
-    opencodeAgent: "spec",
+    profileId: "spec",
   },
   startAgentSession: async () => "session-new",
   sendAgentMessage: async () => {},

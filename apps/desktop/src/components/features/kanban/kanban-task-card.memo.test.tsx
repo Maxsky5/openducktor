@@ -44,6 +44,7 @@ describe("KanbanTaskCard memoization", () => {
 
     const activeSessions = [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         role: "build",
         scenario: "build_implementation_start",

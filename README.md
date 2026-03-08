@@ -156,7 +156,7 @@ cd apps/desktop/src-tauri && cargo check
   - `human_request_changes`, `human_approve`
 - Runs/runtimes:
   - `runs_list`
-  - `opencode_runtime_list`, `opencode_runtime_start`, `opencode_runtime_stop`, `opencode_repo_runtime_ensure`
+  - `runtime_definitions_list`, `runtime_list`, `runtime_start`, `runtime_stop`, `runtime_ensure`
 - Agent sessions:
   - `agent_sessions_list`, `agent_session_upsert`
 - Theme:

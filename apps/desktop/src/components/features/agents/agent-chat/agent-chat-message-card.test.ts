@@ -245,7 +245,7 @@ describe("AgentChatMessageCard tool duration", () => {
           meta: {
             kind: "assistant",
             agentRole: "planner",
-            opencodeAgent: "planner-main",
+            profileId: "planner-main",
             modelId: "gpt-5.3-codex",
           },
         },
@@ -270,7 +270,7 @@ describe("AgentChatMessageCard tool duration", () => {
           meta: {
             kind: "assistant",
             agentRole: "planner",
-            opencodeAgent: "planner-main",
+            profileId: "planner-main",
           },
         },
         sessionRole: "planner",
@@ -295,14 +295,15 @@ describe("AgentChatMessageCard tool duration", () => {
             kind: "user",
             providerId: "openai",
             modelId: "gpt-5.3-codex",
-            opencodeAgent: "Hephaestus (Deep Agent)",
+            profileId: "Hephaestus (Deep Agent)",
           },
         },
         sessionRole: "build",
         sessionSelectedModel: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5.3-codex",
-          opencodeAgent: "Ares (Legacy Agent)",
+          profileId: "Ares (Legacy Agent)",
         },
         sessionAgentColors: {
           "Hephaestus (Deep Agent)": "#2f6fed",
@@ -328,9 +329,10 @@ describe("AgentChatMessageCard tool duration", () => {
         },
         sessionRole: "build",
         sessionSelectedModel: {
+          runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5.3-codex",
-          opencodeAgent: "Ares (Legacy Agent)",
+          profileId: "Ares (Legacy Agent)",
         },
         sessionAgentColors: {
           "Ares (Legacy Agent)": "#f97316",

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createLoadAgentSessions } from "./load-sessions";
@@ -88,6 +89,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = (await import("../../host")).host.agentSessionsList;
     (await import("../../host")).host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -98,7 +100,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -149,6 +151,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const originalList = hostModule.host.agentSessionsList;
     hostModule.host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -159,7 +162,7 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
+        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -175,8 +178,123 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-1"]?.messages).toEqual([]);
   });
 
+  test("hydrates requested session through its persisted runtime kind when endpoint is missing", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    let observedRuntimeEndpoint = "";
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async ({ runtimeConnection }) => {
+          observedRuntimeEndpoint = runtimeConnection.endpoint ?? "";
+          return [];
+        },
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession: () => {},
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
+    const ensuredRuntimeKinds: string[] = [];
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "claude-code",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo",
+        selectedModel: {
+          runtimeKind: "claude-code",
+          providerId: "anthropic",
+          modelId: "claude-3-7-sonnet",
+        },
+      },
+    ];
+    hostModule.host.runtimeList = async (runtimeKind) => [
+      {
+        kind: runtimeKind,
+        runtimeId: "runtime-1",
+        repoPath: "/tmp/repo",
+        taskId: "task-1",
+        role: "planner",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR,
+          kind: runtimeKind,
+          label: "Claude Code",
+          description: "Claude Code runtime",
+        },
+      },
+    ];
+    hostModule.host.runtimeEnsure = async (runtimeKind, _repoPath) => {
+      ensuredRuntimeKinds.push(runtimeKind);
+      return {
+        kind: runtimeKind,
+        runtimeId: "runtime-claude",
+        repoPath: "/tmp/repo",
+        taskId: "repo-main",
+        role: "spec",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR,
+          kind: runtimeKind,
+          label: "Claude Code",
+          description: "Claude Code runtime",
+        },
+      };
+    };
+
+    try {
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runtimeEnsure = originalEnsure;
+    }
+
+    expect(ensuredRuntimeKinds).toEqual([]);
+    expect(observedRuntimeEndpoint).toBe("http://127.0.0.1:4555");
+    expect(state["session-1"]?.runtimeKind).toBe("claude-code");
+  });
+
   test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
     const existingSession: AgentSessionState = {
+      runtimeKind: "opencode",
       sessionId: "session-1",
       externalSessionId: "external-1",
       taskId: "task-1",
@@ -186,7 +304,7 @@ describe("agent-orchestrator-load-sessions", () => {
       startedAt: "2026-02-22T08:00:00.000Z",
       runtimeId: "runtime-1",
       runId: "run-1",
-      baseUrl: "http://127.0.0.1:4444",
+      runtimeEndpoint: "http://127.0.0.1:4444",
       workingDirectory: "/tmp/repo",
       messages: [],
       draftAssistantText: "",
@@ -249,8 +367,10 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
+    const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -261,8 +381,25 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
+      },
+    ];
+    hostModule.host.runsList = async () => [
+      {
+        runId: "run-1",
+        runtimeKind: "opencode",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4444",
+        },
+        repoPath: "/tmp/repo",
+        taskId: "task-1",
+        branch: "obp/task-1",
+        worktreePath: "/tmp/repo/worktree",
+        port: 4444,
+        state: "running",
+        lastMessage: null,
+        startedAt: "2026-02-22T08:00:00.000Z",
       },
     ];
 
@@ -270,6 +407,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runsList = originalRunsList;
     }
 
     expect(historyLoads).toBe(1);
@@ -334,6 +472,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
       listDeferred.resolve([
         {
+          runtimeKind: "opencode",
           sessionId: "session-stale",
           externalSessionId: "external-stale",
           taskId: "task-1",
@@ -344,7 +483,6 @@ describe("agent-orchestrator-load-sessions", () => {
           updatedAt: "2026-02-22T08:00:00.000Z",
           runtimeId: "runtime-1",
           runId: "run-1",
-          baseUrl: "http://127.0.0.1:4444",
           workingDirectory: "/tmp/repo",
         },
       ]);
@@ -417,6 +555,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     hostModule.host.agentSessionsList = async () => [
       {
+        runtimeKind: "opencode",
         sessionId: "session-1",
         externalSessionId: "external-1",
         taskId: "task-1",
@@ -427,7 +566,6 @@ describe("agent-orchestrator-load-sessions", () => {
         updatedAt: "2026-02-22T08:00:00.000Z",
         runtimeId: "runtime-1",
         runId: "run-1",
-        baseUrl: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -454,9 +592,9 @@ describe("agent-orchestrator-load-sessions", () => {
     }
 
     const messages = state["session-1"]?.messages ?? [];
-    expect(messages.length).toBeGreaterThan(1);
-    expect(messages[1]?.id).toBe("history:system-prompt:session-1");
-    expect(messages[1]?.content.startsWith("System prompt:\n\n")).toBe(true);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.id).toBe("history-unavailable:session-1");
+    expect(messages[0]?.content).toContain("Session runtime unavailable");
     expect(specCalls).toBe(0);
     expect(planCalls).toBe(0);
     expect(qaCalls).toBe(0);

@@ -8,11 +8,11 @@ import type { FileDiff, FileStatus } from "@openducktor/contracts";
  * (older OpenCode versions may not expose this route).
  */
 export const loadSessionDiff = async (
-  baseUrl: string,
+  runtimeEndpoint: string,
   sessionId: string,
   messageId?: string,
 ): Promise<FileDiff[]> => {
-  const url = new URL(`/api/session/${sessionId}/diff`, normalizeBaseUrl(baseUrl));
+  const url = new URL(`/api/session/${sessionId}/diff`, normalizeRuntimeEndpoint(runtimeEndpoint));
   if (messageId) {
     url.searchParams.set("messageID", messageId);
   }
@@ -39,8 +39,8 @@ export const loadSessionDiff = async (
  * Loads file status from the OpenCode SDK API.
  * Endpoint: GET /file/status
  */
-export const loadFileStatus = async (baseUrl: string): Promise<FileStatus[]> => {
-  const url = new URL("/api/file/status", normalizeBaseUrl(baseUrl));
+export const loadFileStatus = async (runtimeEndpoint: string): Promise<FileStatus[]> => {
+  const url = new URL("/api/file/status", normalizeRuntimeEndpoint(runtimeEndpoint));
 
   try {
     const response = await fetch(url.toString(), {
@@ -60,8 +60,8 @@ export const loadFileStatus = async (baseUrl: string): Promise<FileStatus[]> => 
   }
 };
 
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+function normalizeRuntimeEndpoint(runtimeEndpoint: string): string {
+  return runtimeEndpoint.endsWith("/") ? runtimeEndpoint.slice(0, -1) : runtimeEndpoint;
 }
 
 function parseFileDiffArray(body: unknown): FileDiff[] {

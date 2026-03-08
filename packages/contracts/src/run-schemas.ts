@@ -1,10 +1,18 @@
 import { z } from "zod";
+import { runtimeDescriptorSchema, runtimeKindSchema } from "./agent-runtime-schemas";
+
+export const runtimeHealthSchema = z.object({
+  kind: runtimeKindSchema,
+  ok: z.boolean(),
+  version: z.string().nullable(),
+  error: z.string().nullable().optional(),
+});
+export type RuntimeHealth = z.infer<typeof runtimeHealthSchema>;
 
 export const systemCheckSchema = z.object({
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
-  opencodeOk: z.boolean(),
-  opencodeVersion: z.string().nullable(),
+  runtimes: z.array(runtimeHealthSchema).default([]),
   beadsOk: z.boolean(),
   beadsPath: z.string().nullable(),
   beadsError: z.string().nullable(),
@@ -15,8 +23,7 @@ export type SystemCheck = z.infer<typeof systemCheckSchema>;
 export const runtimeCheckSchema = z.object({
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
-  opencodeOk: z.boolean(),
-  opencodeVersion: z.string().nullable(),
+  runtimes: z.array(runtimeHealthSchema).default([]),
   errors: z.array(z.string()),
 });
 export type RuntimeCheck = z.infer<typeof runtimeCheckSchema>;
@@ -39,8 +46,18 @@ export const runStateSchema = z.enum([
 ]);
 export type RunState = z.infer<typeof runStateSchema>;
 
+export const runtimeRouteSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("local_http"),
+    endpoint: z.string().trim().min(1),
+  }),
+]);
+export type RuntimeRoute = z.infer<typeof runtimeRouteSchema>;
+
 export const runSummarySchema = z.object({
   runId: z.string(),
+  runtimeKind: runtimeKindSchema,
+  runtimeRoute: runtimeRouteSchema,
   repoPath: z.string(),
   taskId: z.string(),
   branch: z.string(),
@@ -52,20 +69,28 @@ export const runSummarySchema = z.object({
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
-export const agentRuntimeSummaryRoleSchema = z.enum(["workspace", "spec", "planner", "qa"]);
+export const agentRuntimeSummaryRoleSchema = z.enum([
+  "workspace",
+  "spec",
+  "planner",
+  "build",
+  "qa",
+]);
 export type AgentRuntimeSummaryRole = z.infer<typeof agentRuntimeSummaryRoleSchema>;
 
 export const agentRuntimeStartRoleSchema = z.enum(["spec", "planner", "qa"]);
 export type AgentRuntimeStartRole = z.infer<typeof agentRuntimeStartRoleSchema>;
 
 export const agentRuntimeSummarySchema = z.object({
+  kind: runtimeKindSchema,
   runtimeId: z.string(),
   repoPath: z.string(),
-  taskId: z.string(),
+  taskId: z.string().nullable(),
   role: agentRuntimeSummaryRoleSchema,
   workingDirectory: z.string(),
-  port: z.number().int().positive(),
+  runtimeRoute: runtimeRouteSchema,
   startedAt: z.string(),
+  descriptor: runtimeDescriptorSchema,
 });
 export type AgentRuntimeSummary = z.infer<typeof agentRuntimeSummarySchema>;
 

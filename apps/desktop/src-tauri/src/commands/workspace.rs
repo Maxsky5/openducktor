@@ -57,6 +57,14 @@ pub async fn workspace_update_repo_config(
     let existing = as_error(state.service.workspace_get_repo_config_optional(&repo_path))?;
 
     let repo_config = RepoConfig {
+        default_runtime_kind: config
+            .default_runtime_kind
+            .or_else(|| {
+                existing
+                    .as_ref()
+                    .map(|entry| entry.default_runtime_kind.clone())
+            })
+            .unwrap_or_else(|| "opencode".to_string()),
         worktree_base_path: config.worktree_base_path.or_else(|| {
             existing
                 .as_ref()
@@ -136,6 +144,18 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
     .await?;
 
     let final_repo_config = RepoConfig {
+        default_runtime_kind: settings
+            .default_runtime_kind
+            .map(|runtime_kind| runtime_kind.trim().to_string())
+            .map(|runtime_kind| {
+                if runtime_kind.is_empty() {
+                    Err("defaultRuntimeKind cannot be blank".to_string())
+                } else {
+                    Ok(runtime_kind)
+                }
+            })
+            .transpose()?
+            .unwrap_or(existing.default_runtime_kind),
         worktree_base_path: settings.worktree_base_path.or(existing.worktree_base_path),
         branch_prefix: settings.branch_prefix.unwrap_or(existing.branch_prefix),
         default_target_branch: settings
@@ -516,10 +536,10 @@ fn normalize_hook_commands(commands: &mut Vec<String>) {
 mod tests {
     use super::{
         canonical_repo_key, format_hook_list, normalize_hook_set, sanitize_hook_preview,
-        validate_trust_challenge_entry, workspace_save_settings_snapshot,
-        workspace_set_trusted_hooks, HookSet, HookTrustChallenge,
+        validate_trust_challenge_entry, workspace_save_repo_settings,
+        workspace_save_settings_snapshot, workspace_set_trusted_hooks, HookSet, HookTrustChallenge,
     };
-    use crate::{AppState, SettingsSnapshotPayload};
+    use crate::{AppState, RepoSettingsPayload, SettingsSnapshotPayload};
     use host_application::AppService;
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
@@ -641,6 +661,20 @@ mod tests {
         let app_handle = fixture.app.handle().clone();
         tauri::async_runtime::block_on(workspace_save_settings_snapshot(
             state, app_handle, snapshot,
+        ))
+    }
+
+    fn run_workspace_save_repo_settings(
+        fixture: &WorkspaceCommandFixture,
+        settings: RepoSettingsPayload,
+    ) -> Result<WorkspaceRecord, String> {
+        let state = fixture.app.state::<AppState>();
+        let app_handle = fixture.app.handle().clone();
+        tauri::async_runtime::block_on(workspace_save_repo_settings(
+            state,
+            app_handle,
+            fixture.repo_path.clone(),
+            settings,
         ))
     }
 
@@ -1099,6 +1133,61 @@ mod tests {
             persisted.trusted_hooks_fingerprint.as_deref(),
             Some(expected_fingerprint.as_str())
         );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_repo_settings_rejects_blank_default_runtime_kind() {
+        let fixture =
+            setup_workspace_command_fixture("save-repo-settings-blank-runtime", HookSet::default());
+
+        let error = run_workspace_save_repo_settings(
+            &fixture,
+            RepoSettingsPayload {
+                default_runtime_kind: Some("   ".to_string()),
+                worktree_base_path: None,
+                branch_prefix: None,
+                default_target_branch: None,
+                trusted_hooks: false,
+                hooks: None,
+                worktree_file_copies: None,
+                prompt_overrides: None,
+                agent_defaults: None,
+            },
+        )
+        .expect_err("blank runtime kind should be rejected");
+
+        assert!(
+            error.contains("defaultRuntimeKind cannot be blank"),
+            "unexpected validation error: {error}"
+        );
+    }
+
+    #[test]
+    fn workspace_save_repo_settings_trims_default_runtime_kind() -> Result<(), String> {
+        let fixture =
+            setup_workspace_command_fixture("save-repo-settings-runtime-trim", HookSet::default());
+
+        run_workspace_save_repo_settings(
+            &fixture,
+            RepoSettingsPayload {
+                default_runtime_kind: Some("  claude-code  ".to_string()),
+                worktree_base_path: None,
+                branch_prefix: None,
+                default_target_branch: None,
+                trusted_hooks: false,
+                hooks: None,
+                worktree_file_copies: None,
+                prompt_overrides: None,
+                agent_defaults: None,
+            },
+        )?;
+
+        let persisted = fixture
+            .service
+            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .map_err(|error| error.to_string())?;
+        assert_eq!(persisted.default_runtime_kind, "claude-code");
         Ok(())
     }
 

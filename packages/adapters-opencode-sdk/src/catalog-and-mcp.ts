@@ -15,8 +15,12 @@ import type { ClientFactory, McpServerStatus } from "./types";
 const deduplicateAgentAliases = (agents: AgentDescriptor[]): AgentDescriptor[] => {
   const displayNameEntries = new Map<string, AgentDescriptor>();
   for (const agent of agents) {
-    if (agent.name.includes(" ")) {
-      const baseId = (agent.name.split(" ")[0] ?? agent.name).toLowerCase();
+    const agentLabel = agent.label ?? agent.name ?? agent.id;
+    if (!agentLabel) {
+      continue;
+    }
+    if (agentLabel.includes(" ")) {
+      const baseId = (agentLabel.split(" ")[0] ?? agentLabel).toLowerCase();
       displayNameEntries.set(baseId, agent);
     }
   }
@@ -24,10 +28,14 @@ const deduplicateAgentAliases = (agents: AgentDescriptor[]): AgentDescriptor[] =
     return agents;
   }
   return agents.filter((agent) => {
-    if (agent.name.includes(" ")) {
+    const agentLabel = agent.label ?? agent.name ?? agent.id;
+    if (!agentLabel) {
+      return false;
+    }
+    if (agentLabel.includes(" ")) {
       return true;
     }
-    const displayVariant = displayNameEntries.get(agent.name.toLowerCase());
+    const displayVariant = displayNameEntries.get(agentLabel.toLowerCase());
     if (!displayVariant) {
       return true;
     }
@@ -44,12 +52,12 @@ const deduplicateAgentAliases = (agents: AgentDescriptor[]): AgentDescriptor[] =
 export const listAvailableModels = async (
   createClient: ClientFactory,
   input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   },
 ): Promise<AgentModelCatalog> => {
   const client = createClient({
-    baseUrl: input.baseUrl,
+    runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
   const response = await client.config.providers({
@@ -79,33 +87,34 @@ export const listAvailableModels = async (
   const rawAgents = Array.isArray(agentsData)
     ? agentsData
         .map((entry) => ({
-          name: entry.name,
+          id: entry.name,
+          label: entry.name,
           ...(entry.description ? { description: entry.description } : {}),
           mode: entry.mode,
           ...(entry.hidden !== undefined ? { hidden: entry.hidden } : {}),
           ...(entry.native !== undefined ? { native: entry.native } : {}),
           ...(typeof entry.color === "string" ? { color: entry.color } : {}),
         }))
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => a.label.localeCompare(b.label))
     : [];
 
-  const agents = deduplicateAgentAliases(rawAgents);
+  const profiles = deduplicateAgentAliases(rawAgents);
 
   return {
     ...baseCatalog,
-    agents,
+    profiles,
   };
 };
 
 export const listAvailableToolIds = async (
   createClient: ClientFactory,
   input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   },
 ): Promise<string[]> => {
   const client = createClient({
-    baseUrl: input.baseUrl,
+    runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
   const response = await client.tool.ids({
@@ -118,12 +127,12 @@ export const listAvailableToolIds = async (
 export const getMcpStatus = async (
   createClient: ClientFactory,
   input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
   },
 ): Promise<Record<string, McpServerStatus>> => {
   const client = createClient({
-    baseUrl: input.baseUrl,
+    runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
   const response = await client.mcp.status({
@@ -151,13 +160,13 @@ export const getMcpStatus = async (
 export const connectMcpServer = async (
   createClient: ClientFactory,
   input: {
-    baseUrl: string;
+    runtimeEndpoint: string;
     workingDirectory: string;
     name: string;
   },
 ): Promise<void> => {
   const client = createClient({
-    baseUrl: input.baseUrl,
+    runtimeEndpoint: input.runtimeEndpoint,
     workingDirectory: input.workingDirectory,
   });
   const response = await client.mcp.connect({

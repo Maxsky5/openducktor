@@ -33,12 +33,14 @@ fn update_hasher_with_hook_group(hasher: &mut Sha256, group: &[u8], commands: &[
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentModelDefault {
+    #[serde(default = "default_runtime_kind")]
+    pub runtime_kind: String,
     pub provider_id: String,
     pub model_id: String,
     #[serde(default)]
     pub variant: Option<String>,
-    #[serde(default)]
-    pub opencode_agent: Option<String>,
+    #[serde(default, rename = "profileId", alias = "opencodeAgent")]
+    pub profile_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -72,6 +74,8 @@ const fn default_prompt_override_enabled() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoConfig {
+    #[serde(default = "default_runtime_kind")]
+    pub default_runtime_kind: String,
     pub worktree_base_path: Option<String>,
     #[serde(default = "default_branch_prefix")]
     pub branch_prefix: String,
@@ -95,6 +99,10 @@ pub(super) fn default_branch_prefix() -> String {
     "obp".to_string()
 }
 
+pub(super) fn default_runtime_kind() -> String {
+    "opencode".to_string()
+}
+
 pub(super) fn default_target_branch() -> String {
     "origin/main".to_string()
 }
@@ -102,6 +110,7 @@ pub(super) fn default_target_branch() -> String {
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
+            default_runtime_kind: default_runtime_kind(),
             worktree_base_path: None,
             branch_prefix: default_branch_prefix(),
             default_target_branch: default_target_branch(),

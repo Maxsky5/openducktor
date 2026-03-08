@@ -5,15 +5,17 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
 export type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
 type RepoAgentDefaultLike = {
+  runtimeKind?: string;
   providerId: string;
   modelId: string;
   variant?: string | undefined;
-  opencodeAgent?: string | undefined;
+  profileId?: string | undefined;
 };
 export type RepoAgentDefaultsInput = {
   spec?: RepoAgentDefaultLike | null | undefined;
@@ -35,18 +37,20 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
 export const ensureAgentDefault = (
   value:
     | {
+        runtimeKind?: string;
         providerId: string;
         modelId: string;
         variant?: string | undefined;
-        opencodeAgent?: string | undefined;
+        profileId?: string | undefined;
       }
     | null
     | undefined,
 ): RepoAgentDefaultInput => ({
+  runtimeKind: value?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
   providerId: value?.providerId ?? "",
   modelId: value?.modelId ?? "",
   variant: value?.variant ?? "",
-  opencodeAgent: value?.opencodeAgent ?? "",
+  profileId: value?.profileId ?? "",
 });
 
 export const updateRoleDefault = (
@@ -113,7 +117,7 @@ export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInp
       value &&
       value.providerId.trim().length > 0 &&
       value.modelId.trim().length > 0 &&
-      (value.opencodeAgent?.trim().length ?? 0) > 0
+      (value.profileId?.trim().length ?? 0) > 0
     );
   }).map(({ label }) => label);
 };

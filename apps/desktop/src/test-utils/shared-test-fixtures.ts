@@ -41,7 +41,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeId: null,
   runId: null,
-  baseUrl: "http://127.0.0.1:4444",
+  runtimeEndpoint: "http://127.0.0.1:4444",
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
@@ -212,23 +213,46 @@ describe("use-workspace-operations", () => {
     const clearActiveBeadsCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
     const runtimeDeferred = createDeferred<{
+      kind: "opencode";
       runtimeId: string;
       repoPath: string;
-      taskId: string;
+      taskId: null;
       role: "workspace";
       workingDirectory: string;
-      port: number;
+      runtimeRoute: {
+        type: "local_http";
+        endpoint: string;
+      };
       startedAt: string;
+      descriptor: typeof OPENCODE_RUNTIME_DESCRIPTOR;
     }>();
     const runtimeEnsure = mock(async () => runtimeDeferred.promise);
+    const workspaceGetRepoConfig = mock(async () => ({
+      defaultRuntimeKind: "opencode" as const,
+      branchPrefix: "obp",
+      defaultTargetBranch: "main",
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }));
     const runtimeValue = {
+      kind: "opencode",
       runtimeId: "runtime-1",
       repoPath: "/repo-a",
-      taskId: "task-1",
+      taskId: null,
       role: "workspace",
       workingDirectory: "/tmp/repo-a",
-      port: 3030,
+      runtimeRoute: {
+        type: "local_http" as const,
+        endpoint: "http://127.0.0.1:3030",
+      },
       startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     } as const;
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
@@ -236,11 +260,13 @@ describe("use-workspace-operations", () => {
 
     const original = {
       workspaceSelect: host.workspaceSelect,
-      opencodeRepoRuntimeEnsure: host.opencodeRepoRuntimeEnsure,
+      runtimeEnsure: host.runtimeEnsure,
+      workspaceGetRepoConfig: host.workspaceGetRepoConfig,
       workspaceList: host.workspaceList,
     };
     host.workspaceSelect = workspaceSelect;
-    host.opencodeRepoRuntimeEnsure = runtimeEnsure;
+    host.runtimeEnsure = runtimeEnsure;
+    host.workspaceGetRepoConfig = workspaceGetRepoConfig;
     host.workspaceList = workspaceList;
 
     const harness = createHookHarness({
@@ -266,17 +292,19 @@ describe("use-workspace-operations", () => {
       expect(workspaceList).toHaveBeenCalled();
       runtimeDeferred.resolve(runtimeValue);
       await selectPromise;
+      await Promise.resolve();
 
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).toHaveBeenCalled();
       expect(clearActiveBeadsCheck).toHaveBeenCalled();
       expect(workspaceSelect).toHaveBeenCalledWith("/repo-a");
-      expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a");
+      expect(runtimeEnsure).toHaveBeenCalledWith("opencode", "/repo-a");
     } finally {
       runtimeDeferred.resolve(runtimeValue);
       await harness.unmount();
       host.workspaceSelect = original.workspaceSelect;
-      host.opencodeRepoRuntimeEnsure = original.opencodeRepoRuntimeEnsure;
+      host.runtimeEnsure = original.runtimeEnsure;
+      host.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
       host.workspaceList = original.workspaceList;
     }
   });

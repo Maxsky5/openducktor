@@ -116,6 +116,11 @@ describe("use-task-operations", () => {
       async (): Promise<RunSummary[]> => [
         {
           runId: "run-1",
+          runtimeKind: "opencode",
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:3000",
+          },
           repoPath: "/repo",
           taskId: "A",
           branch: "feature/a",
@@ -205,6 +210,11 @@ describe("use-task-operations", () => {
       deferredRuns.resolve([
         {
           runId: "run-a",
+          runtimeKind: "opencode",
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:3100",
+          },
           repoPath: "/repo-a",
           taskId: "A",
           branch: "feature/a",
