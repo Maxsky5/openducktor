@@ -17,6 +17,7 @@ fn get_current_branch_reports_attached_and_detached_states() {
         .expect("current branch should resolve");
     assert_eq!(current.name.as_deref(), Some("main"));
     assert!(!current.detached);
+    assert!(current.revision.is_some());
 
     run_git_ok(&repo.path, &["switch", "--detach", "HEAD"]);
     let detached = git
@@ -24,6 +25,7 @@ fn get_current_branch_reports_attached_and_detached_states() {
         .expect("detached branch state should resolve");
     assert!(detached.name.is_none());
     assert!(detached.detached);
+    assert!(detached.revision.is_some());
 }
 
 #[test]

@@ -49,11 +49,14 @@ let AgentStudioGitPanel: AgentStudioGitPanelComponent;
 
 const baseModel = (overrides: Partial<AgentStudioGitPanelModel> = {}): AgentStudioGitPanelModel => {
   const model: AgentStudioGitPanelModel = {
+    contextMode: "worktree",
     branch: "feature/task-11",
     worktreePath: "/tmp/worktree",
     targetBranch: "origin/main",
     diffScope: "target",
     commitsAheadBehind: { ahead: 2, behind: 1 },
+    upstreamAheadBehind: { ahead: 1, behind: 0 },
+    upstreamStatus: "tracking",
     fileDiffs: [],
     fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
     uncommittedFileCount: 1,
@@ -234,6 +237,85 @@ describe("AgentStudioGitPanel", () => {
 
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("renders repository mode without target branch or rebase action", async () => {
+    const refresh = mock(() => {});
+    const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
+    const commitAll = mock(async (_message: string) => true);
+    const pushBranch = mock(async () => {});
+    const pullFromUpstream = mock(async () => {});
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            contextMode: "repository",
+            diffScope: "uncommitted",
+            refresh,
+            setDiffScope,
+            commitAll,
+            pushBranch,
+            pullFromUpstream,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(hasVisibleText(root, "Repository context")).toBe(true);
+    expect(hasVisibleText(root, "Repository branch")).toBe(true);
+    expect(countByTestId(root, "agent-studio-git-target-branch")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-target-ahead-count")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-rebase-button")).toBe(0);
+    expect(findByTestId(root, "agent-studio-git-pull-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-push-button")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-commit-message-input")).toBeTruthy();
+    expect(findByTestId(root, "agent-studio-git-diff-scope-target").children.join("")).toContain(
+      "Compare to upstream",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("shows a clear no-upstream message in repository compare mode", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            contextMode: "repository",
+            diffScope: "target",
+            upstreamAheadBehind: { ahead: 0, behind: 0 },
+            upstreamStatus: "untracked",
+            fileDiffs: [],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(hasVisibleText(root, "No upstream branch yet")).toBe(true);
+    expect(
+      hasVisibleText(
+        root,
+        "This branch is not tracking an upstream branch yet. Push it first to create one, then compare against it here.",
+      ),
+    ).toBe(true);
+    expect(Boolean(findByTestId(root, "agent-studio-git-pull-button").props.disabled)).toBe(true);
+    expect(Boolean(findByTestId(root, "agent-studio-git-push-button").props.disabled)).toBe(false);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

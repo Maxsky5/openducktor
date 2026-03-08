@@ -10,10 +10,12 @@ import type { AgentStudioGitPanelModel } from "./types";
 
 type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
+  | "contextMode"
   | "branch"
   | "targetBranch"
   | "commitsAheadBehind"
   | "upstreamAheadBehind"
+  | "upstreamStatus"
   | "diffScope"
   | "isLoading"
   | "isCommitting"
@@ -101,10 +103,12 @@ function GitActionIconButton({
 }
 
 export function GitInfoHeader({
+  contextMode = "worktree",
   branch,
   targetBranch,
   commitsAheadBehind,
   upstreamAheadBehind,
+  upstreamStatus,
   diffScope,
   uncommittedFileCount,
   isLoading,
@@ -122,6 +126,7 @@ export function GitInfoHeader({
   setDiffScope,
   onRefresh,
 }: GitInfoHeaderProps): ReactElement {
+  const isRepositoryMode = contextMode === "repository";
   const trimmedTargetBranch = targetBranch.trim();
   const isDetachedHead = branch == null || branch.trim().length === 0;
   const currentBranchLabel = isDetachedHead ? "Detached HEAD" : branch;
@@ -137,6 +142,7 @@ export function GitInfoHeader({
   const isAnyActionInFlight = isCommitting || isPushing || isRebasing;
   const canRefresh = !isLoading && !isAnyActionInFlight;
   const canRebase =
+    !isRepositoryMode &&
     !isDetachedHead &&
     hasTargetBranch &&
     !isAnyActionInFlight &&
@@ -162,16 +168,18 @@ export function GitInfoHeader({
     ? "Pulling"
     : isGitActionsLocked
       ? (gitActionsLockReason ?? "Git actions are disabled.")
-      : hasUncommittedFiles
-        ? "Commit or stash changes before pulling"
-        : pushAheadCount != null &&
-            pushAheadCount > 0 &&
-            pushBehindCount != null &&
-            pushBehindCount > 0
-          ? `Pull with rebase (${pushBehindCount} behind; ${pushAheadCount} local commit${pushAheadCount === 1 ? "" : "s"} will be rewritten)`
-          : pushBehindCount != null && pushBehindCount > 0
-            ? `Pull (${pushBehindCount} behind)`
-            : "Pull";
+      : isRepositoryMode && upstreamStatus === "untracked"
+        ? "No upstream branch yet. Push this branch first to create it."
+        : hasUncommittedFiles
+          ? "Commit or stash changes before pulling"
+          : pushAheadCount != null &&
+              pushAheadCount > 0 &&
+              pushBehindCount != null &&
+              pushBehindCount > 0
+            ? `Pull with rebase (${pushBehindCount} behind; ${pushAheadCount} local commit${pushAheadCount === 1 ? "" : "s"} will be rewritten)`
+            : pushBehindCount != null && pushBehindCount > 0
+              ? `Pull (${pushBehindCount} behind)`
+              : "Pull";
   const pushTooltip = isPushing
     ? "Pushing"
     : isGitActionsLocked
@@ -193,7 +201,7 @@ export function GitInfoHeader({
     <div className="space-y-0 border-b border-border">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
         <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-          Branch context
+          {isRepositoryMode ? "Repository context" : "Branch context"}
         </span>
         <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
           {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"} changed
@@ -201,12 +209,17 @@ export function GitInfoHeader({
       </div>
 
       <div
-        className="mb-2 grid gap-2 px-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
+        className={cn(
+          "mb-2 grid gap-2 px-3",
+          isRepositoryMode
+            ? "sm:grid-cols-[minmax(0,1fr)]"
+            : "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center",
+        )}
         data-testid="agent-studio-git-branch-context-row"
       >
         <div className="rounded-lg border border-border bg-card px-3 py-2">
           <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-            Current branch
+            {isRepositoryMode ? "Repository branch" : "Current branch"}
           </p>
           <div className="mt-1 flex min-w-0 items-center gap-1.5">
             <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
@@ -219,34 +232,38 @@ export function GitInfoHeader({
           </div>
         </div>
 
-        <div className="relative flex items-center justify-center" aria-hidden="true">
-          <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
-            <ArrowRight className="size-3.5" />
-          </span>
-          {hasTargetAhead ? (
-            <span
-              className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
-              data-testid="agent-studio-git-target-ahead-count"
-            >
-              {targetAheadCount}
-            </span>
-          ) : null}
-        </div>
+        {isRepositoryMode ? null : (
+          <>
+            <div className="relative flex items-center justify-center" aria-hidden="true">
+              <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
+                <ArrowRight className="size-3.5" />
+              </span>
+              {hasTargetAhead ? (
+                <span
+                  className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
+                  data-testid="agent-studio-git-target-ahead-count"
+                >
+                  {targetAheadCount}
+                </span>
+              ) : null}
+            </div>
 
-        <div className="rounded-lg border border-border bg-card px-3 py-2">
-          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-            Target branch
-          </p>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5">
-            <Target className="size-3.5 shrink-0 text-muted-foreground" />
-            <span
-              className="truncate font-mono text-xs text-foreground"
-              data-testid="agent-studio-git-target-branch"
-            >
-              {targetBranchLabel}
-            </span>
-          </div>
-        </div>
+            <div className="rounded-lg border border-border bg-card px-3 py-2">
+              <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                Target branch
+              </p>
+              <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                <Target className="size-3.5 shrink-0 text-muted-foreground" />
+                <span
+                  className="truncate font-mono text-xs text-foreground"
+                  data-testid="agent-studio-git-target-branch"
+                >
+                  {targetBranchLabel}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div
@@ -263,23 +280,25 @@ export function GitInfoHeader({
             tooltip={isLoading ? "Refreshing" : "Refresh changes"}
             isSpinning={isLoading}
           />
-          <GitActionIconButton
-            testId="agent-studio-git-rebase-button"
-            srLabel="Rebase onto target"
-            icon={Target}
-            onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
-            disabled={!canRebase}
-            tooltip={rebaseTooltip}
-            badge={
-              rebaseBehindCount != null && rebaseBehindCount > 0
-                ? {
-                    testId: "agent-studio-git-behind-count",
-                    value: rebaseBehindCount,
-                    toneClassName: "text-rose-600 dark:text-rose-400",
-                  }
-                : undefined
-            }
-          />
+          {isRepositoryMode ? null : (
+            <GitActionIconButton
+              testId="agent-studio-git-rebase-button"
+              srLabel="Rebase onto target"
+              icon={Target}
+              onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
+              disabled={!canRebase}
+              tooltip={rebaseTooltip}
+              badge={
+                rebaseBehindCount != null && rebaseBehindCount > 0
+                  ? {
+                      testId: "agent-studio-git-behind-count",
+                      value: rebaseBehindCount,
+                      toneClassName: "text-rose-600 dark:text-rose-400",
+                    }
+                  : undefined
+              }
+            />
+          )}
           <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
             <GitActionIconButton
               testId="agent-studio-git-pull-button"
@@ -352,7 +371,9 @@ export function GitInfoHeader({
                 onClick={() => handleScopeChange(option.scope)}
                 data-testid={option.testId}
               >
-                {option.label}
+                {option.scope === "target" && isRepositoryMode
+                  ? "Compare to upstream"
+                  : option.label}
               </button>
             );
           })}

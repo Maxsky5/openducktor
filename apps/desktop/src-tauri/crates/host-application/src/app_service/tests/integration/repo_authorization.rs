@@ -15,10 +15,7 @@ fn tasks_reject_repo_path_not_in_workspace_allowlist() {
     let (service, task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let error = service
@@ -35,10 +32,7 @@ fn task_update_rejects_unauthorized_repo_before_status_validation() {
     let (service, task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let error = service
@@ -72,10 +66,7 @@ fn spec_mutators_reject_unauthorized_repo_before_markdown_validation() {
     let (service, task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let set_spec_error = service
@@ -98,10 +89,7 @@ fn plan_mutators_reject_unauthorized_repo_before_markdown_validation() {
     let (service, task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let set_plan_error = service
@@ -124,10 +112,7 @@ fn git_rejects_repo_path_not_in_workspace_allowlist() {
     let (service, task_state, git_state) = build_service_with_git_state_enforced(
         vec![],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let error = service
@@ -146,10 +131,7 @@ fn build_rejects_repo_path_not_in_workspace_allowlist() {
     let (service, task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let events = Arc::new(Mutex::new(Vec::<RunEvent>::new()));
@@ -171,10 +153,7 @@ fn canonical_repo_path_variants_are_authorized() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let root = unique_temp_path("repo-auth-canonical");
@@ -198,10 +177,7 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
     let (service, _task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let unknown_repo_path = "/tmp/odt-repo-unauthorized-config";
@@ -234,10 +210,7 @@ fn runs_list_without_filter_hides_non_allowlisted_runs() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state_enforced(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch {
-            name: Some("main".to_string()),
-            detached: false,
-        },
+        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
     );
 
     let run_id = "run-outside-allowlist".to_string();

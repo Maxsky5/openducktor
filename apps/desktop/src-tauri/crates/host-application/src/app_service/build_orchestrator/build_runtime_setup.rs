@@ -9,7 +9,7 @@ use host_domain::{TaskStatus, TASK_METADATA_NAMESPACE};
 use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, RepoConfig};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Child;
+use std::process::{Child, Command};
 
 pub(super) struct BuildPrerequisites {
     pub(super) repo_path: String,
@@ -36,6 +36,41 @@ struct BuildRuntimeFailureEvent<'a> {
     startup_policy: OpencodeStartupReadinessPolicy,
     startup_report: OpencodeStartupWaitReport,
     reason: &'static str,
+}
+
+fn git_reference_exists(repo_path_ref: &Path, reference: &str) -> Result<bool> {
+    let status = Command::new("git")
+        .args(["rev-parse", "--verify", "--quiet", reference])
+        .current_dir(repo_path_ref)
+        .status()
+        .with_context(|| {
+            format!(
+                "Failed checking configured target branch {} in {}",
+                reference,
+                repo_path_ref.display()
+            )
+        })?;
+    Ok(status.success())
+}
+
+fn resolve_build_start_point(
+    repo_path_ref: &Path,
+    configured_target_branch: &str,
+) -> Result<String> {
+    if git_reference_exists(repo_path_ref, configured_target_branch)? {
+        return Ok(configured_target_branch.to_string());
+    }
+
+    if let Some(local_branch) = configured_target_branch.strip_prefix("origin/") {
+        if git_reference_exists(repo_path_ref, local_branch)? {
+            return Ok(local_branch.to_string());
+        }
+    }
+
+    Err(anyhow!(
+        "Configured target branch is unavailable for build worktree creation: {}",
+        configured_target_branch
+    ))
 }
 
 impl AppService {
@@ -97,16 +132,21 @@ impl AppService {
         }
 
         let repo_path_ref = Path::new(prerequisites.repo_path.as_str());
+        let start_point = resolve_build_start_point(
+            repo_path_ref,
+            prerequisites.repo_config.default_target_branch.as_str(),
+        )?;
         host_infra_system::run_command(
             "git",
             &[
                 "worktree",
                 "add",
+                "-b",
+                prerequisites.branch.as_str(),
                 worktree_dir
                     .to_str()
                     .ok_or_else(|| anyhow!("Invalid worktree path"))?,
-                "-b",
-                prerequisites.branch.as_str(),
+                start_point.as_str(),
             ],
             Some(repo_path_ref),
         )?;

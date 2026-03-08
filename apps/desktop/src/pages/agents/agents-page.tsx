@@ -30,7 +30,9 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { errorMessage } from "@/lib/errors";
+import { UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
+import { useDelegationEventsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
@@ -43,9 +45,14 @@ import {
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import { buildRebaseConflictResolutionPrompt, SCENARIO_LABELS } from "./agents-page-constants";
 import {
+  buildAgentStudioGitPanelBranchIdentityKey,
+  resolveAgentStudioGitPanelBranch,
+} from "./agents-page-git-panel";
+import {
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
 } from "./agents-page-selection";
+import { useAgentStudioBuildWorktreeRefresh } from "./use-agent-studio-build-worktree-refresh";
 import { useAgentStudioDiffData } from "./use-agent-studio-diff-data";
 import {
   type AgentStudioRebaseConflict,
@@ -332,7 +339,7 @@ function AgentStudioSessionStartModal({
 }
 
 export function AgentsPage(): ReactElement {
-  const { activeRepo, loadRepoSettings } = useWorkspaceState();
+  const { activeRepo, activeBranch, loadRepoSettings } = useWorkspaceState();
   const { opencodeHealth, isLoadingChecks, refreshChecks } = useChecksState();
   const { isLoadingTasks, tasks } = useTasksState();
   const {
@@ -349,11 +356,14 @@ export function AgentsPage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
+  const [runCompletionRecoverySignal, setRunCompletionRecoverySignal] = useState(0);
+  const latestRunCompletionSignalVersionRef = useRef<number | null>(null);
   const [pendingRebaseConflictResolutionRequest, setPendingRebaseConflictResolutionRequest] =
     useState<PendingRebaseConflictResolutionRequest | null>(null);
   const pendingRebaseConflictResolutionResolverRef = useRef<
     ((decision: RebaseConflictResolutionDecision) => void) | null
   >(null);
+  const { runCompletionSignal } = useDelegationEventsContext();
   const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
     useAgentStudioSessionStartRequest();
 
@@ -423,6 +433,26 @@ export function AgentsPage(): ReactElement {
     clearComposerInput,
     onContextSwitchIntent: signalContextSwitchIntent,
   });
+
+  useEffect(() => {
+    const activeBuildRunId =
+      selection.viewActiveSession?.role === "build" ? selection.viewActiveSession.runId : null;
+
+    if (!runCompletionSignal || !activeBuildRunId) {
+      return;
+    }
+
+    if (runCompletionSignal.runId !== activeBuildRunId) {
+      return;
+    }
+
+    if (runCompletionSignal.version === latestRunCompletionSignalVersionRef.current) {
+      return;
+    }
+
+    latestRunCompletionSignalVersionRef.current = runCompletionSignal.version;
+    setRunCompletionRecoverySignal((current) => current + 1);
+  }, [runCompletionSignal, selection.viewActiveSession?.runId, selection.viewActiveSession?.role]);
 
   useAgentStudioQuerySessionSync({
     isLoadingTasks,
@@ -504,15 +534,38 @@ export function AgentsPage(): ReactElement {
     actions: orchestrationActions,
   });
 
+  const gitPanelContextMode: "repository" | "worktree" =
+    selection.viewActiveSession?.role === "build" ? "worktree" : "repository";
+  const repositoryBranchIdentityKey =
+    gitPanelContextMode === "repository"
+      ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
+      : null;
+  const diffComparisonTarget =
+    gitPanelContextMode === "repository"
+      ? UPSTREAM_TARGET_BRANCH
+      : (orchestration.repoSettings?.defaultTargetBranch ?? "origin/main");
+
   const diffData = useAgentStudioDiffData({
     repoPath: activeRepo,
     sessionWorkingDirectory: selection.viewActiveSession?.workingDirectory ?? null,
     sessionRunId: selection.viewActiveSession?.runId ?? null,
-    defaultTargetBranch: orchestration.repoSettings?.defaultTargetBranch ?? "origin/main",
+    runCompletionRecoverySignal,
+    defaultTargetBranch: diffComparisonTarget,
+    branchIdentityKey: repositoryBranchIdentityKey,
     enablePolling:
       selection.viewRole === "build" &&
       Boolean(selection.viewActiveSession) &&
       orchestration.rightPanel.isPanelOpen,
+  });
+  const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
+    contextMode: gitPanelContextMode,
+    workspaceActiveBranch: activeBranch,
+    diffBranch: diffData.branch,
+  });
+  useAgentStudioBuildWorktreeRefresh({
+    viewRole: selection.viewRole,
+    activeSession: selection.viewActiveSession,
+    refreshWorktree: diffData.refresh,
   });
   const isActiveBuilderWorking =
     selection.viewActiveSession?.role === "build" &&
@@ -659,7 +712,7 @@ export function AgentsPage(): ReactElement {
   const gitActions = useAgentStudioGitActions({
     repoPath: activeRepo,
     workingDir: diffData.worktreePath,
-    branch: diffData.branch,
+    branch: resolvedGitPanelBranch,
     targetBranch: diffData.targetBranch,
     upstreamAheadBehind: diffData.upstreamAheadBehind ?? null,
     detectedConflictedFiles: diffData.fileStatuses
@@ -673,9 +726,11 @@ export function AgentsPage(): ReactElement {
   const diffModel = useMemo(
     () => ({
       ...diffData,
+      contextMode: gitPanelContextMode,
+      branch: resolvedGitPanelBranch,
       ...gitActions,
     }),
-    [diffData, gitActions],
+    [diffData, gitActions, gitPanelContextMode, resolvedGitPanelBranch],
   );
   const rightPanelModel = useMemo(
     () =>

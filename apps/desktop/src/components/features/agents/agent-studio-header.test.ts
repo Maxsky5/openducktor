@@ -152,6 +152,24 @@ describe("AgentStudioHeader", () => {
     expect(html).toContain("disabled");
   });
 
+  test("disables create session while a session is starting without showing a loader", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          isCreatingSession: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('aria-label="Create session"');
+    expect(html).toContain('disabled="" title="Create session"');
+    expect(html).toContain('class="lucide lucide-plus size-4"');
+    expect(html).not.toContain(
+      'title="Create session"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle size-4 animate-spin"',
+    );
+  });
+
   test("keeps unavailable workflow step clickable without existing session", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {

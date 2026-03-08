@@ -12,9 +12,14 @@ import {
   shouldSkipBranchSwitch,
 } from "./workspace-operations-model";
 
-const branch = (name: string | undefined, detached = false): GitCurrentBranch => ({
+const branch = (
+  name: string | undefined,
+  detached = false,
+  revision?: string,
+): GitCurrentBranch => ({
   name,
   detached,
+  revision,
 });
 
 describe("workspace-operations-model", () => {
@@ -45,9 +50,12 @@ describe("workspace-operations-model", () => {
   });
 
   test("detects branch identity changes", () => {
-    expect(hasBranchIdentityChanged(branch("main", false), "main", false)).toBe(false);
-    expect(hasBranchIdentityChanged(branch("feature", false), "main", false)).toBe(true);
-    expect(hasBranchIdentityChanged(branch(undefined, true), null, false)).toBe(true);
+    expect(hasBranchIdentityChanged(branch("main", false), "main", false, null)).toBe(false);
+    expect(hasBranchIdentityChanged(branch("feature", false), "main", false, null)).toBe(true);
+    expect(hasBranchIdentityChanged(branch(undefined, true), null, false, null)).toBe(true);
+    expect(hasBranchIdentityChanged(branch(undefined, true, "abc123"), null, true, null)).toBe(
+      true,
+    );
   });
 
   test("skips no-op branch switch when already attached", () => {

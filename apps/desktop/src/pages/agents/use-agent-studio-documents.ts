@@ -29,11 +29,27 @@ export function useAgentStudioDocuments({
   const processedDocumentToolEventsRef = useRef(new Set<string>());
   const documentReloadAttemptsRef = useRef(new Map<string, number>());
   const refreshedTaskVersionsRef = useRef(new Set<string>());
+  const taskDocumentVersionKey =
+    taskId && selectedTask
+      ? [
+          activeRepo ?? "",
+          taskId,
+          selectedTask.updatedAt,
+          selectedTask.documentSummary.spec.has ? "1" : "0",
+          selectedTask.documentSummary.spec.updatedAt ?? "",
+          selectedTask.documentSummary.plan.has ? "1" : "0",
+          selectedTask.documentSummary.plan.updatedAt ?? "",
+          selectedTask.documentSummary.qaReport.has ? "1" : "0",
+          selectedTask.documentSummary.qaReport.updatedAt ?? "",
+          selectedTask.documentSummary.qaReport.verdict ?? "",
+        ].join(":")
+      : null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Context key intentionally controls reset boundary.
   useEffect(() => {
     processedDocumentToolEventsRef.current.clear();
     documentReloadAttemptsRef.current.clear();
+    refreshedTaskVersionsRef.current.clear();
   }, [documentContextKey]);
 
   useEffect(() => {
@@ -46,20 +62,19 @@ export function useAgentStudioDocuments({
   }, [ensureDocumentLoaded, taskId]);
 
   useEffect(() => {
-    if (!taskId || !selectedTask) {
+    if (!taskId || taskDocumentVersionKey === null) {
       return;
     }
 
-    const taskVersionKey = `${activeRepo ?? ""}:${taskId}:${selectedTask.updatedAt}`;
-    if (refreshedTaskVersionsRef.current.has(taskVersionKey)) {
+    if (refreshedTaskVersionsRef.current.has(taskDocumentVersionKey)) {
       return;
     }
 
-    refreshedTaskVersionsRef.current.add(taskVersionKey);
-    reloadDocument("spec");
-    reloadDocument("plan");
-    reloadDocument("qa");
-  }, [activeRepo, reloadDocument, selectedTask, taskId]);
+    const accepted = [reloadDocument("spec"), reloadDocument("plan"), reloadDocument("qa")];
+    if (accepted.every(Boolean)) {
+      refreshedTaskVersionsRef.current.add(taskDocumentVersionKey);
+    }
+  }, [reloadDocument, taskDocumentVersionKey, taskId]);
 
   useEffect(() => {
     if (!activeSession || !taskId) {
@@ -100,9 +115,10 @@ export function useAgentStudioDocuments({
           ? (meta.input as Record<string, unknown>)
           : null;
       const inputMarkdown = toolInput?.[target.inputKey];
+      const hasInputMarkdown = typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0;
 
       let effectiveUpdatedAtTimestamp = parseTimestamp(target.state.updatedAt);
-      if (typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0) {
+      if (hasInputMarkdown) {
         const shouldApplyOptimisticDocument =
           target.state.markdown.trim() !== inputMarkdown.trim() ||
           (completionInfo !== null &&
@@ -122,6 +138,12 @@ export function useAgentStudioDocuments({
         effectiveUpdatedAtTimestamp !== null &&
         effectiveUpdatedAtTimestamp >= completionInfo.timestamp
       ) {
+        processedDocumentToolEventsRef.current.add(eventKey);
+        documentReloadAttemptsRef.current.delete(eventKey);
+        continue;
+      }
+
+      if (hasInputMarkdown) {
         processedDocumentToolEventsRef.current.add(eventKey);
         documentReloadAttemptsRef.current.delete(eventKey);
         continue;

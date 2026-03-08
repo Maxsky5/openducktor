@@ -60,6 +60,7 @@ export function useWorkspaceOperations({
   const lastProbeErrorSignatureRef = useRef<string | null>(null);
   const lastKnownBranchNameRef = useRef<string | null>(null);
   const lastKnownDetachedRef = useRef<boolean | null>(null);
+  const lastKnownRevisionRef = useRef<string | null>(null);
   const activeRepoRef = useRef(activeRepo);
   const previousActiveRepoRef = useRef(activeRepo);
   const probeGatesRef = useRef({
@@ -78,6 +79,7 @@ export function useWorkspaceOperations({
       setBranches(allBranches);
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
+      lastKnownRevisionRef.current = current.revision ?? null;
       setBranchSyncDegraded(false);
     },
     [],
@@ -90,6 +92,7 @@ export function useWorkspaceOperations({
     lastProbeErrorSignatureRef.current = null;
     lastKnownBranchNameRef.current = null;
     lastKnownDetachedRef.current = null;
+    lastKnownRevisionRef.current = null;
     setBranches([]);
     setActiveBranch(null);
     setBranchSyncDegraded(false);
@@ -191,6 +194,7 @@ export function useWorkspaceOperations({
         setActiveBranch(previousBranch);
         lastKnownBranchNameRef.current = previousBranch?.name ?? null;
         lastKnownDetachedRef.current = previousBranch?.detached ?? null;
+        lastKnownRevisionRef.current = previousBranch?.revision ?? null;
 
         toast.error("Failed to switch branch", {
           description: errorMessage(error),
@@ -267,6 +271,7 @@ export function useWorkspaceOperations({
         current,
         lastKnownBranchNameRef.current,
         lastKnownDetachedRef.current,
+        lastKnownRevisionRef.current,
       );
 
       if (hasChanged) {

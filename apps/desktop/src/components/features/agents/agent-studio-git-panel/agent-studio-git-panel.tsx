@@ -157,12 +157,14 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <GitInfoHeader
+          contextMode={model.contextMode ?? "worktree"}
           branch={model.branch}
           targetBranch={model.targetBranch}
           diffScope={model.diffScope}
           uncommittedFileCount={uncommittedFileCount}
           commitsAheadBehind={model.commitsAheadBehind}
           upstreamAheadBehind={model.upstreamAheadBehind ?? null}
+          upstreamStatus={model.upstreamStatus}
           isLoading={model.isLoading}
           isCommitting={model.isCommitting ?? false}
           isPushing={model.isPushing ?? false}
@@ -266,7 +268,12 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
               onToggleFile={toggleFile}
             />
           ) : (
-            <EmptyDiffState isLoading={model.isLoading} />
+            <EmptyDiffState
+              isLoading={model.isLoading}
+              contextMode={model.contextMode ?? "worktree"}
+              diffScope={model.diffScope}
+              upstreamStatus={model.upstreamStatus}
+            />
           )}
         </ScrollArea>
 

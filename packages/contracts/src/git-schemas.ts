@@ -18,6 +18,7 @@ export type GitBranch = z.infer<typeof gitBranchSchema>;
 export const gitCurrentBranchSchema = z.object({
   name: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   detached: z.boolean(),
+  revision: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
 export type GitCurrentBranch = z.infer<typeof gitCurrentBranchSchema>;
 

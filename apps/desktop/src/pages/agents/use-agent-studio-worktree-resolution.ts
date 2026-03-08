@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/host";
 
@@ -28,6 +28,7 @@ type UseAgentStudioWorktreeResolutionInput = {
   repoPath: string | null;
   sessionWorkingDirectory: string | null;
   sessionRunId: string | null;
+  runCompletionRecoverySignal?: number;
 };
 
 type WorktreeResolutionResult = {
@@ -78,11 +79,15 @@ export function useAgentStudioWorktreeResolution({
   repoPath,
   sessionWorkingDirectory,
   sessionRunId,
+  runCompletionRecoverySignal,
 }: UseAgentStudioWorktreeResolutionInput): WorktreeResolutionResult {
   const [worktreeResolutionState, setWorktreeResolutionState] = useState<WorktreeResolutionState>(
     IDLE_WORKTREE_RESOLUTION_STATE,
   );
   const [worktreeResolutionRetryToken, setWorktreeResolutionRetryToken] = useState(0);
+  const lastHandledRunCompletionRecoverySignalRef = useRef<number | null>(null);
+  const pendingRunCompletionRecoverySignalRef = useRef<number | null>(null);
+  const lastRunCompletionRecoveryContextKeyRef = useRef<string | null>(null);
 
   const directWorktreePath =
     sessionWorkingDirectory && sessionWorkingDirectory !== repoPath
@@ -124,9 +129,80 @@ export function useAgentStudioWorktreeResolution({
     worktreeResolutionRepoPath != null && worktreeResolutionRunId != null
       ? `${worktreeResolutionRepoPath}::${worktreeResolutionRunId}::${worktreeResolutionRetryToken}`
       : null;
+  const worktreeResolutionContextKey =
+    worktreeResolutionRepoPath != null && worktreeResolutionRunId != null
+      ? `${worktreeResolutionRepoPath}::${worktreeResolutionRunId}`
+      : null;
   const retryWorktreeResolution = useCallback((): void => {
     setWorktreeResolutionRetryToken((previous) => previous + 1);
   }, []);
+
+  useEffect(() => {
+    if (lastRunCompletionRecoveryContextKeyRef.current !== worktreeResolutionContextKey) {
+      lastRunCompletionRecoveryContextKeyRef.current = worktreeResolutionContextKey;
+      lastHandledRunCompletionRecoverySignalRef.current = null;
+      pendingRunCompletionRecoverySignalRef.current = null;
+    }
+
+    if (runCompletionRecoverySignal == null) {
+      lastHandledRunCompletionRecoverySignalRef.current = null;
+      pendingRunCompletionRecoverySignalRef.current = null;
+      return;
+    }
+
+    const pendingSignal = pendingRunCompletionRecoverySignalRef.current;
+    if (pendingSignal != null && !isWorktreeResolutionResolving) {
+      pendingRunCompletionRecoverySignalRef.current = null;
+      lastHandledRunCompletionRecoverySignalRef.current = pendingSignal;
+
+      if (
+        worktreeResolutionRepoPath == null ||
+        worktreeResolutionRunId == null ||
+        hasResolvedWorktreeForCurrentContext
+      ) {
+        return;
+      }
+
+      setWorktreeResolutionRetryToken((previous) => previous + 1);
+      return;
+    }
+
+    if (lastHandledRunCompletionRecoverySignalRef.current === null) {
+      lastHandledRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+      return;
+    }
+
+    if (
+      runCompletionRecoverySignal === lastHandledRunCompletionRecoverySignalRef.current ||
+      runCompletionRecoverySignal === pendingRunCompletionRecoverySignalRef.current
+    ) {
+      return;
+    }
+
+    if (
+      worktreeResolutionRepoPath == null ||
+      worktreeResolutionRunId == null ||
+      hasResolvedWorktreeForCurrentContext
+    ) {
+      lastHandledRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+      return;
+    }
+
+    if (isWorktreeResolutionResolving) {
+      pendingRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+      return;
+    }
+
+    lastHandledRunCompletionRecoverySignalRef.current = runCompletionRecoverySignal;
+    setWorktreeResolutionRetryToken((previous) => previous + 1);
+  }, [
+    hasResolvedWorktreeForCurrentContext,
+    isWorktreeResolutionResolving,
+    runCompletionRecoverySignal,
+    worktreeResolutionContextKey,
+    worktreeResolutionRepoPath,
+    worktreeResolutionRunId,
+  ]);
 
   useEffect(() => {
     if (!worktreeResolutionRequestKey || !worktreeResolutionRepoPath || !worktreeResolutionRunId) {

@@ -196,15 +196,11 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                 variant="default"
                 size="icon"
                 className="h-9 w-9 rounded-md"
-                disabled={!agentStudioReady || createSessionDisabled}
+                disabled={!agentStudioReady || createSessionDisabled || isCreatingSession}
                 title="Create session"
                 aria-label="Create session"
               >
-                {isCreatingSession ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <Plus className="size-4" />
-                )}
+                <Plus className="size-4" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80 p-0">

@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSpecState } from "@/state";
+import {
+  createTaskDocumentLoadController,
+  requestTaskDocumentLoad,
+  resetTaskDocumentLoadController,
+  settleTaskDocumentLoad,
+  supersedeTaskDocumentLoad,
+  type TaskDocumentSectionKey,
+} from "./task-document-load-controller";
 
-export type DocumentSectionKey = "spec" | "plan" | "qa";
+export type DocumentSectionKey = TaskDocumentSectionKey;
 
 export type TaskDocumentState = {
   markdown: string;
@@ -16,6 +24,12 @@ type TaskDocumentsState = Record<DocumentSectionKey, TaskDocumentState>;
 type TaskDocumentPayload = {
   markdown: string;
   updatedAt: string | null;
+};
+
+export type TaskDocumentLoaders = {
+  loadSpecDocument: (taskId: string) => Promise<TaskDocumentPayload>;
+  loadPlanDocument: (taskId: string) => Promise<TaskDocumentPayload>;
+  loadQaReportDocument: (taskId: string) => Promise<TaskDocumentPayload>;
 };
 
 const createInitialTaskDocumentState = (): TaskDocumentState => ({
@@ -45,6 +59,7 @@ export function useTaskDocuments(
   taskId: string | null,
   open: boolean,
   cacheScope = "",
+  loadersOverride?: TaskDocumentLoaders,
 ): {
   specDoc: TaskDocumentState;
   planDoc: TaskDocumentState;
@@ -53,18 +68,14 @@ export function useTaskDocuments(
   reloadDocument: (section: DocumentSectionKey) => boolean;
   applyDocumentUpdate: (section: DocumentSectionKey, payload: TaskDocumentPayload) => void;
 } {
-  const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = useSpecState();
+  const specState = useSpecState();
+  const { loadSpecDocument, loadPlanDocument, loadQaReportDocument } = loadersOverride ?? specState;
   const [documents, setDocuments] = useState<TaskDocumentsState>(createInitialDocumentsState);
-  const documentLoadSequence = useRef(0);
   const previousContext = useRef<{ taskCacheKey: string | null; open: boolean } | null>(null);
   const documentsRef = useRef<TaskDocumentsState>(documents);
   const cachedDocumentsByTaskCacheKey = useRef<Record<string, TaskDocumentsState>>({});
   const taskCacheKey = taskId ? `${cacheScope}::${taskId}` : null;
-  const inFlightSections = useRef<Record<DocumentSectionKey, boolean>>({
-    spec: false,
-    plan: false,
-    qa: false,
-  });
+  const loadController = useRef(createTaskDocumentLoadController());
 
   const updateDocumentsSnapshot = useCallback(
     (snapshot: TaskDocumentsState): void => {
@@ -91,31 +102,34 @@ export function useTaskDocuments(
     }
 
     previousContext.current = { taskCacheKey, open };
-    documentLoadSequence.current += 1;
+    resetTaskDocumentLoadController(loadController.current);
     const initialDocuments =
       taskCacheKey && cachedDocumentsByTaskCacheKey.current[taskCacheKey]
         ? cloneDocumentsState(cachedDocumentsByTaskCacheKey.current[taskCacheKey])
         : createInitialDocumentsState();
     documentsRef.current = initialDocuments;
     setDocuments(initialDocuments);
-    inFlightSections.current = {
-      spec: false,
-      plan: false,
-      qa: false,
-    };
   }, [open, taskCacheKey]);
 
   const loadDocument = useCallback(
-    (section: DocumentSectionKey, force: boolean): boolean => {
+    function loadDocument(section: DocumentSectionKey, force: boolean): boolean {
       if (!taskId || !open) {
         return false;
       }
 
       const current = documentsRef.current[section];
-      if (inFlightSections.current[section] || (!force && current.loaded)) {
+      const loadRequest = requestTaskDocumentLoad(
+        loadController.current,
+        section,
+        force,
+        current.loaded,
+      );
+      if (!loadRequest.accepted) {
         return false;
       }
-      inFlightSections.current[section] = true;
+      if (loadRequest.contextVersion === null || loadRequest.requestVersion === null) {
+        return true;
+      }
 
       const loadingSnapshot: TaskDocumentsState = {
         ...documentsRef.current,
@@ -127,7 +141,7 @@ export function useTaskDocuments(
       };
       updateDocumentsSnapshot(loadingSnapshot);
 
-      const sequence = documentLoadSequence.current;
+      const { contextVersion, requestVersion } = loadRequest;
       const loader: (id: string) => Promise<TaskDocumentPayload> =
         section === "spec"
           ? loadSpecDocument
@@ -135,14 +149,29 @@ export function useTaskDocuments(
             ? loadPlanDocument
             : loadQaReportDocument;
 
+      const replayPendingForcedReload = (shouldReplay: boolean): void => {
+        if (!shouldReplay) {
+          return;
+        }
+
+        globalThis.queueMicrotask(() => {
+          loadDocument(section, true);
+        });
+      };
+
       void loader(taskId)
         .then((result) => {
-          if (sequence !== documentLoadSequence.current) {
-            inFlightSections.current[section] = false;
+          const settlement = settleTaskDocumentLoad(
+            loadController.current,
+            section,
+            contextVersion,
+            requestVersion,
+          );
+          if (!settlement.shouldApply) {
+            replayPendingForcedReload(settlement.shouldReplay);
             return;
           }
 
-          inFlightSections.current[section] = false;
           const successSnapshot: TaskDocumentsState = {
             ...documentsRef.current,
             [section]: {
@@ -154,14 +183,20 @@ export function useTaskDocuments(
             },
           };
           updateDocumentsSnapshot(successSnapshot);
+          replayPendingForcedReload(settlement.shouldReplay);
         })
         .catch((error: unknown) => {
-          if (sequence !== documentLoadSequence.current) {
-            inFlightSections.current[section] = false;
+          const settlement = settleTaskDocumentLoad(
+            loadController.current,
+            section,
+            contextVersion,
+            requestVersion,
+          );
+          if (!settlement.shouldApply) {
+            replayPendingForcedReload(settlement.shouldReplay);
             return;
           }
 
-          inFlightSections.current[section] = false;
           const errorSnapshot: TaskDocumentsState = {
             ...documentsRef.current,
             [section]: {
@@ -172,6 +207,7 @@ export function useTaskDocuments(
             },
           };
           updateDocumentsSnapshot(errorSnapshot);
+          replayPendingForcedReload(settlement.shouldReplay);
         });
       return true;
     },
@@ -201,6 +237,7 @@ export function useTaskDocuments(
 
   const applyDocumentUpdate = useCallback(
     (section: DocumentSectionKey, payload: TaskDocumentPayload): void => {
+      supersedeTaskDocumentLoad(loadController.current, section);
       const snapshot: TaskDocumentsState = {
         ...documentsRef.current,
         [section]: {

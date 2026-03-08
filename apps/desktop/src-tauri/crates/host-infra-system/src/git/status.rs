@@ -9,6 +9,34 @@ use std::path::Path;
 use super::util::{combine_output, normalize_non_empty};
 use super::GitCliPort;
 
+const UPSTREAM_TARGET_BRANCH: &str = "@{upstream}";
+
+fn resolve_effective_target_branch(
+    requested_target_branch: &str,
+    upstream_target: Option<&str>,
+) -> Option<String> {
+    if requested_target_branch == UPSTREAM_TARGET_BRANCH {
+        return upstream_target.map(ToOwned::to_owned);
+    }
+
+    Some(requested_target_branch.to_string())
+}
+
+fn commits_against_target_or_default(
+    git: &GitCliPort,
+    repo_path: &Path,
+    target_branch: Option<&str>,
+) -> Result<GitAheadBehind> {
+    if let Some(target_branch) = target_branch {
+        return git.commits_ahead_behind_unchecked(repo_path, target_branch);
+    }
+
+    Ok(GitAheadBehind {
+        ahead: 0,
+        behind: 0,
+    })
+}
+
 impl GitCliPort {
     pub(super) fn get_status_impl(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>> {
         self.ensure_repository(repo_path)?;
@@ -43,8 +71,14 @@ impl GitCliPort {
         let target_branch = normalize_non_empty(target_branch, "target branch")?;
         let current_branch = self.get_current_branch_unchecked(repo_path)?;
         let current_branch_name = current_branch.name.clone();
+        let upstream_target_result = self
+            .resolve_upstream_target_for_branch_impl(repo_path, current_branch_name.as_deref())?;
+        let effective_target_branch = resolve_effective_target_branch(
+            target_branch.as_str(),
+            upstream_target_result.as_deref(),
+        );
         let diff_target = match diff_scope {
-            GitDiffScope::Target => Some(target_branch.as_str()),
+            GitDiffScope::Target => effective_target_branch.as_deref(),
             GitDiffScope::Uncommitted => None,
         };
 
@@ -53,18 +87,24 @@ impl GitCliPort {
                 || {
                     rayon::join(
                         || self.get_status_unchecked(repo_path),
-                        || self.get_diff_unchecked(repo_path, diff_target),
+                        || match diff_scope {
+                            GitDiffScope::Target if effective_target_branch.is_none() => {
+                                Ok(Vec::new())
+                            }
+                            _ => self.get_diff_unchecked(repo_path, diff_target),
+                        },
                     )
                 },
                 || {
                     rayon::join(
-                        || self.commits_ahead_behind_unchecked(repo_path, target_branch.as_str()),
                         || {
-                            self.resolve_upstream_target_for_branch_impl(
+                            commits_against_target_or_default(
+                                self,
                                 repo_path,
-                                current_branch_name.as_deref(),
+                                effective_target_branch.as_deref(),
                             )
                         },
+                        || Ok::<Option<String>, anyhow::Error>(upstream_target_result.clone()),
                     )
                 },
             )
@@ -120,21 +160,28 @@ impl GitCliPort {
         let target_branch = normalize_non_empty(target_branch, "target branch")?;
         let current_branch = self.get_current_branch_unchecked(repo_path)?;
         let current_branch_name = current_branch.name.clone();
+        let upstream_target_result = self
+            .resolve_upstream_target_for_branch_impl(repo_path, current_branch_name.as_deref())?;
+        let effective_target_branch = resolve_effective_target_branch(
+            target_branch.as_str(),
+            upstream_target_result.as_deref(),
+        );
 
         let joined = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             rayon::join(
                 || {
                     rayon::join(
                         || self.get_status_unchecked(repo_path),
-                        || self.commits_ahead_behind_unchecked(repo_path, target_branch.as_str()),
+                        || {
+                            commits_against_target_or_default(
+                                self,
+                                repo_path,
+                                effective_target_branch.as_deref(),
+                            )
+                        },
                     )
                 },
-                || {
-                    self.resolve_upstream_target_for_branch_impl(
-                        repo_path,
-                        current_branch_name.as_deref(),
-                    )
-                },
+                || Ok::<Option<String>, anyhow::Error>(upstream_target_result.clone()),
             )
         }))
         .map_err(|payload| {
