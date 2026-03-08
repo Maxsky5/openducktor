@@ -1,4 +1,6 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import { createElement } from "react";
+import { AgentRuntimeIcon } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
@@ -9,7 +11,7 @@ export const toAgentRuntimeOptions = (
   return runtimeDefinitions.map((definition) => ({
     value: definition.kind,
     label: definition.label,
-    description: definition.description,
+    icon: createElement(AgentRuntimeIcon, { runtimeKind: definition.kind }),
   }));
 };
 
