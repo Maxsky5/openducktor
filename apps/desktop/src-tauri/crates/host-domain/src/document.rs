@@ -150,13 +150,6 @@ pub struct AgentSessionDocument {
     pub runtime_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        rename = "runtimeEndpoint",
-        alias = "baseUrl"
-    )]
-    pub runtime_endpoint: Option<String>,
     pub working_directory: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_model: Option<AgentSessionModelSelection>,

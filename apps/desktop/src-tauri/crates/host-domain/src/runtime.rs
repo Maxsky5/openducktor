@@ -20,6 +20,12 @@ pub enum AgentRuntimeKind {
 }
 
 impl AgentRuntimeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Opencode => "opencode",
+        }
+    }
+
     pub fn descriptor(self) -> RuntimeDescriptor {
         match self {
             Self::Opencode => RuntimeDescriptor {
@@ -60,6 +66,18 @@ impl AgentRuntimeKind {
                 endpoint
             }
         }
+    }
+
+    pub fn route_for_port(self, port: u16) -> RuntimeRoute {
+        RuntimeRoute::LocalHttp {
+            endpoint: self.endpoint_for_port(port),
+        }
+    }
+}
+
+impl fmt::Display for AgentRuntimeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -103,12 +121,20 @@ pub struct RuntimeDescriptor {
     pub capabilities: RuntimeCapabilities,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeRoute {
+    LocalHttp { endpoint: String },
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeRole {
     Workspace,
     Spec,
     Planner,
+    Build,
     Qa,
 }
 
@@ -118,6 +144,7 @@ impl RuntimeRole {
             Self::Workspace => "workspace",
             Self::Spec => "spec",
             Self::Planner => "planner",
+            Self::Build => "build",
             Self::Qa => "qa",
         }
     }
@@ -134,6 +161,7 @@ impl fmt::Display for RuntimeRole {
 pub enum AgentRuntimeRole {
     Spec,
     Planner,
+    Build,
     Qa,
 }
 
@@ -142,6 +170,7 @@ impl AgentRuntimeRole {
         match self {
             Self::Spec => "spec",
             Self::Planner => "planner",
+            Self::Build => "build",
             Self::Qa => "qa",
         }
     }
@@ -158,6 +187,7 @@ impl From<AgentRuntimeRole> for RuntimeRole {
         match value {
             AgentRuntimeRole::Spec => Self::Spec,
             AgentRuntimeRole::Planner => Self::Planner,
+            AgentRuntimeRole::Build => Self::Build,
             AgentRuntimeRole::Qa => Self::Qa,
         }
     }
@@ -167,6 +197,8 @@ impl From<AgentRuntimeRole> for RuntimeRole {
 #[serde(rename_all = "camelCase")]
 pub struct RunSummary {
     pub run_id: String,
+    pub runtime_kind: AgentRuntimeKind,
+    pub runtime_route: RuntimeRoute,
     pub repo_path: String,
     pub task_id: String,
     pub branch: String,
@@ -183,14 +215,12 @@ pub struct AgentRuntimeSummary {
     pub kind: AgentRuntimeKind,
     pub runtime_id: String,
     pub repo_path: String,
-    pub task_id: String,
+    pub task_id: Option<String>,
     pub role: RuntimeRole,
     pub working_directory: String,
-    pub endpoint: String,
-    pub port: u16,
+    pub runtime_route: RuntimeRoute,
     pub started_at: String,
     pub descriptor: RuntimeDescriptor,
-    pub capabilities: RuntimeCapabilities,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

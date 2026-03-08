@@ -41,7 +41,6 @@ impl BeadsTaskStore {
         session.ended_at = None;
         session.runtime_id = None;
         session.run_id = None;
-        session.runtime_endpoint = None;
 
         Ok(session)
     }
