@@ -1,7 +1,5 @@
-import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
-const MCP_TOOL_ERROR_PREFIX = /^\s*mcp\s+error\b/i;
 const TOOL_CANCELLED_PATTERN = /\b(cancel(?:ed|led)|aborted|stopped|interrupted|terminated)\b/i;
 
 const hasMeaningfulInputValue = (value: unknown): boolean => {
@@ -34,19 +32,7 @@ export const hasNonEmptyText = (value: unknown): value is string => {
 };
 
 export const isToolMessageFailure = (meta: ToolMeta): boolean => {
-  if (meta.status === "error") {
-    return true;
-  }
-
-  if (
-    meta.status === "completed" &&
-    isOdtWorkflowMutationToolName(meta.tool) &&
-    hasNonEmptyText(meta.output)
-  ) {
-    return MCP_TOOL_ERROR_PREFIX.test(meta.output);
-  }
-
-  return false;
+  return meta.status === "error";
 };
 
 export const isToolMessageCancelled = (meta: ToolMeta): boolean => {

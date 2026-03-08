@@ -135,11 +135,11 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.workflow_guards": {
     id: "system.shared.workflow_guards",
     purpose: "system",
-    builtinVersion: 1,
+    builtinVersion: 2,
     template: `Workflow constraints you must obey:
 - Feature/epic flow: open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed.
 - Task/bug may skip planning and go open -> in_progress.
-- odt_set_spec allowed from open/spec_ready only.
+- odt_set_spec allowed from open/spec_ready/ready_for_dev.
 - odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev.
 - odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev.
 - For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).

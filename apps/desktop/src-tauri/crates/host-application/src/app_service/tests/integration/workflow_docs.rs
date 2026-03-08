@@ -890,6 +890,34 @@ fn set_spec_rejects_invalid_status() {
 }
 
 #[test]
+fn set_spec_allows_ready_for_dev_without_status_transition() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-spec-ready";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-1", "feature", TaskStatus::ReadyForDev)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let spec = service.set_spec(repo_path, "task-1", "  # Revised Spec  ")?;
+    assert_eq!(spec.markdown, "# Revised Spec");
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.spec_set_calls,
+        vec![("task-1".to_string(), "# Revised Spec".to_string())]
+    );
+    assert!(
+        task_state.updated_patches.is_empty(),
+        "status update should be skipped when already ready_for_dev"
+    );
+    Ok(())
+}
+
+#[test]
 fn set_plan_for_non_epic_transitions_ready_for_dev() -> Result<()> {
     let repo_path = "/tmp/odt-repo-plan-task";
     let (service, task_state, _git_state) = build_service_with_git_state(

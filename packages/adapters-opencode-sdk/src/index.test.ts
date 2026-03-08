@@ -561,13 +561,40 @@ describe("OpencodeSdkAdapter", () => {
     expect(mock.session.promptCalls).toHaveLength(2);
   });
 
-  test("loadSessionHistory preserves assistant text and maps streamed parts", async () => {
+  test("loadSessionHistory preserves message model metadata and maps streamed parts", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {
           info: {
+            id: "user-1",
+            role: "user",
+            agent: "Hephaestus",
+            model: {
+              providerID: "openai",
+              modelID: "gpt-5",
+            },
+            variant: "high",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "text-user-1",
+              sessionID: "session-opencode-1",
+              messageID: "user-1",
+              type: "text",
+              text: "Use the selected agent",
+              time: { start: Date.now(), end: Date.now() },
+            } as Part,
+          ],
+        },
+        {
+          info: {
             id: "assistant-1",
             role: "assistant",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
             tokens: {
               input: 2_000,
               output: 450,
@@ -606,11 +633,24 @@ describe("OpencodeSdkAdapter", () => {
       limit: 100,
     });
 
-    expect(history).toHaveLength(1);
-    expect(history[0]?.text).toBe("Final answer");
-    expect(history[0]?.totalTokens).toBe(2_450);
-    expect(history[0]?.parts).toHaveLength(1);
-    expect(history[0]?.parts[0]).toMatchObject({
+    expect(history).toHaveLength(2);
+    expect(history[0]?.text).toBe("Use the selected agent");
+    expect(history[0]?.model).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      profileId: "Hephaestus",
+      variant: "high",
+    });
+    expect(history[1]?.text).toBe("Final answer");
+    expect(history[1]?.totalTokens).toBe(2_450);
+    expect(history[1]?.model).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      profileId: "Hephaestus",
+      variant: "high",
+    });
+    expect(history[1]?.parts).toHaveLength(1);
+    expect(history[1]?.parts[0]).toMatchObject({
       kind: "reasoning",
       text: "Reasoning block",
     });
@@ -625,6 +665,10 @@ describe("OpencodeSdkAdapter", () => {
             id: "assistant-1",
             role: "assistant",
             sessionID: "session-opencode-1",
+            providerID: "openai",
+            modelID: "gpt-5",
+            agent: "Hephaestus",
+            variant: "high",
             tokens: {
               input: 1_200,
               output: 300,
@@ -682,6 +726,12 @@ describe("OpencodeSdkAdapter", () => {
       type: "assistant_message",
       message: "Assistant output",
       totalTokens: 1_590,
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "Hephaestus",
+        variant: "high",
+      },
     });
   });
 

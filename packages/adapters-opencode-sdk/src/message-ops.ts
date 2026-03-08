@@ -12,6 +12,7 @@ import { AGENT_ROLE_TOOL_POLICY, ODT_WORKFLOW_TOOL_NAMES } from "@openducktor/co
 import { unwrapData } from "./data-utils";
 import {
   extractMessageTotalTokens,
+  readMessageModelSelection,
   readTextFromMessageInfo,
   readTextFromParts,
   sanitizeAssistantMessage,
@@ -126,6 +127,10 @@ export const loadSessionHistory = async (
       timestamp: toIsoFromEpoch(entry.info.time.created, now),
       text,
       ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+      ...(() => {
+        const model = readMessageModelSelection(entry.info);
+        return model ? { model } : {};
+      })(),
       parts,
     };
   });
@@ -220,6 +225,7 @@ export const sendUserMessage = async (input: {
     (responseData as { info?: unknown }).info,
     responseData.parts,
   );
+  const assistantModel = readMessageModelSelection((responseData as { info?: unknown }).info);
   if (assistantMessage.length > 0) {
     input.emit({
       type: "assistant_message",
@@ -227,6 +233,7 @@ export const sendUserMessage = async (input: {
       timestamp: input.now(),
       message: assistantMessage,
       ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+      ...(assistantModel ? { model: assistantModel } : {}),
     });
     if (responseMessageId) {
       input.session.emittedAssistantMessageIds.add(responseMessageId);

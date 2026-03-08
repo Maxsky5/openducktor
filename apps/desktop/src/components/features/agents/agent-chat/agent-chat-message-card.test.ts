@@ -171,12 +171,41 @@ describe("AgentChatMessageCard tool duration", () => {
             partId: "part-5",
             callId: "call-5",
             tool: "odt_set_plan",
-            status: "completed",
+            status: "error",
             input: { taskId: "fairnest-99z" },
-            output: "MCP error -32602: Input validation error",
+            error: "Input validation error",
           },
         },
         sessionRole: "planner",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-destructive-border");
+    expect(html).not.toContain("border-success-border");
+  });
+
+  test("renders workflow status-guard rejections as error styling", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-guard",
+          role: "tool",
+          content: "Tool odt_set_spec completed",
+          timestamp: "2026-02-22T10:21:35.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-guard",
+            callId: "call-guard",
+            tool: "odt_set_spec",
+            status: "error",
+            input: { taskId: "fairnest-99z" },
+            error:
+              "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+          },
+        },
+        sessionRole: "spec",
         sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
@@ -283,6 +312,39 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("border-l-2");
   });
 
+  test("renders assistant footer color from message agent metadata instead of session selection", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-3",
+          role: "assistant",
+          content: "Implemented with the actual agent.",
+          timestamp: "2026-02-22T10:24:30.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            profileId: "Hephaestus (Deep Agent)",
+            modelId: "gpt-5.3-codex",
+          },
+        },
+        sessionRole: "planner",
+        sessionSelectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5.3-codex",
+          profileId: "Ares (Legacy Agent)",
+        },
+        sessionAgentColors: {
+          "Hephaestus (Deep Agent)": "#2f6fed",
+          "Ares (Legacy Agent)": "#f97316",
+        },
+      }),
+    );
+
+    expect(html).toContain("background-color:#2f6fed");
+    expect(html).not.toContain("background-color:#f97316");
+  });
+
   test("renders user messages with border color from send-time user agent metadata", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -318,7 +380,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("border-left-color:#2f6fed");
   });
 
-  test("falls back to session-selected model agent color for legacy user messages without metadata", () => {
+  test("does not color legacy user messages from the current session selection", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -340,6 +402,6 @@ describe("AgentChatMessageCard tool duration", () => {
       }),
     );
 
-    expect(html).toContain("border-left-color:#f97316");
+    expect(html).not.toContain("border-left-color:#f97316");
   });
 });

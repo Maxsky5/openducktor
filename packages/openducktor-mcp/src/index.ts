@@ -5,6 +5,7 @@ import { ODT_TOOL_SCHEMAS, type OdtStoreContext, OdtTaskStore, resolveStoreConte
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 };
 
@@ -23,17 +24,32 @@ const toToolResult = (payload: unknown): ToolResult => {
         text: JSON.stringify(payload, null, 2),
       },
     ],
+    ...(payload && typeof payload === "object"
+      ? { structuredContent: payload as Record<string, unknown> }
+      : {}),
   };
 };
 
 const toToolError = (error: unknown): ToolResult => {
+  const message = toErrorMessage(error);
+  const code =
+    error instanceof Error && error.name === "ZodError"
+      ? "ODT_TOOL_INPUT_INVALID"
+      : "ODT_TOOL_EXECUTION_ERROR";
   return {
     content: [
       {
         type: "text",
-        text: toErrorMessage(error),
+        text: message,
       },
     ],
+    structuredContent: {
+      ok: false,
+      error: {
+        code,
+        message,
+      },
+    },
     isError: true,
   };
 };

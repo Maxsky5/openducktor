@@ -909,8 +909,23 @@ describe("agent-orchestrator-session-events", () => {
         partId: "p-tool-fail",
         callId: "call-fail",
         tool: "odt_set_plan",
-        status: "completed",
-        output: "MCP error -32602: Input validation error",
+        status: "error",
+        error: "Input validation error",
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.275Z",
+      part: {
+        kind: "tool",
+        messageId: "m1",
+        partId: "p-tool-guard",
+        callId: "call-guard",
+        tool: "odt_set_spec",
+        status: "error",
+        error: "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
       },
     });
 
@@ -934,6 +949,12 @@ describe("agent-orchestrator-session-events", () => {
       timestamp: "2026-02-22T08:00:03.000Z",
       message: "Final assistant output",
       totalTokens: 42,
+      model: {
+        providerId: "anthropic",
+        modelId: "claude-3-7-sonnet",
+        profileId: "Hephaestus",
+        variant: "max",
+      },
     });
 
     handleEvent({
@@ -972,6 +993,15 @@ describe("agent-orchestrator-session-events", () => {
       ),
     ).toBe(true);
     expect(
+      sessionsRef.current["session-1"]?.messages.some(
+        (message) =>
+          message.role === "tool" &&
+          message.meta?.kind === "tool" &&
+          message.meta.tool === "odt_set_spec" &&
+          message.meta.status === "error",
+      ),
+    ).toBe(true);
+    expect(
       sessionsRef.current["session-1"]?.messages.some((message) =>
         message.content.includes("Subtask (build): Done subtask"),
       ),
@@ -982,6 +1012,15 @@ describe("agent-orchestrator-session-events", () => {
           message.role === "assistant" && message.content.includes("Final assistant output"),
       ),
     ).toBe(true);
+    const finalAssistantMessage = sessionsRef.current["session-1"]?.messages.find(
+      (message) =>
+        message.role === "assistant" && message.content.includes("Final assistant output"),
+    );
+    if (!finalAssistantMessage || finalAssistantMessage.meta?.kind !== "assistant") {
+      throw new Error("Expected final assistant message with assistant meta");
+    }
+    expect(finalAssistantMessage.meta.profileId).toBe("Hephaestus");
+    expect(finalAssistantMessage.meta.modelId).toBe("claude-3-7-sonnet");
     expect(
       sessionsRef.current["session-1"]?.messages.some(
         (message) => message.role === "assistant" && message.content.includes("Idle follow-up"),

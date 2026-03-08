@@ -1263,6 +1263,79 @@ describe("openducktor-mcp lib", () => {
     expect(statusUpdateCalls).toBe(0);
   });
 
+  test("setSpec allows feature tasks to update spec from ready_for_dev", async () => {
+    let status = "ready_for_dev";
+    let statusUpdateCalls = 0;
+
+    const { runProcess } = buildProcessRunner((args) => {
+      const command = args[1];
+      if (command === "where") {
+        return { ok: true, stdout: JSON.stringify({ path: "/beads" }) };
+      }
+      if (command === "config") {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "list") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Feature task",
+              status,
+              issue_type: "feature",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "show") {
+        return {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              id: "task-1",
+              title: "Feature task",
+              status,
+              issue_type: "feature",
+              metadata: {},
+            },
+          ]),
+        };
+      }
+      if (command === "update" && args.includes("--metadata")) {
+        return { ok: true, stdout: "{}" };
+      }
+      if (command === "update" && args.includes("--status")) {
+        statusUpdateCalls += 1;
+        status = args[args.indexOf("--status") + 1] ?? status;
+        return { ok: true, stdout: "{}" };
+      }
+      throw new Error(`Unexpected bd command: ${args.join(" ")}`);
+    });
+
+    const store = new OdtTaskStore(
+      {
+        repoPath: "/repo",
+        metadataNamespace: "openducktor",
+        beadsDir: "/beads",
+      },
+      { runProcess },
+    );
+
+    const result = (await store.setSpec({
+      taskId: "task-1",
+      markdown: "# Updated spec",
+    })) as {
+      task: { status: string };
+      document: { markdown: string };
+    };
+
+    expect(result.document.markdown).toBe("# Updated spec");
+    expect(result.task.status).toBe("ready_for_dev");
+    expect(statusUpdateCalls).toBe(0);
+  });
+
   test("setPlan epic subtasks replace existing direct subtasks", async () => {
     let status = "spec_ready";
     const deletedTaskIds: string[] = [];

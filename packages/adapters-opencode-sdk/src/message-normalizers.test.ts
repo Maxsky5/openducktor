@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import {
   extractMessageTotalTokens,
+  readMessageModelSelection,
   readTextFromMessageInfo,
   readTextFromParts,
   sanitizeAssistantMessage,
@@ -45,6 +46,38 @@ describe("message-normalizers", () => {
 
   test("sanitizeAssistantMessage trims surrounding whitespace", () => {
     expect(sanitizeAssistantMessage("  done  ")).toBe("done");
+  });
+
+  test("readMessageModelSelection supports assistant and user message shapes", () => {
+    expect(
+      readMessageModelSelection({
+        providerID: "openai",
+        modelID: "gpt-5",
+        agent: "Hephaestus",
+        variant: "high",
+      }),
+    ).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      profileId: "Hephaestus",
+      variant: "high",
+    });
+
+    expect(
+      readMessageModelSelection({
+        model: {
+          providerID: "anthropic",
+          modelID: "claude-3-7-sonnet",
+        },
+        agent: "Ares",
+        variant: "max",
+      }),
+    ).toEqual({
+      providerId: "anthropic",
+      modelId: "claude-3-7-sonnet",
+      profileId: "Ares",
+      variant: "max",
+    });
   });
 
   test("extractMessageTotalTokens prefers info token breakdown", () => {

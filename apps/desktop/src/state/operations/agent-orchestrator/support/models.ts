@@ -82,3 +82,27 @@ export const normalizePersistedSelection = (
     ...(selection.profileId ? { profileId: selection.profileId } : {}),
   };
 };
+
+export const mergeModelSelection = (
+  base: AgentModelSelection | null,
+  override: AgentModelSelection | undefined,
+): AgentModelSelection | null => {
+  if (!base) {
+    return override ?? null;
+  }
+  if (!override) {
+    return base;
+  }
+
+  return {
+    ...((override.runtimeKind ?? base.runtimeKind)
+      ? { runtimeKind: override.runtimeKind ?? base.runtimeKind }
+      : {}),
+    providerId: override.providerId,
+    modelId: override.modelId,
+    ...((override.variant ?? base.variant) ? { variant: override.variant ?? base.variant } : {}),
+    ...((override.profileId ?? base.profileId)
+      ? { profileId: override.profileId ?? base.profileId }
+      : {}),
+  };
+};

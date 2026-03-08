@@ -96,6 +96,48 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps completed tool metadata structured error as tool error part", () => {
+    const part = createToolPart({
+      id: "tool-1b",
+      tool: "openducktor_odt_set_spec",
+      status: "completed",
+      input: { taskId: "task-1" },
+      output: "completed",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message:
+              "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+          },
+        },
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1b",
+      partId: "tool-1b",
+      callId: "call-tool-1b",
+      tool: "openducktor_odt_set_spec",
+      status: "error",
+      input: { taskId: "task-1" },
+      error: "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message:
+              "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+          },
+        },
+      },
+    });
+  });
+
   test("maps pending tool with end timing as completed", () => {
     const part = createToolPart({
       id: "tool-2",
@@ -200,6 +242,45 @@ describe("stream-part-mapper", () => {
       status: "error",
       input: {},
       error: "Execution failed",
+    });
+  });
+
+  test("prefers structured error message for tool parts already marked as error", () => {
+    const part = createToolPart({
+      id: "tool-4b",
+      status: "error",
+      input: {},
+      error: "Generic failure",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message: "Specific structured failure",
+          },
+        },
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-4b",
+      partId: "tool-4b",
+      callId: "call-tool-4b",
+      tool: "todowrite",
+      status: "error",
+      input: {},
+      error: "Specific structured failure",
+      metadata: {
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message: "Specific structured failure",
+          },
+        },
+      },
     });
   });
 

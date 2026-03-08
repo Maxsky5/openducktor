@@ -8,7 +8,7 @@ import type {
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../../agent-tool-messages";
-import { normalizePersistedSelection } from "./models";
+import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
@@ -140,19 +140,36 @@ const isSyntheticHistoryUserMessage = (message: AgentSessionHistoryMessage): boo
 const assistantMessageMeta = (
   role: AgentRole,
   selectedModel: AgentModelSelection | null,
+  messageModel: AgentModelSelection | undefined,
   durationMs: number | undefined,
   totalTokens: number | undefined,
 ) => {
+  const effectiveModel = mergeModelSelection(selectedModel, messageModel);
   return {
     kind: "assistant",
     agentRole: role,
-    ...(selectedModel?.providerId ? { providerId: selectedModel.providerId } : {}),
-    ...(selectedModel?.modelId ? { modelId: selectedModel.modelId } : {}),
-    ...(selectedModel?.variant ? { variant: selectedModel.variant } : {}),
-    ...(selectedModel?.profileId ? { profileId: selectedModel.profileId } : {}),
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
     ...(typeof durationMs === "number" && durationMs > 0 ? { durationMs } : {}),
     ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;
+};
+
+const userMessageMeta = (messageModel: AgentModelSelection | undefined) => {
+  const effectiveModel = mergeModelSelection(null, messageModel);
+  if (!effectiveModel) {
+    return undefined;
+  }
+
+  return {
+    kind: "user",
+    ...(effectiveModel.providerId ? { providerId: effectiveModel.providerId } : {}),
+    ...(effectiveModel.modelId ? { modelId: effectiveModel.modelId } : {}),
+    ...(effectiveModel.variant ? { variant: effectiveModel.variant } : {}),
+    ...(effectiveModel.profileId ? { profileId: effectiveModel.profileId } : {}),
+  } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 };
 
 const historyPartToChatMessage = (
@@ -253,11 +270,17 @@ export const historyToChatMessages = (
               meta: assistantMessageMeta(
                 sessionContext.role,
                 sessionContext.selectedModel,
+                message.model,
                 assistantDurationMs,
                 message.totalTokens,
               ),
             }
-          : {}),
+          : message.role === "user"
+            ? (() => {
+                const meta = userMessageMeta(message.model);
+                return meta ? { meta } : {};
+              })()
+            : {}),
       });
     }
 

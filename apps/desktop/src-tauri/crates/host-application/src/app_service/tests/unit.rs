@@ -216,6 +216,7 @@ fn subtask_plan_inputs_reject_epic_issue_type() {
 fn spec_and_plan_write_status_guards_follow_matrix() {
     assert!(can_set_spec_from_status(&TaskStatus::Open));
     assert!(can_set_spec_from_status(&TaskStatus::SpecReady));
+    assert!(can_set_spec_from_status(&TaskStatus::ReadyForDev));
     assert!(!can_set_spec_from_status(&TaskStatus::InProgress));
 
     let epic_open = make_task("epic-open", "epic", TaskStatus::Open);

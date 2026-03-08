@@ -63,6 +63,7 @@ export type AgentSessionHistoryMessage = {
   timestamp: string;
   text: string;
   totalTokens?: number;
+  model?: AgentModelSelection;
   parts: AgentStreamPart[];
 };
 

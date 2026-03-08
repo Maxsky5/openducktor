@@ -20,7 +20,7 @@ impl AppService {
         let context = self.load_task_context_from_resolved(repo_path, task_id)?;
         if !can_set_spec_from_status(&context.task.status) {
             return Err(anyhow!(
-                "set_spec is only allowed from open/spec_ready (current: {})",
+                "set_spec is only allowed from open/spec_ready/ready_for_dev (current: {})",
                 context.task.status.as_cli_value()
             ));
         }

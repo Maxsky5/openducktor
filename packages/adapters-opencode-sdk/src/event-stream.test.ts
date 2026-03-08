@@ -79,6 +79,10 @@ describe("event-stream", () => {
           id: "assistant-message-1",
           role: "assistant",
           sessionID: "external-session-1",
+          providerID: "openai",
+          modelID: "gpt-5",
+          agent: "Hephaestus",
+          variant: "high",
           tokens: {
             input: 100,
             output: 20,
@@ -134,6 +138,12 @@ describe("event-stream", () => {
       throw new Error("Expected assistant_message event");
     }
     expect(assistantMessages[0].totalTokens).toBe(120);
+    expect(assistantMessages[0].model).toEqual({
+      providerId: "openai",
+      modelId: "gpt-5",
+      profileId: "Hephaestus",
+      variant: "high",
+    });
     expect(emitted.some((event) => event.type === "assistant_part")).toBe(true);
   });
 

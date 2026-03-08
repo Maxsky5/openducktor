@@ -23,7 +23,7 @@ const SKIP_SPEC_AND_PLAN_TRANSITION_EXTRAS: Readonly<
   spec_ready: ["in_progress"],
 };
 
-const SET_SPEC_ALLOWED_STATUSES: readonly TaskStatus[] = ["open", "spec_ready"];
+const SET_SPEC_ALLOWED_STATUSES: readonly TaskStatus[] = ["open", "spec_ready", "ready_for_dev"];
 
 const SET_PLAN_ALLOWED_STATUSES: Readonly<Record<IssueType, readonly TaskStatus[]>> = {
   epic: ["spec_ready", "ready_for_dev"],
@@ -91,7 +91,7 @@ export const getSetSpecError = (status: TaskStatus): string | null => {
   if (canSetSpecFromStatus(status)) {
     return null;
   }
-  return `set_spec is only allowed from open/spec_ready (current: ${status})`;
+  return `set_spec is only allowed from open/spec_ready/ready_for_dev (current: ${status})`;
 };
 
 export const getSetPlanError = (task: TaskCard): string | null => {

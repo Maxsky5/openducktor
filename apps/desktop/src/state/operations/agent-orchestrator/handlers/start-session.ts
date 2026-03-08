@@ -218,6 +218,81 @@ const persistInitialSession = ({
   );
 };
 
+const canReuseSessionForSelectedModel = ({
+  sessionRuntimeKind,
+  selectedModel,
+}: {
+  sessionRuntimeKind: AgentModelSelection["runtimeKind"] | undefined;
+  selectedModel: AgentModelSelection | null;
+}): boolean => {
+  const requestedRuntimeKind = selectedModel?.runtimeKind;
+  if (!requestedRuntimeKind) {
+    return true;
+  }
+
+  return (sessionRuntimeKind ?? DEFAULT_RUNTIME_KIND) === requestedRuntimeKind;
+};
+
+const applySelectedModelToReusedSession = ({
+  repoPath,
+  sessionId,
+  selectedModel,
+  session,
+}: {
+  repoPath: string;
+  sessionId: string;
+  selectedModel: AgentModelSelection | null;
+  session: SessionDependencies;
+}): void => {
+  if (!selectedModel) {
+    return;
+  }
+
+  const currentSession = session.sessionsRef.current[sessionId];
+  if (!currentSession) {
+    return;
+  }
+  if (
+    currentSession.selectedModel?.runtimeKind === selectedModel.runtimeKind &&
+    currentSession.selectedModel?.providerId === selectedModel.providerId &&
+    currentSession.selectedModel?.modelId === selectedModel.modelId &&
+    currentSession.selectedModel?.variant === selectedModel.variant &&
+    currentSession.selectedModel?.profileId === selectedModel.profileId
+  ) {
+    return;
+  }
+
+  const nextSession: AgentSessionState = {
+    ...currentSession,
+    selectedModel,
+  };
+  const summary = {
+    sessionId: currentSession.sessionId,
+    externalSessionId: currentSession.externalSessionId,
+    role: currentSession.role,
+    scenario: currentSession.scenario,
+    startedAt: currentSession.startedAt,
+    status: currentSession.status,
+    ...(currentSession.runtimeKind ? { runtimeKind: currentSession.runtimeKind } : {}),
+  };
+  session.setSessionsById((current) => ({
+    ...current,
+    [sessionId]: nextSession,
+  }));
+  persistInitialSession({
+    initialSession: nextSession,
+    session,
+    tags: createSessionStartTags({
+      repoPath,
+      taskId: currentSession.taskId,
+      role: currentSession.role,
+      resolvedScenario: currentSession.scenario,
+      summary,
+      isStaleRepoOperation: () => false,
+    }),
+  });
+};
+
 const createOrReuseSession = async ({
   ctx,
   input,
@@ -234,10 +309,26 @@ const createOrReuseSession = async ({
       ),
     );
     if (existingSession) {
-      return {
-        kind: "reused",
-        sessionId: existingSession.sessionId,
-      };
+      if (
+        canReuseSessionForSelectedModel({
+          sessionRuntimeKind:
+            existingSession.runtimeKind ??
+            existingSession.selectedModel?.runtimeKind ??
+            DEFAULT_RUNTIME_KIND,
+          selectedModel: input.selectedModel,
+        })
+      ) {
+        applySelectedModelToReusedSession({
+          repoPath: ctx.repoPath,
+          sessionId: existingSession.sessionId,
+          selectedModel: input.selectedModel,
+          session: deps.session,
+        });
+        return {
+          kind: "reused",
+          sessionId: existingSession.sessionId,
+        };
+      }
     }
 
     const persistedSessions = await host.agentSessionsList(ctx.repoPath, ctx.taskId);
@@ -245,13 +336,28 @@ const createOrReuseSession = async ({
     const latestPersistedSession = pickLatestSession(
       persistedSessions.filter((entry) => entry.role === ctx.role),
     );
-    if (latestPersistedSession) {
+    if (
+      latestPersistedSession &&
+      canReuseSessionForSelectedModel({
+        sessionRuntimeKind:
+          latestPersistedSession.runtimeKind ??
+          latestPersistedSession.selectedModel?.runtimeKind ??
+          DEFAULT_RUNTIME_KIND,
+        selectedModel: input.selectedModel,
+      })
+    ) {
       if (!deps.session.sessionsRef.current[latestPersistedSession.sessionId]) {
         await deps.session.loadAgentSessions(ctx.taskId, {
           hydrateHistoryForSessionId: latestPersistedSession.sessionId,
         });
         throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
       }
+      applySelectedModelToReusedSession({
+        repoPath: ctx.repoPath,
+        sessionId: latestPersistedSession.sessionId,
+        selectedModel: input.selectedModel,
+        session: deps.session,
+      });
       return {
         kind: "reused",
         sessionId: latestPersistedSession.sessionId,
@@ -272,16 +378,17 @@ const createOrReuseSession = async ({
     deps,
   });
 
+  const selectedModel = input.selectedModel ?? resolved.resolvedDefaultModelSelection;
   const summary = await deps.runtime.adapter.startSession({
     repoPath: ctx.repoPath,
-    runtimeKind:
-      resolved.runtime.runtimeKind ?? input.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeKind: resolved.runtime.runtimeKind ?? selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     runtimeConnection: resolveRuntimeConnection(resolved.runtime),
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
     scenario: resolved.resolvedScenario,
     systemPrompt: resolved.systemPrompt,
+    ...(selectedModel ? { model: selectedModel } : {}),
   });
 
   const startedCtx: StartedSessionContext = {
