@@ -42,12 +42,15 @@ type ToolMessageMeta = Extract<
   { kind: "tool" }
 >;
 
+const isReadOnlyNonWorktreeTool = (toolName: string): boolean =>
+  EXPLICIT_NON_WORKTREE_TOOL_NAMES.has(toolName) || isSafeReadToolName(toolName);
+
 const canToolAffectWorktree = (meta: ToolMessageMeta): boolean => {
   const toolName = meta.tool.trim().toLowerCase();
   if (toolName.length === 0) {
     return false;
   }
-  if (EXPLICIT_NON_WORKTREE_TOOL_NAMES.has(toolName) || isSafeReadToolName(toolName)) {
+  if (isReadOnlyNonWorktreeTool(toolName)) {
     return false;
   }
 
