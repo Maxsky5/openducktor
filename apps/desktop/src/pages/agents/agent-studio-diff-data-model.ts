@@ -74,7 +74,8 @@ export type ScopeSummaryFields = Pick<
 >;
 
 export type SummaryReloadDecision = {
-  hashesChanged: boolean;
+  sharedHashesChanged: boolean;
+  scopeHashesChanged: boolean;
   shouldReloadFullScope: boolean;
 };
 
@@ -326,7 +327,7 @@ export const applySummarySnapshot = ({
   nextLatestSharedSequence: number;
   shouldReloadFullScope: boolean;
 } => {
-  const { hashesChanged, shouldReloadFullScope } = getSummaryReloadDecision(
+  const { sharedHashesChanged, shouldReloadFullScope } = getSummaryReloadDecision(
     state,
     scope,
     summaryFields,
@@ -368,10 +369,11 @@ export const applySummarySnapshot = ({
         didChange = true;
       }
 
-      if (hashesChanged && state.loadedByScope[otherScope]) {
+      if (sharedHashesChanged && state.loadedByScope[otherScope]) {
         const invalidatedOtherScopeSnapshot: ScopeSnapshot = {
           ...nextByScope[otherScope],
           fileDiffs: EMPTY_DIFFS,
+          diffHash: null,
         };
         if (!scopeSnapshotEqual(nextByScope[otherScope], invalidatedOtherScopeSnapshot)) {
           nextByScope[otherScope] = invalidatedOtherScopeSnapshot;
@@ -402,14 +404,16 @@ export const getSummaryReloadDecision = (
   summaryFields: ScopeSummaryFields,
 ): SummaryReloadDecision => {
   const previousSummarySnapshot = state.byScope[scope];
-  const hashesChanged =
+  const sharedHashesChanged =
     previousSummarySnapshot.hashVersion !== summaryFields.hashVersion ||
-    previousSummarySnapshot.statusHash !== summaryFields.statusHash ||
-    previousSummarySnapshot.diffHash !== summaryFields.diffHash;
+    previousSummarySnapshot.statusHash !== summaryFields.statusHash;
+  const scopeHashesChanged =
+    sharedHashesChanged || previousSummarySnapshot.diffHash !== summaryFields.diffHash;
 
   return {
-    hashesChanged,
-    shouldReloadFullScope: state.loadedByScope[scope] && hashesChanged,
+    sharedHashesChanged,
+    scopeHashesChanged,
+    shouldReloadFullScope: state.loadedByScope[scope] && scopeHashesChanged,
   };
 };
 

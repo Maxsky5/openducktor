@@ -9,7 +9,6 @@ import {
   createInitialDiffBatchState,
   type DiffBatchState,
   type DiffScope,
-  getSummaryReloadDecision,
   type LoadDataMode,
   type ScopeSnapshot,
   toScopeSnapshot,
@@ -38,6 +37,12 @@ type InFlightRequestContext = LoadRequestContext & {
   requestKey: string;
   requestSequence: number;
   version: number;
+};
+
+type DiffControllerState = {
+  batchState: DiffBatchState;
+  latestSharedSequence: number;
+  pendingFullReloads: LoadRequestContext[];
 };
 
 type UseAgentStudioDiffControllerArgs = {
@@ -75,6 +80,28 @@ const createQueuedReloadState = (): Record<DiffScope, boolean> => ({
   uncommitted: false,
 });
 
+const createInitialControllerState = (): DiffControllerState => ({
+  batchState: createInitialDiffBatchState(),
+  latestSharedSequence: 0,
+  pendingFullReloads: [],
+});
+
+const sameLoadRequestContext = (left: LoadRequestContext, right: LoadRequestContext): boolean =>
+  left.repoPath === right.repoPath &&
+  left.scope === right.scope &&
+  left.targetBranch === right.targetBranch &&
+  left.workingDir === right.workingDir;
+
+const enqueuePendingFullReload = (
+  queue: LoadRequestContext[],
+  nextLoadContext: LoadRequestContext,
+): LoadRequestContext[] => {
+  if (queue.some((loadContext) => sameLoadRequestContext(loadContext, nextLoadContext))) {
+    return queue;
+  }
+  return [...queue, nextLoadContext];
+};
+
 export function useAgentStudioDiffController({
   repoPath,
   targetBranch,
@@ -84,15 +111,13 @@ export function useAgentStudioDiffController({
   shouldBlockDiffLoading,
   onContextReset,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
-  const [state, setState] = useState<DiffBatchState>(createInitialDiffBatchState);
-  const stateRef = useRef(state);
-  stateRef.current = state;
-
+  const [controllerState, setControllerState] = useState<DiffControllerState>(
+    createInitialControllerState,
+  );
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
 
   const versionByScopeAndModeRef = useRef(createVersionState());
   const requestSequenceRef = useRef(0);
-  const latestSharedSequenceRef = useRef(0);
   const inFlightScopeRequestRef = useRef(createInFlightState());
   const queuedFullReloadByScopeRef = useRef(createQueuedReloadState());
   const requestContextKeyRef = useRef<string | null>(null);
@@ -115,13 +140,12 @@ export function useAgentStudioDiffController({
       queuedFullReloadByScopeRef.current[scope] = false;
     }
     requestSequenceRef.current = 0;
-    latestSharedSequenceRef.current = 0;
   }, []);
 
   const resetControllerState = useCallback(
     (notifyContextReset: boolean): void => {
       resetRequestTracking();
-      setState(createInitialDiffBatchState());
+      setControllerState(createInitialControllerState());
       if (notifyContextReset) {
         onContextReset?.();
       }
@@ -137,52 +161,6 @@ export function useAgentStudioDiffController({
     [],
   );
 
-  const commitSummaryLoad = useCallback(
-    (
-      scope: DiffScope,
-      summaryFields: ReturnType<typeof toScopeSummaryFields>,
-      requestSequence: number,
-    ) => {
-      const shouldReloadFullScope = getSummaryReloadDecision(
-        stateRef.current,
-        scope,
-        summaryFields,
-      ).shouldReloadFullScope;
-
-      setState((previousState) => {
-        const { nextState, nextLatestSharedSequence } = applySummarySnapshot({
-          state: previousState,
-          scope,
-          summaryFields,
-          requestSequence,
-          latestSharedSequence: latestSharedSequenceRef.current,
-        });
-        latestSharedSequenceRef.current = nextLatestSharedSequence;
-        return nextState;
-      });
-
-      return shouldReloadFullScope;
-    },
-    [],
-  );
-
-  const commitFullLoad = useCallback(
-    (scope: DiffScope, snapshot: ScopeSnapshot, requestSequence: number): void => {
-      setState((previousState) => {
-        const { nextState, nextLatestSharedSequence } = applyFullSnapshot({
-          state: previousState,
-          scope,
-          snapshot,
-          requestSequence,
-          latestSharedSequence: latestSharedSequenceRef.current,
-        });
-        latestSharedSequenceRef.current = nextLatestSharedSequence;
-        return nextState;
-      });
-    },
-    [],
-  );
-
   const runSummaryLoad = useCallback(
     async ({
       repoPath: activeRepoPath,
@@ -191,7 +169,7 @@ export function useAgentStudioDiffController({
       targetBranch: activeTargetBranch,
       version,
       workingDir: nextWorkingDir,
-    }: InFlightRequestContext): Promise<boolean> => {
+    }: InFlightRequestContext): Promise<void> => {
       const summary = await host.gitGetWorktreeStatusSummary(
         activeRepoPath,
         activeTargetBranch,
@@ -200,16 +178,51 @@ export function useAgentStudioDiffController({
       );
 
       if (hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir)) {
-        return false;
+        return;
       }
 
       if (versionByScopeAndModeRef.current[scope].summary !== version) {
-        return false;
+        return;
       }
 
-      return commitSummaryLoad(scope, toScopeSummaryFields(summary), requestSequence);
+      const summaryFields = toScopeSummaryFields(summary);
+      const loadContext: LoadRequestContext = {
+        repoPath: activeRepoPath,
+        scope,
+        targetBranch: activeTargetBranch,
+        workingDir: nextWorkingDir,
+      };
+
+      setControllerState((previousState) => {
+        const { nextState, nextLatestSharedSequence, shouldReloadFullScope } = applySummarySnapshot(
+          {
+            state: previousState.batchState,
+            scope,
+            summaryFields,
+            requestSequence,
+            latestSharedSequence: previousState.latestSharedSequence,
+          },
+        );
+        const nextPendingFullReloads = shouldReloadFullScope
+          ? enqueuePendingFullReload(previousState.pendingFullReloads, loadContext)
+          : previousState.pendingFullReloads;
+
+        if (
+          nextState === previousState.batchState &&
+          nextLatestSharedSequence === previousState.latestSharedSequence &&
+          nextPendingFullReloads === previousState.pendingFullReloads
+        ) {
+          return previousState;
+        }
+
+        return {
+          batchState: nextState,
+          latestSharedSequence: nextLatestSharedSequence,
+          pendingFullReloads: nextPendingFullReloads,
+        };
+      });
     },
-    [commitSummaryLoad, hasLoadContextChanged],
+    [hasLoadContextChanged],
   );
 
   const runFullLoad = useCallback(
@@ -236,9 +249,31 @@ export function useAgentStudioDiffController({
         return;
       }
 
-      commitFullLoad(scope, toScopeSnapshot(snapshot), requestSequence);
+      const nextScopeSnapshot = toScopeSnapshot(snapshot);
+      setControllerState((previousState) => {
+        const { nextState, nextLatestSharedSequence } = applyFullSnapshot({
+          state: previousState.batchState,
+          scope,
+          snapshot: nextScopeSnapshot,
+          requestSequence,
+          latestSharedSequence: previousState.latestSharedSequence,
+        });
+
+        if (
+          nextState === previousState.batchState &&
+          nextLatestSharedSequence === previousState.latestSharedSequence
+        ) {
+          return previousState;
+        }
+
+        return {
+          ...previousState,
+          batchState: nextState,
+          latestSharedSequence: nextLatestSharedSequence,
+        };
+      });
     },
-    [commitFullLoad, hasLoadContextChanged],
+    [hasLoadContextChanged],
   );
 
   const loadData = useCallback(
@@ -277,8 +312,13 @@ export function useAgentStudioDiffController({
       const requestSequence = ++requestSequenceRef.current;
 
       if (showLoading) {
-        setState((previousState) =>
-          previousState.isLoading ? previousState : { ...previousState, isLoading: true },
+        setControllerState((previousState) =>
+          previousState.batchState.isLoading
+            ? previousState
+            : {
+                ...previousState,
+                batchState: { ...previousState.batchState, isLoading: true },
+              },
         );
       }
 
@@ -292,16 +332,7 @@ export function useAgentStudioDiffController({
         };
 
         if (mode === "summary") {
-          const shouldReloadFullScope = await runSummaryLoad(inFlightRequestContext);
-          if (shouldReloadFullScope) {
-            void loadData(false, {
-              repoPath: loadContext.repoPath,
-              targetBranch: loadContext.targetBranch,
-              workingDir: loadContext.workingDir,
-              scope: loadContext.scope,
-              mode: "full",
-            });
-          }
+          await runSummaryLoad(inFlightRequestContext);
           return;
         }
 
@@ -318,14 +349,23 @@ export function useAgentStudioDiffController({
         }
 
         if (versionByScopeAndModeRef.current[loadContext.scope][mode] === version) {
-          setState((previousState) =>
-            applyScopeError({
-              state: previousState,
+          setControllerState((previousState) => {
+            const nextBatchState = applyScopeError({
+              state: previousState.batchState,
               scope: loadContext.scope,
               mode,
               error: String(error),
-            }),
-          );
+            });
+
+            if (nextBatchState === previousState.batchState) {
+              return previousState;
+            }
+
+            return {
+              ...previousState,
+              batchState: nextBatchState,
+            };
+          });
         }
       } finally {
         if (inFlightScopeRequestRef.current[loadContext.scope][mode] === requestKey) {
@@ -348,6 +388,37 @@ export function useAgentStudioDiffController({
     },
     [hasLoadContextChanged, runFullLoad, runSummaryLoad],
   );
+
+  const pendingFullReload = controllerState.pendingFullReloads[0];
+
+  useEffect(() => {
+    if (!pendingFullReload) {
+      return;
+    }
+
+    setControllerState((previousState) => {
+      const nextPendingFullReload = previousState.pendingFullReloads[0];
+      if (
+        !nextPendingFullReload ||
+        !sameLoadRequestContext(nextPendingFullReload, pendingFullReload)
+      ) {
+        return previousState;
+      }
+
+      return {
+        ...previousState,
+        pendingFullReloads: previousState.pendingFullReloads.slice(1),
+      };
+    });
+
+    void loadData(false, {
+      repoPath: pendingFullReload.repoPath,
+      targetBranch: pendingFullReload.targetBranch,
+      workingDir: pendingFullReload.workingDir,
+      scope: pendingFullReload.scope,
+      mode: "full",
+    });
+  }, [loadData, pendingFullReload]);
 
   useEffect(() => {
     const previousContextKey = requestContextKeyRef.current;
@@ -393,7 +464,7 @@ export function useAgentStudioDiffController({
       return;
     }
 
-    if (state.loadedByScope[diffScope]) {
+    if (controllerState.batchState.loadedByScope[diffScope]) {
       return;
     }
 
@@ -404,11 +475,11 @@ export function useAgentStudioDiffController({
       scope: diffScope,
     });
   }, [
+    controllerState.batchState.loadedByScope,
     diffScope,
     loadData,
     repoPath,
     shouldBlockDiffLoading,
-    state.loadedByScope,
     targetBranch,
     workingDir,
   ]);
@@ -465,13 +536,13 @@ export function useAgentStudioDiffController({
     [loadData, shouldBlockDiffLoading],
   );
 
-  const activeScopeState = state.byScope[diffScope];
+  const activeScopeState = controllerState.batchState.byScope[diffScope];
 
   return {
     activeScopeState,
     diffScope,
     setDiffScope,
-    state,
+    state: controllerState.batchState,
     statusSnapshotKey: toStatusSnapshotKey(activeScopeState),
     refreshActiveScope,
     reloadActiveScope,

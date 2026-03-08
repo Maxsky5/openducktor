@@ -55,7 +55,8 @@ describe("agent-studio-diff-data-model", () => {
       createScopeSummaryFields({ diffHash: "diff-2" }),
     );
 
-    expect(decision.hashesChanged).toBe(true);
+    expect(decision.sharedHashesChanged).toBe(false);
+    expect(decision.scopeHashesChanged).toBe(true);
     expect(decision.shouldReloadFullScope).toBe(false);
   });
 
@@ -70,8 +71,50 @@ describe("agent-studio-diff-data-model", () => {
       createScopeSummaryFields({ statusHash: "status-2" }),
     );
 
-    expect(decision.hashesChanged).toBe(true);
+    expect(decision.sharedHashesChanged).toBe(true);
+    expect(decision.scopeHashesChanged).toBe(true);
     expect(decision.shouldReloadFullScope).toBe(true);
+  });
+
+  test("does not invalidate the inactive scope when only the active scope diff hash changes", () => {
+    const state = createInitialDiffBatchState();
+    state.byScope.target = createScopeSnapshot();
+    state.byScope.uncommitted = createScopeSnapshot({
+      fileDiffs: [
+        {
+          file: "src/worktree.ts",
+          type: "modified",
+          additions: 2,
+          deletions: 0,
+          diff: "@@ -1 +1,2 @@",
+        },
+      ],
+      diffHash: "worktree-diff-1",
+    });
+    state.loadedByScope.target = true;
+    state.loadedByScope.uncommitted = true;
+
+    const { nextState, shouldReloadFullScope } = applySummarySnapshot({
+      state,
+      scope: "target",
+      summaryFields: createScopeSummaryFields({
+        diffHash: "diff-2",
+      }),
+      requestSequence: 2,
+      latestSharedSequence: 1,
+    });
+
+    expect(shouldReloadFullScope).toBe(true);
+    expect(nextState.loadedByScope.uncommitted).toBe(true);
+    expect(nextState.byScope.uncommitted.fileDiffs).toEqual([
+      {
+        file: "src/worktree.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 0,
+        diff: "@@ -1 +1,2 @@",
+      },
+    ]);
   });
 
   test("invalidates the inactive scope cache when summary hashes change", () => {
@@ -107,6 +150,7 @@ describe("agent-studio-diff-data-model", () => {
     expect(shouldReloadFullScope).toBe(true);
     expect(nextState.loadedByScope.uncommitted).toBe(false);
     expect(nextState.byScope.uncommitted.fileDiffs).toEqual([]);
+    expect(nextState.byScope.uncommitted.diffHash).toBeNull();
     expect(nextState.byScope.uncommitted.branch).toBe("feature/task-11");
   });
 });
