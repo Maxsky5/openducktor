@@ -6,6 +6,7 @@ import type {
   RuntimeCapabilities,
   RuntimeDescriptor,
   RuntimeKind,
+  RuntimeTransport,
   TaskPriority,
 } from "@openducktor/contracts";
 import { isAgentKickoffScenario as isContractsAgentKickoffScenario } from "@openducktor/contracts";
@@ -65,6 +66,8 @@ export type AgentModelCatalog = {
 };
 
 export type AgentRuntimeCapabilities = RuntimeCapabilities;
+export type AgentRuntimeConnection = RuntimeTransport;
+export type AgentRuntimeDefinition = RuntimeDescriptor;
 
 export type AgentSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 export type AgentSessionTodoPriority = "high" | "medium" | "low";
@@ -137,12 +140,12 @@ export type AgentSessionContext = {
   repoPath: string;
   runtimeKind: RuntimeKind;
   runtimeId?: string;
+  runtimeConnection?: AgentRuntimeConnection;
   workingDirectory: string;
   taskId: string;
   role: AgentRole;
   scenario: AgentScenario;
   systemPrompt: string;
-  runtimeEndpoint?: string;
   model?: AgentModelSelection;
 };
 

@@ -1,9 +1,10 @@
-import type { FileDiff, FileStatus } from "@openducktor/contracts";
+import type { FileDiff, FileStatus, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentEvent,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentRuntimeConnection,
   AgentScenario,
   AgentSessionContext,
   AgentSessionTodoItem,
@@ -28,17 +29,32 @@ export type SendAgentUserMessageInput = {
 
 export type LoadAgentSessionHistoryInput = {
   runtimeKind?: RuntimeKind;
-  runtimeEndpoint: string;
-  workingDirectory: string;
+  runtimeConnection: AgentRuntimeConnection;
   externalSessionId: string;
   limit?: number;
 };
 
 export type LoadAgentSessionTodosInput = {
   runtimeKind?: RuntimeKind;
-  runtimeEndpoint: string;
-  workingDirectory: string;
+  runtimeConnection: AgentRuntimeConnection;
   externalSessionId: string;
+};
+
+export type ListAgentModelsInput = {
+  runtimeKind?: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+};
+
+export type LoadAgentSessionDiffInput = {
+  runtimeKind?: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
+  sessionId: string;
+  messageId?: string;
+};
+
+export type LoadAgentFileStatusInput = {
+  runtimeKind?: RuntimeKind;
+  runtimeConnection: AgentRuntimeConnection;
 };
 
 export type AgentSessionHistoryMessage = {
@@ -75,14 +91,17 @@ export type AgentSessionSummary = {
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };
 
-export interface AgentEnginePort {
+export interface AgentRuntimeRegistryPort {
+  listRuntimeDefinitions(): RuntimeDescriptor[];
+}
+
+export interface AgentCatalogPort {
+  listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog>;
+}
+
+export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
-  listAvailableModels(input: {
-    runtimeKind?: RuntimeKind;
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  }): Promise<AgentModelCatalog>;
   hasSession(sessionId: string): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
@@ -91,14 +110,14 @@ export interface AgentEnginePort {
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
   subscribeEvents(sessionId: string, listener: (event: AgentEvent) => void): EventUnsubscribe;
   stopSession(sessionId: string): Promise<void>;
-  loadSessionDiff(input: {
-    runtimeKind?: RuntimeKind;
-    runtimeEndpoint: string;
-    sessionId: string;
-    messageId?: string;
-  }): Promise<FileDiff[]>;
-  loadFileStatus(input: {
-    runtimeKind?: RuntimeKind;
-    runtimeEndpoint: string;
-  }): Promise<FileStatus[]>;
 }
+
+export interface AgentWorkspaceInspectionPort {
+  loadSessionDiff(input: LoadAgentSessionDiffInput): Promise<FileDiff[]>;
+  loadFileStatus(input: LoadAgentFileStatusInput): Promise<FileStatus[]>;
+}
+
+export type AgentEnginePort = AgentRuntimeRegistryPort &
+  AgentCatalogPort &
+  AgentSessionPort &
+  AgentWorkspaceInspectionPort;
