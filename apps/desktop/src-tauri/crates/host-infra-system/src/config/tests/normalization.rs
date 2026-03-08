@@ -27,6 +27,7 @@ fn update_repo_config_normalizes_blank_worktree_path() {
         .update_repo_config(
             &repo_str,
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some("   ".to_string()),
                 branch_prefix: "duck".to_string(),
                 default_target_branch: "   ".to_string(),
@@ -63,6 +64,7 @@ fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
         .update_repo_config(
             &repo_str,
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "duck".to_string(),
                 default_target_branch: "main".to_string(),
@@ -159,10 +161,11 @@ fn load_normalizes_legacy_blank_repo_config_values() {
     );
 
     let spec = repo_config.agent_defaults.spec.expect("spec default");
+    assert_eq!(spec.runtime_kind, "opencode");
     assert_eq!(spec.provider_id, "openai");
     assert_eq!(spec.model_id, "gpt-5");
     assert!(spec.variant.is_none());
-    assert!(spec.opencode_agent.is_none());
+    assert!(spec.profile_id.is_none());
     let kickoff_override = repo_config
         .prompt_overrides
         .get("kickoff.spec_initial")

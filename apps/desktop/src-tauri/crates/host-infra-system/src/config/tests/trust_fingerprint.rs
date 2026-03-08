@@ -16,6 +16,7 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
         .update_repo_config(
             repo_str.as_str(),
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                 branch_prefix: "duck".to_string(),
                 default_target_branch: "origin/release".to_string(),
@@ -70,6 +71,7 @@ fn update_repo_hooks_revokes_trust_when_commands_change() {
         .update_repo_config(
             repo_str.as_str(),
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                 branch_prefix: "duck".to_string(),
                 default_target_branch: "origin/main".to_string(),

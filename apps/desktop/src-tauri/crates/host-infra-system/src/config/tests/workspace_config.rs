@@ -34,6 +34,7 @@ fn workspace_add_select_and_update_persist_state() {
         .update_repo_config(
             &repo_a_str,
             RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(worktrees_path.clone()),
                 branch_prefix: "duck".to_string(),
                 default_target_branch: "origin/main".to_string(),
