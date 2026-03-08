@@ -201,7 +201,21 @@ describe("use-repo-settings-operations", () => {
 
     try {
       await harness.mount();
-      await harness.getLatest().saveRepoSettings(inputFixture);
+      const specDefault = inputFixture.agentDefaults.spec;
+      if (!specDefault) {
+        throw new Error("Expected spec default fixture");
+      }
+      const input = {
+        ...inputFixture,
+        agentDefaults: {
+          ...inputFixture.agentDefaults,
+          spec: {
+            ...specDefault,
+            runtimeKind: "claude-code",
+          },
+        },
+      };
+      await harness.getLatest().saveRepoSettings(input);
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("/repo-a", {
         defaultRuntimeKind: "opencode" as const,
@@ -216,7 +230,7 @@ describe("use-repo-settings-operations", () => {
         worktreeFileCopies: [".env", ".env.local"],
         agentDefaults: {
           spec: {
-            runtimeKind: "opencode",
+            runtimeKind: "claude-code",
             providerId: "openai",
             modelId: "gpt-5",
             variant: "mini",

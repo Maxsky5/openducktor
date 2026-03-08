@@ -1,7 +1,6 @@
 use crate::{as_error, run_service_blocking, AppState};
 use host_domain::{
-    AgentRuntimeRole, AgentRuntimeSummary, BeadsCheck, RuntimeCheck, RuntimeDescriptor,
-    SystemCheck,
+    AgentRuntimeRole, AgentRuntimeSummary, BeadsCheck, RuntimeCheck, RuntimeDescriptor, SystemCheck,
 };
 use tauri::State;
 
@@ -46,7 +45,11 @@ pub async fn runtime_list(
     runtime_kind: String,
     repo_path: Option<String>,
 ) -> Result<Vec<AgentRuntimeSummary>, String> {
-    as_error(state.service.runtime_list(&runtime_kind, repo_path.as_deref()))
+    as_error(
+        state
+            .service
+            .runtime_list(&runtime_kind, repo_path.as_deref()),
+    )
 }
 
 #[tauri::command]

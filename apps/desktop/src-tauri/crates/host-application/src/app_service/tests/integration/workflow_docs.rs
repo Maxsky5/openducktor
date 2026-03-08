@@ -40,7 +40,11 @@ fn task_update_rejects_direct_status_changes() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -163,7 +167,11 @@ fn task_delete_blocks_when_subtasks_exist_without_confirmation() {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![parent, child],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -186,20 +194,27 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![parent, child],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-        branch_prefix: "obp".to_string(),
-        default_target_branch: "origin/main".to_string(),
-        trusted_hooks: true,
-        trusted_hooks_fingerprint: None,
-        hooks: HookSet::default(),
-        worktree_file_copies: Vec::new(),
-        prompt_overrides: Default::default(),
-        agent_defaults: Default::default(), },
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
     )?;
 
     service.task_delete(repo_path, "parent-1", true)?;
@@ -237,20 +252,27 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
             is_current: false,
             is_remote: false,
         }],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-        branch_prefix: "obp".to_string(),
-        default_target_branch: "origin/main".to_string(),
-        trusted_hooks: true,
-        trusted_hooks_fingerprint: None,
-        hooks: HookSet::default(),
-        worktree_file_copies: Vec::new(),
-        prompt_overrides: Default::default(),
-        agent_defaults: Default::default(), },
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
     )?;
 
     task_state
@@ -327,20 +349,27 @@ fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
             is_current: false,
             is_remote: false,
         }],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-        branch_prefix: "obp".to_string(),
-        default_target_branch: "origin/main".to_string(),
-        trusted_hooks: true,
-        trusted_hooks_fingerprint: None,
-        hooks: HookSet::default(),
-        worktree_file_copies: Vec::new(),
-        prompt_overrides: Default::default(),
-        agent_defaults: Default::default(), },
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
     )?;
 
     task_state
@@ -391,7 +420,11 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
             is_current: false,
             is_remote: false,
         }],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
     service
         .workspace_add(repo_path)
@@ -399,15 +432,18 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
     service
         .workspace_update_repo_config(
             repo_path,
-            RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-            branch_prefix: "obp".to_string(),
-            default_target_branch: "origin/main".to_string(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(), },
+            RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
+                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+                branch_prefix: "obp".to_string(),
+                default_target_branch: "origin/main".to_string(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                worktree_file_copies: Vec::new(),
+                prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
+            },
         )
         .expect("repo config update should succeed");
 
@@ -445,20 +481,27 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
             is_current: false,
             is_remote: false,
         }],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-        branch_prefix: "obp".to_string(),
-        default_target_branch: "origin/main".to_string(),
-        trusted_hooks: true,
-        trusted_hooks_fingerprint: None,
-        hooks: HookSet::default(),
-        worktree_file_copies: Vec::new(),
-        prompt_overrides: Default::default(),
-        agent_defaults: Default::default(), },
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
     )?;
 
     task_state
@@ -513,7 +556,11 @@ fn build_blocked_requires_non_empty_reason() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::InProgress)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -535,7 +582,11 @@ fn build_resumed_human_actions_and_resume_deferred_paths_work() -> Result<()> {
             deferred,
         ],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let resumed = service.build_resumed(repo_path, "task-blocked")?;
@@ -558,7 +609,11 @@ fn task_resume_deferred_requires_deferred_state() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -573,7 +628,11 @@ fn tasks_list_enriches_available_actions() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![make_task("feature-1", "feature", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let tasks = service.tasks_list(repo_path)?;
@@ -591,7 +650,11 @@ fn task_create_defaults_ai_review_for_typed_issue_type() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let created = service.task_create(
@@ -623,7 +686,11 @@ fn task_transition_returns_current_task_when_status_is_unchanged() -> Result<()>
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let task = service.task_transition(repo_path, "task-1", TaskStatus::Open, None)?;
@@ -640,7 +707,11 @@ fn task_transition_updates_status_when_valid() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("bug-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let task = service.task_transition(repo_path, "bug-1", TaskStatus::InProgress, None)?;
@@ -661,7 +732,11 @@ fn build_completed_routes_to_ai_review_when_enabled() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::InProgress)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let task = service.build_completed(repo_path, "task-1", Some("done"))?;
@@ -683,7 +758,11 @@ fn build_completed_routes_to_human_review_when_ai_is_disabled() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![task],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let task = service.build_completed(repo_path, "task-1", None)?;
@@ -705,7 +784,11 @@ fn task_defer_rejects_subtasks() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![subtask],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -720,7 +803,11 @@ fn task_defer_transitions_open_parent_task() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let task = service.task_defer(repo_path, "task-1", Some("later"))?;
@@ -740,7 +827,11 @@ fn task_defer_rejects_closed_tasks() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::Closed)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -757,7 +848,11 @@ fn set_spec_persists_trimmed_markdown_and_transitions_open_task() -> Result<()> 
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "feature", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let spec = service.set_spec(repo_path, "task-1", "  # Spec  ")?;
@@ -781,7 +876,11 @@ fn set_spec_rejects_invalid_status() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::InProgress)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -796,7 +895,11 @@ fn set_plan_for_non_epic_transitions_ready_for_dev() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let plan = service.set_plan(repo_path, "task-1", "  # Plan  ", None)?;
@@ -821,7 +924,11 @@ fn set_plan_allows_feature_from_ready_for_dev_without_status_transition() -> Res
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "feature", TaskStatus::ReadyForDev)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let plan = service.set_plan(repo_path, "task-1", "  # Revised Plan  ", None)?;
@@ -848,7 +955,11 @@ fn set_plan_rejects_invalid_status_for_feature() {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "feature", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -868,7 +979,11 @@ fn set_plan_for_epic_replaces_existing_subtasks_with_new_plan_proposals() -> Res
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![epic, existing_child],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let plan = service.set_plan(
@@ -931,7 +1046,11 @@ fn set_plan_for_epic_without_subtasks_clears_existing_direct_subtasks() -> Resul
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![epic, existing_child],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let plan = service.set_plan(repo_path, "epic-1", "# Epic Plan", None)?;
@@ -960,7 +1079,11 @@ fn set_plan_for_epic_rejects_subtask_replacement_when_existing_subtask_is_active
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![epic, active_child],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let error = service
@@ -994,7 +1117,11 @@ fn qa_get_report_returns_latest_markdown_when_present() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
     {
         let mut state = task_state.lock().expect("task lock poisoned");
@@ -1018,7 +1145,11 @@ fn qa_get_report_returns_empty_when_not_present() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let report = service.qa_get_report(repo_path, "task-1")?;
@@ -1033,7 +1164,11 @@ fn spec_get_and_plan_get_use_consolidated_metadata_lookup() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let _ = service.spec_get(repo_path, "task-1")?;
@@ -1055,7 +1190,11 @@ fn qa_approved_appends_report_and_transitions_to_human_review() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::AiReview)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let task = service.qa_approved(repo_path, "task-1", "Looks good")?;
@@ -1081,7 +1220,11 @@ fn qa_rejected_appends_report_and_transitions_to_in_progress() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![make_task("task-1", "task", TaskStatus::AiReview)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let task = service.qa_rejected(repo_path, "task-1", "Needs work")?;
@@ -1107,7 +1250,11 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
     {
         let mut state = task_state.lock().expect("task lock poisoned");

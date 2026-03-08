@@ -63,8 +63,10 @@ export function useRepoSettingsOperations({
         return undefined;
       }
 
+      const runtimeKind = entry.runtimeKind?.trim() || DEFAULT_RUNTIME_KIND;
+
       return {
-        runtimeKind: DEFAULT_RUNTIME_KIND,
+        runtimeKind,
         providerId: entry.providerId.trim(),
         modelId: entry.modelId.trim(),
         ...(entry.variant.trim() ? { variant: entry.variant.trim() } : {}),
