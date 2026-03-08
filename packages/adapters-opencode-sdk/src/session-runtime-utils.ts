@@ -21,7 +21,7 @@ export const toSessionInput = (
     systemPrompt: input.systemPrompt,
     runtimeKind: input.runtimeKind,
     ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
-    ...(input.runtimeEndpoint ? { runtimeEndpoint: input.runtimeEndpoint } : {}),
+    ...(input.runtimeConnection ? { runtimeConnection: input.runtimeConnection } : {}),
     ...(input.model ? { model: input.model } : {}),
     sessionId: input.sessionId,
   };

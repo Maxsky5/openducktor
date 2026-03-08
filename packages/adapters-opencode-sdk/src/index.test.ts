@@ -4,6 +4,11 @@ import type { AgentEvent, AgentSessionTodoItem } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
 
 const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const defaultRuntimeConnection = {
+  endpoint: "http://127.0.0.1:12345",
+  workingDirectory: "/repo",
+} as const;
+
 const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
   "odt_read_task",
   "odt_set_spec",
@@ -342,16 +347,16 @@ const startDefaultSession = async (
     repoPath: "/repo",
     workingDirectory: "/repo",
     taskId: "task-1",
+    runtimeKind: "opencode",
     role,
     scenario,
     systemPrompt: "system prompt",
-    runtimeEndpoint: "http://127.0.0.1:12345",
+    runtimeConnection: defaultRuntimeConnection,
   });
 };
 
 const defaultLoadSessionTodosInput = {
-  runtimeEndpoint: "http://127.0.0.1:12345",
-  workingDirectory: "/repo",
+  runtimeConnection: defaultRuntimeConnection,
   externalSessionId: "session-opencode-1",
 };
 
@@ -403,10 +408,14 @@ describe("OpencodeSdkAdapter", () => {
       repoPath: "/repo",
       workingDirectory: "/repo",
       taskId: "task-1",
+      runtimeKind: "opencode",
       role: "planner",
       scenario: "planner_initial",
       systemPrompt: "system",
-      runtimeEndpoint: "http://127.0.0.1:12000",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12000",
+        workingDirectory: "/repo",
+      },
     });
 
     expect(summary.sessionId).toBe("session-1");
@@ -592,8 +601,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const history = await adapter.loadSessionHistory({
-      runtimeEndpoint: "http://127.0.0.1:12345",
-      workingDirectory: "/repo",
+      runtimeConnection: defaultRuntimeConnection,
       externalSessionId: "session-opencode-1",
       limit: 100,
     });
@@ -974,8 +982,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
-      runtimeEndpoint: "http://127.0.0.1:12345",
-      workingDirectory: "/repo",
+      runtimeConnection: defaultRuntimeConnection,
       externalSessionId: "session-opencode-1",
     });
 
@@ -1072,7 +1079,7 @@ describe("OpencodeSdkAdapter", () => {
     ]);
   });
 
-  test("loadSessionTodos omits directory when workingDirectory is blank", async () => {
+  test("loadSessionTodos rejects blank workingDirectory in runtimeConnection", async () => {
     const mock = makeMockClient({
       todoResult: {
         mode: "success",
@@ -1088,24 +1095,18 @@ describe("OpencodeSdkAdapter", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    const todos = await adapter.loadSessionTodos({
-      runtimeEndpoint: "http://127.0.0.1:12345",
-      workingDirectory: "   ",
-      externalSessionId: "session-opencode-1",
-    });
+    await expect(
+      adapter.loadSessionTodos({
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:12345",
+          workingDirectory: "   ",
+        },
+        externalSessionId: "session-opencode-1",
+      }),
+    ).rejects.toThrow("Runtime connection workingDirectory is required to load session todos.");
 
-    expect(todos).toEqual([]);
-    expect(mock.session.todoCalls).toEqual([
-      {
-        sessionID: "session-opencode-1",
-      },
-    ]);
-    expect(createClientCalls).toEqual([
-      {
-        runtimeEndpoint: "http://127.0.0.1:12345",
-        workingDirectory: "   ",
-      },
-    ]);
+    expect(mock.session.todoCalls).toEqual([]);
+    expect(createClientCalls).toEqual([]);
   });
 
   test("loadSessionTodos trims workingDirectory before forwarding directory", async () => {
@@ -1121,8 +1122,10 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
-      runtimeEndpoint: "http://127.0.0.1:12345",
-      workingDirectory: "  /repo  ",
+      runtimeConnection: {
+        endpoint: "http://127.0.0.1:12345",
+        workingDirectory: "  /repo  ",
+      },
       externalSessionId: "session-opencode-1",
     });
 
@@ -1154,8 +1157,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
-      runtimeEndpoint: "http://127.0.0.1:12345",
-      workingDirectory: "/repo",
+      runtimeConnection: defaultRuntimeConnection,
     });
 
     expect(catalog.models).toHaveLength(1);
@@ -1165,8 +1167,8 @@ describe("OpencodeSdkAdapter", () => {
       contextWindow: 400_000,
       outputLimit: 32_000,
     });
-    expect(catalog.profiles).toHaveLength(1);
-    expect(catalog.profiles[0]).toMatchObject({
+    expect(catalog.profiles ?? []).toHaveLength(1);
+    expect(catalog.profiles?.[0]).toMatchObject({
       id: "Hephaestus",
       label: "Hephaestus",
       mode: "primary",
