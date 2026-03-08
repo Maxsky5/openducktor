@@ -25,18 +25,17 @@ impl AppService {
             ..
         } = input;
 
+        let descriptor = AgentRuntimeKind::Opencode.descriptor();
         let summary = AgentRuntimeSummary {
             kind: AgentRuntimeKind::Opencode,
             runtime_id: spawned_server.runtime_id.clone(),
             repo_path: repo_key,
-            task_id: task_id.to_string(),
+            task_id: (role != host_domain::RuntimeRole::Workspace).then(|| task_id.to_string()),
             role,
             working_directory,
-            endpoint: AgentRuntimeKind::Opencode.endpoint_for_port(spawned_server.port),
-            port: spawned_server.port,
+            runtime_route: AgentRuntimeKind::Opencode.route_for_port(spawned_server.port),
             started_at: now_rfc3339(),
-            descriptor: AgentRuntimeKind::Opencode.descriptor(),
-            capabilities: AgentRuntimeKind::Opencode.descriptor().capabilities,
+            descriptor,
         };
 
         let mut runtimes = self

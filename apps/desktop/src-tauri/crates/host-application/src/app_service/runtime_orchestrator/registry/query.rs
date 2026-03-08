@@ -59,7 +59,7 @@ impl AppService {
                     && runtime.summary.role == lookup.role
                     && lookup
                         .task_id
-                        .is_none_or(|task_id| runtime.summary.task_id == task_id)
+                        .is_none_or(|task_id| runtime.summary.task_id.as_deref() == Some(task_id))
             })
             .map(|runtime| runtime.summary.clone())
     }
