@@ -1,3 +1,4 @@
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { TauriHostClient as TauriHostClientType } from "./index";
 import { createTauriHostClient } from "./index";
@@ -863,8 +864,12 @@ describe("TauriHostClient", () => {
           taskId: "task-1",
           role: "planner",
           workingDirectory: "/repo",
-          port: 4173,
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4173",
+          },
           startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
       if (command === "runtime_list") {
@@ -876,8 +881,12 @@ describe("TauriHostClient", () => {
             taskId: "task-1",
             role: "planner",
             workingDirectory: "/repo",
-            port: 4173,
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:4173",
+            },
             startedAt: "2026-02-17T12:00:00Z",
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
           },
         ];
       }
@@ -886,11 +895,15 @@ describe("TauriHostClient", () => {
           kind: "opencode",
           runtimeId: "runtime-main",
           repoPath: "/repo",
-          taskId: "__workspace__",
+          taskId: null,
           role: "workspace",
           workingDirectory: "/repo",
-          port: 4180,
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4180",
+          },
           startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
       if (command === "runtime_stop") {
