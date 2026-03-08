@@ -178,8 +178,7 @@ const buildToolStreamPart = (
 
   const outputValue = readUnknownProp(toolState, "output");
   const output = readToolOutputText(outputValue);
-  const structuredError =
-    readStructuredToolError(outputValue) ?? readStructuredToolError(metadata);
+  const structuredError = readStructuredToolError(outputValue) ?? readStructuredToolError(metadata);
   if (structuredError || (error && error.trim().length > 0)) {
     return {
       ...base,

@@ -1013,7 +1013,8 @@ describe("agent-orchestrator-session-events", () => {
       ),
     ).toBe(true);
     const finalAssistantMessage = sessionsRef.current["session-1"]?.messages.find(
-      (message) => message.role === "assistant" && message.content.includes("Final assistant output"),
+      (message) =>
+        message.role === "assistant" && message.content.includes("Final assistant output"),
     );
     if (!finalAssistantMessage || finalAssistantMessage.meta?.kind !== "assistant") {
       throw new Error("Expected final assistant message with assistant meta");

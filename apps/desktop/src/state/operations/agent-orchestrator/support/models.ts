@@ -95,13 +95,13 @@ export const mergeModelSelection = (
   }
 
   return {
-    ...(override.runtimeKind ?? base.runtimeKind
+    ...((override.runtimeKind ?? base.runtimeKind)
       ? { runtimeKind: override.runtimeKind ?? base.runtimeKind }
       : {}),
     providerId: override.providerId,
     modelId: override.modelId,
-    ...(override.variant ?? base.variant ? { variant: override.variant ?? base.variant } : {}),
-    ...(override.profileId ?? base.profileId
+    ...((override.variant ?? base.variant) ? { variant: override.variant ?? base.variant } : {}),
+    ...((override.profileId ?? base.profileId)
       ? { profileId: override.profileId ?? base.profileId }
       : {}),
   };

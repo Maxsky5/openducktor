@@ -109,7 +109,7 @@ const toArticleClassName = (
 export const buildAgentChatMessageCardViewModel = ({
   message,
   sessionRole,
-  sessionSelectedModel,
+  sessionSelectedModel: _sessionSelectedModel,
   sessionAgentColors,
 }: AgentChatMessageCardViewModelInput): AgentChatMessageCardViewModel => {
   const timeLabel = formatTime(message.timestamp);

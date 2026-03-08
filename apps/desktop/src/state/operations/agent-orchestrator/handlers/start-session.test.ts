@@ -278,8 +278,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         | Record<string, AgentSessionState>
         | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
     ) => {
-      sessionsRef.current =
-        typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      sessionsRef.current = typeof updater === "function" ? updater(sessionsRef.current) : updater;
     };
 
     const originalAgentSessionsList = host.agentSessionsList;

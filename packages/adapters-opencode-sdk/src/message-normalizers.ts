@@ -25,16 +25,15 @@ export const readTextFromMessageInfo = (info: unknown): string => {
 
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
 
-export const readMessageModelSelection = (
-  info: unknown,
-): AgentModelSelection | undefined => {
+export const readMessageModelSelection = (info: unknown): AgentModelSelection | undefined => {
   const record = asUnknownRecord(info);
   if (!record) {
     return undefined;
   }
 
   const nestedModel = readRecordProp(record, "model");
-  const providerId = readUnknownProp(record, "providerID") ?? readUnknownProp(nestedModel, "providerID");
+  const providerId =
+    readUnknownProp(record, "providerID") ?? readUnknownProp(nestedModel, "providerID");
   const modelId = readUnknownProp(record, "modelID") ?? readUnknownProp(nestedModel, "modelID");
   const variant = readUnknownProp(record, "variant");
   const profileId = readUnknownProp(record, "agent");

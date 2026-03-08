@@ -280,7 +280,7 @@ export const historyToChatMessages = (
                 const meta = userMessageMeta(message.model);
                 return meta ? { meta } : {};
               })()
-          : {}),
+            : {}),
       });
     }
 

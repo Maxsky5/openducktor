@@ -108,7 +108,8 @@ describe("stream-part-mapper", () => {
           ok: false,
           error: {
             code: "ODT_TOOL_EXECUTION_ERROR",
-            message: "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
+            message:
+              "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
           },
         },
       },
