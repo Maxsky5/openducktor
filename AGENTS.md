@@ -118,6 +118,7 @@ Prefer light shades for backgrounds (`bg-sky-50`) and dark for text (`text-sky-7
 - Use operation-specific loading flags (`isLoadingTasks`, `isLoadingChecks`), not generic busy flags.
 - Centralize shared types under `apps/desktop/src/types`; use feature-level `constants.ts` over magic strings.
 - For async form submissions: disable the full form scope, show in-button loading, and preserve pending/error/success feedback.
+- Avoid nested ternaries in app and test code. Prefer named booleans, helper functions, lookup maps, or explicit `if`/`else` control flow so state rules stay readable.
 
 ## Backend / Tauri
 
