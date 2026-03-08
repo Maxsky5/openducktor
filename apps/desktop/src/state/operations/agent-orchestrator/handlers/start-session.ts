@@ -7,7 +7,7 @@ import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import { requireActiveRepo } from "../../task-operations-model";
-import type { RuntimeInfo } from "../runtime/runtime";
+import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
 import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
@@ -276,12 +276,12 @@ const createOrReuseSession = async ({
     repoPath: ctx.repoPath,
     runtimeKind:
       resolved.runtime.runtimeKind ?? input.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runtimeConnection: resolveRuntimeConnection(resolved.runtime),
     workingDirectory: resolved.runtime.workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
     scenario: resolved.resolvedScenario,
     systemPrompt: resolved.systemPrompt,
-    runtimeEndpoint: resolved.runtime.runtimeEndpoint,
   });
 
   const startedCtx: StartedSessionContext = {
@@ -367,13 +367,13 @@ const warmSessionData = ({
   model: ModelDependencies;
 }): void => {
   const tags = createSessionStartTags(startedCtx);
+  const runtimeConnection = resolveRuntimeConnection(runtimeInfo);
 
   runOrchestratorSideEffect(
     "start-session-warm-session-todos",
     model.loadSessionTodos(
       startedCtx.summary.sessionId,
-      runtimeInfo.runtimeEndpoint,
-      runtimeInfo.workingDirectory,
+      runtimeConnection,
       startedCtx.summary.externalSessionId,
     ),
     {
@@ -386,11 +386,7 @@ const warmSessionData = ({
 
   runOrchestratorSideEffect(
     "start-session-warm-session-model-catalog",
-    model.loadSessionModelCatalog(
-      startedCtx.summary.sessionId,
-      runtimeInfo.runtimeEndpoint,
-      runtimeInfo.workingDirectory,
-    ),
+    model.loadSessionModelCatalog(startedCtx.summary.sessionId, runtimeConnection),
     { tags },
   );
 };

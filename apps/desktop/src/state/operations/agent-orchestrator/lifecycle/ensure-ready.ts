@@ -1,9 +1,13 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import { type AgentEnginePort, buildAgentSystemPrompt } from "@openducktor/core";
+import {
+  type AgentEnginePort,
+  type AgentRuntimeConnection,
+  buildAgentSystemPrompt,
+} from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
-import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import { type RuntimeInfo, resolveRuntimeConnection, type TaskDocuments } from "../runtime/runtime";
 import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
@@ -45,14 +49,12 @@ type EnsureSessionReadyDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
-    runtimeEndpoint: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    runtimeEndpoint: string,
-    workingDirectory: string,
+    runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
 };
 
@@ -159,12 +161,12 @@ export const createEnsureSessionReady = ({
       repoPath,
       runtimeKind:
         runtime.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      runtimeConnection: resolveRuntimeConnection(runtime),
       workingDirectory: runtime.workingDirectory,
       taskId: session.taskId,
       role: session.role,
       scenario: session.scenario,
       systemPrompt,
-      runtimeEndpoint: runtime.runtimeEndpoint,
     });
 
     if (isStaleRepoOperation()) {
@@ -202,15 +204,11 @@ export const createEnsureSessionReady = ({
     }
 
     const activeSession = sessionsRef.current[sessionId];
+    const runtimeConnection = resolveRuntimeConnection(runtime);
     const warmSessionData = (targetSession: AgentSessionState): void => {
       runOrchestratorSideEffect(
         "ensure-ready-warm-session-todos",
-        loadSessionTodos(
-          sessionId,
-          runtime.runtimeEndpoint,
-          runtime.workingDirectory,
-          targetSession.externalSessionId,
-        ),
+        loadSessionTodos(sessionId, runtimeConnection, targetSession.externalSessionId),
         {
           tags: {
             repoPath,
@@ -224,7 +222,7 @@ export const createEnsureSessionReady = ({
       if (!targetSession.modelCatalog && !targetSession.isLoadingModelCatalog) {
         runOrchestratorSideEffect(
           "ensure-ready-warm-session-model-catalog",
-          loadSessionModelCatalog(sessionId, runtime.runtimeEndpoint, runtime.workingDirectory),
+          loadSessionModelCatalog(sessionId, runtimeConnection),
           {
             tags: {
               repoPath,

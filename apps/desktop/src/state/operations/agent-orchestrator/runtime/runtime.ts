@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides, RunSummary, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelSelection, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { host } from "../../host";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
@@ -11,8 +11,24 @@ export type RuntimeInfo = {
   kind?: string;
   runtimeId: string | null;
   runId: string | null;
+  runtimeConnection?: AgentRuntimeConnection;
   runtimeEndpoint: string;
   workingDirectory: string;
+};
+
+export const toRuntimeConnection = (
+  runtimeEndpoint: string,
+  workingDirectory: string,
+): AgentRuntimeConnection => ({
+  endpoint: runtimeEndpoint,
+  workingDirectory,
+});
+
+export const resolveRuntimeConnection = (runtime: RuntimeInfo): AgentRuntimeConnection => {
+  return (
+    runtime.runtimeConnection ??
+    toRuntimeConnection(runtime.runtimeEndpoint, runtime.workingDirectory)
+  );
 };
 
 export type TaskDocuments = {
@@ -100,11 +116,13 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             entry.worktreePath === workingDirectoryOverride,
         );
         if (matchingRun) {
+          const runtimeEndpoint = toBaseUrl(matchingRun.port);
           return {
             runtimeKind,
             runtimeId: null,
             runId: matchingRun.runId,
-            runtimeEndpoint: toBaseUrl(matchingRun.port),
+            runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectoryOverride),
+            runtimeEndpoint,
             workingDirectory: workingDirectoryOverride,
           };
         }
@@ -116,21 +134,25 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             runningStates.has(entry.state),
         );
         if (taskRun && workingDirectoryOverride === repoPath) {
+          const runtimeEndpoint = toBaseUrl(taskRun.port);
           return {
             runtimeKind,
             runtimeId: null,
             runId: taskRun.runId,
-            runtimeEndpoint: toBaseUrl(taskRun.port),
+            runtimeConnection: toRuntimeConnection(runtimeEndpoint, taskRun.worktreePath),
+            runtimeEndpoint,
             workingDirectory: taskRun.worktreePath,
           };
         }
 
         const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
+        const runtimeEndpoint = resolveRuntimeEndpoint(runtime);
         return {
           runtimeKind,
           runtimeId: runtime.runtimeId,
           runId: null,
-          runtimeEndpoint: resolveRuntimeEndpoint(runtime),
+          runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectoryOverride),
+          runtimeEndpoint,
           workingDirectory: workingDirectoryOverride,
         };
       }
@@ -149,33 +171,41 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           },
         );
       }
+      const runtimeEndpoint = toBaseUrl(run.port);
       return {
         runtimeKind,
         runtimeId: null,
         runId: run.runId,
-        runtimeEndpoint: toBaseUrl(run.port),
+        runtimeConnection: toRuntimeConnection(runtimeEndpoint, run.worktreePath),
+        runtimeEndpoint,
         workingDirectory: run.worktreePath,
       };
     }
 
     if (role === "qa") {
       const runtime = await host.runtimeStart(runtimeKind, repoPath, taskId, "qa");
+      const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
+      const runtimeEndpoint = resolveRuntimeEndpoint(runtime);
       return {
         runtimeKind,
         runtimeId: runtime.runtimeId,
         runId: null,
-        runtimeEndpoint: resolveRuntimeEndpoint(runtime),
-        workingDirectory: workingDirectoryOverride || runtime.workingDirectory,
+        runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+        runtimeEndpoint,
+        workingDirectory,
       };
     }
 
     const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
+    const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
+    const runtimeEndpoint = resolveRuntimeEndpoint(runtime);
     return {
       runtimeKind,
       runtimeId: runtime.runtimeId,
       runId: null,
-      runtimeEndpoint: resolveRuntimeEndpoint(runtime),
-      workingDirectory: workingDirectoryOverride || runtime.workingDirectory,
+      runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
+      runtimeEndpoint,
+      workingDirectory,
     };
   };
 };

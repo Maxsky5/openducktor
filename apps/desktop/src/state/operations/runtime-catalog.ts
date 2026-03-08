@@ -353,7 +353,14 @@ export const createHostRuntimeCatalogOperations = (
   createRuntimeCatalogOperations({
     ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(runtimeKind, repoPath),
     stopRuntime: (runtimeId) => host.runtimeStop(runtimeId),
-    listAvailableModels: (input) => getAdapter(input.runtimeKind).listAvailableModels(input),
+    listAvailableModels: (input) =>
+      getAdapter(input.runtimeKind).listAvailableModels({
+        runtimeKind: input.runtimeKind,
+        runtimeConnection: {
+          endpoint: input.runtimeEndpoint,
+          workingDirectory: input.workingDirectory,
+        },
+      }),
     listAvailableToolIds: (input) => getAdapter(input.runtimeKind).listAvailableToolIds(input),
     getMcpStatus: (input) => getAdapter(input.runtimeKind).getMcpStatus(input),
     connectMcpServer: (input) => getAdapter(input.runtimeKind).connectMcpServer(input),

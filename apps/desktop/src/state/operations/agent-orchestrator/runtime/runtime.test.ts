@@ -62,6 +62,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
@@ -152,6 +156,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
@@ -159,6 +167,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
@@ -206,6 +218,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
@@ -255,6 +271,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-shared",
         runId: null,
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4666",
+          workingDirectory: "/tmp/repo/conflict-worktree",
+        },
         runtimeEndpoint: "http://127.0.0.1:4666",
         workingDirectory: "/tmp/repo/conflict-worktree",
       });
@@ -298,6 +318,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: null,
         runId: "run-1",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
         runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo/worktree",
       });
@@ -488,6 +512,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-qa",
         runId: null,
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4555",
+          workingDirectory: "/tmp/repo/qa",
+        },
         runtimeEndpoint: "http://127.0.0.1:4555",
         workingDirectory: "/tmp/repo/qa",
       });
@@ -522,6 +550,10 @@ describe("agent-orchestrator-runtime", () => {
         runtimeKind: "opencode",
         runtimeId: "runtime-shared",
         runId: null,
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4666",
+          workingDirectory: "/tmp/repo/shared",
+        },
         runtimeEndpoint: "http://127.0.0.1:4666",
         workingDirectory: "/tmp/repo/shared",
       });

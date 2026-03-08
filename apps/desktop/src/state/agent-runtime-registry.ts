@@ -1,10 +1,22 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
+import type {
+  AgentCatalogPort,
+  AgentEnginePort,
+  AgentModelSelection,
+  AgentRuntimeDefinition,
+  AgentSessionPort,
+  AgentWorkspaceInspectionPort,
+} from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { RuntimeCatalogAdapter } from "./operations/runtime-catalog";
 
-type RegisteredRuntimeAdapter = AgentEnginePort & RuntimeCatalogAdapter;
+type RegisteredRuntimeAdapter = AgentCatalogPort &
+  AgentSessionPort &
+  AgentWorkspaceInspectionPort &
+  RuntimeCatalogAdapter & {
+    getRuntimeDefinition(): AgentRuntimeDefinition;
+  };
 
 export type AgentRuntimeRegistry = {
   defaultRuntimeKind: RuntimeKind;
@@ -64,6 +76,12 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
       ...summary,
       runtimeKind,
     };
+  }
+
+  listRuntimeDefinitions(): AgentRuntimeDefinition[] {
+    return this.registeredRuntimeKinds.map((runtimeKind) =>
+      this.getAdapter(runtimeKind).getRuntimeDefinition(),
+    );
   }
 
   listAvailableModels(input: Parameters<AgentEnginePort["listAvailableModels"]>[0]) {
