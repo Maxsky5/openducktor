@@ -24,6 +24,8 @@ describe("task-document-load-controller", () => {
       shouldApply: false,
       shouldReplay: false,
     });
+    expect(controller.sections.spec.inFlight).toBe(false);
+    expect(controller.sections.spec.inFlightRequestVersion).toBeNull();
   });
 
   test("forced reload requests queue while a section is still loading", () => {
@@ -73,5 +75,32 @@ describe("task-document-load-controller", () => {
       shouldApply: false,
       shouldReplay: false,
     });
+  });
+
+  test("stale settlements from a previous context do not clear the active request", () => {
+    const controller = createTaskDocumentLoadController();
+    const initialLoad = requestTaskDocumentLoad(controller, "spec", false, false);
+
+    expect(initialLoad).toEqual({
+      accepted: true,
+      contextVersion: 0,
+      requestVersion: 1,
+    });
+
+    resetTaskDocumentLoadController(controller);
+    const currentLoad = requestTaskDocumentLoad(controller, "spec", false, false);
+
+    expect(currentLoad).toEqual({
+      accepted: true,
+      contextVersion: 1,
+      requestVersion: 1,
+    });
+
+    expect(settleTaskDocumentLoad(controller, "spec", 0, 1)).toEqual({
+      shouldApply: false,
+      shouldReplay: false,
+    });
+    expect(controller.sections.spec.inFlight).toBe(true);
+    expect(controller.sections.spec.inFlightRequestVersion).toBe(1);
   });
 });

@@ -127,9 +127,21 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
 
       await harness.update({
         ...createBaseArgs(),
+        activeSession: createCompletedToolSession("ast_grep_search", "tool-1bb"),
+      });
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
         activeSession: createCompletedToolSession("bash", "tool-1c", {
           command: "git status",
         }),
+      });
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        activeSession: createCompletedToolSession("look_at", "tool-1d"),
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
 

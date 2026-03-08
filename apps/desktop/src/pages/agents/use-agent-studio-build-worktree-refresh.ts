@@ -8,7 +8,8 @@ type UseAgentStudioBuildWorktreeRefreshArgs = {
   refreshWorktree: () => void;
 };
 
-const NON_WORKTREE_TOOL_NAMES = new Set([
+const EXPLICIT_NON_WORKTREE_TOOL_NAMES = new Set([
+  "ast_grep_search",
   "background_output",
   "context7_query-docs",
   "context7_resolve-library-id",
@@ -19,10 +20,10 @@ const NON_WORKTREE_TOOL_NAMES = new Set([
   "lsp_goto_definition",
   "lsp_prepare_rename",
   "lsp_symbols",
+  "look_at",
   "odt_read_task",
   "prune",
   "question",
-  "read",
   "session_info",
   "session_list",
   "session_read",
@@ -46,7 +47,7 @@ const canToolAffectWorktree = (meta: ToolMessageMeta): boolean => {
   if (toolName.length === 0) {
     return false;
   }
-  if (NON_WORKTREE_TOOL_NAMES.has(toolName) || isSafeReadToolName(toolName)) {
+  if (EXPLICIT_NON_WORKTREE_TOOL_NAMES.has(toolName) || isSafeReadToolName(toolName)) {
     return false;
   }
 

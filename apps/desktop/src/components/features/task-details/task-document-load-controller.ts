@@ -2,6 +2,7 @@ export type TaskDocumentSectionKey = "spec" | "plan" | "qa";
 
 type SectionLoadState = {
   inFlight: boolean;
+  inFlightRequestVersion: number | null;
   requestVersion: number;
   pendingForcedReload: boolean;
 };
@@ -24,6 +25,7 @@ type LoadSettlement = {
 
 const createInitialSectionLoadState = (): SectionLoadState => ({
   inFlight: false,
+  inFlightRequestVersion: null,
   requestVersion: 0,
   pendingForcedReload: false,
 });
@@ -77,6 +79,7 @@ export const requestTaskDocumentLoad = (
   }
 
   sectionState.inFlight = true;
+  sectionState.inFlightRequestVersion = sectionState.requestVersion + 1;
   sectionState.pendingForcedReload = false;
   sectionState.requestVersion += 1;
   return {
@@ -100,7 +103,17 @@ export const settleTaskDocumentLoad = (
   requestVersion: number,
 ): LoadSettlement => {
   const sectionState = controller.sections[section];
+  const contextMatches = controller.contextVersion === contextVersion;
+  const requestMatches = sectionState.inFlightRequestVersion === requestVersion;
+  if (!contextMatches || !requestMatches) {
+    return {
+      shouldApply: false,
+      shouldReplay: false,
+    };
+  }
+
   sectionState.inFlight = false;
+  sectionState.inFlightRequestVersion = null;
   const shouldReplay =
     controller.contextVersion === contextVersion && sectionState.pendingForcedReload;
   sectionState.pendingForcedReload = false;

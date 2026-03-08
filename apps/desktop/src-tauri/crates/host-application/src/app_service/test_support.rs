@@ -486,7 +486,11 @@ impl GitPort for FakeGitPort {
             branch: branch.to_string(),
             create,
         });
-        state.current_branch = GitCurrentBranch { name: Some(branch.to_string()), detached: false, revision: None };
+        state.current_branch = GitCurrentBranch {
+            name: Some(branch.to_string()),
+            detached: false,
+            revision: None,
+        };
         Ok(state.current_branch.clone())
     }
 
@@ -749,7 +753,11 @@ pub(crate) fn build_service_with_state(
     build_service_with_git_state(
         tasks,
         Vec::new(),
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     )
 }
 
@@ -899,17 +907,16 @@ pub(crate) fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocum
 }
 
 pub(crate) static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+pub(crate) static UNIQUE_TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn lock_env<'a>() -> std::sync::MutexGuard<'a, ()> {
     ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
 pub(crate) fn unique_temp_path(name: &str) -> PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time")
-        .as_nanos();
-    std::env::temp_dir().join(format!("openducktor-host-app-{name}-{nonce}"))
+    let nonce = UNIQUE_TEMP_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    std::env::temp_dir().join(format!("openducktor-host-app-{name}-{pid}-{nonce}"))
 }
 
 pub(crate) fn write_executable_script(path: &Path, script: &str) -> Result<()> {
@@ -964,6 +971,15 @@ pub(crate) fn init_git_repo(path: &Path) -> Result<()> {
         .arg("commit")
         .arg("-m")
         .arg("initial")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .arg("branch")
+        .arg("-M")
+        .arg("main")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;
