@@ -47,14 +47,12 @@ fn runtime_summary_fixture(
         kind: AgentRuntimeKind::Opencode,
         runtime_id: runtime_id.to_string(),
         repo_path: repo_path.to_string(),
-        task_id: task_id.to_string(),
+        task_id: Some(task_id.to_string()),
         role,
         working_directory: working_directory.to_string(),
-        endpoint: AgentRuntimeKind::Opencode.endpoint_for_port(port),
-        port,
+        runtime_route: AgentRuntimeKind::Opencode.route_for_port(port),
         started_at: "2026-02-20T12:00:00Z".to_string(),
         descriptor: AgentRuntimeKind::Opencode.descriptor(),
-        capabilities: AgentRuntimeKind::Opencode.descriptor().capabilities,
     }
 }
 
@@ -63,7 +61,11 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let run_id = "run-shutdown".to_string();
@@ -72,6 +74,8 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
         RunProcess {
             summary: RunSummary {
                 run_id: run_id.clone(),
+                runtime_kind: AgentRuntimeKind::Opencode,
+                runtime_route: AgentRuntimeKind::Opencode.route_for_port(1),
                 repo_path: "/tmp/repo".to_string(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),
@@ -87,6 +91,7 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
             task_id: "task-1".to_string(),
             worktree_path: "/tmp/worktree".to_string(),
             repo_config: RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "odt".to_string(),
                 default_target_branch: "origin/main".to_string(),
@@ -145,7 +150,11 @@ fn shutdown_terminates_pending_opencode_processes() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
     );
 
     let root = unique_temp_path("shutdown-pending-opencode");
@@ -194,7 +203,11 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
 
@@ -205,6 +218,8 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
         RunProcess {
             summary: RunSummary {
                 run_id: "run-shutdown-registry-error".to_string(),
+                runtime_kind: AgentRuntimeKind::Opencode,
+                runtime_route: AgentRuntimeKind::Opencode.route_for_port(1),
                 repo_path: "/tmp/repo".to_string(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),
@@ -220,6 +235,7 @@ fn shutdown_drains_runs_and_runtimes_when_pending_opencode_cleanup_fails() -> Re
             task_id: "task-1".to_string(),
             worktree_path: "/tmp/worktree".to_string(),
             repo_config: RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "odt".to_string(),
                 default_target_branch: "origin/main".to_string(),
@@ -379,7 +395,11 @@ fn startup_reconcile_terminates_orphaned_registered_opencode_processes() -> Resu
     let (_service, _task_state, _git_state) = build_service_with_store(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
 
@@ -443,7 +463,11 @@ fn startup_reconcile_keeps_non_orphan_registered_opencode_processes() -> Result<
     let (_service, _task_state, _git_state) = build_service_with_store(
         vec![],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
 

@@ -898,9 +898,9 @@ pub(crate) fn make_session(task_id: &str, session_id: &str) -> AgentSessionDocum
         started_at: "2026-02-20T12:00:00Z".to_string(),
         updated_at: Some("2026-02-20T12:00:10Z".to_string()),
         ended_at: None,
+        runtime_kind: "opencode".to_string(),
         runtime_id: Some("runtime-1".to_string()),
         run_id: Some("run-1".to_string()),
-        base_url: Some("http://127.0.0.1:4173".to_string()),
         working_directory: "/tmp/repo".to_string(),
         selected_model: None,
     }

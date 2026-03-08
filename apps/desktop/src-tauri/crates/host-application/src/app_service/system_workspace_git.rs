@@ -481,7 +481,7 @@ mod tests {
     use super::super::CachedRuntimeCheck;
     use super::RUNTIME_CHECK_CACHE_TTL;
     use crate::app_service::test_support::build_service_with_state;
-    use host_domain::{GitPushResult, RuntimeCheck};
+    use host_domain::{GitPushResult, RuntimeCheck, RuntimeHealth};
     use std::time::{Duration, Instant};
 
     #[test]
@@ -543,8 +543,12 @@ mod tests {
         let cached = RuntimeCheck {
             git_ok: false,
             git_version: Some("cached-git-sentinel".to_string()),
-            opencode_ok: false,
-            opencode_version: Some("cached-opencode-sentinel".to_string()),
+            runtimes: vec![RuntimeHealth {
+                kind: "opencode".to_string(),
+                ok: false,
+                version: Some("cached-opencode-sentinel".to_string()),
+                error: None,
+            }],
             errors: vec!["cached-runtime-sentinel".to_string()],
         };
         {
@@ -562,7 +566,18 @@ mod tests {
             .runtime_check()
             .expect("runtime check should use cached entry");
         assert_eq!(runtime.git_version, cached.git_version);
-        assert_eq!(runtime.opencode_version, cached.opencode_version);
+        assert_eq!(
+            runtime
+                .runtimes
+                .iter()
+                .find(|entry| entry.kind == "opencode")
+                .and_then(|entry| entry.version.as_deref()),
+            cached
+                .runtimes
+                .iter()
+                .find(|entry| entry.kind == "opencode")
+                .and_then(|entry| entry.version.as_deref())
+        );
         assert_eq!(runtime.errors, cached.errors);
     }
 
@@ -580,8 +595,12 @@ mod tests {
                 value: RuntimeCheck {
                     git_ok: false,
                     git_version: Some("cached-git-sentinel".to_string()),
-                    opencode_ok: false,
-                    opencode_version: Some("cached-opencode-sentinel".to_string()),
+                    runtimes: vec![RuntimeHealth {
+                        kind: "opencode".to_string(),
+                        ok: false,
+                        version: Some("cached-opencode-sentinel".to_string()),
+                        error: None,
+                    }],
                     errors: vec![sentinel_error.clone()],
                 },
             });
@@ -593,7 +612,11 @@ mod tests {
         assert!(!runtime.errors.contains(&sentinel_error));
         assert_ne!(runtime.git_version.as_deref(), Some("cached-git-sentinel"));
         assert_ne!(
-            runtime.opencode_version.as_deref(),
+            runtime
+                .runtimes
+                .iter()
+                .find(|entry| entry.kind == "opencode")
+                .and_then(|entry| entry.version.as_deref()),
             Some("cached-opencode-sentinel")
         );
     }
@@ -612,8 +635,12 @@ mod tests {
                 value: RuntimeCheck {
                     git_ok: false,
                     git_version: Some("cached-git-sentinel".to_string()),
-                    opencode_ok: false,
-                    opencode_version: Some("cached-opencode-sentinel".to_string()),
+                    runtimes: vec![RuntimeHealth {
+                        kind: "opencode".to_string(),
+                        ok: false,
+                        version: Some("cached-opencode-sentinel".to_string()),
+                        error: None,
+                    }],
                     errors: vec![sentinel_error.clone()],
                 },
             });
@@ -625,7 +652,11 @@ mod tests {
         assert!(!runtime.errors.contains(&sentinel_error));
         assert_ne!(runtime.git_version.as_deref(), Some("cached-git-sentinel"));
         assert_ne!(
-            runtime.opencode_version.as_deref(),
+            runtime
+                .runtimes
+                .iter()
+                .find(|entry| entry.kind == "opencode")
+                .and_then(|entry| entry.version.as_deref()),
             Some("cached-opencode-sentinel")
         );
     }

@@ -158,17 +158,15 @@ mod tests {
 
         config_store.update_repo_config(
             repo_path.as_str(),
-            RepoConfig {
-                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                branch_prefix: "odt".to_string(),
-                default_target_branch: "origin/main".to_string(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-            },
+            RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(), },
         )?;
 
         let setup = prepare_qa_worktree(repo_path.as_str(), "task-1", "Task 1", &config_store)?;
@@ -192,17 +190,15 @@ mod tests {
 
         config_store.update_repo_config(
             repo_path.as_str(),
-            RepoConfig {
-                worktree_base_path: None,
-                branch_prefix: "odt".to_string(),
-                default_target_branch: "origin/main".to_string(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-            },
+            RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: None,
+            branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(), },
         )?;
 
         let error = prepare_qa_worktree(repo_path.as_str(), "task-1", "Task 1", &config_store)
@@ -229,17 +225,15 @@ mod tests {
 
         config_store.update_repo_config(
             repo_path.as_str(),
-            RepoConfig {
-                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                branch_prefix: "odt".to_string(),
-                default_target_branch: "origin/main".to_string(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: Some(hook_set_fingerprint(&hooks)),
-                hooks,
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-            },
+            RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: Some(hook_set_fingerprint(&hooks)),
+            hooks,
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(), },
         )?;
 
         let qa_worktree_path = worktree_base.join("qa-task-1");
@@ -269,17 +263,15 @@ mod tests {
 
         config_store.update_repo_config(
             repo_path.as_str(),
-            RepoConfig {
-                worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
-                branch_prefix: "odt".to_string(),
-                default_target_branch: "origin/main".to_string(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-            },
+            RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            branch_prefix: "odt".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(), },
         )?;
 
         let error = prepare_qa_worktree(repo_path.as_str(), "../../tmp", "Task 1", &config_store)

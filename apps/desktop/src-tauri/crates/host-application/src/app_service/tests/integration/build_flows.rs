@@ -2,9 +2,9 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentRuntimeKind, AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch,
+    GitCurrentBranch, GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
+    RunSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -80,13 +80,18 @@ fn build_start_respond_and_cleanup_success_flow() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -214,13 +219,18 @@ fn build_start_bases_worktree_on_configured_target_branch() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/develop".to_string(),
@@ -258,7 +268,11 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
     let (service, task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::InProgress)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
 
@@ -268,6 +282,8 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
         RunProcess {
             summary: RunSummary {
                 run_id: run_id.clone(),
+                runtime_kind: AgentRuntimeKind::Opencode,
+                runtime_route: AgentRuntimeKind::Opencode.route_for_port(1),
                 repo_path: repo_path.clone(),
                 task_id: "task-1".to_string(),
                 branch: "odt/task-1".to_string(),
@@ -283,6 +299,7 @@ fn build_stop_respond_and_cleanup_failure_paths() -> Result<()> {
             task_id: "task-1".to_string(),
             worktree_path: repo_path.clone(),
             repo_config: RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "odt".to_string(),
                 default_target_branch: "origin/main".to_string(),
@@ -348,7 +365,11 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
             make_task("task-2", "bug", TaskStatus::Open),
         ],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
@@ -360,6 +381,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -390,6 +412,7 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -456,13 +479,18 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: None,
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -500,13 +528,18 @@ fn build_start_rejects_untrusted_hooks_configuration() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -550,13 +583,18 @@ fn build_start_rejects_existing_worktree_directory() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -602,13 +640,18 @@ fn build_start_reports_opencode_startup_failure() -> Result<()> {
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -649,13 +692,18 @@ fn build_start_fails_on_invalid_startup_config_before_worktree_creation() -> Res
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),
@@ -713,13 +761,18 @@ fn build_start_stops_spawned_child_when_run_state_lock_is_poisoned() -> Result<(
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
-        GitCurrentBranch { name: Some("main".to_string()), detached: false, revision: None },
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
     service.workspace_update_repo_config(
         repo_path.as_str(),
         RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
             branch_prefix: "odt".to_string(),
             default_target_branch: "origin/main".to_string(),

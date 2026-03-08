@@ -191,17 +191,15 @@ fn task_delete_allows_cascade_and_forwards_delete_flag() -> Result<()> {
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig {
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-            branch_prefix: "obp".to_string(),
-            default_target_branch: "origin/main".to_string(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-        },
+        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+        branch_prefix: "obp".to_string(),
+        default_target_branch: "origin/main".to_string(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), },
     )?;
 
     service.task_delete(repo_path, "parent-1", true)?;
@@ -244,17 +242,15 @@ fn task_delete_removes_managed_worktrees_and_related_branches() -> Result<()> {
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig {
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-            branch_prefix: "obp".to_string(),
-            default_target_branch: "origin/main".to_string(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-        },
+        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+        branch_prefix: "obp".to_string(),
+        default_target_branch: "origin/main".to_string(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), },
     )?;
 
     task_state
@@ -336,17 +332,15 @@ fn task_delete_cascade_cleans_descendant_worktrees() -> Result<()> {
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig {
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-            branch_prefix: "obp".to_string(),
-            default_target_branch: "origin/main".to_string(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-        },
+        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+        branch_prefix: "obp".to_string(),
+        default_target_branch: "origin/main".to_string(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), },
     )?;
 
     task_state
@@ -405,17 +399,15 @@ fn task_delete_stops_before_store_delete_when_worktree_cleanup_fails() {
     service
         .workspace_update_repo_config(
             repo_path,
-            RepoConfig {
-                worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-                branch_prefix: "obp".to_string(),
-                default_target_branch: "origin/main".to_string(),
-                trusted_hooks: true,
-                trusted_hooks_fingerprint: None,
-                hooks: HookSet::default(),
-                worktree_file_copies: Vec::new(),
-                prompt_overrides: Default::default(),
-                agent_defaults: Default::default(),
-            },
+            RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+            branch_prefix: "obp".to_string(),
+            default_target_branch: "origin/main".to_string(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(), },
         )
         .expect("repo config update should succeed");
 
@@ -458,17 +450,15 @@ fn task_delete_retries_branch_cleanup_after_worktree_was_removed() -> Result<()>
     service.workspace_add(repo_path)?;
     service.workspace_update_repo_config(
         repo_path,
-        RepoConfig {
-            worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
-            branch_prefix: "obp".to_string(),
-            default_target_branch: "origin/main".to_string(),
-            trusted_hooks: true,
-            trusted_hooks_fingerprint: None,
-            hooks: HookSet::default(),
-            worktree_file_copies: Vec::new(),
-            prompt_overrides: Default::default(),
-            agent_defaults: Default::default(),
-        },
+        RepoConfig { default_runtime_kind: "opencode".to_string(), worktree_base_path: Some("/tmp/odt-test-worktrees".to_string()),
+        branch_prefix: "obp".to_string(),
+        default_target_branch: "origin/main".to_string(),
+        trusted_hooks: true,
+        trusted_hooks_fingerprint: None,
+        hooks: HookSet::default(),
+        worktree_file_copies: Vec::new(),
+        prompt_overrides: Default::default(),
+        agent_defaults: Default::default(), },
     )?;
 
     task_state
