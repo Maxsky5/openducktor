@@ -1,4 +1,9 @@
-import type { RepoPromptOverrides, RunSummary, RuntimeKind } from "@openducktor/contracts";
+import type {
+  RepoPromptOverrides,
+  RunSummary,
+  RuntimeKind,
+  RuntimeRoute,
+} from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { host } from "../../host";
@@ -146,7 +151,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         }
 
         const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
-        const runtimeEndpoint = resolveRuntimeEndpoint(runtime);
+        const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
         return {
           runtimeKind,
           runtimeId: runtime.runtimeId,
@@ -185,7 +190,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     if (role === "qa") {
       const runtime = await host.runtimeStart(runtimeKind, repoPath, taskId, "qa");
       const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
-      const runtimeEndpoint = resolveRuntimeEndpoint(runtime);
+      const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
       return {
         runtimeKind,
         runtimeId: runtime.runtimeId,
@@ -198,7 +203,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
 
     const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
     const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
-    const runtimeEndpoint = resolveRuntimeEndpoint(runtime);
+    const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
     return {
       runtimeKind,
       runtimeId: runtime.runtimeId,
@@ -210,15 +215,9 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
   };
 };
 
-const resolveRuntimeEndpoint = (runtime: {
-  endpoint?: string | null | undefined;
-  port?: number | undefined;
-}): string => {
-  if (runtime.endpoint?.trim()) {
-    return runtime.endpoint;
+const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
+  switch (runtimeRoute.type) {
+    case "local_http":
+      return runtimeRoute.endpoint;
   }
-  if (typeof runtime.port === "number") {
-    return toBaseUrl(runtime.port);
-  }
-  throw new Error("Runtime endpoint is missing from the runtime summary.");
 };

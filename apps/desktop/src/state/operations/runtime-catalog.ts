@@ -1,4 +1,4 @@
-import type { AgentRuntimeSummary, RuntimeKind } from "@openducktor/contracts";
+import type { AgentRuntimeSummary, RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -67,7 +67,7 @@ const toRuntimeInput = (
   runtimeKind: RuntimeKind,
 ): ListCatalogInput => ({
   runtimeKind,
-  runtimeEndpoint: resolveRuntimeEndpoint(runtime),
+  runtimeEndpoint: resolveRuntimeEndpoint(runtime.runtimeRoute),
   workingDirectory: runtime.workingDirectory,
 });
 const shouldReconnectMcp = (status: string | null): boolean => {
@@ -278,7 +278,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     const runtime = await deps.ensureRuntime(runtimeKind, repoPath);
     return deps.listAvailableModels({
       runtimeKind,
-      runtimeEndpoint: resolveRuntimeEndpoint(runtime),
+      runtimeEndpoint: resolveRuntimeEndpoint(runtime.runtimeRoute),
       workingDirectory: runtime.workingDirectory,
     });
   };
@@ -397,12 +397,9 @@ export const checkRepoRuntimeHealth = (
   return getConfiguredRuntimeCatalogOperations().checkRepoRuntimeHealth(repoPath, runtimeKind);
 };
 
-const resolveRuntimeEndpoint = (runtime: AgentRuntimeSummary): string => {
-  if (runtime.endpoint?.trim()) {
-    return runtime.endpoint;
+const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
+  switch (runtimeRoute.type) {
+    case "local_http":
+      return runtimeRoute.endpoint;
   }
-  if (typeof runtime.port === "number") {
-    return `http://127.0.0.1:${runtime.port}`;
-  }
-  throw new Error("Runtime endpoint is missing from runtime summary.");
 };

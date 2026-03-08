@@ -24,15 +24,6 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
   runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
   ...(session.runtimeId ? { runtimeId: session.runtimeId } : {}),
   ...(session.runId ? { runId: session.runId } : {}),
-  ...(session.runtimeEndpoint ? { runtimeEndpoint: session.runtimeEndpoint } : {}),
-  ...(session.runtimeEndpoint
-    ? {
-        runtimeTransport: {
-          endpoint: session.runtimeEndpoint,
-          workingDirectory: session.workingDirectory,
-        },
-      }
-    : {}),
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel
     ? {
@@ -77,7 +68,7 @@ export const fromPersistedSessionRecord = (
     runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
     runtimeId: session.runtimeId ?? null,
     runId: session.runId ?? null,
-    runtimeEndpoint: session.runtimeEndpoint ?? "",
+    runtimeEndpoint: "",
     workingDirectory: session.workingDirectory,
     messages: [],
     draftAssistantText: "",

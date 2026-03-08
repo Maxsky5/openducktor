@@ -2,10 +2,11 @@ import type {
   BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
+  RuntimeRoute,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
-import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
+import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import {
   buildDiagnosticsSummary,
   type DiagnosticsSummary,
@@ -191,7 +192,7 @@ export const buildDiagnosticsPanelModel = (
             },
             {
               label: "Endpoint",
-              value: resolveRuntimeEndpoint(runtimeHealth.runtime),
+              value: resolveRuntimeEndpoint(runtimeHealth.runtime.runtimeRoute),
               mono: true,
               valueClassName: "text-muted-foreground",
             },
@@ -295,15 +296,12 @@ export const buildDiagnosticsPanelModel = (
   };
 };
 
-const resolveRuntimeEndpoint = (runtime: RepoRuntimeHealthCheck["runtime"]): string => {
-  if (!runtime) {
+const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute | undefined): string => {
+  if (!runtimeRoute) {
     return "unavailable";
   }
-  if (runtime.endpoint?.trim()) {
-    return runtime.endpoint;
+  switch (runtimeRoute.type) {
+    case "local_http":
+      return runtimeRoute.endpoint;
   }
-  if (typeof runtime.port === "number") {
-    return `http://127.0.0.1:${runtime.port}`;
-  }
-  return "unavailable";
 };
