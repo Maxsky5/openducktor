@@ -1,4 +1,4 @@
-import { memo, type ReactElement } from "react";
+import { memo, type ReactElement, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { AgentStudioRebaseConflict } from "@/pages/agents/use-agent-studio-git-actions";
+import { INLINE_CODE_CLASS_NAME } from "./constants";
 import { RebaseConflictActions, type RebaseConflictActionsModel } from "./rebase-conflict-actions";
 
 type RebaseConflictDialogProps = {
@@ -21,12 +22,16 @@ type RebaseConflictDialogProps = {
 const toConflictTitle = (conflict: AgentStudioRebaseConflict): string =>
   `${conflict.operation === "pull_rebase" ? "Pull with rebase" : "Rebase"} conflict detected`;
 
-const toConflictDescription = (conflict: AgentStudioRebaseConflict): string => {
-  if (conflict.operation === "pull_rebase") {
-    return `The pull with rebase onto \`${conflict.targetBranch}\` stopped on conflicts. Abort the rebase or send the conflict to Builder for resolution.`;
-  }
+const toConflictDescription = (conflict: AgentStudioRebaseConflict): ReactNode => {
+  const operationLabel = conflict.operation === "pull_rebase" ? "pull with rebase" : "rebase";
 
-  return `The rebase onto \`${conflict.targetBranch}\` stopped on conflicts. Abort the rebase or send the conflict to Builder for resolution.`;
+  return (
+    <>
+      The {operationLabel} onto{" "}
+      <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code> stopped on conflicts.
+      Abort the rebase or send the conflict to Builder for resolution.
+    </>
+  );
 };
 
 export const RebaseConflictDialog = memo(function RebaseConflictDialog({
@@ -36,7 +41,15 @@ export const RebaseConflictDialog = memo(function RebaseConflictDialog({
   actions,
 }: RebaseConflictDialogProps): ReactElement {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && actions.isDisabled) {
+          return;
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent className="max-w-xl" data-testid="agent-studio-git-rebase-conflict-modal">
         <DialogHeader>
           <DialogTitle>

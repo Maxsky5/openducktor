@@ -21,6 +21,9 @@ export const ForcePushDialog = memo(function ForcePushDialog({
     <GitConfirmationDialog
       open={pendingForcePush != null}
       onOpenChange={(open) => {
+        if (isPushing) {
+          return;
+        }
         if (!open) {
           onCancel();
         }

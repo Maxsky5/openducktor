@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ArrowUp } from "lucide-react";
-import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 
 (
@@ -84,27 +83,25 @@ describe("GitConfirmationDialog", () => {
 
     await act(async () => {
       renderer = TestRenderer.create(
-        createElement(
-          GitConfirmationDialog,
-          {
-            open: true,
-            onOpenChange: () => {},
-            title: "Confirm force push",
-            description: "Force push description",
-            closeDisabled: false,
-            onClose: () => {},
-            closeTestId: "close-button",
-            confirmLabel: "Force push with lease",
-            confirmPendingLabel: "Force pushing...",
-            confirmPending: false,
-            confirmDisabled: true,
-            onConfirm: () => {},
-            confirmTestId: "confirm-button",
-            confirmIcon: ArrowUp,
-            contentTestId: "dialog",
-          },
-          createElement("div", null, "Body"),
-        ),
+        <GitConfirmationDialog
+          open
+          onOpenChange={() => {}}
+          title="Confirm force push"
+          description="Force push description"
+          closeDisabled={false}
+          onClose={() => {}}
+          closeTestId="close-button"
+          confirmLabel="Force push with lease"
+          confirmPendingLabel="Force pushing..."
+          confirmPending={false}
+          confirmDisabled
+          onConfirm={() => {}}
+          confirmTestId="confirm-button"
+          confirmIcon={ArrowUp}
+          contentTestId="dialog"
+        >
+          <div>Body</div>
+        </GitConfirmationDialog>,
       );
       await flush();
     });
@@ -127,27 +124,25 @@ describe("GitConfirmationDialog", () => {
 
     await act(async () => {
       renderer = TestRenderer.create(
-        createElement(
-          GitConfirmationDialog,
-          {
-            open: true,
-            onOpenChange: () => {},
-            title: "Confirm force push",
-            description: "Force push description",
-            closeDisabled: false,
-            onClose: () => {},
-            closeTestId: "close-button",
-            confirmLabel: "Force push with lease",
-            confirmPendingLabel: "Force pushing...",
-            confirmPending: true,
-            confirmDisabled: true,
-            onConfirm: () => {},
-            confirmTestId: "confirm-button",
-            confirmIcon: ArrowUp,
-            contentTestId: "dialog",
-          },
-          createElement("div", null, "Body"),
-        ),
+        <GitConfirmationDialog
+          open
+          onOpenChange={() => {}}
+          title="Confirm force push"
+          description="Force push description"
+          closeDisabled={false}
+          onClose={() => {}}
+          closeTestId="close-button"
+          confirmLabel="Force push with lease"
+          confirmPendingLabel="Force pushing..."
+          confirmPending
+          confirmDisabled
+          onConfirm={() => {}}
+          confirmTestId="confirm-button"
+          confirmIcon={ArrowUp}
+          contentTestId="dialog"
+        >
+          <div>Body</div>
+        </GitConfirmationDialog>,
       );
       await flush();
     });

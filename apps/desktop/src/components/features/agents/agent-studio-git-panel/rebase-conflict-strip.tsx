@@ -1,7 +1,8 @@
-import { memo, type ReactElement } from "react";
+import { memo, type ReactElement, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AgentStudioRebaseConflict } from "@/pages/agents/use-agent-studio-git-actions";
+import { INLINE_CODE_CLASS_NAME } from "./constants";
 import { RebaseConflictActions, type RebaseConflictActionsModel } from "./rebase-conflict-actions";
 
 type RebaseConflictStripProps = {
@@ -10,12 +11,16 @@ type RebaseConflictStripProps = {
   onViewDetails: () => void;
 };
 
-const toConflictDescription = (conflict: AgentStudioRebaseConflict): string => {
-  if (conflict.operation === "pull_rebase") {
-    return `The pull with rebase onto \`${conflict.targetBranch}\` is paused on conflicts.`;
-  }
+const toConflictDescription = (conflict: AgentStudioRebaseConflict): ReactNode => {
+  const operationLabel = conflict.operation === "pull_rebase" ? "pull with rebase" : "rebase";
 
-  return `The rebase onto \`${conflict.targetBranch}\` is paused on conflicts.`;
+  return (
+    <>
+      The {operationLabel} onto{" "}
+      <code className={INLINE_CODE_CLASS_NAME}>{conflict.targetBranch}</code> is paused on
+      conflicts.
+    </>
+  );
 };
 
 export const RebaseConflictStrip = memo(function RebaseConflictStrip({
