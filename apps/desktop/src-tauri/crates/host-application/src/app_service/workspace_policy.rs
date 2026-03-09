@@ -42,7 +42,7 @@ pub struct HookTrustConfirmationRequest {
     pub hooks: HookSet,
 }
 
-pub trait HookTrustConfirmationPort {
+pub trait HookTrustConfirmationPort: Send {
     fn confirm_trusted_hooks(&self, request: &HookTrustConfirmationRequest) -> Result<()>;
 }
 

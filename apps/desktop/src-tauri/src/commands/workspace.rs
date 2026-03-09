@@ -562,6 +562,30 @@ mod tests {
     }
 
     #[test]
+    fn workspace_set_trusted_hooks_rejects_fingerprint_mismatch_from_prepared_challenge(
+    ) -> Result<(), String> {
+        let hooks = HookSet {
+            pre_start: vec!["echo pre".to_string()],
+            post_complete: Vec::new(),
+        };
+        let fixture = setup_workspace_command_fixture("fingerprint-mismatch", hooks);
+        let challenge = run_workspace_prepare_trusted_hooks_challenge(&fixture)?;
+
+        let error = run_workspace_set_trusted_hooks(
+            &fixture,
+            true,
+            Some(challenge.nonce),
+            Some("different-fingerprint".to_string()),
+        )
+        .expect_err("fingerprint mismatch should fail");
+        assert!(
+            error.contains("fingerprint mismatch"),
+            "unexpected error: {error}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn workspace_set_trusted_hooks_accepts_prepared_challenge_and_persists_trust(
     ) -> Result<(), String> {
         let hooks = HookSet {

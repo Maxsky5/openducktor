@@ -8,7 +8,10 @@ use host_infra_system::{AppConfigStore, RuntimeConfigStore};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+#[cfg(test)]
+use std::sync::Mutex;
+use std::sync::{Arc, OnceLock};
+#[cfg(test)]
 use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent};
 
