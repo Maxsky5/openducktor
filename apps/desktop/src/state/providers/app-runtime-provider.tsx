@@ -27,7 +27,7 @@ export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElemen
     (runtimeDefinitions: RuntimeDescriptor[]): RuntimeDescriptor[] => {
       const validationErrors = validateRuntimeDefinitionsForOpenDucktor(runtimeDefinitions);
       if (validationErrors.length > 0) {
-        throw new Error(validationErrors.join(" "));
+        throw new Error(validationErrors.join("; "));
       }
 
       return runtimeDefinitions;
