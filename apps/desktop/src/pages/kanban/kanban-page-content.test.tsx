@@ -34,11 +34,9 @@ describe("KanbanPageContent", () => {
     const html = renderToStaticMarkup(createElement(KanbanPageContent, { model }));
 
     expect(html).toContain("flex-1");
-    expect(html).toContain("h-full");
-    expect(html).toContain("overflow-hidden");
     expect(html).toContain("w-full");
     expect(html).toContain("overflow-x-auto");
-    expect(html).toContain("overflow-y-hidden");
+    expect(html).toContain("overflow-y-visible");
     expect(html).toContain("min-h-full");
   });
 

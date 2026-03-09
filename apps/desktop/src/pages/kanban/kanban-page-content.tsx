@@ -129,15 +129,12 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
     model.isLoadingTasks && !model.isSwitchingWorkspace && totalTaskCount > 0;
 
   return (
-    <section
-      className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden"
-      aria-busy={isBoardLoading}
-    >
+    <section className="relative min-h-0 min-w-0 flex-1" aria-busy={isBoardLoading}>
       {showRefreshingIndicator ? <KanbanBoardRefreshingIndicator /> : null}
 
       <div
         className={cn(
-          "hide-scrollbar h-full w-full max-w-full overflow-x-auto overflow-y-hidden transition-opacity duration-150",
+          "hide-scrollbar min-h-full w-full max-w-full overflow-x-auto overflow-y-visible transition-opacity duration-150",
           showBlockingLoader ? "opacity-0" : "opacity-100",
         )}
       >

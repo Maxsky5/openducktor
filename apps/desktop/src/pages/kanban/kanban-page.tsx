@@ -10,7 +10,7 @@ export function KanbanPage(): ReactElement {
   const models = useKanbanPageModels();
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden py-4 pl-4">
+    <div className="flex h-full min-h-full min-w-0 flex-col gap-4 py-4 pl-4">
       <KanbanPageHeader model={models.header} />
       <KanbanPageContent model={models.content} />
       <TaskCreateModal {...models.taskComposer} />
