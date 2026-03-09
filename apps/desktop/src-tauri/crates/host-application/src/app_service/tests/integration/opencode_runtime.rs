@@ -544,7 +544,7 @@ fn runtime_start_surfaces_cleanup_failure_after_startup_error() -> Result<()> {
         )
         .expect_err("startup cleanup failure should be surfaced");
     let message = error.to_string();
-    assert!(message.contains("OpenCode runtime failed to start for task task-1"));
+    assert!(message.contains("opencode runtime failed to start for task task-1"));
     assert!(message.contains("Failed removing QA worktree runtime"));
 
     let _ = fs::remove_dir_all(root);

@@ -527,11 +527,11 @@ fn resolve_runtime_startup_policy_emits_config_failure_metrics() -> Result<()> {
             "/tmp/repo",
             "task-42",
             RuntimeRole::Qa,
-            "OpenCode runtime failed to start for task task-42",
+            "opencode runtime failed to start for task task-42",
         )
         .expect_err("invalid config should fail runtime startup policy resolution");
     let message = format!("{error:#}");
-    assert!(message.contains("OpenCode runtime failed to start for task task-42"));
+    assert!(message.contains("opencode runtime failed to start for task task-42"));
     assert!(message.contains("Failed loading OpenCode startup readiness config"));
 
     let metrics = service.startup_metrics_snapshot()?;

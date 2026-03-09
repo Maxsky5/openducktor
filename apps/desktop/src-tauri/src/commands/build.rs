@@ -1,6 +1,6 @@
 use crate::{as_error, run_emitter, run_service_blocking, AppState, BuildCompletePayload};
 use host_application::{BuildResponseAction, CleanupMode};
-use host_domain::{RunSummary, RuntimeKind, TaskCard};
+use host_domain::{AgentRuntimeKind, RunSummary, TaskCard};
 use tauri::{AppHandle, State};
 
 #[tauri::command]
@@ -9,7 +9,7 @@ pub async fn build_start(
     app: AppHandle,
     repo_path: String,
     task_id: String,
-    runtime_kind: RuntimeKind,
+    runtime_kind: AgentRuntimeKind,
 ) -> Result<RunSummary, String> {
     let service = state.service.clone();
     let emitter = run_emitter(app);

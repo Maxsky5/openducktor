@@ -315,7 +315,8 @@ export const createLoadAgentSessions = ({
       }
 
       const shouldEnsureWorkspaceRuntime =
-        (record.role === "spec" || record.role === "planner") && workingDirectory === repoPath;
+        record.role === "build" ||
+        ((record.role === "spec" || record.role === "planner") && workingDirectory === repoPath);
       if (shouldEnsureWorkspaceRuntime) {
         const workspaceRuntime = await ensureWorkspaceRuntime(runtimeKind);
         if (!workspaceRuntime) {

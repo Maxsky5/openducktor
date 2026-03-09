@@ -3,7 +3,7 @@ use super::super::super::{
 };
 use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Result};
-use host_domain::{now_rfc3339, AgentRuntimeKind, RuntimeInstanceSummary};
+use host_domain::{now_rfc3339, RuntimeInstanceSummary};
 use std::collections::HashMap;
 use std::process::Child;
 use std::sync::MutexGuard;
@@ -15,6 +15,7 @@ impl AppService {
         mut spawned_server: SpawnedRuntimeServer,
     ) -> Result<RuntimeInstanceSummary> {
         let RuntimeStartInput {
+            runtime_kind,
             startup_scope,
             repo_key,
             task_id,
@@ -25,15 +26,15 @@ impl AppService {
             ..
         } = input;
 
-        let descriptor = AgentRuntimeKind::Opencode.descriptor();
+        let descriptor = runtime_kind.descriptor();
         let summary = RuntimeInstanceSummary {
-            kind: AgentRuntimeKind::Opencode,
+            kind: runtime_kind,
             runtime_id: spawned_server.runtime_id.clone(),
             repo_path: repo_key,
             task_id: (role != host_domain::RuntimeRole::Workspace).then(|| task_id.to_string()),
             role,
             working_directory,
-            runtime_route: AgentRuntimeKind::Opencode.route_for_port(spawned_server.port),
+            runtime_route: runtime_kind.route_for_port(spawned_server.port),
             started_at: now_rfc3339(),
             descriptor,
         };

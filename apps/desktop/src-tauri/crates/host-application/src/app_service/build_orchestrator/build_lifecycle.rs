@@ -21,6 +21,16 @@ struct BuildRunRegistration {
     emitter: RunEmitter,
 }
 
+struct BuildModeStartInput<'a> {
+    runtime_kind: AgentRuntimeKind,
+    prerequisites: BuildPrerequisites,
+    prepared_worktree: PreparedBuildWorktree,
+    spawned_agent: SpawnedBuildAgent,
+    task_id: &'a str,
+    run_id: &'a str,
+    emitter: RunEmitter,
+}
+
 impl AppService {
     pub fn build_start(
         &self,
@@ -46,15 +56,15 @@ impl AppService {
             startup_policy,
         )?;
 
-        self.initiate_build_mode(
+        self.initiate_build_mode(BuildModeStartInput {
             runtime_kind,
             prerequisites,
             prepared_worktree,
             spawned_agent,
             task_id,
-            run_id.as_str(),
+            run_id: run_id.as_str(),
             emitter,
-        )
+        })
     }
 
     pub fn build_respond(
@@ -254,16 +264,16 @@ impl AppService {
         Ok(summary)
     }
 
-    fn initiate_build_mode(
-        &self,
-        runtime_kind: AgentRuntimeKind,
-        prerequisites: BuildPrerequisites,
-        prepared_worktree: PreparedBuildWorktree,
-        mut spawned_agent: SpawnedBuildAgent,
-        task_id: &str,
-        run_id: &str,
-        emitter: RunEmitter,
-    ) -> Result<RunSummary> {
+    fn initiate_build_mode(&self, input: BuildModeStartInput<'_>) -> Result<RunSummary> {
+        let BuildModeStartInput {
+            runtime_kind,
+            prerequisites,
+            prepared_worktree,
+            mut spawned_agent,
+            task_id,
+            run_id,
+            emitter,
+        } = input;
         self.task_transition(
             prerequisites.repo_path.as_str(),
             task_id,
