@@ -379,12 +379,14 @@ export function AgentsPage(): ReactElement {
         <>
           {pendingRebaseConflictResolutionRequest ? (
             <RebaseConflictResolutionModal
+              key={pendingRebaseConflictResolutionRequest.requestId}
               request={pendingRebaseConflictResolutionRequest}
               onResolve={resolvePendingRebaseConflictResolution}
             />
           ) : null}
           {pendingSessionStartRequest ? (
             <AgentStudioSessionStartModalBridge
+              key={pendingSessionStartRequest.requestId}
               request={pendingSessionStartRequest}
               activeRepo={activeRepo}
               repoSettings={orchestration.repoSettings}

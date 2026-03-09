@@ -24,6 +24,7 @@ export type RebaseConflictResolutionDecision =
   | null;
 
 export type PendingRebaseConflictResolutionRequest = {
+  requestId: string;
   conflict: AgentStudioRebaseConflict;
   builderSessions: AgentSessionState[];
   currentWorktreePath: string;
@@ -31,6 +32,11 @@ export type PendingRebaseConflictResolutionRequest = {
   defaultMode: "existing" | "new";
   defaultSessionId: string | null;
 };
+
+type RebaseConflictResolutionRequestInput = Omit<
+  PendingRebaseConflictResolutionRequest,
+  "requestId"
+>;
 
 type AgentStudioRebaseConflictResolutionSelectionContext = {
   viewTaskId: string;
@@ -70,6 +76,7 @@ export function useAgentStudioRebaseConflictResolution({
   const pendingRebaseConflictResolutionResolverRef = useRef<
     ((decision: RebaseConflictResolutionDecision) => void) | null
   >(null);
+  const requestSequenceRef = useRef(0);
 
   const resolvePendingRebaseConflictResolution = useCallback(
     (decision: RebaseConflictResolutionDecision): void => {
@@ -82,13 +89,16 @@ export function useAgentStudioRebaseConflictResolution({
   );
 
   const requestRebaseConflictResolutionChoice = useCallback(
-    (
-      request: PendingRebaseConflictResolutionRequest,
-    ): Promise<RebaseConflictResolutionDecision> => {
+    (request: RebaseConflictResolutionRequestInput): Promise<RebaseConflictResolutionDecision> => {
       pendingRebaseConflictResolutionResolverRef.current?.(null);
       return new Promise((resolve) => {
         pendingRebaseConflictResolutionResolverRef.current = resolve;
-        setPendingRebaseConflictResolutionRequest(request);
+        const requestId = `rebase-conflict-${requestSequenceRef.current}`;
+        requestSequenceRef.current += 1;
+        setPendingRebaseConflictResolutionRequest({
+          ...request,
+          requestId,
+        });
       });
     },
     [],

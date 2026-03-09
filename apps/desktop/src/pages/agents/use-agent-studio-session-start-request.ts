@@ -4,16 +4,21 @@ import type {
   NewSessionStartRequest,
 } from "./use-agent-studio-session-actions";
 
+export type PendingSessionStartRequest = NewSessionStartRequest & {
+  requestId: string;
+};
+
 export function useAgentStudioSessionStartRequest(): {
-  pendingSessionStartRequest: NewSessionStartRequest | null;
+  pendingSessionStartRequest: PendingSessionStartRequest | null;
   requestNewSessionStart: (request: NewSessionStartRequest) => Promise<NewSessionStartDecision>;
   resolvePendingSessionStart: (decision: NewSessionStartDecision) => void;
 } {
   const [pendingSessionStartRequest, setPendingSessionStartRequest] =
-    useState<NewSessionStartRequest | null>(null);
+    useState<PendingSessionStartRequest | null>(null);
   const pendingSessionStartResolverRef = useRef<
     ((decision: NewSessionStartDecision) => void) | null
   >(null);
+  const requestSequenceRef = useRef(0);
 
   const resolvePendingSessionStart = useCallback((decision: NewSessionStartDecision): void => {
     const resolver = pendingSessionStartResolverRef.current;
@@ -27,7 +32,12 @@ export function useAgentStudioSessionStartRequest(): {
       pendingSessionStartResolverRef.current?.(null);
       return new Promise((resolve) => {
         pendingSessionStartResolverRef.current = resolve;
-        setPendingSessionStartRequest(request);
+        const requestId = `session-start-${requestSequenceRef.current}`;
+        requestSequenceRef.current += 1;
+        setPendingSessionStartRequest({
+          ...request,
+          requestId,
+        });
       });
     },
     [],

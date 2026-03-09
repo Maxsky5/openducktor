@@ -34,6 +34,7 @@ describe("useAgentStudioSessionStartRequest", () => {
       });
 
       expect(harness.getLatest().pendingSessionStartRequest?.taskId).toBe("task-1");
+      expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-0");
 
       await harness.run((state) => {
         state.resolvePendingSessionStart({ selectedModel: null });
@@ -70,6 +71,7 @@ describe("useAgentStudioSessionStartRequest", () => {
       await harness.waitFor(() => firstDecision !== undefined);
       expect(firstDecision).toBeNull();
       expect(harness.getLatest().pendingSessionStartRequest?.taskId).toBe("task-2");
+      expect(harness.getLatest().pendingSessionStartRequest?.requestId).toBe("session-start-1");
     } finally {
       await harness.unmount();
     }

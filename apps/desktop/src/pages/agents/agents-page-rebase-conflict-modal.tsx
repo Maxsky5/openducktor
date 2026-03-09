@@ -40,7 +40,7 @@ export function RebaseConflictResolutionModal({
   useEffect(() => {
     setMode(request.defaultMode);
     setSelectedSessionId(request.defaultSessionId ?? "");
-  }, [request.defaultMode, request.defaultSessionId]);
+  }, [request]);
 
   return (
     <Dialog

@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useRef } from "react";
+import { type ReactElement, useEffect } from "react";
 import { SessionStartModal } from "@/components/features/agents";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -7,13 +7,11 @@ import {
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "../shared/use-session-start-modal-coordinator";
-import type {
-  NewSessionStartDecision,
-  NewSessionStartRequest,
-} from "./use-agent-studio-session-actions";
+import type { NewSessionStartDecision } from "./use-agent-studio-session-actions";
+import type { PendingSessionStartRequest } from "./use-agent-studio-session-start-request";
 
 type AgentStudioSessionStartModalBridgeProps = {
-  request: NewSessionStartRequest;
+  request: PendingSessionStartRequest;
   activeRepo: string | null;
   repoSettings: RepoSettingsInput | null;
   onResolve: (decision: NewSessionStartDecision) => void;
@@ -25,7 +23,6 @@ export function AgentStudioSessionStartModalBridge({
   repoSettings,
   onResolve,
 }: AgentStudioSessionStartModalBridgeProps): ReactElement {
-  const initializedRequestKeyRef = useRef<string | null>(null);
   const {
     intent,
     isOpen,
@@ -51,22 +48,6 @@ export function AgentStudioSessionStartModalBridge({
   });
 
   useEffect(() => {
-    const requestKey = [
-      request.taskId,
-      request.role,
-      request.scenario,
-      request.startMode,
-      request.reason,
-      request.selectedModel?.providerId ?? "",
-      request.selectedModel?.modelId ?? "",
-      request.selectedModel?.variant ?? "",
-      request.selectedModel?.profileId ?? "",
-    ].join(":");
-    if (initializedRequestKeyRef.current === requestKey) {
-      return;
-    }
-    initializedRequestKeyRef.current = requestKey;
-
     openStartModal({
       source: "agent_studio",
       taskId: request.taskId,

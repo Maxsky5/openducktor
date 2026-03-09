@@ -123,6 +123,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.defaultSessionId).toBe(
         "build-1",
       );
+      expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
+        "rebase-conflict-0",
+      );
 
       await harness.run((state) => {
         state.resolvePendingRebaseConflictResolution({
@@ -166,6 +169,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       });
 
       await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
+      expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
+        "rebase-conflict-0",
+      );
 
       await harness.run((state) => {
         state.resolvePendingRebaseConflictResolution({ mode: "new" });
@@ -216,6 +222,9 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       });
 
       await harness.waitFor((state) => state.pendingRebaseConflictResolutionRequest !== null);
+      expect(harness.getLatest().pendingRebaseConflictResolutionRequest?.requestId).toBe(
+        "rebase-conflict-0",
+      );
       await harness.run((state) => {
         state.resolvePendingRebaseConflictResolution(null);
       });
