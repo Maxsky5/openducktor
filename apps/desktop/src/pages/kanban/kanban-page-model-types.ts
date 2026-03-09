@@ -27,6 +27,8 @@ export type KanbanPageContentModel = {
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart: (taskId: string) => void;
+  onQaOpen: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
@@ -45,6 +47,8 @@ export type KanbanPageDetailsSheetModel = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart: (taskId: string) => void;
+  onQaOpen: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onEdit: (taskId: string) => void;

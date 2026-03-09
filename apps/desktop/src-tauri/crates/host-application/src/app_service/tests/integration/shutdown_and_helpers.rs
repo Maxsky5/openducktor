@@ -130,12 +130,9 @@ fn shutdown_reports_runtime_cleanup_errors_and_drains_state() -> Result<()> {
             },
         );
 
-    let error = service
+    service
         .shutdown()
-        .expect_err("shutdown should aggregate runtime cleanup failures");
-    assert!(error
-        .to_string()
-        .contains("Failed removing QA worktree runtime"));
+        .expect("shutdown should drain runtime state without QA cleanup errors");
     assert!(service.runs.lock().expect("run lock poisoned").is_empty());
     assert!(service
         .agent_runtimes

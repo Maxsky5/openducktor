@@ -233,6 +233,14 @@ const canReuseSessionForSelectedModel = ({
   return (sessionRuntimeKind ?? DEFAULT_RUNTIME_KIND) === requestedRuntimeKind;
 };
 
+const normalizeWorkingDirectory = (workingDirectory: string | null | undefined): string => {
+  let normalized = workingDirectory?.trim() ?? "";
+  while (normalized.length > 1 && /[\\/]/.test(normalized.at(-1) ?? "")) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+};
+
 const applySelectedModelToReusedSession = ({
   repoPath,
   sessionId,
@@ -302,6 +310,15 @@ const createOrReuseSession = async ({
   input: StartSessionCreationInput;
   deps: StartSessionExecutionDependencies;
 }): Promise<StartOrReuseResult> => {
+  const validatedTaskCard = ctx.role === "qa" ? resolveStartTask({ ctx, task: deps.task }) : null;
+  const resolvedWorkingDirectoryOverride =
+    ctx.role === "qa"
+      ? normalizeWorkingDirectory(input.workingDirectoryOverride) ||
+        (await deps.runtime.resolveQaReviewTarget(ctx.repoPath, ctx.taskId))
+      : input.workingDirectoryOverride;
+  const expectedWorkingDirectory =
+    ctx.role === "qa" ? normalizeWorkingDirectory(resolvedWorkingDirectoryOverride) : "";
+
   if (input.startMode === "reuse_latest") {
     const existingSession = pickLatestSession(
       Object.values(deps.session.sessionsRef.current).filter(
@@ -310,6 +327,8 @@ const createOrReuseSession = async ({
     );
     if (existingSession) {
       if (
+        (ctx.role !== "qa" ||
+          normalizeWorkingDirectory(existingSession.workingDirectory) === expectedWorkingDirectory) &&
         canReuseSessionForSelectedModel({
           sessionRuntimeKind:
             existingSession.runtimeKind ??
@@ -338,6 +357,9 @@ const createOrReuseSession = async ({
     );
     if (
       latestPersistedSession &&
+      (ctx.role !== "qa" ||
+        normalizeWorkingDirectory(latestPersistedSession.workingDirectory) ===
+          expectedWorkingDirectory) &&
       canReuseSessionForSelectedModel({
         sessionRuntimeKind:
           latestPersistedSession.runtimeKind ??
@@ -365,14 +387,14 @@ const createOrReuseSession = async ({
     }
   }
 
-  const taskCard = resolveStartTask({ ctx, task: deps.task });
+  const taskCard = validatedTaskCard ?? resolveStartTask({ ctx, task: deps.task });
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
     requireModelReady: input.requireModelReady && input.selectedModel == null,
     requestedRuntimeKind: input.selectedModel?.runtimeKind ?? null,
-    ...(input.workingDirectoryOverride !== undefined
-      ? { workingDirectoryOverride: input.workingDirectoryOverride }
+    ...(resolvedWorkingDirectoryOverride !== undefined
+      ? { workingDirectoryOverride: resolvedWorkingDirectoryOverride }
       : {}),
     taskCard,
     deps,

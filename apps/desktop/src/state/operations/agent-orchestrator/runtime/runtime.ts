@@ -1,4 +1,5 @@
 import type {
+  QaReviewTarget,
   RepoPromptOverrides,
   RunSummary,
   RuntimeKind,
@@ -28,6 +29,14 @@ export const toRuntimeConnection = (
   endpoint: runtimeEndpoint,
   workingDirectory,
 });
+
+const normalizeWorkingDirectory = (workingDirectory: string | null | undefined): string => {
+  let normalized = workingDirectory?.trim() ?? "";
+  while (normalized.length > 1 && /[\\/]/.test(normalized.at(-1) ?? "")) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+};
 
 export const resolveRuntimeConnection = (runtime: RuntimeInfo): AgentRuntimeConnection => {
   return (
@@ -87,6 +96,13 @@ export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPro
   return loadEffectivePromptOverrides(repoPath);
 };
 
+export const loadQaReviewTarget = async (
+  repoPath: string,
+  taskId: string,
+): Promise<QaReviewTarget> => {
+  return host.qaReviewTargetGet(repoPath, taskId);
+};
+
 export const loadRepoDefaultRuntimeKind = async (
   repoPath: string,
   role: AgentRole,
@@ -107,6 +123,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     },
   ): Promise<RuntimeInfo> => {
     const workingDirectoryOverride = options?.workingDirectoryOverride?.trim() ?? "";
+    const normalizedWorkingDirectoryOverride = normalizeWorkingDirectory(workingDirectoryOverride);
     const runtimeKind = options?.runtimeKind?.trim()
       ? options.runtimeKind
       : await loadRepoDefaultRuntimeKind(repoPath, role);
@@ -118,7 +135,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             entry.repoPath === repoPath &&
             entry.taskId === taskId &&
             runningStates.has(entry.state) &&
-            entry.worktreePath === workingDirectoryOverride,
+            normalizeWorkingDirectory(entry.worktreePath) === normalizedWorkingDirectoryOverride,
         );
         if (matchingRun) {
           const runtimeEndpoint = toBaseUrl(matchingRun.port);
@@ -126,9 +143,9 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             runtimeKind,
             runtimeId: null,
             runId: matchingRun.runId,
-            runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectoryOverride),
+            runtimeConnection: toRuntimeConnection(runtimeEndpoint, matchingRun.worktreePath),
             runtimeEndpoint,
-            workingDirectory: workingDirectoryOverride,
+            workingDirectory: matchingRun.worktreePath,
           };
         }
 
@@ -138,7 +155,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
             entry.taskId === taskId &&
             runningStates.has(entry.state),
         );
-        if (taskRun && workingDirectoryOverride === repoPath) {
+        if (taskRun && normalizedWorkingDirectoryOverride === normalizeWorkingDirectory(repoPath)) {
           const runtimeEndpoint = toBaseUrl(taskRun.port);
           return {
             runtimeKind,
@@ -188,8 +205,29 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
     }
 
     if (role === "qa") {
-      const runtime = await host.runtimeStart(runtimeKind, repoPath, taskId, "qa");
-      const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
+      const workingDirectory =
+        workingDirectoryOverride || (await host.qaReviewTargetGet(repoPath, taskId)).workingDirectory;
+      const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
+      const matchingRun = runsRef.current.find(
+        (entry) =>
+          entry.repoPath === repoPath &&
+          entry.taskId === taskId &&
+          runningStates.has(entry.state) &&
+          normalizeWorkingDirectory(entry.worktreePath) === normalizedWorkingDirectory,
+      );
+      if (matchingRun) {
+        const runtimeEndpoint = toBaseUrl(matchingRun.port);
+        return {
+          runtimeKind,
+          runtimeId: null,
+          runId: matchingRun.runId,
+          runtimeConnection: toRuntimeConnection(runtimeEndpoint, matchingRun.worktreePath),
+          runtimeEndpoint,
+          workingDirectory: matchingRun.worktreePath,
+        };
+      }
+
+      const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
       const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
       return {
         runtimeKind,

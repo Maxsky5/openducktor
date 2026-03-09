@@ -4,6 +4,7 @@ import type { AgentChatModel, AgentStudioWorkspaceDocument } from "@/components/
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
+import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { SCENARIO_LABELS } from "./agents-page-constants";
 import {
@@ -72,6 +73,7 @@ export const buildWorkflowModelContext = ({
   const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
   const latestSessionByRole = buildLatestSessionByRoleMap(sessionsForTask);
   const workflowStateByRole = buildWorkflowStateByRole({
+    task: selectedTask,
     roleWorkflowsByTask,
     latestSessionByRole,
   });
@@ -92,7 +94,7 @@ export const buildWorkflowModelContext = ({
   const createSessionDisabled = Boolean(activeSession && isSessionWorking);
   const sessionCreateOptions = buildSessionCreateOptions({
     roleEnabledByTask,
-    hasQaFeedback: qaDoc.markdown.trim().length > 0,
+    hasQaRejection: isQaRejectedTask(selectedTask),
     hasHumanFeedback: isTaskAwaitingHumanFeedback(selectedTask),
     createSessionDisabled,
     roleLabelByRole,

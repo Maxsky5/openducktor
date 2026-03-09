@@ -3,6 +3,7 @@ import { type AgentRole, type AgentScenario, isRecord } from "@openducktor/core"
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
+import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 
@@ -145,6 +146,7 @@ export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentR
 };
 
 export const buildWorkflowStateByRole = (params: {
+  task: TaskCard | null;
   roleWorkflowsByTask: Record<AgentRole, AgentWorkflowState>;
   latestSessionByRole: Record<AgentRole, AgentSessionState | null>;
 }): Record<AgentRole, WorkflowStepState> => {
@@ -154,8 +156,17 @@ export const buildWorkflowStateByRole = (params: {
     build: "blocked",
     qa: "blocked",
   };
+  const qaRejected = isQaRejectedTask(params.task);
 
   for (const role of ALL_AGENT_ROLES) {
+    if (role === "build" && qaRejected) {
+      stateByRole[role] = "done";
+      continue;
+    }
+    if (role === "qa" && qaRejected) {
+      stateByRole[role] = "rejected";
+      continue;
+    }
     if (params.roleWorkflowsByTask[role].completed) {
       stateByRole[role] = "done";
       continue;
@@ -257,7 +268,7 @@ export const buildSessionSelectorGroups = (params: {
 
 export const buildSessionCreateOptions = (params: {
   roleEnabledByTask: Record<AgentRole, boolean>;
-  hasQaFeedback: boolean;
+  hasQaRejection: boolean;
   hasHumanFeedback: boolean;
   createSessionDisabled: boolean;
   roleLabelByRole: Record<AgentRole, string>;
@@ -311,7 +322,7 @@ export const buildSessionCreateOptions = (params: {
       `Create ${params.roleLabelByRole.build.toLowerCase()} session with ${params.scenarioLabels.build_implementation_start.toLowerCase()}`,
       params.createSessionDisabled,
     );
-    if (params.hasQaFeedback) {
+    if (params.hasQaRejection) {
       addFreshOption(
         "build",
         "build_after_qa_rejected",

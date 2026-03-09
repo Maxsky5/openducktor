@@ -35,6 +35,7 @@ type SessionActionsDependencies = {
     options?: { persist?: boolean },
   ) => void;
   attachSessionListener: (repoPath: string, sessionId: string) => void;
+  resolveQaReviewTarget?: (repoPath: string, taskId: string) => Promise<string>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoDefaultModel: (repoPath: string, role: AgentRole) => Promise<AgentModelSelection | null>;
@@ -109,6 +110,7 @@ export const createAgentSessionActions = ({
   turnStartedAtBySessionRef,
   updateSession,
   attachSessionListener,
+  resolveQaReviewTarget,
   ensureRuntime,
   loadTaskDocuments,
   loadRepoDefaultModel,
@@ -226,6 +228,11 @@ export const createAgentSessionActions = ({
     },
     runtime: {
       adapter,
+      resolveQaReviewTarget:
+        resolveQaReviewTarget ??
+        (async () => {
+          throw new Error("QA review target resolution is unavailable.");
+        }),
       ensureRuntime,
     },
     task: {

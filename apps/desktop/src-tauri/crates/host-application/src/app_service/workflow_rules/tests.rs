@@ -46,6 +46,29 @@ fn module_derive_available_actions_exposes_resume_for_deferred_task() {
 }
 
 #[test]
+fn module_derive_available_actions_exposes_qa_start_for_ai_review() {
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+    assert!(actions.contains(&TaskAction::QaStart));
+    assert!(!actions.contains(&TaskAction::BuildStart));
+}
+
+#[test]
+fn module_derive_available_actions_exposes_rework_and_open_qa_for_qa_rejected_tasks() {
+    let mut task = make_task("task-1", "task", TaskStatus::InProgress);
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+    assert!(actions.contains(&TaskAction::BuildStart));
+    assert!(actions.contains(&TaskAction::OpenBuilder));
+    assert!(actions.contains(&TaskAction::OpenQa));
+}
+
+#[test]
 fn module_normalize_subtask_plan_inputs_rejects_empty_title() {
     let inputs = vec![PlanSubtaskInput {
         title: "   ".to_string(),

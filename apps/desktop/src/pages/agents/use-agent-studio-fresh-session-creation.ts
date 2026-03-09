@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
+import { host } from "@/state/operations/host";
 import { runOrchestratorSideEffect } from "../../state/operations/agent-orchestrator/support/async-side-effects";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import { kickoffPromptForScenario } from "./agents-page-constants";
@@ -134,6 +135,10 @@ export function useAgentStudioFreshSessionCreation({
       previousSelection: QueryUpdate;
     }): Promise<string | undefined> => {
       try {
+        const workingDirectoryOverride =
+          params.nextRole === "build" && params.nextScenario === "build_after_qa_rejected"
+            ? (await host.qaReviewTargetGet(activeRepo ?? "", taskId)).workingDirectory
+            : null;
         return await startAgentSession({
           taskId,
           role: params.nextRole,
@@ -142,6 +147,7 @@ export function useAgentStudioFreshSessionCreation({
           sendKickoff: false,
           startMode: "fresh",
           requireModelReady: true,
+          ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
         });
       } catch (error) {
         updateQuery(params.previousSelection);

@@ -8,6 +8,8 @@ import type {
 type UseKanbanTaskDialogsArgs = {
   tasks: TaskCard[];
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart: (taskId: string) => void;
+  onQaOpen: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onDefer: (taskId: string) => void;
@@ -27,6 +29,8 @@ type UseKanbanTaskDialogsResult = {
 export function useKanbanTaskDialogs({
   tasks,
   onPlan,
+  onQaStart,
+  onQaOpen,
   onBuild,
   onDelegate,
   onDefer,
@@ -92,6 +96,8 @@ export function useKanbanTaskDialogs({
       open: detailsTask !== null,
       onOpenChange: onDetailsOpenChange,
       onPlan,
+      onQaStart,
+      onQaOpen,
       onBuild,
       onDelegate,
       onEdit: onEditTask,

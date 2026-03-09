@@ -148,6 +148,8 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
               onOpenDetails={model.onOpenDetails}
               onDelegate={model.onDelegate}
               onPlan={model.onPlan}
+              onQaStart={model.onQaStart}
+              onQaOpen={model.onQaOpen}
               onBuild={model.onBuild}
               onHumanApprove={model.onHumanApprove}
               onHumanRequestChanges={model.onHumanRequestChanges}

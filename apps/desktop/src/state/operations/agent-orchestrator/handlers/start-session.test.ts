@@ -1006,6 +1006,67 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
+  test("rejects qa start before resolving a review target when qa is unavailable", async () => {
+    let qaTargetCalls = 0;
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter: new OpencodeSdkAdapter(),
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: {
+        current: [
+          createTaskCardFixture({
+            id: "task-1",
+            status: "open",
+            agentWorkflows: {
+              spec: { required: true, canSkip: false, available: true, completed: false },
+              planner: { required: true, canSkip: false, available: false, completed: false },
+              builder: { required: true, canSkip: false, available: false, completed: false },
+              qa: { required: true, canSkip: false, available: false, completed: false },
+            },
+          }),
+        ],
+      },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      resolveQaReviewTarget: async () => {
+        qaTargetCalls += 1;
+        return "/tmp/repo/worktree";
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "qa" })).rejects.toThrow(
+        "Role 'qa' is unavailable for task 'task-1' in status 'open'.",
+      );
+      expect(qaTargetCalls).toBe(0);
+    } finally {
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
   test("fails fast on stale repo before any side effects", async () => {
     let persistedListCalls = 0;
 

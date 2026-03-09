@@ -6,6 +6,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { kickoffPromptForScenario } from "./agents-page-constants";
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 enableReactActEnvironment();
@@ -46,6 +47,7 @@ const createBaseArgs = (): HookArgs => ({
 describe("useAgentStudioSessionStartFlow", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+  const originalQaReviewTargetGet = host.qaReviewTargetGet;
 
   beforeEach(() => {
     host.workspaceGetRepoConfig = async () =>
@@ -56,11 +58,16 @@ describe("useAgentStudioSessionStartFlow", () => {
       repos: {},
       globalPromptOverrides: {},
     });
+    host.qaReviewTargetGet = async () => ({
+      workingDirectory: "/repo/worktrees/task-1",
+      source: "builder_session",
+    });
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    host.qaReviewTargetGet = originalQaReviewTargetGet;
   });
 
   test("startSession reuses active session and clears fresh-start query flag", async () => {
@@ -149,6 +156,85 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     expect(updateCalls).toHaveLength(2);
     expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("handleCreateSession for qa rejection starts a fresh builder session in the existing worktree", async () => {
+    const startAgentSession = mock(async () => "session-build-rework");
+    const sendAgentMessage = mock(async () => {});
+    const updateCalls: Array<Record<string, string | undefined>> = [];
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "qa",
+      scenario: "qa_review",
+      activeSession: createSession({
+        taskId: "task-1",
+        sessionId: "session-qa",
+        role: "qa",
+        scenario: "qa_review",
+      }),
+      selectedTask: createTask({
+        status: "in_progress",
+        documentSummary: {
+          spec: { has: false, updatedAt: undefined },
+          plan: { has: false, updatedAt: undefined },
+          qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+        },
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: { required: true, canSkip: false, available: true, completed: true },
+          builder: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: true, canSkip: false, available: false, completed: false },
+        },
+      }),
+      startAgentSession,
+      sendAgentMessage,
+      updateQuery: (updates) => {
+        updateCalls.push(updates);
+      },
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleCreateSession({
+        id: "build:build_after_qa_rejected:fresh",
+        role: "build",
+        scenario: "build_after_qa_rejected",
+        label: "Builder · Fix QA Rejection",
+        description: "Create a new builder session in the existing worktree",
+        disabled: false,
+      });
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith({
+      taskId: "task-1",
+      role: "build",
+      scenario: "build_after_qa_rejected",
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+        profileId: "spec",
+      },
+      sendKickoff: false,
+      startMode: "fresh",
+      requireModelReady: true,
+      workingDirectoryOverride: "/repo/worktrees/task-1",
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      "session-build-rework",
+      kickoffPromptForScenario("build", "build_after_qa_rejected", "task-1"),
+    );
+    expect(updateCalls).toContainEqual({
+      task: "task-1",
+      session: "session-build-rework",
+      agent: "build",
+      autostart: undefined,
+      start: undefined,
+    });
 
     await harness.unmount();
   });

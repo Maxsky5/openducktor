@@ -19,9 +19,9 @@ pub use git::{
     GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 pub use runtime::{
-    AgentRuntimeKind, AgentRuntimeRole, RunEvent, RunState, RunSummary, RuntimeCapabilities,
-    RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole,
-    RuntimeSupportedScope,
+    AgentRuntimeKind, QaReviewTarget, QaReviewTargetSource, RunEvent, RunState, RunSummary,
+    RuntimeCapabilities, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode,
+    RuntimeRole, RuntimeSupportedScope,
 };
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
@@ -98,15 +98,15 @@ mod tests {
     #[test]
     fn public_api_exports_compile() {
         use super::{
-            AgentRuntimeRole, AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState,
-            AgentWorkflows, BeadsCheck, CreateTaskInput, GitBranch, GitCommitAllRequest,
+            AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows,
+            BeadsCheck, CreateTaskInput, GitBranch, GitCommitAllRequest,
             GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort,
             GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
             GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
             GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData,
             GitWorktreeStatusSnapshot, GitWorktreeStatusSummary, GitWorktreeStatusSummaryData,
-            GitWorktreeSummary, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict,
-            QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeCheck,
+            GitWorktreeSummary, IssueType, PlanSubtaskInput, QaReportDocument, QaReviewTarget,
+            QaReviewTargetSource, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeCheck,
             RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck, TaskAction, TaskCard,
             TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
             TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
@@ -127,7 +127,6 @@ mod tests {
             AgentWorkflowState,
             AgentWorkflows,
             BeadsCheck,
-            AgentRuntimeRole,
             CreateTaskInput,
             GitBranch,
             GitCommitAllRequest,
@@ -152,6 +151,8 @@ mod tests {
             IssueType,
             PlanSubtaskInput,
             QaReportDocument,
+            QaReviewTarget,
+            QaReviewTargetSource,
             QaVerdict,
             QaWorkflowVerdict,
             RunEvent,

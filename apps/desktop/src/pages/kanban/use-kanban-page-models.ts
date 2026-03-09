@@ -39,8 +39,15 @@ export function useKanbanPageModels(): KanbanPageModels {
     sendAgentMessage,
     updateAgentSessionModel,
   });
-  const { sessionStartModal, onDelegate, onPlan, onBuild, openBuildAfterHumanRequestChanges } =
-    sessionStartFlow;
+  const {
+    sessionStartModal,
+    onDelegate,
+    onPlan,
+    onQaStart,
+    onQaOpen,
+    onBuild,
+    openBuildAfterHumanRequestChanges,
+  } = sessionStartFlow;
 
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
@@ -66,6 +73,8 @@ export function useKanbanPageModels(): KanbanPageModels {
   const taskDialogs = useKanbanTaskDialogs({
     tasks,
     onPlan,
+    onQaStart,
+    onQaOpen,
     onBuild,
     onDelegate,
     onDefer: (taskId) => {
@@ -88,6 +97,8 @@ export function useKanbanPageModels(): KanbanPageModels {
     onOpenDetails: taskDialogs.onOpenDetails,
     onDelegate,
     onPlan,
+    onQaStart,
+    onQaOpen,
     onBuild,
     onHumanApprove,
     onHumanRequestChanges,

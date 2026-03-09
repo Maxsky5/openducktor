@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { Badge } from "@/components/ui/badge";
+import { isQaRejectedTask } from "@/lib/task-qa";
 import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
 
 type TaskDetailsSheetHeaderProps = {
@@ -17,6 +18,7 @@ export function TaskDetailsSheetHeader({
   taskLabels,
 }: TaskDetailsSheetHeaderProps): ReactElement {
   const isEpic = task.issueType === "epic";
+  const qaRejected = isQaRejectedTask(task);
   const aiReviewBadge = task.aiReviewEnabled ? (
     <Badge
       variant="outline"
@@ -46,6 +48,14 @@ export function TaskDetailsSheetHeader({
       <div className="flex flex-wrap items-center gap-2">
         <IssueTypeBadge issueType={task.issueType} />
         <PriorityBadge priority={task.priority} />
+        {qaRejected ? (
+          <Badge
+            variant="outline"
+            className="border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300"
+          >
+            QA Rejected
+          </Badge>
+        ) : null}
         {aiReviewBadge}
         {isEpic ? (
           <Badge

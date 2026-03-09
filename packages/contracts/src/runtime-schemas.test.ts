@@ -1,7 +1,6 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
 import {
-  agentRuntimeStartRoleSchema,
   agentSessionRecordSchema,
   gitBranchSchema,
   gitCommitAllRequestSchema,
@@ -19,6 +18,8 @@ import {
   gitWorktreeSummarySchema,
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
+  qaReviewTargetSchema,
+  qaReviewTargetSourceSchema,
   runEventSchema,
   runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
@@ -492,8 +493,8 @@ describe("runtime schemas", () => {
       kind: "opencode",
       runtimeId: "runtime-1",
       repoPath: "/repo",
-      taskId: "task-1",
-      role: "planner",
+      taskId: null,
+      role: "workspace",
       workingDirectory: "/repo",
       runtimeRoute: {
         type: "local_http",
@@ -507,10 +508,25 @@ describe("runtime schemas", () => {
     expect(parsed.runtimeRoute.endpoint).toBe("http://127.0.0.1:4100");
   });
 
-  test("agent runtime role schemas enforce summary vs start boundaries", () => {
+  test("agent runtime role schemas and qa review target schema enforce boundaries", () => {
     expect(runtimeInstanceSummaryRoleSchema.parse("workspace")).toBe("workspace");
-    expect(agentRuntimeStartRoleSchema.parse("spec")).toBe("spec");
-    expect(() => agentRuntimeStartRoleSchema.parse("workspace")).toThrow();
+    expect(() => runtimeInstanceSummaryRoleSchema.parse("planner")).toThrow();
+    expect(qaReviewTargetSourceSchema.parse("active_build_run")).toBe("active_build_run");
+    expect(
+      qaReviewTargetSchema.parse({
+        workingDirectory: "/repo/worktrees/task-1",
+        source: "builder_session",
+      }),
+    ).toEqual({
+      workingDirectory: "/repo/worktrees/task-1",
+      source: "builder_session",
+    });
+    expect(() =>
+      qaReviewTargetSchema.parse({
+        workingDirectory: "   ",
+        source: "active_build_run",
+      }),
+    ).toThrow();
   });
 
   test("agent session record parses persisted history payload", () => {

@@ -49,6 +49,14 @@ type SessionHistoryLoadResult =
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 
+const normalizeWorkingDirectory = (workingDirectory: string | null | undefined): string => {
+  let normalized = workingDirectory?.trim() ?? "";
+  while (normalized.length > 1 && /[\\/]/.test(normalized.at(-1) ?? "")) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+};
+
 const resolveRuntimeRouteEndpoint = (runtimeRoute: RuntimeRoute): string => {
   switch (runtimeRoute.type) {
     case "local_http":
@@ -239,7 +247,9 @@ export const createLoadAgentSessions = ({
     );
     const runtimesByKind = new Map(runtimeLists);
 
-    const liveRuns = recordsToHydrate.some((record) => record.role === "build")
+    const liveRuns = recordsToHydrate.some(
+      (record) => record.role === "build" || record.role === "qa",
+    )
       ? await captureOrchestratorFallback(
           "load-sessions-list-runs",
           async () => host.runsList(repoPath),
@@ -276,16 +286,25 @@ export const createLoadAgentSessions = ({
       workingDirectory: string,
     ): RuntimeInstanceSummary | null => {
       const runtimes = runtimesByKind.get(runtimeKind) ?? [];
-      return runtimes.find((runtime) => runtime.workingDirectory === workingDirectory) ?? null;
+      const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
+      return (
+        runtimes.find(
+          (runtime) =>
+            normalizeWorkingDirectory(runtime.workingDirectory) === normalizedWorkingDirectory,
+        ) ?? null
+      );
     };
 
     const findRunByWorkingDirectory = (
       runtimeKind: RuntimeKind,
       workingDirectory: string,
     ): RunSummary | null => {
+      const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       return (
         liveRuns.find(
-          (run) => run.runtimeKind === runtimeKind && run.worktreePath === workingDirectory,
+          (run) =>
+            run.runtimeKind === runtimeKind &&
+            normalizeWorkingDirectory(run.worktreePath) === normalizedWorkingDirectory,
         ) ?? null
       );
     };
@@ -296,7 +315,7 @@ export const createLoadAgentSessions = ({
       const runtimeKind =
         record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
       const workingDirectory = record.workingDirectory;
-      if (record.role === "build") {
+      if (record.role === "build" || record.role === "qa") {
         const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
         if (run) {
           return {
@@ -316,6 +335,7 @@ export const createLoadAgentSessions = ({
 
       const shouldEnsureWorkspaceRuntime =
         record.role === "build" ||
+        (record.role === "qa" && workingDirectory !== repoPath) ||
         ((record.role === "spec" || record.role === "planner") && workingDirectory === repoPath);
       if (shouldEnsureWorkspaceRuntime) {
         const workspaceRuntime = await ensureWorkspaceRuntime(runtimeKind);

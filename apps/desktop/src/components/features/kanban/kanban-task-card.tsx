@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import {
   IssueTypeBadge,
   PriorityBadge,
+  QaRejectedBadge,
   RunStateBadge,
 } from "@/components/features/kanban/kanban-task-badges";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
@@ -27,6 +28,8 @@ type KanbanTaskCardProps = {
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart?: (taskId: string) => void;
+  onQaOpen?: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
@@ -98,6 +101,8 @@ const areKanbanTaskCardPropsEqual = (
   previous.onOpenDetails === next.onOpenDetails &&
   previous.onDelegate === next.onDelegate &&
   previous.onPlan === next.onPlan &&
+  previous.onQaStart === next.onQaStart &&
+  previous.onQaOpen === next.onQaOpen &&
   previous.onBuild === next.onBuild &&
   previous.onHumanApprove === next.onHumanApprove &&
   previous.onHumanRequestChanges === next.onHumanRequestChanges;
@@ -181,6 +186,7 @@ function TaskMeta({
     <div className="flex flex-wrap items-center gap-1.5">
       <IssueTypeBadge issueType={task.issueType} />
       <PriorityBadge priority={task.priority} />
+      <QaRejectedBadge task={task} />
       {task.subtaskIds.length > 0 ? (
         <Badge
           variant="secondary"
@@ -197,6 +203,8 @@ function TaskMeta({
 function TaskActions({
   task,
   onPlan,
+  onQaStart,
+  onQaOpen,
   onBuild,
   onDelegate,
   onHumanApprove,
@@ -204,6 +212,8 @@ function TaskActions({
 }: {
   task: TaskCard;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart?: (taskId: string) => void;
+  onQaOpen?: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
@@ -217,6 +227,12 @@ function TaskActions({
         return;
       case "open_builder":
         onBuild(task.id);
+        return;
+      case "open_qa":
+        onQaOpen?.(task.id);
+        return;
+      case "qa_start":
+        onQaStart?.(task.id);
         return;
       case "build_start":
         onDelegate(task.id);
@@ -239,8 +255,10 @@ function TaskActions({
         includeActions={[
           "set_spec",
           "set_plan",
+          "qa_start",
           "build_start",
           "open_builder",
+          "open_qa",
           "human_approve",
           "human_request_changes",
         ]}
@@ -261,6 +279,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onOpenDetails,
   onDelegate,
   onPlan,
+  onQaStart,
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
@@ -304,15 +323,14 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
 
         <TaskMeta task={task} runState={runState} />
 
-        {hasActiveSessions ? (
-          <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} />
-        ) : null}
+        {hasActiveSessions ? <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} /> : null}
 
         <TaskActions
           task={task}
           onPlan={onPlan}
           onBuild={onBuild}
           onDelegate={onDelegate}
+          {...(onQaStart ? { onQaStart } : {})}
           {...(onHumanApprove ? { onHumanApprove } : {})}
           {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
         />

@@ -6,6 +6,8 @@ export type TaskDetailsSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPlan?: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart?: (taskId: string) => void;
+  onQaOpen?: (taskId: string) => void;
   onBuild?: (taskId: string) => void;
   onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;

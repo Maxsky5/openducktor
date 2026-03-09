@@ -79,4 +79,34 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).not.toContain("Active sessions");
     expect(html).not.toContain("Active agent session");
   });
+
+  test("renders qa rejected badge for rework tasks", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-3",
+      title: "Fix OAuth flow",
+      status: "in_progress",
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          activeSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain("QA Rejected");
+  });
 });

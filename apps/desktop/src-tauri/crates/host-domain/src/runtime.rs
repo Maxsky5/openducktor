@@ -220,41 +220,18 @@ impl fmt::Display for RuntimeRole {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum AgentRuntimeRole {
-    Spec,
-    Planner,
-    Build,
-    Qa,
+pub enum QaReviewTargetSource {
+    ActiveBuildRun,
+    BuilderSession,
 }
 
-impl AgentRuntimeRole {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Spec => "spec",
-            Self::Planner => "planner",
-            Self::Build => "build",
-            Self::Qa => "qa",
-        }
-    }
-}
-
-impl fmt::Display for AgentRuntimeRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl From<AgentRuntimeRole> for RuntimeRole {
-    fn from(value: AgentRuntimeRole) -> Self {
-        match value {
-            AgentRuntimeRole::Spec => Self::Spec,
-            AgentRuntimeRole::Planner => Self::Planner,
-            AgentRuntimeRole::Build => Self::Build,
-            AgentRuntimeRole::Qa => Self::Qa,
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct QaReviewTarget {
+    pub working_directory: String,
+    pub source: QaReviewTargetSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

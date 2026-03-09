@@ -29,6 +29,8 @@ type UseKanbanSessionStartFlowResult = {
   sessionStartModal: SessionStartModalModel | null;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart: (taskId: string) => void;
+  onQaOpen: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   openBuildAfterHumanRequestChanges: (taskId: string) => void;
 };
@@ -311,6 +313,42 @@ export function useKanbanSessionStartFlow({
     [openAgents],
   );
 
+  const onQaStart = useCallback(
+    (taskId: string): void => {
+      openSessionStartModal({
+        taskId,
+        role: "qa",
+        scenario: "qa_review",
+        startMode: "reuse_latest",
+        sendKickoff: true,
+      });
+    },
+    [openSessionStartModal],
+  );
+
+  const onQaOpen = useCallback(
+    (taskId: string): void => {
+      const latestQaSession = findLatestSessionByRoleForTask(sessions, taskId, "qa");
+
+      if (latestQaSession) {
+        openSessionInAgentStudio(
+          {
+            taskId,
+            role: "qa",
+            scenario: "qa_review",
+            startMode: "reuse_latest",
+            sendKickoff: false,
+          },
+          latestQaSession.sessionId,
+        );
+        return;
+      }
+
+      openAgents(taskId, "qa", "qa_review");
+    },
+    [openAgents, openSessionInAgentStudio, sessions],
+  );
+
   const openBuildAfterHumanRequestChanges = useCallback(
     (taskId: string): void => {
       openSessionStartModal({
@@ -386,6 +424,8 @@ export function useKanbanSessionStartFlow({
     sessionStartModal,
     onDelegate,
     onPlan,
+    onQaStart,
+    onQaOpen,
     onBuild,
     openBuildAfterHumanRequestChanges,
   };

@@ -12,6 +12,7 @@ import {
   createAgentSessionActions,
   createEnsureRuntime,
   createLoadAgentSessions,
+  loadQaReviewTarget,
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
   loadTaskDocuments,
@@ -264,6 +265,8 @@ export function useAgentOrchestratorOperations({
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         updateSession,
         attachSessionListener,
+        resolveQaReviewTarget: async (repoPath, taskId) =>
+          (await loadQaReviewTarget(repoPath, taskId)).workingDirectory,
         ensureRuntime,
         loadTaskDocuments,
         loadRepoDefaultModel,

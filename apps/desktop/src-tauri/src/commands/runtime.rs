@@ -1,7 +1,6 @@
 use crate::{as_error, run_service_blocking, AppState};
 use host_domain::{
-    AgentRuntimeRole, BeadsCheck, RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary,
-    SystemCheck,
+    BeadsCheck, QaReviewTarget, RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary, SystemCheck,
 };
 use tauri::State;
 
@@ -54,16 +53,14 @@ pub async fn runtime_list(
 }
 
 #[tauri::command]
-pub async fn runtime_start(
+pub async fn qa_review_target_get(
     state: State<'_, AppState>,
-    runtime_kind: String,
     repo_path: String,
     task_id: String,
-    role: AgentRuntimeRole,
-) -> Result<RuntimeInstanceSummary, String> {
+ ) -> Result<QaReviewTarget, String> {
     let service = state.service.clone();
-    let result = run_service_blocking("runtime_start", move || {
-        service.runtime_start(&runtime_kind, &repo_path, &task_id, role)
+    let result = run_service_blocking("qa_review_target_get", move || {
+        service.qa_review_target_get(&repo_path, &task_id)
     })
     .await;
     as_error(result)
@@ -98,49 +95,36 @@ pub async fn runtime_ensure(
 
 #[cfg(test)]
 mod tests {
-    use super::AgentRuntimeRole;
     use serde::Deserialize;
     use serde_json::json;
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
-    struct RuntimeStartPayload {
-        runtime_kind: String,
+    struct QaReviewTargetGetPayload {
         repo_path: String,
         task_id: String,
-        role: AgentRuntimeRole,
     }
 
     #[test]
-    fn runtime_start_payload_accepts_spec_role() {
+    fn qa_review_target_get_payload_accepts_task_identifiers() {
         let payload = json!({
-            "runtimeKind": "opencode",
             "repoPath": "/repo",
             "taskId": "task-1",
-            "role": "spec",
         });
-        let parsed: RuntimeStartPayload =
+        let parsed: QaReviewTargetGetPayload =
             serde_json::from_value(payload).expect("payload should deserialize");
-        assert_eq!(parsed.runtime_kind, "opencode");
         assert_eq!(parsed.repo_path, "/repo");
         assert_eq!(parsed.task_id, "task-1");
-        assert_eq!(parsed.role, AgentRuntimeRole::Spec);
     }
 
     #[test]
-    fn runtime_start_payload_rejects_workspace_role() {
+    fn qa_review_target_get_payload_rejects_missing_task_id() {
         let payload = json!({
-            "runtimeKind": "opencode",
             "repoPath": "/repo",
-            "taskId": "task-1",
-            "role": "workspace",
         });
-        let error = serde_json::from_value::<RuntimeStartPayload>(payload)
-            .expect_err("workspace role should be rejected at command boundary");
+        let error = serde_json::from_value::<QaReviewTargetGetPayload>(payload)
+            .expect_err("task id should be required at command boundary");
         let message = error.to_string();
-        assert!(message.contains("unknown variant `workspace`"));
-        assert!(message.contains("spec"));
-        assert!(message.contains("planner"));
-        assert!(message.contains("qa"));
+        assert!(message.contains("taskId"));
     }
 }

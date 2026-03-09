@@ -1,7 +1,7 @@
 use anyhow::Result;
 use host_domain::{
-    CreateTaskInput, IssueType, PlanSubtaskInput, RuntimeRole, TaskAction, TaskStatus, TaskStore,
-    UpdateTaskPatch,
+    CreateTaskInput, IssueType, PlanSubtaskInput, QaWorkflowVerdict, RuntimeRole, TaskAction,
+    TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, OpencodeStartupReadinessConfig, RuntimeConfig, RuntimeConfigStore,
@@ -312,8 +312,32 @@ fn in_progress_tasks_expose_builder_action_and_no_plan_actions() {
     let task = make_task("task-1", "task", TaskStatus::InProgress);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));
     assert!(actions.contains(&TaskAction::OpenBuilder));
+    assert!(!actions.contains(&TaskAction::BuildStart));
+    assert!(!actions.contains(&TaskAction::OpenQa));
     assert!(!actions.contains(&TaskAction::SetSpec));
     assert!(!actions.contains(&TaskAction::SetPlan));
+}
+
+#[test]
+fn qa_rejected_in_progress_tasks_expose_rework_and_open_qa_actions() {
+    let mut task = make_task("task-1", "task", TaskStatus::InProgress);
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+    assert!(actions.contains(&TaskAction::BuildStart));
+    assert!(actions.contains(&TaskAction::OpenBuilder));
+    assert!(actions.contains(&TaskAction::OpenQa));
+}
+
+#[test]
+fn ai_review_tasks_expose_qa_start_and_hide_build_start() {
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+    assert!(actions.contains(&TaskAction::QaStart));
+    assert!(!actions.contains(&TaskAction::BuildStart));
+    assert!(actions.contains(&TaskAction::OpenBuilder));
 }
 
 #[test]

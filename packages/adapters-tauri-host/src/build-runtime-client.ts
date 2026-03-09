@@ -1,7 +1,8 @@
 import {
-  type AgentRuntimeStartRole,
   type BeadsCheck,
   beadsCheckSchema,
+  type QaReviewTarget,
+  qaReviewTargetSchema,
   type RunSummary,
   type RuntimeCheck,
   type RuntimeDescriptor,
@@ -19,7 +20,6 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
 
-export type RuntimeRole = AgentRuntimeStartRole;
 export type BuildRespondAction = "approve" | "deny" | "message";
 export type BuildCleanupMode = "success" | "failure";
 
@@ -57,20 +57,16 @@ export const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<Runtim
   return parseArray(runtimeDescriptorSchema, payload);
 };
 
-export const runtimeStart = async (
+export const qaReviewTargetGet = async (
   invokeFn: InvokeFn,
-  runtimeKind: RuntimeKind,
   repoPath: string,
   taskId: string,
-  role: RuntimeRole,
-): Promise<RuntimeInstanceSummary> => {
-  const payload = await invokeFn<unknown>("runtime_start", {
-    runtimeKind,
+): Promise<QaReviewTarget> => {
+  const payload = await invokeFn<unknown>("qa_review_target_get", {
     repoPath,
     taskId,
-    role,
   });
-  return runtimeInstanceSummarySchema.parse(payload);
+  return qaReviewTargetSchema.parse(payload);
 };
 
 export const runtimeStop = async (
@@ -221,13 +217,8 @@ export class TauriAgentClient {
     return runtimeDefinitionsList(this.invokeFn);
   }
 
-  async runtimeStart(
-    runtimeKind: RuntimeKind,
-    repoPath: string,
-    taskId: string,
-    role: RuntimeRole,
-  ): Promise<RuntimeInstanceSummary> {
-    return runtimeStart(this.invokeFn, runtimeKind, repoPath, taskId, role);
+  async qaReviewTargetGet(repoPath: string, taskId: string): Promise<QaReviewTarget> {
+    return qaReviewTargetGet(this.invokeFn, repoPath, taskId);
   }
 
   async runtimeStop(runtimeId: string): Promise<{ ok: boolean }> {

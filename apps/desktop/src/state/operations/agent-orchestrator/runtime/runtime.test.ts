@@ -201,8 +201,8 @@ describe("agent-orchestrator-runtime", () => {
         kind: "opencode",
         runtimeId: "runtime-shared",
         repoPath: "/tmp/repo",
-        taskId: "task-1",
-        role: "planner",
+        taskId: null,
+        role: "workspace",
         workingDirectory: "/tmp/repo/shared",
         runtimeRoute: {
           type: "local_http",
@@ -257,8 +257,8 @@ describe("agent-orchestrator-runtime", () => {
         kind: "opencode",
         runtimeId: "runtime-shared",
         repoPath: "/tmp/repo",
-        taskId: "task-1",
-        role: "planner",
+        taskId: null,
+        role: "workspace",
         workingDirectory: "/tmp/repo/shared",
         runtimeRoute: {
           type: "local_http",
@@ -307,8 +307,8 @@ describe("agent-orchestrator-runtime", () => {
         kind: "opencode",
         runtimeId: "runtime-shared",
         repoPath: "/tmp/repo",
-        taskId: "task-1",
-        role: "planner",
+        taskId: null,
+        role: "workspace",
         workingDirectory: "/tmp/repo/shared",
         runtimeRoute: {
           type: "local_http",
@@ -500,18 +500,53 @@ describe("agent-orchestrator-runtime", () => {
     }
   });
 
-  test("uses qa runtime for qa role", async () => {
-    const originalRuntimeStart = host.runtimeStart;
-    host.runtimeStart = async () => ({
+  test("uses the active build run runtime for qa when the review target matches it", async () => {
+    const originalQaReviewTargetGet = host.qaReviewTargetGet;
+    host.qaReviewTargetGet = async () => ({
+      workingDirectory: "/tmp/repo/worktree",
+      source: "active_build_run",
+    });
+
+    try {
+      const ensureRuntime = createEnsureRuntime({
+        runsRef: { current: [runningRunFixture] },
+        refreshTaskData: async () => {},
+      });
+
+      const runtime = await ensureRuntime("/tmp/repo", "task-1", "qa");
+      expect(runtime).toEqual({
+        runtimeKind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeConnection: {
+          endpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      });
+    } finally {
+      host.qaReviewTargetGet = originalQaReviewTargetGet;
+    }
+  });
+
+  test("uses the shared repo runtime for qa when only a persisted builder worktree exists", async () => {
+    const originalQaReviewTargetGet = host.qaReviewTargetGet;
+    const originalRepoRuntimeEnsure = host.runtimeEnsure;
+    host.qaReviewTargetGet = async () => ({
+      workingDirectory: "/tmp/repo/worktrees/task-1",
+      source: "builder_session",
+    });
+    host.runtimeEnsure = async () => ({
       kind: "opencode",
-      runtimeId: "runtime-qa",
+      runtimeId: "runtime-shared",
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      role: "qa",
-      workingDirectory: "/tmp/repo/qa",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/tmp/repo",
       runtimeRoute: {
         type: "local_http",
-        endpoint: "http://127.0.0.1:4555",
+        endpoint: "http://127.0.0.1:4666",
       },
       startedAt: "2026-02-22T08:00:00.000Z",
       descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -526,17 +561,18 @@ describe("agent-orchestrator-runtime", () => {
       const runtime = await ensureRuntime("/tmp/repo", "task-1", "qa");
       expect(runtime).toEqual({
         runtimeKind: "opencode",
-        runtimeId: "runtime-qa",
+        runtimeId: "runtime-shared",
         runId: null,
         runtimeConnection: {
-          endpoint: "http://127.0.0.1:4555",
-          workingDirectory: "/tmp/repo/qa",
+          endpoint: "http://127.0.0.1:4666",
+          workingDirectory: "/tmp/repo/worktrees/task-1",
         },
-        runtimeEndpoint: "http://127.0.0.1:4555",
-        workingDirectory: "/tmp/repo/qa",
+        runtimeEndpoint: "http://127.0.0.1:4666",
+        workingDirectory: "/tmp/repo/worktrees/task-1",
       });
     } finally {
-      host.runtimeStart = originalRuntimeStart;
+      host.qaReviewTargetGet = originalQaReviewTargetGet;
+      host.runtimeEnsure = originalRepoRuntimeEnsure;
     }
   });
 
@@ -546,8 +582,8 @@ describe("agent-orchestrator-runtime", () => {
       kind: "opencode",
       runtimeId: "runtime-shared",
       repoPath: "/tmp/repo",
-      taskId: "task-1",
-      role: "planner",
+      taskId: null,
+      role: "workspace",
       workingDirectory: "/tmp/repo/shared",
       runtimeRoute: {
         type: "local_http",

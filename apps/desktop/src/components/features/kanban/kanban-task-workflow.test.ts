@@ -88,6 +88,36 @@ describe("resolveTaskCardActions", () => {
     expect(result.primaryAction).toBe("open_builder");
   });
 
+  test("uses qa_start as primary during ai review", () => {
+    const task = createTaskCardFixture({
+      status: "ai_review",
+      issueType: "epic",
+      availableActions: ["open_builder", "qa_start"],
+    });
+
+    const result = resolveTaskCardActions(task);
+
+    expect(result.primaryAction).toBe("qa_start");
+  });
+
+  test("uses build_start as primary for qa rejected in-progress tasks", () => {
+    const task = createTaskCardFixture({
+      status: "in_progress",
+      issueType: "task",
+      availableActions: ["open_builder", "open_qa", "build_start"],
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "rejected" },
+      },
+    });
+
+    const result = resolveTaskCardActions(task);
+
+    expect(result.primaryAction).toBe("build_start");
+    expect(result.secondaryActions).toEqual(["open_builder", "open_qa"]);
+  });
+
   test("uses human_approve as primary during human review", () => {
     const task = createTaskCardFixture({
       status: "human_review",
