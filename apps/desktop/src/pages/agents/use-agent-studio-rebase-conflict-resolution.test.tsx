@@ -1,32 +1,15 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { useAgentStudioRebaseConflictResolution } from "./use-agent-studio-rebase-conflict-resolution";
 
 enableReactActEnvironment();
 
-const loadEffectivePromptOverridesMock = mock(async () => ({}));
-const toastErrorMock = mock(() => {});
-
-mock.module("../../state/operations/prompt-overrides", () => ({
-  loadEffectivePromptOverrides: loadEffectivePromptOverridesMock,
-}));
-
-mock.module("sonner", () => ({
-  toast: {
-    error: toastErrorMock,
-  },
-}));
-
-type UseAgentStudioRebaseConflictResolutionHook =
-  typeof import("./use-agent-studio-rebase-conflict-resolution")["useAgentStudioRebaseConflictResolution"];
-
-let useAgentStudioRebaseConflictResolution: UseAgentStudioRebaseConflictResolutionHook;
-
-type HookArgs = Parameters<UseAgentStudioRebaseConflictResolutionHook>[0];
+type HookArgs = Parameters<typeof useAgentStudioRebaseConflictResolution>[0];
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioRebaseConflictResolution, initialProps);
@@ -88,21 +71,10 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     onContextSwitchIntent: mock(() => {}),
     startAgentSession: mock(async () => "build-new-1"),
     sendAgentMessage: mock(async () => {}),
+    loadPromptOverrides: mock(async () => ({})),
     ...overrides,
   };
 };
-
-beforeAll(async () => {
-  ({ useAgentStudioRebaseConflictResolution } = await import(
-    "./use-agent-studio-rebase-conflict-resolution"
-  ));
-});
-
-beforeEach(() => {
-  loadEffectivePromptOverridesMock.mockClear();
-  toastErrorMock.mockClear();
-  loadEffectivePromptOverridesMock.mockImplementation(async () => ({}));
-});
 
 describe("useAgentStudioRebaseConflictResolution", () => {
   test("routes conflict resolution to an existing Builder session", async () => {

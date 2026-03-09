@@ -20,6 +20,15 @@ type RebaseConflictResolutionModalProps = {
   onResolve: (decision: RebaseConflictResolutionDecision) => void;
 };
 
+type UseRebaseConflictResolutionModalStateResult = {
+  mode: "existing" | "new";
+  selectedSessionId: string;
+  hasExistingSessions: boolean;
+  confirmDisabled: boolean;
+  setMode: (mode: "existing" | "new") => void;
+  setSelectedSessionId: (sessionId: string) => void;
+};
+
 const formatConflictResolutionSessionMeta = (session: AgentSessionState): string => {
   const startedAt = new Date(session.startedAt);
   const startedAtLabel = Number.isNaN(startedAt.getTime())
@@ -28,10 +37,9 @@ const formatConflictResolutionSessionMeta = (session: AgentSessionState): string
   return `${startedAtLabel} · ${session.status} · ${session.sessionId.slice(0, 8)}`;
 };
 
-export function RebaseConflictResolutionModal({
-  request,
-  onResolve,
-}: RebaseConflictResolutionModalProps): ReactElement {
+export function useRebaseConflictResolutionModalState(
+  request: PendingRebaseConflictResolutionRequest,
+): UseRebaseConflictResolutionModalStateResult {
   const [mode, setMode] = useState<"existing" | "new">(request.defaultMode);
   const [selectedSessionId, setSelectedSessionId] = useState(request.defaultSessionId ?? "");
   const hasExistingSessions = request.builderSessions.length > 0;
@@ -41,6 +49,29 @@ export function RebaseConflictResolutionModal({
     setMode(request.defaultMode);
     setSelectedSessionId(request.defaultSessionId ?? "");
   }, [request]);
+
+  return {
+    mode,
+    selectedSessionId,
+    hasExistingSessions,
+    confirmDisabled,
+    setMode,
+    setSelectedSessionId,
+  };
+}
+
+export function RebaseConflictResolutionModal({
+  request,
+  onResolve,
+}: RebaseConflictResolutionModalProps): ReactElement {
+  const {
+    mode,
+    selectedSessionId,
+    hasExistingSessions,
+    confirmDisabled,
+    setMode,
+    setSelectedSessionId,
+  } = useRebaseConflictResolutionModalState(request);
 
   return (
     <Dialog

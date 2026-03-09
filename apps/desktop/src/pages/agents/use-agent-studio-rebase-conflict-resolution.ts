@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -55,6 +55,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   onContextSwitchIntent: () => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
+  loadPromptOverrides?: (repoPath: string) => Promise<RepoPromptOverrides>;
 };
 
 type UseAgentStudioRebaseConflictResolutionResult = {
@@ -70,6 +71,7 @@ export function useAgentStudioRebaseConflictResolution({
   onContextSwitchIntent,
   startAgentSession,
   sendAgentMessage,
+  loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
   const [pendingRebaseConflictResolutionRequest, setPendingRebaseConflictResolutionRequest] =
     useState<PendingRebaseConflictResolutionRequest | null>(null);
@@ -169,7 +171,7 @@ export function useAgentStudioRebaseConflictResolution({
         return false;
       }
 
-      const promptOverrides = await loadEffectivePromptOverrides(activeRepo);
+      const promptOverrides = await loadPromptOverrides(activeRepo);
       const message = buildRebaseConflictResolutionPrompt(selection.viewTaskId, {
         overrides: promptOverrides,
         ...(selection.viewSelectedTask
@@ -244,6 +246,7 @@ export function useAgentStudioRebaseConflictResolution({
       selection,
       sendConflictResolutionMessage,
       startAgentSession,
+      loadPromptOverrides,
     ],
   );
 

@@ -4,6 +4,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
+  type SessionStartModalOpenRequest,
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
 } from "../shared/use-session-start-modal-coordinator";
@@ -17,13 +18,40 @@ type AgentStudioSessionStartModalBridgeProps = {
   onResolve: (decision: NewSessionStartDecision) => void;
 };
 
+type UseSessionStartModalRequestActivationArgs = {
+  request: PendingSessionStartRequest;
+  openStartModal: (request: SessionStartModalOpenRequest) => void;
+};
+
+export function useSessionStartModalRequestActivation({
+  request,
+  openStartModal,
+}: UseSessionStartModalRequestActivationArgs): void {
+  const openedRequestIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (openedRequestIdRef.current === request.requestId) {
+      return;
+    }
+    openedRequestIdRef.current = request.requestId;
+
+    openStartModal({
+      source: "agent_studio",
+      taskId: request.taskId,
+      role: request.role,
+      scenario: request.scenario,
+      startMode: request.startMode,
+      selectedModel: request.selectedModel,
+      postStartAction: toSessionStartPostAction(request.reason),
+    });
+  }, [openStartModal, request]);
+}
+
 export function AgentStudioSessionStartModalBridge({
   request,
   activeRepo,
   repoSettings,
   onResolve,
 }: AgentStudioSessionStartModalBridgeProps): ReactElement {
-  const openedRequestIdRef = useRef<string | null>(null);
   const {
     intent,
     isOpen,
@@ -48,22 +76,7 @@ export function AgentStudioSessionStartModalBridge({
     repoSettings,
   });
 
-  useEffect(() => {
-    if (openedRequestIdRef.current === request.requestId) {
-      return;
-    }
-    openedRequestIdRef.current = request.requestId;
-
-    openStartModal({
-      source: "agent_studio",
-      taskId: request.taskId,
-      role: request.role,
-      scenario: request.scenario,
-      startMode: request.startMode,
-      selectedModel: request.selectedModel,
-      postStartAction: toSessionStartPostAction(request.reason),
-    });
-  }, [openStartModal, request]);
+  useSessionStartModalRequestActivation({ request, openStartModal });
 
   return (
     <SessionStartModal
