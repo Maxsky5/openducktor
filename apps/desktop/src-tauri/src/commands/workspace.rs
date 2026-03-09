@@ -1,27 +1,16 @@
 use crate::{
-    as_error, run_service_blocking, AppState, HookTrustChallenge, RepoConfigPayload,
-    RepoSettingsPayload, SettingsSnapshotPayload, SettingsSnapshotResponsePayload,
-    HOOK_TRUST_CHALLENGE_TTL,
+    as_error, run_service_blocking, AppState, RepoConfigPayload, RepoSettingsPayload,
+    SettingsSnapshotPayload, SettingsSnapshotResponsePayload,
 };
-use host_infra_system::{hook_set_fingerprint, HookSet, RepoConfig};
-use std::path::Path;
-use std::time::SystemTime;
+use host_application::{
+    HookTrustConfirmationPort, HookTrustConfirmationRequest, PreparedHookTrustChallenge,
+    RepoConfigUpdate, RepoSettingsUpdate,
+};
+use host_infra_system::HookSet;
 #[cfg(test)]
 use tauri::Manager;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-use uuid::Uuid;
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HookTrustChallengePayload {
-    nonce: String,
-    repo_path: String,
-    fingerprint: String,
-    expires_at: String,
-    pre_start_count: usize,
-    post_complete_count: usize,
-}
 
 #[tauri::command]
 pub async fn workspace_list(
@@ -54,72 +43,18 @@ pub async fn workspace_update_repo_config(
     repo_path: String,
     config: RepoConfigPayload,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    let existing = as_error(state.service.workspace_get_repo_config_optional(&repo_path))?;
-
-    let repo_config = RepoConfig {
-        default_runtime_kind: config
-            .default_runtime_kind
-            .or_else(|| {
-                existing
-                    .as_ref()
-                    .map(|entry| entry.default_runtime_kind.clone())
-            })
-            .unwrap_or_else(|| "opencode".to_string()),
-        worktree_base_path: config.worktree_base_path.or_else(|| {
-            existing
-                .as_ref()
-                .and_then(|entry| entry.worktree_base_path.clone())
-        }),
-        branch_prefix: config
-            .branch_prefix
-            .or_else(|| existing.as_ref().map(|entry| entry.branch_prefix.clone()))
-            .unwrap_or_else(|| "obp".to_string()),
-        default_target_branch: config
-            .default_target_branch
-            .or_else(|| {
-                existing
-                    .as_ref()
-                    .map(|entry| entry.default_target_branch.clone())
-            })
-            .unwrap_or_else(|| "origin/main".to_string()),
-        trusted_hooks: existing
-            .as_ref()
-            .map(|entry| entry.trusted_hooks)
-            .unwrap_or(false),
-        trusted_hooks_fingerprint: existing
-            .as_ref()
-            .and_then(|entry| entry.trusted_hooks_fingerprint.clone()),
-        hooks: existing
-            .as_ref()
-            .map(|entry| entry.hooks.clone())
-            .unwrap_or_default(),
-        worktree_file_copies: config
-            .worktree_file_copies
-            .or_else(|| {
-                existing
-                    .as_ref()
-                    .map(|entry| entry.worktree_file_copies.clone())
-            })
-            .unwrap_or_default(),
-        prompt_overrides: config
-            .prompt_overrides
-            .or_else(|| {
-                existing
-                    .as_ref()
-                    .map(|entry| entry.prompt_overrides.clone())
-            })
-            .unwrap_or_default(),
-        agent_defaults: config
-            .agent_defaults
-            .or_else(|| existing.as_ref().map(|entry| entry.agent_defaults.clone()))
-            .unwrap_or_default(),
-    };
-
-    as_error(
-        state
-            .service
-            .workspace_update_repo_config(&repo_path, repo_config),
-    )
+    as_error(state.service.workspace_merge_repo_config(
+        &repo_path,
+        RepoConfigUpdate {
+            default_runtime_kind: config.default_runtime_kind,
+            worktree_base_path: config.worktree_base_path,
+            branch_prefix: config.branch_prefix,
+            default_target_branch: config.default_target_branch,
+            worktree_file_copies: config.worktree_file_copies,
+            prompt_overrides: config.prompt_overrides,
+            agent_defaults: config.agent_defaults,
+        },
+    ))
 }
 
 // Generic runtime keeps this command testable under MockRuntime without changing
@@ -131,52 +66,25 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
     repo_path: String,
     settings: RepoSettingsPayload,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    let existing =
-        as_error(state.service.workspace_get_repo_config_optional(&repo_path))?.unwrap_or_default();
-
-    let (normalized_hooks, trusted_hooks_fingerprint) = normalize_hooks_with_trust_confirmation(
-        &app,
-        repo_path.as_str(),
-        &existing,
-        settings.trusted_hooks,
-        settings.hooks.unwrap_or_else(|| existing.hooks.clone()),
-    )
-    .await?;
-
-    let final_repo_config = RepoConfig {
-        default_runtime_kind: settings
-            .default_runtime_kind
-            .map(|runtime_kind| runtime_kind.trim().to_string())
-            .map(|runtime_kind| {
-                if runtime_kind.is_empty() {
-                    Err("defaultRuntimeKind cannot be blank".to_string())
-                } else {
-                    Ok(runtime_kind)
-                }
-            })
-            .transpose()?
-            .unwrap_or(existing.default_runtime_kind),
-        worktree_base_path: settings.worktree_base_path.or(existing.worktree_base_path),
-        branch_prefix: settings.branch_prefix.unwrap_or(existing.branch_prefix),
-        default_target_branch: settings
-            .default_target_branch
-            .unwrap_or(existing.default_target_branch),
+    let service = state.service.clone();
+    let confirmation_port = TauriHookTrustConfirmationPort::new(app);
+    let update = RepoSettingsUpdate {
+        default_runtime_kind: settings.default_runtime_kind,
+        worktree_base_path: settings.worktree_base_path,
+        branch_prefix: settings.branch_prefix,
+        default_target_branch: settings.default_target_branch,
         trusted_hooks: settings.trusted_hooks,
-        trusted_hooks_fingerprint,
-        hooks: normalized_hooks,
-        worktree_file_copies: settings
-            .worktree_file_copies
-            .unwrap_or(existing.worktree_file_copies),
-        prompt_overrides: settings
-            .prompt_overrides
-            .unwrap_or(existing.prompt_overrides),
-        agent_defaults: settings.agent_defaults.unwrap_or(existing.agent_defaults),
+        hooks: settings.hooks,
+        worktree_file_copies: settings.worktree_file_copies,
+        prompt_overrides: settings.prompt_overrides,
+        agent_defaults: settings.agent_defaults,
     };
 
     as_error(
-        state
-            .service
-            .workspace_update_repo_config(&repo_path, final_repo_config),
+        run_service_blocking("workspace_save_repo_settings", move || {
+            service.workspace_save_repo_settings(&repo_path, update, &confirmation_port)
+        })
+        .await,
     )
 }
 
@@ -193,39 +101,12 @@ pub async fn workspace_update_repo_hooks(
 pub async fn workspace_prepare_trusted_hooks_challenge(
     state: State<'_, AppState>,
     repo_path: String,
-) -> Result<HookTrustChallengePayload, String> {
-    let repo_config = as_error(state.service.workspace_get_repo_config(&repo_path))?;
-    let canonical_repo_path = canonical_repo_key(&repo_path);
-    let fingerprint = hook_set_fingerprint(&repo_config.hooks);
-    let nonce = format!("hooks-trust-{}", Uuid::new_v4().simple());
-    let expires_at = SystemTime::now()
-        .checked_add(HOOK_TRUST_CHALLENGE_TTL)
-        .ok_or_else(|| "Failed to allocate hook trust challenge window.".to_string())?;
-
-    {
-        let mut challenges = state
-            .hook_trust_challenges
-            .lock()
-            .map_err(|_| "Hook trust challenge lock poisoned".to_string())?;
-        prune_expired_hook_trust_challenges(&mut challenges);
-        challenges.insert(
-            nonce.clone(),
-            HookTrustChallenge {
-                repo_path: canonical_repo_path.clone(),
-                fingerprint: fingerprint.clone(),
-                expires_at,
-            },
-        );
-    }
-
-    Ok(HookTrustChallengePayload {
-        nonce,
-        repo_path: canonical_repo_path,
-        fingerprint,
-        expires_at: chrono::DateTime::<chrono::Utc>::from(expires_at).to_rfc3339(),
-        pre_start_count: repo_config.hooks.pre_start.len(),
-        post_complete_count: repo_config.hooks.post_complete.len(),
-    })
+) -> Result<PreparedHookTrustChallenge, String> {
+    as_error(
+        state
+            .service
+            .workspace_prepare_trusted_hooks_challenge(&repo_path),
+    )
 }
 
 #[tauri::command]
@@ -255,33 +136,22 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
     snapshot: SettingsSnapshotPayload,
 ) -> Result<Vec<host_domain::WorkspaceRecord>, String> {
     let SettingsSnapshotPayload {
-        mut repos,
+        repos,
         global_prompt_overrides,
     } = snapshot;
-
-    for (repo_path, repo_config) in repos.iter_mut() {
-        let existing = as_error(state.service.workspace_get_repo_config_optional(repo_path))?
-            .unwrap_or_default();
-        let submitted_hooks = std::mem::take(&mut repo_config.hooks);
-        let (normalized_hooks, trusted_hooks_fingerprint) =
-            normalize_hooks_with_trust_confirmation(
-                &app,
-                repo_path.as_str(),
-                &existing,
-                repo_config.trusted_hooks,
-                submitted_hooks,
-            )
-            .await?;
-        repo_config.hooks = normalized_hooks;
-        repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
-    }
+    let service = state.service.clone();
+    let confirmation_port = TauriHookTrustConfirmationPort::new(app);
 
     as_error(
-        state
-            .service
-            .workspace_save_settings_snapshot(repos, global_prompt_overrides),
-    )?;
-    as_error(state.service.workspace_list())
+        run_service_blocking("workspace_save_settings_snapshot", move || {
+            service.workspace_save_settings_snapshot(
+                repos,
+                global_prompt_overrides,
+                &confirmation_port,
+            )
+        })
+        .await,
+    )
 }
 
 // Generic runtime keeps this command testable under MockRuntime without changing
@@ -295,60 +165,21 @@ pub async fn workspace_set_trusted_hooks<R: tauri::Runtime>(
     challenge_nonce: Option<String>,
     challenge_fingerprint: Option<String>,
 ) -> Result<host_domain::WorkspaceRecord, String> {
-    if !trusted {
-        return as_error(
-            state
-                .service
-                .workspace_set_trusted_hooks(&repo_path, false, None),
-        );
-    }
+    let service = state.service.clone();
+    let confirmation_port = TauriHookTrustConfirmationPort::new(app);
 
-    let nonce = challenge_nonce
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "Hook trust confirmation requires challenge nonce.".to_string())?;
-    let expected_fingerprint = challenge_fingerprint
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "Hook trust confirmation requires challenge fingerprint.".to_string())?;
-
-    let canonical_repo_path = canonical_repo_key(&repo_path);
-    let challenge = {
-        let mut challenges = state
-            .hook_trust_challenges
-            .lock()
-            .map_err(|_| "Hook trust challenge lock poisoned".to_string())?;
-        prune_expired_hook_trust_challenges(&mut challenges);
-        let Some(challenge) = challenges.remove(&nonce) else {
-            return Err(
-                "Hook trust challenge is missing or expired. Retry confirmation.".to_string(),
-            );
-        };
-
-        validate_trust_challenge_entry(
-            &challenge,
-            canonical_repo_path.as_str(),
-            expected_fingerprint.as_str(),
-            SystemTime::now(),
-        )?;
-
-        challenge
-    };
-
-    let repo_config = as_error(state.service.workspace_get_repo_config(&repo_path))?;
-    let latest_fingerprint = hook_set_fingerprint(&repo_config.hooks);
-    if latest_fingerprint != challenge.fingerprint {
-        return Err(
-            "Hook commands changed after challenge generation. Request trust confirmation again."
-                .to_string(),
-        );
-    }
-
-    confirm_hook_trust_dialog(&app, canonical_repo_path.as_str(), &repo_config.hooks).await?;
-
-    as_error(state.service.workspace_set_trusted_hooks(
-        &repo_path,
-        true,
-        Some(challenge.fingerprint.as_str()),
-    ))
+    as_error(
+        run_service_blocking("workspace_set_trusted_hooks", move || {
+            service.workspace_set_trusted_hooks(
+                &repo_path,
+                trusted,
+                challenge_nonce.as_deref(),
+                challenge_fingerprint.as_deref(),
+                &confirmation_port,
+            )
+        })
+        .await,
+    )
 }
 
 #[tauri::command]
@@ -359,20 +190,6 @@ pub async fn get_theme(state: State<'_, AppState>) -> Result<String, String> {
 #[tauri::command]
 pub async fn set_theme(state: State<'_, AppState>, theme: String) -> Result<(), String> {
     as_error(state.service.set_theme(&theme))
-}
-
-fn canonical_repo_key(repo_path: &str) -> String {
-    std::fs::canonicalize(Path::new(repo_path))
-        .ok()
-        .and_then(|path| path.to_str().map(|value| value.to_string()))
-        .unwrap_or_else(|| repo_path.trim().to_string())
-}
-
-fn prune_expired_hook_trust_challenges(
-    challenges: &mut std::collections::HashMap<String, HookTrustChallenge>,
-) {
-    let now = SystemTime::now();
-    challenges.retain(|_, challenge| challenge.expires_at > now);
 }
 
 fn format_hook_list(commands: &[String]) -> String {
@@ -412,145 +229,84 @@ fn sanitize_hook_preview(command: &str) -> String {
     escaped
 }
 
-// Generic runtime keeps dialog plumbing compatible with command tests that run
-// under MockRuntime.
-async fn confirm_hook_trust_dialog<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    repo_path: &str,
-    hooks: &HookSet,
-) -> Result<(), String> {
-    #[cfg(test)]
-    {
-        let test_response = {
-            let state = app.state::<AppState>();
-            let response = state
-                .hook_trust_dialog_test_response
-                .lock()
-                .map_err(|_| "Hook trust dialog test response lock poisoned".to_string())?;
-            *response
-        };
-        if let Some(confirmed) = test_response {
-            if !confirmed {
-                return Err("Hook trust confirmation was cancelled by the user.".to_string());
+struct TauriHookTrustConfirmationPort<R: tauri::Runtime> {
+    app: AppHandle<R>,
+}
+
+impl<R: tauri::Runtime> TauriHookTrustConfirmationPort<R> {
+    fn new(app: AppHandle<R>) -> Self {
+        Self { app }
+    }
+}
+
+impl<R: tauri::Runtime> HookTrustConfirmationPort for TauriHookTrustConfirmationPort<R> {
+    fn confirm_trusted_hooks(&self, request: &HookTrustConfirmationRequest) -> anyhow::Result<()> {
+        #[cfg(test)]
+        {
+            let test_response = {
+                let state = self.app.state::<AppState>();
+                let response = state.hook_trust_dialog_test_response.lock().map_err(|_| {
+                    anyhow::anyhow!("Hook trust dialog test response lock poisoned")
+                })?;
+                *response
+            };
+            if let Some(confirmed) = test_response {
+                if !confirmed {
+                    return Err(anyhow::anyhow!(
+                        "Hook trust confirmation was cancelled by the user."
+                    ));
+                }
+                return Ok(());
             }
-            return Ok(());
         }
+
+        let dialog_message = format!(
+            "Approve trusted scripts for this workspace?\n\nRepository:\n{repo}\n\nWorktree setup script commands:\n{pre}\n\nWorktree cleanup script commands:\n{post}\n\nTrusted scripts can execute shell commands on this machine.",
+            repo = request.repo_path,
+            pre = format_hook_list(&request.hooks.pre_start),
+            post = format_hook_list(&request.hooks.post_complete),
+        );
+
+        let confirmed = self
+            .app
+            .dialog()
+            .message(dialog_message)
+            .title("Trust Workspace Scripts")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Trust scripts".to_string(),
+                "Cancel".to_string(),
+            ))
+            .blocking_show();
+
+        if !confirmed {
+            return Err(anyhow::anyhow!(
+                "Hook trust confirmation was cancelled by the user."
+            ));
+        }
+
+        Ok(())
     }
-
-    let dialog_message = format!(
-        "Approve trusted scripts for this workspace?\n\nRepository:\n{repo}\n\nWorktree setup script commands:\n{pre}\n\nWorktree cleanup script commands:\n{post}\n\nTrusted scripts can execute shell commands on this machine.",
-        repo = repo_path,
-        pre = format_hook_list(&hooks.pre_start),
-        post = format_hook_list(&hooks.post_complete),
-    );
-
-    let app_handle = app.clone();
-    let confirmed = as_error(
-        run_service_blocking("workspace_set_trusted_hooks_confirm", move || {
-            Ok(app_handle
-                .dialog()
-                .message(dialog_message)
-                .title("Trust Workspace Scripts")
-                .kind(MessageDialogKind::Warning)
-                .buttons(MessageDialogButtons::OkCancelCustom(
-                    "Trust scripts".to_string(),
-                    "Cancel".to_string(),
-                ))
-                .blocking_show())
-        })
-        .await,
-    )?;
-
-    if !confirmed {
-        return Err("Hook trust confirmation was cancelled by the user.".to_string());
-    }
-
-    Ok(())
-}
-
-fn validate_trust_challenge_entry(
-    challenge: &HookTrustChallenge,
-    canonical_repo_path: &str,
-    expected_fingerprint: &str,
-    now: SystemTime,
-) -> Result<(), String> {
-    if challenge.repo_path != canonical_repo_path {
-        return Err("Hook trust challenge repository mismatch. Retry confirmation.".to_string());
-    }
-    if challenge.fingerprint != expected_fingerprint {
-        return Err("Hook trust challenge fingerprint mismatch. Retry confirmation.".to_string());
-    }
-    if challenge.expires_at <= now {
-        return Err("Hook trust challenge expired. Retry confirmation.".to_string());
-    }
-    Ok(())
-}
-
-fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
-    normalize_hook_commands(&mut hooks.pre_start);
-    normalize_hook_commands(&mut hooks.post_complete);
-    hooks
-}
-
-async fn normalize_hooks_with_trust_confirmation<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    repo_path: &str,
-    existing: &RepoConfig,
-    trusted_hooks: bool,
-    hooks: HookSet,
-) -> Result<(HookSet, Option<String>), String> {
-    let normalized_hooks = normalize_hook_set(hooks);
-    let hooks_fingerprint = hook_set_fingerprint(&normalized_hooks);
-    let trust_already_approved_for_same_hooks = existing.trusted_hooks
-        && existing.hooks == normalized_hooks
-        && existing.trusted_hooks_fingerprint.as_deref() == Some(hooks_fingerprint.as_str());
-
-    if trusted_hooks && !trust_already_approved_for_same_hooks {
-        confirm_hook_trust_dialog(app, repo_path, &normalized_hooks).await?;
-    }
-
-    let trusted_hooks_fingerprint = if trusted_hooks {
-        Some(hooks_fingerprint)
-    } else {
-        None
-    };
-
-    Ok((normalized_hooks, trusted_hooks_fingerprint))
-}
-
-fn normalize_hook_commands(commands: &mut Vec<String>) {
-    *commands = std::mem::take(commands)
-        .into_iter()
-        .filter_map(|command| {
-            let trimmed = command.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        })
-        .collect();
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_repo_key, format_hook_list, normalize_hook_set, sanitize_hook_preview,
-        validate_trust_challenge_entry, workspace_save_repo_settings,
-        workspace_save_settings_snapshot, workspace_set_trusted_hooks, HookSet, HookTrustChallenge,
+        format_hook_list, sanitize_hook_preview, workspace_prepare_trusted_hooks_challenge,
+        workspace_save_repo_settings, workspace_save_settings_snapshot,
+        workspace_set_trusted_hooks, HookSet,
     };
     use crate::{AppState, RepoSettingsPayload, SettingsSnapshotPayload};
-    use host_application::AppService;
+    use host_application::{AppService, PreparedHookTrustChallenge};
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
     use host_infra_system::{hook_set_fingerprint, AppConfigStore, GitCliPort, PromptOverride};
     use serde_json::{json, Value};
     use std::{
-        collections::HashMap,
         fs,
         path::PathBuf,
         sync::{Arc, Mutex},
-        time::{Duration, SystemTime, UNIX_EPOCH},
+        time::{SystemTime, UNIX_EPOCH},
     };
     use tauri::{
         ipc::{CallbackFn, InvokeBody},
@@ -617,12 +373,12 @@ mod tests {
         let app = mock_builder()
             .manage(AppState {
                 service: service.clone(),
-                hook_trust_challenges: Mutex::new(HashMap::new()),
                 hook_trust_dialog_test_response: Mutex::new(dialog_response),
             })
             .invoke_handler(tauri::generate_handler![
+                workspace_prepare_trusted_hooks_challenge,
                 workspace_set_trusted_hooks,
-                workspace_save_settings_snapshot
+                workspace_save_settings_snapshot,
             ])
             .build(mock_context(noop_assets()))
             .expect("test app should build");
@@ -633,6 +389,13 @@ mod tests {
             repo_path,
             root,
         }
+    }
+
+    fn canonical_repo_path(fixture: &WorkspaceCommandFixture) -> String {
+        fs::canonicalize(&fixture.repo_path)
+            .expect("repo path should canonicalize")
+            .to_string_lossy()
+            .to_string()
     }
 
     fn run_workspace_set_trusted_hooks(
@@ -678,18 +441,14 @@ mod tests {
         ))
     }
 
-    fn insert_challenge(
+    fn run_workspace_prepare_trusted_hooks_challenge(
         fixture: &WorkspaceCommandFixture,
-        nonce: &str,
-        challenge: HookTrustChallenge,
-    ) -> Result<(), String> {
+    ) -> Result<PreparedHookTrustChallenge, String> {
         let state = fixture.app.state::<AppState>();
-        let mut map = state
-            .hook_trust_challenges
-            .lock()
-            .map_err(|_| "challenge lock poisoned".to_string())?;
-        map.insert(nonce.to_string(), challenge);
-        Ok(())
+        tauri::async_runtime::block_on(workspace_prepare_trusted_hooks_challenge(
+            state,
+            fixture.repo_path.clone(),
+        ))
     }
 
     fn invoke_workspace_set_trusted_hooks_ipc(
@@ -803,109 +562,8 @@ mod tests {
     }
 
     #[test]
-    fn workspace_set_trusted_hooks_rejects_expired_challenge_entries() -> Result<(), String> {
-        let fixture = setup_workspace_command_fixture("expired-challenge", HookSet::default());
-        let nonce = "expired-nonce".to_string();
-        let fingerprint = hook_set_fingerprint(&HookSet::default());
-        insert_challenge(
-            &fixture,
-            nonce.as_str(),
-            HookTrustChallenge {
-                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
-                fingerprint: fingerprint.clone(),
-                expires_at: SystemTime::now()
-                    .checked_sub(Duration::from_secs(1))
-                    .ok_or_else(|| "expired time should be valid".to_string())?,
-            },
-        )?;
-
-        let error = run_workspace_set_trusted_hooks(&fixture, true, Some(nonce), Some(fingerprint))
-            .expect_err("expired challenge should fail");
-        assert!(
-            error.contains("missing or expired"),
-            "unexpected error: {error}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn workspace_set_trusted_hooks_rejects_fingerprint_mismatch() -> Result<(), String> {
-        let hooks = HookSet {
-            pre_start: vec!["echo pre".to_string()],
-            post_complete: Vec::new(),
-        };
-        let fixture = setup_workspace_command_fixture("fingerprint-mismatch", hooks.clone());
-        let nonce = "nonce-fp-mismatch".to_string();
-        let expected_fingerprint = hook_set_fingerprint(&hooks);
-        insert_challenge(
-            &fixture,
-            nonce.as_str(),
-            HookTrustChallenge {
-                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
-                fingerprint: expected_fingerprint,
-                expires_at: SystemTime::now()
-                    .checked_add(Duration::from_secs(60))
-                    .ok_or_else(|| "future time should be valid".to_string())?,
-            },
-        )?;
-
-        let error = run_workspace_set_trusted_hooks(
-            &fixture,
-            true,
-            Some(nonce),
-            Some("different-fingerprint".to_string()),
-        )
-        .expect_err("fingerprint mismatch should fail");
-        assert!(
-            error.contains("fingerprint mismatch"),
-            "unexpected error: {error}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn workspace_set_trusted_hooks_rejects_repository_mismatch_and_consumes_nonce(
+    fn workspace_set_trusted_hooks_accepts_prepared_challenge_and_persists_trust(
     ) -> Result<(), String> {
-        let fixture = setup_workspace_command_fixture("repo-mismatch", HookSet::default());
-        let nonce = "nonce-repo-mismatch".to_string();
-        let fingerprint = hook_set_fingerprint(&HookSet::default());
-        insert_challenge(
-            &fixture,
-            nonce.as_str(),
-            HookTrustChallenge {
-                repo_path: "/tmp/not-the-same-repo".to_string(),
-                fingerprint: fingerprint.clone(),
-                expires_at: SystemTime::now()
-                    .checked_add(Duration::from_secs(60))
-                    .ok_or_else(|| "future time should be valid".to_string())?,
-            },
-        )?;
-
-        let mismatch_error = run_workspace_set_trusted_hooks(
-            &fixture,
-            true,
-            Some(nonce.clone()),
-            Some(fingerprint.clone()),
-        )
-        .expect_err("repository mismatch should fail");
-        assert!(
-            mismatch_error.contains("repository mismatch"),
-            "unexpected mismatch error: {mismatch_error}"
-        );
-
-        let replay_error =
-            run_workspace_set_trusted_hooks(&fixture, true, Some(nonce), Some(fingerprint))
-                .expect_err("challenge nonce should be consumed after mismatch");
-        assert!(
-            replay_error.contains("missing or expired"),
-            "unexpected replay error: {replay_error}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn workspace_set_trusted_hooks_accepts_valid_challenge_and_persists_trust() -> Result<(), String>
-    {
         let hooks = HookSet {
             pre_start: vec!["echo pre".to_string()],
             post_complete: vec!["echo post".to_string()],
@@ -915,24 +573,16 @@ mod tests {
             hooks.clone(),
             Some(true),
         );
-        let nonce = "nonce-trust-success".to_string();
-        let fingerprint = hook_set_fingerprint(&hooks);
-        insert_challenge(
-            &fixture,
-            nonce.as_str(),
-            HookTrustChallenge {
-                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
-                fingerprint: fingerprint.clone(),
-                expires_at: SystemTime::now()
-                    .checked_add(Duration::from_secs(60))
-                    .ok_or_else(|| "future time should be valid".to_string())?,
-            },
-        )?;
+        let challenge = run_workspace_prepare_trusted_hooks_challenge(&fixture)?;
 
-        let updated =
-            run_workspace_set_trusted_hooks(&fixture, true, Some(nonce), Some(fingerprint.clone()))
-                .expect("valid challenge should trust hooks");
-        assert_eq!(updated.path, canonical_repo_key(fixture.repo_path.as_str()));
+        let updated = run_workspace_set_trusted_hooks(
+            &fixture,
+            true,
+            Some(challenge.nonce.clone()),
+            Some(challenge.fingerprint.clone()),
+        )
+        .expect("valid challenge should trust hooks");
+        assert_eq!(updated.path, canonical_repo_path(&fixture));
 
         let repo_config = fixture
             .service
@@ -941,66 +591,7 @@ mod tests {
         assert!(repo_config.trusted_hooks);
         assert_eq!(
             repo_config.trusted_hooks_fingerprint.as_deref(),
-            Some(fingerprint.as_str())
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn workspace_set_trusted_hooks_consumes_nonce_and_rejects_replay_after_hook_changes(
-    ) -> Result<(), String> {
-        let original_hooks = HookSet {
-            pre_start: vec!["echo pre".to_string()],
-            post_complete: Vec::new(),
-        };
-        let fixture = setup_workspace_command_fixture("replay-and-stale", original_hooks.clone());
-        let nonce = "nonce-replay".to_string();
-        let challenge_fingerprint = hook_set_fingerprint(&original_hooks);
-        insert_challenge(
-            &fixture,
-            nonce.as_str(),
-            HookTrustChallenge {
-                repo_path: canonical_repo_key(fixture.repo_path.as_str()),
-                fingerprint: challenge_fingerprint.clone(),
-                expires_at: SystemTime::now()
-                    .checked_add(Duration::from_secs(60))
-                    .ok_or_else(|| "future time should be valid".to_string())?,
-            },
-        )?;
-
-        fixture
-            .service
-            .workspace_update_repo_hooks(
-                fixture.repo_path.as_str(),
-                HookSet {
-                    pre_start: vec!["echo changed".to_string()],
-                    post_complete: Vec::new(),
-                },
-            )
-            .map_err(|error| error.to_string())?;
-
-        let stale_error = run_workspace_set_trusted_hooks(
-            &fixture,
-            true,
-            Some(nonce.clone()),
-            Some(challenge_fingerprint),
-        )
-        .expect_err("stale hook challenge should fail");
-        assert!(
-            stale_error.contains("Hook commands changed after challenge generation"),
-            "unexpected stale challenge error: {stale_error}"
-        );
-
-        let replay_error = run_workspace_set_trusted_hooks(
-            &fixture,
-            true,
-            Some(nonce),
-            Some("ignored".to_string()),
-        )
-        .expect_err("replay should fail after nonce consumption");
-        assert!(
-            replay_error.contains("missing or expired"),
-            "unexpected replay error: {replay_error}"
+            Some(challenge.fingerprint.as_str())
         );
         Ok(())
     }
@@ -1015,7 +606,7 @@ mod tests {
         let fingerprint = hook_set_fingerprint(&hooks);
         fixture
             .service
-            .workspace_set_trusted_hooks(
+            .workspace_persist_trusted_hooks(
                 fixture.repo_path.as_str(),
                 true,
                 Some(fingerprint.as_str()),
@@ -1024,7 +615,7 @@ mod tests {
 
         let updated = run_workspace_set_trusted_hooks(&fixture, false, None, None)
             .expect("disabling trust should succeed");
-        assert_eq!(updated.path, canonical_repo_key(fixture.repo_path.as_str()));
+        assert_eq!(updated.path, canonical_repo_path(&fixture));
 
         let repo_config = fixture
             .service
@@ -1056,7 +647,7 @@ mod tests {
             repos,
             global_prompt_overrides,
         };
-        let repo_key = canonical_repo_key(fixture.repo_path.as_str());
+        let repo_key = canonical_repo_path(&fixture);
         let repo_config = snapshot
             .repos
             .get_mut(repo_key.as_str())
@@ -1103,7 +694,7 @@ mod tests {
             repos,
             global_prompt_overrides,
         };
-        let repo_key = canonical_repo_key(fixture.repo_path.as_str());
+        let repo_key = canonical_repo_path(&fixture);
         let repo_config = snapshot
             .repos
             .get_mut(repo_key.as_str())
@@ -1223,7 +814,7 @@ mod tests {
             },
         );
 
-        let repo_key = canonical_repo_key(fixture.repo_path.as_str());
+        let repo_key = canonical_repo_path(&fixture);
         let repo_config = snapshot
             .repos
             .get_mut(repo_key.as_str())
@@ -1327,57 +918,5 @@ mod tests {
         let formatted = format_hook_list(&hooks);
         assert!(formatted.contains("- echo b\\nline"));
         assert!(formatted.contains("... and 1 more"));
-    }
-
-    #[test]
-    fn normalize_hook_set_trims_and_removes_blank_commands() {
-        let normalized = normalize_hook_set(HookSet {
-            pre_start: vec!["  echo pre  ".to_string(), "   ".to_string()],
-            post_complete: vec!["".to_string(), " echo post ".to_string()],
-        });
-        assert_eq!(normalized.pre_start, vec!["echo pre".to_string()]);
-        assert_eq!(normalized.post_complete, vec!["echo post".to_string()]);
-    }
-
-    #[test]
-    fn validate_trust_challenge_entry_checks_repo_and_fingerprint_and_expiry() -> Result<(), String>
-    {
-        let now = SystemTime::now();
-        let challenge = HookTrustChallenge {
-            repo_path: "/repo".to_string(),
-            fingerprint: "abc".to_string(),
-            expires_at: now
-                .checked_add(Duration::from_secs(5))
-                .ok_or_else(|| "challenge expiry".to_string())?,
-        };
-        assert!(
-            validate_trust_challenge_entry(&challenge, "/repo", "abc", now).is_ok(),
-            "valid challenge should pass"
-        );
-
-        let repo_error = validate_trust_challenge_entry(&challenge, "/repo-2", "abc", now)
-            .expect_err("repo mismatch should fail");
-        assert!(repo_error.contains("repository mismatch"));
-
-        let fingerprint_error = validate_trust_challenge_entry(&challenge, "/repo", "def", now)
-            .expect_err("fingerprint mismatch should fail");
-        assert!(fingerprint_error.contains("fingerprint mismatch"));
-
-        let expired = HookTrustChallenge {
-            expires_at: now
-                .checked_sub(Duration::from_secs(1))
-                .ok_or_else(|| "expired instant".to_string())?,
-            ..challenge
-        };
-        let expired_error = validate_trust_challenge_entry(&expired, "/repo", "abc", now)
-            .expect_err("expired challenge should fail");
-        assert!(expired_error.contains("expired"));
-        Ok(())
-    }
-
-    #[test]
-    fn canonical_repo_key_keeps_input_when_path_does_not_exist() {
-        let missing_path = "/this/path/should/not/exist-for-openducktor";
-        assert_eq!(canonical_repo_key(missing_path), missing_path.to_string());
     }
 }

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use fs2::FileExt;
 use host_domain::{
-    RuntimeInstanceSummary, GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeRole, TaskCard,
+    GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, TaskCard,
     TaskStore,
 };
 use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig, RuntimeConfigStore};
@@ -33,6 +33,7 @@ mod task_workflow;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod workflow_rules;
+mod workspace_policy;
 
 pub(crate) use events::{emit_event, spawn_output_forwarder};
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
@@ -64,6 +65,10 @@ pub(crate) use startup_metrics::{
 };
 pub(crate) use workflow_rules::{
     derive_agent_workflows, derive_available_actions, validate_transition,
+};
+pub use workspace_policy::{
+    HookTrustConfirmationPort, HookTrustConfirmationRequest, PreparedHookTrustChallenge,
+    RepoConfigUpdate, RepoSettingsUpdate,
 };
 
 #[cfg(test)]

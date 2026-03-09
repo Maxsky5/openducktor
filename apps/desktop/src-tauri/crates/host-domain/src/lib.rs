@@ -19,8 +19,8 @@ pub use git::{
     GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 pub use runtime::{
-    AgentRuntimeKind, AgentRuntimeRole, RuntimeInstanceSummary, RunEvent, RunState, RunSummary,
-    RuntimeCapabilities, RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRole,
+    AgentRuntimeKind, AgentRuntimeRole, RunEvent, RunState, RunSummary, RuntimeCapabilities,
+    RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole,
 };
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};
@@ -97,16 +97,16 @@ mod tests {
     #[test]
     fn public_api_exports_compile() {
         use super::{
-            AgentRuntimeRole, RuntimeInstanceSummary, AgentSessionDocument,
-            AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows, BeadsCheck,
-            CreateTaskInput, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-            GitDiffScope, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult,
-            GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
-            GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-            GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
-            GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType, PlanSubtaskInput,
-            QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary,
-            RuntimeCheck, RuntimeRole, SpecDocument, SystemCheck, TaskAction, TaskCard,
+            AgentRuntimeRole, AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState,
+            AgentWorkflows, BeadsCheck, CreateTaskInput, GitBranch, GitCommitAllRequest,
+            GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort,
+            GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
+            GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+            GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData,
+            GitWorktreeStatusSnapshot, GitWorktreeStatusSummary, GitWorktreeStatusSummaryData,
+            GitWorktreeSummary, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict,
+            QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeCheck,
+            RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck, TaskAction, TaskCard,
             TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
             TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,
         };

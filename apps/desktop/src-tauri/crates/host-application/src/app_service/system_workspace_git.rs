@@ -206,7 +206,7 @@ impl AppService {
         Ok((config.repos, config.global_prompt_overrides))
     }
 
-    pub fn workspace_save_settings_snapshot(
+    pub fn workspace_persist_settings_snapshot(
         &self,
         repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
@@ -227,7 +227,7 @@ impl AppService {
         self.config_store.save(&config)
     }
 
-    pub fn workspace_set_trusted_hooks(
+    pub fn workspace_persist_trusted_hooks(
         &self,
         repo_path: &str,
         trusted: bool,
