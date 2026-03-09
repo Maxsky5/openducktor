@@ -54,7 +54,7 @@ describe("KanbanPageContent", () => {
     );
 
     expect(html).toContain('data-testid="kanban-loading-overlay"');
-    expect(html).toContain("Loading Kanban tasks");
+    expect(html).toContain("Loading tasks...");
     expect(html).not.toContain('data-testid="kanban-refresh-indicator"');
   });
 
