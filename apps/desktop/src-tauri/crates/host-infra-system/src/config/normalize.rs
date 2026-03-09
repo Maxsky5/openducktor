@@ -1,6 +1,7 @@
 use super::types::{
     default_branch_prefix, default_target_branch, hook_set_fingerprint, AgentModelDefault,
-    GlobalConfig, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RuntimeConfig,
+    GlobalConfig, HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig,
+    RuntimeConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -73,6 +74,12 @@ fn canonicalize_default_target_branch(value: &str) -> String {
     format!("origin/{trimmed}")
 }
 
+pub fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
+    normalize_hook_commands(&mut hooks.pre_start);
+    normalize_hook_commands(&mut hooks.post_complete);
+    hooks
+}
+
 pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     repo.worktree_base_path = normalize_optional_non_empty(repo.worktree_base_path.take());
     let branch_prefix = repo.branch_prefix.trim();
@@ -82,8 +89,7 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
         branch_prefix.to_string()
     };
     repo.default_target_branch = canonicalize_default_target_branch(&repo.default_target_branch);
-    normalize_hook_commands(&mut repo.hooks.pre_start);
-    normalize_hook_commands(&mut repo.hooks.post_complete);
+    repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
     normalize_hook_commands(&mut repo.worktree_file_copies);
     let current_fingerprint = hook_set_fingerprint(&repo.hooks);
     if repo.trusted_hooks {

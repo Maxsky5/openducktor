@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
-    hook_set_fingerprint, AgentDefaults, HookSet, PromptOverrides, RepoConfig,
+    hook_set_fingerprint, normalize_hook_set, AgentDefaults, HookSet, PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -372,26 +372,6 @@ fn validate_trust_challenge_entry(
         return Err(anyhow!("Hook trust challenge expired. Retry confirmation."));
     }
     Ok(())
-}
-
-fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
-    normalize_hook_commands(&mut hooks.pre_start);
-    normalize_hook_commands(&mut hooks.post_complete);
-    hooks
-}
-
-fn normalize_hook_commands(commands: &mut Vec<String>) {
-    *commands = std::mem::take(commands)
-        .into_iter()
-        .filter_map(|command| {
-            let trimmed = command.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        })
-        .collect();
 }
 
 #[cfg(test)]

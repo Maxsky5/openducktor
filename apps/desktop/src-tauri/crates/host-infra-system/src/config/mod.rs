@@ -5,6 +5,7 @@ mod security;
 mod store;
 mod types;
 
+pub use normalize::normalize_hook_set;
 pub use store::{AppConfigStore, RuntimeConfigStore};
 pub use types::{
     hook_set_fingerprint, AgentDefaults, AgentModelDefault, GlobalConfig, HookSet,

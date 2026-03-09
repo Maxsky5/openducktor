@@ -604,13 +604,15 @@ mod tests {
         };
         let fixture = setup_workspace_command_fixture("disable-without-challenge", hooks.clone());
         let fingerprint = hook_set_fingerprint(&hooks);
+        let mut repo_config = fixture
+            .service
+            .workspace_get_repo_config(fixture.repo_path.as_str())
+            .map_err(|error| error.to_string())?;
+        repo_config.trusted_hooks = true;
+        repo_config.trusted_hooks_fingerprint = Some(fingerprint);
         fixture
             .service
-            .workspace_persist_trusted_hooks(
-                fixture.repo_path.as_str(),
-                true,
-                Some(fingerprint.as_str()),
-            )
+            .workspace_update_repo_config(fixture.repo_path.as_str(), repo_config)
             .map_err(|error| error.to_string())?;
 
         let updated = run_workspace_set_trusted_hooks(&fixture, false, None, None)
