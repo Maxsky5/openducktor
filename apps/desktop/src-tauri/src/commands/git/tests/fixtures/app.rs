@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -106,7 +105,6 @@ pub(crate) fn setup_command_git_fixture_with_summary(
     let app = mock_builder()
         .manage(AppState {
             service,
-            hook_trust_challenges: Mutex::new(HashMap::new()),
             hook_trust_dialog_test_response: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![

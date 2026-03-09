@@ -8,8 +8,11 @@ use host_infra_system::{AppConfigStore, RuntimeConfigStore};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, SystemTime};
+#[cfg(test)]
+use std::sync::Mutex;
+use std::sync::{Arc, OnceLock};
+#[cfg(test)]
+use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent};
 
 mod commands;
@@ -24,20 +27,10 @@ use commands::workspace::*;
 
 struct AppState {
     service: Arc<AppService>,
-    hook_trust_challenges: Mutex<HashMap<String, HookTrustChallenge>>,
     #[cfg(test)]
     hook_trust_dialog_test_response: Mutex<Option<bool>>,
 }
-
-const HOOK_TRUST_CHALLENGE_TTL: Duration = Duration::from_secs(120);
 static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
-
-#[derive(Debug, Clone)]
-struct HookTrustChallenge {
-    repo_path: String,
-    fingerprint: String,
-    expires_at: SystemTime,
-}
 
 fn init_tracing_subscriber() {
     TRACING_INITIALIZED.get_or_init(|| {
@@ -309,7 +302,6 @@ fn startup_phase_build_tauri_app(
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             service,
-            hook_trust_challenges: Mutex::new(HashMap::new()),
             #[cfg(test)]
             hook_trust_dialog_test_response: Mutex::new(None),
         });

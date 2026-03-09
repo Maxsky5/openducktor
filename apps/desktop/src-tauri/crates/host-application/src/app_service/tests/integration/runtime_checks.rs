@@ -2,8 +2,8 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    RuntimeInstanceSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
-    GitPort, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
+    AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort, PlanSubtaskInput,
+    QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary, RuntimeInstanceSummary,
     TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
@@ -127,12 +127,12 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
         .workspace_get_repo_config_optional(repo_path.as_str())?
         .is_some());
     let stale_trust_error = service
-        .workspace_set_trusted_hooks(repo_path.as_str(), true, Some("stale-fingerprint"))
+        .workspace_persist_trusted_hooks(repo_path.as_str(), true, Some("stale-fingerprint"))
         .expect_err("stale fingerprint should be rejected");
     assert!(stale_trust_error
         .to_string()
         .contains("Hook trust challenge is stale"));
-    let trusted = service.workspace_set_trusted_hooks(
+    let trusted = service.workspace_persist_trusted_hooks(
         repo_path.as_str(),
         true,
         Some(host_infra_system::hook_set_fingerprint(&config.hooks).as_str()),

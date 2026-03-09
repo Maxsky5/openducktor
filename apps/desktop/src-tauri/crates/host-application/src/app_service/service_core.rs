@@ -1,5 +1,6 @@
 use super::process_registry::TrackedOpencodeProcessGuard;
 use super::startup_metrics::OpencodeStartupMetrics;
+use super::workspace_policy::HookTrustChallenge;
 use super::*;
 
 pub type RunEmitter = Arc<dyn Fn(RunEvent) + Send + Sync + 'static>;
@@ -20,6 +21,7 @@ pub struct AppService {
     pub(super) startup_cancel_epoch: StartupCancelEpoch,
     pub(super) startup_metrics: Arc<Mutex<OpencodeStartupMetrics>>,
     pub(super) enforce_repo_allowlist: bool,
+    pub(super) hook_trust_challenges: Arc<Mutex<HashMap<String, HookTrustChallenge>>>,
 }
 
 pub(crate) struct RunProcess {
@@ -95,6 +97,7 @@ impl AppService {
             startup_cancel_epoch: Arc::new(AtomicU64::new(0)),
             startup_metrics: Arc::new(Mutex::new(OpencodeStartupMetrics::default())),
             enforce_repo_allowlist,
+            hook_trust_challenges: Arc::new(Mutex::new(HashMap::new())),
         };
         if let Err(error) = service.reconcile_opencode_process_registry_on_startup() {
             eprintln!(

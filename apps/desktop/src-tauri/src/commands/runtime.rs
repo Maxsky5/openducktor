@@ -1,6 +1,7 @@
 use crate::{as_error, run_service_blocking, AppState};
 use host_domain::{
-    AgentRuntimeRole, RuntimeInstanceSummary, BeadsCheck, RuntimeCheck, RuntimeDescriptor, SystemCheck,
+    AgentRuntimeRole, BeadsCheck, RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary,
+    SystemCheck,
 };
 use tauri::State;
 
