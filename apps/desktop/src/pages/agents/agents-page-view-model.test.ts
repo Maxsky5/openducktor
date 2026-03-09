@@ -118,6 +118,7 @@ describe("agents-page-view-model", () => {
 
     const model = buildAgentStudioHeaderModel({
       selectedTask: createTaskCard("task-1"),
+      onOpenTaskDetails: mock(() => {}),
       activeSession,
       roleOptions: [
         { role: "spec", label: "Spec", icon: Sparkles },
@@ -152,11 +153,47 @@ describe("agents-page-view-model", () => {
     });
 
     expect(model.workflowSteps).toHaveLength(2);
+    expect(typeof model.onOpenTaskDetails).toBe("function");
     expect(model.sessionSelector.disabled).toBe(true);
     expect(model.stats).toEqual({ sessions: 2, messages: 1, permissions: 1, questions: 1 });
 
     model.sessionSelector.onValueChange("session-next");
     expect(onSessionSelectionChange).toHaveBeenCalledWith("session-next");
+  });
+
+  test("buildAgentStudioHeaderModel clears task details action when no task is selected", () => {
+    const model = buildAgentStudioHeaderModel({
+      selectedTask: null,
+      onOpenTaskDetails: mock(() => {}),
+      activeSession: null,
+      roleOptions: [],
+      workflowStateByRole: {
+        spec: "blocked",
+        planner: "blocked",
+        build: "blocked",
+        qa: "blocked",
+      },
+      selectedRole: null,
+      latestSessionByRole: {
+        spec: null,
+        planner: null,
+        build: null,
+        qa: null,
+      },
+      onWorkflowStepSelect: mock(() => {}),
+      onSessionSelectionChange: mock(() => {}),
+      sessionSelectorValue: "",
+      sessionSelectorGroups: [],
+      agentStudioReady: true,
+      sessionsForTaskLength: 0,
+      sessionCreateOptions: [],
+      onCreateSession: mock(() => {}),
+      createSessionDisabled: false,
+      isStarting: false,
+      contextSessionsLength: 0,
+    });
+
+    expect(model.onOpenTaskDetails).toBeNull();
   });
 
   test("buildAgentStudioWorkspaceSidebarModel forwards active document state", () => {

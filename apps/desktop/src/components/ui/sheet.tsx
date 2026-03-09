@@ -45,10 +45,12 @@ function SheetContent({
   children,
   side = "right",
   closeButton,
+  visualOverlay = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> &
   VariantProps<typeof sheetVariants> & {
     closeButton?: React.ReactNode;
+    visualOverlay?: boolean;
   }) {
   const renderedCloseButton =
     closeButton === undefined ? (
@@ -62,7 +64,18 @@ function SheetContent({
 
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {visualOverlay ? (
+        <DialogPrimitive.Close asChild>
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Close sheet overlay"
+            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm"
+          />
+        </DialogPrimitive.Close>
+      ) : (
+        <SheetOverlay />
+      )}
       <DialogPrimitive.Content className={cn(sheetVariants({ side }), className)} {...props}>
         {children}
         {renderedCloseButton}

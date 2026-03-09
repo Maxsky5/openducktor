@@ -26,8 +26,7 @@ export const toStartSessionDependencies = (
     },
     runtime: {
       adapter: deps.adapter,
-      resolveQaReviewTarget:
-        deps.resolveQaReviewTarget ?? (async () => "/tmp/repo/worktree"),
+      resolveQaReviewTarget: deps.resolveQaReviewTarget ?? (async () => "/tmp/repo/worktree"),
       ensureRuntime: deps.ensureRuntime,
     },
     task: {

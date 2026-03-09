@@ -32,6 +32,7 @@ export function TaskDetailsSheet({
   allTasks,
   open,
   onOpenChange,
+  workflowActionsEnabled = true,
   onPlan,
   onQaStart,
   onQaOpen,
@@ -63,8 +64,13 @@ export function TaskDetailsSheet({
 
   if (!task) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]">
+      <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="right"
+          closeButton={null}
+          visualOverlay
+          className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
+        >
           <SheetHeader>
             <SheetTitle>Task Details</SheetTitle>
             <SheetDescription>Select a task to inspect details.</SheetDescription>
@@ -75,8 +81,13 @@ export function TaskDetailsSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]">
+    <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        closeButton={null}
+        visualOverlay
+        className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
+      >
         <SheetHeader className="border-b border-border bg-card px-5 py-4">
           <TaskDetailsSheetHeader
             task={task}
@@ -108,8 +119,12 @@ export function TaskDetailsSheet({
         <TaskDetailsSheetFooter
           task={task}
           onOpenChange={onOpenChange}
-          includeActions={DETAIL_ACTIONS}
-          onWorkflowAction={viewModel.runWorkflowAction}
+          {...(workflowActionsEnabled
+            ? {
+                includeActions: DETAIL_ACTIONS,
+                onWorkflowAction: viewModel.runWorkflowAction,
+              }
+            : {})}
           {...(onEdit ? { onEdit } : {})}
           {...(onDelete ? { onDeleteSelect: viewModel.openDeleteDialog } : {})}
         />

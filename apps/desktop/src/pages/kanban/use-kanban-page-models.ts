@@ -7,7 +7,11 @@ import { useKanbanBoardModel } from "./use-kanban-board-model";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 import { useKanbanTaskDialogs } from "./use-kanban-task-dialogs";
 
-export function useKanbanPageModels(): KanbanPageModels {
+type UseKanbanPageModelsArgs = {
+  onOpenDetails: (taskId: string) => void;
+};
+
+export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs): KanbanPageModels {
   const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
   const { sessions, startAgentSession, sendAgentMessage, updateAgentSessionModel } =
     useAgentState();
@@ -72,20 +76,6 @@ export function useKanbanPageModels(): KanbanPageModels {
 
   const taskDialogs = useKanbanTaskDialogs({
     tasks,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onDelegate,
-    onDefer: (taskId) => {
-      void deferTask(taskId);
-    },
-    onResumeDeferred: (taskId) => {
-      void resumeDeferredTask(taskId);
-    },
-    onHumanApprove,
-    onHumanRequestChanges,
-    onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
   });
 
   const content = useKanbanBoardModel({
@@ -94,7 +84,7 @@ export function useKanbanPageModels(): KanbanPageModels {
     tasks,
     runs,
     sessions,
-    onOpenDetails: taskDialogs.onOpenDetails,
+    onOpenDetails,
     onDelegate,
     onPlan,
     onQaStart,
@@ -113,7 +103,24 @@ export function useKanbanPageModels(): KanbanPageModels {
     },
     content,
     taskComposer: taskDialogs.taskComposer,
-    detailsSheet: taskDialogs.detailsSheet,
+    taskDetailsController: {
+      allTasks: tasks,
+      onPlan,
+      onQaStart,
+      onQaOpen,
+      onBuild,
+      onDelegate,
+      onEdit: taskDialogs.onEditTask,
+      onDefer: (taskId) => {
+        void deferTask(taskId);
+      },
+      onResumeDeferred: (taskId) => {
+        void resumeDeferredTask(taskId);
+      },
+      onHumanApprove,
+      onHumanRequestChanges,
+      onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
+    },
     sessionStartModal,
   };
 }

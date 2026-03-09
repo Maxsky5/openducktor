@@ -27,6 +27,7 @@ import type {
 
 export type UseAgentStudioHeaderModelArgs = {
   selectedTask: TaskCard | null;
+  onOpenTaskDetails: (() => void) | null;
   activeSession: AgentSessionState | null;
   sessionsForTaskLength: number;
   contextSessionsLength: number;
@@ -40,6 +41,7 @@ export type UseAgentStudioHeaderModelArgs = {
 
 export const useAgentStudioHeaderModel = ({
   selectedTask,
+  onOpenTaskDetails,
   activeSession,
   sessionsForTaskLength,
   contextSessionsLength,
@@ -54,6 +56,7 @@ export const useAgentStudioHeaderModel = ({
     () =>
       buildAgentStudioHeaderModel({
         selectedTask,
+        onOpenTaskDetails,
         activeSession,
         roleOptions: ROLE_OPTIONS,
         workflowStateByRole: workflow.workflowStateByRole,
@@ -76,6 +79,7 @@ export const useAgentStudioHeaderModel = ({
       agentStudioReady,
       contextSessionsLength,
       isStarting,
+      onOpenTaskDetails,
       onCreateSession,
       onSessionSelectionChange,
       onWorkflowStepSelect,

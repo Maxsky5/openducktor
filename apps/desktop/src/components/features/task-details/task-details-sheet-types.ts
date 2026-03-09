@@ -5,6 +5,7 @@ export type TaskDetailsSheetProps = {
   allTasks: TaskCard[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  workflowActionsEnabled?: boolean;
   onPlan?: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;

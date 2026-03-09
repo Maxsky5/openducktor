@@ -328,7 +328,8 @@ const createOrReuseSession = async ({
     if (existingSession) {
       if (
         (ctx.role !== "qa" ||
-          normalizeWorkingDirectory(existingSession.workingDirectory) === expectedWorkingDirectory) &&
+          normalizeWorkingDirectory(existingSession.workingDirectory) ===
+            expectedWorkingDirectory) &&
         canReuseSessionForSelectedModel({
           sessionRuntimeKind:
             existingSession.runtimeKind ??

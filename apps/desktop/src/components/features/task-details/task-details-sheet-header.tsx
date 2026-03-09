@@ -3,8 +3,8 @@ import { Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { Badge } from "@/components/ui/badge";
-import { isQaRejectedTask } from "@/lib/task-qa";
 import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
+import { isQaRejectedTask } from "@/lib/task-qa";
 
 type TaskDetailsSheetHeaderProps = {
   task: TaskCard;

@@ -206,7 +206,8 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
 
     if (role === "qa") {
       const workingDirectory =
-        workingDirectoryOverride || (await host.qaReviewTargetGet(repoPath, taskId)).workingDirectory;
+        workingDirectoryOverride ||
+        (await host.qaReviewTargetGet(repoPath, taskId)).workingDirectory;
       const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       const matchingRun = runsRef.current.find(
         (entry) =>

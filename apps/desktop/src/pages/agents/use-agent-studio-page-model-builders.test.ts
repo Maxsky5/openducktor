@@ -106,7 +106,6 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession: null,
       role: "planner",
       isSessionWorking: false,
-      qaDoc: createDoc(""),
       roleLabelByRole,
     });
 
@@ -146,7 +145,6 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession,
       role: "spec",
       isSessionWorking: true,
-      qaDoc: createDoc("latest qa rejection"),
       roleLabelByRole,
     });
 
@@ -179,7 +177,6 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession: null,
       role: "build",
       isSessionWorking: false,
-      qaDoc: createDoc("approved qa report"),
       roleLabelByRole,
     });
 

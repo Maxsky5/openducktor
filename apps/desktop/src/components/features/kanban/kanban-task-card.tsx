@@ -323,7 +323,9 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
 
         <TaskMeta task={task} runState={runState} />
 
-        {hasActiveSessions ? <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} /> : null}
+        {hasActiveSessions ? (
+          <ActiveSessionsLine taskId={task.id} activeSessions={activeSessions} />
+        ) : null}
 
         <TaskActions
           task={task}

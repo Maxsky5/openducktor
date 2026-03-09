@@ -15,6 +15,7 @@ const roleIcon = (index: number) => {
 const buildModel = () => ({
   taskTitle: "Rework Agent Studio UI",
   taskId: "fairnest-97f",
+  onOpenTaskDetails: () => {},
   sessionStatus: "running" as const,
   selectedRole: "spec" as const,
   workflowSteps: [
@@ -101,6 +102,8 @@ describe("AgentStudioHeader", () => {
 
     expect(html).toContain("Rework Agent Studio UI");
     expect(html).toContain("fairnest-97f");
+    expect(html).toContain('aria-label="Open task details"');
+    expect(html).toContain(">Open<");
     expect(html).toContain("Create session");
     expect(html).not.toContain("Viewing Session");
     expect(html).not.toContain("Sessions:");
@@ -122,6 +125,20 @@ describe("AgentStudioHeader", () => {
     );
 
     expect(html).toContain("Agent Studio");
+  });
+
+  test("hides the task details button when no task is selected", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioHeader, {
+        model: {
+          ...buildModel(),
+          taskId: null,
+          onOpenTaskDetails: null,
+        },
+      }),
+    );
+
+    expect(html).not.toContain('aria-label="Open task details"');
   });
 
   test("shows creation lock helper when session creation is disabled", () => {

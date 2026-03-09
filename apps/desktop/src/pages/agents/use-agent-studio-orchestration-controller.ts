@@ -50,6 +50,7 @@ export type AgentStudioOrchestrationComposerContext = {
 export type AgentStudioOrchestrationActionsContext = {
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent: () => void;
+  openTaskDetails: () => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   stopAgentSession: AgentStateContextValue["stopAgentSession"];
@@ -319,6 +320,7 @@ export function useAgentStudioOrchestrationController({
     },
     readiness,
     sessionActions: {
+      openTaskDetails: actions.openTaskDetails,
       isStarting,
       isSending,
       isSubmittingQuestionByRequestId,

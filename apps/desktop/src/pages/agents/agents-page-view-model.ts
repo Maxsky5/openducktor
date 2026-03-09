@@ -45,6 +45,7 @@ export const buildAgentStudioTaskTabsModel = (args: {
 
 export const buildAgentStudioHeaderModel = (args: {
   selectedTask: TaskCard | null;
+  onOpenTaskDetails: (() => void) | null;
   activeSession: AgentSessionState | null;
   roleOptions: AgentRoleOption[];
   workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
@@ -64,6 +65,7 @@ export const buildAgentStudioHeaderModel = (args: {
 }): AgentStudioHeaderModel => ({
   taskTitle: args.selectedTask?.title ?? null,
   taskId: args.selectedTask?.id ?? null,
+  onOpenTaskDetails: args.selectedTask ? args.onOpenTaskDetails : null,
   sessionStatus: args.activeSession?.status ?? null,
   selectedRole: args.selectedRole,
   workflowSteps: args.roleOptions.map((entry) => {

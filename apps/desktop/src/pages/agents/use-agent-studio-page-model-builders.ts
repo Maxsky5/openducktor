@@ -33,7 +33,6 @@ type BuildWorkflowModelContextArgs = {
   activeSession: AgentSessionState | null;
   role: AgentRole;
   isSessionWorking: boolean;
-  qaDoc: TaskDocumentState;
   roleLabelByRole: Record<AgentRole, string>;
 };
 
@@ -66,7 +65,6 @@ export const buildWorkflowModelContext = ({
   activeSession,
   role,
   isSessionWorking,
-  qaDoc,
   roleLabelByRole,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);

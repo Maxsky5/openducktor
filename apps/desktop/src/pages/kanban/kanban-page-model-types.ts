@@ -41,11 +41,8 @@ export type KanbanPageTaskComposerModel = {
   onOpenChange: (open: boolean) => void;
 };
 
-export type KanbanPageDetailsSheetModel = {
-  task: TaskCard | null;
+export type KanbanPageTaskDetailsControllerModel = {
   allTasks: TaskCard[];
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -63,6 +60,6 @@ export type KanbanPageModels = {
   header: KanbanPageHeaderModel;
   content: KanbanPageContentModel;
   taskComposer: KanbanPageTaskComposerModel;
-  detailsSheet: KanbanPageDetailsSheetModel;
+  taskDetailsController: KanbanPageTaskDetailsControllerModel;
   sessionStartModal: SessionStartModalModel | null;
 };
