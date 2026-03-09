@@ -15,7 +15,6 @@ type RebaseConflictDialogProps = {
   conflict: AgentStudioRebaseConflict | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAskBuilder: () => void;
   actions: RebaseConflictActionsModel;
 };
 
@@ -34,7 +33,6 @@ export const RebaseConflictDialog = memo(function RebaseConflictDialog({
   conflict,
   open,
   onOpenChange,
-  onAskBuilder,
   actions,
 }: RebaseConflictDialogProps): ReactElement {
   return (
@@ -82,13 +80,7 @@ export const RebaseConflictDialog = memo(function RebaseConflictDialog({
           </Button>
 
           <RebaseConflictActions
-            actions={{
-              ...actions,
-              askBuilder: {
-                ...actions.askBuilder,
-                onClick: onAskBuilder,
-              },
-            }}
+            actions={actions}
             abortTestId="agent-studio-git-abort-rebase-button"
             askBuilderTestId="agent-studio-git-ask-builder-button"
             size="default"

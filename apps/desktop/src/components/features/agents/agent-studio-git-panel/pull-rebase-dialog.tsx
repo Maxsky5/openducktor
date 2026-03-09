@@ -44,6 +44,7 @@ export const PullRebaseDialog = memo(function PullRebaseDialog({
       closeTestId="agent-studio-git-cancel-pull-rebase-button"
       confirmLabel="Pull with rebase"
       confirmPendingLabel="Pulling..."
+      confirmPending={isRebasing}
       confirmDisabled={isRebasing}
       onConfirm={onConfirm}
       confirmTestId="agent-studio-git-confirm-pull-rebase-button"

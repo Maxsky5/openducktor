@@ -76,7 +76,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
     void model.askBuilderToResolveRebaseConflict?.();
   }, [model.askBuilderToResolveRebaseConflict]);
 
-  const rebaseConflictActions = useMemo(
+  const stripRebaseConflictActions = useMemo(
     () =>
       createRebaseConflictActionsModel({
         isHandlingRebaseConflict: model.isHandlingRebaseConflict ?? false,
@@ -91,6 +91,24 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
     [
       model.abortRebase,
       model.askBuilderToResolveRebaseConflict,
+      model.isHandlingRebaseConflict,
+      model.rebaseConflictAction,
+    ],
+  );
+
+  const modalRebaseConflictActions = useMemo(
+    () =>
+      createRebaseConflictActionsModel({
+        isHandlingRebaseConflict: model.isHandlingRebaseConflict ?? false,
+        rebaseConflictAction: model.rebaseConflictAction,
+        onAbort: () => {
+          void model.abortRebase?.();
+        },
+        onAskBuilder: handleAskBuilderFromConflictModal,
+      }),
+    [
+      handleAskBuilderFromConflictModal,
+      model.abortRebase,
       model.isHandlingRebaseConflict,
       model.rebaseConflictAction,
     ],
@@ -187,7 +205,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
         {model.rebaseConflict ? (
           <RebaseConflictStrip
             conflict={model.rebaseConflict}
-            actions={rebaseConflictActions}
+            actions={stripRebaseConflictActions}
             onViewDetails={() => setIsRebaseConflictModalOpen(true)}
           />
         ) : null}
@@ -232,8 +250,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           conflict={model.rebaseConflict ?? null}
           open={hasRebaseConflict && isRebaseConflictModalOpen}
           onOpenChange={setIsRebaseConflictModalOpen}
-          onAskBuilder={handleAskBuilderFromConflictModal}
-          actions={rebaseConflictActions}
+          actions={modalRebaseConflictActions}
         />
 
         <ForcePushDialog

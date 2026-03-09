@@ -23,6 +23,7 @@ type GitConfirmationDialogProps = {
   closeTestId: string;
   confirmLabel: string;
   confirmPendingLabel: string;
+  confirmPending: boolean;
   confirmDisabled: boolean;
   onConfirm: () => void;
   confirmTestId: string;
@@ -42,6 +43,7 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
   closeTestId,
   confirmLabel,
   confirmPendingLabel,
+  confirmPending,
   confirmDisabled,
   onConfirm,
   confirmTestId,
@@ -79,12 +81,12 @@ export const GitConfirmationDialog = memo(function GitConfirmationDialog({
               disabled={confirmDisabled}
               data-testid={confirmTestId}
             >
-              {confirmDisabled ? (
+              {confirmPending ? (
                 <LoaderCircle className="size-4 animate-spin" />
               ) : (
                 <ConfirmIcon className="size-4" />
               )}
-              {confirmDisabled ? confirmPendingLabel : confirmLabel}
+              {confirmPending ? confirmPendingLabel : confirmLabel}
             </Button>
           </div>
         </DialogFooter>

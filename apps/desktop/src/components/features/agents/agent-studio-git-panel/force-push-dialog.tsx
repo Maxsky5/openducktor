@@ -37,6 +37,7 @@ export const ForcePushDialog = memo(function ForcePushDialog({
       closeTestId="agent-studio-git-cancel-force-push-button"
       confirmLabel="Force push with lease"
       confirmPendingLabel="Force pushing..."
+      confirmPending={isPushing}
       confirmDisabled={isPushing}
       onConfirm={onConfirm}
       confirmTestId="agent-studio-git-confirm-force-push-button"
