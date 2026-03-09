@@ -56,8 +56,36 @@ pub(super) struct SpawnedRuntimeServer {
 }
 
 impl AppService {
-    pub fn runtime_definitions_list(&self) -> Vec<RuntimeDescriptor> {
-        vec![AgentRuntimeKind::Opencode.descriptor()]
+    pub(super) fn ensure_runtime_supports_all_workflow_scopes(
+        runtime_kind: AgentRuntimeKind,
+    ) -> Result<()> {
+        let descriptor = runtime_kind.descriptor();
+        let validation_errors = descriptor.validate_for_openducktor();
+        if validation_errors.is_empty() {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Runtime '{}' is incompatible with OpenDucktor: {}.",
+            runtime_kind.as_str(),
+            validation_errors.join("; "),
+        ))
+    }
+
+    pub fn runtime_definitions_list(&self) -> Result<Vec<RuntimeDescriptor>> {
+        let definitions = vec![AgentRuntimeKind::Opencode.descriptor()];
+        for definition in &definitions {
+            let validation_errors = definition.validate_for_openducktor();
+            if !validation_errors.is_empty() {
+                return Err(anyhow!(
+                    "Runtime '{}' is incompatible with OpenDucktor: {}.",
+                    definition.kind.as_str(),
+                    validation_errors.join("; "),
+                ));
+            }
+        }
+
+        Ok(definitions)
     }
 
     pub fn runtime_list(
@@ -79,6 +107,7 @@ impl AppService {
         repo_path: &str,
     ) -> Result<RuntimeInstanceSummary> {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
         self.ensure_workspace_runtime(runtime_kind, repo_path)
     }
 
@@ -90,6 +119,7 @@ impl AppService {
         role: AgentRuntimeRole,
     ) -> Result<RuntimeInstanceSummary> {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
         self.start_task_runtime(runtime_kind, repo_path, task_id, role)
     }
 

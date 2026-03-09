@@ -129,6 +129,7 @@ export function useSessionStartModalState({
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const [catalog, setCatalog] = useState<AgentModelCatalog | null>(initialCatalog ?? null);
   const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const activeRole = intent?.role ?? null;
   const runtimeOptions = useMemo(
     () => toAgentRuntimeOptions(runtimeDefinitions),
     [runtimeDefinitions],
@@ -216,8 +217,6 @@ export function useSessionStartModalState({
     },
     [catalog, repoSettings, runtimeDefinitions],
   );
-
-  const activeRole = intent?.role ?? null;
 
   useEffect(() => {
     if (!activeRole) {

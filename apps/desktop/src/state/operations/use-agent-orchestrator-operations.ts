@@ -1,6 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type {
   AgentChatMessage,
   AgentSessionLoadOptions,
@@ -63,6 +64,7 @@ export function useAgentOrchestratorOperations({
     runs,
   });
   const { sessionsRef, turnStartedAtBySessionRef, unsubscribersRef } = refBridges;
+  const runtimeDefinitions = useMemo(() => agentEngine.listRuntimeDefinitions(), [agentEngine]);
 
   const persistSessionSnapshot = useCallback(
     async (session: AgentSessionState): Promise<void> => {
@@ -173,9 +175,12 @@ export function useAgentOrchestratorOperations({
     () =>
       createLoadSessionTodos({
         adapter: agentEngine,
+        supportsSessionTodos: (runtimeKind) =>
+          findRuntimeDefinition(runtimeDefinitions, runtimeKind)?.capabilities.supportsTodos ??
+          false,
         updateSession,
       }),
-    [agentEngine, updateSession],
+    [agentEngine, runtimeDefinitions, updateSession],
   );
 
   const loadAgentSessions = useMemo(

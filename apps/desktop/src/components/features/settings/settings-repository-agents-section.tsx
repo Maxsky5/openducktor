@@ -85,6 +85,7 @@ export function RepositoryAgentsSection({
     const runtimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
     return !(
       value &&
+      runtimeDefinition &&
       value.providerId.trim().length > 0 &&
       value.modelId.trim().length > 0 &&
       (!runtimeDefinition?.capabilities.supportsProfiles ||
@@ -141,6 +142,7 @@ export function RepositoryAgentsSection({
 
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
+          const roleRuntimeOptions = runtimeOptions;
           const value = ensureAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
           const runtimeKind = resolveRuntimeKindSelection({
             runtimeDefinitions,
@@ -182,9 +184,9 @@ export function RepositoryAgentsSection({
                   <Label className="text-xs">Agent Runtime</Label>
                   <AgentRuntimeCombobox
                     value={runtimeKind}
-                    runtimeOptions={runtimeOptions}
+                    runtimeOptions={roleRuntimeOptions}
                     disabled={
-                      isSaving || isLoadingRuntimeDefinitions || runtimeOptions.length === 0
+                      isSaving || isLoadingRuntimeDefinitions || roleRuntimeOptions.length === 0
                     }
                     className={runtimeDropdownClassName}
                     onValueChange={(runtimeKind) =>

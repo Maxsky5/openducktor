@@ -40,6 +40,7 @@ impl AppService {
         emitter: RunEmitter,
     ) -> Result<RunSummary> {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
         let run_id = format!("run-{}", Uuid::new_v4().simple());
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
         let startup_policy = self.resolve_build_startup_policy(

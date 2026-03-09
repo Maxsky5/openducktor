@@ -21,6 +21,7 @@ pub use git::{
 pub use runtime::{
     AgentRuntimeKind, AgentRuntimeRole, RunEvent, RunState, RunSummary, RuntimeCapabilities,
     RuntimeDescriptor, RuntimeInstanceSummary, RuntimeProvisioningMode, RuntimeRole,
+    RuntimeSupportedScope,
 };
 pub use store::TaskStore;
 pub use system::{BeadsCheck, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord};

@@ -1,24 +1,20 @@
-import type { RuntimeCapabilities, RuntimeDescriptor } from "./agent-runtime-schemas";
+import {
+  type RuntimeCapabilities,
+  type RuntimeDescriptor,
+  requiredRuntimeSupportedScopes,
+} from "./agent-runtime-schemas";
 
 export const OPENCODE_RUNTIME_CAPABILITIES = {
-  supportsSessionLifecycle: true,
-  supportsStreamingEvents: true,
-  supportsModelCatalog: true,
   supportsProfiles: true,
   supportsVariants: true,
-  supportsWorkflowTools: true,
+  supportsOdtWorkflowTools: true,
   supportsPermissionRequests: true,
   supportsQuestionRequests: true,
-  supportsHistory: true,
   supportsTodos: true,
   supportsDiff: true,
   supportsFileStatus: true,
-  supportsDiagnostics: true,
-  supportsWorkspaceRuntime: true,
-  supportsTaskRuntime: true,
-  supportsBuildRuntime: true,
   supportsMcpStatus: true,
-  supportsMcpConnect: true,
+  supportedScopes: requiredRuntimeSupportedScopes,
   provisioningMode: "host_managed",
 } as const satisfies RuntimeCapabilities;
 

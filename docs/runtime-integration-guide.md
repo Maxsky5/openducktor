@@ -98,29 +98,27 @@ If the runtime kind is missing, or hydration resolves to a runtime with a differ
 
 Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 
-| Capability | Meaning | Where it matters | How the integration uses it |
-|---|---|---|---|
-| `supportsSessionLifecycle` | Runtime can start, resume, and stop sessions | Session orchestration | Session flows use this when the runtime participates in agent sessions |
-| `supportsStreamingEvents` | Runtime emits incremental session events | Session event stream | Live chat and event-driven UI use this to decide whether streaming is available |
-| `supportsModelCatalog` | Runtime can list models, profiles, and variants | Session start flow and runtime catalog loads | Catalog loading and picker UIs rely on this surface |
-| `supportsProfiles` | Runtime supports named profiles or agents | Session start flow and repo settings | Profile selectors read this before showing profile choices |
-| `supportsVariants` | Runtime supports model variants | Session start flow and repo settings | Variant selectors read this before showing variant choices |
-| `supportsWorkflowTools` | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Workflow roles rely on this when the runtime runs ODT tools |
-| `supportsPermissionRequests` | Runtime can emit permission prompts | Session event handling | Permission reply flows depend on this prompt type existing |
-| `supportsQuestionRequests` | Runtime can emit question prompts | Session event handling | Question reply flows depend on this prompt type existing |
-| `supportsHistory` | Runtime can load historical messages | Session hydration | Session restore uses this to rebuild prior conversation state |
-| `supportsTodos` | Runtime can list session todo items | Session warmup and event refresh | Todo warmup and refresh logic read from this surface |
-| `supportsDiff` | Runtime can provide session diff data | Diff inspection | Diff views call this when showing runtime-produced changes |
-| `supportsFileStatus` | Runtime can provide file status data | File-status inspection | File-status inspection calls this when showing workspace state |
-| `supportsDiagnostics` | Runtime supports diagnostics reporting | Diagnostics panel | Diagnostics views query this surface |
-| `supportsWorkspaceRuntime` | Runtime supports shared workspace instances | Workspace runtime provisioning | Workspace roles such as `spec` and `planner` use this provisioning mode |
-| `supportsTaskRuntime` | Runtime supports task-scoped runtime instances | Task runtime provisioning | Task-scoped roles such as `qa` use this provisioning mode |
-| `supportsBuildRuntime` | Runtime supports build worktree execution | Build orchestration | Build routing uses this when selecting a runtime for `build` |
-| `supportsMcpStatus` | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
-| `supportsMcpConnect` | Runtime can connect to MCP endpoints | MCP integration contract | MCP connection flows use this when wiring runtime MCP support |
+| Capability | Class | Meaning | Where it matters | How the integration uses it |
+|---|---|---|---|---|
+| `supportsProfiles` | Optional enhancement | Runtime supports named profiles or agents | Session start flow and repo settings | Profile selectors read this before showing profile choices |
+| `supportsVariants` | Optional enhancement | Runtime supports model variants | Session start flow and repo settings | Variant selectors read this before showing variant choices |
+| `supportsOdtWorkflowTools` | Product-required capability | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Built-in OpenDucktor roles rely on this when the runtime runs ODT tools |
+| `supportsPermissionRequests` | Optional enhancement | Runtime can emit permission prompts | Session event handling | Permission reply flows are only needed if the runtime emits permission prompts |
+| `supportsQuestionRequests` | Optional enhancement | Runtime can emit question prompts | Session event handling | Question reply flows are only needed if the runtime emits question prompts |
+| `supportsTodos` | Optional enhancement | Runtime can list session todo items | Session warmup and event refresh | Todo warmup and refresh logic read from this surface |
+| `supportsDiff` | Optional enhancement | Runtime can provide session diff data | Diff inspection | Diff views call this when showing runtime-produced changes |
+| `supportsFileStatus` | Optional enhancement | Runtime can provide file status data | File-status inspection | File-status inspection calls this when showing workspace state |
+| `supportsMcpStatus` | Optional enhancement | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
+| `supportedScopes` | Product-required scope coverage | Declares the workflow scopes the runtime implements. For OpenDucktor integration this must include `workspace`, `task`, and `build`. | Runtime validation and host startup | Runtime registration rejects descriptors missing any required workflow scope, and the host fails fast if a runtime does not cover the full workflow scope set |
 | `provisioningMode` | Whether runtime is `host_managed` or `external` | Host/runtime startup model | Startup flows use this to decide whether the host starts the runtime or connects to one that already exists |
 
-Capability flags are part of the runtime descriptor. They describe which runtime surfaces are implemented and which parts of the product can rely on them.
+The current codebase treats runtime integration in three layers:
+
+- `Baseline runtime contract`: session lifecycle, streaming events, model catalog, history, and runtime diagnostics are treated as part of the required OpenDucktor runtime surface rather than as capability toggles.
+- `Required workflow scope coverage`: `supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
+- `Optional enhancement`: the application can work without these. The UI and runtime-health flow gate these features explicitly instead of assuming support.
+
+The current schema does not yet model runtime-specific custom slash commands. If that surface is added later, it belongs in the `Optional enhancement` category: the app can function without it, and the UI should treat it as additive capability rather than a baseline runtime requirement.
 
 ## Eligibility Model
 
@@ -158,6 +156,7 @@ Within that model, runtime behavior looks like this:
 
 - honor the selected model/profile/variant when capabilities claim support,
 - support session hydration from persisted `runtimeKind`, `workingDirectory`, and model/session context,
+- cover every OpenDucktor workflow role by implementing all required runtime scopes: `workspace`, `task`, and `build`,
 - fail fast when a requested operation is unsupported,
 - resolve session-scoped reads from the session runtime rather than the repo default runtime,
 - expose capability flags that match the adapter and host behavior.
@@ -171,6 +170,8 @@ Workflow roles map onto the runtime system like this:
 - `build` is separate and goes through the build orchestrator, not `runtime_start`.
 
 This is why `agentRuntimeStartRoleSchema` excludes `build` in `packages/contracts/src/run-schemas.ts`.
+
+Even though these roles route through different startup paths, every runtime integration must support all of them. OpenDucktor does not allow registering a runtime that handles only `spec`, only `planner`, or any other partial subset.
 
 ## Files to Change When Adding a Runtime
 
@@ -233,6 +234,7 @@ This is the layer where `RuntimeConnection` becomes runtime-specific client inpu
 Update the runtime registry and orchestration entrypoints:
 
 - `apps/desktop/src/state/agent-runtime-registry.ts`
+- `apps/desktop/src/lib/agent-runtime.ts`
 - `apps/desktop/src/state/operations/agent-orchestrator/runtime/runtime.ts`
 - `apps/desktop/src/state/operations/runtime-catalog.ts`
 - `apps/desktop/src/state/operations/use-delegation-operations.ts`
@@ -244,6 +246,8 @@ This layer is where runtime selection is applied to real frontend operations:
 - persisted session hydration fails on runtime-kind mismatches.
 
 These behaviors are what keep runtime routing deterministic across fresh sessions and restored sessions.
+
+The current capability policy helpers live in `apps/desktop/src/lib/agent-runtime.ts`. That file is where OpenDucktor classifies mandatory capabilities, required workflow scope coverage, and optional enhancement capabilities, and where the desktop runtime registry validates descriptors during registration.
 
 ### 5. Session hydration and persistence
 
@@ -280,6 +284,8 @@ Concrete consumers to keep in mind:
 - `supportsProfiles` and `supportsVariants` drive session-start and repo-settings controls,
 - `supportsMcpStatus` drives diagnostics sections and MCP health checks.
 
+`apps/desktop/src/state/operations/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false.
+
 When contributors add new capability-driven UI behavior, the capability information comes from runtime descriptors rather than per-session state.
 
 ### 7. Rust host integration
@@ -301,7 +307,7 @@ Host integration work:
 - add the runtime kind to Rust domain enums and descriptors,
 - make `runtime_list`, `runtime_ensure`, and `runtime_start` understand it,
 - implement host-managed startup if `provisioningMode` is `host_managed`,
-- implement build startup support if `supportsBuildRuntime` is true.
+- implement build startup support while preserving full workflow scope coverage (`workspace`, `task`, and `build`).
 
 ## Build Runtime Rules
 
@@ -315,8 +321,8 @@ Build runtime routing is separate from the generic runtime-start path:
 
 For a new runtime, the build path works like this:
 
-- when `supportsBuildRuntime` is false, build role stays on another runtime,
-- when `supportsBuildRuntime` is true, the build orchestrator starts that runtime for build worktrees,
+- because integrated runtimes must include every required workflow scope, `supportedScopes` must already contain `build`, `task`, and `workspace`,
+- when full workflow scope coverage is present, the build orchestrator starts that runtime for build worktrees,
 - if the host does not know how to start that runtime yet, build startup returns an error instead of launching a different runtime.
 
 ## Verification Checklist
