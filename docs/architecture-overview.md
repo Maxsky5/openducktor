@@ -41,10 +41,10 @@ Key boundary:
 2. `start-session.ts` enforces in-flight dedupe and reuse policy (in-memory latest, then persisted metadata session, else new).
 3. For new sessions it concurrently loads task docs, resolves runtime, and loads repo default model.
 4. Runtime acquisition:
-- `build` role: `host.buildStart` creates worktree + OpenCode runtime.
-- `qa` role: `host.runtimeStart("opencode", repo, task, "qa")` creates role/task runtime.
-- `spec`/`planner`: `host.runtimeEnsure("opencode", repo)` ensures shared workspace runtime.
-5. Rust host spawns OpenCode with `OPENCODE_CONFIG_CONTENT` containing MCP server `openducktor` and env (`ODT_REPO_PATH`, `ODT_BEADS_DIR`, `ODT_METADATA_NAMESPACE`).
+ - `build` role: `host.buildStart(repo, task, runtimeKind)` creates a build worktree and starts the configured build runtime; today only `opencode` is implemented.
+ - `qa` role: `host.runtimeStart(runtimeKind, repo, task, "qa")` creates a task runtime for the selected kind.
+ - `spec`/`planner`: `host.runtimeEnsure(runtimeKind, repo)` ensures a shared workspace runtime for the selected kind.
+5. Rust host resolves the requested runtime kind, then runs runtime-specific startup. Today that startup path still spawns OpenCode with `OPENCODE_CONFIG_CONTENT` containing MCP server `openducktor` and env (`ODT_REPO_PATH`, `ODT_BEADS_DIR`, `ODT_METADATA_NAMESPACE`).
 6. `OpencodeSdkAdapter` (`AgentEnginePort` implementation) starts/resumes session and subscribes to OpenCode stream events.
 7. On prompt send, adapter applies role-scoped tool gating from `AGENT_ROLE_TOOL_POLICY` (core) and runtime tool IDs, then sends `tools` selection to OpenCode.
 8. Session snapshots are persisted via `host.agentSessionUpsert` into task metadata for restart/reuse continuity.
@@ -100,6 +100,7 @@ Concrete adapters today:
 
 ## Related Docs
 - `docs/agent-orchestrator-module-map.md`
+- `docs/runtime-integration-guide.md`
 - `docs/task-workflow-status-model.md`
 - `docs/task-workflow-actions.md`
 - `docs/task-workflow-transition-matrix.md`

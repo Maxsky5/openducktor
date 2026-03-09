@@ -2,8 +2,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentRuntimeStartRoleSchema,
-  agentRuntimeSummaryRoleSchema,
-  agentRuntimeSummarySchema,
   agentSessionRecordSchema,
   gitBranchSchema,
   gitCommitAllRequestSchema,
@@ -22,6 +20,8 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
   runEventSchema,
+  runtimeInstanceSummaryRoleSchema,
+  runtimeInstanceSummarySchema,
   taskCardSchema,
 } from "./index";
 
@@ -488,7 +488,7 @@ describe("runtime schemas", () => {
   });
 
   test("agent runtime summary parses host payload", () => {
-    const parsed = agentRuntimeSummarySchema.parse({
+    const parsed = runtimeInstanceSummarySchema.parse({
       kind: "opencode",
       runtimeId: "runtime-1",
       repoPath: "/repo",
@@ -508,7 +508,7 @@ describe("runtime schemas", () => {
   });
 
   test("agent runtime role schemas enforce summary vs start boundaries", () => {
-    expect(agentRuntimeSummaryRoleSchema.parse("workspace")).toBe("workspace");
+    expect(runtimeInstanceSummaryRoleSchema.parse("workspace")).toBe("workspace");
     expect(agentRuntimeStartRoleSchema.parse("spec")).toBe("spec");
     expect(() => agentRuntimeStartRoleSchema.parse("workspace")).toThrow();
   });

@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentRuntimeSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
+    RuntimeInstanceSummary, AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch,
     GitPort, IssueType, PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState,
     RunSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };

@@ -69,30 +69,30 @@ export const runSummarySchema = z.object({
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
-export const agentRuntimeSummaryRoleSchema = z.enum([
+export const runtimeInstanceSummaryRoleSchema = z.enum([
   "workspace",
   "spec",
   "planner",
   "build",
   "qa",
 ]);
-export type AgentRuntimeSummaryRole = z.infer<typeof agentRuntimeSummaryRoleSchema>;
+export type RuntimeInstanceSummaryRole = z.infer<typeof runtimeInstanceSummaryRoleSchema>;
 
 export const agentRuntimeStartRoleSchema = z.enum(["spec", "planner", "qa"]);
 export type AgentRuntimeStartRole = z.infer<typeof agentRuntimeStartRoleSchema>;
 
-export const agentRuntimeSummarySchema = z.object({
+export const runtimeInstanceSummarySchema = z.object({
   kind: runtimeKindSchema,
   runtimeId: z.string(),
   repoPath: z.string(),
   taskId: z.string().nullable(),
-  role: agentRuntimeSummaryRoleSchema,
+  role: runtimeInstanceSummaryRoleSchema,
   workingDirectory: z.string(),
   runtimeRoute: runtimeRouteSchema,
   startedAt: z.string(),
   descriptor: runtimeDescriptorSchema,
 });
-export type AgentRuntimeSummary = z.infer<typeof agentRuntimeSummarySchema>;
+export type RuntimeInstanceSummary = z.infer<typeof runtimeInstanceSummarySchema>;
 
 export const runEventSchema = z.discriminatedUnion("type", [
   z.object({

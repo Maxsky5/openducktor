@@ -1,9 +1,9 @@
-import type { AgentRuntimeSummary } from "@openducktor/contracts";
+import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 
 export type RepoRuntimeHealthCheck = {
   runtimeOk: boolean;
   runtimeError: string | null;
-  runtime: AgentRuntimeSummary | null;
+  runtime: RuntimeInstanceSummary | null;
   mcpOk: boolean;
   mcpError: string | null;
   mcpServerName: string;

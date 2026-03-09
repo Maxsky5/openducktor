@@ -87,7 +87,7 @@ export const loadRepoPromptOverrides = async (repoPath: string): Promise<RepoPro
   return loadEffectivePromptOverrides(repoPath);
 };
 
-const loadRepoDefaultRuntimeKind = async (
+export const loadRepoDefaultRuntimeKind = async (
   repoPath: string,
   role: AgentRole,
 ): Promise<RuntimeKind> => {
@@ -167,7 +167,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           entry.repoPath === repoPath && entry.taskId === taskId && runningStates.has(entry.state),
       );
       if (!run) {
-        run = await host.buildStart(repoPath, taskId);
+        run = await host.buildStart(repoPath, taskId, runtimeKind);
         runOrchestratorSideEffect(
           "runtime-refresh-task-data-after-build-start",
           refreshTaskData(repoPath),

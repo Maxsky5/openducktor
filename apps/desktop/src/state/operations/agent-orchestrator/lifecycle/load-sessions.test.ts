@@ -98,9 +98,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
-        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -160,9 +157,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
-        runtimeEndpoint: "http://127.0.0.1:4444",
         workingDirectory: "/tmp/repo",
       },
     ];
@@ -226,7 +220,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
         selectedModel: {
           runtimeKind: "claude-code",
@@ -379,9 +372,7 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
-        workingDirectory: "/tmp/repo",
+        workingDirectory: "/tmp/repo/worktree",
       },
     ];
     hostModule.host.runsList = async () => [
@@ -412,6 +403,128 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(historyLoads).toBe(1);
     expect(state["session-1"]?.messages.length).toBeGreaterThan(0);
+    expect(state["session-1"]?.messages[0]?.id).toBe("history:session-start:session-1");
+  });
+
+  test("rehydrates build sessions through a shared runtime when the persisted working directory is an override", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    let observedRuntimeEndpoint: string | null = null;
+    const ensuredRuntimeKinds: string[] = [];
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      const next = updater(current);
+      observedRuntimeEndpoint = next.runtimeEndpoint;
+      state = {
+        ...state,
+        [sessionId]: next,
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => [],
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    const originalRunsList = hostModule.host.runsList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo/conflict-worktree",
+      },
+    ];
+    hostModule.host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-shared",
+        repoPath: "/tmp/repo",
+        taskId: "repo-main",
+        role: "planner",
+        workingDirectory: "/tmp/repo/shared",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4666",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
+    hostModule.host.runsList = async () => [];
+    hostModule.host.runtimeEnsure = async (runtimeKind) => {
+      ensuredRuntimeKinds.push(runtimeKind);
+      return {
+        kind: runtimeKind,
+        runtimeId: "runtime-shared",
+        repoPath: "/tmp/repo",
+        taskId: "repo-main",
+        role: "planner",
+        workingDirectory: "/tmp/repo/shared",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4666",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      };
+    };
+
+    try {
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runsList = originalRunsList;
+      hostModule.host.runtimeEnsure = originalEnsure;
+    }
+
+    expect(ensuredRuntimeKinds).toEqual(["opencode"]);
+    if (observedRuntimeEndpoint === null) {
+      throw new Error("Expected shared runtime hydration to set a runtime endpoint");
+    }
+    if (observedRuntimeEndpoint !== "http://127.0.0.1:4666") {
+      throw new Error(`Unexpected shared runtime endpoint: ${observedRuntimeEndpoint}`);
+    }
+    expect(state["session-1"]?.workingDirectory).toBe("/tmp/repo/conflict-worktree");
     expect(state["session-1"]?.messages[0]?.id).toBe("history:session-start:session-1");
   });
 
@@ -481,8 +594,6 @@ describe("agent-orchestrator-load-sessions", () => {
           status: "running",
           startedAt: "2026-02-22T08:00:00.000Z",
           updatedAt: "2026-02-22T08:00:00.000Z",
-          runtimeId: "runtime-1",
-          runId: "run-1",
           workingDirectory: "/tmp/repo",
         },
       ]);
@@ -564,8 +675,6 @@ describe("agent-orchestrator-load-sessions", () => {
         status: "running",
         startedAt: "2026-02-22T08:00:00.000Z",
         updatedAt: "2026-02-22T08:00:00.000Z",
-        runtimeId: "runtime-1",
-        runId: "run-1",
         workingDirectory: "/tmp/repo",
       },
     ];

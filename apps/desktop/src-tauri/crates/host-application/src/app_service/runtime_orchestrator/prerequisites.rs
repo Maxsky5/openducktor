@@ -1,7 +1,7 @@
 use super::super::{qa_worktree::prepare_qa_worktree, AppService, RuntimeCleanupTarget};
 use super::{RuntimeExistingLookup, RuntimePrerequisiteResolution, RuntimePrerequisites};
 use anyhow::{anyhow, Result};
-use host_domain::{AgentRuntimeRole, AgentRuntimeSummary, RuntimeRole};
+use host_domain::{AgentRuntimeRole, RuntimeInstanceSummary, RuntimeRole};
 use std::path::Path;
 
 impl AppService {
@@ -10,7 +10,7 @@ impl AppService {
         repo_key: &str,
         role: RuntimeRole,
         task_id: &str,
-    ) -> Result<Option<AgentRuntimeSummary>> {
+    ) -> Result<Option<RuntimeInstanceSummary>> {
         let mut runtimes = self
             .agent_runtimes
             .lock()

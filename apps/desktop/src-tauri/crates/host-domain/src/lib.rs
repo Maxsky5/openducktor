@@ -19,7 +19,7 @@ pub use git::{
     GitWorktreeStatusSummaryData, GitWorktreeSummary,
 };
 pub use runtime::{
-    AgentRuntimeKind, AgentRuntimeRole, AgentRuntimeSummary, RunEvent, RunState, RunSummary,
+    AgentRuntimeKind, AgentRuntimeRole, RuntimeInstanceSummary, RunEvent, RunState, RunSummary,
     RuntimeCapabilities, RuntimeDescriptor, RuntimeProvisioningMode, RuntimeRole,
 };
 pub use store::TaskStore;
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn public_api_exports_compile() {
         use super::{
-            AgentRuntimeRole, AgentRuntimeSummary, AgentSessionDocument,
+            AgentRuntimeRole, RuntimeInstanceSummary, AgentSessionDocument,
             AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows, BeadsCheck,
             CreateTaskInput, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
             GitDiffScope, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult,
@@ -120,7 +120,7 @@ mod tests {
         }
 
         check_types_exported!(
-            AgentRuntimeSummary,
+            RuntimeInstanceSummary,
             AgentSessionDocument,
             AgentSessionModelSelection,
             AgentWorkflowState,

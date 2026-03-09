@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use fs2::FileExt;
 use host_domain::{
-    AgentRuntimeSummary, GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeRole, TaskCard,
+    RuntimeInstanceSummary, GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeRole, TaskCard,
     TaskStore,
 };
 use host_infra_system::{AppConfigStore, GitCliPort, RepoConfig, RuntimeConfigStore};

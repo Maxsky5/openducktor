@@ -22,8 +22,6 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
   status: session.status,
   startedAt: session.startedAt,
   runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-  ...(session.runtimeId ? { runtimeId: session.runtimeId } : {}),
-  ...(session.runId ? { runId: session.runId } : {}),
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel
     ? {
@@ -66,8 +64,8 @@ export const fromPersistedSessionRecord = (
     status: normalizedStatus,
     startedAt: session.startedAt,
     runtimeKind: session.runtimeKind ?? session.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-    runtimeId: session.runtimeId ?? null,
-    runId: session.runId ?? null,
+    runtimeId: null,
+    runId: null,
     runtimeEndpoint: "",
     workingDirectory: session.workingDirectory,
     messages: [],

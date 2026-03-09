@@ -103,10 +103,17 @@ export const refreshTodosFromSessionRef = (context: SessionEventContext): void =
   if (!session) {
     return;
   }
+  const runtimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
+  if (!runtimeKind) {
+    throw new Error(
+      `Runtime kind is required to refresh todos for session '${context.sessionId}'.`,
+    );
+  }
   runOrchestratorSideEffect(
     "session-events-refresh-todos",
     context.loadSessionTodos(
       context.sessionId,
+      runtimeKind,
       {
         endpoint: session.runtimeEndpoint,
         workingDirectory: session.workingDirectory,

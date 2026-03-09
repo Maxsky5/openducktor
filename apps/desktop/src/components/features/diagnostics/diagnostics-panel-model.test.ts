@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentRuntimeSummary, RuntimeDescriptor } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 
 const runtimeDefinitions: RuntimeDescriptor[] = [OPENCODE_RUNTIME_DESCRIPTOR];
 
-const runtimeSummary: AgentRuntimeSummary = {
+const runtimeSummary: RuntimeInstanceSummary = {
   kind: "opencode",
   runtimeId: "runtime-1",
   repoPath: "/repo",

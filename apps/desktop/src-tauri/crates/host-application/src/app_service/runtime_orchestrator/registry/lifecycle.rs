@@ -3,7 +3,7 @@ use super::super::super::{
 };
 use super::super::{RuntimePostStartPolicy, RuntimeStartInput, SpawnedRuntimeServer};
 use anyhow::{anyhow, Result};
-use host_domain::{now_rfc3339, AgentRuntimeKind, AgentRuntimeSummary};
+use host_domain::{now_rfc3339, RuntimeInstanceSummary};
 use std::collections::HashMap;
 use std::process::Child;
 use std::sync::MutexGuard;
@@ -13,8 +13,9 @@ impl AppService {
         &self,
         input: RuntimeStartInput<'_>,
         mut spawned_server: SpawnedRuntimeServer,
-    ) -> Result<AgentRuntimeSummary> {
+    ) -> Result<RuntimeInstanceSummary> {
         let RuntimeStartInput {
+            runtime_kind,
             startup_scope,
             repo_key,
             task_id,
@@ -25,15 +26,15 @@ impl AppService {
             ..
         } = input;
 
-        let descriptor = AgentRuntimeKind::Opencode.descriptor();
-        let summary = AgentRuntimeSummary {
-            kind: AgentRuntimeKind::Opencode,
+        let descriptor = runtime_kind.descriptor();
+        let summary = RuntimeInstanceSummary {
+            kind: runtime_kind,
             runtime_id: spawned_server.runtime_id.clone(),
             repo_path: repo_key,
             task_id: (role != host_domain::RuntimeRole::Workspace).then(|| task_id.to_string()),
             role,
             working_directory,
-            runtime_route: AgentRuntimeKind::Opencode.route_for_port(spawned_server.port),
+            runtime_route: runtime_kind.route_for_port(spawned_server.port),
             started_at: now_rfc3339(),
             descriptor,
         };
@@ -86,7 +87,7 @@ impl AppService {
         startup_scope: &str,
         child: &mut Child,
         cleanup_target: Option<&RuntimeCleanupTarget>,
-    ) -> Result<Option<AgentRuntimeSummary>> {
+    ) -> Result<Option<RuntimeInstanceSummary>> {
         let Some(post_start_policy) = post_start_policy else {
             return Ok(None);
         };

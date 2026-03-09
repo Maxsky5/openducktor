@@ -1,4 +1,4 @@
-import type { AgentRuntimeSummary, RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
+import type { RuntimeInstanceSummary, RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -23,7 +23,7 @@ export type RuntimeCatalogAdapter = Pick<AgentEnginePort, "listAvailableModels">
 };
 
 type RuntimeCatalogDependencies = {
-  ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<AgentRuntimeSummary>;
+  ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
   stopRuntime: (runtimeId: string) => Promise<{ ok: boolean }>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
   listAvailableToolIds: (input: ListCatalogInput) => Promise<string[]>;
@@ -35,7 +35,7 @@ type RuntimeCatalogDependencies = {
 type RuntimeProbeResult =
   | {
       ok: true;
-      runtime: AgentRuntimeSummary;
+      runtime: RuntimeInstanceSummary;
       runtimeInput: ListCatalogInput;
     }
   | {
@@ -46,7 +46,7 @@ type RuntimeProbeResult =
 type McpProbeResult =
   | {
       ok: true;
-      runtime: AgentRuntimeSummary;
+      runtime: RuntimeInstanceSummary;
       runtimeInput: ListCatalogInput;
       statusByServer: Record<string, RuntimeMcpServerStatus>;
     }
@@ -63,7 +63,7 @@ type NormalizedMcpStatus = {
 const ODT_MCP_SERVER_NAME = "openducktor";
 const toNowIso = (): string => new Date().toISOString();
 const toRuntimeInput = (
-  runtime: AgentRuntimeSummary,
+  runtime: RuntimeInstanceSummary,
   runtimeKind: RuntimeKind,
 ): ListCatalogInput => ({
   runtimeKind,
@@ -95,7 +95,7 @@ const toRuntimeUnavailableHealthCheck = (
 };
 
 const toMcpStatusFailedHealthCheck = (
-  runtime: AgentRuntimeSummary,
+  runtime: RuntimeInstanceSummary,
   mcpError: string,
   checkedAt: string,
 ): RepoRuntimeHealthCheck => {
@@ -121,7 +121,7 @@ const toRepoRuntimeHealthCheck = ({
   mcpServerError,
   checkedAt,
 }: {
-  runtime: AgentRuntimeSummary;
+  runtime: RuntimeInstanceSummary;
   availableToolIds: string[];
   checkedAt: string;
 } & NormalizedMcpStatus): RepoRuntimeHealthCheck => {
@@ -211,7 +211,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
         };
       }
 
-      let restartedRuntime: AgentRuntimeSummary | null = null;
+      let restartedRuntime: RuntimeInstanceSummary | null = null;
       try {
         await deps.stopRuntime(runtimeProbe.runtime.runtimeId);
         restartedRuntime = await deps.ensureRuntime(runtimeKind, repoPath);

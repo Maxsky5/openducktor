@@ -113,6 +113,8 @@ pub struct QaReportDocument {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSessionModelSelection {
+    #[serde(default = "default_runtime_kind")]
+    pub runtime_kind: String,
     pub provider_id: String,
     pub model_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -146,10 +148,6 @@ pub struct AgentSessionDocument {
     pub ended_at: Option<String>,
     #[serde(default = "default_runtime_kind")]
     pub runtime_kind: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run_id: Option<String>,
     pub working_directory: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_model: Option<AgentSessionModelSelection>,

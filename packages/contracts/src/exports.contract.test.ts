@@ -5,8 +5,6 @@ import type {
   AgentPromptTemplateId,
   AgentRole,
   AgentRuntimeStartRole,
-  AgentRuntimeSummary,
-  AgentRuntimeSummaryRole,
   AgentScenario,
   AgentSessionModelSelection,
   AgentSessionRecord,
@@ -47,6 +45,8 @@ import type {
   RunState,
   RunSummary,
   RuntimeCheck,
+  RuntimeInstanceSummary,
+  RuntimeInstanceSummaryRole,
   SettingsSnapshot,
   SoftGuardrails,
   SystemCheck,
@@ -77,8 +77,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentToolNameSchema",
   "agentToolNameValues",
   "agentRuntimeStartRoleSchema",
-  "agentRuntimeSummarySchema",
-  "agentRuntimeSummaryRoleSchema",
+  "runtimeInstanceSummarySchema",
+  "runtimeInstanceSummaryRoleSchema",
   "agentPromptOverrideSchema",
   "agentPromptPlaceholderSchema",
   "agentPromptPlaceholderValues",
@@ -166,8 +166,8 @@ type ExportedTypeContract = {
   AgentPromptTemplateId: AgentPromptTemplateId;
   AgentScenario: AgentScenario;
   AgentRuntimeStartRole: AgentRuntimeStartRole;
-  AgentRuntimeSummary: AgentRuntimeSummary;
-  AgentRuntimeSummaryRole: AgentRuntimeSummaryRole;
+  RuntimeInstanceSummary: RuntimeInstanceSummary;
+  RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
   AgentSessionModelSelection: AgentSessionModelSelection;
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;

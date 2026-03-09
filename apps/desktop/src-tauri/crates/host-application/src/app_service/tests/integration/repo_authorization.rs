@@ -165,6 +165,7 @@ fn build_rejects_repo_path_not_in_workspace_allowlist() {
         .build_start(
             "/tmp/odt-repo-unauthorized-build",
             "task-1",
+            "opencode",
             make_emitter(events),
         )
         .expect_err("unconfigured repo path should be rejected");

@@ -211,7 +211,7 @@ pub struct RunSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentRuntimeSummary {
+pub struct RuntimeInstanceSummary {
     pub kind: AgentRuntimeKind,
     pub runtime_id: String,
     pub repo_path: String,

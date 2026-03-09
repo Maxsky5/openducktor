@@ -1,16 +1,16 @@
 import {
   type AgentRuntimeStartRole,
-  type AgentRuntimeSummary,
-  agentRuntimeSummarySchema,
   type BeadsCheck,
   beadsCheckSchema,
   type RunSummary,
   type RuntimeCheck,
   type RuntimeDescriptor,
+  type RuntimeInstanceSummary,
   type RuntimeKind,
   runSummarySchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
+  runtimeInstanceSummarySchema,
   type SystemCheck,
   systemCheckSchema,
   type TaskCard,
@@ -47,9 +47,9 @@ export const runtimeList = async (
   invokeFn: InvokeFn,
   runtimeKind: RuntimeKind,
   repoPath?: string,
-): Promise<AgentRuntimeSummary[]> => {
+): Promise<RuntimeInstanceSummary[]> => {
   const payload = await invokeFn<unknown>("runtime_list", { repoPath, runtimeKind });
-  return parseArray(agentRuntimeSummarySchema, payload);
+  return parseArray(runtimeInstanceSummarySchema, payload);
 };
 
 export const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
@@ -63,14 +63,14 @@ export const runtimeStart = async (
   repoPath: string,
   taskId: string,
   role: RuntimeRole,
-): Promise<AgentRuntimeSummary> => {
+): Promise<RuntimeInstanceSummary> => {
   const payload = await invokeFn<unknown>("runtime_start", {
     runtimeKind,
     repoPath,
     taskId,
     role,
   });
-  return agentRuntimeSummarySchema.parse(payload);
+  return runtimeInstanceSummarySchema.parse(payload);
 };
 
 export const runtimeStop = async (
@@ -86,20 +86,21 @@ export const runtimeEnsure = async (
   invokeFn: InvokeFn,
   runtimeKind: RuntimeKind,
   repoPath: string,
-): Promise<AgentRuntimeSummary> => {
+): Promise<RuntimeInstanceSummary> => {
   const payload = await invokeFn<unknown>("runtime_ensure", {
     runtimeKind,
     repoPath,
   });
-  return agentRuntimeSummarySchema.parse(payload);
+  return runtimeInstanceSummarySchema.parse(payload);
 };
 
 export const buildStart = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
+  runtimeKind: RuntimeKind,
 ): Promise<RunSummary> => {
-  const payload = await invokeFn<unknown>("build_start", { repoPath, taskId });
+  const payload = await invokeFn<unknown>("build_start", { repoPath, taskId, runtimeKind });
   return runSummarySchema.parse(payload);
 };
 
@@ -209,7 +210,10 @@ export class TauriAgentClient {
     return runsList(this.invokeFn, repoPath);
   }
 
-  async runtimeList(runtimeKind: RuntimeKind, repoPath?: string): Promise<AgentRuntimeSummary[]> {
+  async runtimeList(
+    runtimeKind: RuntimeKind,
+    repoPath?: string,
+  ): Promise<RuntimeInstanceSummary[]> {
     return runtimeList(this.invokeFn, runtimeKind, repoPath);
   }
 
@@ -222,7 +226,7 @@ export class TauriAgentClient {
     repoPath: string,
     taskId: string,
     role: RuntimeRole,
-  ): Promise<AgentRuntimeSummary> {
+  ): Promise<RuntimeInstanceSummary> {
     return runtimeStart(this.invokeFn, runtimeKind, repoPath, taskId, role);
   }
 
@@ -230,12 +234,16 @@ export class TauriAgentClient {
     return runtimeStop(this.invokeFn, runtimeId);
   }
 
-  async runtimeEnsure(runtimeKind: RuntimeKind, repoPath: string): Promise<AgentRuntimeSummary> {
+  async runtimeEnsure(runtimeKind: RuntimeKind, repoPath: string): Promise<RuntimeInstanceSummary> {
     return runtimeEnsure(this.invokeFn, runtimeKind, repoPath);
   }
 
-  async buildStart(repoPath: string, taskId: string): Promise<RunSummary> {
-    return buildStart(this.invokeFn, repoPath, taskId);
+  async buildStart(
+    repoPath: string,
+    taskId: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<RunSummary> {
+    return buildStart(this.invokeFn, repoPath, taskId, runtimeKind);
   }
 
   async buildBlocked(repoPath: string, taskId: string, reason: string): Promise<TaskCard> {

@@ -1,14 +1,14 @@
 use super::super::super::{AgentRuntimeProcess, AppService};
 use super::super::RuntimeExistingLookup;
 use anyhow::{anyhow, Result};
-use host_domain::AgentRuntimeSummary;
+use host_domain::RuntimeInstanceSummary;
 use std::collections::{HashMap, HashSet};
 
 impl AppService {
     pub(in crate::app_service::runtime_orchestrator) fn list_registered_runtimes(
         &self,
         repo_path: Option<&str>,
-    ) -> Result<Vec<AgentRuntimeSummary>> {
+    ) -> Result<Vec<RuntimeInstanceSummary>> {
         let repo_key_filter = repo_path
             .map(|path| self.ensure_repo_authorized(path))
             .transpose()?;
@@ -51,7 +51,7 @@ impl AppService {
     pub(in crate::app_service::runtime_orchestrator) fn find_existing_runtime(
         runtimes: &HashMap<String, AgentRuntimeProcess>,
         lookup: RuntimeExistingLookup<'_>,
-    ) -> Option<AgentRuntimeSummary> {
+    ) -> Option<RuntimeInstanceSummary> {
         runtimes
             .values()
             .find(|runtime| {
