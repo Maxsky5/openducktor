@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { SessionStartModal } from "@/components/features/agents";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -23,6 +23,7 @@ export function AgentStudioSessionStartModalBridge({
   repoSettings,
   onResolve,
 }: AgentStudioSessionStartModalBridgeProps): ReactElement {
+  const openedRequestIdRef = useRef<string | null>(null);
   const {
     intent,
     isOpen,
@@ -48,6 +49,11 @@ export function AgentStudioSessionStartModalBridge({
   });
 
   useEffect(() => {
+    if (openedRequestIdRef.current === request.requestId) {
+      return;
+    }
+    openedRequestIdRef.current = request.requestId;
+
     openStartModal({
       source: "agent_studio",
       taskId: request.taskId,

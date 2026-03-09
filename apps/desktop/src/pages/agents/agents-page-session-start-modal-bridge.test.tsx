@@ -6,7 +6,9 @@ import { createTaskCardFixture, enableReactActEnvironment } from "./agent-studio
 enableReactActEnvironment();
 
 const openStartModalMock = mock(() => {});
+const replacementOpenStartModalMock = mock(() => {});
 const closeStartModalMock = mock(() => {});
+let currentOpenStartModal = openStartModalMock;
 
 mock.module("@/components/features/agents", () => ({
   SessionStartModal: ({ model }: { model: Record<string, unknown> }): ReactElement =>
@@ -30,7 +32,7 @@ mock.module("../shared/use-session-start-modal-coordinator", () => ({
     modelOptions: [],
     modelGroups: [],
     variantOptions: [],
-    openStartModal: openStartModalMock,
+    openStartModal: currentOpenStartModal,
     closeStartModal: closeStartModalMock,
     handleSelectRuntime: mock(() => {}),
     handleSelectAgent: mock(() => {}),
@@ -56,7 +58,9 @@ const createRequest = (requestId: string) => ({
 
 beforeEach(async () => {
   openStartModalMock.mockClear();
+  replacementOpenStartModalMock.mockClear();
   closeStartModalMock.mockClear();
+  currentOpenStartModal = openStartModalMock;
 
   ({ AgentStudioSessionStartModalBridge } = await import(
     "./agents-page-session-start-modal-bridge"
@@ -102,6 +106,45 @@ describe("AgentStudioSessionStartModalBridge", () => {
           scenario: "build_implementation_start",
         }),
       );
+    } finally {
+      await act(async () => {
+        renderer.unmount();
+      });
+    }
+  });
+
+  test("does not reopen the modal when only the coordinator callback identity changes", async () => {
+    const onResolve = mock(() => {});
+    let renderer!: ReactTestRenderer;
+
+    await act(async () => {
+      renderer = create(
+        createElement(AgentStudioSessionStartModalBridge, {
+          request: createRequest("session-start-0"),
+          activeRepo: "/repo",
+          repoSettings: null,
+          onResolve,
+        }),
+      );
+    });
+
+    try {
+      expect(openStartModalMock).toHaveBeenCalledTimes(1);
+
+      currentOpenStartModal = replacementOpenStartModalMock;
+      await act(async () => {
+        renderer.update(
+          createElement(AgentStudioSessionStartModalBridge, {
+            request: createRequest("session-start-0"),
+            activeRepo: "/repo",
+            repoSettings: null,
+            onResolve,
+          }),
+        );
+      });
+
+      expect(openStartModalMock).toHaveBeenCalledTimes(1);
+      expect(replacementOpenStartModalMock).toHaveBeenCalledTimes(0);
     } finally {
       await act(async () => {
         renderer.unmount();
