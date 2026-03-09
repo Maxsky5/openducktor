@@ -15,6 +15,7 @@ import {
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import {
   DEFAULT_RUNTIME_KIND,
+  filterRuntimeDefinitionsForRole,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
@@ -129,24 +130,32 @@ export function useSessionStartModalState({
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
   const [catalog, setCatalog] = useState<AgentModelCatalog | null>(initialCatalog ?? null);
   const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const activeRole = intent?.role ?? null;
+  const eligibleRuntimeDefinitions = useMemo(
+    () =>
+      activeRole
+        ? filterRuntimeDefinitionsForRole(runtimeDefinitions, activeRole)
+        : runtimeDefinitions,
+    [activeRole, runtimeDefinitions],
+  );
   const runtimeOptions = useMemo(
-    () => toAgentRuntimeOptions(runtimeDefinitions),
-    [runtimeDefinitions],
+    () => toAgentRuntimeOptions(eligibleRuntimeDefinitions),
+    [eligibleRuntimeDefinitions],
   );
   const selectedRuntimeDescriptor = useMemo(
-    () => findRuntimeDefinition(runtimeDefinitions, selectedRuntimeKind),
-    [runtimeDefinitions, selectedRuntimeKind],
+    () => findRuntimeDefinition(eligibleRuntimeDefinitions, selectedRuntimeKind),
+    [eligibleRuntimeDefinitions, selectedRuntimeKind],
   );
 
   useEffect(() => {
     const nextRuntimeKind = resolveRuntimeKindSelection({
-      runtimeDefinitions,
+      runtimeDefinitions: eligibleRuntimeDefinitions,
       requestedRuntimeKind: selectedRuntimeKind,
     });
     if (nextRuntimeKind !== selectedRuntimeKind) {
       setSelectedRuntimeKind(nextRuntimeKind);
     }
-  }, [runtimeDefinitions, selectedRuntimeKind]);
+  }, [eligibleRuntimeDefinitions, selectedRuntimeKind]);
 
   useEffect(() => {
     if (initialCatalog !== undefined) {
@@ -194,8 +203,12 @@ export function useSessionStartModalState({
 
   const openStartModal = useCallback(
     (nextIntent: SessionStartModalIntent) => {
-      const initialRuntimeKind = resolveRuntimeKindSelection({
+      const roleRuntimeDefinitions = filterRuntimeDefinitionsForRole(
         runtimeDefinitions,
+        nextIntent.role,
+      );
+      const initialRuntimeKind = resolveRuntimeKindSelection({
+        runtimeDefinitions: roleRuntimeDefinitions,
         requestedRuntimeKind:
           nextIntent.selectedModel?.runtimeKind ??
           roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
@@ -216,8 +229,6 @@ export function useSessionStartModalState({
     },
     [catalog, repoSettings, runtimeDefinitions],
   );
-
-  const activeRole = intent?.role ?? null;
 
   useEffect(() => {
     if (!activeRole) {
@@ -241,7 +252,7 @@ export function useSessionStartModalState({
   const handleSelectRuntime = useCallback(
     (runtimeKindValue: string): void => {
       const runtimeKind = resolveRuntimeKindSelection({
-        runtimeDefinitions,
+        runtimeDefinitions: eligibleRuntimeDefinitions,
         requestedRuntimeKind: runtimeKindValue as RuntimeKind,
       });
       setSelectedRuntimeKind(runtimeKind);
@@ -258,7 +269,7 @@ export function useSessionStartModalState({
         );
       });
     },
-    [activeRole, intent?.selectedModel, repoSettings, runtimeDefinitions],
+    [activeRole, eligibleRuntimeDefinitions, intent?.selectedModel, repoSettings],
   );
 
   const selectedModelEntry = useMemo(() => {

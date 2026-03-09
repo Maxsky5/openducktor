@@ -6,7 +6,7 @@ use super::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{
     AgentRuntimeKind, AgentRuntimeRole, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
-    RuntimeRole,
+    RuntimeRole, RuntimeSupportedScope,
 };
 use std::collections::HashSet;
 use std::process::Child;
@@ -79,6 +79,17 @@ impl AppService {
         repo_path: &str,
     ) -> Result<RuntimeInstanceSummary> {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        if !runtime_kind
+            .descriptor()
+            .capabilities
+            .supported_scopes
+            .contains(&RuntimeSupportedScope::Workspace)
+        {
+            return Err(anyhow!(
+                "Runtime '{}' does not support workspace runtimes.",
+                runtime_kind.as_str()
+            ));
+        }
         self.ensure_workspace_runtime(runtime_kind, repo_path)
     }
 
@@ -90,6 +101,17 @@ impl AppService {
         role: AgentRuntimeRole,
     ) -> Result<RuntimeInstanceSummary> {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
+        if !runtime_kind
+            .descriptor()
+            .capabilities
+            .supported_scopes
+            .contains(&RuntimeSupportedScope::Task)
+        {
+            return Err(anyhow!(
+                "Runtime '{}' does not support task runtimes.",
+                runtime_kind.as_str()
+            ));
+        }
         self.start_task_runtime(runtime_kind, repo_path, task_id, role)
     }
 

@@ -40,6 +40,7 @@ const catalogFixture: AgentModelCatalog = {
 };
 
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
+  getRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
   ensureRuntime: async () => runtimeFixture,
   stopRuntime: async () => ({ ok: true }),
   listAvailableModels: async () => catalogFixture,
@@ -147,6 +148,67 @@ describe("opencode-catalog", () => {
     expect(result.runtime).toEqual(runtimeFixture);
     expect(result.mcpError).toBe("Failed to query runtime MCP status: status unavailable");
     expect(result.errors).toEqual(["Failed to query runtime MCP status: status unavailable"]);
+  });
+
+  test("treats MCP status as optional when the runtime does not support it", async () => {
+    const getMcpStatus = mock(async () => ({
+      openducktor: {
+        status: "connected",
+      },
+    }));
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        getRuntimeDefinition: () => ({
+          ...OPENCODE_RUNTIME_DESCRIPTOR,
+          capabilities: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+            supportsMcpStatus: false,
+          },
+        }),
+        getMcpStatus,
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(result.runtimeOk).toBe(true);
+    expect(result.mcpOk).toBe(true);
+    expect(result.availableToolIds).toEqual([]);
+    expect(result.mcpServerStatus).toBeNull();
+    expect(result.errors).toEqual([]);
+    expect(getMcpStatus).not.toHaveBeenCalled();
+  });
+
+  test("reconnects MCP when status support reports a disconnected server", async () => {
+    const connectMcpServer = mock(async () => {});
+    const getMcpStatus = mock(async () => ({
+      openducktor: {
+        status: "disconnected",
+        error: "not connected",
+        command: null,
+        args: null,
+        env: null,
+      },
+    }));
+    const operations = createRuntimeCatalogOperations(
+      createDeps({
+        getRuntimeDefinition: () => ({
+          ...OPENCODE_RUNTIME_DESCRIPTOR,
+          capabilities: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          },
+        }),
+        getMcpStatus,
+        connectMcpServer,
+      }),
+    );
+
+    const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
+
+    expect(connectMcpServer).toHaveBeenCalledTimes(1);
+    expect(result.mcpOk).toBe(false);
+    expect(result.mcpServerStatus).toBe("disconnected");
+    expect(result.mcpError).toBe("not connected");
   });
 
   test("reports missing openducktor server in MCP status map", async () => {

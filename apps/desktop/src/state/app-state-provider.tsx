@@ -37,7 +37,10 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const runtimeRegistry = useMemo(() => createAgentRuntimeRegistry(), []);
   const agentEngine = useMemo(() => runtimeRegistry.createAgentEngine(), [runtimeRegistry]);
   const runtimeCatalogOperations = useMemo(() => {
-    const ops = createHostRuntimeCatalogOperations(runtimeRegistry.getAdapter);
+    const ops = createHostRuntimeCatalogOperations(
+      runtimeRegistry.getAdapter,
+      runtimeRegistry.getRuntimeDefinition,
+    );
     configureRuntimeCatalogOperations(ops);
     return ops;
   }, [runtimeRegistry]);

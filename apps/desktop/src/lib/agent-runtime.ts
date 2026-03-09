@@ -1,4 +1,12 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import {
+  mandatoryRuntimeCapabilityKeys,
+  type RuntimeCapabilityKey,
+  type RuntimeDescriptor,
+  type RuntimeKind,
+  type RuntimeSupportedScope,
+  runtimeRequiredScopeByRole,
+} from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { createElement } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
@@ -63,4 +71,62 @@ export const runtimeLabelFor = ({
   runtimeKind: RuntimeKind;
 }): string => {
   return findRuntimeDefinition(runtimeDefinitions, runtimeKind)?.label ?? runtimeKind;
+};
+
+export const runtimeSupportsCapability = (
+  runtimeDescriptor: RuntimeDescriptor,
+  capability: RuntimeCapabilityKey,
+): boolean => {
+  return runtimeDescriptor.capabilities[capability];
+};
+
+export const getMissingMandatoryRuntimeCapabilities = (
+  runtimeDescriptor: RuntimeDescriptor,
+): RuntimeCapabilityKey[] => {
+  return mandatoryRuntimeCapabilityKeys.filter(
+    (capability) => !runtimeSupportsCapability(runtimeDescriptor, capability),
+  );
+};
+
+export const getRuntimeDescriptorCapabilityConfigErrors = (
+  _runtimeDescriptor: RuntimeDescriptor,
+): string[] => {
+  return [];
+};
+
+export const validateRuntimeDefinitionForOpenDucktor = (
+  runtimeDescriptor: RuntimeDescriptor,
+): string[] => {
+  const missingMandatory = getMissingMandatoryRuntimeCapabilities(runtimeDescriptor);
+  const errors = [...getRuntimeDescriptorCapabilityConfigErrors(runtimeDescriptor)];
+  if (missingMandatory.length > 0) {
+    errors.unshift(`missing mandatory capabilities: ${missingMandatory.join(", ")}`);
+  }
+  return errors;
+};
+
+export const runtimeSupportsRole = (
+  runtimeDescriptor: RuntimeDescriptor,
+  role: AgentRole,
+): boolean => {
+  return runtimeDescriptor.capabilities.supportedScopes.includes(runtimeRequiredScopeByRole[role]);
+};
+
+export const filterRuntimeDefinitionsForRole = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  role: AgentRole,
+): RuntimeDescriptor[] => {
+  return runtimeDefinitions.filter((definition) => runtimeSupportsRole(definition, role));
+};
+
+export const runtimeSupportsAllRoles = (runtimeDescriptor: RuntimeDescriptor): boolean => {
+  return (Object.values(runtimeRequiredScopeByRole) as RuntimeSupportedScope[]).every((scope) =>
+    runtimeDescriptor.capabilities.supportedScopes.includes(scope),
+  );
+};
+
+export const filterRuntimeDefinitionsForDefaultSelection = (
+  runtimeDefinitions: RuntimeDescriptor[],
+): RuntimeDescriptor[] => {
+  return runtimeDefinitions.filter(runtimeSupportsAllRoles);
 };

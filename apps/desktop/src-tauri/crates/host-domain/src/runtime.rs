@@ -33,24 +33,20 @@ impl AgentRuntimeKind {
                 label: "OpenCode".to_string(),
                 description: "OpenCode local runtime with OpenDucktor MCP integration.".to_string(),
                 capabilities: RuntimeCapabilities {
-                    supports_session_lifecycle: true,
-                    supports_streaming_events: true,
-                    supports_model_catalog: true,
                     supports_profiles: true,
                     supports_variants: true,
-                    supports_workflow_tools: true,
+                    supports_odt_workflow_tools: true,
                     supports_permission_requests: true,
                     supports_question_requests: true,
-                    supports_history: true,
                     supports_todos: true,
                     supports_diff: true,
                     supports_file_status: true,
-                    supports_diagnostics: true,
-                    supports_workspace_runtime: true,
-                    supports_task_runtime: true,
-                    supports_build_runtime: true,
                     supports_mcp_status: true,
-                    supports_mcp_connect: true,
+                    supported_scopes: vec![
+                        RuntimeSupportedScope::Workspace,
+                        RuntimeSupportedScope::Task,
+                        RuntimeSupportedScope::Build,
+                    ],
                     provisioning_mode: RuntimeProvisioningMode::HostManaged,
                 },
             },
@@ -88,27 +84,27 @@ pub enum RuntimeProvisioningMode {
     External,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeSupportedScope {
+    Workspace,
+    Task,
+    Build,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapabilities {
-    pub supports_session_lifecycle: bool,
-    pub supports_streaming_events: bool,
-    pub supports_model_catalog: bool,
     pub supports_profiles: bool,
     pub supports_variants: bool,
-    pub supports_workflow_tools: bool,
+    pub supports_odt_workflow_tools: bool,
     pub supports_permission_requests: bool,
     pub supports_question_requests: bool,
-    pub supports_history: bool,
     pub supports_todos: bool,
     pub supports_diff: bool,
     pub supports_file_status: bool,
-    pub supports_diagnostics: bool,
-    pub supports_workspace_runtime: bool,
-    pub supports_task_runtime: bool,
-    pub supports_build_runtime: bool,
     pub supports_mcp_status: bool,
-    pub supports_mcp_connect: bool,
+    pub supported_scopes: Vec<RuntimeSupportedScope>,
     pub provisioning_mode: RuntimeProvisioningMode,
 }
 

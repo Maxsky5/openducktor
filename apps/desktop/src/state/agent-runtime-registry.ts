@@ -8,7 +8,7 @@ import type {
   AgentSessionPort,
   AgentWorkspaceInspectionPort,
 } from "@openducktor/core";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { DEFAULT_RUNTIME_KIND, validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
 import type { RuntimeCatalogAdapter } from "./operations/runtime-catalog";
 
 type RegisteredRuntimeAdapter = AgentCatalogPort &
@@ -22,6 +22,7 @@ export type AgentRuntimeRegistry = {
   defaultRuntimeKind: RuntimeKind;
   registeredRuntimeKinds: RuntimeKind[];
   getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter;
+  getRuntimeDefinition: (runtimeKind: RuntimeKind) => AgentRuntimeDefinition;
   createAgentEngine: () => AgentEnginePort;
 };
 
@@ -40,10 +41,25 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
     return adapter;
   };
 
+  const getRuntimeDefinition = (runtimeKind: RuntimeKind): AgentRuntimeDefinition => {
+    return getAdapter(runtimeKind).getRuntimeDefinition();
+  };
+
+  for (const runtimeKind of registeredRuntimeKinds) {
+    const definition = getRuntimeDefinition(runtimeKind);
+    const validationErrors = validateRuntimeDefinitionForOpenDucktor(definition);
+    if (validationErrors.length > 0) {
+      throw new Error(
+        `Runtime '${definition.kind}' is incompatible with OpenDucktor: ${validationErrors.join("; ")}`,
+      );
+    }
+  }
+
   return {
     defaultRuntimeKind: DEFAULT_RUNTIME_KIND,
     registeredRuntimeKinds,
     getAdapter,
+    getRuntimeDefinition,
     createAgentEngine: () =>
       new RuntimeRegistryAgentEngine(getAdapter, registeredRuntimeKinds, DEFAULT_RUNTIME_KIND),
   };

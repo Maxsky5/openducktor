@@ -1,4 +1,9 @@
-import type { RuntimeInstanceSummary, RuntimeKind, RuntimeRoute } from "@openducktor/contracts";
+import type {
+  RuntimeDescriptor,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+  RuntimeRoute,
+} from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -23,6 +28,7 @@ export type RuntimeCatalogAdapter = Pick<AgentEnginePort, "listAvailableModels">
 };
 
 type RuntimeCatalogDependencies = {
+  getRuntimeDefinition: (runtimeKind: RuntimeKind) => RuntimeDescriptor;
   ensureRuntime: (runtimeKind: RuntimeKind, repoPath: string) => Promise<RuntimeInstanceSummary>;
   stopRuntime: (runtimeId: string) => Promise<{ ok: boolean }>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
@@ -111,6 +117,25 @@ const toMcpStatusFailedHealthCheck = (
     availableToolIds: [],
     checkedAt,
     errors: [mcpError],
+  };
+};
+
+const toRepoRuntimeHealthCheckWithoutMcpStatus = (
+  runtime: RuntimeInstanceSummary,
+  checkedAt: string,
+): RepoRuntimeHealthCheck => {
+  return {
+    runtimeOk: true,
+    runtimeError: null,
+    runtime,
+    mcpOk: true,
+    mcpError: null,
+    mcpServerName: ODT_MCP_SERVER_NAME,
+    mcpServerStatus: null,
+    mcpServerError: null,
+    availableToolIds: [],
+    checkedAt,
+    errors: [],
   };
 };
 
@@ -306,9 +331,14 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     runtimeKind: RuntimeKind,
   ): Promise<RepoRuntimeHealthCheck> => {
     const checkedAt = toNowIso();
+    const runtimeDefinition = deps.getRuntimeDefinition(runtimeKind);
     const runtimeProbe = await probeRuntime(repoPath, runtimeKind, checkedAt);
     if (!runtimeProbe.ok) {
       return runtimeProbe.result;
+    }
+
+    if (!runtimeDefinition.capabilities.supportsMcpStatus) {
+      return toRepoRuntimeHealthCheckWithoutMcpStatus(runtimeProbe.runtime, checkedAt);
     }
 
     const mcpProbe = await probeMcpStatusWithRetryStrategy(
@@ -349,8 +379,10 @@ export type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOpe
 
 export const createHostRuntimeCatalogOperations = (
   getAdapter: (runtimeKind: RuntimeKind) => RuntimeCatalogAdapter,
+  getRuntimeDefinition: (runtimeKind: RuntimeKind) => RuntimeDescriptor,
 ): RuntimeCatalogOperations =>
   createRuntimeCatalogOperations({
+    getRuntimeDefinition,
     ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(runtimeKind, repoPath),
     stopRuntime: (runtimeId) => host.runtimeStop(runtimeId),
     listAvailableModels: (input) =>
