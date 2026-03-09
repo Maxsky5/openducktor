@@ -19,11 +19,8 @@ import type { ComboboxGroup } from "@/components/ui/combobox";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import {
-  filterRuntimeDefinitionsForDefaultSelection,
-  filterRuntimeDefinitionsForRole,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
-  runtimeSupportsRole,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 
@@ -70,8 +67,7 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const defaultRuntimeDefinitions = filterRuntimeDefinitionsForDefaultSelection(runtimeDefinitions);
-  const runtimeOptions = toAgentRuntimeOptions(defaultRuntimeDefinitions);
+  const runtimeOptions = toAgentRuntimeOptions(runtimeDefinitions);
   const runtimeDropdownClassName = "sm:min-w-[18rem]";
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const modelDropdownClassName = "sm:min-w-[26rem]";
@@ -83,14 +79,13 @@ export function RepositoryAgentsSection({
   const missingRoleLabels = ROLE_DEFAULTS.filter(({ role }) => {
     const value = selectedRepoConfig.agentDefaults[role];
     const runtimeKind = resolveRuntimeKindSelection({
-      runtimeDefinitions: filterRuntimeDefinitionsForRole(runtimeDefinitions, role),
+      runtimeDefinitions,
       requestedRuntimeKind: value?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind,
     });
     const runtimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
     return !(
       value &&
       runtimeDefinition &&
-      runtimeSupportsRole(runtimeDefinition, role) &&
       value.providerId.trim().length > 0 &&
       value.modelId.trim().length > 0 &&
       (!runtimeDefinition?.capabilities.supportsProfiles ||
@@ -147,14 +142,13 @@ export function RepositoryAgentsSection({
 
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
-          const roleRuntimeDefinitions = filterRuntimeDefinitionsForRole(runtimeDefinitions, role);
-          const roleRuntimeOptions = toAgentRuntimeOptions(roleRuntimeDefinitions);
+          const roleRuntimeOptions = runtimeOptions;
           const value = ensureAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
           const runtimeKind = resolveRuntimeKindSelection({
-            runtimeDefinitions: roleRuntimeDefinitions,
+            runtimeDefinitions,
             requestedRuntimeKind: value.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind,
           });
-          const runtimeDescriptor = findRuntimeDefinition(roleRuntimeDefinitions, runtimeKind);
+          const runtimeDescriptor = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
           const catalog = getCatalogForRuntime(runtimeKind);
           const catalogError = getCatalogErrorForRuntime(runtimeKind);
           const isRoleCatalogLoading = isCatalogLoadingForRuntime(runtimeKind);

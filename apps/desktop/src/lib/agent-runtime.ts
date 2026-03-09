@@ -1,9 +1,9 @@
 import {
+  getMissingRequiredRuntimeSupportedScopes,
   mandatoryRuntimeCapabilityKeys,
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
-  runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createElement } from "react";
@@ -88,9 +88,16 @@ export const getMissingMandatoryRuntimeCapabilities = (
 };
 
 export const getRuntimeDescriptorCapabilityConfigErrors = (
-  _runtimeDescriptor: RuntimeDescriptor,
+  runtimeDescriptor: RuntimeDescriptor,
 ): string[] => {
-  return [];
+  const missingSupportedScopes = getMissingRequiredRuntimeSupportedScopes(
+    runtimeDescriptor.capabilities.supportedScopes,
+  );
+  if (missingSupportedScopes.length === 0) {
+    return [];
+  }
+
+  return [`missing required workflow scopes: ${missingSupportedScopes.join(", ")}`];
 };
 
 export const validateRuntimeDefinitionForOpenDucktor = (
@@ -104,13 +111,26 @@ export const validateRuntimeDefinitionForOpenDucktor = (
   return errors;
 };
 
+export const validateRuntimeDefinitionsForOpenDucktor = (
+  runtimeDefinitions: RuntimeDescriptor[],
+): string[] => {
+  return runtimeDefinitions.flatMap((runtimeDescriptor) => {
+    const errors = validateRuntimeDefinitionForOpenDucktor(runtimeDescriptor);
+    if (errors.length === 0) {
+      return [];
+    }
+
+    return [
+      `Runtime '${runtimeDescriptor.kind}' is incompatible with OpenDucktor: ${errors.join("; ")}`,
+    ];
+  });
+};
+
 export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
-  role: AgentRole,
+  _role: AgentRole,
 ): boolean => {
-  return runtimeRequiredScopesByRole[role].every((scope) =>
-    runtimeDescriptor.capabilities.supportedScopes.includes(scope),
-  );
+  return runtimeSupportsAllRoles(runtimeDescriptor);
 };
 
 export const filterRuntimeDefinitionsForRole = (
@@ -121,8 +141,9 @@ export const filterRuntimeDefinitionsForRole = (
 };
 
 export const runtimeSupportsAllRoles = (runtimeDescriptor: RuntimeDescriptor): boolean => {
-  return Object.values(runtimeRequiredScopesByRole).every((scopes) =>
-    scopes.every((scope) => runtimeDescriptor.capabilities.supportedScopes.includes(scope)),
+  return (
+    getMissingRequiredRuntimeSupportedScopes(runtimeDescriptor.capabilities.supportedScopes)
+      .length === 0
   );
 };
 

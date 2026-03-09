@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { validateRuntimeDefinitionsForOpenDucktor } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import {
   ActiveRepoContext,
@@ -22,6 +23,18 @@ export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElemen
   const [isLoadingRuntimeDefinitions, setIsLoadingRuntimeDefinitions] = useState(true);
   const [runtimeDefinitionsError, setRuntimeDefinitionsError] = useState<string | null>(null);
 
+  const requireCompatibleRuntimeDefinitions = useCallback(
+    (runtimeDefinitions: RuntimeDescriptor[]): RuntimeDescriptor[] => {
+      const validationErrors = validateRuntimeDefinitionsForOpenDucktor(runtimeDefinitions);
+      if (validationErrors.length > 0) {
+        throw new Error(validationErrors.join(" "));
+      }
+
+      return runtimeDefinitions;
+    },
+    [],
+  );
+
   const activeRepoValue = useMemo<ActiveRepoContextValue>(
     () => ({
       activeRepo,
@@ -34,7 +47,9 @@ export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElemen
     setIsLoadingRuntimeDefinitions(true);
     setRuntimeDefinitionsError(null);
     try {
-      const nextDefinitions = await host.runtimeDefinitionsList();
+      const nextDefinitions = requireCompatibleRuntimeDefinitions(
+        await host.runtimeDefinitionsList(),
+      );
       setRuntimeDefinitions(nextDefinitions);
       return nextDefinitions;
     } catch (error) {
@@ -45,7 +60,7 @@ export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElemen
     } finally {
       setIsLoadingRuntimeDefinitions(false);
     }
-  }, []);
+  }, [requireCompatibleRuntimeDefinitions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +73,7 @@ export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElemen
         if (cancelled) {
           return;
         }
-        setRuntimeDefinitions(nextDefinitions);
+        setRuntimeDefinitions(requireCompatibleRuntimeDefinitions(nextDefinitions));
       })
       .catch((error) => {
         if (cancelled) {
@@ -76,7 +91,7 @@ export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElemen
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [requireCompatibleRuntimeDefinitions]);
 
   const runtimeDefinitionsValue = useMemo<RuntimeDefinitionsContextValue>(
     () => ({

@@ -73,6 +73,21 @@ export const runtimeRequiredScopesByRole = {
   build: ["build", "workspace"],
 } as const satisfies Record<AgentRole, readonly RuntimeSupportedScope[]>;
 
+const requiredRuntimeSupportedScopeSet = new Set<RuntimeSupportedScope>(
+  Object.values(runtimeRequiredScopesByRole).flat(),
+);
+
+export const requiredRuntimeSupportedScopes = runtimeSupportedScopeValues.filter((scope) =>
+  requiredRuntimeSupportedScopeSet.has(scope),
+);
+
+export const getMissingRequiredRuntimeSupportedScopes = (
+  supportedScopes: readonly RuntimeSupportedScope[],
+): RuntimeSupportedScope[] => {
+  const supportedScopeSet = new Set<RuntimeSupportedScope>(supportedScopes);
+  return requiredRuntimeSupportedScopes.filter((scope) => !supportedScopeSet.has(scope));
+};
+
 export type RuntimeCapabilityClass = "mandatory" | "optional" | "role_scoped";
 
 export const runtimeCapabilityClasses = {

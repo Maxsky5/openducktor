@@ -42,11 +42,7 @@ impl AgentRuntimeKind {
                     supports_diff: true,
                     supports_file_status: true,
                     supports_mcp_status: true,
-                    supported_scopes: vec![
-                        RuntimeSupportedScope::Workspace,
-                        RuntimeSupportedScope::Task,
-                        RuntimeSupportedScope::Build,
-                    ],
+                    supported_scopes: REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec(),
                     provisioning_mode: RuntimeProvisioningMode::HostManaged,
                 },
             },
@@ -92,6 +88,28 @@ pub enum RuntimeSupportedScope {
     Build,
 }
 
+impl RuntimeSupportedScope {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace",
+            Self::Task => "task",
+            Self::Build => "build",
+        }
+    }
+}
+
+impl fmt::Display for RuntimeSupportedScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+pub const REQUIRED_RUNTIME_SUPPORTED_SCOPES: [RuntimeSupportedScope; 3] = [
+    RuntimeSupportedScope::Workspace,
+    RuntimeSupportedScope::Task,
+    RuntimeSupportedScope::Build,
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapabilities {
@@ -108,6 +126,28 @@ pub struct RuntimeCapabilities {
     pub provisioning_mode: RuntimeProvisioningMode,
 }
 
+impl RuntimeCapabilities {
+    pub fn missing_mandatory_capabilities(&self) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if !self.supports_odt_workflow_tools {
+            missing.push("supports_odt_workflow_tools");
+        }
+        missing
+    }
+
+    pub fn missing_required_supported_scopes(&self) -> Vec<RuntimeSupportedScope> {
+        REQUIRED_RUNTIME_SUPPORTED_SCOPES
+            .iter()
+            .copied()
+            .filter(|scope| !self.supported_scopes.contains(scope))
+            .collect()
+    }
+
+    pub fn supports_all_workflow_scopes(&self) -> bool {
+        self.missing_required_supported_scopes().is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeDescriptor {
@@ -115,6 +155,34 @@ pub struct RuntimeDescriptor {
     pub label: String,
     pub description: String,
     pub capabilities: RuntimeCapabilities,
+}
+
+impl RuntimeDescriptor {
+    pub fn validate_for_openducktor(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        let missing_mandatory_capabilities = self.capabilities.missing_mandatory_capabilities();
+        if !missing_mandatory_capabilities.is_empty() {
+            errors.push(format!(
+                "missing mandatory capabilities: {}",
+                missing_mandatory_capabilities.join(", ")
+            ));
+        }
+
+        let missing_supported_scopes = self.capabilities.missing_required_supported_scopes();
+        if !missing_supported_scopes.is_empty() {
+            errors.push(format!(
+                "missing required workflow scopes: {}",
+                missing_supported_scopes
+                    .into_iter()
+                    .map(|scope| scope.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+
+        errors
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,4 +338,88 @@ pub enum RunEvent {
         message: String,
         timestamp: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AgentRuntimeKind, RuntimeCapabilities, RuntimeDescriptor, RuntimeProvisioningMode,
+        RuntimeSupportedScope, REQUIRED_RUNTIME_SUPPORTED_SCOPES,
+    };
+
+    fn capabilities_with_scopes(scopes: Vec<RuntimeSupportedScope>) -> RuntimeCapabilities {
+        RuntimeCapabilities {
+            supports_profiles: true,
+            supports_variants: true,
+            supports_odt_workflow_tools: true,
+            supports_permission_requests: true,
+            supports_question_requests: true,
+            supports_todos: true,
+            supports_diff: true,
+            supports_file_status: true,
+            supports_mcp_status: true,
+            supported_scopes: scopes,
+            provisioning_mode: RuntimeProvisioningMode::HostManaged,
+        }
+    }
+
+    #[test]
+    fn missing_required_supported_scopes_reports_uncovered_workflow_scopes() {
+        let capabilities = capabilities_with_scopes(vec![RuntimeSupportedScope::Workspace]);
+
+        assert_eq!(
+            capabilities.missing_required_supported_scopes(),
+            vec![RuntimeSupportedScope::Task, RuntimeSupportedScope::Build]
+        );
+        assert!(!capabilities.supports_all_workflow_scopes());
+    }
+
+    #[test]
+    fn supports_all_workflow_scopes_accepts_full_runtime_scope_coverage() {
+        let capabilities = capabilities_with_scopes(REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec());
+
+        assert!(capabilities.missing_required_supported_scopes().is_empty());
+        assert!(capabilities.supports_all_workflow_scopes());
+    }
+
+    #[test]
+    fn opencode_descriptor_uses_required_workflow_scope_set() {
+        let descriptor = AgentRuntimeKind::Opencode.descriptor();
+
+        assert_eq!(
+            descriptor.capabilities.supported_scopes,
+            REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec()
+        );
+        assert!(descriptor.capabilities.supports_all_workflow_scopes());
+    }
+
+    #[test]
+    fn runtime_descriptor_validation_reports_mandatory_capabilities_and_scopes() {
+        let descriptor = RuntimeDescriptor {
+            kind: AgentRuntimeKind::Opencode,
+            label: "OpenCode".to_string(),
+            description: "desc".to_string(),
+            capabilities: RuntimeCapabilities {
+                supports_profiles: true,
+                supports_variants: true,
+                supports_odt_workflow_tools: false,
+                supports_permission_requests: true,
+                supports_question_requests: true,
+                supports_todos: true,
+                supports_diff: true,
+                supports_file_status: true,
+                supports_mcp_status: true,
+                supported_scopes: vec![RuntimeSupportedScope::Workspace],
+                provisioning_mode: RuntimeProvisioningMode::HostManaged,
+            },
+        };
+
+        assert_eq!(
+            descriptor.validate_for_openducktor(),
+            vec![
+                "missing mandatory capabilities: supports_odt_workflow_tools".to_string(),
+                "missing required workflow scopes: task, build".to_string(),
+            ]
+        );
+    }
 }

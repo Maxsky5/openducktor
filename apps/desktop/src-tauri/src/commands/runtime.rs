@@ -37,7 +37,7 @@ pub async fn beads_check(
 pub async fn runtime_definitions_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<RuntimeDescriptor>, String> {
-    Ok(state.service.runtime_definitions_list())
+    as_error(state.service.runtime_definitions_list())
 }
 
 #[tauri::command]

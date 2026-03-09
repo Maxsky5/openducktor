@@ -7,10 +7,7 @@ use super::super::{
 use super::build_runtime_setup::{BuildPrerequisites, PreparedBuildWorktree, SpawnedBuildAgent};
 use super::BuildResponseAction;
 use anyhow::{anyhow, Context, Result};
-use host_domain::{
-    now_rfc3339, AgentRuntimeKind, RunEvent, RunState, RunSummary, RuntimeSupportedScope,
-    TaskStatus,
-};
+use host_domain::{now_rfc3339, AgentRuntimeKind, RunEvent, RunState, RunSummary, TaskStatus};
 use std::process::{ChildStderr, ChildStdout};
 use uuid::Uuid;
 
@@ -43,17 +40,7 @@ impl AppService {
         emitter: RunEmitter,
     ) -> Result<RunSummary> {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
-        if !runtime_kind
-            .descriptor()
-            .capabilities
-            .supported_scopes
-            .contains(&RuntimeSupportedScope::Build)
-        {
-            return Err(anyhow!(
-                "Runtime '{}' does not support build runtimes.",
-                runtime_kind.as_str()
-            ));
-        }
+        Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
         let run_id = format!("run-{}", Uuid::new_v4().simple());
         let prerequisites = self.validate_build_prerequisites(repo_path, task_id)?;
         let startup_policy = self.resolve_build_startup_policy(

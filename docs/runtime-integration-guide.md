@@ -109,13 +109,13 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `supportsDiff` | Optional enhancement | Runtime can provide session diff data | Diff inspection | Diff views call this when showing runtime-produced changes |
 | `supportsFileStatus` | Optional enhancement | Runtime can provide file status data | File-status inspection | File-status inspection calls this when showing workspace state |
 | `supportsMcpStatus` | Optional enhancement | Runtime exposes MCP status info | Diagnostics and health checks | Diagnostics and MCP health checks read this before querying MCP status |
-| `supportedScopes` | Role-scoped | Declares where the runtime can run: `workspace`, `task`, and/or `build` | Runtime selection and host startup | The UI filters runtime choices by role, and the host rejects unsupported startup paths |
+| `supportedScopes` | Product-required scope coverage | Declares the workflow scopes the runtime implements. For OpenDucktor integration this must include `workspace`, `task`, and `build`. | Runtime validation and host startup | Runtime registration rejects descriptors missing any required workflow scope, and the host fails fast if a runtime does not cover the full workflow scope set |
 | `provisioningMode` | Whether runtime is `host_managed` or `external` | Host/runtime startup model | Startup flows use this to decide whether the host starts the runtime or connects to one that already exists |
 
 The current codebase treats runtime integration in three layers:
 
 - `Baseline runtime contract`: session lifecycle, streaming events, model catalog, history, and runtime diagnostics are treated as part of the required OpenDucktor runtime surface rather than as capability toggles.
-- `Role-scoped support`: `supportedScopes` decides which runtime roles a runtime can serve. The UI filters runtime choices by role, and the host rejects unsupported `workspace`, `task`, or `build` startup paths.
+- `Required workflow scope coverage`: `supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
 - `Optional enhancement`: the application can work without these. The UI and runtime-health flow gate these features explicitly instead of assuming support.
 
 The current schema does not yet model runtime-specific custom slash commands. If that surface is added later, it belongs in the `Optional enhancement` category: the app can function without it, and the UI should treat it as additive capability rather than a baseline runtime requirement.
@@ -156,6 +156,7 @@ Within that model, runtime behavior looks like this:
 
 - honor the selected model/profile/variant when capabilities claim support,
 - support session hydration from persisted `runtimeKind`, `workingDirectory`, and model/session context,
+- cover every OpenDucktor workflow role by implementing all required runtime scopes: `workspace`, `task`, and `build`,
 - fail fast when a requested operation is unsupported,
 - resolve session-scoped reads from the session runtime rather than the repo default runtime,
 - expose capability flags that match the adapter and host behavior.
@@ -169,6 +170,8 @@ Workflow roles map onto the runtime system like this:
 - `build` is separate and goes through the build orchestrator, not `runtime_start`.
 
 This is why `agentRuntimeStartRoleSchema` excludes `build` in `packages/contracts/src/run-schemas.ts`.
+
+Even though these roles route through different startup paths, every runtime integration must support all of them. OpenDucktor does not allow registering a runtime that handles only `spec`, only `planner`, or any other partial subset.
 
 ## Files to Change When Adding a Runtime
 
@@ -244,7 +247,7 @@ This layer is where runtime selection is applied to real frontend operations:
 
 These behaviors are what keep runtime routing deterministic across fresh sessions and restored sessions.
 
-The current capability policy helpers live in `apps/desktop/src/lib/agent-runtime.ts`. That file is where OpenDucktor classifies mandatory capabilities, role-scoped provisioning capabilities, and optional enhancement capabilities, and where the desktop runtime registry validates descriptors during registration.
+The current capability policy helpers live in `apps/desktop/src/lib/agent-runtime.ts`. That file is where OpenDucktor classifies mandatory capabilities, required workflow scope coverage, and optional enhancement capabilities, and where the desktop runtime registry validates descriptors during registration.
 
 ### 5. Session hydration and persistence
 
@@ -304,7 +307,7 @@ Host integration work:
 - add the runtime kind to Rust domain enums and descriptors,
 - make `runtime_list`, `runtime_ensure`, and `runtime_start` understand it,
 - implement host-managed startup if `provisioningMode` is `host_managed`,
-- implement build startup support when `supportedScopes` includes `build`.
+- implement build startup support while preserving full workflow scope coverage (`workspace`, `task`, and `build`).
 
 ## Build Runtime Rules
 
@@ -318,8 +321,8 @@ Build runtime routing is separate from the generic runtime-start path:
 
 For a new runtime, the build path works like this:
 
-- when `supportedScopes` does not include `build`, the runtime is not eligible for the `build` role,
-- when `supportedScopes` includes `build`, the build orchestrator starts that runtime for build worktrees,
+- because integrated runtimes must include every required workflow scope, `supportedScopes` must already contain `build`, `task`, and `workspace`,
+- when full workflow scope coverage is present, the build orchestrator starts that runtime for build worktrees,
 - if the host does not know how to start that runtime yet, build startup returns an error instead of launching a different runtime.
 
 ## Verification Checklist
