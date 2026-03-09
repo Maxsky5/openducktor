@@ -37,3 +37,6 @@ export const DIFF_SCOPE_OPTIONS: Array<{
 ];
 
 export const PRELOAD_DIFF_LIMIT = 12;
+
+export const INLINE_CODE_CLASS_NAME =
+  "rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
