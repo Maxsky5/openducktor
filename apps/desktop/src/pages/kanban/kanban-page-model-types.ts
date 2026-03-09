@@ -19,6 +19,8 @@ export type KanbanPageHeaderModel = {
 };
 
 export type KanbanPageContentModel = {
+  isLoadingTasks: boolean;
+  isSwitchingWorkspace: boolean;
   columns: KanbanColumnData[];
   runStateByTaskId: Map<string, RunSummary["state"]>;
   activeSessionsByTaskId: Map<string, AgentSessionState[]>;

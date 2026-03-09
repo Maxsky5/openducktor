@@ -7,6 +7,8 @@ import type { KanbanPageContentModel } from "./kanban-page-model-types";
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
 
 type UseKanbanBoardModelArgs = {
+  isLoadingTasks: boolean;
+  isSwitchingWorkspace: boolean;
   tasks: TaskCard[];
   runs: RunSummary[];
   sessions: AgentSessionState[];
@@ -19,6 +21,8 @@ type UseKanbanBoardModelArgs = {
 };
 
 export function useKanbanBoardModel({
+  isLoadingTasks,
+  isSwitchingWorkspace,
   tasks,
   runs,
   sessions,
@@ -64,6 +68,8 @@ export function useKanbanBoardModel({
   }, [sessions]);
 
   return {
+    isLoadingTasks,
+    isSwitchingWorkspace,
     columns,
     runStateByTaskId,
     activeSessionsByTaskId,

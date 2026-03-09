@@ -80,6 +80,8 @@ export function useKanbanPageModels(): KanbanPageModels {
   });
 
   const content = useKanbanBoardModel({
+    isLoadingTasks,
+    isSwitchingWorkspace,
     tasks,
     runs,
     sessions,

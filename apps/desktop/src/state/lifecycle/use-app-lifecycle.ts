@@ -129,20 +129,31 @@ export function useAppLifecycle({
       }),
     );
 
-    Promise.allSettled([
-      (async () => {
-        const beads = await refreshBeadsCheckForRepo(activeRepo, false);
-        if (!beads.beadsOk) {
-          throw new Error(
-            beads.beadsError ?? "Beads store is not initialized for this repository.",
-          );
-        }
+    const taskLoadPromise = (async () => {
+      const beads = await refreshBeadsCheckForRepo(activeRepo, false);
+      if (!beads.beadsOk) {
+        throw new Error(beads.beadsError ?? "Beads store is not initialized for this repository.");
+      }
 
-        await refreshTaskData(activeRepo);
-      })(),
-      refreshRuntimeCheck(false),
-      refreshRepoRuntimeHealthForRepo(activeRepo, false),
-      refreshBranches(false),
+      await refreshTaskData(activeRepo);
+    })();
+    const runtimeCheckPromise = refreshRuntimeCheck(false);
+    const runtimeHealthPromise = refreshRepoRuntimeHealthForRepo(activeRepo, false);
+    const branchesPromise = refreshBranches(false);
+
+    void taskLoadPromise.finally(() => {
+      if (repoLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+
+      setIsLoadingTasks(false);
+    });
+
+    Promise.allSettled([
+      taskLoadPromise,
+      runtimeCheckPromise,
+      runtimeHealthPromise,
+      branchesPromise,
     ])
       .then(([tasksResult, runtimeResult, runtimeHealthResult, branchesResult]) => {
         if (repoLoadVersionRef.current !== loadVersion) {
@@ -190,7 +201,6 @@ export function useAppLifecycle({
           return;
         }
 
-        setIsLoadingTasks(false);
         setIsLoadingChecks(false);
       });
   }, [
