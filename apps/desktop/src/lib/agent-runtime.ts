@@ -3,8 +3,7 @@ import {
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
-  type RuntimeSupportedScope,
-  runtimeRequiredScopeByRole,
+  runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createElement } from "react";
@@ -109,7 +108,9 @@ export const runtimeSupportsRole = (
   runtimeDescriptor: RuntimeDescriptor,
   role: AgentRole,
 ): boolean => {
-  return runtimeDescriptor.capabilities.supportedScopes.includes(runtimeRequiredScopeByRole[role]);
+  return runtimeRequiredScopesByRole[role].every((scope) =>
+    runtimeDescriptor.capabilities.supportedScopes.includes(scope),
+  );
 };
 
 export const filterRuntimeDefinitionsForRole = (
@@ -120,8 +121,8 @@ export const filterRuntimeDefinitionsForRole = (
 };
 
 export const runtimeSupportsAllRoles = (runtimeDescriptor: RuntimeDescriptor): boolean => {
-  return (Object.values(runtimeRequiredScopeByRole) as RuntimeSupportedScope[]).every((scope) =>
-    runtimeDescriptor.capabilities.supportedScopes.includes(scope),
+  return Object.values(runtimeRequiredScopesByRole).every((scopes) =>
+    scopes.every((scope) => runtimeDescriptor.capabilities.supportedScopes.includes(scope)),
   );
 };
 

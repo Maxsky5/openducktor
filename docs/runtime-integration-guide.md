@@ -281,7 +281,6 @@ Concrete consumers to keep in mind:
 - `supportsProfiles` and `supportsVariants` drive session-start and repo-settings controls,
 - `supportsMcpStatus` drives diagnostics sections and MCP health checks.
 
-`apps/desktop/src/state/operations/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false and only attempts MCP reconnect when `supportsMcpConnect` is true.
 `apps/desktop/src/state/operations/runtime-catalog.ts` is the main optional-capability gate for runtime diagnostics. It now skips MCP probing when `supportsMcpStatus` is false.
 
 When contributors add new capability-driven UI behavior, the capability information comes from runtime descriptors rather than per-session state.

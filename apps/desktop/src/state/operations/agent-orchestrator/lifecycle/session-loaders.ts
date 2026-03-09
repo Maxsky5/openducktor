@@ -19,6 +19,7 @@ type SessionLoadersAdapter = Pick<AgentEnginePort, "listAvailableModels" | "load
 
 type CreateSessionLoadersArgs = {
   adapter: SessionLoadersAdapter;
+  supportsSessionTodos?: (runtimeKind: string) => boolean;
   updateSession: UpdateSession;
 };
 
@@ -157,6 +158,7 @@ export const createLoadSessionModelCatalog = ({
 
 export const createLoadSessionTodos = ({
   adapter,
+  supportsSessionTodos = () => true,
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
@@ -170,6 +172,17 @@ export const createLoadSessionTodos = ({
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ): Promise<void> => {
+    if (!supportsSessionTodos(runtimeKind)) {
+      updateSession(
+        sessionId,
+        (current) => ({
+          ...current,
+          todos: [],
+        }),
+        { persist: false },
+      );
+      return;
+    }
     const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
     const todos = await adapter.loadSessionTodos({
       runtimeKind,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AgentRole } from "./agent-workflow-schemas";
 
 export const knownRuntimeKindValues = ["opencode"] as const;
 export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
@@ -59,15 +60,18 @@ export const optionalRuntimeCapabilityKeys = [
   "supportsVariants",
   "supportsPermissionRequests",
   "supportsQuestionRequests",
+  "supportsTodos",
+  "supportsDiff",
+  "supportsFileStatus",
   "supportsMcpStatus",
 ] as const satisfies readonly RuntimeCapabilityKey[];
 
-export const runtimeRequiredScopeByRole = {
-  spec: "workspace",
-  planner: "workspace",
-  qa: "task",
-  build: "build",
-} as const satisfies Record<string, RuntimeSupportedScope>;
+export const runtimeRequiredScopesByRole = {
+  spec: ["workspace"],
+  planner: ["workspace"],
+  qa: ["task"],
+  build: ["build", "workspace"],
+} as const satisfies Record<AgentRole, readonly RuntimeSupportedScope[]>;
 
 export type RuntimeCapabilityClass = "mandatory" | "optional" | "role_scoped";
 

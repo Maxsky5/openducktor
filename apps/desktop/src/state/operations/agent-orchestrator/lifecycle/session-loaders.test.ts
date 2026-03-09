@@ -183,6 +183,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
           { id: "a", content: "A updated", status: "completed", priority: "medium" },
         ],
       },
+      supportsSessionTodos: () => true,
       updateSession: harness.updateSession,
     });
 
@@ -205,6 +206,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
           return [];
         },
       },
+      supportsSessionTodos: () => true,
       updateSession: harness.updateSession,
     });
 
@@ -220,5 +222,28 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       ),
     ).rejects.toThrow("Session runtime workingDirectory must not contain traversal segments.");
     expect(loadSessionTodosCalled).toBe(false);
+  });
+
+  test("skips adapter todos loading when runtime does not support todos", async () => {
+    const harness = createStateHarness(
+      createSession({}, [{ id: "a", content: "A", status: "pending", priority: "medium" }]),
+    );
+    let loadSessionTodosCalled = false;
+    const loadSessionTodos = createLoadSessionTodos({
+      adapter: {
+        listAvailableModels: async () => catalogFixture,
+        loadSessionTodos: async () => {
+          loadSessionTodosCalled = true;
+          return [];
+        },
+      },
+      supportsSessionTodos: () => false,
+      updateSession: harness.updateSession,
+    });
+
+    await loadSessionTodos("session-1", "opencode", runtimeConnection, "external-1");
+
+    expect(loadSessionTodosCalled).toBe(false);
+    expect(harness.getState()["session-1"]?.todos).toEqual([]);
   });
 });

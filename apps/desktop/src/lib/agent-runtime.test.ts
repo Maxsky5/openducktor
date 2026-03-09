@@ -49,12 +49,17 @@ describe("agent-runtime capability policies", () => {
     const buildOnly = withCapabilities({
       supportedScopes: ["build"],
     });
+    const buildAndWorkspace = withCapabilities({
+      supportedScopes: ["build", "workspace"],
+    });
 
     expect(runtimeSupportsRole(workspaceOnly, "planner")).toBe(true);
     expect(runtimeSupportsRole(workspaceOnly, "qa")).toBe(false);
-    expect(filterRuntimeDefinitionsForRole([workspaceOnly, buildOnly], "build")).toEqual([
-      buildOnly,
-    ]);
+    expect(runtimeSupportsRole(buildOnly, "build")).toBe(false);
+    expect(runtimeSupportsRole(buildAndWorkspace, "build")).toBe(true);
+    expect(
+      filterRuntimeDefinitionsForRole([workspaceOnly, buildOnly, buildAndWorkspace], "build"),
+    ).toEqual([buildAndWorkspace]);
     expect(filterRuntimeDefinitionsForDefaultSelection([workspaceOnly, buildOnly])).toEqual([]);
     expect(filterRuntimeDefinitionsForDefaultSelection([OPENCODE_RUNTIME_DESCRIPTOR])).toEqual([
       OPENCODE_RUNTIME_DESCRIPTOR,

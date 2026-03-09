@@ -142,7 +142,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeKindSchema",
   "runtimeRouteSchema",
   "runtimeProvisioningModeSchema",
-  "runtimeRequiredScopeByRole",
+  "runtimeRequiredScopesByRole",
   "runtimeRefSchema",
   "runtimeSupportedScopeSchema",
   "runtimeSupportedScopeValues",
