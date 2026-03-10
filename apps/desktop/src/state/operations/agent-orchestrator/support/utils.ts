@@ -2,6 +2,7 @@ export { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assista
 export {
   createRepoStaleGuard,
   isDuplicateAssistantMessage,
+  normalizeWorkingDirectory,
   now,
   READ_ONLY_ROLES,
   runningStates,

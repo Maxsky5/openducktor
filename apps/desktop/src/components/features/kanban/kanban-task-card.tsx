@@ -280,6 +280,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   onDelegate,
   onPlan,
   onQaStart,
+  onQaOpen,
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
@@ -333,6 +334,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           onBuild={onBuild}
           onDelegate={onDelegate}
           {...(onQaStart ? { onQaStart } : {})}
+          {...(onQaOpen ? { onQaOpen } : {})}
           {...(onHumanApprove ? { onHumanApprove } : {})}
           {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
         />

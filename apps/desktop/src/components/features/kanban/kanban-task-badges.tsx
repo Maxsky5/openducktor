@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
+import { isQaRejectedTask } from "@/lib/task-qa";
 
 const ISSUE_TYPE_STYLES: Record<
   IssueType,
@@ -205,7 +206,7 @@ export const QaRejectedBadge = memo(function QaRejectedBadge({
 }: {
   task: TaskCard;
 }): ReactElement | null {
-  if (!(task.status === "in_progress" && task.documentSummary.qaReport.verdict === "rejected")) {
+  if (!isQaRejectedTask(task)) {
     return null;
   }
 

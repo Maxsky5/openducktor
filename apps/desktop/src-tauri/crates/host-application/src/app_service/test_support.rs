@@ -1108,46 +1108,6 @@ exit 1
     write_executable_script(path, script)
 }
 
-pub(crate) fn create_failing_opencode_with_worktree_cleanup(path: &Path) -> Result<()> {
-    let script = r#"#!/bin/sh
-if [ "$1" = "--version" ]; then
-  echo "opencode-fake 0.0.1"
-  exit 0
-fi
-
-if [ "$1" = "serve" ]; then
-  REPO_PATH=$(python3 - <<'PY'
-import json
-import os
-
-raw = os.environ.get("OPENCODE_CONFIG_CONTENT", "{}")
-try:
-    config = json.loads(raw)
-except Exception:
-    print("")
-    raise SystemExit(0)
-
-environment = (
-    config.get("mcp", {})
-    .get("openducktor", {})
-    .get("environment", {})
-)
-print(environment.get("ODT_REPO_PATH", ""))
-PY
-)
-  if [ -n "$REPO_PATH" ]; then
-    rm -rf "$REPO_PATH"
-  fi
-  echo "simulated startup failure after deleting repo path" >&2
-  exit 42
-fi
-
-echo "unsupported opencode invocation" >&2
-exit 1
-"#;
-    write_executable_script(path, script)
-}
-
 pub(crate) fn create_fake_bd(path: &Path) -> Result<()> {
     let script = r#"#!/bin/sh
 echo "bd-fake"

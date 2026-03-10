@@ -10,7 +10,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { host } from "../../host";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
-import { runningStates, toBaseUrl } from "../support/utils";
+import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/utils";
 
 export type RuntimeInfo = {
   runtimeKind?: RuntimeKind;
@@ -29,14 +29,6 @@ export const toRuntimeConnection = (
   endpoint: runtimeEndpoint,
   workingDirectory,
 });
-
-const normalizeWorkingDirectory = (workingDirectory: string | null | undefined): string => {
-  let normalized = workingDirectory?.trim() ?? "";
-  while (normalized.length > 1 && /[\\/]/.test(normalized.at(-1) ?? "")) {
-    normalized = normalized.slice(0, -1);
-  }
-  return normalized;
-};
 
 export const resolveRuntimeConnection = (runtime: RuntimeInfo): AgentRuntimeConnection => {
   return (

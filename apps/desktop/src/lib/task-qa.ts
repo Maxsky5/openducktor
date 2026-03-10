@@ -5,5 +5,8 @@ export const isQaRejectedTask = (task: TaskCard | null | undefined): boolean => 
     return false;
   }
 
-  return task.status === "in_progress" && task.documentSummary.qaReport.verdict === "rejected";
+  return (
+    (task.status === "in_progress" || task.status === "blocked") &&
+    task.documentSummary.qaReport.verdict === "rejected"
+  );
 };
