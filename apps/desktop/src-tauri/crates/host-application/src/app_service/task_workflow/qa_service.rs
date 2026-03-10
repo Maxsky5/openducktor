@@ -1,6 +1,6 @@
 use crate::app_service::service_core::AppService;
 use crate::app_service::workflow_rules::validate_transition;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use host_domain::{QaVerdict, SpecDocument, TaskCard, TaskStatus};
 
 impl AppService {
@@ -48,6 +48,12 @@ impl AppService {
         verdict: QaVerdict,
     ) -> Result<TaskCard> {
         let mut context = self.load_task_context(repo_path, task_id)?;
+        if context.task.status != TaskStatus::AiReview {
+            return Err(anyhow!(
+                "QA outcomes are only allowed from ai_review (current: {}).",
+                context.task.status.as_cli_value()
+            ));
+        }
         validate_transition(
             &context.task,
             &context.repo.tasks,

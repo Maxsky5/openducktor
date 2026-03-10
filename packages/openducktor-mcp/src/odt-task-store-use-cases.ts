@@ -308,6 +308,9 @@ export class QaApprovedUseCase implements OdtTaskStoreUseCase<QaApprovedInput, Q
   async execute(input: QaApprovedInput): Promise<QaApprovedResult> {
     await this.workflow.ensureInitialized();
     const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
+    if (task.status !== "ai_review") {
+      throw new Error(`QA outcomes are only allowed from ai_review (current: ${task.status}).`);
+    }
     this.workflow.assertTransitionAllowed(task, [task], "human_review");
     const preparedWrite = this.documentStore.prepareQaReportWrite(
       issue,
@@ -334,6 +337,9 @@ export class QaRejectedUseCase implements OdtTaskStoreUseCase<QaRejectedInput, Q
   async execute(input: QaRejectedInput): Promise<QaRejectedResult> {
     await this.workflow.ensureInitialized();
     const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
+    if (task.status !== "ai_review") {
+      throw new Error(`QA outcomes are only allowed from ai_review (current: ${task.status}).`);
+    }
     this.workflow.assertTransitionAllowed(task, [task], "in_progress");
     const preparedWrite = this.documentStore.prepareQaReportWrite(
       issue,
