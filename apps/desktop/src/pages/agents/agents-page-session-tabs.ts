@@ -159,7 +159,17 @@ export const buildWorkflowStateByRole = (params: {
   const qaRejected = isQaRejectedTask(params.task);
 
   for (const role of ALL_AGENT_ROLES) {
+    const latestRoleSession = params.latestSessionByRole[role];
     if (role === "build" && qaRejected) {
+      stateByRole[role] = "done";
+      continue;
+    }
+    if (
+      role === "build" &&
+      latestRoleSession?.scenario === "build_after_qa_rejected" &&
+      latestRoleSession.status === "idle" &&
+      !qaRejected
+    ) {
       stateByRole[role] = "done";
       continue;
     }
@@ -171,7 +181,6 @@ export const buildWorkflowStateByRole = (params: {
       stateByRole[role] = "done";
       continue;
     }
-    const latestRoleSession = params.latestSessionByRole[role];
     const hasStartedRoleSession =
       latestRoleSession?.status === "starting" ||
       latestRoleSession?.status === "running" ||
@@ -204,8 +213,18 @@ export const buildLatestSessionByRoleMap = (
     qa: null,
   };
 
+  const sortedSessions = [...sessionsForTask].sort((a, b) => {
+    if (a.startedAt !== b.startedAt) {
+      return a.startedAt > b.startedAt ? -1 : 1;
+    }
+    if (a.sessionId === b.sessionId) {
+      return 0;
+    }
+    return a.sessionId > b.sessionId ? -1 : 1;
+  });
+
   for (const role of ALL_AGENT_ROLES) {
-    map[role] = sessionsForTask.find((entry) => entry.role === role) ?? null;
+    map[role] = sortedSessions.find((entry) => entry.role === role) ?? null;
   }
 
   return map;

@@ -309,6 +309,56 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
+  test("keeps builder done after completed qa-rework session even before task status catches up", () => {
+    const task = buildTask({
+      status: "in_progress",
+      documentSummary: {
+        spec: { has: true, updatedAt: "2026-02-22T09:00:00.000Z" },
+        plan: { has: true, updatedAt: "2026-02-22T09:30:00.000Z" },
+        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: true },
+      },
+    });
+
+    const states = buildWorkflowStateByRole({
+      task,
+      roleWorkflowsByTask: {
+        spec: task.agentWorkflows.spec,
+        planner: task.agentWorkflows.planner,
+        build: task.agentWorkflows.builder,
+        qa: task.agentWorkflows.qa,
+      },
+      latestSessionByRole: {
+        spec: buildSession({ role: "spec", status: "idle" }),
+        planner: buildSession({ role: "planner", status: "idle" }),
+        build: buildSession({
+          role: "build",
+          status: "idle",
+          scenario: "build_after_qa_rejected",
+          startedAt: "2026-02-22T11:00:00.000Z",
+        }),
+        qa: buildSession({
+          role: "qa",
+          status: "idle",
+          scenario: "qa_review",
+          startedAt: "2026-02-22T10:00:00.000Z",
+        }),
+      },
+    });
+
+    expect(states).toEqual({
+      spec: "done",
+      planner: "done",
+      build: "done",
+      qa: "done",
+    });
+  });
+
   test("builds grouped session selector options", () => {
     const groups = buildSessionSelectorGroups({
       sessionsForTask: [
@@ -374,6 +424,27 @@ describe("agents-page-session-tabs", () => {
     expect(latestByRole.planner?.sessionId).toBe("planner-1");
     expect(latestByRole.build?.sessionId).toBe("build-1");
     expect(latestByRole.qa).toBeNull();
+  });
+
+  test("builds latest session map by role using newest startedAt", () => {
+    const sessions = [
+      buildSession({
+        sessionId: "build-older",
+        role: "build",
+        scenario: "build_implementation_start",
+        startedAt: "2026-02-20T09:00:00.000Z",
+      }),
+      buildSession({
+        sessionId: "build-newer",
+        role: "build",
+        scenario: "build_after_qa_rejected",
+        startedAt: "2026-02-20T11:00:00.000Z",
+      }),
+    ];
+
+    const latestByRole = buildLatestSessionByRoleMap(sessions);
+
+    expect(latestByRole.build?.sessionId).toBe("build-newer");
   });
 
   test("builds session create options without continue actions", () => {
