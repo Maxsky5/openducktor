@@ -657,7 +657,7 @@ describe("OdtTaskStore workflow mutation paths", () => {
         makeIssue({
           id: "task-1",
           title: "QA task",
-          status: "human_review",
+          status: "ai_review",
           issueType: "feature",
           metadata: {
             openducktor: {
@@ -735,7 +735,7 @@ describe("OdtTaskStore workflow mutation paths", () => {
         taskId: "task-1",
         reportMarkdown: "## QA report",
       }),
-    ).rejects.toThrow("Transition not allowed");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
 
     expect(harness.getMetadataUpdateCalls()).toHaveLength(0);
     expect(harness.getStatusUpdateCalls()).toHaveLength(0);
