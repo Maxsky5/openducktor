@@ -281,8 +281,9 @@ export class OpencodeSdkAdapter
     session: SessionRecord,
     model: SendAgentUserMessageInput["model"],
   ): Promise<Record<string, boolean>> {
-    const providerId = model?.providerId?.trim() ?? "";
-    const modelId = model?.modelId?.trim() ?? "";
+    const effectiveModel = model ?? session.input.model;
+    const providerId = effectiveModel?.providerId?.trim() ?? "";
+    const modelId = effectiveModel?.modelId?.trim() ?? "";
     const modelKey = providerId && modelId ? `${providerId}/${modelId}` : "";
     const nowMs = Date.now();
     if (

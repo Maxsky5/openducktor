@@ -1,5 +1,6 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentRole, ODT_WORKFLOW_TOOL_NAMES } from "@openducktor/core";
+import { isReadOnlyRole } from "./read-only-roles";
 
 type PermissionAction = "allow" | "deny" | "ask";
 
@@ -10,8 +11,6 @@ export type OpencodePermissionRule = {
 };
 
 const ODT_WORKFLOW_PERMISSION_WILDCARD = "openducktor_odt_*";
-const isReadOnlyRole = (role: AgentRole): boolean =>
-  role === "spec" || role === "planner" || role === "qa";
 
 export const buildRoleScopedPermissionRules = (input: {
   role: AgentRole;
@@ -22,17 +21,7 @@ export const buildRoleScopedPermissionRules = (input: {
   const rules: OpencodePermissionRule[] = [];
 
   if (isReadOnlyRole(role)) {
-    // OpenCode's umbrella edit permission governs edit/write/patch-style file mutations.
-    rules.push({
-      permission: "edit",
-      pattern: "*",
-      action: "deny",
-    });
-
     for (const toolId of new Set(runtimeDescriptor.readOnlyRoleBlockedTools)) {
-      if (toolId === "edit") {
-        continue;
-      }
       rules.push({
         permission: toolId,
         pattern: "*",

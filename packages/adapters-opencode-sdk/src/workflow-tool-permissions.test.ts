@@ -9,15 +9,20 @@ describe("workflow-tool-permissions", () => {
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
-    expect(rules).toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
-    expect(rules).toContainEqual({ permission: "write", pattern: "*", action: "deny" });
-    expect(rules).toContainEqual({ permission: "apply_patch", pattern: "*", action: "deny" });
-    expect(rules).toContainEqual({
-      permission: "ast_grep_replace",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).toContainEqual({ permission: "lsp_rename", pattern: "*", action: "deny" });
+    const deniedNativeTools = [
+      "edit",
+      "write",
+      "apply_patch",
+      "ast_grep_replace",
+      "lsp_rename",
+    ] as const;
+    for (const toolName of deniedNativeTools) {
+      expect(rules).toContainEqual({
+        permission: toolName,
+        pattern: "*",
+        action: "deny",
+      });
+    }
     expect(rules).not.toContainEqual({ permission: "bash", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
       permission: "openducktor_odt_*",

@@ -4,6 +4,7 @@ import { type AgentRole, buildRoleScopedOdtToolSelection } from "@openducktor/co
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
 import { toToolIdList } from "./payload-mappers";
+import { isReadOnlyRole } from "./read-only-roles";
 
 const TRUSTED_ODT_MCP_SERVER_NAME = "openducktor";
 const CONNECTED_MCP_SERVER_STATUSES = new Set(["connected"]);
@@ -12,9 +13,6 @@ type ModelScopedToolInput = {
   providerId: string;
   modelId: string;
 };
-
-const isReadOnlyRole = (role: AgentRole): boolean =>
-  role === "spec" || role === "planner" || role === "qa";
 
 const assertTrustedOdtMcpServerConnected = async (input: {
   client: OpencodeClient;
