@@ -923,13 +923,24 @@ pub(crate) fn write_executable_script(path: &Path, script: &str) -> Result<()> {
     }
     let mut file = fs::File::create(path)?;
     file.write_all(script.as_bytes())?;
-    let status = Command::new("chmod")
-        .arg("+x")
-        .arg(path)
-        .status()
-        .map_err(|error| anyhow!("failed running chmod: {error}"))?;
-    if !status.success() {
-        return Err(anyhow!("chmod +x failed for {}", path.display()));
+    file.sync_all()?;
+    drop(file);
+
+    #[cfg(unix)]
+    {
+        fs::set_permissions(path, Permissions::from_mode(0o755))?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        let status = Command::new("chmod")
+            .arg("+x")
+            .arg(path)
+            .status()
+            .map_err(|error| anyhow!("failed running chmod: {error}"))?;
+        if !status.success() {
+            return Err(anyhow!("chmod +x failed for {}", path.display()));
+        }
     }
     Ok(())
 }
