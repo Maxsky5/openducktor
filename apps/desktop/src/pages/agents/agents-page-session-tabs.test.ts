@@ -338,7 +338,7 @@ describe("agents-page-session-tabs", () => {
         planner: buildSession({ role: "planner", status: "idle" }),
         build: buildSession({
           role: "build",
-          status: "idle",
+          status: "stopped",
           scenario: "build_after_qa_rejected",
           startedAt: "2026-02-22T11:00:00.000Z",
         }),

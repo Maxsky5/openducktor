@@ -167,7 +167,8 @@ export const buildWorkflowStateByRole = (params: {
     if (
       role === "build" &&
       latestRoleSession?.scenario === "build_after_qa_rejected" &&
-      latestRoleSession.status === "idle" &&
+      (latestRoleSession.status === "idle" || latestRoleSession.status === "stopped") &&
+      params.roleWorkflowsByTask.qa.completed &&
       !qaRejected
     ) {
       stateByRole[role] = "done";
