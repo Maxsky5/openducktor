@@ -154,7 +154,8 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
     if task.status == TaskStatus::AiReview {
         actions.push(TaskAction::QaStart);
     } else if is_qa_rejected_rework(task)
-        || allows_transition(task, &task.status, &TaskStatus::InProgress)
+        || (!matches!(task.status, TaskStatus::InProgress | TaskStatus::Blocked)
+            && allows_transition(task, &task.status, &TaskStatus::InProgress))
     {
         actions.push(TaskAction::BuildStart);
     }

@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
-import { TaskDetailsSheet } from "./task-details-sheet";
 
 const sheetContentRenderMock = mock(
   (_props: {
@@ -60,8 +59,9 @@ mock.module("./use-task-details-sheet-view-model", () => ({
 }));
 
 describe("TaskDetailsSheet", () => {
-  test("renders without the top-right close control", () => {
+  test("renders without the top-right close control", async () => {
     sheetContentRenderMock.mockClear();
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
 
     const task = createTaskCardFixture({
       id: "TASK-1",
