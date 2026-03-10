@@ -430,7 +430,37 @@ describe("OpencodeSdkAdapter", () => {
       permission?: Array<{ permission: string; pattern: string; action: string }>;
     };
     const permissionRules = createInput.permission ?? [];
-    expect(permissionRules[0]).toEqual({
+    expect(permissionRules).toContainEqual({
+      permission: "edit",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "write",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "apply_patch",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "ast_grep_replace",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
+      permission: "lsp_rename",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).not.toContainEqual({
+      permission: "bash",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
       permission: "openducktor_odt_*",
       pattern: "*",
       action: "deny",
@@ -510,6 +540,11 @@ describe("OpencodeSdkAdapter", () => {
       variant: "high",
       agent: "hephaestus",
       tools: {
+        edit: false,
+        write: false,
+        apply_patch: false,
+        ast_grep_replace: false,
+        lsp_rename: false,
         openducktor_odt_read_task: true,
         openducktor_odt_set_spec: true,
         openducktor_odt_set_plan: false,
@@ -521,6 +556,8 @@ describe("OpencodeSdkAdapter", () => {
       },
       parts: [{ type: "text", text: "Write and persist spec" }],
     });
+    expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
     expect(events.some((event) => event.type === "assistant_message")).toBe(true);
     const assistantMessage = events.find((event) => event.type === "assistant_message");
     expect(assistantMessage).toMatchObject({
@@ -530,7 +567,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
   });
 
-  test("sendUserMessage never calls deprecated workflow tool discovery on prompt", async () => {
+  test("sendUserMessage caches workflow tool discovery across prompts for the same model", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -556,8 +593,8 @@ describe("OpencodeSdkAdapter", () => {
       model: selectedModel,
     });
 
-    expect(mock.tool.idsCalls).toEqual([]);
-    expect(mock.mcp.statusCalls).toEqual([]);
+    expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
     expect(mock.session.promptCalls).toHaveLength(2);
   });
 

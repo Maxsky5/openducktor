@@ -61,7 +61,9 @@ import type {
   OpencodeSdkAdapterOptions,
   SessionRecord,
 } from "./types";
-import { buildRoleScopedOdtPermissionRules } from "./workflow-tool-permissions";
+import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
+import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
+import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -87,13 +89,17 @@ export class OpencodeSdkAdapter
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
+    const runtimeDefinition = this.getRuntimeDefinition();
     const client = this.createClient(
       toRuntimeClientInput(input.runtimeConnection, "start session"),
     );
     const created = await client.session.create({
       directory: input.workingDirectory,
       title: `${input.role.toUpperCase()} ${input.taskId}`,
-      permission: buildRoleScopedOdtPermissionRules(input.role),
+      permission: buildRoleScopedPermissionRules({
+        role: input.role,
+        runtimeDescriptor: runtimeDefinition,
+      }),
     });
     const createdData = unwrapData(created, "create session");
     const externalSessionId = createdData.id;
@@ -211,9 +217,11 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     const session = requireSession(this.sessions, input.sessionId);
+    const tools = await this.resolveSessionToolSelection(session, input.model);
     await sendUserMessage({
       session,
       request: input,
+      tools,
       now: this.now,
       emit: (event) => this.emit(session.summary.sessionId, event),
     });
@@ -267,5 +275,36 @@ export class OpencodeSdkAdapter
 
   private emit(sessionId: string, event: AgentEvent): void {
     emitSessionEvent(this.listeners, sessionId, event);
+  }
+
+  private async resolveSessionToolSelection(
+    session: SessionRecord,
+    model: SendAgentUserMessageInput["model"],
+  ): Promise<Record<string, boolean>> {
+    const providerId = model?.providerId?.trim() ?? "";
+    const modelId = model?.modelId?.trim() ?? "";
+    const modelKey = providerId && modelId ? `${providerId}/${modelId}` : "";
+    const nowMs = Date.now();
+    if (
+      session.workflowToolSelectionCache &&
+      typeof session.workflowToolSelectionCachedAt === "number" &&
+      nowMs - session.workflowToolSelectionCachedAt < WORKFLOW_TOOL_CACHE_TTL_MS &&
+      (session.workflowToolSelectionCacheModelKey ?? "") === modelKey
+    ) {
+      return session.workflowToolSelectionCache;
+    }
+
+    const selection = await resolveWorkflowToolSelection({
+      client: session.client,
+      role: session.input.role,
+      runtimeDescriptor: this.getRuntimeDefinition(),
+      workingDirectory: session.input.workingDirectory,
+      ...(providerId && modelId ? { model: { providerId, modelId } } : {}),
+    });
+
+    session.workflowToolSelectionCache = selection;
+    session.workflowToolSelectionCachedAt = nowMs;
+    session.workflowToolSelectionCacheModelKey = modelKey;
+    return selection;
   }
 }

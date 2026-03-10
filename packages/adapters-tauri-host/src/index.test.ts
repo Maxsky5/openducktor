@@ -832,6 +832,13 @@ describe("TauriHostClient", () => {
             kind: "opencode",
             label: "OpenCode",
             description: "OpenCode local runtime with OpenDucktor MCP integration.",
+            readOnlyRoleBlockedTools: [
+              "edit",
+              "write",
+              "apply_patch",
+              "ast_grep_replace",
+              "lsp_rename",
+            ],
             capabilities: {
               supportsProfiles: true,
               supportsVariants: true,

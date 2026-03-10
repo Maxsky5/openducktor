@@ -506,6 +506,8 @@ describe("runtime schemas", () => {
 
     expect(parsed.runtimeId).toBe("runtime-1");
     expect(parsed.runtimeRoute.endpoint).toBe("http://127.0.0.1:4100");
+    expect(parsed.descriptor.readOnlyRoleBlockedTools).toContain("apply_patch");
+    expect(parsed.descriptor.readOnlyRoleBlockedTools).not.toContain("bash");
   });
 
   test("agent runtime role schemas and qa review target schema enforce boundaries", () => {

@@ -1,4 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import { type AgentRole, buildRoleScopedOdtToolSelection } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
@@ -11,6 +12,9 @@ type ModelScopedToolInput = {
   providerId: string;
   modelId: string;
 };
+
+const isReadOnlyRole = (role: AgentRole): boolean =>
+  role === "spec" || role === "planner" || role === "qa";
 
 const assertTrustedOdtMcpServerConnected = async (input: {
   client: OpencodeClient;
@@ -117,6 +121,7 @@ const listModelScopedToolIds = async (input: {
 export const resolveWorkflowToolSelection = async (input: {
   client: OpencodeClient;
   role: AgentRole;
+  runtimeDescriptor: RuntimeDescriptor;
   workingDirectory: string;
   model?: ModelScopedToolInput;
 }): Promise<Record<string, boolean>> => {
@@ -144,6 +149,12 @@ export const resolveWorkflowToolSelection = async (input: {
     includeCanonicalDefaults: true,
     runtimeToolIds,
   });
+
+  if (isReadOnlyRole(input.role)) {
+    for (const toolId of input.runtimeDescriptor.readOnlyRoleBlockedTools) {
+      selection[toolId] = false;
+    }
+  }
 
   return selection;
 };

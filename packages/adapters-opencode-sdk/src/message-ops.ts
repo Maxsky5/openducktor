@@ -1,6 +1,5 @@
 import type {
   AgentEvent,
-  AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
   AgentStreamPart,
@@ -8,7 +7,6 @@ import type {
   ReplyQuestionInput,
   SendAgentUserMessageInput,
 } from "@openducktor/core";
-import { AGENT_ROLE_TOOL_POLICY, ODT_WORKFLOW_TOOL_NAMES } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import {
   extractMessageTotalTokens,
@@ -78,17 +76,6 @@ const normalizeTodoRequestFailure = (
         : {}),
     ...(errorCode ? { code: errorCode } : {}),
   };
-};
-
-const buildRoleScopedPromptToolSelection = (role: AgentRole) => {
-  const allowedTools = new Set(AGENT_ROLE_TOOL_POLICY[role]);
-  const selection: Record<string, boolean> = {};
-
-  for (const tool of ODT_WORKFLOW_TOOL_NAMES) {
-    selection[`openducktor_${tool}`] = allowedTools.has(tool);
-  }
-
-  return selection;
 };
 
 export const loadSessionHistory = async (
@@ -185,12 +172,12 @@ export const loadSessionTodos = async (
 export const sendUserMessage = async (input: {
   session: SessionRecord;
   request: SendAgentUserMessageInput;
+  tools: Record<string, boolean>;
   now: () => string;
   emit: (event: AgentEvent) => void;
 }): Promise<void> => {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
-  const tools = buildRoleScopedPromptToolSelection(input.session.input.role);
 
   const response = await input.session.client.session.prompt({
     sessionID: input.session.externalSessionId,
@@ -201,7 +188,7 @@ export const sendUserMessage = async (input: {
     ...(modelInput.model ? { model: modelInput.model } : {}),
     ...(modelInput.variant ? { variant: modelInput.variant } : {}),
     ...(modelInput.agent ? { agent: modelInput.agent } : {}),
-    tools,
+    tools: input.tools,
     parts: [{ type: "text", text: input.request.content }],
   });
   const responseData = unwrapData(response, "prompt session");
