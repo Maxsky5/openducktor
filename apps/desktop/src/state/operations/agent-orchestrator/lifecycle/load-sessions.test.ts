@@ -503,6 +503,105 @@ describe("agent-orchestrator-load-sessions", () => {
     expect(state["session-qa-1"]?.messages[0]?.id).toBe("history:session-start:session-qa-1");
   });
 
+  test("does not ensure a workspace runtime for qa sessions when repo root paths only differ by trailing slash", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    const ensuredRuntimeKinds: string[] = [];
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => [],
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-qa-root",
+        externalSessionId: "external-qa-root",
+        taskId: "task-1",
+        role: "qa",
+        scenario: "qa_review",
+        status: "stopped",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo/",
+      },
+    ];
+    hostModule.host.runtimeList = async () => [];
+    hostModule.host.runtimeEnsure = async (runtimeKind) => {
+      ensuredRuntimeKinds.push(runtimeKind);
+      return {
+        kind: runtimeKind,
+        runtimeId: "runtime-root",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR,
+          kind: runtimeKind,
+          label: "OpenCode",
+          description: "Shared runtime",
+        },
+      };
+    };
+
+    try {
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-qa-root" });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runtimeEnsure = originalEnsure;
+    }
+
+    expect(ensuredRuntimeKinds).toEqual([]);
+    expect(state["session-qa-root"]?.messages[0]?.content).toContain("Session runtime unavailable");
+  });
+
   test("rehydrates build sessions through a shared runtime when the persisted working directory is an override", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
     let state: Record<string, AgentSessionState> = {};

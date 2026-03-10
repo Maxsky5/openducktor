@@ -32,12 +32,12 @@ impl AppService {
     pub fn qa_review_target_get(&self, repo_path: &str, task_id: &str) -> Result<QaReviewTarget> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
 
-        {
+        let active_worktree_path: Option<String> = {
             let runs = self
                 .runs
                 .lock()
                 .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            if let Some(run) = runs
+            runs
                 .values()
                 .filter(|run| {
                     run.repo_path == repo_path
@@ -51,14 +51,19 @@ impl AppService {
                         )
                 })
                 .max_by(|left, right| left.summary.started_at.cmp(&right.summary.started_at))
-            {
-                let working_directory =
-                    validate_qa_review_target_working_directory(repo_path.as_str(), task_id, &run.worktree_path)?;
-                return Ok(QaReviewTarget {
-                    working_directory,
-                    source: QaReviewTargetSource::ActiveBuildRun,
-                });
-            }
+                .map(|run| run.worktree_path.clone())
+        };
+
+        if let Some(worktree_path) = active_worktree_path {
+            let working_directory = validate_qa_review_target_working_directory(
+                repo_path.as_str(),
+                task_id,
+                &worktree_path,
+            )?;
+            return Ok(QaReviewTarget {
+                working_directory,
+                source: QaReviewTargetSource::ActiveBuildRun,
+            });
         }
 
         let sessions = self.agent_sessions_list(repo_path.as_str(), task_id)?;

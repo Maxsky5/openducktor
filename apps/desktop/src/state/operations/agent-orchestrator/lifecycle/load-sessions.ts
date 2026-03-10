@@ -328,7 +328,8 @@ export const createLoadAgentSessions = ({
 
       const shouldEnsureWorkspaceRuntime =
         record.role === "build" ||
-        (record.role === "qa" && workingDirectory !== repoPath) ||
+        (record.role === "qa" &&
+          normalizeWorkingDirectory(workingDirectory) !== normalizeWorkingDirectory(repoPath)) ||
         ((record.role === "spec" || record.role === "planner") && workingDirectory === repoPath);
       if (shouldEnsureWorkspaceRuntime) {
         const workspaceRuntime = await ensureWorkspaceRuntime(runtimeKind);
