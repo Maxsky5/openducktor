@@ -9,8 +9,8 @@ type TaskDetailsSheetFooterProps = {
   task: TaskCard;
   onOpenChange: (open: boolean) => void;
   onEdit?: (taskId: string) => void;
-  includeActions: readonly TaskWorkflowAction[];
-  onWorkflowAction: (action: TaskWorkflowAction) => void;
+  includeActions?: readonly TaskWorkflowAction[];
+  onWorkflowAction?: (action: TaskWorkflowAction) => void;
   onDeleteSelect?: () => void;
 };
 
@@ -36,28 +36,30 @@ export function TaskDetailsSheetFooter({
         ) : null}
       </div>
 
-      <TaskWorkflowActionGroup
-        task={task}
-        includeActions={includeActions}
-        onAction={onWorkflowAction}
-        menuAlign="end"
-        className="min-w-[240px] justify-end"
-        primaryClassName="font-semibold"
-        emptyLabel="No available workflow action"
-        {...(onDeleteSelect
-          ? {
-              extraMenuActions: [
-                {
-                  id: "delete-task",
-                  label: "Delete task",
-                  icon: <Trash2 className="size-3.5" />,
-                  destructive: true,
-                  onSelect: onDeleteSelect,
-                },
-              ],
-            }
-          : {})}
-      />
+      {includeActions && onWorkflowAction ? (
+        <TaskWorkflowActionGroup
+          task={task}
+          includeActions={includeActions}
+          onAction={onWorkflowAction}
+          menuAlign="end"
+          className="min-w-[240px] justify-end"
+          primaryClassName="font-semibold"
+          emptyLabel="No available workflow action"
+          {...(onDeleteSelect
+            ? {
+                extraMenuActions: [
+                  {
+                    id: "delete-task",
+                    label: "Delete task",
+                    icon: <Trash2 className="size-3.5" />,
+                    destructive: true,
+                    onSelect: onDeleteSelect,
+                  },
+                ],
+              }
+            : {})}
+        />
+      ) : null}
     </div>
   );
 }

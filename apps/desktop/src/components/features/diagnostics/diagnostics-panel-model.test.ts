@@ -9,8 +9,8 @@ const runtimeSummary: RuntimeInstanceSummary = {
   kind: "opencode",
   runtimeId: "runtime-1",
   repoPath: "/repo",
-  taskId: "repo-main",
-  role: "spec",
+  taskId: null,
+  role: "workspace",
   workingDirectory: "/repo",
   runtimeRoute: {
     type: "local_http",

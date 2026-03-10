@@ -3,6 +3,7 @@ export { createAgentSessionActions } from "./handlers/session-actions";
 export { createLoadAgentSessions } from "./lifecycle/load-sessions";
 export {
   createEnsureRuntime,
+  loadQaReviewTarget,
   loadRepoDefaultModel,
   loadRepoPromptOverrides,
   loadTaskDocuments,

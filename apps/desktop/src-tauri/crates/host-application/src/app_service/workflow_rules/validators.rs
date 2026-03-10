@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use host_domain::{
-    CreateTaskInput, IssueType, PlanSubtaskInput, TaskAction, TaskCard, TaskStatus, UpdateTaskPatch,
+    CreateTaskInput, IssueType, PlanSubtaskInput, QaWorkflowVerdict, TaskAction, TaskCard,
+    TaskStatus, UpdateTaskPatch,
 };
 
 use super::transitions::{
@@ -134,6 +135,11 @@ pub(crate) fn normalize_required_markdown(markdown: &str, document_label: &str) 
     Ok(trimmed.to_string())
 }
 
+fn is_qa_rejected_rework(task: &TaskCard) -> bool {
+    matches!(task.status, TaskStatus::InProgress | TaskStatus::Blocked)
+        && task.document_summary.qa_report.verdict == QaWorkflowVerdict::Rejected
+}
+
 pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) -> Vec<TaskAction> {
     let mut actions = vec![TaskAction::ViewDetails];
 
@@ -145,15 +151,24 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
         actions.push(TaskAction::SetPlan);
     }
 
-    if allows_transition(task, &task.status, &TaskStatus::InProgress) {
+    if task.status == TaskStatus::AiReview {
+        actions.push(TaskAction::QaStart);
+    } else if is_qa_rejected_rework(task)
+        || (!matches!(task.status, TaskStatus::InProgress | TaskStatus::Blocked)
+            && allows_transition(task, &task.status, &TaskStatus::InProgress))
+    {
         actions.push(TaskAction::BuildStart);
     }
 
     if matches!(
         task.status,
-        TaskStatus::InProgress | TaskStatus::Blocked | TaskStatus::HumanReview
+        TaskStatus::InProgress | TaskStatus::Blocked | TaskStatus::AiReview | TaskStatus::HumanReview
     ) {
         actions.push(TaskAction::OpenBuilder);
+    }
+
+    if is_qa_rejected_rework(task) {
+        actions.push(TaskAction::OpenQa);
     }
 
     if task.parent_id.is_none() {

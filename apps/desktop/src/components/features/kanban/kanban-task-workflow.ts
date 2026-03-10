@@ -1,4 +1,5 @@
 import type { TaskAction, TaskCard } from "@openducktor/contracts";
+import { isQaRejectedTask } from "@/lib/task-qa";
 
 export type TaskWorkflowAction = Exclude<TaskAction, "view_details">;
 
@@ -17,7 +18,9 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "set_spec",
     "set_plan",
     "build_start",
+    "qa_start",
     "open_builder",
+    "open_qa",
     "human_approve",
     "human_request_changes",
     "resume_deferred",
@@ -27,7 +30,9 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "set_spec",
     "set_plan",
     "build_start",
+    "qa_start",
     "open_builder",
+    "open_qa",
     "human_approve",
     "human_request_changes",
     "resume_deferred",
@@ -35,9 +40,11 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
   ],
   bug: [
     "build_start",
+    "qa_start",
     "set_plan",
     "set_spec",
     "open_builder",
+    "open_qa",
     "human_approve",
     "human_request_changes",
     "resume_deferred",
@@ -45,9 +52,11 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
   ],
   task: [
     "build_start",
+    "qa_start",
     "set_plan",
     "set_spec",
     "open_builder",
+    "open_qa",
     "human_approve",
     "human_request_changes",
     "resume_deferred",
@@ -73,6 +82,7 @@ const prioritize = (
 const resolvePriorityForTask = (task: TaskCard): TaskWorkflowAction[] => {
   const basePriority =
     ACTION_PRIORITY_BY_ISSUE_TYPE[task.issueType] ?? ACTION_PRIORITY_BY_ISSUE_TYPE.task;
+  const qaRejected = isQaRejectedTask(task);
 
   switch (task.status) {
     case "spec_ready": {
@@ -85,9 +95,14 @@ const resolvePriorityForTask = (task: TaskCard): TaskWorkflowAction[] => {
       return prioritize(basePriority, ["resume_deferred"]);
     }
     case "in_progress":
-    case "blocked":
-    case "ai_review": {
+    case "blocked": {
+      if (qaRejected) {
+        return prioritize(basePriority, ["build_start", "open_builder", "open_qa"]);
+      }
       return prioritize(basePriority, ["open_builder", "build_start"]);
+    }
+    case "ai_review": {
+      return prioritize(basePriority, ["qa_start", "open_builder"]);
     }
     case "human_review": {
       return prioritize(basePriority, [
@@ -113,15 +128,18 @@ export const resolveTaskCardActions = (
       .filter(isWorkflowAction)
       .filter((action) => (includeSet ? includeSet.has(action) : true)),
   );
-
   const priority = resolvePriorityForTask(task);
-  const primaryAction = priority.find((action) => enabled.includes(action)) ?? enabled[0] ?? null;
+  const orderedEnabled = [
+    ...priority.filter((action) => enabled.includes(action)),
+    ...enabled.filter((action) => !priority.includes(action)),
+  ];
+  const primaryAction = orderedEnabled[0] ?? null;
 
   return {
     primaryAction,
     secondaryActions: primaryAction
-      ? enabled.filter((action) => action !== primaryAction)
-      : enabled,
-    allActions: enabled,
+      ? orderedEnabled.filter((action) => action !== primaryAction)
+      : orderedEnabled,
+    allActions: orderedEnabled,
   };
 };

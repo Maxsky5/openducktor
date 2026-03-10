@@ -58,8 +58,8 @@ describe("DiagnosticsPanelSections", () => {
             kind: "opencode",
             runtimeId: "runtime-1",
             repoPath: "/Users/dev/fairnest",
-            taskId: "repo-main",
-            role: "spec",
+            taskId: null,
+            role: "workspace",
             workingDirectory: "/Users/dev/fairnest",
             runtimeRoute: {
               type: "local_http",

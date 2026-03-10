@@ -1,13 +1,9 @@
-mod prerequisites;
 mod registry;
 mod startup;
 
 use super::AppService;
 use anyhow::{anyhow, Result};
-use host_domain::{
-    AgentRuntimeKind, AgentRuntimeRole, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary,
-    RuntimeRole,
-};
+use host_domain::{AgentRuntimeKind, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeRole};
 use std::collections::HashSet;
 use std::process::Child;
 
@@ -36,16 +32,6 @@ pub(super) struct RuntimeStartInput<'a> {
     tracking_error_context: &'static str,
     startup_error_context: String,
     post_start_policy: Option<RuntimePostStartPolicy<'a>>,
-}
-
-pub(super) enum RuntimePrerequisiteResolution {
-    Existing(RuntimeInstanceSummary),
-    Ready(RuntimePrerequisites),
-}
-
-pub(super) struct RuntimePrerequisites {
-    working_directory: String,
-    cleanup_target: Option<super::RuntimeCleanupTarget>,
 }
 
 pub(super) struct SpawnedRuntimeServer {
@@ -109,18 +95,6 @@ impl AppService {
         let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
         Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
         self.ensure_workspace_runtime(runtime_kind, repo_path)
-    }
-
-    pub fn runtime_start(
-        &self,
-        runtime_kind: &str,
-        repo_path: &str,
-        task_id: &str,
-        role: AgentRuntimeRole,
-    ) -> Result<RuntimeInstanceSummary> {
-        let runtime_kind = Self::resolve_supported_runtime_kind(runtime_kind)?;
-        Self::ensure_runtime_supports_all_workflow_scopes(runtime_kind)?;
-        self.start_task_runtime(runtime_kind, repo_path, task_id, role)
     }
 
     pub fn runtime_stop(&self, runtime_id: &str) -> Result<bool> {
@@ -225,62 +199,6 @@ impl AppService {
                 },
                 prune_error_context: format!(
                     "Failed pruning stale runtimes while finalizing workspace runtime for {repo_path}"
-                ),
-            }),
-        })
-    }
-
-    fn start_task_runtime(
-        &self,
-        runtime_kind: AgentRuntimeKind,
-        repo_path: &str,
-        task_id: &str,
-        role: AgentRuntimeRole,
-    ) -> Result<RuntimeInstanceSummary> {
-        let repo_key = self.resolve_initialized_repo_path(repo_path)?;
-        let repo_path = repo_key.as_str();
-        let runtime_role = RuntimeRole::from(role);
-        if let Some(existing) =
-            self.resolve_existing_runtime_for_start(repo_path, runtime_role, task_id)?
-        {
-            return Ok(existing);
-        }
-        let startup_error_context = format!(
-            "{} runtime failed to start for task {task_id}",
-            runtime_kind.as_str()
-        );
-        let startup_policy = self.resolve_runtime_startup_policy(
-            "agent_runtime",
-            repo_path,
-            task_id,
-            runtime_role,
-            startup_error_context.as_str(),
-        )?;
-        let prerequisites = match self.resolve_runtime_prerequisites(repo_path, task_id, role)? {
-            RuntimePrerequisiteResolution::Existing(existing) => return Ok(existing),
-            RuntimePrerequisiteResolution::Ready(prerequisites) => prerequisites,
-        };
-
-        self.spawn_and_register_runtime(RuntimeStartInput {
-            runtime_kind,
-            startup_scope: "agent_runtime",
-            repo_path,
-            repo_key: repo_key.clone(),
-            task_id,
-            role: runtime_role,
-            startup_policy,
-            working_directory: prerequisites.working_directory,
-            cleanup_target: prerequisites.cleanup_target,
-            tracking_error_context: "Failed tracking spawned OpenCode agent runtime",
-            startup_error_context,
-            post_start_policy: Some(RuntimePostStartPolicy {
-                existing_lookup: RuntimeExistingLookup {
-                    repo_key: repo_key.as_str(),
-                    role: runtime_role,
-                    task_id: Some(task_id),
-                },
-                prune_error_context: format!(
-                    "Failed pruning stale runtimes while finalizing OpenCode runtime for task {task_id}"
                 ),
             }),
         })

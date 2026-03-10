@@ -372,9 +372,35 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("Transition not allowed");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
     expect(prepareCalled).toBe(false);
     expect(updateCalled).toBe(false);
+  });
+
+  test("QaApprovedUseCase rejects non-ai-review tasks before transition validation", async () => {
+    let assertCalled = false;
+    const currentTask = makeTask({ status: "in_progress" });
+
+    const useCase = new QaApprovedUseCase({
+      workflow: {
+        ensureInitialized: async () => {},
+        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
+        assertTransitionAllowed: () => {
+          assertCalled = true;
+        },
+        applyTaskUpdate: async () => currentTask,
+      },
+      documentStore: {
+        prepareQaReportWrite: () => {
+          throw new Error("should not prepare metadata");
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    expect(assertCalled).toBe(false);
   });
 
   test("QaRejectedUseCase rejects invalid transitions before preparing qa metadata", async () => {
@@ -408,8 +434,34 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("Transition not allowed");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
     expect(prepareCalled).toBe(false);
     expect(updateCalled).toBe(false);
+  });
+
+  test("QaRejectedUseCase rejects non-ai-review tasks before transition validation", async () => {
+    let assertCalled = false;
+    const currentTask = makeTask({ status: "in_progress" });
+
+    const useCase = new QaRejectedUseCase({
+      workflow: {
+        ensureInitialized: async () => {},
+        readTaskSnapshot: async () => ({ issue: makeIssue(), task: currentTask }),
+        assertTransitionAllowed: () => {
+          assertCalled = true;
+        },
+        applyTaskUpdate: async () => currentTask,
+      },
+      documentStore: {
+        prepareQaReportWrite: () => {
+          throw new Error("should not prepare metadata");
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    expect(assertCalled).toBe(false);
   });
 });

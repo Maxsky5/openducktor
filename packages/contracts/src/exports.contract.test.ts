@@ -4,7 +4,6 @@ import type {
   AgentPromptOverride,
   AgentPromptTemplateId,
   AgentRole,
-  AgentRuntimeStartRole,
   AgentScenario,
   AgentSessionModelSelection,
   AgentSessionRecord,
@@ -36,6 +35,8 @@ import type {
   GitWorktreeSummary,
   GlobalConfig,
   IssueType,
+  QaReviewTarget,
+  QaReviewTargetSource,
   QaWorkflowVerdict,
   RepoAgentDefaults,
   RepoConfig,
@@ -76,7 +77,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentKickoffScenarioValues",
   "agentToolNameSchema",
   "agentToolNameValues",
-  "agentRuntimeStartRoleSchema",
+  "qaReviewTargetSchema",
+  "qaReviewTargetSourceSchema",
   "runtimeInstanceSummarySchema",
   "runtimeInstanceSummaryRoleSchema",
   "agentPromptOverrideSchema",
@@ -176,9 +178,10 @@ type ExportedTypeContract = {
   AgentPromptOverride: AgentPromptOverride;
   AgentPromptTemplateId: AgentPromptTemplateId;
   AgentScenario: AgentScenario;
-  AgentRuntimeStartRole: AgentRuntimeStartRole;
   RuntimeInstanceSummary: RuntimeInstanceSummary;
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
+  QaReviewTarget: QaReviewTarget;
+  QaReviewTargetSource: QaReviewTargetSource;
   AgentSessionModelSelection: AgentSessionModelSelection;
   AgentSessionTodoPayloadRecord: AgentSessionTodoPayloadRecord;
   AgentSessionRecord: AgentSessionRecord;

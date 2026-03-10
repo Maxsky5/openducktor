@@ -1,21 +1,12 @@
-use super::super::super::{
-    qa_worktree::remove_runtime_worktree, terminate_child_process, AgentRuntimeProcess, AppService,
-    RuntimeCleanupTarget,
-};
+use super::super::super::{terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget};
 use anyhow::{anyhow, Result};
-use std::path::Path;
 use std::process::Child;
 
 impl AppService {
     pub(super) fn cleanup_runtime_worktree_if_needed(
         cleanup_target: Option<&RuntimeCleanupTarget>,
     ) -> Result<()> {
-        if let Some(cleanup_target) = cleanup_target {
-            remove_runtime_worktree(
-                Path::new(cleanup_target.repo_path.as_str()),
-                Path::new(cleanup_target.worktree_path.as_str()),
-            )?;
-        }
+        let _ = cleanup_target;
         Ok(())
     }
 

@@ -41,6 +41,7 @@ pub(crate) struct AgentRuntimeProcess {
     pub(super) cleanup_target: Option<RuntimeCleanupTarget>,
 }
 
+#[allow(dead_code)]
 pub(crate) struct RuntimeCleanupTarget {
     pub(super) repo_path: String,
     pub(super) worktree_path: String,

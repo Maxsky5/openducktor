@@ -14,6 +14,10 @@ import {
   AgentStudioRightPanel,
   AgentStudioTaskTabs,
 } from "@/components/features/agents";
+import {
+  TaskDetailsSheetController,
+  type TaskDetailsSheetControllerHandle,
+} from "@/components/features/task-details";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
@@ -70,6 +74,7 @@ export function AgentsPage(): ReactElement {
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
   const [runCompletionRecoverySignal, setRunCompletionRecoverySignal] = useState(0);
   const latestRunCompletionSignalVersionRef = useRef<number | null>(null);
+  const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
   const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
     useAgentStudioSessionStartRequest();
@@ -119,6 +124,13 @@ export function AgentsPage(): ReactElement {
     clearComposerInput,
     onContextSwitchIntent: signalContextSwitchIntent,
   });
+
+  const openTaskDetails = useCallback((): void => {
+    if (!selection.viewSelectedTask) {
+      return;
+    }
+    taskDetailsSheetRef.current?.openTask(selection.viewSelectedTask.id);
+  }, [selection.viewSelectedTask]);
 
   useEffect(() => {
     const activeBuildRunId =
@@ -239,6 +251,7 @@ export function AgentsPage(): ReactElement {
     replyAgentPermission,
     answerAgentQuestion,
     requestNewSessionStart,
+    openTaskDetails,
   } satisfies AgentStudioOrchestrationActionsContext;
 
   const orchestration = useAgentStudioOrchestrationController({
@@ -393,6 +406,11 @@ export function AgentsPage(): ReactElement {
               onResolve={resolvePendingSessionStart}
             />
           ) : null}
+          <TaskDetailsSheetController
+            ref={taskDetailsSheetRef}
+            allTasks={tasks}
+            workflowActionsEnabled={false}
+          />
         </>
       }
     />

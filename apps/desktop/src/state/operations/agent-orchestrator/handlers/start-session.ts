@@ -16,6 +16,7 @@ import {
   createRepoStaleGuard,
   inferScenario,
   kickoffPromptWithTaskContext,
+  normalizeWorkingDirectory,
   throwIfRepoStale,
 } from "../support/utils";
 import type {
@@ -302,6 +303,20 @@ const createOrReuseSession = async ({
   input: StartSessionCreationInput;
   deps: StartSessionExecutionDependencies;
 }): Promise<StartOrReuseResult> => {
+  const validatedTaskCard = ctx.role === "qa" ? resolveStartTask({ ctx, task: deps.task }) : null;
+  let resolvedQaWorkingDirectory: string | null = null;
+  const resolveExpectedQaWorkingDirectory = async (): Promise<string> => {
+    if (resolvedQaWorkingDirectory !== null) {
+      return resolvedQaWorkingDirectory;
+    }
+
+    const overrideWorkingDirectory = normalizeWorkingDirectory(input.workingDirectoryOverride);
+    resolvedQaWorkingDirectory =
+      overrideWorkingDirectory ||
+      (await deps.runtime.resolveQaReviewTarget(ctx.repoPath, ctx.taskId));
+    return resolvedQaWorkingDirectory;
+  };
+
   if (input.startMode === "reuse_latest") {
     const existingSession = pickLatestSession(
       Object.values(deps.session.sessionsRef.current).filter(
@@ -309,15 +324,19 @@ const createOrReuseSession = async ({
       ),
     );
     if (existingSession) {
-      if (
-        canReuseSessionForSelectedModel({
-          sessionRuntimeKind:
-            existingSession.runtimeKind ??
-            existingSession.selectedModel?.runtimeKind ??
-            DEFAULT_RUNTIME_KIND,
-          selectedModel: input.selectedModel,
-        })
-      ) {
+      const canReuseExistingSession = canReuseSessionForSelectedModel({
+        sessionRuntimeKind:
+          existingSession.runtimeKind ??
+          existingSession.selectedModel?.runtimeKind ??
+          DEFAULT_RUNTIME_KIND,
+        selectedModel: input.selectedModel,
+      });
+      const existingSessionMatchesQaTarget =
+        ctx.role !== "qa" ||
+        (canReuseExistingSession &&
+          normalizeWorkingDirectory(existingSession.workingDirectory) ===
+            (await resolveExpectedQaWorkingDirectory()));
+      if (canReuseExistingSession && existingSessionMatchesQaTarget) {
         applySelectedModelToReusedSession({
           repoPath: ctx.repoPath,
           sessionId: existingSession.sessionId,
@@ -336,16 +355,22 @@ const createOrReuseSession = async ({
     const latestPersistedSession = pickLatestSession(
       persistedSessions.filter((entry) => entry.role === ctx.role),
     );
-    if (
-      latestPersistedSession &&
-      canReuseSessionForSelectedModel({
-        sessionRuntimeKind:
-          latestPersistedSession.runtimeKind ??
-          latestPersistedSession.selectedModel?.runtimeKind ??
-          DEFAULT_RUNTIME_KIND,
-        selectedModel: input.selectedModel,
-      })
-    ) {
+    const canReusePersistedSession = latestPersistedSession
+      ? canReuseSessionForSelectedModel({
+          sessionRuntimeKind:
+            latestPersistedSession.runtimeKind ??
+            latestPersistedSession.selectedModel?.runtimeKind ??
+            DEFAULT_RUNTIME_KIND,
+          selectedModel: input.selectedModel,
+        })
+      : false;
+    const persistedSessionMatchesQaTarget =
+      ctx.role !== "qa" ||
+      (latestPersistedSession !== undefined &&
+        canReusePersistedSession &&
+        normalizeWorkingDirectory(latestPersistedSession.workingDirectory) ===
+          (await resolveExpectedQaWorkingDirectory()));
+    if (latestPersistedSession && canReusePersistedSession && persistedSessionMatchesQaTarget) {
       if (!deps.session.sessionsRef.current[latestPersistedSession.sessionId]) {
         await deps.session.loadAgentSessions(ctx.taskId, {
           hydrateHistoryForSessionId: latestPersistedSession.sessionId,
@@ -365,15 +390,17 @@ const createOrReuseSession = async ({
     }
   }
 
-  const taskCard = resolveStartTask({ ctx, task: deps.task });
+  const taskCard = validatedTaskCard ?? resolveStartTask({ ctx, task: deps.task });
   const resolved = await resolveRuntimeAndModel({
     ctx,
     scenario: input.scenario,
     requireModelReady: input.requireModelReady && input.selectedModel == null,
     requestedRuntimeKind: input.selectedModel?.runtimeKind ?? null,
-    ...(input.workingDirectoryOverride !== undefined
-      ? { workingDirectoryOverride: input.workingDirectoryOverride }
-      : {}),
+    ...(ctx.role === "qa"
+      ? { workingDirectoryOverride: await resolveExpectedQaWorkingDirectory() }
+      : input.workingDirectoryOverride !== undefined
+        ? { workingDirectoryOverride: input.workingDirectoryOverride }
+        : {}),
     taskCard,
     deps,
   });

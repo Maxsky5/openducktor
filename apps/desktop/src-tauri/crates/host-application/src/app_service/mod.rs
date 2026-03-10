@@ -22,7 +22,6 @@ mod events;
 mod hook_security;
 mod opencode_runtime;
 mod process_registry;
-mod qa_worktree;
 mod repo_init;
 mod runtime_orchestrator;
 mod service_core;

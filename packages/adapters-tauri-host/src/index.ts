@@ -56,7 +56,7 @@ const AGENT_METHODS = [
   "runsList",
   "runtimeDefinitionsList",
   "runtimeList",
-  "runtimeStart",
+  "qaReviewTargetGet",
   "runtimeStop",
   "runtimeEnsure",
   "buildStart",

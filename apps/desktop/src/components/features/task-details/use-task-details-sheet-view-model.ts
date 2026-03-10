@@ -53,6 +53,8 @@ type UseTaskDetailsSheetViewModelOptions = {
   open: TaskDetailsSheetProps["open"];
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
   onPlan: TaskDetailsSheetProps["onPlan"] | undefined;
+  onQaStart: TaskDetailsSheetProps["onQaStart"] | undefined;
+  onQaOpen: TaskDetailsSheetProps["onQaOpen"] | undefined;
   onBuild: TaskDetailsSheetProps["onBuild"] | undefined;
   onDelegate: TaskDetailsSheetProps["onDelegate"] | undefined;
   onDefer: TaskDetailsSheetProps["onDefer"] | undefined;
@@ -68,6 +70,8 @@ export function useTaskDetailsSheetViewModel({
   open,
   onOpenChange,
   onPlan,
+  onQaStart,
+  onQaOpen,
   onBuild,
   onDelegate,
   onDefer,
@@ -113,6 +117,8 @@ export function useTaskDetailsSheetViewModel({
     (action: TaskWorkflowAction): void => {
       runTaskWorkflowAction(action, taskId, {
         onPlan,
+        onQaStart,
+        onQaOpen,
         onBuild,
         onDelegate,
         onDefer,
@@ -128,6 +134,8 @@ export function useTaskDetailsSheetViewModel({
       onHumanApprove,
       onHumanRequestChanges,
       onPlan,
+      onQaOpen,
+      onQaStart,
       onResumeDeferred,
       taskId,
     ],

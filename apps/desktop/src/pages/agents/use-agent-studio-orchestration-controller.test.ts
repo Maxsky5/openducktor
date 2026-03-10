@@ -61,6 +61,7 @@ const baseArgs: BuildArgs = {
     handleWorkflowStepSelect: () => {},
     handleSessionSelectionChange: () => {},
     handleCreateSession: () => {},
+    openTaskDetails: () => {},
     isStarting: false,
     isSending: false,
     isSessionWorking: false,

@@ -68,6 +68,7 @@ type AgentStudioSessionActionsContext = {
   handleWorkflowStepSelect: (role: AgentRole, sessionId: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
+  openTaskDetails: () => void;
   isStarting: boolean;
   isSending: boolean;
   isSessionWorking: boolean;
@@ -191,7 +192,6 @@ export function useAgentStudioPageModels({
         activeSession: core.activeSession,
         role: core.role,
         isSessionWorking: sessionActions.isSessionWorking,
-        qaDoc: documents.qaDoc,
         roleLabelByRole,
       }),
     [
@@ -199,7 +199,6 @@ export function useAgentStudioPageModels({
       core.role,
       core.selectedTask,
       core.sessionsForTask,
-      documents.qaDoc,
       roleLabelByRole,
       sessionActions.isSessionWorking,
     ],
@@ -230,6 +229,7 @@ export function useAgentStudioPageModels({
 
   const agentStudioHeaderModel = useAgentStudioHeaderModel({
     selectedTask: core.selectedTask,
+    onOpenTaskDetails: core.selectedTask ? sessionActions.openTaskDetails : null,
     activeSession: core.activeSession,
     sessionsForTaskLength: core.sessionsForTask.length,
     contextSessionsLength: core.contextSessionsLength,

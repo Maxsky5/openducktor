@@ -1,5 +1,7 @@
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import {
+  AlertTriangle,
+  ArrowUpRightFromSquare,
   Check,
   ChevronRight,
   Circle,
@@ -53,6 +55,7 @@ type AgentSessionCreateOption = {
 export type AgentStudioHeaderModel = {
   taskTitle: string | null;
   taskId: string | null;
+  onOpenTaskDetails: (() => void) | null;
   sessionStatus: "starting" | "running" | "idle" | "error" | "stopped" | null;
   selectedRole: AgentRole | null;
   workflowSteps: AgentWorkflowStep[];
@@ -76,6 +79,8 @@ const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStep["state"] | "blocked", stri
   done: "border-success-border bg-success-surface hover:bg-success-surface text-success-muted shadow-sm",
   available: "border-input bg-card text-foreground",
   optional: "border-warning-border bg-warning-surface text-warning-muted",
+  rejected:
+    "border-rose-300 bg-rose-50 text-rose-700 shadow-sm dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
   blocked: "border-border bg-muted text-muted-foreground",
 };
 
@@ -84,6 +89,7 @@ const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStep["state"] | "blocked",
   in_progress: "text-info-ring",
   available: "text-muted-foreground/40",
   optional: "text-warning-ring",
+  rejected: "text-rose-500",
   blocked: "text-muted-foreground/20",
 };
 
@@ -92,6 +98,7 @@ const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStep["state"] | "blocked",
   in_progress: "ring-2 ring-offset-2 ring-offset-card ring-info-ring",
   available: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",
   optional: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
+  rejected: "ring-2 ring-offset-2 ring-offset-card ring-rose-400",
   blocked: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
 };
 
@@ -119,6 +126,9 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   }
   if (entry.state === "optional") {
     return "Optional step for this task";
+  }
+  if (entry.state === "rejected") {
+    return "Latest QA review rejected this task";
   }
   return "Blocked by workflow state";
 };
@@ -151,6 +161,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   const hasTaskTitle = normalizedTaskTitle.length > 0;
   const normalizedTaskId = taskId?.trim() ?? "";
   const hasTaskId = normalizedTaskId.length > 0;
+  const canOpenTaskDetails = hasTaskId && Boolean(model.onOpenTaskDetails);
   const sessionSelectorOptions = sessionSelector.groups.flatMap((group) => group.options);
   const createOptionsByRole = useMemo(
     () =>
@@ -171,9 +182,24 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
     <CardHeader className="space-y-2 border-b border-border bg-card pb-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <CardTitle className="max-w-160 truncate text-xl">
-            {hasTaskTitle ? normalizedTaskTitle : "Agent Studio"}
-          </CardTitle>
+          <div className="flex items-center gap-1.5">
+            <CardTitle className="max-w-160 truncate text-xl">
+              {hasTaskTitle ? normalizedTaskTitle : "Agent Studio"}
+            </CardTitle>
+            {canOpenTaskDetails ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto shrink-0 gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground transition hover:border-border hover:bg-muted hover:text-muted-foreground"
+                title="Open task details"
+                aria-label="Open task details"
+                onClick={() => model.onOpenTaskDetails?.()}
+              >
+                <ArrowUpRightFromSquare className="size-3" />
+                Open
+              </Button>
+            ) : null}
+          </div>
           {hasTaskId ? (
             <p className="font-mono text-[11px] text-muted-foreground">{normalizedTaskId}</p>
           ) : null}
@@ -281,6 +307,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   ) : null}
                   {entry.state === "available" ? <Circle className="size-3" /> : null}
                   {entry.state === "optional" ? <CircleDashed className="size-3" /> : null}
+                  {entry.state === "rejected" ? <AlertTriangle className="size-3.5" /> : null}
                 </Button>
                 {index < workflowSteps.length - 1 ? (
                   <ChevronRight

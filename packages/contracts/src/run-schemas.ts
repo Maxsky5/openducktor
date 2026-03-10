@@ -69,17 +69,17 @@ export const runSummarySchema = z.object({
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
-export const runtimeInstanceSummaryRoleSchema = z.enum([
-  "workspace",
-  "spec",
-  "planner",
-  "build",
-  "qa",
-]);
+export const runtimeInstanceSummaryRoleSchema = z.literal("workspace");
 export type RuntimeInstanceSummaryRole = z.infer<typeof runtimeInstanceSummaryRoleSchema>;
 
-export const agentRuntimeStartRoleSchema = z.enum(["spec", "planner", "qa"]);
-export type AgentRuntimeStartRole = z.infer<typeof agentRuntimeStartRoleSchema>;
+export const qaReviewTargetSourceSchema = z.enum(["active_build_run", "builder_session"]);
+export type QaReviewTargetSource = z.infer<typeof qaReviewTargetSourceSchema>;
+
+export const qaReviewTargetSchema = z.object({
+  workingDirectory: z.string().trim().min(1),
+  source: qaReviewTargetSourceSchema,
+});
+export type QaReviewTarget = z.infer<typeof qaReviewTargetSchema>;
 
 export const runtimeInstanceSummarySchema = z.object({
   kind: runtimeKindSchema,

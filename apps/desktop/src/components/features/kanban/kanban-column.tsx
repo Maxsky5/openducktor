@@ -19,6 +19,8 @@ type KanbanColumnProps = {
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
+  onQaStart?: (taskId: string) => void;
+  onQaOpen?: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
@@ -28,7 +30,14 @@ const laneCountLabel = (count: number): string => (count === 1 ? "1 task" : `${c
 
 type TaskCardHandlers = Pick<
   KanbanColumnProps,
-  "onOpenDetails" | "onDelegate" | "onPlan" | "onBuild" | "onHumanApprove" | "onHumanRequestChanges"
+  | "onOpenDetails"
+  | "onDelegate"
+  | "onPlan"
+  | "onQaStart"
+  | "onQaOpen"
+  | "onBuild"
+  | "onHumanApprove"
+  | "onHumanRequestChanges"
 >;
 
 const MeasuredTaskCard = memo(function MeasuredTaskCard({
@@ -39,6 +48,8 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   onOpenDetails,
   onDelegate,
   onPlan,
+  onQaStart,
+  onQaOpen,
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
@@ -89,6 +100,8 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
         onDelegate={onDelegate}
         onPlan={onPlan}
         onBuild={onBuild}
+        {...(onQaStart ? { onQaStart } : {})}
+        {...(onQaOpen ? { onQaOpen } : {})}
         {...(onHumanApprove ? { onHumanApprove } : {})}
         {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
       />
@@ -146,6 +159,8 @@ export function KanbanColumn({
   onOpenDetails,
   onDelegate,
   onPlan,
+  onQaStart,
+  onQaOpen,
   onBuild,
   onHumanApprove,
   onHumanRequestChanges,
@@ -188,6 +203,8 @@ export function KanbanColumn({
                   onDelegate={onDelegate}
                   onPlan={onPlan}
                   onBuild={onBuild}
+                  {...(onQaStart ? { onQaStart } : {})}
+                  {...(onQaOpen ? { onQaOpen } : {})}
                   {...(onHumanApprove ? { onHumanApprove } : {})}
                   {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
                 />
@@ -211,6 +228,8 @@ export function KanbanColumn({
                 onDelegate={onDelegate}
                 onPlan={onPlan}
                 onBuild={onBuild}
+                {...(onQaStart ? { onQaStart } : {})}
+                {...(onQaOpen ? { onQaOpen } : {})}
                 {...(onHumanApprove ? { onHumanApprove } : {})}
                 {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
               />

@@ -4,6 +4,7 @@ import { assertAgentKickoffScenario } from "@openducktor/core";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { host } from "@/state/operations/host";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { runOrchestratorSideEffect } from "../../state/operations/agent-orchestrator/support/async-side-effects";
@@ -134,6 +135,10 @@ export function useAgentStudioFreshSessionCreation({
       previousSelection: QueryUpdate;
     }): Promise<string | undefined> => {
       try {
+        const workingDirectoryOverride =
+          params.nextRole === "build" && params.nextScenario === "build_after_qa_rejected"
+            ? (await host.qaReviewTargetGet(activeRepo ?? "", taskId)).workingDirectory
+            : null;
         return await startAgentSession({
           taskId,
           role: params.nextRole,
@@ -142,6 +147,7 @@ export function useAgentStudioFreshSessionCreation({
           sendKickoff: false,
           startMode: "fresh",
           requireModelReady: true,
+          ...(workingDirectoryOverride ? { workingDirectoryOverride } : {}),
         });
       } catch (error) {
         updateQuery(params.previousSelection);
@@ -151,7 +157,7 @@ export function useAgentStudioFreshSessionCreation({
         return undefined;
       }
     },
-    [startAgentSession, taskId, updateQuery],
+    [activeRepo, startAgentSession, taskId, updateQuery],
   );
 
   const runFreshSessionCreation = useCallback(

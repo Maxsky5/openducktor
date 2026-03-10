@@ -106,7 +106,6 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession: null,
       role: "planner",
       isSessionWorking: false,
-      qaDoc: createDoc(""),
       roleLabelByRole,
     });
 
@@ -125,8 +124,13 @@ describe("use-agent-studio-page-model-builders", () => {
       scenario: "spec_initial",
     });
     const taskWithFeedback = createTaskCardFixture({
-      status: "human_review",
+      status: "in_progress",
       availableActions: ["human_request_changes"],
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
+      },
       agentWorkflows: {
         spec: { required: true, canSkip: false, available: true, completed: true },
         planner: { required: true, canSkip: false, available: true, completed: true },
@@ -141,7 +145,6 @@ describe("use-agent-studio-page-model-builders", () => {
       activeSession,
       role: "spec",
       isSessionWorking: true,
-      qaDoc: createDoc("latest qa report"),
       roleLabelByRole,
     });
 
@@ -150,5 +153,35 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(optionIds).toContain("build:build_after_human_request_changes:fresh");
     expect(context.sessionCreateOptions.every((option) => option.disabled)).toBe(true);
     expect(context.createSessionDisabled).toBe(true);
+  });
+
+  test("does not expose qa-rejected follow-up build scenario when latest qa verdict is approved", () => {
+    const taskWithApprovedQa = createTaskCardFixture({
+      status: "human_review",
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: false, completed: true },
+      },
+    });
+
+    const context = buildWorkflowModelContext({
+      selectedTask: taskWithApprovedQa,
+      sessionsForTask: [],
+      activeSession: null,
+      role: "build",
+      isSessionWorking: false,
+      roleLabelByRole,
+    });
+
+    expect(context.sessionCreateOptions.map((option) => option.id)).not.toContain(
+      "build:build_after_qa_rejected:fresh",
+    );
   });
 });

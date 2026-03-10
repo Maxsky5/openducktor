@@ -25,6 +25,7 @@ import {
   fromPersistedSessionRecord,
   historyToChatMessages,
   normalizePersistedSelection,
+  normalizeWorkingDirectory,
   now,
   upsertMessage,
 } from "../support/utils";
@@ -239,7 +240,9 @@ export const createLoadAgentSessions = ({
     );
     const runtimesByKind = new Map(runtimeLists);
 
-    const liveRuns = recordsToHydrate.some((record) => record.role === "build")
+    const liveRuns = recordsToHydrate.some(
+      (record) => record.role === "build" || record.role === "qa",
+    )
       ? await captureOrchestratorFallback(
           "load-sessions-list-runs",
           async () => host.runsList(repoPath),
@@ -276,16 +279,25 @@ export const createLoadAgentSessions = ({
       workingDirectory: string,
     ): RuntimeInstanceSummary | null => {
       const runtimes = runtimesByKind.get(runtimeKind) ?? [];
-      return runtimes.find((runtime) => runtime.workingDirectory === workingDirectory) ?? null;
+      const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
+      return (
+        runtimes.find(
+          (runtime) =>
+            normalizeWorkingDirectory(runtime.workingDirectory) === normalizedWorkingDirectory,
+        ) ?? null
+      );
     };
 
     const findRunByWorkingDirectory = (
       runtimeKind: RuntimeKind,
       workingDirectory: string,
     ): RunSummary | null => {
+      const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
       return (
         liveRuns.find(
-          (run) => run.runtimeKind === runtimeKind && run.worktreePath === workingDirectory,
+          (run) =>
+            run.runtimeKind === runtimeKind &&
+            normalizeWorkingDirectory(run.worktreePath) === normalizedWorkingDirectory,
         ) ?? null
       );
     };
@@ -296,7 +308,7 @@ export const createLoadAgentSessions = ({
       const runtimeKind =
         record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
       const workingDirectory = record.workingDirectory;
-      if (record.role === "build") {
+      if (record.role === "build" || record.role === "qa") {
         const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
         if (run) {
           return {
@@ -316,6 +328,8 @@ export const createLoadAgentSessions = ({
 
       const shouldEnsureWorkspaceRuntime =
         record.role === "build" ||
+        (record.role === "qa" &&
+          normalizeWorkingDirectory(workingDirectory) !== normalizeWorkingDirectory(repoPath)) ||
         ((record.role === "spec" || record.role === "planner") && workingDirectory === repoPath);
       if (shouldEnsureWorkspaceRuntime) {
         const workspaceRuntime = await ensureWorkspaceRuntime(runtimeKind);

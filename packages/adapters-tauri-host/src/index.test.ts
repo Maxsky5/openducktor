@@ -166,7 +166,7 @@ describe("TauriHostClient", () => {
       "runsList",
       "runtimeDefinitionsList",
       "runtimeList",
-      "runtimeStart",
+      "qaReviewTargetGet",
       "runtimeStop",
       "runtimeEnsure",
       "buildStart",
@@ -848,20 +848,10 @@ describe("TauriHostClient", () => {
           },
         ];
       }
-      if (command === "runtime_start") {
+      if (command === "qa_review_target_get") {
         return {
-          kind: "opencode",
-          runtimeId: "runtime-1",
-          repoPath: "/repo",
-          taskId: "task-1",
-          role: "planner",
-          workingDirectory: "/repo",
-          runtimeRoute: {
-            type: "local_http",
-            endpoint: "http://127.0.0.1:4173",
-          },
-          startedAt: "2026-02-17T12:00:00Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          workingDirectory: "/repo/worktrees/task-1",
+          source: "active_build_run",
         };
       }
       if (command === "runtime_list") {
@@ -870,8 +860,8 @@ describe("TauriHostClient", () => {
             kind: "opencode",
             runtimeId: "runtime-1",
             repoPath: "/repo",
-            taskId: "task-1",
-            role: "planner",
+            taskId: null,
+            role: "workspace",
             workingDirectory: "/repo",
             runtimeRoute: {
               type: "local_http",
@@ -905,19 +895,22 @@ describe("TauriHostClient", () => {
     });
 
     const definitions = await client.runtimeDefinitionsList();
-    const runtime = await client.runtimeStart("opencode", "/repo", "task-1", "planner");
+    const qaTarget = await client.qaReviewTargetGet("/repo", "task-1");
     const runtimes = await client.runtimeList("opencode", "/repo");
     const ensured = await client.runtimeEnsure("opencode", "/repo");
     const stopped = await client.runtimeStop("runtime-1");
 
     expect(definitions[0]?.kind).toBe("opencode");
-    expect(runtime.runtimeId).toBe("runtime-1");
+    expect(qaTarget).toEqual({
+      workingDirectory: "/repo/worktrees/task-1",
+      source: "active_build_run",
+    });
     expect(runtimes).toHaveLength(1);
     expect(ensured.runtimeId).toBe("runtime-main");
     expect(stopped.ok).toBe(true);
     expect(calls.map((entry) => entry.command)).toEqual([
       "runtime_definitions_list",
-      "runtime_start",
+      "qa_review_target_get",
       "runtime_list",
       "runtime_ensure",
       "runtime_stop",

@@ -3,6 +3,8 @@ import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-tas
 
 type TaskWorkflowCallbacks = {
   onPlan: ((taskId: string, action: "set_spec" | "set_plan") => void) | undefined;
+  onQaStart: ((taskId: string) => void) | undefined;
+  onQaOpen: ((taskId: string) => void) | undefined;
   onBuild: ((taskId: string) => void) | undefined;
   onDelegate: ((taskId: string) => void) | undefined;
   onDefer: ((taskId: string) => void) | undefined;
@@ -75,6 +77,12 @@ export const runTaskWorkflowAction = (
       return;
     case "set_plan":
       callbacks.onPlan?.(taskId, action);
+      return;
+    case "qa_start":
+      callbacks.onQaStart?.(taskId);
+      return;
+    case "open_qa":
+      callbacks.onQaOpen?.(taskId);
       return;
     case "open_builder":
       callbacks.onBuild?.(taskId);

@@ -5,16 +5,18 @@ import {
   Pause,
   Play,
   ScrollText,
+  ShieldCheck,
   Sparkles,
   Undo2,
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
+import { isQaRejectedTask } from "@/lib/task-qa";
 import type { TaskWorkflowAction } from "./kanban-task-workflow";
 
 export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): string => {
   if (action === "set_spec") {
-    return task.status === "spec_ready" ? "Continue Spec" : "Start Spec";
+    return task.status === "spec_ready" ? "Open Spec" : "Start Spec";
   }
   if (action === "set_plan") {
     return "Start Planner";
@@ -22,26 +24,34 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
   if (action === "open_builder") {
     return "Open Builder";
   }
+  if (action === "open_qa") {
+    return "Open QA";
+  }
   if (action === "build_start") {
-    return "Start Build";
+    return isQaRejectedTask(task) ? "Address QA Feedbacks" : "Start Builder";
+  }
+  if (action === "qa_start") {
+    return "Start QA";
   }
   if (action === "human_approve") {
-    return "Approve";
+    return "Approve Task";
   }
   if (action === "human_request_changes") {
     return "Request Changes";
   }
   if (action === "defer_issue") {
-    return "Defer";
+    return "Defer Task";
   }
-  return "Resume";
+  return "Resume Task";
 };
 
 export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
   set_spec: <Sparkles className="size-3.5" />,
   set_plan: <ScrollText className="size-3.5" />,
   open_builder: <ArrowUpRightFromSquare className="size-3.5" />,
+  open_qa: <ArrowUpRightFromSquare className="size-3.5" />,
   build_start: <Wrench className="size-3.5" />,
+  qa_start: <ShieldCheck className="size-3.5" />,
   human_approve: <CircleCheckBig className="size-3.5" />,
   human_request_changes: <Undo2 className="size-3.5" />,
   defer_issue: <Pause className="size-3.5" />,
@@ -51,7 +61,12 @@ export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
 export const taskPrimaryActionVariant = (
   action: TaskWorkflowAction,
 ): "default" | "outline" | "destructive" => {
-  if (action === "build_start" || action === "human_approve" || action === "resume_deferred") {
+  if (
+    action === "build_start" ||
+    action === "qa_start" ||
+    action === "human_approve" ||
+    action === "resume_deferred"
+  ) {
     return "default";
   }
   if (action === "human_request_changes" || action === "defer_issue") {
