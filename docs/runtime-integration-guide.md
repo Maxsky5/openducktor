@@ -24,9 +24,12 @@ It is the stable definition of a runtime kind:
 - `kind`
 - `label`
 - `description`
+- `readOnlyRoleBlockedTools`
 - `capabilities`
 
 Descriptors are static metadata. They are not live runtime instances.
+
+`readOnlyRoleBlockedTools` is the runtime-owned list of native tool IDs that must be denied for read-only OpenDucktor roles (`spec`, `planner`, `qa`). This list is runtime-specific. OpenDucktor must not hardcode another runtime's tool names in generic orchestration code or in a different runtime adapter.
 
 ### `RuntimeInstanceSummary`
 
@@ -120,6 +123,20 @@ The current codebase treats runtime integration in three layers:
 
 The current schema does not yet model runtime-specific custom slash commands. If that surface is added later, it belongs in the `Optional enhancement` category: the app can function without it, and the UI should treat it as additive capability rather than a baseline runtime requirement.
 
+## Read-Only Tool Policy
+
+Read-only role tool blocking is part of the runtime definition, not the generic role policy.
+
+Rules:
+
+- `AGENT_ROLE_TOOL_POLICY` continues to define which `odt_*` workflow tools each role may call.
+- Each runtime descriptor must declare `readOnlyRoleBlockedTools` for that runtime's native mutating tool IDs.
+- Runtime adapters must consume `readOnlyRoleBlockedTools` both when constructing runtime permission rules and when building the runtime `tools` selection sent on prompt turns for `spec`, `planner`, and `qa`.
+- Do not hardcode OpenCode tool IDs in generic orchestration code or assume another runtime uses the same tool names.
+- Do not block `bash` generically for read-only roles. Read-only roles still need shell access for inspections, tests, and lint commands; mutation control for shell commands remains a runtime/permission-flow concern.
+
+For OpenCode today, the blocked list is sourced from the runtime's native tool inventory and currently includes edit-style tools such as `edit`, `write`, `apply_patch`, `ast_grep_replace`, and `lsp_rename`.
+
 ## Eligibility Model
 
 The current OpenDucktor runtime model expects the following pieces to exist for a runtime integration.
@@ -130,6 +147,7 @@ A runtime is represented through:
 
 - a stable `runtimeKind`,
 - a `RuntimeDescriptor` that describes its implemented capabilities,
+- a runtime-owned `readOnlyRoleBlockedTools` list for native mutating tools,
 - a live `RuntimeRoute` compatible with current host-visible route schemas,
 - a request-scoped `RuntimeConnection`,
 - persisted session records that keep `runtimeKind`, `externalSessionId`, and `workingDirectory`.
@@ -191,6 +209,7 @@ What to add:
 
 - the new `runtimeKind` in any curated constant lists,
 - a descriptor constant whose capabilities describe implemented behavior,
+- a descriptor-level `readOnlyRoleBlockedTools` list for that runtime's native mutating tool IDs,
 - any new route or transport schema support if the runtime is not `local_http`,
 - config/session schema support for runtime-aware model defaults.
 
@@ -203,6 +222,7 @@ Review these files:
 - `packages/core/src/ports/agent-engine.ts`
 - `packages/core/src/services/runtime-connections.ts`
 - `packages/core/src/types/agent-orchestrator.ts`
+- `packages/contracts/src/runtime-descriptors.ts`
 
 The runtime adapter implements the `AgentEnginePort` surface used by session orchestration and workspace inspection, especially:
 
@@ -221,6 +241,7 @@ If a runtime does not implement one of these surfaces, the descriptor and adapte
 Reference implementation:
 
 - `packages/adapters-opencode-sdk/src/opencode-sdk-adapter.ts`
+- `packages/adapters-opencode-sdk/src/workflow-tool-permissions.ts`
 
 Related mapping files:
 

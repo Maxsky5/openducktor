@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { resolveWorkflowToolSelection } from "./workflow-tool-selection";
 
 const makeClient = (input: {
@@ -56,6 +57,7 @@ describe("workflow-tool-selection", () => {
         ],
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     });
 
@@ -77,6 +79,7 @@ describe("workflow-tool-selection", () => {
         ],
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     });
 
@@ -94,6 +97,7 @@ describe("workflow-tool-selection", () => {
         toolIds: ["odt_read_task", "odt_set_spec", "odt_set_plan"],
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     });
 
@@ -113,6 +117,7 @@ describe("workflow-tool-selection", () => {
         ],
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
       model: {
         providerId: "openai",
@@ -132,6 +137,7 @@ describe("workflow-tool-selection", () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({ throwOnIds: true }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     }).catch((error: unknown) => error);
 
@@ -146,6 +152,7 @@ describe("workflow-tool-selection", () => {
         throwOnList: true,
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
       model: {
         providerId: "openai",
@@ -164,6 +171,7 @@ describe("workflow-tool-selection", () => {
         mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     }).catch((error: unknown) => error);
 
@@ -179,6 +187,7 @@ describe("workflow-tool-selection", () => {
         throwOnMcpStatus: true,
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     }).catch((error: unknown) => error);
 
@@ -192,6 +201,7 @@ describe("workflow-tool-selection", () => {
         toolIds: ["odt_read_task", "odt_set_plan"],
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     });
 
@@ -212,6 +222,7 @@ describe("workflow-tool-selection", () => {
         ],
       }),
       role: "spec",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
     });
 
@@ -220,5 +231,8 @@ describe("workflow-tool-selection", () => {
     expect(selection.openducktor_odt_set_spec_extra).toBeUndefined();
     expect(selection.customprefix_odt_set_plan).toBeUndefined();
     expect(selection.OpenDucktor_ODT_SET_SPEC).toBeUndefined();
+    expect(selection.edit).toBe(false);
+    expect(selection.apply_patch).toBe(false);
+    expect(selection.bash).toBeUndefined();
   });
 });

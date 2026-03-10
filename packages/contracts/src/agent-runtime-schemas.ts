@@ -107,10 +107,18 @@ export const runtimeRefSchema = z.object({
 });
 export type RuntimeRef = z.infer<typeof runtimeRefSchema>;
 
+const runtimeToolIdSchema = z.string().trim().min(1);
+const runtimeReadOnlyRoleBlockedToolsSchema = z
+  .array(runtimeToolIdSchema)
+  .refine((toolIds) => new Set(toolIds).size === toolIds.length, {
+    message: "Read-only blocked runtime tool IDs must be unique.",
+  });
+
 export const runtimeDescriptorSchema = z.object({
   kind: runtimeKindSchema,
   label: z.string().min(1),
   description: z.string().min(1),
+  readOnlyRoleBlockedTools: runtimeReadOnlyRoleBlockedToolsSchema,
   capabilities: runtimeCapabilitiesSchema,
 });
 export type RuntimeDescriptor = z.infer<typeof runtimeDescriptorSchema>;

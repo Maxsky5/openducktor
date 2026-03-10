@@ -58,6 +58,7 @@ type MockSession = {
 
 type MockTool = {
   idsCalls: unknown[];
+  listCalls: unknown[];
 };
 
 type MockMcp = {
@@ -110,6 +111,7 @@ type MakeMockClientInput = {
   providerResponse?: unknown;
   agentsResponse?: unknown;
   toolIdsResponse?: unknown;
+  modelToolsResponse?: unknown;
   mcpStatusResponse?: unknown;
 };
 
@@ -148,6 +150,7 @@ const makeMockClient = ({
   },
   agentsResponse = [],
   toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
+  modelToolsResponse = [],
   mcpStatusResponse = { openducktor: { status: "connected" } },
 }: MakeMockClientInput): {
   client: OpencodeClient;
@@ -174,6 +177,7 @@ const makeMockClient = ({
   };
   const tool: MockTool = {
     idsCalls: [],
+    listCalls: [],
   };
   const mcp: MockMcp = {
     statusCalls: [],
@@ -297,6 +301,13 @@ const makeMockClient = ({
           error: undefined,
         };
       },
+      list: async (input: unknown) => {
+        tool.listCalls.push(input);
+        return {
+          data: modelToolsResponse,
+          error: undefined,
+        };
+      },
     },
     mcp: {
       status: async (input: unknown) => {
@@ -333,6 +344,12 @@ const startDefaultSession = async (
   adapter: OpencodeSdkAdapter,
   sessionId = "session-1",
   role: "spec" | "planner" | "build" | "qa" = "spec",
+  model?: {
+    providerId: string;
+    modelId: string;
+    variant?: string;
+    profileId?: string;
+  },
 ): Promise<void> => {
   const scenario =
     role === "qa"
@@ -352,6 +369,7 @@ const startDefaultSession = async (
     scenario,
     systemPrompt: "system prompt",
     runtimeConnection: defaultRuntimeConnection,
+    ...(model ? { model } : {}),
   });
 };
 
@@ -430,7 +448,26 @@ describe("OpencodeSdkAdapter", () => {
       permission?: Array<{ permission: string; pattern: string; action: string }>;
     };
     const permissionRules = createInput.permission ?? [];
-    expect(permissionRules[0]).toEqual({
+    const deniedNativeTools = [
+      "edit",
+      "write",
+      "apply_patch",
+      "ast_grep_replace",
+      "lsp_rename",
+    ] as const;
+    for (const toolName of deniedNativeTools) {
+      expect(permissionRules).toContainEqual({
+        permission: toolName,
+        pattern: "*",
+        action: "deny",
+      });
+    }
+    expect(permissionRules).not.toContainEqual({
+      permission: "bash",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(permissionRules).toContainEqual({
       permission: "openducktor_odt_*",
       pattern: "*",
       action: "deny",
@@ -510,6 +547,11 @@ describe("OpencodeSdkAdapter", () => {
       variant: "high",
       agent: "hephaestus",
       tools: {
+        edit: false,
+        write: false,
+        apply_patch: false,
+        ast_grep_replace: false,
+        lsp_rename: false,
         openducktor_odt_read_task: true,
         openducktor_odt_set_spec: true,
         openducktor_odt_set_plan: false,
@@ -521,6 +563,8 @@ describe("OpencodeSdkAdapter", () => {
       },
       parts: [{ type: "text", text: "Write and persist spec" }],
     });
+    expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
     expect(events.some((event) => event.type === "assistant_message")).toBe(true);
     const assistantMessage = events.find((event) => event.type === "assistant_message");
     expect(assistantMessage).toMatchObject({
@@ -530,7 +574,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
   });
 
-  test("sendUserMessage never calls deprecated workflow tool discovery on prompt", async () => {
+  test("sendUserMessage caches workflow tool discovery across prompts for the same model", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -556,9 +600,50 @@ describe("OpencodeSdkAdapter", () => {
       model: selectedModel,
     });
 
-    expect(mock.tool.idsCalls).toEqual([]);
-    expect(mock.mcp.statusCalls).toEqual([]);
+    expect(mock.tool.idsCalls).toEqual([{ directory: "/repo" }]);
+    expect(mock.mcp.statusCalls).toEqual([{ directory: "/repo" }]);
     expect(mock.session.promptCalls).toHaveLength(2);
+  });
+
+  test("sendUserMessage falls back to the session model for model-scoped tool discovery", async () => {
+    const mock = makeMockClient({
+      toolIdsResponse: ["bash", "read", "glob"],
+      modelToolsResponse: [{ id: "openducktor_odt_read_task" }, { id: "openducktor_odt_set_spec" }],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec", {
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+    });
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Use the saved model",
+    });
+
+    expect(mock.tool.listCalls).toEqual([
+      {
+        directory: "/repo",
+        provider: "openai",
+        model: "gpt-5",
+      },
+    ]);
+    expect(mock.session.promptCalls[0]).toMatchObject({
+      tools: {
+        edit: false,
+        write: false,
+        apply_patch: false,
+        ast_grep_replace: false,
+        lsp_rename: false,
+        openducktor_odt_read_task: true,
+        openducktor_odt_set_spec: true,
+      },
+    });
   });
 
   test("loadSessionHistory preserves message model metadata and maps streamed parts", async () => {

@@ -32,6 +32,13 @@ impl AgentRuntimeKind {
                 kind: self,
                 label: "OpenCode".to_string(),
                 description: "OpenCode local runtime with OpenDucktor MCP integration.".to_string(),
+                read_only_role_blocked_tools: vec![
+                    "edit".to_string(),
+                    "write".to_string(),
+                    "apply_patch".to_string(),
+                    "ast_grep_replace".to_string(),
+                    "lsp_rename".to_string(),
+                ],
                 capabilities: RuntimeCapabilities {
                     supports_profiles: true,
                     supports_variants: true,
@@ -154,6 +161,7 @@ pub struct RuntimeDescriptor {
     pub kind: AgentRuntimeKind,
     pub label: String,
     pub description: String,
+    pub read_only_role_blocked_tools: Vec<String>,
     pub capabilities: RuntimeCapabilities,
 }
 
@@ -367,6 +375,12 @@ mod tests {
             descriptor.capabilities.supported_scopes,
             REQUIRED_RUNTIME_SUPPORTED_SCOPES.to_vec()
         );
+        assert!(descriptor
+            .read_only_role_blocked_tools
+            .contains(&"apply_patch".to_string()));
+        assert!(!descriptor
+            .read_only_role_blocked_tools
+            .contains(&"bash".to_string()));
         assert!(descriptor.capabilities.supports_all_workflow_scopes());
     }
 
@@ -376,6 +390,7 @@ mod tests {
             kind: AgentRuntimeKind::Opencode,
             label: "OpenCode".to_string(),
             description: "desc".to_string(),
+            read_only_role_blocked_tools: vec![],
             capabilities: RuntimeCapabilities {
                 supports_profiles: true,
                 supports_variants: true,
