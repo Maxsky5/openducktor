@@ -855,7 +855,7 @@ describe("openducktor-mcp lib", () => {
         taskId: "task-1",
         reportMarkdown: "## QA",
       }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
 
     expect(metadataUpdateCalls).toBe(0);
   });
@@ -1689,7 +1689,7 @@ describe("openducktor-mcp lib", () => {
       }),
     ).rejects.toThrow("Transition not allowed");
 
-    expect(listCalls).toBe(1);
+    expect(listCalls).toBe(2);
     expect(statusUpdateCalls).toBe(0);
   });
 

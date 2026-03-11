@@ -46,13 +46,15 @@ fn module_derive_available_actions_exposes_resume_for_deferred_task() {
 }
 
 #[test]
-fn module_derive_available_actions_exposes_qa_start_for_ai_review() {
-    let task = make_task("task-1", "task", TaskStatus::AiReview);
+fn module_derive_available_actions_exposes_qa_start_for_review_states() {
+    for status in [TaskStatus::AiReview, TaskStatus::HumanReview] {
+        let task = make_task("task-1", "task", status);
 
-    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
 
-    assert!(actions.contains(&TaskAction::QaStart));
-    assert!(!actions.contains(&TaskAction::BuildStart));
+        assert!(actions.contains(&TaskAction::QaStart));
+        assert!(!actions.contains(&TaskAction::BuildStart));
+    }
 }
 
 #[test]
@@ -66,6 +68,38 @@ fn module_derive_available_actions_exposes_rework_and_open_qa_for_qa_rejected_ta
     assert!(actions.contains(&TaskAction::BuildStart));
     assert!(actions.contains(&TaskAction::OpenBuilder));
     assert!(actions.contains(&TaskAction::OpenQa));
+}
+
+#[test]
+fn module_derive_available_actions_exposes_human_review_actions_only_during_human_review() {
+    let task = make_task("task-1", "task", TaskStatus::HumanReview);
+
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+    assert!(actions.contains(&TaskAction::QaStart));
+    assert!(actions.contains(&TaskAction::HumanRequestChanges));
+    assert!(actions.contains(&TaskAction::HumanApprove));
+}
+
+#[test]
+fn module_derive_available_actions_exposes_review_actions_during_ai_review() {
+    let task = make_task("task-1", "task", TaskStatus::AiReview);
+
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+    assert!(actions.contains(&TaskAction::QaStart));
+    assert!(actions.contains(&TaskAction::HumanRequestChanges));
+    assert!(actions.contains(&TaskAction::HumanApprove));
+}
+
+#[test]
+fn module_derive_available_actions_hides_human_approve_for_closed_tasks() {
+    let task = make_task("task-1", "task", TaskStatus::Closed);
+
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+    assert!(!actions.contains(&TaskAction::HumanRequestChanges));
+    assert!(!actions.contains(&TaskAction::HumanApprove));
 }
 
 #[test]
@@ -169,6 +203,10 @@ fn module_derive_agent_workflows_qa_flags_and_completion_follow_payload() {
     assert!(!optional.qa.required);
     assert!(optional.qa.can_skip);
     assert!(optional.qa.available);
+
+    task.status = TaskStatus::HumanReview;
+    let human_review = derive_agent_workflows(&task);
+    assert!(human_review.qa.available);
 
     task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
     let rejected = derive_agent_workflows(&task);

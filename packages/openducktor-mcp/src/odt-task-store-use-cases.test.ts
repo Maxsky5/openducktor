@@ -201,12 +201,17 @@ describe("odt task workflow use cases", () => {
   test("BuildCompletedUseCase routes to ai_review when AI review is enabled", async () => {
     const inProgressTask = makeTask({ status: "in_progress", aiReviewEnabled: true });
     const aiReviewTask = makeTask({ status: "ai_review", aiReviewEnabled: true });
+    const issue = makeIssue();
     const calls: string[] = [];
 
     const useCase = new BuildCompletedUseCase({
       workflow: {
         ensureInitialized: async () => {
           calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue, task: inProgressTask };
         },
         resolveTaskContext: async (taskId) => {
           calls.push(`resolve:${taskId}`);
@@ -221,6 +226,16 @@ describe("odt task workflow use cases", () => {
           return aiReviewTask;
         },
       },
+      documentStore: {
+        parseDocs: (rawIssue) => {
+          calls.push(`docs:${rawIssue.id}:not_reviewed`);
+          return {
+            spec: { markdown: "", updatedAt: null },
+            implementationPlan: { markdown: "", updatedAt: null },
+            latestQaReport: { markdown: "", updatedAt: null, verdict: "not_reviewed" },
+          };
+        },
+      },
     });
 
     await expect(
@@ -233,7 +248,64 @@ describe("odt task workflow use cases", () => {
       "init",
       "resolve:task-1",
       "refresh:task-1:in_progress",
+      "read:task-1",
+      "docs:task-1:not_reviewed",
       "transition:task-1:ai_review",
+    ]);
+  });
+
+  test("BuildCompletedUseCase routes to human_review after approved QA", async () => {
+    const inProgressTask = makeTask({ status: "in_progress", aiReviewEnabled: true });
+    const humanReviewTask = makeTask({ status: "human_review", aiReviewEnabled: true });
+    const issue = makeIssue({
+      metadata: { openducktor: { documents: { qaReports: [{ verdict: "approved" }] } } },
+    });
+    const calls: string[] = [];
+
+    const useCase = new BuildCompletedUseCase({
+      workflow: {
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue, task: inProgressTask };
+        },
+        resolveTaskContext: async (taskId) => {
+          calls.push(`resolve:${taskId}`);
+          return { task: inProgressTask, tasks: [inProgressTask] };
+        },
+        refreshTaskContext: async (taskId, context) => {
+          calls.push(`refresh:${taskId}:${context?.task.status ?? "none"}`);
+          return { task: inProgressTask, tasks: [inProgressTask] };
+        },
+        transitionTask: async (taskId, nextStatus) => {
+          calls.push(`transition:${taskId}:${nextStatus}`);
+          return humanReviewTask;
+        },
+      },
+      documentStore: {
+        parseDocs: (rawIssue) => {
+          calls.push(`docs:${rawIssue.id}:approved`);
+          return {
+            spec: { markdown: "", updatedAt: null },
+            implementationPlan: { markdown: "", updatedAt: null },
+            latestQaReport: { markdown: "", updatedAt: null, verdict: "approved" },
+          };
+        },
+      },
+    });
+
+    await expect(useCase.execute({ taskId: "task-1" })).resolves.toEqual({
+      task: humanReviewTask,
+    });
+    expect(calls).toEqual([
+      "init",
+      "resolve:task-1",
+      "refresh:task-1:in_progress",
+      "read:task-1",
+      "docs:task-1:approved",
+      "transition:task-1:human_review",
     ]);
   });
 
@@ -341,6 +413,53 @@ describe("odt task workflow use cases", () => {
     });
   });
 
+  test("QaApprovedUseCase accepts human_review tasks", async () => {
+    const qaTask = makeTask({ status: "human_review" });
+    const issue = makeIssue({ status: "human_review" });
+    const approvedTask = makeTask({ status: "human_review" });
+    const calls: string[] = [];
+
+    const useCase = new QaApprovedUseCase({
+      workflow: {
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue, task: qaTask };
+        },
+        assertTransitionAllowed: () => {
+          calls.push("assert");
+        },
+        applyTaskUpdate: async (taskId, input) => {
+          calls.push(`apply:${taskId}:${input.status ?? "none"}`);
+          return approvedTask;
+        },
+      },
+      documentStore: {
+        prepareQaReportWrite: (rawIssue, markdown, verdict) => {
+          calls.push(`prepare:${rawIssue.id}:${verdict}:${markdown}`);
+          return {
+            metadataRoot: { openducktor: { documents: { qaReports: [{ verdict, markdown }] } } },
+            namespace: {},
+            root: {},
+          };
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA follow-up" }),
+    ).resolves.toEqual({ task: approvedTask });
+    expect(calls).toEqual([
+      "init",
+      "read:task-1",
+      "assert",
+      "prepare:task-1:approved:## QA follow-up",
+      "apply:task-1:human_review",
+    ]);
+  });
+
   test("QaApprovedUseCase rejects invalid transitions before preparing qa metadata", async () => {
     let prepareCalled = false;
     let updateCalled = false;
@@ -372,7 +491,7 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
     expect(prepareCalled).toBe(false);
     expect(updateCalled).toBe(false);
   });
@@ -399,7 +518,7 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
     expect(assertCalled).toBe(false);
   });
 
@@ -434,7 +553,7 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
     expect(prepareCalled).toBe(false);
     expect(updateCalled).toBe(false);
   });
@@ -461,7 +580,54 @@ describe("odt task workflow use cases", () => {
 
     await expect(
       useCase.execute({ taskId: "task-1", reportMarkdown: "## QA review" }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
     expect(assertCalled).toBe(false);
+  });
+
+  test("QaRejectedUseCase accepts human_review tasks", async () => {
+    const qaTask = makeTask({ status: "human_review" });
+    const issue = makeIssue({ status: "human_review" });
+    const rejectedTask = makeTask({ status: "in_progress" });
+    const calls: string[] = [];
+
+    const useCase = new QaRejectedUseCase({
+      workflow: {
+        ensureInitialized: async () => {
+          calls.push("init");
+        },
+        readTaskSnapshot: async (taskId) => {
+          calls.push(`read:${taskId}`);
+          return { issue, task: qaTask };
+        },
+        assertTransitionAllowed: () => {
+          calls.push("assert");
+        },
+        applyTaskUpdate: async (taskId, input) => {
+          calls.push(`apply:${taskId}:${input.status ?? "none"}`);
+          return rejectedTask;
+        },
+      },
+      documentStore: {
+        prepareQaReportWrite: (rawIssue, markdown, verdict) => {
+          calls.push(`prepare:${rawIssue.id}:${verdict}:${markdown}`);
+          return {
+            metadataRoot: { openducktor: { documents: { qaReports: [{ verdict, markdown }] } } },
+            namespace: {},
+            root: {},
+          };
+        },
+      },
+    });
+
+    await expect(
+      useCase.execute({ taskId: "task-1", reportMarkdown: "## QA reject" }),
+    ).resolves.toEqual({ task: rejectedTask });
+    expect(calls).toEqual([
+      "init",
+      "read:task-1",
+      "assert",
+      "prepare:task-1:rejected:## QA reject",
+      "apply:task-1:in_progress",
+    ]);
   });
 });

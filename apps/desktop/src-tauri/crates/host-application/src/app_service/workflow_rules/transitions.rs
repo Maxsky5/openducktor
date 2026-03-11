@@ -68,7 +68,7 @@ pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
     let qa_available = if is_closed {
         false
     } else {
-        task.status == TaskStatus::AiReview
+        matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview)
     };
     let qa_completed = task.document_summary.qa_report.verdict == QaWorkflowVerdict::Approved;
 
@@ -143,7 +143,10 @@ pub(crate) fn allows_transition(task: &TaskCard, from: &TaskStatus, to: &TaskSta
         TaskStatus::Blocked => matches!(to, TaskStatus::InProgress | TaskStatus::Deferred),
         TaskStatus::AiReview => matches!(
             to,
-            TaskStatus::InProgress | TaskStatus::HumanReview | TaskStatus::Deferred
+            TaskStatus::InProgress
+                | TaskStatus::HumanReview
+                | TaskStatus::Closed
+                | TaskStatus::Deferred
         ),
         TaskStatus::HumanReview => matches!(
             to,

@@ -5,7 +5,8 @@ use crate::app_service::workflow_rules::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, TaskCard, TaskMetadata, TaskStatus, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, QaWorkflowVerdict, TaskCard, TaskMetadata, TaskStatus,
+    UpdateTaskPatch,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -218,7 +219,9 @@ impl AppService {
         _summary: Option<&str>,
     ) -> Result<TaskCard> {
         let context = self.load_task_context(repo_path, task_id)?;
-        let next_status = if context.task.ai_review_enabled {
+        let should_return_to_ai_review = context.task.ai_review_enabled
+            && context.task.document_summary.qa_report.verdict != QaWorkflowVerdict::Approved;
+        let next_status = if should_return_to_ai_review {
             TaskStatus::AiReview
         } else {
             TaskStatus::HumanReview
