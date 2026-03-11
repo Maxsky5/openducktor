@@ -28,7 +28,7 @@ const LazyMarkdownRenderer = lazy(async () => {
 
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
   compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-foreground",
-  document: "whitespace-pre-wrap leading-6 text-foreground",
+  document: "whitespace-pre-wrap leading-6 py-4 text-foreground",
 };
 
 type PlainTextMarkdownFallbackProps = {

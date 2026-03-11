@@ -86,7 +86,7 @@ export const getAssistantFooterData = (
   }
 
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  if (!assistantMeta || assistantMeta.isFinal === false) {
+  if (!assistantMeta || assistantMeta.isFinal !== true) {
     return { infoParts: [] };
   }
   const parts: string[] = [];

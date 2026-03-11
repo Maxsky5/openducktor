@@ -51,7 +51,10 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
     const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
     const turnDurationMs = assistantMeta?.durationMs;
     const shouldShowTurnDuration =
-      message.role === "assistant" && typeof turnDurationMs === "number" && turnDurationMs > 0;
+      message.role === "assistant" &&
+      assistantMeta?.isFinal === true &&
+      typeof turnDurationMs === "number" &&
+      turnDurationMs > 0;
 
     if (shouldShowTurnDuration) {
       rows.push({

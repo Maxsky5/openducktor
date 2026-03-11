@@ -143,6 +143,13 @@ describe("agent-orchestrator/support/persistence", () => {
               prompt: "Implement",
               description: "Did work",
             },
+            {
+              kind: "step",
+              messageId: "m-assistant",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "stop",
+            },
           ],
         },
       ],
@@ -172,6 +179,7 @@ describe("agent-orchestrator/support/persistence", () => {
       throw new Error("Expected assistant message with assistant meta");
     }
     expect(assistant.meta.agentRole).toBe("build");
+    expect(assistant.meta.isFinal).toBe(true);
     expect(assistant.meta.totalTokens).toBe(123);
     expect(assistant.meta.providerId).toBe("anthropic");
     expect(assistant.meta.modelId).toBe("claude-3-7-sonnet");
@@ -219,9 +227,123 @@ describe("agent-orchestrator/support/persistence", () => {
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
+    expect(assistant.meta.isFinal).toBe(false);
     expect(assistant.meta.providerId).toBe("anthropic");
     expect(assistant.meta.modelId).toBe("claude-3-7-sonnet");
     expect(assistant.meta.profileId).toBe("Hephaestus");
     expect(assistant.meta.variant).toBe("high");
+    expect(assistant.meta.totalTokens).toBeUndefined();
+    expect(assistant.meta.durationMs).toBeUndefined();
+  });
+
+  test("keeps intermediate assistant history text non-final until a step-finish exists", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-user",
+          role: "user",
+          timestamp: "2026-02-22T08:00:00.000Z",
+          text: "Please implement this",
+          parts: [
+            {
+              kind: "text",
+              messageId: "m-user",
+              partId: "p-user",
+              text: "Please implement this",
+              synthetic: false,
+              completed: true,
+            },
+          ],
+        },
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "Let me inspect the current code.",
+          totalTokens: 321,
+          model: {
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+            profileId: "Hephaestus",
+            variant: "high",
+          },
+          parts: [
+            {
+              kind: "tool",
+              messageId: "m-assistant",
+              partId: "p-tool",
+              callId: "call-1",
+              tool: "read",
+              status: "completed",
+              startedAtMs: 100,
+              endedAtMs: 200,
+            },
+            {
+              kind: "step",
+              messageId: "m-assistant",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "tool-calls",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const assistant = messages.find(
+      (entry) => entry.role === "assistant" && entry.content === "Let me inspect the current code.",
+    );
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+
+    expect(assistant.meta.isFinal).toBe(false);
+    expect(assistant.meta.totalTokens).toBeUndefined();
+    expect(assistant.meta.durationMs).toBeUndefined();
+  });
+
+  test("marks only stop step-finish assistant history text as final", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant-final",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "Final answer",
+          totalTokens: 999,
+          model: {
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+            profileId: "Hephaestus",
+            variant: "high",
+          },
+          parts: [
+            {
+              kind: "step",
+              messageId: "m-assistant-final",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const assistant = messages[0];
+    if (!assistant || assistant.meta?.kind !== "assistant") {
+      throw new Error("Expected assistant message with assistant meta");
+    }
+
+    expect(assistant.meta.isFinal).toBe(true);
+    expect(assistant.meta.totalTokens).toBe(999);
   });
 });

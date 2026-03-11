@@ -36,6 +36,7 @@ describe("agent-chat-thread virtualization helpers", () => {
           meta: {
             kind: "assistant",
             agentRole: "spec",
+            isFinal: true,
             profileId: "Hephaestus (Deep Agent)",
             durationMs: 1_500,
           },
@@ -177,6 +178,29 @@ describe("agent-chat-thread virtualization helpers", () => {
     const rows = buildAgentChatVirtualRows(session);
 
     expect(rows).toEqual([]);
+  });
+
+  test("buildAgentChatVirtualRows skips turn duration rows for non-final assistant messages", () => {
+    const session = buildSession({
+      messages: [
+        buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: {
+            kind: "assistant",
+            agentRole: "spec",
+            isFinal: false,
+            profileId: "Hephaestus (Deep Agent)",
+            durationMs: 1_500,
+          },
+        }),
+      ],
+      pendingQuestions: [],
+    });
+
+    const rows = buildAgentChatVirtualRows(session);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message"]);
+    expect(rows[0]?.key).toBe("session-1:assistant-live");
   });
 
   test("range and spacer helpers compute visible window boundaries", () => {
