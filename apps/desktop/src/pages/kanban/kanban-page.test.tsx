@@ -746,7 +746,9 @@ describe("KanbanPage session start modal flow", () => {
 
   test("human request changes falls back to new-session mode when no builder session exists", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
-    currentSessionsFixture = [currentSessionsFixture[0]!];
+    const [specSession] = currentSessionsFixture;
+    expect(specSession).toBeDefined();
+    currentSessionsFixture = specSession ? [specSession] : [];
     loadAgentSessionsMock.mockImplementationOnce(async () => {
       currentSessionsFixture = [...currentSessionsFixture];
     });
@@ -770,7 +772,9 @@ describe("KanbanPage session start modal flow", () => {
 
   test("human request changes detects builder sessions loaded on demand before opening modal", async () => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
-    currentSessionsFixture = [currentSessionsFixture[0]!];
+    const [specSession] = currentSessionsFixture;
+    expect(specSession).toBeDefined();
+    currentSessionsFixture = specSession ? [specSession] : [];
     loadAgentSessionsMock.mockImplementation(async (taskId: string) => {
       if (taskId !== "TASK-123") {
         return;

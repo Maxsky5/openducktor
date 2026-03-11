@@ -417,6 +417,7 @@ export function useKanbanSessionStartFlow({
       sessionStartSelection,
       startAgentSession,
       tasks,
+      humanRequestChangesTask,
       updateAgentSessionModel,
       sessionStartBeforeAction,
     ],
