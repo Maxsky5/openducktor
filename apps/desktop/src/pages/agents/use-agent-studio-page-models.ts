@@ -7,7 +7,10 @@ import {
   isNearBottom,
   useAgentChatLayout,
 } from "@/components/features/agents";
-import { CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
+import {
+  CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET,
+  CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX,
+} from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -157,9 +160,18 @@ export function useAgentStudioPageModels({
 
   const handleMessagesScroll = useCallback(
     (event: UIEvent<HTMLDivElement>): void => {
-      if (event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] === "true") {
-        setIsPinnedToBottom(true);
-        return;
+      const marker = event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
+      if (typeof marker === "string") {
+        const expectedScrollTop = Number(marker);
+        delete event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
+        if (
+          Number.isFinite(expectedScrollTop) &&
+          Math.abs(event.currentTarget.scrollTop - expectedScrollTop) <=
+            CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX
+        ) {
+          setIsPinnedToBottom(true);
+          return;
+        }
       }
       setIsPinnedToBottom(isNearBottom(event.currentTarget));
     },

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import {
@@ -8,6 +8,7 @@ import {
   computeComposerTextareaLayout,
   computeTodoPanelBottomOffset,
   isNearBottom,
+  scrollMessagesContainerToBottom,
   useAgentChatLayout,
 } from "./use-agent-chat-layout";
 
@@ -53,6 +54,24 @@ describe("use-agent-chat-layout helpers", () => {
   test("anchors todo panel with a fixed offset from the thread bottom", () => {
     expect(computeTodoPanelBottomOffset(40)).toBe(12);
     expect(computeTodoPanelBottomOffset(180)).toBe(12);
+  });
+
+  test("scrollMessagesContainerToBottom repins the latest rows after layout changes", () => {
+    const scrollTo = mock(() => {});
+    const container = {
+      clientHeight: 320,
+      scrollHeight: 960,
+      scrollTo,
+      scrollTop: 40,
+    } as unknown as HTMLDivElement;
+
+    scrollMessagesContainerToBottom(container);
+
+    expect(scrollTo).toHaveBeenCalledWith({
+      top: 640,
+      behavior: "auto",
+    });
+    expect(container.scrollTop).toBe(640);
   });
 
   test("repins when active session changes", async () => {

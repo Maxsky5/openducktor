@@ -136,9 +136,7 @@ describe("useAgentChatAutoScroll", () => {
     expect(measure.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(scrollToIndex).toHaveBeenCalledWith(3, { align: "end", behavior: "auto" });
     expect(scrollToMock).toHaveBeenCalledWith(640);
-    expect(messagesContainerRef.current?.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET]).toBe(
-      "true",
-    );
+    expect(messagesContainerRef.current?.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET]).toBe("640");
 
     await act(async () => {
       renderer?.unmount();
@@ -256,6 +254,63 @@ describe("useAgentChatAutoScroll", () => {
     expect(measure).toHaveBeenCalledTimes(0);
     expect(scrollToIndex).toHaveBeenCalledTimes(0);
     expect(scrollToMock).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  });
+
+  test("jumps to the latest message when switching sessions even if the previous session was unpinned", async () => {
+    const cancelAnimationFrame = mock((_id: number) => {});
+    setGlobalWindow({
+      cancelAnimationFrame,
+      requestAnimationFrame: mock((_callback: FrameRequestCallback) => 17),
+    });
+
+    const { measure, scrollToIndex, virtualizer } = createVirtualizerMock();
+    const { container, scrollToMock } = createContainerMock();
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    messagesContainerRef.current = container;
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-1",
+          isPinnedToBottom: false,
+          messagesContainerRef,
+          scrollVersion: "session-1:1",
+          shouldVirtualize: true,
+          virtualRowsCount: 4,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    measure.mockClear();
+    scrollToIndex.mockClear();
+    scrollToMock.mockClear();
+
+    await act(async () => {
+      renderer?.update(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-2",
+          isPinnedToBottom: false,
+          messagesContainerRef,
+          scrollVersion: "session-2:1",
+          shouldVirtualize: true,
+          virtualRowsCount: 4,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(scrollToIndex).toHaveBeenCalledWith(3, { align: "end", behavior: "auto" });
+    expect(scrollToMock).toHaveBeenCalledWith(640);
 
     await act(async () => {
       renderer?.unmount();

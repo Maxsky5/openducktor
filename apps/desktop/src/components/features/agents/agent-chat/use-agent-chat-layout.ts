@@ -5,7 +5,7 @@ export const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
 export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 40;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
 export const CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET = "odtAutoscrolling";
-export const CHAT_PROGRAMMATIC_AUTOSCROLL_TIMEOUT_MS = 1000;
+export const CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX = 1;
 
 type ScrollableElement = Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">;
 
@@ -35,6 +35,24 @@ export const computeTodoPanelBottomOffset = (_composerFormHeight: number): numbe
   return 12;
 };
 
+export const scrollMessagesContainerToBottom = (
+  container: Pick<
+    HTMLDivElement,
+    "scrollHeight" | "clientHeight" | "scrollTop" | "scrollTo"
+  > | null,
+): void => {
+  if (!container) {
+    return;
+  }
+
+  const nextTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  container.scrollTo({
+    top: nextTop,
+    behavior: "auto",
+  });
+  container.scrollTop = nextTop;
+};
+
 type UseAgentChatLayoutInput = {
   input: string;
   activeSessionId: string | null;
@@ -58,6 +76,7 @@ export const useAgentChatLayout = ({
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
+  const previousComposerFormHeightRef = useRef<number | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [composerFormHeight, setComposerFormHeight] = useState(0);
 
@@ -101,6 +120,20 @@ export const useAgentChatLayout = ({
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    const previousComposerFormHeight = previousComposerFormHeightRef.current;
+    previousComposerFormHeightRef.current = composerFormHeight;
+    if (
+      previousComposerFormHeight === null ||
+      previousComposerFormHeight === composerFormHeight ||
+      !isPinnedToBottom
+    ) {
+      return;
+    }
+
+    scrollMessagesContainerToBottom(messagesContainerRef.current);
+  }, [composerFormHeight, isPinnedToBottom]);
 
   useEffect(() => {
     if (previousSessionIdRef.current === activeSessionId) {

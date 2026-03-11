@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { isAgentKickoffScenario } from "@openducktor/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
@@ -82,6 +82,7 @@ export function useAgentStudioSessionActions({
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
+  const latestInputRef = useRef(input);
 
   const activeSessionId = activeSession?.sessionId ?? null;
   const isSessionWorking =
@@ -111,6 +112,10 @@ export function useAgentStudioSessionActions({
       ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
     });
 
+  useEffect(() => {
+    latestInputRef.current = input;
+  }, [input]);
+
   const onSend = useCallback(async (): Promise<void> => {
     if (isSending || isStarting || !agentStudioReady) {
       return;
@@ -127,20 +132,31 @@ export function useAgentStudioSessionActions({
       return;
     }
 
+    latestInputRef.current = "";
     setInput("");
+    const restoreComposerInput = () => {
+      if (latestInputRef.current.trim().length > 0) {
+        return;
+      }
+      setInput(message);
+    };
 
-    let targetSessionId = activeSession?.sessionId;
-    if (!targetSessionId) {
-      targetSessionId = await startSession("composer_send");
-    }
-
-    if (!targetSessionId) {
-      return;
-    }
-
-    setIsSending(true);
     try {
+      let targetSessionId = activeSession?.sessionId;
+      if (!targetSessionId) {
+        targetSessionId = await startSession("composer_send");
+      }
+
+      if (!targetSessionId) {
+        restoreComposerInput();
+        return;
+      }
+
+      setIsSending(true);
       await sendAgentMessage(targetSessionId, message);
+    } catch (error) {
+      restoreComposerInput();
+      throw error;
     } finally {
       setIsSending(false);
     }

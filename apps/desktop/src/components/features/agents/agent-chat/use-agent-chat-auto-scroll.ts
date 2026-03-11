@@ -1,9 +1,6 @@
 import type { RefObject } from "react";
 import { useCallback, useEffect, useRef } from "react";
-import {
-  CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET,
-  CHAT_PROGRAMMATIC_AUTOSCROLL_TIMEOUT_MS,
-} from "./use-agent-chat-layout";
+import { CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET } from "./use-agent-chat-layout";
 import type { AgentChatVirtualizer } from "./use-agent-chat-virtualization";
 
 const CHAT_AUTOSCROLL_DURATION_MS = 500;
@@ -31,7 +28,7 @@ export function useAgentChatAutoScroll({
 }: UseAgentChatAutoScrollInput): void {
   const previousSessionIdRef = useRef<string | null>(null);
   const previousScrollVersionRef = useRef<string | null>(null);
-  const autoscrollMarkerClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSessionJumpRef = useRef<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const smoothScrollStateRef = useRef<{
     initialDistancePx: number;
@@ -39,16 +36,12 @@ export function useAgentChatAutoScroll({
     targetTop: number;
   } | null>(null);
 
-  const markProgrammaticAutoScroll = useCallback((container: HTMLDivElement): void => {
-    container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] = "true";
-    if (autoscrollMarkerClearTimeoutRef.current !== null) {
-      clearTimeout(autoscrollMarkerClearTimeoutRef.current);
-    }
-    autoscrollMarkerClearTimeoutRef.current = setTimeout(() => {
-      delete container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
-      autoscrollMarkerClearTimeoutRef.current = null;
-    }, CHAT_PROGRAMMATIC_AUTOSCROLL_TIMEOUT_MS);
-  }, []);
+  const markProgrammaticAutoScroll = useCallback(
+    (container: HTMLDivElement, targetTop: number): void => {
+      container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] = String(targetTop);
+    },
+    [],
+  );
 
   const scheduleScrollToBottom = useCallback(
     (behavior: ScrollBehavior, sessionChanged: boolean): void => {
@@ -72,6 +65,7 @@ export function useAgentChatAutoScroll({
       const applyScrollTop = (targetTop: number): void => {
         const maxScrollTop = resolveMaxScrollTop(container);
         const clampedTop = Math.min(Math.max(targetTop, 0), maxScrollTop);
+        markProgrammaticAutoScroll(container, clampedTop);
         container.scrollTo({
           top: clampedTop,
           behavior: "auto",
@@ -91,7 +85,6 @@ export function useAgentChatAutoScroll({
         }
       }
 
-      markProgrammaticAutoScroll(container);
       const targetTop = resolveMaxScrollTop(container);
 
       if (behavior === "auto") {
@@ -131,7 +124,10 @@ export function useAgentChatAutoScroll({
           return;
         }
 
-        const liveTargetTop = resolveMaxScrollTop(currentContainer);
+        const liveTargetTop = Math.max(
+          0,
+          currentContainer.scrollHeight - currentContainer.clientHeight,
+        );
         smoothScrollState.targetTop = liveTargetTop;
         if (smoothScrollState.lastTimestampMs === null) {
           smoothScrollState.lastTimestampMs = timestampMs;
@@ -177,43 +173,59 @@ export function useAgentChatAutoScroll({
 
   useEffect(() => {
     return () => {
-      if (autoscrollMarkerClearTimeoutRef.current !== null) {
-        clearTimeout(autoscrollMarkerClearTimeoutRef.current);
-      }
       if (animationFrameRef.current !== null && typeof window !== "undefined") {
         window.cancelAnimationFrame(animationFrameRef.current);
       }
+      const container = messagesContainerRef.current;
+      if (container) {
+        delete container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
+      }
       smoothScrollStateRef.current = null;
+      pendingSessionJumpRef.current = null;
     };
-  }, []);
+  }, [messagesContainerRef]);
 
   useEffect(() => {
     if (!activeSessionId) {
       previousSessionIdRef.current = null;
       previousScrollVersionRef.current = null;
+      pendingSessionJumpRef.current = null;
       smoothScrollStateRef.current = null;
       return;
     }
 
-    const sessionChanged = previousSessionIdRef.current !== activeSessionId;
-    previousSessionIdRef.current = activeSessionId;
-    if (!sessionChanged) {
+    const previousSessionId = previousSessionIdRef.current;
+    const firstSessionSelection = previousSessionId === null;
+    const sessionChanged = previousSessionId !== null && previousSessionId !== activeSessionId;
+    if (sessionChanged) {
+      previousSessionIdRef.current = activeSessionId;
+      previousScrollVersionRef.current = scrollVersion;
+      pendingSessionJumpRef.current = activeSessionId;
+    } else if (firstSessionSelection) {
+      previousSessionIdRef.current = activeSessionId;
+    }
+
+    const shouldJumpOnInitialPinnedSelection = firstSessionSelection && isPinnedToBottom;
+    const shouldJumpForSessionSwitch = pendingSessionJumpRef.current === activeSessionId;
+    if (
+      (!shouldJumpOnInitialPinnedSelection && !shouldJumpForSessionSwitch) ||
+      virtualRowsCount === 0
+    ) {
       return;
     }
 
-    previousScrollVersionRef.current = scrollVersion;
-
-    if (!isPinnedToBottom || virtualRowsCount === 0) {
-      smoothScrollStateRef.current = null;
-      return;
+    scheduleScrollToBottom("auto", true);
+    if (shouldJumpForSessionSwitch) {
+      pendingSessionJumpRef.current = null;
     }
-
-    scheduleScrollToBottom(sessionChanged ? "auto" : "smooth", sessionChanged);
   }, [activeSessionId, isPinnedToBottom, scheduleScrollToBottom, scrollVersion, virtualRowsCount]);
 
   useEffect(() => {
     if (!activeSessionId || !isPinnedToBottom || virtualRowsCount === 0) {
       smoothScrollStateRef.current = null;
+      return;
+    }
+    if (pendingSessionJumpRef.current === activeSessionId) {
       return;
     }
 
