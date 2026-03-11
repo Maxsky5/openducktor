@@ -143,9 +143,9 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
 - odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev.
 - odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev.
 - For odt_set_plan subtasks, priority must be an integer 0..4 (default 2).
-- odt_build_completed from in_progress transitions to ai_review when qaRequired=true, else human_review.
-- odt_qa_rejected transitions ai_review -> in_progress.
-- odt_qa_approved transitions ai_review -> human_review.`,
+- odt_build_completed from in_progress transitions to ai_review only when qaRequired=true and the latest QA verdict is not approved; otherwise it transitions to human_review.
+- odt_qa_rejected transitions ai_review/human_review -> in_progress.
+- odt_qa_approved transitions ai_review/human_review -> human_review.`,
   },
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",

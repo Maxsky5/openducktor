@@ -48,9 +48,12 @@ impl AppService {
         verdict: QaVerdict,
     ) -> Result<TaskCard> {
         let mut context = self.load_task_context(repo_path, task_id)?;
-        if context.task.status != TaskStatus::AiReview {
+        if !matches!(
+            context.task.status,
+            TaskStatus::AiReview | TaskStatus::HumanReview
+        ) {
             return Err(anyhow!(
-                "QA outcomes are only allowed from ai_review (current: {}).",
+                "QA outcomes are only allowed from ai_review or human_review (current: {}).",
                 context.task.status.as_cli_value()
             ));
         }

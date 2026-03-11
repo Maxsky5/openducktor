@@ -8,7 +8,10 @@ import {
   QaRejectedBadge,
   RunStateBadge,
 } from "@/components/features/kanban/kanban-task-badges";
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import {
+  resolveTaskCardActions,
+  type TaskWorkflowAction,
+} from "@/components/features/kanban/kanban-task-workflow";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
@@ -218,7 +221,23 @@ function TaskActions({
   onDelegate: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
-}): ReactElement {
+}): ReactElement | null {
+  const includeActions: readonly TaskWorkflowAction[] = [
+    "set_spec",
+    "set_plan",
+    "qa_start",
+    "build_start",
+    "open_builder",
+    "open_qa",
+    "human_approve",
+    "human_request_changes",
+  ];
+  const workflowActions = resolveTaskCardActions(task, { include: includeActions });
+
+  if (workflowActions.allActions.length === 0) {
+    return null;
+  }
+
   const runAction = (action: TaskWorkflowAction): void => {
     switch (action) {
       case "set_spec":
@@ -252,16 +271,7 @@ function TaskActions({
     <div className="mt-3 cursor-default border-t border-border pt-2.5">
       <TaskWorkflowActionGroup
         task={task}
-        includeActions={[
-          "set_spec",
-          "set_plan",
-          "qa_start",
-          "build_start",
-          "open_builder",
-          "open_qa",
-          "human_approve",
-          "human_request_changes",
-        ]}
+        includeActions={includeActions}
         onAction={runAction}
         size="sm"
         expandPrimary

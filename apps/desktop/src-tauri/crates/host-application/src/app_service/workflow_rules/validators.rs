@@ -151,7 +151,7 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
         actions.push(TaskAction::SetPlan);
     }
 
-    if task.status == TaskStatus::AiReview {
+    if matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview) {
         actions.push(TaskAction::QaStart);
     } else if is_qa_rejected_rework(task)
         || (!matches!(task.status, TaskStatus::InProgress | TaskStatus::Blocked)
@@ -162,7 +162,10 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
 
     if matches!(
         task.status,
-        TaskStatus::InProgress | TaskStatus::Blocked | TaskStatus::AiReview | TaskStatus::HumanReview
+        TaskStatus::InProgress
+            | TaskStatus::Blocked
+            | TaskStatus::AiReview
+            | TaskStatus::HumanReview
     ) {
         actions.push(TaskAction::OpenBuilder);
     }
@@ -179,11 +182,13 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
         }
     }
 
-    if task.status == TaskStatus::HumanReview {
+    if matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview) {
         actions.push(TaskAction::HumanRequestChanges);
     }
 
-    if validate_transition(task, all_tasks, &task.status, &TaskStatus::Closed).is_ok() {
+    if matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview)
+        && validate_transition(task, all_tasks, &task.status, &TaskStatus::Closed).is_ok()
+    {
         actions.push(TaskAction::HumanApprove);
     }
 

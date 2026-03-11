@@ -43,12 +43,12 @@ Human actions:
 | `odt_build_resumed` | `ready_for_dev` | feature/epic standard flow | `in_progress` |
 | `odt_build_resumed` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | task/bug optional flow + blocked resume | `in_progress` |
 | `odt_build_blocked` | `in_progress` | reason required | `blocked` |
-| `odt_build_completed` | `in_progress` | `qaRequired=true` | `ai_review` |
-| `odt_build_completed` | `in_progress` | `qaRequired=false` | `human_review` |
-| `odt_qa_rejected` | `ai_review` | report markdown required | `in_progress` |
-| `odt_qa_approved` | `ai_review` | report markdown required | `human_review` |
-| `human_request_changes` | `human_review` | note optional | `in_progress` |
-| `human_approve` | `human_review` | epic completion guard passes | `closed` |
+| `odt_build_completed` | `in_progress` | `qaRequired=true` and latest QA verdict is not `approved` (including no QA verdict yet) | `ai_review` |
+| `odt_build_completed` | `in_progress` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
+| `odt_qa_rejected` | `ai_review`, `human_review` | report markdown required | `in_progress` |
+| `odt_qa_approved` | `ai_review`, `human_review` | report markdown required | `human_review` |
+| `human_request_changes` | `ai_review`, `human_review` | note optional | `in_progress` |
+| `human_approve` | `ai_review`, `human_review` | epic completion guard passes | `closed` |
 | `defer_issue` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | not subtask | `deferred` |
 | `resume_deferred` | `deferred` | not subtask | `open` |
 
@@ -61,7 +61,7 @@ Human actions:
 
 ## Invalid Transition Examples
 - `open -> closed` without human approval.
-- `ai_review -> closed` without QA approval + human approval.
+- `ai_review -> closed` without an explicit `human_approve` action.
 - `blocked -> closed` directly.
 - `deferred -> in_progress` directly (must resume to `open` first).
 

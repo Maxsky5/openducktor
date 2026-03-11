@@ -735,7 +735,7 @@ describe("OdtTaskStore workflow mutation paths", () => {
         taskId: "task-1",
         reportMarkdown: "## QA report",
       }),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review");
+    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
 
     expect(harness.getMetadataUpdateCalls()).toHaveLength(0);
     expect(harness.getStatusUpdateCalls()).toHaveLength(0);

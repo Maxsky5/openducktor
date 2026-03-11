@@ -5,10 +5,41 @@ import {
 } from "../agents/agent-studio-test-utils";
 import {
   findLatestSessionByRoleForTask,
+  findSessionsByRoleForTask,
   resolveKanbanPlanningStartPreference,
 } from "./use-kanban-session-start-flow";
 
 describe("use-kanban-session-start-flow helpers", () => {
+  test("findSessionsByRoleForTask returns all matching sessions newest first", () => {
+    const sessions = [
+      createAgentSessionFixture({
+        runtimeKind: "opencode",
+        sessionId: "build-older",
+        taskId: "TASK-1",
+        role: "build",
+        startedAt: "2026-02-10T10:00:00.000Z",
+      }),
+      createAgentSessionFixture({
+        runtimeKind: "opencode",
+        sessionId: "build-latest",
+        taskId: "TASK-1",
+        role: "build",
+        startedAt: "2026-02-12T10:00:00.000Z",
+      }),
+      createAgentSessionFixture({
+        runtimeKind: "opencode",
+        sessionId: "qa-latest",
+        taskId: "TASK-1",
+        role: "qa",
+        startedAt: "2026-02-11T10:00:00.000Z",
+      }),
+    ];
+
+    expect(
+      findSessionsByRoleForTask(sessions, "TASK-1", "build").map((session) => session.sessionId),
+    ).toEqual(["build-latest", "build-older"]);
+  });
+
   test("findLatestSessionByRoleForTask returns the most recent matching session", () => {
     const sessions = [
       createAgentSessionFixture({

@@ -88,16 +88,21 @@ describe("resolveTaskCardActions", () => {
     expect(result.primaryAction).toBe("open_builder");
   });
 
-  test("uses qa_start as primary during ai review", () => {
+  test("uses qa_start as primary during ai review when available", () => {
     const task = createTaskCardFixture({
       status: "ai_review",
       issueType: "epic",
-      availableActions: ["open_builder", "qa_start"],
+      availableActions: ["open_builder", "qa_start", "human_request_changes", "human_approve"],
     });
 
     const result = resolveTaskCardActions(task);
 
     expect(result.primaryAction).toBe("qa_start");
+    expect(result.secondaryActions).toEqual([
+      "human_approve",
+      "human_request_changes",
+      "open_builder",
+    ]);
   });
 
   test("uses build_start as primary for qa rejected in-progress tasks", () => {
@@ -122,12 +127,26 @@ describe("resolveTaskCardActions", () => {
     const task = createTaskCardFixture({
       status: "human_review",
       issueType: "epic",
-      availableActions: ["open_builder", "human_request_changes", "human_approve"],
+      availableActions: ["open_builder", "qa_start", "human_request_changes", "human_approve"],
     });
 
     const result = resolveTaskCardActions(task);
 
     expect(result.primaryAction).toBe("human_approve");
+    expect(result.secondaryActions).toContain("qa_start");
+  });
+
+  test("filters build_start from human review actions", () => {
+    const task = createTaskCardFixture({
+      status: "human_review",
+      issueType: "feature",
+      availableActions: ["human_approve", "human_request_changes", "open_builder", "build_start"],
+    });
+
+    const result = resolveTaskCardActions(task);
+
+    expect(result.allActions).toEqual(["human_approve", "human_request_changes", "open_builder"]);
+    expect(result.secondaryActions).not.toContain("build_start");
   });
 
   test("uses resume as primary for deferred tasks", () => {

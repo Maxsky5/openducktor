@@ -116,7 +116,7 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(context.createSessionDisabled).toBe(false);
   });
 
-  test("buildWorkflowModelContext includes follow-up build scenarios from QA and human feedback", () => {
+  test("buildWorkflowModelContext includes follow-up build scenario from human feedback", () => {
     const activeSession = createSession({
       runtimeKind: "opencode",
       sessionId: "spec-session",
@@ -124,8 +124,8 @@ describe("use-agent-studio-page-model-builders", () => {
       scenario: "spec_initial",
     });
     const taskWithFeedback = createTaskCardFixture({
-      status: "in_progress",
-      availableActions: ["human_request_changes"],
+      status: "human_review",
+      availableActions: ["human_request_changes", "human_approve"],
       documentSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
@@ -149,10 +149,40 @@ describe("use-agent-studio-page-model-builders", () => {
     });
 
     const optionIds = context.sessionCreateOptions.map((option) => option.id);
-    expect(optionIds).toContain("build:build_after_qa_rejected:fresh");
     expect(optionIds).toContain("build:build_after_human_request_changes:fresh");
     expect(context.sessionCreateOptions.every((option) => option.disabled)).toBe(true);
     expect(context.createSessionDisabled).toBe(true);
+  });
+
+  test("buildWorkflowModelContext does not treat ai review request changes as human feedback follow-up", () => {
+    const taskInAiReview = createTaskCardFixture({
+      status: "ai_review",
+      availableActions: ["qa_start", "human_request_changes", "human_approve"],
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
+      },
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: false },
+        qa: { required: true, canSkip: false, available: true, completed: true },
+      },
+    });
+
+    const context = buildWorkflowModelContext({
+      selectedTask: taskInAiReview,
+      sessionsForTask: [],
+      activeSession: null,
+      role: "build",
+      isSessionWorking: false,
+      roleLabelByRole,
+    });
+
+    expect(context.sessionCreateOptions.map((option) => option.id)).not.toContain(
+      "build:build_after_human_request_changes:fresh",
+    );
   });
 
   test("does not expose qa-rejected follow-up build scenario when latest qa verdict is approved", () => {

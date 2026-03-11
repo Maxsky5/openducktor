@@ -332,12 +332,23 @@ fn qa_rejected_in_progress_tasks_expose_rework_and_open_qa_actions() {
 }
 
 #[test]
-fn ai_review_tasks_expose_qa_start_and_hide_build_start() {
+fn ai_review_tasks_expose_qa_start_request_changes_approve_and_hide_build_start() {
     let task = make_task("task-1", "task", TaskStatus::AiReview);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));
     assert!(actions.contains(&TaskAction::QaStart));
+    assert!(actions.contains(&TaskAction::HumanRequestChanges));
+    assert!(actions.contains(&TaskAction::HumanApprove));
     assert!(!actions.contains(&TaskAction::BuildStart));
     assert!(actions.contains(&TaskAction::OpenBuilder));
+}
+
+#[test]
+fn human_review_tasks_expose_qa_start_and_request_changes() {
+    let task = make_task("task-1", "task", TaskStatus::HumanReview);
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+    assert!(actions.contains(&TaskAction::QaStart));
+    assert!(actions.contains(&TaskAction::HumanRequestChanges));
+    assert!(actions.contains(&TaskAction::HumanApprove));
 }
 
 #[test]

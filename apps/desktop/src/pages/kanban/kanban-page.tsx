@@ -4,6 +4,7 @@ import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
 } from "@/components/features/task-details";
+import { HumanReviewFeedbackModal } from "./human-review-feedback-modal";
 import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanSessionStartModal } from "./kanban-session-start-modal";
@@ -24,6 +25,7 @@ export function KanbanPage(): ReactElement {
       <KanbanPageContent model={models.content} />
       <TaskCreateModal {...models.taskComposer} />
       <TaskDetailsSheetController ref={taskDetailsSheetRef} {...models.taskDetailsController} />
+      <HumanReviewFeedbackModal model={models.humanReviewFeedbackModal} />
       <KanbanSessionStartModal model={models.sessionStartModal} />
     </div>
   );

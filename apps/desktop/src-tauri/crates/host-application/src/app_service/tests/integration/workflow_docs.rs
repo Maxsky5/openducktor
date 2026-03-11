@@ -3,8 +3,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
     AgentSessionDocument, CreateTaskInput, GitBranch, GitCurrentBranch, GitPort, IssueType,
-    PlanSubtaskInput, QaReportDocument, QaVerdict, RunEvent, RunState, RunSummary,
-    RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
+    PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, TaskAction, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
@@ -579,6 +579,7 @@ fn build_resumed_human_actions_and_resume_deferred_paths_work() -> Result<()> {
             make_task("task-blocked", "task", TaskStatus::Blocked),
             make_task("task-human-review", "task", TaskStatus::HumanReview),
             make_task("task-approve", "task", TaskStatus::HumanReview),
+            make_task("task-ai-approve", "task", TaskStatus::AiReview),
             deferred,
         ],
         vec![],
@@ -597,6 +598,9 @@ fn build_resumed_human_actions_and_resume_deferred_paths_work() -> Result<()> {
 
     let approved = service.human_approve(repo_path, "task-approve")?;
     assert_eq!(approved.status, TaskStatus::Closed);
+
+    let ai_review_approved = service.human_approve(repo_path, "task-ai-approve")?;
+    assert_eq!(ai_review_approved.status, TaskStatus::Closed);
 
     let resumed_deferred = service.task_resume_deferred(repo_path, "task-deferred")?;
     assert_eq!(resumed_deferred.status, TaskStatus::Open);
@@ -727,10 +731,13 @@ fn task_transition_updates_status_when_valid() -> Result<()> {
 }
 
 #[test]
-fn build_completed_routes_to_ai_review_when_enabled() -> Result<()> {
+fn build_completed_routes_to_ai_review_when_enabled_without_approved_qa() -> Result<()> {
     let repo_path = "/tmp/odt-repo-build-ai";
+    let mut task = make_task("task-1", "task", TaskStatus::InProgress);
+    task.document_summary.qa_report.has = false;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::NotReviewed;
     let (service, task_state, _git_state) = build_service_with_git_state(
-        vec![make_task("task-1", "task", TaskStatus::InProgress)],
+        vec![task],
         vec![],
         GitCurrentBranch {
             name: Some("main".to_string()),
@@ -755,6 +762,34 @@ fn build_completed_routes_to_human_review_when_ai_is_disabled() -> Result<()> {
     let repo_path = "/tmp/odt-repo-build-human";
     let mut task = make_task("task-1", "task", TaskStatus::InProgress);
     task.ai_review_enabled = false;
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![task],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.build_completed(repo_path, "task-1", None)?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert!(task_state
+        .updated_patches
+        .iter()
+        .any(|(_, patch)| patch.status == Some(TaskStatus::HumanReview)));
+    Ok(())
+}
+
+#[test]
+fn build_completed_routes_to_human_review_when_last_qa_was_approved() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-build-human-approved-qa";
+    let mut task = make_task("task-1", "task", TaskStatus::InProgress);
+    task.ai_review_enabled = true;
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Approved;
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![task],
         vec![],
@@ -1243,6 +1278,35 @@ fn qa_approved_appends_report_and_transitions_to_human_review() -> Result<()> {
 }
 
 #[test]
+fn qa_approved_from_human_review_stays_in_human_review() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-qa-approved-human-review";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.qa_approved(repo_path, "task-1", "Looks good again")?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.qa_outcome_calls,
+        vec![(
+            "task-1".to_string(),
+            TaskStatus::HumanReview,
+            "Looks good again".to_string(),
+            QaVerdict::Approved
+        )]
+    );
+    Ok(())
+}
+
+#[test]
 fn qa_approved_rejects_non_ai_review_tasks() {
     let repo_path = "/tmp/odt-repo-qa-approved-invalid";
     let (service, _task_state, _git_state) = build_service_with_git_state(
@@ -1261,7 +1325,7 @@ fn qa_approved_rejects_non_ai_review_tasks() {
 
     assert!(error
         .to_string()
-        .contains("QA outcomes are only allowed from ai_review"));
+        .contains("QA outcomes are only allowed from ai_review or human_review"));
 }
 
 #[test]
@@ -1295,6 +1359,35 @@ fn qa_rejected_appends_report_and_transitions_to_in_progress() -> Result<()> {
 }
 
 #[test]
+fn qa_rejected_from_human_review_transitions_to_in_progress() -> Result<()> {
+    let repo_path = "/tmp/odt-repo-qa-rejected-human-review";
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.qa_rejected(repo_path, "task-1", "Needs another pass")?;
+    assert_eq!(task.status, TaskStatus::InProgress);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.qa_outcome_calls,
+        vec![(
+            "task-1".to_string(),
+            TaskStatus::InProgress,
+            "Needs another pass".to_string(),
+            QaVerdict::Rejected
+        )]
+    );
+    Ok(())
+}
+
+#[test]
 fn qa_rejected_rejects_non_ai_review_tasks() {
     let repo_path = "/tmp/odt-repo-qa-rejected-invalid";
     let (service, _task_state, _git_state) = build_service_with_git_state(
@@ -1313,7 +1406,7 @@ fn qa_rejected_rejects_non_ai_review_tasks() {
 
     assert!(error
         .to_string()
-        .contains("QA outcomes are only allowed from ai_review"));
+        .contains("QA outcomes are only allowed from ai_review or human_review"));
 }
 
 #[test]

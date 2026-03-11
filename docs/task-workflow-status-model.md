@@ -65,7 +65,8 @@ Removed from OpenDucktor UI scope:
 - `task`: `true` (for now)
 - `bug`: `true` (for now)
 
-When `qaRequired=false`, transition from build completion skips `ai_review` and goes directly to `human_review`.
+When `qaRequired=true`, build completion returns to `ai_review` until the latest QA verdict is `approved`.
+When `qaRequired=false`, or when the latest QA verdict is already `approved`, build completion goes directly to `human_review`.
 
 ## Epic/Subtask Rules
 - Only `epic` can have subtasks.

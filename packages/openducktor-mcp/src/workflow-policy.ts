@@ -10,7 +10,7 @@ const BASE_TRANSITION_RULES: Readonly<Record<TaskStatus, readonly TaskStatus[]>>
   ready_for_dev: ["in_progress", "deferred"],
   in_progress: ["blocked", "ai_review", "human_review", "deferred"],
   blocked: ["in_progress", "deferred"],
-  ai_review: ["in_progress", "human_review", "deferred"],
+  ai_review: ["in_progress", "human_review", "closed", "deferred"],
   human_review: ["in_progress", "closed", "deferred"],
   deferred: ["open"],
   closed: [],

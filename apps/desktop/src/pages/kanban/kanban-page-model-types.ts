@@ -8,7 +8,32 @@ export type KanbanSessionStartIntent = {
   role: AgentRole;
   scenario: AgentScenario;
   startMode: "fresh" | "reuse_latest";
-  sendKickoff: boolean;
+  postStartAction: "none" | "kickoff" | "send_message";
+  message?: string;
+  beforeStartAction?: {
+    action: "human_request_changes";
+    note: string;
+  };
+};
+
+export type HumanReviewFeedbackTargetOption = {
+  value: string;
+  label: string;
+  description: string;
+  secondaryLabel?: string;
+};
+
+export type HumanReviewFeedbackModalModel = {
+  open: boolean;
+  taskId: string;
+  selectedTarget: string;
+  targetOptions: HumanReviewFeedbackTargetOption[];
+  message: string;
+  isSubmitting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onTargetChange: (value: string) => void;
+  onMessageChange: (message: string) => void;
+  onConfirm: () => void;
 };
 
 export type KanbanPageHeaderModel = {
@@ -61,5 +86,6 @@ export type KanbanPageModels = {
   content: KanbanPageContentModel;
   taskComposer: KanbanPageTaskComposerModel;
   taskDetailsController: KanbanPageTaskDetailsControllerModel;
+  humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
 };

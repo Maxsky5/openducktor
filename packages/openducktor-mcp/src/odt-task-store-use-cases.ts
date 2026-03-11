@@ -259,17 +259,24 @@ export class BuildResumedUseCase
 type BuildCompletedUseCaseDeps = {
   workflow: Pick<
     OdtTaskWorkflowRuntimePort,
-    "ensureInitialized" | "resolveTaskContext" | "refreshTaskContext" | "transitionTask"
+    | "ensureInitialized"
+    | "readTaskSnapshot"
+    | "resolveTaskContext"
+    | "refreshTaskContext"
+    | "transitionTask"
   >;
+  documentStore: Pick<TaskDocumentPort, "parseDocs">;
 };
 
 export class BuildCompletedUseCase
   implements OdtTaskStoreUseCase<BuildCompletedInput, BuildCompletedResult>
 {
   private readonly workflow: BuildCompletedUseCaseDeps["workflow"];
+  private readonly documentStore: BuildCompletedUseCaseDeps["documentStore"];
 
   constructor(deps: BuildCompletedUseCaseDeps) {
     this.workflow = deps.workflow;
+    this.documentStore = deps.documentStore;
   }
 
   async execute(input: BuildCompletedInput): Promise<BuildCompletedResult> {
@@ -278,8 +285,13 @@ export class BuildCompletedUseCase
     const context = await this.workflow.resolveTaskContext(input.taskId);
     const refreshedContext = await this.workflow.refreshTaskContext(context.task.id, context);
     const { task } = refreshedContext;
+    const { issue } = await this.workflow.readTaskSnapshot(task.id);
+    const documents = this.documentStore.parseDocs(issue);
 
-    const nextStatus = task.aiReviewEnabled ? "ai_review" : "human_review";
+    const nextStatus =
+      task.aiReviewEnabled && documents.latestQaReport.verdict !== "approved"
+        ? "ai_review"
+        : "human_review";
     const updatedTask = await this.workflow.transitionTask(task.id, nextStatus, refreshedContext);
     return {
       task: updatedTask,
@@ -308,8 +320,10 @@ export class QaApprovedUseCase implements OdtTaskStoreUseCase<QaApprovedInput, Q
   async execute(input: QaApprovedInput): Promise<QaApprovedResult> {
     await this.workflow.ensureInitialized();
     const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
-    if (task.status !== "ai_review") {
-      throw new Error(`QA outcomes are only allowed from ai_review (current: ${task.status}).`);
+    if (task.status !== "ai_review" && task.status !== "human_review") {
+      throw new Error(
+        `QA outcomes are only allowed from ai_review or human_review (current: ${task.status}).`,
+      );
     }
     this.workflow.assertTransitionAllowed(task, [task], "human_review");
     const preparedWrite = this.documentStore.prepareQaReportWrite(
@@ -337,8 +351,10 @@ export class QaRejectedUseCase implements OdtTaskStoreUseCase<QaRejectedInput, Q
   async execute(input: QaRejectedInput): Promise<QaRejectedResult> {
     await this.workflow.ensureInitialized();
     const { issue, task } = await this.workflow.readTaskSnapshot(input.taskId);
-    if (task.status !== "ai_review") {
-      throw new Error(`QA outcomes are only allowed from ai_review (current: ${task.status}).`);
+    if (task.status !== "ai_review" && task.status !== "human_review") {
+      throw new Error(
+        `QA outcomes are only allowed from ai_review or human_review (current: ${task.status}).`,
+      );
     }
     this.workflow.assertTransitionAllowed(task, [task], "in_progress");
     const preparedWrite = this.documentStore.prepareQaReportWrite(
@@ -384,6 +400,7 @@ export const createOdtTaskStoreUseCases = (
   }),
   buildCompleted: new BuildCompletedUseCase({
     workflow: deps.workflow,
+    documentStore: deps.documentStore,
   }),
   qaApproved: new QaApprovedUseCase({
     workflow: deps.workflow,
