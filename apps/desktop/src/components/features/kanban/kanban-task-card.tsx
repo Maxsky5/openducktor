@@ -221,7 +221,7 @@ function TaskActions({
   onDelegate: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
-}): ReactElement {
+}): ReactElement | null {
   const includeActions: readonly TaskWorkflowAction[] = [
     "set_spec",
     "set_plan",
@@ -235,7 +235,7 @@ function TaskActions({
   const workflowActions = resolveTaskCardActions(task, { include: includeActions });
 
   if (workflowActions.allActions.length === 0) {
-    return <></>;
+    return null;
   }
 
   const runAction = (action: TaskWorkflowAction): void => {
