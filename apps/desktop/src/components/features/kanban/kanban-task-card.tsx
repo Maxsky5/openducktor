@@ -312,7 +312,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
       )}
     >
       {hasActiveSessions ? (
-        <BorderRay turnDurationMs={2500} className="kanban-active-session-ray" />
+        <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
       ) : null}
 
       <div className="kanban-active-session-content flex min-w-0 flex-col space-y-2.5 p-3.5">

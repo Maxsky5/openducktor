@@ -127,6 +127,8 @@ export function useAgentStudioSessionActions({
       return;
     }
 
+    setInput("");
+
     let targetSessionId = activeSession?.sessionId;
     if (!targetSessionId) {
       targetSessionId = await startSession("composer_send");
@@ -139,7 +141,6 @@ export function useAgentStudioSessionActions({
     setIsSending(true);
     try {
       await sendAgentMessage(targetSessionId, message);
-      setInput("");
     } finally {
       setIsSending(false);
     }

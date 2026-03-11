@@ -86,14 +86,17 @@ export const getAssistantFooterData = (
   }
 
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+  if (!assistantMeta || assistantMeta.isFinal === false) {
+    return { infoParts: [] };
+  }
   const parts: string[] = [];
 
-  const agentLabel = assistantMeta?.profileId ?? sessionSelectedModel?.profileId;
+  const agentLabel = assistantMeta.profileId ?? sessionSelectedModel?.profileId;
   if (typeof agentLabel === "string" && agentLabel.trim().length > 0) {
     parts.push(agentLabel.trim());
   }
 
-  const modelLabel = assistantMeta?.modelId ?? sessionSelectedModel?.modelId;
+  const modelLabel = assistantMeta.modelId ?? sessionSelectedModel?.modelId;
   if (typeof modelLabel === "string" && modelLabel.trim().length > 0) {
     parts.push(modelLabel.trim());
   }

@@ -20,7 +20,7 @@ import {
   readMessageCompletedAt,
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart } from "./shared";
+import { applyDeltaToPart, isReasoningDeltaField } from "./shared";
 
 const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: string): boolean => {
   const mapped = mapPartToAgentStreamPart(part);
@@ -29,7 +29,7 @@ const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: s
   }
 
   const mappedRole = roleHint ?? runtime.messageRoleById.get(mapped.messageId);
-  if (mappedRole === "user" && mapped.kind === "text") {
+  if (mappedRole !== "assistant") {
     return false;
   }
 
@@ -158,6 +158,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     type: "assistant_message",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
+    messageId,
     message: visible,
     ...(typeof totalTokens === "number" ? { totalTokens } : {}),
     ...(assistantModel ? { model: assistantModel } : {}),
@@ -201,17 +202,21 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
   if (delta.length === 0) {
     return true;
   }
-  if (messageId) {
-    const deltaRole = runtime.messageRoleById.get(messageId);
-    if (deltaRole === "user") {
-      return true;
-    }
+  if (!messageId) {
+    return true;
   }
+  const deltaRole = runtime.messageRoleById.get(messageId);
+  if (deltaRole !== "assistant") {
+    return true;
+  }
+  const channel = isReasoningDeltaField(field) ? "reasoning" : "text";
 
   runtime.emit(runtime.sessionId, {
     type: "assistant_delta",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
+    channel,
+    messageId,
     delta,
   });
   return true;

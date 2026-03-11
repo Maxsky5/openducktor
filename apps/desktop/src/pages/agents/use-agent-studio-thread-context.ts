@@ -11,7 +11,6 @@ type AgentStudioThreadContext = {
   threadSession: AgentSessionState | null;
   activeSessionId: string | null;
   isContextSwitching: boolean;
-  scrollTrigger: string;
 };
 
 export const useAgentStudioThreadContext = ({
@@ -113,15 +112,9 @@ export const useAgentStudioThreadContext = ({
   const isContextSwitching =
     isTaskHydrating || isThreadContextSwitching || isContextSwitchIntentActive;
 
-  const activeMessageCount = threadSession?.messages.length ?? 0;
-  const activeDraftScrollBucket = Math.floor((threadSession?.draftAssistantText.length ?? 0) / 48);
-  const activeSessionStatus = threadSession?.status ?? "stopped";
-  const scrollTrigger = `${threadSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${threadSession?.pendingQuestions.length ?? 0}:${threadSession?.pendingPermissions.length ?? 0}:${activeDraftScrollBucket}`;
-
   return {
     threadSession,
     activeSessionId,
     isContextSwitching,
-    scrollTrigger,
   };
 };

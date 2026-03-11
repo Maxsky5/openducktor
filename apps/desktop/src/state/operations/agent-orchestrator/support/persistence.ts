@@ -70,6 +70,9 @@ export const fromPersistedSessionRecord = (
     workingDirectory: session.workingDirectory,
     messages: [],
     draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
     pendingPermissions: [],
     pendingQuestions: [],
     todos: [],
@@ -146,6 +149,7 @@ const assistantMessageMeta = (
   return {
     kind: "assistant",
     agentRole: role,
+    isFinal: true,
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),

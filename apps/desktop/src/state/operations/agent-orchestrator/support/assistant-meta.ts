@@ -26,6 +26,7 @@ export const toAssistantMessageMeta = (
   return {
     kind: "assistant",
     agentRole: session.role,
+    isFinal: true,
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
@@ -49,12 +50,31 @@ export const finalizeDraftAssistantMessage = (
   model?: AgentSessionState["selectedModel"],
 ): AgentSessionState => {
   const draft = session.draftAssistantText.trim();
+  const clearedDraftFields = {
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+  } as const;
   if (draft.length === 0) {
-    return session;
+    if (
+      session.draftReasoningText.length === 0 &&
+      session.draftAssistantMessageId === null &&
+      session.draftReasoningMessageId === null
+    ) {
+      return session;
+    }
+
+    return {
+      ...session,
+      ...clearedDraftFields,
+    };
   }
 
   const lastMessage = session.messages[session.messages.length - 1];
-  const alreadyAppended = lastMessage?.role === "assistant" && lastMessage.content.trim() === draft;
+  const alreadyAppended =
+    lastMessage?.role === "assistant" &&
+    (lastMessage.id === session.draftAssistantMessageId || lastMessage.content.trim() === draft);
   if (alreadyAppended) {
     const nextMessages = [...session.messages];
     const lastIndex = nextMessages.length - 1;
@@ -67,18 +87,18 @@ export const finalizeDraftAssistantMessage = (
     }
     return {
       ...session,
-      draftAssistantText: "",
+      ...clearedDraftFields,
       messages: nextMessages,
     };
   }
 
   return {
     ...session,
-    draftAssistantText: "",
+    ...clearedDraftFields,
     messages: [
       ...session.messages,
       {
-        id: crypto.randomUUID(),
+        id: session.draftAssistantMessageId ?? crypto.randomUUID(),
         role: "assistant",
         content: draft,
         timestamp,

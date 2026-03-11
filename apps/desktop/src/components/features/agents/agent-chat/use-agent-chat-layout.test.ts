@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import {
@@ -55,20 +55,12 @@ describe("use-agent-chat-layout helpers", () => {
     expect(computeTodoPanelBottomOffset(180)).toBe(12);
   });
 
-  test("repins and autoscrolls when active session changes", async () => {
+  test("repins when active session changes", async () => {
     let latest: unknown = null;
-    const scrollTo = mock((_options: ScrollToOptions) => {});
-    const container = {
-      scrollHeight: 1_000,
-      scrollTop: 0,
-      clientHeight: 320,
-      scrollTo,
-    } as unknown as HTMLDivElement;
 
     const Harness = ({ activeSessionId }: { activeSessionId: string | null }) => {
       latest = useAgentChatLayout({
         input: "",
-        scrollTrigger: "trigger",
         activeSessionId,
       });
       return null;
@@ -85,7 +77,6 @@ describe("use-agent-chat-layout helpers", () => {
       if (!state) {
         throw new Error("Hook state unavailable");
       }
-      state.messagesContainerRef.current = container;
       state.setIsPinnedToBottom(false);
       await Promise.resolve();
     });
@@ -106,10 +97,6 @@ describe("use-agent-chat-layout helpers", () => {
       throw new Error("Hook state unavailable");
     }
     expect(stateAfterSessionSwitch.isPinnedToBottom).toBe(true);
-    expect(scrollTo).toHaveBeenCalledWith({
-      top: 1_000,
-      behavior: "auto",
-    });
 
     await act(async () => {
       renderer.unmount();

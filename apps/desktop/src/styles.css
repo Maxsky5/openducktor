@@ -357,6 +357,11 @@ pre {
   }
 }
 
+.agent-chat-row-motion {
+  transform-origin: center bottom;
+  will-change: transform, opacity;
+}
+
 .kanban-active-session-card {
   position: relative;
   isolation: isolate;
@@ -370,10 +375,10 @@ pre {
   --odt-border-ray-turn-duration: 3000ms;
   --odt-border-ray-perimeter: 1000;
   --odt-border-ray-length: 190;
+  --odt-border-ray-stroke-width: 4.4;
+  --odt-border-ray-color: rgba(56, 189, 248, 1);
 }
 
-.odt-border-ray-segment-halo,
-.odt-border-ray-segment-glow,
 .odt-border-ray-segment {
   fill: none;
   stroke-linecap: round;
@@ -385,24 +390,9 @@ pre {
   animation: odt-border-ray-run var(--odt-border-ray-turn-duration) linear infinite;
 }
 
-.odt-border-ray-segment-halo {
-  stroke: rgba(56, 189, 248, 0.44);
-  stroke-width: 14;
-  opacity: 0.42;
-  filter: blur(7px);
-}
-
-.odt-border-ray-segment-glow {
-  stroke: rgba(125, 211, 252, 0.9);
-  stroke-width: 9.8;
-  opacity: 0.58;
-  filter: blur(3.3px) drop-shadow(0 0 8px rgba(56, 189, 248, 0.62));
-}
-
 .odt-border-ray-segment {
-  stroke: rgba(56, 189, 248, 1);
-  stroke-width: 4.4;
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9));
+  stroke: var(--odt-border-ray-color);
+  stroke-width: var(--odt-border-ray-stroke-width);
 }
 
 .kanban-active-session-content {
@@ -411,8 +401,7 @@ pre {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .odt-border-ray-segment-halo,
-  .odt-border-ray-segment-glow,
+  .agent-chat-row-motion,
   .odt-border-ray-segment {
     animation: none;
   }

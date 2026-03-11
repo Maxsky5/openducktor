@@ -42,15 +42,6 @@ export type AgentChatVirtualRow =
       kind: "message";
       key: string;
       message: AgentChatMessage;
-    }
-  | {
-      kind: "draft";
-      key: string;
-      draftText: string;
-    }
-  | {
-      kind: "thinking";
-      key: string;
     };
 
 export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChatVirtualRow[] {
@@ -79,25 +70,6 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
     });
   }
 
-  if (session.draftAssistantText) {
-    rows.push({
-      kind: "draft",
-      key: `${session.sessionId}:draft`,
-      draftText: session.draftAssistantText,
-    });
-  }
-
-  if (
-    session.status === "running" &&
-    !session.draftAssistantText &&
-    session.pendingQuestions.length === 0
-  ) {
-    rows.push({
-      kind: "thinking",
-      key: `${session.sessionId}:thinking`,
-    });
-  }
-
   return rows;
 }
 
@@ -108,7 +80,8 @@ export function buildAgentChatVirtualRowsSignature(
   const signatureParts: string[] = [
     session.sessionId,
     session.status,
-    session.draftAssistantText,
+    session.draftReasoningText,
+    session.draftReasoningMessageId ?? "",
     String(session.pendingQuestions.length),
   ];
 

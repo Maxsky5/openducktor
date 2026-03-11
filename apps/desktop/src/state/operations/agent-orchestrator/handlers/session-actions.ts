@@ -178,6 +178,9 @@ export const createAgentSessionActions = ({
       ...current,
       status: "running",
       draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
       messages: [
         ...current.messages,
         {
@@ -203,6 +206,9 @@ export const createAgentSessionActions = ({
           ...current,
           status: "error",
           draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
           messages: [
             ...current.messages,
             {
@@ -407,6 +413,9 @@ export const createAgentSessionActions = ({
         ...current,
         status: "stopped",
         draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
         pendingPermissions: [],
         pendingQuestions: [],
       }));
@@ -417,6 +426,12 @@ export const createAgentSessionActions = ({
     sessionId: string,
     selection: AgentModelSelection | null,
   ): void => {
+    if (adapter.hasSession(sessionId)) {
+      adapter.updateSessionModel({
+        sessionId,
+        model: selection,
+      });
+    }
     updateSession(sessionId, (current) => ({
       ...current,
       selectedModel: selection,

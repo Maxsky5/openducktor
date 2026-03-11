@@ -33,6 +33,11 @@ export type SendAgentUserMessageInput = {
   model?: AgentModelSelection;
 };
 
+export type UpdateAgentSessionModelInput = {
+  sessionId: string;
+  model: AgentModelSelection | null;
+};
+
 export type LoadAgentSessionHistoryInput = {
   runtimeKind?: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
@@ -113,6 +118,7 @@ export interface AgentSessionPort {
   hasSession(sessionId: string): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
+  updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyPermission(input: ReplyPermissionInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;

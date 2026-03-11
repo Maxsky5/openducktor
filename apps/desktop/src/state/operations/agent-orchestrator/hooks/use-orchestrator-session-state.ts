@@ -2,6 +2,7 @@ import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
 
 export type SessionStateById = Record<string, AgentSessionState>;
 export type SessionStateUpdater =
@@ -16,8 +17,10 @@ export type OrchestratorMutableState = {
   repoEpoch: number;
   inFlightStartsByRepoTask: Map<string, Promise<string>>;
   unsubscribersBySession: Map<string, () => void>;
-  draftRawBySession: Record<string, string>;
-  draftSourceBySession: Record<string, "delta" | "part">;
+  draftRawBySession: Record<string, DraftChannelValueMap<string>>;
+  draftSourceBySession: Record<string, DraftChannelValueMap<DraftSource>>;
+  draftMessageIdBySession: Record<string, DraftChannelValueMap<string>>;
+  draftFlushTimeoutBySession: Record<string, ReturnType<typeof setTimeout> | undefined>;
   turnStartedAtBySession: Record<string, number>;
 };
 
@@ -29,8 +32,12 @@ export type OrchestratorRefBridges = {
   repoEpochRef: MutableRefObject<number>;
   inFlightStartsByRepoTaskRef: MutableRefObject<Map<string, Promise<string>>>;
   unsubscribersRef: MutableRefObject<Map<string, () => void>>;
-  draftRawBySessionRef: MutableRefObject<Record<string, string>>;
-  draftSourceBySessionRef: MutableRefObject<Record<string, "delta" | "part">>;
+  draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
+  draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
+  draftMessageIdBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
+  draftFlushTimeoutBySessionRef: MutableRefObject<
+    Record<string, ReturnType<typeof setTimeout> | undefined>
+  >;
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
 };
 
@@ -83,6 +90,8 @@ export const useOrchestratorSessionState = ({
     unsubscribersBySession: new Map<string, () => void>(),
     draftRawBySession: {},
     draftSourceBySession: {},
+    draftMessageIdBySession: {},
+    draftFlushTimeoutBySession: {},
     turnStartedAtBySession: {},
   });
   const refBridges = useMemo<OrchestratorRefBridges>(
@@ -96,6 +105,11 @@ export const useOrchestratorSessionState = ({
       unsubscribersRef: createMutableBridge(mutableStateRef, "unsubscribersBySession"),
       draftRawBySessionRef: createMutableBridge(mutableStateRef, "draftRawBySession"),
       draftSourceBySessionRef: createMutableBridge(mutableStateRef, "draftSourceBySession"),
+      draftMessageIdBySessionRef: createMutableBridge(mutableStateRef, "draftMessageIdBySession"),
+      draftFlushTimeoutBySessionRef: createMutableBridge(
+        mutableStateRef,
+        "draftFlushTimeoutBySession",
+      ),
       turnStartedAtBySessionRef: createMutableBridge(mutableStateRef, "turnStartedAtBySession"),
     }),
     [],
@@ -121,8 +135,15 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.previousRepo = activeRepo;
 
     clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
+    for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    }
     mutableStateRef.current.draftRawBySession = {};
     mutableStateRef.current.draftSourceBySession = {};
+    mutableStateRef.current.draftMessageIdBySession = {};
+    mutableStateRef.current.draftFlushTimeoutBySession = {};
     mutableStateRef.current.turnStartedAtBySession = {};
     mutableStateRef.current.inFlightStartsByRepoTask.clear();
     commitSessions({});
@@ -131,6 +152,11 @@ export const useOrchestratorSessionState = ({
   useEffect(() => {
     return () => {
       clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
+      for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
+        if (timeoutId !== undefined) {
+          clearTimeout(timeoutId);
+        }
+      }
       mutableStateRef.current.inFlightStartsByRepoTask.clear();
     };
   }, []);

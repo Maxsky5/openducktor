@@ -50,9 +50,11 @@ export const normalizeSelectionForCatalog = (
 
   const hasVariant = Boolean(selection.variant && model.variants.includes(selection.variant));
   const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
+  const preserveAgentSelection = catalogProfiles.length === 0;
   const hasAgent = Boolean(
     selection.profileId &&
-      catalogProfiles.some((agent) => (agent.id ?? agent.name) === selection.profileId),
+      (preserveAgentSelection ||
+        catalogProfiles.some((agent) => (agent.id ?? agent.name) === selection.profileId)),
   );
 
   return {

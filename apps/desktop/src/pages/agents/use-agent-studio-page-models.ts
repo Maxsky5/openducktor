@@ -7,6 +7,7 @@ import {
   isNearBottom,
   useAgentChatLayout,
 } from "@/components/features/agents";
+import { CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -135,12 +136,11 @@ export function useAgentStudioPageModels({
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
-  const { threadSession, activeSessionId, isContextSwitching, scrollTrigger } =
-    useAgentStudioThreadContext({
-      activeSession: core.activeSession,
-      isTaskHydrating: core.isTaskHydrating,
-      contextSwitchVersion: core.contextSwitchVersion,
-    });
+  const { threadSession, activeSessionId, isContextSwitching } = useAgentStudioThreadContext({
+    activeSession: core.activeSession,
+    isTaskHydrating: core.isTaskHydrating,
+    contextSwitchVersion: core.contextSwitchVersion,
+  });
 
   const {
     messagesContainerRef,
@@ -152,12 +152,15 @@ export function useAgentStudioPageModels({
     resizeComposerTextarea,
   } = useAgentChatLayout({
     input: composer.input,
-    scrollTrigger,
     activeSessionId: threadSession?.sessionId ?? null,
   });
 
   const handleMessagesScroll = useCallback(
     (event: UIEvent<HTMLDivElement>): void => {
+      if (event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] === "true") {
+        setIsPinnedToBottom(true);
+        return;
+      }
       setIsPinnedToBottom(isNearBottom(event.currentTarget));
     },
     [setIsPinnedToBottom],

@@ -15,7 +15,7 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
-import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
+import { normalizeModelInput } from "./payload-mappers";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
@@ -192,7 +192,6 @@ export const sendUserMessage = async (input: {
     parts: [{ type: "text", text: input.request.content }],
   });
   const responseData = unwrapData(response, "prompt session");
-  const responseMessageId = resolveAssistantResponseMessageId(responseData);
 
   for (const responsePart of responseData.parts) {
     const mappedPart = mapPartToAgentStreamPart(responsePart);
@@ -213,18 +212,21 @@ export const sendUserMessage = async (input: {
     responseData.parts,
   );
   const assistantModel = readMessageModelSelection((responseData as { info?: unknown }).info);
+  const responseMessageId = (responseData as { info?: { id?: string } }).info?.id;
   if (assistantMessage.length > 0) {
+    if (!responseMessageId) {
+      throw new Error("Prompt session returned assistant text without a message id.");
+    }
     input.emit({
       type: "assistant_message",
       sessionId: input.session.summary.sessionId,
       timestamp: input.now(),
+      messageId: responseMessageId,
       message: assistantMessage,
       ...(typeof totalTokens === "number" ? { totalTokens } : {}),
       ...(assistantModel ? { model: assistantModel } : {}),
     });
-    if (responseMessageId) {
-      input.session.emittedAssistantMessageIds.add(responseMessageId);
-    }
+    input.session.emittedAssistantMessageIds.add(responseMessageId);
   }
 
   input.emit({

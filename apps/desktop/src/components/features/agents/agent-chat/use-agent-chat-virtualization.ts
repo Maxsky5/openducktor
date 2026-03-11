@@ -121,7 +121,10 @@ function useAgentChatVirtualRows(session: AgentSessionState | null): UseAgentCha
     };
     return nextRows;
   }, [session, virtualRowsSignature]);
-  const shouldVirtualize = virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT;
+  const shouldVirtualize =
+    virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT &&
+    session !== null &&
+    isStableTranscriptSessionStatus(session.status);
   const activeSessionId = session?.sessionId ?? null;
 
   return {
@@ -130,6 +133,10 @@ function useAgentChatVirtualRows(session: AgentSessionState | null): UseAgentCha
     virtualRows,
   };
 }
+
+const isStableTranscriptSessionStatus = (status: AgentSessionState["status"]): boolean => {
+  return status === "idle" || status === "error" || status === "stopped";
+};
 
 function useVirtualRowMeasurements({
   activeSessionId,
@@ -160,7 +167,7 @@ function useVirtualRowMeasurements({
       return measuredHeight + trailingGap;
     }
 
-    return 1 + trailingGap;
+    return estimateVirtualRowHeight(row) + trailingGap;
   }, []);
 
   const measureVirtualRowElement = useCallback((element: Element): number => {
@@ -193,6 +200,66 @@ function useVirtualRowMeasurements({
 
   return { estimateRowSize, measureVirtualRowElement, resolveRowKey };
 }
+
+const estimateVirtualRowHeight = (row: AgentChatVirtualRow): number => {
+  switch (row.kind) {
+    case "turn_duration":
+      return 28;
+    case "message":
+      return estimateMessageRowHeight(row.message);
+  }
+};
+
+const estimateMessageRowHeight = (message: AgentChatMessage): number => {
+  switch (message.role) {
+    case "user":
+      return estimateTextBlockHeight(message.content, {
+        lineHeightPx: 28,
+        minHeightPx: 56,
+        charsPerLine: 78,
+      });
+    case "assistant":
+      return estimateTextBlockHeight(message.content, {
+        lineHeightPx: 28,
+        minHeightPx: 72,
+        charsPerLine: 78,
+      });
+    case "thinking":
+      return estimateTextBlockHeight(message.content, {
+        lineHeightPx: 24,
+        minHeightPx: 52,
+        charsPerLine: 74,
+      });
+    case "tool":
+    case "system":
+      return estimateTextBlockHeight(message.content, {
+        lineHeightPx: 24,
+        minHeightPx: 44,
+        charsPerLine: 82,
+      });
+  }
+};
+
+const estimateTextBlockHeight = (
+  text: string,
+  options: {
+    lineHeightPx: number;
+    minHeightPx: number;
+    charsPerLine: number;
+  },
+): number => {
+  const normalized = text.trim();
+  if (normalized.length === 0) {
+    return options.minHeightPx;
+  }
+
+  const lineCount = normalized.split("\n").reduce((total, line) => {
+    const wrappedLineCount = Math.max(1, Math.ceil(line.length / options.charsPerLine));
+    return total + wrappedLineCount;
+  }, 0);
+
+  return Math.max(options.minHeightPx, 20 + lineCount * options.lineHeightPx);
+};
 
 function useVirtualRowsToRender(
   virtualRows: AgentChatVirtualRow[],

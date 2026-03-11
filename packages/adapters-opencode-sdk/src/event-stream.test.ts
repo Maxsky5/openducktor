@@ -70,6 +70,18 @@ const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
   return emitted;
 };
 
+const assistantRoleEvent = (messageId: string): Event =>
+  ({
+    type: "message.updated",
+    properties: {
+      info: {
+        id: messageId,
+        role: "assistant",
+        sessionID: "external-session-1",
+      },
+    },
+  }) as unknown as Event;
+
 describe("event-stream", () => {
   test("deduplicates assistant_message across repeated message.updated events", async () => {
     const assistantEvent = {
@@ -137,6 +149,7 @@ describe("event-stream", () => {
     if (assistantMessages[0]?.type !== "assistant_message") {
       throw new Error("Expected assistant_message event");
     }
+    expect(assistantMessages[0].messageId).toBe("assistant-message-1");
     expect(assistantMessages[0].totalTokens).toBe(120);
     expect(assistantMessages[0].model).toEqual({
       providerId: "openai",
@@ -247,6 +260,7 @@ describe("event-stream", () => {
 
   test("applies queued part delta with append semantics", async () => {
     const emitted = await runEventStream([
+      assistantRoleEvent("assistant-message-2"),
       {
         type: "message.part.delta",
         properties: {
@@ -288,6 +302,7 @@ describe("event-stream", () => {
 
   test("replays queued deltas in FIFO order", async () => {
     const emitted = await runEventStream([
+      assistantRoleEvent("assistant-message-fifo"),
       {
         type: "message.part.delta",
         properties: {
@@ -333,6 +348,7 @@ describe("event-stream", () => {
 
   test("keeps known-part and queued-part delta application consistent", async () => {
     const queuedPath = await runEventStream([
+      assistantRoleEvent("assistant-message-consistency"),
       {
         type: "message.part.delta",
         properties: {
@@ -359,6 +375,7 @@ describe("event-stream", () => {
     ]);
 
     const knownPath = await runEventStream([
+      assistantRoleEvent("assistant-message-consistency"),
       {
         type: "message.part.updated",
         properties: {
@@ -425,6 +442,59 @@ describe("event-stream", () => {
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
+  });
+
+  test("emits reasoning channel for reasoning fallback deltas", async () => {
+    const emitted = await runEventStream([
+      assistantRoleEvent("assistant-message-reasoning"),
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "external-session-1",
+          messageID: "assistant-message-reasoning",
+          field: "reasoning_content",
+          delta: "Hidden chain of thought",
+        },
+      } as unknown as Event,
+    ]);
+
+    const deltas = emitted.filter((event) => event.type === "assistant_delta");
+    expect(deltas).toHaveLength(1);
+    if (deltas[0]?.type !== "assistant_delta") {
+      throw new Error("Expected assistant_delta event");
+    }
+    expect(deltas[0]).toMatchObject({
+      channel: "reasoning",
+      messageId: "assistant-message-reasoning",
+      delta: "Hidden chain of thought",
+    });
+  });
+
+  test("suppresses non-assistant reasoning parts", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "user-message-reasoning",
+            role: "user",
+            sessionID: "external-session-1",
+          },
+          parts: [
+            {
+              id: "reasoning-user-1",
+              sessionID: "external-session-1",
+              messageID: "user-message-reasoning",
+              type: "reasoning",
+              text: "Should not surface",
+              time: { start: 1, end: 2 },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ]);
+
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
   });
 
   test("emits retry session_status payload", async () => {
@@ -531,6 +601,7 @@ describe("event-stream", () => {
 
   test("clears pending deltas when message part is removed", async () => {
     const emitted = await runEventStream([
+      assistantRoleEvent("assistant-message-3"),
       {
         type: "message.part.delta",
         properties: {

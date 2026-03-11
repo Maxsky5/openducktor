@@ -173,6 +173,7 @@ export const createEnsureSessionReady = ({
       role: session.role,
       scenario: session.scenario,
       systemPrompt,
+      ...(session.selectedModel ? { model: session.selectedModel } : {}),
     });
 
     if (isStaleRepoOperation()) {

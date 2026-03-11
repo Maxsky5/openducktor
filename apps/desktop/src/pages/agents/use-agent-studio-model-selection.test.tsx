@@ -82,6 +82,11 @@ const ALTERNATE_CATALOG: AgentModelCatalog = {
   ],
 };
 
+const CATALOG_WITHOUT_PROFILES: AgentModelCatalog = {
+  ...CATALOG,
+  profiles: [],
+};
+
 const createRepoSettings = (
   specDefault: RepoSettingsInput["agentDefaults"]["spec"] | null,
 ): RepoSettingsInput => ({
@@ -223,6 +228,34 @@ describe("useAgentStudioModelSelection", () => {
     } finally {
       await harness.unmount();
     }
+  });
+
+  test("preserves selected agent profile when catalog does not expose profile metadata", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        repoSettings: createRepoSettings({
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "spec-agent",
+        }),
+        loadCatalog: async () => CATALOG_WITHOUT_PROFILES,
+      }),
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
+
+    expect(harness.getLatest().selectedModelSelection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    });
+
+    await harness.unmount();
   });
 
   test("publishes agent colors from composer catalog before a session is started", async () => {

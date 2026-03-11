@@ -729,6 +729,7 @@ describe("agent-chat-message-card-model", () => {
           meta: {
             kind: "assistant",
             agentRole: "build",
+            isFinal: true,
             modelId: "gpt-5",
             profileId: "builder",
           },
@@ -743,14 +744,35 @@ describe("agent-chat-message-card-model", () => {
       expect(footer.infoParts).toEqual(["builder", "gpt-5"]);
     });
 
-    test("falls back to session model labels when assistant metadata is absent", () => {
+    test("does not show footer for assistant messages without final metadata", () => {
       const footer = getAssistantFooterData(createMessage(), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-4o-mini",
         profileId: "planner-agent",
       });
-      expect(footer.infoParts).toEqual(["planner-agent", "gpt-4o-mini"]);
+      expect(footer.infoParts).toEqual([]);
+    });
+
+    test("does not show footer for streaming assistant messages", () => {
+      const footer = getAssistantFooterData(
+        createMessage({
+          meta: {
+            kind: "assistant",
+            agentRole: "spec",
+            isFinal: false,
+            modelId: "gpt-5",
+            profileId: "hephaestus",
+          },
+        }),
+        {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-4o-mini",
+          profileId: "planner-agent",
+        },
+      );
+      expect(footer.infoParts).toEqual([]);
     });
 
     test("returns empty parts for non-assistant messages and blank metadata", () => {
@@ -767,6 +789,7 @@ describe("agent-chat-message-card-model", () => {
           meta: {
             kind: "assistant",
             agentRole: "spec",
+            isFinal: true,
             modelId: "   ",
             profileId: " ",
           },

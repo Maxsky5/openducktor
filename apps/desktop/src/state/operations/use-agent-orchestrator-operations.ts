@@ -223,6 +223,8 @@ export function useAgentOrchestratorOperations({
         sessionsRef: refBridges.sessionsRef,
         draftRawBySessionRef: refBridges.draftRawBySessionRef,
         draftSourceBySessionRef: refBridges.draftSourceBySessionRef,
+        draftMessageIdBySessionRef: refBridges.draftMessageIdBySessionRef,
+        draftFlushTimeoutBySessionRef: refBridges.draftFlushTimeoutBySessionRef,
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         updateSession,
         resolveTurnDurationMs,

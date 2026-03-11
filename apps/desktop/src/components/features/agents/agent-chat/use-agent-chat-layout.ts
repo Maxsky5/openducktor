@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
 export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 40;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
+export const CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET = "odtAutoscrolling";
+export const CHAT_PROGRAMMATIC_AUTOSCROLL_TIMEOUT_MS = 1000;
 
 type ScrollableElement = Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">;
 
@@ -35,7 +37,6 @@ export const computeTodoPanelBottomOffset = (_composerFormHeight: number): numbe
 
 type UseAgentChatLayoutInput = {
   input: string;
-  scrollTrigger: string;
   activeSessionId: string | null;
 };
 
@@ -51,15 +52,14 @@ type UseAgentChatLayoutResult = {
 
 export const useAgentChatLayout = ({
   input,
-  scrollTrigger,
   activeSessionId,
 }: UseAgentChatLayoutInput): UseAgentChatLayoutResult => {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const previousSessionIdRef = useRef<string | null>(activeSessionId);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [composerFormHeight, setComposerFormHeight] = useState(0);
-  const autoscrollVersion = `${composerFormHeight}:${scrollTrigger}`;
 
   const resizeComposerTextarea = useCallback((): void => {
     const textarea = composerTextareaRef.current;
@@ -70,18 +70,6 @@ export const useAgentChatLayout = ({
     const layout = computeComposerTextareaLayout(textarea.scrollHeight);
     textarea.style.height = `${layout.heightPx}px`;
     textarea.style.overflowY = layout.overflowY;
-  }, []);
-
-  const scrollToBottom = useCallback((): void => {
-    const container = messagesContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: "auto",
-    });
   }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Input string is an explicit resize trigger.
@@ -115,48 +103,12 @@ export const useAgentChatLayout = ({
   }, []);
 
   useEffect(() => {
-    if (!isPinnedToBottom) {
+    if (previousSessionIdRef.current === activeSessionId) {
       return;
     }
-
-    if (autoscrollVersion.length === 0) {
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      scrollToBottom();
-      return;
-    }
-
-    const rafId = window.requestAnimationFrame(() => {
-      scrollToBottom();
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [autoscrollVersion, isPinnedToBottom, scrollToBottom]);
-
-  useEffect(() => {
+    previousSessionIdRef.current = activeSessionId;
     setIsPinnedToBottom(true);
-
-    if (!activeSessionId) {
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      scrollToBottom();
-      return;
-    }
-
-    const rafId = window.requestAnimationFrame(() => {
-      scrollToBottom();
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [activeSessionId, scrollToBottom]);
+  }, [activeSessionId]);
 
   return {
     messagesContainerRef,

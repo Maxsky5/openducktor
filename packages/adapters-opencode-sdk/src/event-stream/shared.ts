@@ -26,16 +26,17 @@ export type EventStreamState = {
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
-const normalizePartDeltaField = (field: string): string => {
-  if (
+export const isReasoningDeltaField = (field: string): boolean => {
+  return (
     field === "reasoning_content" ||
     field === "reasoning_details" ||
     field === "reasoningContent" ||
     field === "reasoningDetails"
-  ) {
-    return "text";
-  }
-  return field;
+  );
+};
+
+const normalizePartDeltaField = (field: string): string => {
+  return isReasoningDeltaField(field) ? "text" : field;
 };
 
 export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {

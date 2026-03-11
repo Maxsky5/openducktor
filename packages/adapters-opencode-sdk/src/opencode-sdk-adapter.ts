@@ -20,6 +20,7 @@ import {
   type ResumeAgentSessionInput,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
+  type UpdateAgentSessionModelInput,
   toRuntimeClientInput,
 } from "@openducktor/core";
 import {
@@ -255,6 +256,20 @@ export class OpencodeSdkAdapter
       now: this.now,
       emit: (event) => this.emit(session.summary.sessionId, event),
     });
+  }
+
+  updateSessionModel(input: UpdateAgentSessionModelInput): void {
+    const session = requireSession(this.sessions, input.sessionId);
+    session.input = {
+      ...session.input,
+      ...(input.model ? { model: input.model } : {}),
+    };
+    if (!input.model) {
+      delete session.input.model;
+    }
+    delete session.workflowToolSelectionCache;
+    delete session.workflowToolSelectionCachedAt;
+    delete session.workflowToolSelectionCacheModelKey;
   }
 
   async replyPermission(input: ReplyPermissionInput): Promise<void> {
