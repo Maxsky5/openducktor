@@ -219,7 +219,7 @@ describe("useAgentChatAutoScroll", () => {
     });
   });
 
-  test("does not auto-scroll while unpinned", async () => {
+  test("does not auto-scroll on same-session updates while unpinned", async () => {
     const rafCallbacks: FrameRequestCallback[] = [];
     setGlobalWindow({
       cancelAnimationFrame: mock((_id: number) => {}),
@@ -244,6 +244,30 @@ describe("useAgentChatAutoScroll", () => {
           scrollVersion: "session-1:1",
           shouldVirtualize: true,
           virtualRowsCount: 3,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(scrollToIndex).toHaveBeenCalledWith(2, { align: "end", behavior: "auto" });
+    expect(scrollToMock).toHaveBeenCalledWith(640);
+
+    measure.mockClear();
+    scrollToIndex.mockClear();
+    scrollToMock.mockClear();
+    rafCallbacks.length = 0;
+
+    await act(async () => {
+      renderer?.update(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-1",
+          isPinnedToBottom: false,
+          messagesContainerRef,
+          scrollVersion: "session-1:2",
+          shouldVirtualize: true,
+          virtualRowsCount: 4,
           virtualizer,
         }),
       );
@@ -300,6 +324,63 @@ describe("useAgentChatAutoScroll", () => {
           isPinnedToBottom: false,
           messagesContainerRef,
           scrollVersion: "session-2:1",
+          shouldVirtualize: true,
+          virtualRowsCount: 4,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(scrollToIndex).toHaveBeenCalledWith(3, { align: "end", behavior: "auto" });
+    expect(scrollToMock).toHaveBeenCalledWith(640);
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  });
+
+  test("jumps to the latest message when the first selected session rows appear after mount", async () => {
+    const cancelAnimationFrame = mock((_id: number) => {});
+    setGlobalWindow({
+      cancelAnimationFrame,
+      requestAnimationFrame: mock((_callback: FrameRequestCallback) => 17),
+    });
+
+    const { measure, scrollToIndex, virtualizer } = createVirtualizerMock();
+    const { container, scrollToMock } = createContainerMock();
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    messagesContainerRef.current = container;
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-1",
+          isPinnedToBottom: false,
+          messagesContainerRef,
+          scrollVersion: "session-1:1",
+          shouldVirtualize: true,
+          virtualRowsCount: 0,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    expect(measure).toHaveBeenCalledTimes(0);
+    expect(scrollToIndex).toHaveBeenCalledTimes(0);
+    expect(scrollToMock).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.update(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-1",
+          isPinnedToBottom: false,
+          messagesContainerRef,
+          scrollVersion: "session-1:1",
           shouldVirtualize: true,
           virtualRowsCount: 4,
           virtualizer,

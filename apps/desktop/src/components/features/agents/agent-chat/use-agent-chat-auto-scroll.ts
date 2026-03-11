@@ -197,28 +197,20 @@ export function useAgentChatAutoScroll({
     const previousSessionId = previousSessionIdRef.current;
     const firstSessionSelection = previousSessionId === null;
     const sessionChanged = previousSessionId !== null && previousSessionId !== activeSessionId;
-    if (sessionChanged) {
+    if (sessionChanged || firstSessionSelection) {
       previousSessionIdRef.current = activeSessionId;
       previousScrollVersionRef.current = scrollVersion;
       pendingSessionJumpRef.current = activeSessionId;
-    } else if (firstSessionSelection) {
-      previousSessionIdRef.current = activeSessionId;
     }
 
-    const shouldJumpOnInitialPinnedSelection = firstSessionSelection && isPinnedToBottom;
     const shouldJumpForSessionSwitch = pendingSessionJumpRef.current === activeSessionId;
-    if (
-      (!shouldJumpOnInitialPinnedSelection && !shouldJumpForSessionSwitch) ||
-      virtualRowsCount === 0
-    ) {
+    if (!shouldJumpForSessionSwitch || virtualRowsCount === 0) {
       return;
     }
 
     scheduleScrollToBottom("auto", true);
-    if (shouldJumpForSessionSwitch) {
-      pendingSessionJumpRef.current = null;
-    }
-  }, [activeSessionId, isPinnedToBottom, scheduleScrollToBottom, scrollVersion, virtualRowsCount]);
+    pendingSessionJumpRef.current = null;
+  }, [activeSessionId, scheduleScrollToBottom, scrollVersion, virtualRowsCount]);
 
   useEffect(() => {
     if (!activeSessionId || !isPinnedToBottom || virtualRowsCount === 0) {
