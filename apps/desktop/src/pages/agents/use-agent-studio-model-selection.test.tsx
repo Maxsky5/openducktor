@@ -645,6 +645,40 @@ describe("useAgentStudioModelSelection", () => {
     }
   });
 
+  test("prefers live session context usage before final assistant completion", async () => {
+    const activeSession = createActiveSession({
+      contextUsage: {
+        totalTokens: 35_022,
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+      },
+      messages: [
+        createAssistantMessage({
+          totalTokens: 12,
+          contextWindow: 40_000,
+          outputLimit: 1_000,
+        }),
+      ],
+    });
+
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 35_022,
+        contextWindow: 200_000,
+        outputLimit: 8_192,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("falls back to the selected model context window when message + descriptor metadata are missing", async () => {
     const primaryModel = CATALOG.models[0];
     const secondaryModel = CATALOG.models[1];

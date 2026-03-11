@@ -861,6 +861,69 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("includes step-finish total tokens on assistant part events", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+          },
+          parts: [
+            {
+              id: "step-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "step-finish",
+              reason: "tool-calls",
+              tokens: {
+                input: 898,
+                output: 245,
+                reasoning: 0,
+                cache: {
+                  read: 0,
+                  write: 33_879,
+                },
+              },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    expect(events).toContainEqual({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+      part: {
+        kind: "step",
+        messageId: "assistant-1",
+        partId: "step-1",
+        phase: "finish",
+        reason: "tool-calls",
+        totalTokens: 35_022,
+      },
+    });
+  });
+
   test("maps completed MCP tool part with isError=true as error status", async () => {
     const streamEvents: Event[] = [
       {

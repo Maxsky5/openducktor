@@ -49,6 +49,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
+  contextUsage: null,
   pendingPermissions: [],
   pendingQuestions: [],
   todos: [],

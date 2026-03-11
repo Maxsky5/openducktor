@@ -36,6 +36,7 @@ export type AttachAgentSessionListenerParams = {
     Record<string, ReturnType<typeof setTimeout> | undefined>
   >;
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
+  turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   updateSession: UpdateSession;
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionId: string) => void;

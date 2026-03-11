@@ -198,6 +198,7 @@ const buildInitialSession = ({
   draftAssistantMessageId: null,
   draftReasoningText: "",
   draftReasoningMessageId: null,
+  contextUsage: null,
   pendingPermissions: [],
   pendingQuestions: [],
   todos: [],

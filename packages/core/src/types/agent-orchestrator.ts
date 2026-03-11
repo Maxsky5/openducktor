@@ -187,6 +187,7 @@ export type AgentStreamPart =
       phase: "start" | "finish";
       reason?: string;
       cost?: number;
+      totalTokens?: number;
     }
   | {
       kind: "subtask";

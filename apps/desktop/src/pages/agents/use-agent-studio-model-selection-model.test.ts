@@ -227,6 +227,32 @@ describe("use-agent-studio-model-selection-model", () => {
     });
   });
 
+  test("prefers live session context usage over assistant message history", () => {
+    const lookup = toModelDescriptorByKey(CATALOG);
+    const messages: AgentChatMessage[] = [
+      createAssistantMessage({
+        totalTokens: 12,
+        contextWindow: 10_000,
+      }),
+    ];
+
+    expect(
+      extractLatestContextUsage({
+        messages,
+        liveContextUsage: {
+          totalTokens: 44,
+          contextWindow: 150_000,
+          outputLimit: 4_096,
+        },
+        modelDescriptorByKey: lookup,
+      }),
+    ).toEqual({
+      totalTokens: 44,
+      contextWindow: 150_000,
+      outputLimit: 4_096,
+    });
+  });
+
   test("falls back to an older assistant message when the latest tokenized one has no usable context window", () => {
     const lookup = toModelDescriptorByKey(CATALOG);
     const messages: AgentChatMessage[] = [

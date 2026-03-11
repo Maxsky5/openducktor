@@ -31,6 +31,7 @@ type SessionActionsDependencies = {
   inFlightStartsByRepoTaskRef: { current: Map<string, Promise<string>> };
   unsubscribersRef: { current: Map<string, () => void> };
   turnStartedAtBySessionRef: { current: Record<string, number> };
+  turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
   updateSession: (
     sessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
@@ -66,10 +67,18 @@ export type ForkAgentSessionActionInput = {
 
 const markTurnStartedIfMissing = (
   turnStartedAtBySessionRef: { current: Record<string, number> },
+  turnModelBySessionRef:
+    | { current: Record<string, AgentSessionState["selectedModel"]> }
+    | undefined,
+  sessionsRef: { current: Record<string, AgentSessionState> },
   sessionId: string,
 ): void => {
   if (turnStartedAtBySessionRef.current[sessionId] === undefined) {
     turnStartedAtBySessionRef.current[sessionId] = Date.now();
+  }
+  if (turnModelBySessionRef) {
+    turnModelBySessionRef.current[sessionId] =
+      sessionsRef.current[sessionId]?.selectedModel ?? null;
   }
 };
 
@@ -115,6 +124,7 @@ export const createAgentSessionActions = ({
   inFlightStartsByRepoTaskRef,
   unsubscribersRef,
   turnStartedAtBySessionRef,
+  turnModelBySessionRef,
   updateSession,
   attachSessionListener,
   resolveQaReviewTarget,
@@ -173,6 +183,9 @@ export const createAgentSessionActions = ({
         }
       : undefined;
     turnStartedAtBySessionRef.current[sessionId] = Date.now();
+    if (turnModelBySessionRef) {
+      turnModelBySessionRef.current[sessionId] = selectedModel ?? null;
+    }
 
     updateSession(sessionId, (current) => ({
       ...current,
@@ -222,6 +235,9 @@ export const createAgentSessionActions = ({
         { persist: false },
       );
       clearTurnDuration(sessionId);
+      if (turnModelBySessionRef) {
+        delete turnModelBySessionRef.current[sessionId];
+      }
     }
   };
 
@@ -408,6 +424,9 @@ export const createAgentSessionActions = ({
     } catch {
     } finally {
       clearTurnDuration(sessionId);
+      if (turnModelBySessionRef) {
+        delete turnModelBySessionRef.current[sessionId];
+      }
 
       updateSession(sessionId, (current) => ({
         ...current,
@@ -444,7 +463,12 @@ export const createAgentSessionActions = ({
     reply: "once" | "always" | "reject",
     message?: string,
   ): Promise<void> => {
-    markTurnStartedIfMissing(turnStartedAtBySessionRef, sessionId);
+    markTurnStartedIfMissing(
+      turnStartedAtBySessionRef,
+      turnModelBySessionRef,
+      sessionsRef,
+      sessionId,
+    );
     await adapter.replyPermission({
       sessionId,
       requestId,
@@ -465,7 +489,12 @@ export const createAgentSessionActions = ({
     requestId: string,
     answers: string[][],
   ): Promise<void> => {
-    markTurnStartedIfMissing(turnStartedAtBySessionRef, sessionId);
+    markTurnStartedIfMissing(
+      turnStartedAtBySessionRef,
+      turnModelBySessionRef,
+      sessionsRef,
+      sessionId,
+    );
     await adapter.replyQuestion({ sessionId, requestId, answers });
     updateSession(sessionId, (current) => {
       const { pendingQuestions, messages } = applyQuestionAnswerToSession(

@@ -1,4 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { toSessionContextUsage } from "../support/assistant-meta";
 import { sanitizeStreamingText, toAssistantMessageMeta, upsertMessage } from "../support/utils";
 import type {
   DraftChannel,
@@ -92,13 +93,40 @@ const clearDraftChannelBuffer = (
 
 const toReasoningMessageId = (messageId: string): string => `thinking:${messageId}`;
 
+const resolvePartModelSelection = (
+  context: SessionEventContext,
+  current: AgentSessionState,
+  messageId: string,
+): AgentSessionState["selectedModel"] | null => {
+  const existingMessage = current.messages.find((entry) => entry.id === messageId);
+  if (existingMessage?.meta?.kind === "assistant") {
+    if (!existingMessage.meta.providerId || !existingMessage.meta.modelId) {
+      return null;
+    }
+    return {
+      providerId: existingMessage.meta.providerId,
+      modelId: existingMessage.meta.modelId,
+      ...(existingMessage.meta.variant ? { variant: existingMessage.meta.variant } : {}),
+      ...(existingMessage.meta.profileId ? { profileId: existingMessage.meta.profileId } : {}),
+      ...(current.selectedModel?.runtimeKind
+        ? { runtimeKind: current.selectedModel.runtimeKind }
+        : {}),
+    };
+  }
+
+  const turnModel = context.turnModelBySessionRef?.current[context.sessionId];
+  return turnModel ?? current.selectedModel ?? null;
+};
+
 const upsertLiveAssistantMessage = ({
   current,
+  model,
   messageId,
   text,
   timestamp,
 }: {
   current: AgentSessionState;
+  model: AgentSessionState["selectedModel"] | null;
   messageId: string;
   text: string;
   timestamp: string;
@@ -117,7 +145,7 @@ const upsertLiveAssistantMessage = ({
     existingMessage?.meta?.kind === "assistant"
       ? existingMessage.meta
       : {
-          ...toAssistantMessageMeta(current),
+          ...toAssistantMessageMeta(current, undefined, undefined, model),
           isFinal: false,
         };
   const nextAssistantMeta =
@@ -163,6 +191,7 @@ export const handleAssistantDelta = (
             ...current,
             status: "running",
           },
+          model: resolvePartModelSelection(context, current, messageId),
           messageId,
           text: `${baseContent}${event.delta}`,
           timestamp: event.timestamp,
@@ -231,6 +260,7 @@ const handleTextPart = (
           ...prepared,
           status: "running",
         },
+        model: resolvePartModelSelection(context, prepared, part.messageId),
         messageId: part.messageId,
         text: part.text,
         timestamp: event.timestamp,
@@ -327,6 +357,40 @@ const handleSubtaskPart = (
   );
 };
 
+const handleStepPart = (
+  context: SessionEventContext,
+  part: Extract<SessionPart, { kind: "step" }>,
+  prepareCurrent: PrepareCurrent,
+): void => {
+  if (part.phase !== "finish" || typeof part.totalTokens !== "number" || part.totalTokens <= 0) {
+    return;
+  }
+
+  context.updateSession(
+    context.sessionId,
+    (current) => {
+      const prepared = prepareCurrent(current);
+      const model = resolvePartModelSelection(context, prepared, part.messageId);
+      const nextContextUsage = toSessionContextUsage(prepared, part.totalTokens, model);
+      if (!nextContextUsage) {
+        return prepared.status === "running"
+          ? prepared
+          : {
+              ...prepared,
+              status: "running",
+            };
+      }
+
+      return {
+        ...prepared,
+        status: "running",
+        contextUsage: nextContextUsage,
+      };
+    },
+    { persist: false },
+  );
+};
+
 export const handleAssistantPart = (
   context: SessionEventContext,
   event: SessionPartEvent,
@@ -349,6 +413,7 @@ export const handleAssistantPart = (
       handleSubtaskPart(context, event, part, streamMessageKey, prepareCurrent);
       return;
     case "step":
+      handleStepPart(context, part, prepareCurrent);
       return;
   }
 };

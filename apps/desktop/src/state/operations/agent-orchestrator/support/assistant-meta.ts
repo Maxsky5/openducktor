@@ -1,17 +1,45 @@
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionContextUsage,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import { mergeModelSelection } from "./models";
 
-const resolveSelectedModelDescriptor = (session: AgentSessionState) => {
-  if (!session.selectedModel || !session.modelCatalog) {
+const resolveModelDescriptor = (
+  session: AgentSessionState,
+  model: AgentSessionState["selectedModel"] | null,
+) => {
+  if (!model || !session.modelCatalog) {
     return null;
   }
   return (
     session.modelCatalog.models.find(
-      (entry) =>
-        entry.providerId === session.selectedModel?.providerId &&
-        entry.modelId === session.selectedModel?.modelId,
+      (entry) => entry.providerId === model.providerId && entry.modelId === model.modelId,
     ) ?? null
   );
+};
+
+export const toSessionContextUsage = (
+  session: AgentSessionState,
+  totalTokens: number | undefined,
+  model?: AgentSessionState["selectedModel"],
+): AgentSessionContextUsage | null => {
+  if (typeof totalTokens !== "number" || totalTokens <= 0) {
+    return null;
+  }
+
+  const effectiveModel = mergeModelSelection(session.selectedModel, model ?? undefined);
+  const modelDescriptor = resolveModelDescriptor(session, effectiveModel);
+
+  return {
+    totalTokens,
+    ...(typeof modelDescriptor?.contextWindow === "number"
+      ? { contextWindow: modelDescriptor.contextWindow }
+      : {}),
+    ...(typeof modelDescriptor?.outputLimit === "number"
+      ? { outputLimit: modelDescriptor.outputLimit }
+      : {}),
+  };
 };
 
 export const toAssistantMessageMeta = (
@@ -21,8 +49,7 @@ export const toAssistantMessageMeta = (
   model?: AgentSessionState["selectedModel"],
 ): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
   const effectiveModel = mergeModelSelection(session.selectedModel, model ?? undefined);
-  const selectedModelDescriptor =
-    model === undefined ? resolveSelectedModelDescriptor(session) : null;
+  const selectedModelDescriptor = resolveModelDescriptor(session, effectiveModel);
   return {
     kind: "assistant",
     agentRole: session.role,

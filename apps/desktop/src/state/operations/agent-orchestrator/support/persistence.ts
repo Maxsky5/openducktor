@@ -73,6 +73,7 @@ export const fromPersistedSessionRecord = (
     draftAssistantMessageId: null,
     draftReasoningText: "",
     draftReasoningMessageId: null,
+    contextUsage: null,
     pendingPermissions: [],
     pendingQuestions: [],
     todos: [],

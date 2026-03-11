@@ -91,6 +91,12 @@ export type AgentQuestionRequest = {
   }>;
 };
 
+export type AgentSessionContextUsage = {
+  totalTokens: number;
+  contextWindow?: number;
+  outputLimit?: number;
+};
+
 export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
@@ -109,6 +115,7 @@ export type AgentSessionState = {
   draftAssistantMessageId: string | null;
   draftReasoningText: string;
   draftReasoningMessageId: string | null;
+  contextUsage?: AgentSessionContextUsage | null;
   pendingPermissions: AgentPermissionRequest[];
   pendingQuestions: AgentQuestionRequest[];
   todos: AgentSessionTodoItem[];

@@ -22,6 +22,7 @@ export type OrchestratorMutableState = {
   draftMessageIdBySession: Record<string, DraftChannelValueMap<string>>;
   draftFlushTimeoutBySession: Record<string, ReturnType<typeof setTimeout> | undefined>;
   turnStartedAtBySession: Record<string, number>;
+  turnModelBySession: Record<string, AgentSessionState["selectedModel"]>;
 };
 
 export type OrchestratorRefBridges = {
@@ -39,6 +40,7 @@ export type OrchestratorRefBridges = {
     Record<string, ReturnType<typeof setTimeout> | undefined>
   >;
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
+  turnModelBySessionRef: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
 };
 
 type UseOrchestratorSessionStateArgs = {
@@ -93,6 +95,7 @@ export const useOrchestratorSessionState = ({
     draftMessageIdBySession: {},
     draftFlushTimeoutBySession: {},
     turnStartedAtBySession: {},
+    turnModelBySession: {},
   });
   const refBridges = useMemo<OrchestratorRefBridges>(
     () => ({
@@ -111,6 +114,7 @@ export const useOrchestratorSessionState = ({
         "draftFlushTimeoutBySession",
       ),
       turnStartedAtBySessionRef: createMutableBridge(mutableStateRef, "turnStartedAtBySession"),
+      turnModelBySessionRef: createMutableBridge(mutableStateRef, "turnModelBySession"),
     }),
     [],
   );
@@ -145,6 +149,7 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.draftMessageIdBySession = {};
     mutableStateRef.current.draftFlushTimeoutBySession = {};
     mutableStateRef.current.turnStartedAtBySession = {};
+    mutableStateRef.current.turnModelBySession = {};
     mutableStateRef.current.inFlightStartsByRepoTask.clear();
     commitSessions({});
   }, [activeRepo, commitSessions]);

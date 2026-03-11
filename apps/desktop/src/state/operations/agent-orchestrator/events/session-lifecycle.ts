@@ -11,6 +11,7 @@ import {
   normalizeSessionErrorMessage,
   READ_ONLY_ROLES,
   toAssistantMessageMeta,
+  toSessionContextUsage,
   upsertMessage,
 } from "../support/utils";
 import type { SessionEvent, SessionEventContext } from "./session-event-types";
@@ -20,6 +21,12 @@ import {
   flushDraftBuffers,
   settleDraftToIdle,
 } from "./session-helpers";
+
+const clearTurnModelSnapshot = (context: SessionEventContext): void => {
+  if (context.turnModelBySessionRef) {
+    delete context.turnModelBySessionRef.current[context.sessionId];
+  }
+};
 
 type PermissionRequiredEvent = Extract<SessionEvent, { type: "permission_required" }>;
 
@@ -192,6 +199,7 @@ export const handleAssistantMessage = (
       draftAssistantMessageId: null,
       draftReasoningText: "",
       draftReasoningMessageId: null,
+      contextUsage: toSessionContextUsage(current, event.totalTokens, event.model),
       messages: messageAlreadyPresent
         ? existingMessageIndex >= 0
           ? settledMessages.map((entry, index) =>
@@ -202,6 +210,7 @@ export const handleAssistantMessage = (
     };
   });
   context.clearTurnDuration(context.sessionId);
+  clearTurnModelSnapshot(context);
 };
 
 export const handleSessionStatus = (
@@ -254,6 +263,7 @@ export const handleSessionStatus = (
 
   if (settleDraftToIdle(context, event.timestamp)) {
     context.clearTurnDuration(context.sessionId);
+    clearTurnModelSnapshot(context);
   }
 };
 
@@ -344,6 +354,7 @@ export const handleSessionError = (
     };
   });
   context.clearTurnDuration(context.sessionId);
+  clearTurnModelSnapshot(context);
 };
 
 export const handleSessionIdle = (
@@ -354,6 +365,7 @@ export const handleSessionIdle = (
   clearDraftBuffers(context);
   if (settleDraftToIdle(context, event.timestamp)) {
     context.clearTurnDuration(context.sessionId);
+    clearTurnModelSnapshot(context);
   }
 };
 
@@ -378,4 +390,5 @@ export const handleSessionFinished = (
     };
   });
   context.clearTurnDuration(context.sessionId);
+  clearTurnModelSnapshot(context);
 };
