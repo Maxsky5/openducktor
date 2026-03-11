@@ -19,6 +19,8 @@ The backend is the single source of truth for which actions are currently allowe
 - `set_plan`
 - `build_start`
 - `open_builder`
+- `qa_start`
+- `open_qa`
 - `defer_issue`
 - `resume_deferred`
 - `human_request_changes`
@@ -48,6 +50,14 @@ The backend is the single source of truth for which actions are currently allowe
 - Purpose: open existing builder context/run UX.
 - Transition: none.
 
+### `qa_start`
+- Purpose: request or start a QA review loop for the current task state.
+- Transition: none directly; it opens the QA workflow from `ai_review` or `human_review`.
+
+### `open_qa`
+- Purpose: open existing QA context/run UX.
+- Transition: none.
+
 ### `defer_issue`
 - Purpose: park a task without closing it.
 - Transition: open states -> `deferred`.
@@ -60,11 +70,11 @@ The backend is the single source of truth for which actions are currently allowe
 
 ### `human_request_changes`
 - Purpose: human review rejects current output and requests a rework loop.
-- Transition: `human_review -> in_progress`.
+- Transition: `ai_review -> in_progress` or `human_review -> in_progress`.
 
 ### `human_approve`
 - Purpose: human review accepts completion.
-- Transition: `human_review -> closed`.
+- Transition: `ai_review -> closed` or `human_review -> closed`.
 - Guardrail: epic completion checks direct children and ignores deferred children.
 
 ## UI Mapping Guidance
@@ -80,6 +90,8 @@ Current card/detail primary+menu rendering uses workflow actions:
 - `set_plan`
 - `build_start`
 - `open_builder`
+- `qa_start`
+- `open_qa`
 - `defer_issue`
 - `resume_deferred`
 - `human_request_changes`
