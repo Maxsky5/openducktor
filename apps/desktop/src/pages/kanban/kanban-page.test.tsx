@@ -3,6 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR, type RepoPromptOverrides } from "@openduck
 import { isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createTaskCardFixture,
@@ -14,6 +15,9 @@ enableReactActEnvironment();
 const startAgentSessionMock = mock(async () => "session-1");
 const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
+const loadAgentSessionsMock = mock(
+  async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
+);
 const humanApproveTaskMock = mock(async () => {});
 const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
@@ -32,11 +36,50 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
 }));
 
 let latestKanbanColumnProps: Record<string, unknown> | null = null;
+let latestHumanReviewFeedbackModalModel: Record<string, unknown> | null = null;
 let latestSessionStartModalModel: Record<string, unknown> | null = null;
 let latestLocation = "/";
 const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
 
 let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
+let currentSessionsFixture = [
+  {
+    runtimeKind: "opencode",
+    sessionId: "session-spec",
+    taskId: "TASK-123",
+    role: "spec",
+    scenario: "spec_initial",
+    status: "running",
+    startedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    pendingPermissions: 0,
+    pendingQuestions: 0,
+  },
+  {
+    runtimeKind: "opencode",
+    sessionId: "session-build-older",
+    taskId: "TASK-123",
+    role: "build",
+    scenario: "build_after_human_request_changes",
+    status: "running",
+    startedAt: "2026-01-01T12:00:00.000Z",
+    updatedAt: "2026-01-01T12:00:00.000Z",
+    pendingPermissions: 0,
+    pendingQuestions: 0,
+  },
+  {
+    runtimeKind: "opencode",
+    sessionId: "session-build-latest",
+    taskId: "TASK-123",
+    role: "build",
+    scenario: "build_implementation_start",
+    status: "idle",
+    startedAt: "2026-01-02T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z",
+    pendingPermissions: 0,
+    pendingQuestions: 0,
+  },
+];
 
 const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
   defaultRuntimeKind: "opencode" as const,
@@ -106,6 +149,17 @@ mock.module("./kanban-session-start-modal", () => ({
   },
 }));
 
+mock.module("./human-review-feedback-modal", () => ({
+  HumanReviewFeedbackModal: ({
+    model,
+  }: {
+    model: Record<string, unknown> | null;
+  }): ReactElement | null => {
+    latestHumanReviewFeedbackModalModel = model;
+    return null;
+  },
+}));
+
 mock.module("@/state", () => ({
   AppStateProvider: ({ children }: { children: ReactElement }): ReactElement => children,
   useWorkspaceState: () => ({
@@ -114,20 +168,8 @@ mock.module("@/state", () => ({
     loadRepoSettings: async () => REPO_SETTINGS_FIXTURE,
   }),
   useAgentState: () => ({
-    sessions: [
-      {
-        runtimeKind: "opencode",
-        sessionId: "session-spec",
-        taskId: "TASK-123",
-        role: "spec",
-        scenario: "spec_initial",
-        status: "running",
-        startedAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        pendingPermissions: 0,
-        pendingQuestions: 0,
-      },
-    ],
+    sessions: currentSessionsFixture,
+    loadAgentSessions: loadAgentSessionsMock,
     startAgentSession: startAgentSessionMock,
     sendAgentMessage: sendAgentMessageMock,
     updateAgentSessionModel: updateAgentSessionModelMock,
@@ -174,12 +216,52 @@ const renderPage = async (): Promise<ReactTestRenderer> => {
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
+    currentSessionsFixture = [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-spec",
+        taskId: "TASK-123",
+        role: "spec",
+        scenario: "spec_initial",
+        status: "running",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        pendingPermissions: 0,
+        pendingQuestions: 0,
+      },
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-build-older",
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_after_human_request_changes",
+        status: "running",
+        startedAt: "2026-01-01T12:00:00.000Z",
+        updatedAt: "2026-01-01T12:00:00.000Z",
+        pendingPermissions: 0,
+        pendingQuestions: 0,
+      },
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-build-latest",
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+        startedAt: "2026-01-02T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        pendingPermissions: 0,
+        pendingQuestions: 0,
+      },
+    ];
     latestKanbanColumnProps = null;
+    latestHumanReviewFeedbackModalModel = null;
     latestSessionStartModalModel = null;
     latestLocation = "/";
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
+    loadAgentSessionsMock.mockClear();
     humanApproveTaskMock.mockClear();
     humanRequestChangesTaskMock.mockClear();
     deleteTaskMock.mockClear();
@@ -525,7 +607,8 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  test("human request changes action opens modal with build follow-up scenario", async () => {
+  test("human request changes opens dedicated feedback modal before mutating", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
     const renderer = await renderPage();
 
     await act(async () => {
@@ -534,8 +617,98 @@ describe("KanbanPage session start modal flow", () => {
       );
     });
 
-    expect(humanRequestChangesTaskMock).toHaveBeenCalledWith("TASK-123");
+    expect(loadAgentSessionsMock).toHaveBeenCalledWith("TASK-123");
+    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
+    expect(latestHumanReviewFeedbackModalModel?.open).toBe(true);
+    expect(latestHumanReviewFeedbackModalModel?.selectedTarget).toBe("session-build-latest");
+    expect(latestHumanReviewFeedbackModalModel?.targetOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "new_session" }),
+        expect.objectContaining({ value: "session-build-latest", secondaryLabel: "Latest" }),
+        expect.objectContaining({ value: "session-build-older" }),
+      ]),
+    );
+    expect(typeof latestHumanReviewFeedbackModalModel?.message).toBe("string");
+    expect(String(latestHumanReviewFeedbackModalModel?.message)).toContain("TASK-123");
+    expect(latestSessionStartModalModel).toBeNull();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("human request changes can target a selected existing builder session", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
+        "TASK-123",
+      );
+    });
+
+    await act(async () => {
+      (latestHumanReviewFeedbackModalModel?.onTargetChange as (value: string) => void)(
+        "session-build-older",
+      );
+      (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
+        "Apply the requested human review changes.",
+      );
+    });
+
+    await act(async () => {
+      await (latestHumanReviewFeedbackModalModel?.onConfirm as () => Promise<void>)();
+      await Promise.resolve();
+    });
+
+    expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(
+      "TASK-123",
+      "Apply the requested human review changes.",
+    );
+    expect(loadAgentSessionsMock.mock.calls).toEqual([
+      ["TASK-123"],
+      ["TASK-123", { hydrateHistoryForSessionId: "session-build-older" }],
+    ]);
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(sendAgentMessageMock).toHaveBeenCalledWith(
+      "session-build-older",
+      "Apply the requested human review changes.",
+    );
+    expect(latestLocation).toContain("/agents?task=TASK-123");
+    expect(latestLocation).toContain("session=session-build-older");
+    expect(latestLocation).toContain("agent=build");
+    expect(latestSessionStartModalModel).toBeNull();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("human request changes can start a fresh builder session after feedback review", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
+        "TASK-123",
+      );
+    });
+
+    await act(async () => {
+      (latestHumanReviewFeedbackModalModel?.onTargetChange as (value: string) => void)(
+        "new_session",
+      );
+      (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
+        "Use a fresh builder session for these changes.",
+      );
+    });
+
+    await act(async () => {
+      (latestHumanReviewFeedbackModalModel?.onConfirm as () => void)();
+    });
+
     expect(latestSessionStartModalModel?.open).toBe(true);
+    expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
 
     await act(async () => {
       (latestSessionStartModalModel?.onConfirm as () => void)();
@@ -547,8 +720,141 @@ describe("KanbanPage session start modal flow", () => {
         taskId: "TASK-123",
         role: "build",
         scenario: "build_after_human_request_changes",
-        startMode: "reuse_latest",
+        startMode: "fresh",
       }),
+    );
+    expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(
+      "TASK-123",
+      "Use a fresh builder session for these changes.",
+    );
+    const startCallOrder = startAgentSessionMock.mock.invocationCallOrder[0];
+    const requestChangesCallOrder = humanRequestChangesTaskMock.mock.invocationCallOrder[0];
+    expect(startCallOrder).toBeDefined();
+    expect(requestChangesCallOrder).toBeDefined();
+    if (startCallOrder !== undefined && requestChangesCallOrder !== undefined) {
+      expect(startCallOrder).toBeLessThan(requestChangesCallOrder);
+    }
+    expect(sendAgentMessageMock).toHaveBeenCalledWith(
+      "session-1",
+      "Use a fresh builder session for these changes.",
+    );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("human request changes falls back to new-session mode when no builder session exists", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+    currentSessionsFixture = [currentSessionsFixture[0]!];
+    loadAgentSessionsMock.mockImplementationOnce(async () => {
+      currentSessionsFixture = [...currentSessionsFixture];
+    });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
+        "TASK-123",
+      );
+    });
+
+    expect(latestHumanReviewFeedbackModalModel?.selectedTarget).toBe("new_session");
+    expect(latestHumanReviewFeedbackModalModel?.targetOptions).toEqual([
+      expect.objectContaining({ value: "new_session" }),
+    ]);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("human request changes detects builder sessions loaded on demand before opening modal", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
+    currentSessionsFixture = [currentSessionsFixture[0]!];
+    loadAgentSessionsMock.mockImplementation(async (taskId: string) => {
+      if (taskId !== "TASK-123") {
+        return;
+      }
+
+      currentSessionsFixture = [
+        ...currentSessionsFixture,
+        {
+          runtimeKind: "opencode",
+          sessionId: "session-build-hydrated",
+          taskId: "TASK-123",
+          role: "build",
+          scenario: "build_implementation_start",
+          status: "idle",
+          startedAt: "2026-01-03T00:00:00.000Z",
+          updatedAt: "2026-01-03T00:00:00.000Z",
+          pendingPermissions: 0,
+          pendingQuestions: 0,
+        },
+      ];
+    });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
+        "TASK-123",
+      );
+    });
+
+    expect(loadAgentSessionsMock).toHaveBeenCalledWith("TASK-123");
+    expect(latestHumanReviewFeedbackModalModel?.selectedTarget).toBe("session-build-hydrated");
+    expect(latestHumanReviewFeedbackModalModel?.targetOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "new_session" }),
+        expect.objectContaining({ value: "session-build-hydrated", secondaryLabel: "Latest" }),
+      ]),
+    );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("ai review request changes starts a fresh builder session with the QA follow-up scenario", async () => {
+    currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "ai_review" });
+    const renderer = await renderPage();
+
+    await act(async () => {
+      await (latestKanbanColumnProps?.onHumanRequestChanges as (taskId: string) => Promise<void>)(
+        "TASK-123",
+      );
+    });
+
+    await act(async () => {
+      (latestHumanReviewFeedbackModalModel?.onTargetChange as (value: string) => void)(
+        "new_session",
+      );
+      (latestHumanReviewFeedbackModalModel?.onMessageChange as (message: string) => void)(
+        "Please address the AI review feedback in a fresh session.",
+      );
+    });
+
+    await act(async () => {
+      (latestHumanReviewFeedbackModalModel?.onConfirm as () => void)();
+    });
+
+    expect(latestSessionStartModalModel?.open).toBe(true);
+
+    await act(async () => {
+      (latestSessionStartModalModel?.onConfirm as () => void)();
+      await Promise.resolve();
+    });
+
+    expect(startAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-123",
+        role: "build",
+        scenario: "build_after_qa_rejected",
+        startMode: "fresh",
+      }),
+    );
+    expect(humanRequestChangesTaskMock).toHaveBeenCalledWith(
+      "TASK-123",
+      "Please address the AI review feedback in a fresh session.",
     );
 
     await act(async () => {

@@ -13,8 +13,13 @@ type UseKanbanPageModelsArgs = {
 
 export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs): KanbanPageModels {
   const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
-  const { sessions, startAgentSession, sendAgentMessage, updateAgentSessionModel } =
-    useAgentState();
+  const {
+    sessions,
+    loadAgentSessions,
+    startAgentSession,
+    sendAgentMessage,
+    updateAgentSessionModel,
+  } = useAgentState();
   const {
     tasks,
     runs,
@@ -39,18 +44,21 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     tasks,
     sessions,
     navigate,
+    loadAgentSessions,
+    humanRequestChangesTask,
     startAgentSession,
     sendAgentMessage,
     updateAgentSessionModel,
   });
   const {
+    humanReviewFeedbackModal,
     sessionStartModal,
     onDelegate,
     onPlan,
     onQaStart,
     onQaOpen,
     onBuild,
-    openBuildAfterHumanRequestChanges,
+    onHumanRequestChanges,
   } = sessionStartFlow;
 
   const onRefreshTasks = useCallback((): void => {
@@ -62,16 +70,6 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
       void humanApproveTask(taskId);
     },
     [humanApproveTask],
-  );
-
-  const onHumanRequestChanges = useCallback(
-    (taskId: string): void => {
-      void (async () => {
-        await humanRequestChangesTask(taskId);
-        openBuildAfterHumanRequestChanges(taskId);
-      })();
-    },
-    [humanRequestChangesTask, openBuildAfterHumanRequestChanges],
   );
 
   const taskDialogs = useKanbanTaskDialogs({
@@ -121,6 +119,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
       onHumanRequestChanges,
       onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
     },
+    humanReviewFeedbackModal,
     sessionStartModal,
   };
 }

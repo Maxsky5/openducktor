@@ -52,11 +52,7 @@ const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
   if (!task) {
     return false;
   }
-  return (
-    task.status === "human_review" ||
-    task.availableActions.includes("human_request_changes") ||
-    task.availableActions.includes("human_approve")
-  );
+  return task.status === "human_review";
 };
 
 export const buildWorkflowModelContext = ({
