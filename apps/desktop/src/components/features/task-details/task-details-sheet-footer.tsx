@@ -1,7 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import {
+  resolveTaskCardActions,
+  type TaskWorkflowAction,
+} from "@/components/features/kanban/kanban-task-workflow";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Button } from "@/components/ui/button";
 
@@ -22,6 +25,12 @@ export function TaskDetailsSheetFooter({
   onWorkflowAction,
   onDeleteSelect,
 }: TaskDetailsSheetFooterProps): ReactElement {
+  const hasWorkflowAction = Boolean(
+    includeActions && onWorkflowAction
+      ? resolveTaskCardActions(task, { include: includeActions }).allActions.length > 0
+      : false,
+  );
+
   return (
     <div className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -36,7 +45,7 @@ export function TaskDetailsSheetFooter({
         ) : null}
       </div>
 
-      {includeActions && onWorkflowAction ? (
+      {includeActions && onWorkflowAction && (hasWorkflowAction || onDeleteSelect) ? (
         <TaskWorkflowActionGroup
           task={task}
           includeActions={includeActions}
@@ -45,6 +54,7 @@ export function TaskDetailsSheetFooter({
           className="min-w-[240px] justify-end"
           primaryClassName="font-semibold"
           emptyLabel="No available workflow action"
+          hideWhenEmpty
           {...(onDeleteSelect
             ? {
                 extraMenuActions: [

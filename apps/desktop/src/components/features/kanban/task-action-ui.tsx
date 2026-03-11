@@ -31,7 +31,7 @@ export const taskActionLabel = (action: TaskWorkflowAction, task: TaskCard): str
     return isQaRejectedTask(task) ? "Address QA Feedbacks" : "Start Builder";
   }
   if (action === "qa_start") {
-    return "Start QA";
+    return "Request QA Review";
   }
   if (action === "human_approve") {
     return "Approve Task";

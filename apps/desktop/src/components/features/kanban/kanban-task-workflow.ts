@@ -13,6 +13,24 @@ type ResolveTaskCardActionsOptions = {
   include?: readonly TaskWorkflowAction[];
 };
 
+const filterEnabledActions = (
+  task: TaskCard,
+  options: ResolveTaskCardActionsOptions,
+): TaskWorkflowAction[] => {
+  const includeSet = options.include ? new Set(options.include) : null;
+  const enabled = dedupeActions(
+    task.availableActions
+      .filter(isWorkflowAction)
+      .filter((action) => (includeSet ? includeSet.has(action) : true)),
+  );
+
+  if (task.status === "human_review") {
+    return enabled.filter((action) => action !== "build_start");
+  }
+
+  return enabled;
+};
+
 const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowAction[]> = {
   epic: [
     "set_spec",
@@ -102,12 +120,18 @@ const resolvePriorityForTask = (task: TaskCard): TaskWorkflowAction[] => {
       return prioritize(basePriority, ["open_builder", "build_start"]);
     }
     case "ai_review": {
-      return prioritize(basePriority, ["qa_start", "open_builder"]);
+      return prioritize(basePriority, [
+        "qa_start",
+        "human_approve",
+        "human_request_changes",
+        "open_builder",
+      ]);
     }
     case "human_review": {
       return prioritize(basePriority, [
         "human_approve",
         "human_request_changes",
+        "qa_start",
         "open_builder",
         "build_start",
       ]);
@@ -122,12 +146,7 @@ export const resolveTaskCardActions = (
   task: TaskCard,
   options: ResolveTaskCardActionsOptions = {},
 ): TaskCardActionState => {
-  const includeSet = options.include ? new Set(options.include) : null;
-  const enabled = dedupeActions(
-    task.availableActions
-      .filter(isWorkflowAction)
-      .filter((action) => (includeSet ? includeSet.has(action) : true)),
-  );
+  const enabled = filterEnabledActions(task, options);
   const priority = resolvePriorityForTask(task);
   const orderedEnabled = [
     ...priority.filter((action) => enabled.includes(action)),

@@ -28,6 +28,7 @@ type TaskWorkflowActionGroupProps = {
   expandPrimary?: boolean;
   compactMenuTrigger?: boolean;
   emptyLabel?: string;
+  hideWhenEmpty?: boolean;
 };
 
 export function TaskWorkflowActionGroup({
@@ -42,7 +43,8 @@ export function TaskWorkflowActionGroup({
   expandPrimary = false,
   compactMenuTrigger = false,
   emptyLabel = "No workflow action",
-}: TaskWorkflowActionGroupProps): ReactElement {
+  hideWhenEmpty = false,
+}: TaskWorkflowActionGroupProps): ReactElement | null {
   const [isMenuOpen, setMenuOpen] = useState(false);
   const { primaryAction, secondaryActions, allActions } = includeActions
     ? resolveTaskCardActions(task, { include: includeActions })
@@ -52,6 +54,10 @@ export function TaskWorkflowActionGroup({
   const hasAnyAction = hasWorkflowAction || hasExtraMenuAction;
 
   if (!hasAnyAction) {
+    if (hideWhenEmpty) {
+      return null;
+    }
+
     return (
       <Button
         type="button"
@@ -82,17 +88,7 @@ export function TaskWorkflowActionGroup({
           {TASK_ACTION_ICON[primary]}
           {taskActionLabel(primary, task)}
         </Button>
-      ) : (
-        <Button
-          type="button"
-          size={size}
-          variant="outline"
-          className={cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName)}
-          disabled
-        >
-          {emptyLabel}
-        </Button>
-      )}
+      ) : null}
 
       {showMenu ? (
         <Popover open={isMenuOpen} onOpenChange={setMenuOpen}>
