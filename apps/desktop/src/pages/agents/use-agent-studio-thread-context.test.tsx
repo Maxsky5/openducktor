@@ -53,6 +53,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     scenario: "spec_initial",
   }),
   isTaskHydrating: false,
+  isSessionHistoryHydrating: false,
   contextSwitchVersion: 0,
   ...overrides,
 });
@@ -102,7 +103,7 @@ describe("useAgentStudioThreadContext", () => {
     }
   });
 
-  test("switches thread session on the next animation frame when active session changes", async () => {
+  test("switches thread session immediately when active session changes", async () => {
     const sessionA = createSession({
       runtimeKind: "opencode",
       sessionId: "session-a",
@@ -127,19 +128,12 @@ describe("useAgentStudioThreadContext", () => {
     expect(harness.getLatest().isContextSwitching).toBe(false);
 
     await harness.update(createHookArgs({ activeSession: sessionB }));
-    expect(harness.getLatest().threadSession?.sessionId).toBe("session-a");
-    expect(harness.getLatest().isContextSwitching).toBe(true);
-
-    await harness.run(() => {
-      flushRafFrames(1);
-    });
-
     expect(harness.getLatest().threadSession?.sessionId).toBe("session-b");
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
 
-  test("clears context-switch intent after nested animation frames when no switch is observed", async () => {
+  test("clears context-switch intent after one animation frame when no hydration is active", async () => {
     const session = createSession({
       runtimeKind: "opencode",
       sessionId: "session-a",
@@ -159,16 +153,11 @@ describe("useAgentStudioThreadContext", () => {
     await harness.run(() => {
       flushRafFrames(1);
     });
-    expect(harness.getLatest().isContextSwitching).toBe(true);
-
-    await harness.run(() => {
-      flushRafFrames(1);
-    });
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });
 
-  test("keeps context-switch intent active while hydration is observed and clears once hydrated", async () => {
+  test("keeps context-switch intent active while hydration is running", async () => {
     const session = createSession({
       runtimeKind: "opencode",
       sessionId: "session-a",
@@ -192,7 +181,7 @@ describe("useAgentStudioThreadContext", () => {
     expect(harness.getLatest().isContextSwitching).toBe(true);
 
     await harness.run(() => {
-      flushRafFrames(2);
+      flushRafFrames(1);
     });
     expect(harness.getLatest().isContextSwitching).toBe(true);
 
@@ -201,8 +190,14 @@ describe("useAgentStudioThreadContext", () => {
         activeSession: session,
         contextSwitchVersion: 1,
         isTaskHydrating: false,
+        isSessionHistoryHydrating: false,
       }),
     );
+    expect(harness.getLatest().isContextSwitching).toBe(true);
+
+    await harness.run(() => {
+      flushRafFrames(1);
+    });
     expect(harness.getLatest().isContextSwitching).toBe(false);
     await harness.unmount();
   });

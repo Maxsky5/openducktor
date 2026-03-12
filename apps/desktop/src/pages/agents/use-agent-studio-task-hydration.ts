@@ -8,18 +8,27 @@ type UseAgentStudioTaskHydrationParams = {
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
 };
 
+type UseAgentStudioTaskHydrationResult = {
+  hydratedTasksByRepoAndTask: Record<string, boolean>;
+  isActiveSessionHistoryHydrated: boolean;
+  isActiveSessionHistoryHydrating: boolean;
+};
+
 export function useAgentStudioTaskHydration({
   activeRepo,
   activeTaskId,
   activeSessionId,
   loadAgentSessions,
-}: UseAgentStudioTaskHydrationParams): Record<string, boolean> {
+}: UseAgentStudioTaskHydrationParams): UseAgentStudioTaskHydrationResult {
   const hydratingTasksByRepoRef = useRef(new Set<string>());
   const hydratingSessionHistoriesByRepoRef = useRef(new Set<string>());
   const hydratedSessionHistoriesByRepoRef = useRef(new Set<string>());
   const previousRepoRef = useRef<string | null>(activeRepo);
   const [hydratedTasksByRepoAndTask, setHydratedTasksByRepoAndTask] = useState<
     Record<string, boolean>
+  >({});
+  const [sessionHistoryStatusByRepoKey, setSessionHistoryStatusByRepoKey] = useState<
+    Record<string, "hydrating" | "hydrated">
   >({});
 
   useEffect(() => {
@@ -31,6 +40,7 @@ export function useAgentStudioTaskHydration({
     hydratingSessionHistoriesByRepoRef.current.clear();
     hydratedSessionHistoriesByRepoRef.current.clear();
     setHydratedTasksByRepoAndTask({});
+    setSessionHistoryStatusByRepoKey({});
   }, [activeRepo]);
 
   useEffect(() => {
@@ -89,6 +99,10 @@ export function useAgentStudioTaskHydration({
     }
 
     hydratingSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
+    setSessionHistoryStatusByRepoKey((current) => ({
+      ...current,
+      [sessionHydrationKey]: "hydrating",
+    }));
     let cancelled = false;
     void loadAgentSessions(activeTaskId, {
       hydrateHistoryForSessionId: activeSessionId,
@@ -98,9 +112,17 @@ export function useAgentStudioTaskHydration({
           return;
         }
         hydratedSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
+        setSessionHistoryStatusByRepoKey((current) => ({
+          ...current,
+          [sessionHydrationKey]: "hydrated",
+        }));
       })
       .catch(() => {
         // Keep history unhydrated so callers can retry after load failures.
+        setSessionHistoryStatusByRepoKey((current) => {
+          const { [sessionHydrationKey]: _removed, ...rest } = current;
+          return rest;
+        });
       })
       .finally(() => {
         hydratingSessionHistoriesByRepoRef.current.delete(sessionHydrationKey);
@@ -111,5 +133,17 @@ export function useAgentStudioTaskHydration({
     };
   }, [activeRepo, activeSessionId, activeTaskId, loadAgentSessions]);
 
-  return hydratedTasksByRepoAndTask;
+  const activeSessionHistoryKey =
+    activeRepo && activeTaskId && activeSessionId
+      ? `${activeRepo}:${activeTaskId}:${activeSessionId}`
+      : "";
+  const activeSessionHistoryStatus = activeSessionHistoryKey
+    ? sessionHistoryStatusByRepoKey[activeSessionHistoryKey]
+    : undefined;
+
+  return {
+    hydratedTasksByRepoAndTask,
+    isActiveSessionHistoryHydrated: activeSessionHistoryStatus === "hydrated",
+    isActiveSessionHistoryHydrating: activeSessionHistoryStatus === "hydrating",
+  };
 }

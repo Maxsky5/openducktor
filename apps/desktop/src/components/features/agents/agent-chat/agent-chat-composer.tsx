@@ -72,7 +72,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
       <div className="relative border border-input bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl">
         {isSessionWorking ? (
           <BorderRay
-            strokeWidth={4.0}
+            strokeWidth={2.6}
             rayLengthRatio={0.12}
             {...(composerAccentColor ? { color: composerAccentColor } : {})}
           />

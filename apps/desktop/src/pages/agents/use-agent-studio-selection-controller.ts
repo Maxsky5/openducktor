@@ -42,6 +42,8 @@ type UseAgentStudioSelectionControllerResult = {
   viewRole: AgentRole;
   viewScenario: AgentScenario;
   isActiveTaskHydrated: boolean;
+  isViewSessionHistoryHydrated: boolean;
+  isViewSessionHistoryHydrating: boolean;
 };
 
 const compareSessionsByRecency = (left: AgentSessionState, right: AgentSessionState): number => {
@@ -257,7 +259,11 @@ export function useAgentStudioSelectionController({
       ? viewActiveSession.scenario
       : firstScenario(viewRole);
 
-  const hydratedTasksByRepoAndTask = useAgentStudioTaskHydration({
+  const {
+    hydratedTasksByRepoAndTask,
+    isActiveSessionHistoryHydrated,
+    isActiveSessionHistoryHydrating,
+  } = useAgentStudioTaskHydration({
     activeRepo,
     activeTaskId: viewTaskId,
     activeSessionId: viewActiveSession?.sessionId ?? null,
@@ -288,5 +294,7 @@ export function useAgentStudioSelectionController({
     viewRole,
     viewScenario,
     isActiveTaskHydrated,
+    isViewSessionHistoryHydrated: isActiveSessionHistoryHydrated,
+    isViewSessionHistoryHydrating: isActiveSessionHistoryHydrating,
   };
 }

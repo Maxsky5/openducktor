@@ -13,6 +13,7 @@ export type AgentRoleOption = {
 
 export type AgentChatThreadModel = {
   session: AgentSessionState | null;
+  isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
   blockedReason: string;
@@ -75,5 +76,4 @@ export type AgentChatComposerModel = {
 export type AgentChatModel = {
   thread: AgentChatThreadModel;
   composer: AgentChatComposerModel;
-  isContextSwitching: boolean;
 };

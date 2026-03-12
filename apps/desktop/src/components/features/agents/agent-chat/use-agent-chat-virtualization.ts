@@ -1,7 +1,8 @@
 import { useVirtualizer, type VirtualItem, type Virtualizer } from "@tanstack/react-virtual";
-import type { RefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { RefCallback, RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
 import {
   AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
   AGENT_CHAT_VIRTUAL_ROW_GAP_PX,
@@ -23,10 +24,17 @@ type AgentChatVirtualRowsToRenderEntry = {
   virtualItem: VirtualItem;
 };
 
+type RetainedVirtualWindowState = {
+  sessionId: string | null;
+  virtualItems: VirtualItem[];
+};
+
 type UseAgentChatVirtualizationResult = {
   activeSessionId: string | null;
   canRenderVirtualRows: boolean;
   hasRenderableSessionRows: boolean;
+  isPreparingVirtualization: boolean;
+  registerStaticMeasurementRowElement: (rowKey: string) => RefCallback<HTMLDivElement>;
   shouldVirtualize: boolean;
   virtualRows: AgentChatVirtualRow[];
   virtualRowsToRender: AgentChatVirtualRowsToRenderEntry[];
@@ -40,25 +48,58 @@ type UseAgentChatVirtualRowsResult = {
 };
 
 type UseVirtualRowMeasurementsInput = {
-  activeSessionId: string | null;
   virtualRows: AgentChatVirtualRow[];
 };
 
 type UseVirtualRowMeasurementsResult = {
   estimateRowSize: (index: number) => number;
+  measureStaticRowElement: (rowKey: string, element: Element) => void;
   measureVirtualRowElement: (element: Element) => number;
+  resetMeasuredRowHeights: () => void;
   resolveRowKey: (index: number) => string | number;
 };
+
+type MeasurementBucketStats = {
+  count: number;
+  maxHeight: number;
+  movingAverageHeight: number;
+};
+
+type VirtualizationPreparationPhase = "idle" | "static" | "revealing" | "ready";
+
+const CHAT_VIRTUALIZATION_STABLE_TOTAL_SIZE_DELTA_PX = 1;
+const CHAT_VIRTUALIZATION_STABLE_TOTAL_SIZE_FRAMES = 2;
+const CHAT_VIRTUALIZATION_MAX_REVEAL_FRAMES = 24;
 
 export function useAgentChatVirtualization({
   session,
   messagesContainerRef,
 }: UseAgentChatVirtualizationInput): UseAgentChatVirtualizationResult {
   const { activeSessionId, shouldVirtualize, virtualRows } = useAgentChatVirtualRows(session);
-  const { estimateRowSize, measureVirtualRowElement, resolveRowKey } = useVirtualRowMeasurements({
-    activeSessionId,
+  const {
+    estimateRowSize,
+    measureStaticRowElement,
+    measureVirtualRowElement,
+    resetMeasuredRowHeights,
+    resolveRowKey,
+  } = useVirtualRowMeasurements({
     virtualRows,
   });
+  const [staticMeasurementRowCount, setStaticMeasurementRowCount] = useState(0);
+  const [virtualizationPreparationPhase, setVirtualizationPreparationPhase] =
+    useState<VirtualizationPreparationPhase>("idle");
+  const measurementSignature = useMemo(() => {
+    if (!shouldVirtualize) {
+      return "";
+    }
+    return [activeSessionId ?? "none", ...virtualRows.map((row) => row.key)].join("\u001f");
+  }, [activeSessionId, shouldVirtualize, virtualRows]);
+  const staticRowElementByKeyRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const staticMeasurementRefByKeyRef = useRef<Map<string, RefCallback<HTMLDivElement>>>(new Map());
+  const prepareMeasurementsRafRef = useRef<number | null>(null);
+  const revealVirtualizationRafRef = useRef<number | null>(null);
+  const revealStableFrameCountRef = useRef(0);
+  const revealLastTotalSizeRef = useRef<number | null>(null);
   const resolveScrollElement = useCallback((): HTMLDivElement | null => {
     return messagesContainerRef.current;
   }, [messagesContainerRef]);
@@ -72,14 +113,210 @@ export function useAgentChatVirtualization({
     overscan: AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS,
   });
 
-  const virtualRowsToRender = useVirtualRowsToRender(virtualRows, virtualizer.getVirtualItems());
-  const canRenderVirtualRows = shouldVirtualize && virtualRowsToRender.length > 0;
+  const virtualRowsToRender = useVirtualRowsToRender({
+    activeSessionId,
+    shouldVirtualize,
+    virtualRows,
+    virtualItems: virtualizer.getVirtualItems(),
+  });
+  const canRenderVirtualRows = shouldVirtualize && virtualizationPreparationPhase === "ready";
   const hasRenderableSessionRows = virtualRows.length > 0;
+  const isPreparingVirtualization =
+    shouldVirtualize && !canRenderVirtualRows && typeof window !== "undefined";
+
+  useEffect(() => {
+    staticMeasurementRefByKeyRef.current.clear();
+    staticRowElementByKeyRef.current.clear();
+    setStaticMeasurementRowCount(0);
+    if (prepareMeasurementsRafRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(prepareMeasurementsRafRef.current);
+      prepareMeasurementsRafRef.current = null;
+    }
+    if (revealVirtualizationRafRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(revealVirtualizationRafRef.current);
+      revealVirtualizationRafRef.current = null;
+    }
+    revealStableFrameCountRef.current = 0;
+    revealLastTotalSizeRef.current = null;
+
+    if (!shouldVirtualize || measurementSignature.length === 0) {
+      setVirtualizationPreparationPhase("idle");
+      return;
+    }
+
+    setVirtualizationPreparationPhase("static");
+  }, [measurementSignature, shouldVirtualize]);
+
+  useEffect(() => {
+    if (
+      !shouldVirtualize ||
+      virtualizationPreparationPhase !== "revealing" ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    const finishRevealWhenStable = (remainingFrames: number): void => {
+      virtualizer.measure();
+      const totalSize = virtualizer.getTotalSize();
+      const previousTotalSize = revealLastTotalSizeRef.current;
+      const isStable =
+        previousTotalSize !== null &&
+        Math.abs(previousTotalSize - totalSize) <= CHAT_VIRTUALIZATION_STABLE_TOTAL_SIZE_DELTA_PX;
+      revealLastTotalSizeRef.current = totalSize;
+      revealStableFrameCountRef.current = isStable ? revealStableFrameCountRef.current + 1 : 0;
+
+      if (
+        revealStableFrameCountRef.current >= CHAT_VIRTUALIZATION_STABLE_TOTAL_SIZE_FRAMES ||
+        remainingFrames <= 0
+      ) {
+        revealVirtualizationRafRef.current = null;
+        revealStableFrameCountRef.current = 0;
+        revealLastTotalSizeRef.current = null;
+        setVirtualizationPreparationPhase("ready");
+        return;
+      }
+
+      revealVirtualizationRafRef.current = window.requestAnimationFrame(() => {
+        finishRevealWhenStable(remainingFrames - 1);
+      });
+    };
+
+    revealVirtualizationRafRef.current = window.requestAnimationFrame(() => {
+      finishRevealWhenStable(CHAT_VIRTUALIZATION_MAX_REVEAL_FRAMES);
+    });
+
+    return () => {
+      if (revealVirtualizationRafRef.current !== null) {
+        window.cancelAnimationFrame(revealVirtualizationRafRef.current);
+        revealVirtualizationRafRef.current = null;
+      }
+      revealStableFrameCountRef.current = 0;
+      revealLastTotalSizeRef.current = null;
+    };
+  }, [shouldVirtualize, virtualizationPreparationPhase, virtualizer]);
+
+  useEffect(() => {
+    if (
+      !shouldVirtualize ||
+      virtualizationPreparationPhase !== "static" ||
+      virtualRows.length === 0 ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    const staticRowElements = staticRowElementByKeyRef.current;
+    if (
+      staticMeasurementRowCount < virtualRows.length ||
+      staticRowElements.size < virtualRows.length
+    ) {
+      return;
+    }
+
+    const firstRafId = window.requestAnimationFrame(() => {
+      prepareMeasurementsRafRef.current = window.requestAnimationFrame(() => {
+        prepareMeasurementsRafRef.current = null;
+        for (const row of virtualRows) {
+          const element = staticRowElements.get(row.key);
+          if (!element) {
+            return;
+          }
+          measureStaticRowElement(row.key, element);
+        }
+        virtualizer.measure();
+        setVirtualizationPreparationPhase("revealing");
+      });
+    });
+    prepareMeasurementsRafRef.current = firstRafId;
+
+    return () => {
+      if (prepareMeasurementsRafRef.current !== null) {
+        window.cancelAnimationFrame(prepareMeasurementsRafRef.current);
+        prepareMeasurementsRafRef.current = null;
+      }
+    };
+  }, [
+    measureStaticRowElement,
+    shouldVirtualize,
+    staticMeasurementRowCount,
+    virtualizationPreparationPhase,
+    virtualRows,
+    virtualizer,
+  ]);
+
+  const registerStaticMeasurementRowElement = useCallback(
+    (rowKey: string): RefCallback<HTMLDivElement> => {
+      const cached = staticMeasurementRefByKeyRef.current.get(rowKey);
+      if (cached) {
+        return cached;
+      }
+
+      const callback: RefCallback<HTMLDivElement> = (element) => {
+        if (!shouldVirtualize) {
+          if (staticRowElementByKeyRef.current.delete(rowKey)) {
+            setStaticMeasurementRowCount(staticRowElementByKeyRef.current.size);
+          }
+          return;
+        }
+
+        if (!element) {
+          if (staticRowElementByKeyRef.current.delete(rowKey)) {
+            setStaticMeasurementRowCount(staticRowElementByKeyRef.current.size);
+          }
+          return;
+        }
+
+        const previousElement = staticRowElementByKeyRef.current.get(rowKey);
+        if (previousElement === element) {
+          return;
+        }
+
+        staticRowElementByKeyRef.current.set(rowKey, element);
+        setStaticMeasurementRowCount(staticRowElementByKeyRef.current.size);
+      };
+
+      staticMeasurementRefByKeyRef.current.set(rowKey, callback);
+      return callback;
+    },
+    [shouldVirtualize],
+  );
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !shouldVirtualize || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let previousWidth = container.getBoundingClientRect().width;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const nextWidth = entry?.contentRect.width ?? container.getBoundingClientRect().width;
+      if (!Number.isFinite(nextWidth) || Math.abs(nextWidth - previousWidth) <= 0.5) {
+        return;
+      }
+
+      previousWidth = nextWidth;
+      resetMeasuredRowHeights();
+      staticMeasurementRefByKeyRef.current.clear();
+      staticRowElementByKeyRef.current.clear();
+      setStaticMeasurementRowCount(0);
+      setVirtualizationPreparationPhase("static");
+      virtualizer.measure();
+    });
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+    };
+  }, [messagesContainerRef, resetMeasuredRowHeights, shouldVirtualize, virtualizer]);
 
   return {
     activeSessionId,
     canRenderVirtualRows,
     hasRenderableSessionRows,
+    isPreparingVirtualization,
+    registerStaticMeasurementRowElement,
     shouldVirtualize,
     virtualRows,
     virtualRowsToRender,
@@ -139,21 +376,57 @@ const isStableTranscriptSessionStatus = (status: AgentSessionState["status"]): b
 };
 
 function useVirtualRowMeasurements({
-  activeSessionId,
   virtualRows,
 }: UseVirtualRowMeasurementsInput): UseVirtualRowMeasurementsResult {
   const virtualRowsRef = useRef(virtualRows);
   virtualRowsRef.current = virtualRows;
-  const measuredSessionIdRef = useRef<string | null>(activeSessionId);
   const measuredRowHeightByKeyRef = useRef<Record<string, number>>({});
+  const measuredBucketStatsByKeyRef = useRef<Record<string, MeasurementBucketStats>>({});
+  const resolveRowByKey = useCallback((rowKey: string): AgentChatVirtualRow | undefined => {
+    return virtualRowsRef.current.find((candidateRow) => candidateRow.key === rowKey);
+  }, []);
 
-  useEffect(() => {
-    if (measuredSessionIdRef.current === activeSessionId) {
-      return;
-    }
-    measuredSessionIdRef.current = activeSessionId;
-    measuredRowHeightByKeyRef.current = {};
-  }, [activeSessionId]);
+  const updateMeasuredRowHeight = useCallback(
+    (rowKey: string, measuredHeight: number): void => {
+      if (!(measuredHeight > 0)) {
+        return;
+      }
+
+      const previousHeight = measuredRowHeightByKeyRef.current[rowKey];
+      if (typeof previousHeight !== "number") {
+        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
+      } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
+        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
+      }
+
+      const row = resolveRowByKey(rowKey);
+      const measurementBucketKey = row ? resolveMeasurementBucketKey(row) : null;
+      if (!measurementBucketKey) {
+        return;
+      }
+
+      const previousStats = measuredBucketStatsByKeyRef.current[measurementBucketKey];
+      if (!previousStats) {
+        measuredBucketStatsByKeyRef.current[measurementBucketKey] = {
+          count: 1,
+          maxHeight: measuredHeight,
+          movingAverageHeight: measuredHeight,
+        };
+        return;
+      }
+
+      const nextCount = previousStats.count + 1;
+      const nextMovingAverageHeight =
+        previousStats.movingAverageHeight +
+        (measuredHeight - previousStats.movingAverageHeight) / nextCount;
+      measuredBucketStatsByKeyRef.current[measurementBucketKey] = {
+        count: nextCount,
+        maxHeight: Math.max(previousStats.maxHeight, measuredHeight),
+        movingAverageHeight: nextMovingAverageHeight,
+      };
+    },
+    [resolveRowByKey],
+  );
 
   const estimateRowSize = useCallback((index: number): number => {
     const rows = virtualRowsRef.current;
@@ -167,38 +440,65 @@ function useVirtualRowMeasurements({
       return measuredHeight + trailingGap;
     }
 
-    return estimateVirtualRowHeight(row) + trailingGap;
+    const staticEstimate = estimateVirtualRowHeight(row);
+    const measurementBucketKey = resolveMeasurementBucketKey(row);
+    const bucketStats =
+      measurementBucketKey !== null
+        ? measuredBucketStatsByKeyRef.current[measurementBucketKey]
+        : null;
+    const learnedEstimate =
+      bucketStats && bucketStats.count > 0
+        ? Math.max(bucketStats.movingAverageHeight, bucketStats.maxHeight * 0.82)
+        : 0;
+
+    return Math.max(staticEstimate, learnedEstimate) + trailingGap;
   }, []);
 
-  const measureVirtualRowElement = useCallback((element: Element): number => {
-    const measuredHeight = element.getBoundingClientRect().height;
-    let rowKey = element.getAttribute("data-row-key");
+  const measureStaticRowElement = useCallback(
+    (rowKey: string, element: Element): void => {
+      updateMeasuredRowHeight(rowKey, element.getBoundingClientRect().height);
+    },
+    [updateMeasuredRowHeight],
+  );
 
-    if (!rowKey) {
-      const indexValue = Number.parseInt(element.getAttribute("data-index") ?? "", 10);
-      const row =
-        Number.isFinite(indexValue) && indexValue >= 0
-          ? virtualRowsRef.current[indexValue]
-          : undefined;
-      rowKey = row?.key ?? null;
-    }
+  const measureVirtualRowElement = useCallback(
+    (element: Element): number => {
+      const measuredHeight = element.getBoundingClientRect().height;
+      let rowKey = element.getAttribute("data-row-key");
 
-    if (rowKey && measuredHeight > 0) {
-      const previousHeight = measuredRowHeightByKeyRef.current[rowKey];
-      if (typeof previousHeight !== "number") {
-        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
-      } else if (Math.abs(previousHeight - measuredHeight) > 0.5) {
-        measuredRowHeightByKeyRef.current[rowKey] = measuredHeight;
+      if (!rowKey) {
+        const indexValue = Number.parseInt(element.getAttribute("data-index") ?? "", 10);
+        const row =
+          Number.isFinite(indexValue) && indexValue >= 0
+            ? virtualRowsRef.current[indexValue]
+            : undefined;
+        rowKey = row?.key ?? null;
       }
-    }
-    return measuredHeight;
-  }, []);
+
+      if (rowKey && measuredHeight > 0) {
+        updateMeasuredRowHeight(rowKey, measuredHeight);
+      }
+      return measuredHeight;
+    },
+    [updateMeasuredRowHeight],
+  );
 
   const resolveRowKey = useCallback((index: number): string | number => {
     return virtualRowsRef.current[index]?.key ?? index;
   }, []);
 
-  return { estimateRowSize, measureVirtualRowElement, resolveRowKey };
+  const resetMeasuredRowHeights = useCallback((): void => {
+    measuredRowHeightByKeyRef.current = {};
+    measuredBucketStatsByKeyRef.current = {};
+  }, []);
+
+  return {
+    estimateRowSize,
+    measureStaticRowElement,
+    measureVirtualRowElement,
+    resetMeasuredRowHeights,
+    resolveRowKey,
+  };
 }
 
 const estimateVirtualRowHeight = (row: AgentChatVirtualRow): number => {
@@ -210,25 +510,32 @@ const estimateVirtualRowHeight = (row: AgentChatVirtualRow): number => {
   }
 };
 
-const estimateMessageRowHeight = (message: AgentChatMessage): number => {
+export const estimateMessageRowHeight = (message: AgentChatMessage): number => {
+  const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   switch (message.role) {
     case "user":
       return estimateTextBlockHeight(message.content, {
         lineHeightPx: 28,
-        minHeightPx: 56,
+        minHeightPx: 64,
         charsPerLine: 78,
+        baseChromePx: 28,
+        markdownBonusPx: 24,
       });
     case "assistant":
       return estimateTextBlockHeight(message.content, {
         lineHeightPx: 28,
-        minHeightPx: 72,
-        charsPerLine: 78,
+        minHeightPx: assistantMeta?.isFinal === true ? 84 : 72,
+        charsPerLine: 76,
+        baseChromePx: assistantMeta?.isFinal === true ? 36 : 20,
+        markdownBonusPx: assistantMeta?.isFinal === true ? 36 : 28,
       });
     case "thinking":
       return estimateTextBlockHeight(message.content, {
         lineHeightPx: 24,
-        minHeightPx: 52,
+        minHeightPx: 56,
         charsPerLine: 74,
+        baseChromePx: 24,
+        markdownBonusPx: 28,
       });
     case "tool":
     case "system":
@@ -236,6 +543,8 @@ const estimateMessageRowHeight = (message: AgentChatMessage): number => {
         lineHeightPx: 24,
         minHeightPx: 44,
         charsPerLine: 82,
+        baseChromePx: 20,
+        markdownBonusPx: 24,
       });
   }
 };
@@ -243,7 +552,9 @@ const estimateMessageRowHeight = (message: AgentChatMessage): number => {
 const estimateTextBlockHeight = (
   text: string,
   options: {
+    baseChromePx: number;
     lineHeightPx: number;
+    markdownBonusPx: number;
     minHeightPx: number;
     charsPerLine: number;
   },
@@ -253,29 +564,165 @@ const estimateTextBlockHeight = (
     return options.minHeightPx;
   }
 
+  const containsMarkdown = hasMarkdownSyntaxHint(normalized);
+  const blankLineCount = Math.max(0, normalized.split(/\n\s*\n/).length - 1);
+  const structuredLineCount = normalized
+    .split("\n")
+    .filter((line) => /^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+|\d+\.\s+|\|)/.test(line)).length;
+  const codeFenceCount = normalized.match(/```|~~~/g)?.length ?? 0;
+  const charsPerLine = containsMarkdown
+    ? Math.max(44, options.charsPerLine - 8)
+    : options.charsPerLine;
   const lineCount = normalized.split("\n").reduce((total, line) => {
-    const wrappedLineCount = Math.max(1, Math.ceil(line.length / options.charsPerLine));
+    const wrappedLineCount = Math.max(1, Math.ceil(line.length / charsPerLine));
     return total + wrappedLineCount;
   }, 0);
 
-  return Math.max(options.minHeightPx, 20 + lineCount * options.lineHeightPx);
+  const structuralBonusPx = containsMarkdown
+    ? options.markdownBonusPx +
+      blankLineCount * 10 +
+      Math.min(8, structuredLineCount) * 8 +
+      Math.min(4, codeFenceCount) * 18
+    : 0;
+
+  return Math.max(
+    options.minHeightPx,
+    options.baseChromePx + lineCount * options.lineHeightPx + structuralBonusPx,
+  );
 };
 
-function useVirtualRowsToRender(
-  virtualRows: AgentChatVirtualRow[],
-  virtualItems: VirtualItem[],
-): AgentChatVirtualRowsToRenderEntry[] {
-  return useMemo(
-    () =>
-      virtualItems
-        .map((virtualItem) => {
-          const row = virtualRows[virtualItem.index];
-          if (!row) {
-            return null;
-          }
-          return { row, virtualItem };
-        })
-        .filter((entry): entry is AgentChatVirtualRowsToRenderEntry => entry !== null),
-    [virtualItems, virtualRows],
-  );
+const resolveMeasurementBucketKey = (row: AgentChatVirtualRow): string | null => {
+  if (row.kind === "turn_duration") {
+    return "turn_duration";
+  }
+
+  const { message } = row;
+  if (message.role === "assistant") {
+    const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
+    return assistantMeta?.isFinal === true
+      ? hasMarkdownSyntaxHint(message.content)
+        ? "assistant:final:markdown"
+        : "assistant:final:text"
+      : hasMarkdownSyntaxHint(message.content)
+        ? "assistant:streaming:markdown"
+        : "assistant:streaming:text";
+  }
+
+  if (message.role === "user") {
+    return "user";
+  }
+
+  if (message.role === "thinking") {
+    return "thinking";
+  }
+
+  if (message.role === "tool") {
+    return "tool";
+  }
+
+  if (message.role === "system") {
+    return "system";
+  }
+
+  return null;
+};
+
+function useVirtualRowsToRender({
+  activeSessionId,
+  shouldVirtualize,
+  virtualRows,
+  virtualItems,
+}: {
+  activeSessionId: string | null;
+  shouldVirtualize: boolean;
+  virtualRows: AgentChatVirtualRow[];
+  virtualItems: VirtualItem[];
+}): AgentChatVirtualRowsToRenderEntry[] {
+  const lastNonEmptyWindowRef = useRef<RetainedVirtualWindowState>({
+    sessionId: null,
+    virtualItems: [],
+  });
+
+  return useMemo(() => {
+    const { nextWindowState, resolvedVirtualItems } = resolveRetainedVirtualWindow({
+      activeSessionId,
+      previousWindowState: lastNonEmptyWindowRef.current,
+      rowCount: virtualRows.length,
+      shouldVirtualize,
+      virtualItems,
+    });
+    lastNonEmptyWindowRef.current = nextWindowState;
+
+    return resolvedVirtualItems
+      .map((virtualItem) => {
+        const row = virtualRows[virtualItem.index];
+        if (!row) {
+          return null;
+        }
+        return { row, virtualItem };
+      })
+      .filter((entry): entry is AgentChatVirtualRowsToRenderEntry => entry !== null);
+  }, [activeSessionId, shouldVirtualize, virtualItems, virtualRows]);
+}
+
+export function resolveRetainedVirtualWindow({
+  activeSessionId,
+  previousWindowState,
+  rowCount,
+  shouldVirtualize,
+  virtualItems,
+}: {
+  activeSessionId: string | null;
+  previousWindowState: RetainedVirtualWindowState;
+  rowCount: number;
+  shouldVirtualize: boolean;
+  virtualItems: VirtualItem[];
+}): {
+  nextWindowState: RetainedVirtualWindowState;
+  resolvedVirtualItems: VirtualItem[];
+} {
+  if (!shouldVirtualize || !activeSessionId) {
+    return {
+      nextWindowState: {
+        sessionId: null,
+        virtualItems: [],
+      },
+      resolvedVirtualItems: [],
+    };
+  }
+
+  const resolvedVirtualItems = virtualItems.filter((virtualItem) => {
+    return virtualItem.index >= 0 && virtualItem.index < rowCount;
+  });
+
+  if (resolvedVirtualItems.length > 0) {
+    return {
+      nextWindowState: {
+        sessionId: activeSessionId,
+        virtualItems: resolvedVirtualItems,
+      },
+      resolvedVirtualItems,
+    };
+  }
+
+  if (previousWindowState.sessionId !== activeSessionId) {
+    return {
+      nextWindowState: {
+        sessionId: activeSessionId,
+        virtualItems: [],
+      },
+      resolvedVirtualItems: [],
+    };
+  }
+
+  const retainedVirtualItems = previousWindowState.virtualItems.filter((virtualItem) => {
+    return virtualItem.index >= 0 && virtualItem.index < rowCount;
+  });
+  return {
+    nextWindowState: {
+      sessionId: activeSessionId,
+      virtualItems: retainedVirtualItems,
+    },
+    resolvedVirtualItems: retainedVirtualItems,
+  };
 }

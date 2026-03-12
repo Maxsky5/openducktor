@@ -81,6 +81,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     role: "spec",
     selectedTask: createTask(),
     isTaskHydrating: false,
+    isSessionHistoryHydrating: false,
     contextSwitchVersion: 0,
     ...overrides.core,
     sessionsForTask,

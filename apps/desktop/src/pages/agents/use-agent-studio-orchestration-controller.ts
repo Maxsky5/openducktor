@@ -31,6 +31,7 @@ export type AgentStudioOrchestrationSelectionContext = {
   contextSwitchVersion: number;
   isLoadingTasks: boolean;
   isActiveTaskHydrated: boolean;
+  isViewSessionHistoryHydrating: boolean;
   onCreateTab: (taskId: string) => void;
   onCloseTab: (taskId: string) => void;
 };
@@ -82,7 +83,12 @@ type UseAgentStudioOrchestrationControllerResult = {
 
 type AgentStudioPageModelsViewContext = Pick<
   AgentStudioOrchestrationSelectionContext,
-  "viewTaskId" | "viewRole" | "viewSelectedTask" | "contextSwitchVersion" | "isActiveTaskHydrated"
+  | "viewTaskId"
+  | "viewRole"
+  | "viewSelectedTask"
+  | "contextSwitchVersion"
+  | "isActiveTaskHydrated"
+  | "isViewSessionHistoryHydrating"
 >;
 
 type AgentStudioPageModelsSessionsContext = Pick<
@@ -161,6 +167,7 @@ export const buildAgentStudioPageModelsArgs = ({
       contextSessionsLength: sessions.viewSessionsForTask.length,
       activeSession: sessions.viewActiveSession,
       isTaskHydrating: Boolean(view.viewTaskId && !view.isActiveTaskHydrated),
+      isSessionHistoryHydrating: view.isViewSessionHistoryHydrating,
       contextSwitchVersion: view.contextSwitchVersion,
     },
     taskTabs,
@@ -300,6 +307,7 @@ export function useAgentStudioOrchestrationController({
       viewSelectedTask,
       contextSwitchVersion,
       isActiveTaskHydrated,
+      isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
     },
     sessions: {
       viewSessionsForTask,

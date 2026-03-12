@@ -1,6 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart } from "@openducktor/core";
-import { toTokenTotal } from "./message-normalizers";
 import {
   asUnknownRecord,
   readNumberProp,
@@ -8,6 +7,7 @@ import {
   readStringProp,
   readUnknownProp,
 } from "./guards";
+import { toTokenTotal } from "./message-normalizers";
 
 const toDisplayText = (value: unknown): string | undefined => {
   if (typeof value === "string") {

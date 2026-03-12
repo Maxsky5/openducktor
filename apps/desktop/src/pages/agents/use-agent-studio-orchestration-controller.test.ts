@@ -33,6 +33,7 @@ const baseArgs: BuildArgs = {
     viewSelectedTask: task,
     contextSwitchVersion: 4,
     isActiveTaskHydrated: true,
+    isViewSessionHistoryHydrating: false,
   },
   sessions: {
     viewSessionsForTask: [session],

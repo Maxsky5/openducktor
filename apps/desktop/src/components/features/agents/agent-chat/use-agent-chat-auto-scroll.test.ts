@@ -13,6 +13,7 @@ import type { AgentChatVirtualizer } from "./use-agent-chat-virtualization";
 
 type AutoScrollHarnessProps = {
   activeSessionId: string | null;
+  canScrollToLatest: boolean;
   isPinnedToBottom: boolean;
   messagesContainerRef: ReturnType<typeof createRef<HTMLDivElement>>;
   scrollVersion: string;
@@ -77,8 +78,25 @@ const createContainerMock = () => {
   return { container, scrollTo, scrollToMock };
 };
 
+const drainAnimationFrames = (
+  rafCallbacks: FrameRequestCallback[],
+  options?: { startTimestampMs?: number; stepMs?: number },
+): void => {
+  let timestampMs = options?.startTimestampMs ?? 0;
+  const stepMs = options?.stepMs ?? 16;
+  while (rafCallbacks.length > 0) {
+    const callback = rafCallbacks.shift();
+    if (!callback) {
+      return;
+    }
+    callback(timestampMs);
+    timestampMs += stepMs;
+  }
+};
+
 const AutoScrollHarness = ({
   activeSessionId,
+  canScrollToLatest,
   isPinnedToBottom,
   messagesContainerRef,
   scrollVersion,
@@ -88,6 +106,7 @@ const AutoScrollHarness = ({
 }: AutoScrollHarnessProps): null => {
   useAgentChatAutoScroll({
     activeSessionId,
+    canScrollToLatest,
     isPinnedToBottom,
     messagesContainerRef,
     scrollVersion,
@@ -106,10 +125,14 @@ describe("useAgentChatAutoScroll", () => {
   });
 
   test("jumps to the bottom on session changes", async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
     const cancelAnimationFrame = mock((_id: number) => {});
     setGlobalWindow({
       cancelAnimationFrame,
-      requestAnimationFrame: mock((_callback: FrameRequestCallback) => 17),
+      requestAnimationFrame: mock((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      }),
     });
 
     const { measure, scrollToIndex, virtualizer } = createVirtualizerMock();
@@ -122,6 +145,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer = TestRenderer.create(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: true,
           isPinnedToBottom: true,
           messagesContainerRef,
           scrollVersion: "session-1:1",
@@ -133,9 +157,15 @@ describe("useAgentChatAutoScroll", () => {
       await flush();
     });
 
+    await act(async () => {
+      drainAnimationFrames(rafCallbacks);
+      await flush();
+    });
+
     expect(measure.mock.calls.length).toBeGreaterThanOrEqual(1);
-    expect(scrollToIndex).toHaveBeenCalledWith(3, { align: "end", behavior: "auto" });
-    expect(scrollToMock).toHaveBeenCalledWith(640);
+    expect(scrollToIndex).toHaveBeenCalledTimes(0);
+    expect(scrollToMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(container.scrollTop).toBe(640);
     expect(messagesContainerRef.current?.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET]).toBe("640");
 
     await act(async () => {
@@ -164,6 +194,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer = TestRenderer.create(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: true,
           isPinnedToBottom: true,
           messagesContainerRef,
           scrollVersion: "session-1:1",
@@ -179,12 +210,14 @@ describe("useAgentChatAutoScroll", () => {
     measure.mockClear();
     scrollToIndex.mockClear();
     scrollToMock.mockClear();
+    rafCallbacks.length = 0;
     container.scrollTop = 480;
 
     await act(async () => {
       renderer?.update(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: true,
           isPinnedToBottom: true,
           messagesContainerRef,
           scrollVersion: "session-1:2",
@@ -209,9 +242,12 @@ describe("useAgentChatAutoScroll", () => {
 
     expect(measure).toHaveBeenCalledTimes(1);
     expect(scrollToIndex).toHaveBeenCalledTimes(0);
-    const firstScrollCall = scrollToMock.mock.calls[0]?.[0];
-    expect(Number(firstScrollCall)).toBeGreaterThan(480);
-    expect(Number(firstScrollCall)).toBeLessThanOrEqual(640);
+    const numericScrollCalls = scrollToMock.mock.calls
+      .map((call) => Number(call[0]))
+      .filter((value) => Number.isFinite(value));
+    expect(numericScrollCalls.length).toBeGreaterThan(0);
+    expect(numericScrollCalls[0]).toBeGreaterThan(480);
+    expect(numericScrollCalls[0]).toBeLessThanOrEqual(640);
 
     await act(async () => {
       renderer?.unmount();
@@ -239,6 +275,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer = TestRenderer.create(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: true,
           isPinnedToBottom: false,
           messagesContainerRef,
           scrollVersion: "session-1:1",
@@ -251,8 +288,12 @@ describe("useAgentChatAutoScroll", () => {
     });
 
     expect(measure).toHaveBeenCalledTimes(1);
-    expect(scrollToIndex).toHaveBeenCalledWith(2, { align: "end", behavior: "auto" });
-    expect(scrollToMock).toHaveBeenCalledWith(640);
+    await act(async () => {
+      drainAnimationFrames(rafCallbacks);
+      await flush();
+    });
+    expect(scrollToIndex).toHaveBeenCalledTimes(0);
+    expect(scrollToMock.mock.calls.length).toBeGreaterThanOrEqual(1);
 
     measure.mockClear();
     scrollToIndex.mockClear();
@@ -263,6 +304,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer?.update(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: true,
           isPinnedToBottom: false,
           messagesContainerRef,
           scrollVersion: "session-1:2",
@@ -286,10 +328,14 @@ describe("useAgentChatAutoScroll", () => {
   });
 
   test("jumps to the latest message when switching sessions even if the previous session was unpinned", async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
     const cancelAnimationFrame = mock((_id: number) => {});
     setGlobalWindow({
       cancelAnimationFrame,
-      requestAnimationFrame: mock((_callback: FrameRequestCallback) => 17),
+      requestAnimationFrame: mock((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      }),
     });
 
     const { measure, scrollToIndex, virtualizer } = createVirtualizerMock();
@@ -302,6 +348,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer = TestRenderer.create(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: true,
           isPinnedToBottom: false,
           messagesContainerRef,
           scrollVersion: "session-1:1",
@@ -313,6 +360,7 @@ describe("useAgentChatAutoScroll", () => {
       await flush();
     });
 
+    drainAnimationFrames(rafCallbacks);
     measure.mockClear();
     scrollToIndex.mockClear();
     scrollToMock.mockClear();
@@ -321,6 +369,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer?.update(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-2",
+          canScrollToLatest: true,
           isPinnedToBottom: false,
           messagesContainerRef,
           scrollVersion: "session-2:1",
@@ -332,9 +381,14 @@ describe("useAgentChatAutoScroll", () => {
       await flush();
     });
 
-    expect(measure).toHaveBeenCalledTimes(1);
-    expect(scrollToIndex).toHaveBeenCalledWith(3, { align: "end", behavior: "auto" });
-    expect(scrollToMock).toHaveBeenCalledWith(640);
+    await act(async () => {
+      drainAnimationFrames(rafCallbacks);
+      await flush();
+    });
+    expect(measure.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(scrollToIndex).toHaveBeenCalledTimes(0);
+    expect(scrollToMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(container.scrollTop).toBe(640);
 
     await act(async () => {
       renderer?.unmount();
@@ -343,10 +397,14 @@ describe("useAgentChatAutoScroll", () => {
   });
 
   test("jumps to the latest message when the first selected session rows appear after mount", async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
     const cancelAnimationFrame = mock((_id: number) => {});
     setGlobalWindow({
       cancelAnimationFrame,
-      requestAnimationFrame: mock((_callback: FrameRequestCallback) => 17),
+      requestAnimationFrame: mock((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      }),
     });
 
     const { measure, scrollToIndex, virtualizer } = createVirtualizerMock();
@@ -359,6 +417,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer = TestRenderer.create(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: false,
           isPinnedToBottom: false,
           messagesContainerRef,
           scrollVersion: "session-1:1",
@@ -378,6 +437,7 @@ describe("useAgentChatAutoScroll", () => {
       renderer?.update(
         createElement(AutoScrollHarness, {
           activeSessionId: "session-1",
+          canScrollToLatest: true,
           isPinnedToBottom: false,
           messagesContainerRef,
           scrollVersion: "session-1:1",
@@ -390,8 +450,78 @@ describe("useAgentChatAutoScroll", () => {
     });
 
     expect(measure).toHaveBeenCalledTimes(1);
-    expect(scrollToIndex).toHaveBeenCalledWith(3, { align: "end", behavior: "auto" });
-    expect(scrollToMock).toHaveBeenCalledWith(640);
+    await act(async () => {
+      drainAnimationFrames(rafCallbacks);
+      await flush();
+    });
+    expect(scrollToIndex).toHaveBeenCalledTimes(0);
+    expect(scrollToMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(container.scrollTop).toBe(640);
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  });
+
+  test("keeps correcting a session-open jump while the bottom continues to grow", async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    setGlobalWindow({
+      cancelAnimationFrame: mock((_id: number) => {}),
+      requestAnimationFrame: mock((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      }),
+    });
+
+    const { measure, scrollToIndex, virtualizer } = createVirtualizerMock();
+    const { container, scrollToMock } = createContainerMock();
+    const mutableContainer = container as HTMLDivElement & {
+      scrollHeight: number;
+      scrollTop: number;
+    };
+    mutableContainer.scrollHeight = 900;
+    mutableContainer.scrollTop = 0;
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    messagesContainerRef.current = container;
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-1",
+          canScrollToLatest: true,
+          isPinnedToBottom: false,
+          messagesContainerRef,
+          scrollVersion: "session-1:1",
+          shouldVirtualize: true,
+          virtualRowsCount: 6,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    const firstFrame = rafCallbacks.shift();
+    if (!firstFrame) {
+      throw new Error("Missing first session jump frame");
+    }
+    await act(async () => {
+      firstFrame(0);
+      await flush();
+    });
+
+    mutableContainer.scrollHeight = 1200;
+
+    await act(async () => {
+      drainAnimationFrames(rafCallbacks, { startTimestampMs: 16, stepMs: 16 });
+      await flush();
+    });
+
+    expect(measure.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(scrollToIndex).toHaveBeenCalledTimes(0);
+    expect(scrollToMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mutableContainer.scrollTop).toBe(880);
 
     await act(async () => {
       renderer?.unmount();

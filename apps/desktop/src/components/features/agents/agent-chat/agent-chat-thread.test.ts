@@ -19,6 +19,7 @@ import { AgentChatThread } from "./agent-chat-thread";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const baseModel = {
+  isSessionViewLoading: false,
   roleOptions: TEST_ROLE_OPTIONS,
   agentStudioReady: true,
   blockedReason: "",

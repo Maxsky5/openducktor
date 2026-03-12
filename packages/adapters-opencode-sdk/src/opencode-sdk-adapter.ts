@@ -20,8 +20,8 @@ import {
   type ResumeAgentSessionInput,
   type SendAgentUserMessageInput,
   type StartAgentSessionInput,
-  type UpdateAgentSessionModelInput,
   toRuntimeClientInput,
+  type UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import {
   connectMcpServer,

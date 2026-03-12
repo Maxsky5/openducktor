@@ -232,6 +232,7 @@ describe("agents-page-view-model", () => {
 
     const model = buildAgentChatModel({
       activeSession: createSession(),
+      isSessionViewLoading: false,
       roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
       agentStudioReady: true,
       agentStudioBlockedReason: "",

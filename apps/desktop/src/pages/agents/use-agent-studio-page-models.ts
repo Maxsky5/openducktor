@@ -57,6 +57,7 @@ type AgentStudioCoreContext = {
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
+  isSessionHistoryHydrating: boolean;
   contextSwitchVersion: number;
 };
 
@@ -142,6 +143,7 @@ export function useAgentStudioPageModels({
   const { threadSession, activeSessionId, isContextSwitching } = useAgentStudioThreadContext({
     activeSession: core.activeSession,
     isTaskHydrating: core.isTaskHydrating,
+    isSessionHistoryHydrating: core.isSessionHistoryHydrating,
     contextSwitchVersion: core.contextSwitchVersion,
   });
 
@@ -294,10 +296,11 @@ export function useAgentStudioPageModels({
   const threadSessionContext = useMemo<AgentStudioThreadSessionContext>(
     () => ({
       threadSession,
+      isContextSwitching,
       taskId: core.taskId,
       activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     }),
-    [core.taskId, modelSelection.activeSessionAgentColors, threadSession],
+    [core.taskId, isContextSwitching, modelSelection.activeSessionAgentColors, threadSession],
   );
 
   const threadReadinessContext = useMemo<AgentStudioThreadReadinessContext>(
@@ -478,9 +481,8 @@ export function useAgentStudioPageModels({
     () => ({
       thread: agentChatThreadModel,
       composer: agentChatComposerModel,
-      isContextSwitching,
     }),
-    [agentChatComposerModel, agentChatThreadModel, isContextSwitching],
+    [agentChatComposerModel, agentChatThreadModel],
   );
 
   return {

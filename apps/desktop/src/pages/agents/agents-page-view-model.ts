@@ -108,6 +108,7 @@ export const buildAgentStudioWorkspaceSidebarModel = (args: {
 
 type AgentChatThreadModelArgs = {
   activeSession: AgentSessionState | null;
+  isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
   agentStudioBlockedReason: string;
@@ -167,6 +168,7 @@ export const buildAgentChatThreadModel = (
   args: AgentChatThreadModelArgs,
 ): AgentChatThreadModel => ({
   session: args.activeSession,
+  isSessionViewLoading: args.isSessionViewLoading,
   roleOptions: args.roleOptions,
   agentStudioReady: args.agentStudioReady,
   blockedReason: args.agentStudioBlockedReason,
@@ -225,12 +227,8 @@ export const buildAgentChatComposerModel = (
 });
 
 export const buildAgentChatModel = (
-  args: AgentChatThreadModelArgs &
-    AgentChatComposerModelArgs & {
-      isContextSwitching?: boolean;
-    },
+  args: AgentChatThreadModelArgs & AgentChatComposerModelArgs,
 ): AgentChatModel => ({
   thread: buildAgentChatThreadModel(args),
   composer: buildAgentChatComposerModel(args),
-  isContextSwitching: args.isContextSwitching ?? false,
 });

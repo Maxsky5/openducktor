@@ -23,6 +23,7 @@ export type WorkflowComposerContext = Pick<
 
 export type AgentStudioThreadSessionContext = {
   threadSession: AgentSessionState | null;
+  isContextSwitching: boolean;
   taskId: string;
   activeSessionAgentColors: Record<string, string>;
 };
