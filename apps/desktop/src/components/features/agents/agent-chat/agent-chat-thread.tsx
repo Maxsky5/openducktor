@@ -38,7 +38,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     todoPanelBottomOffset,
     isPinnedToBottom,
     messagesContainerRef,
+    onMessagesPointerDown,
     onMessagesScroll,
+    onMessagesTouchMove,
+    onMessagesWheel,
   } = model;
 
   const {
@@ -158,7 +161,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
       <div
         ref={messagesContainerRef}
         className="relative min-h-0 flex-1 space-y-1 overflow-y-auto p-4 pb-6"
+        onPointerDown={onMessagesPointerDown}
         onScroll={onMessagesScroll}
+        onTouchMove={onMessagesTouchMove}
+        onWheel={onMessagesWheel}
       >
         {!session ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">

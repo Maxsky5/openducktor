@@ -322,12 +322,6 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
           })}
         </div>
       </div>
-
-      {createSessionDisabled ? (
-        <p className="text-xs text-muted-foreground">
-          Session creation is locked while the current session is actively running.
-        </p>
-      ) : null}
     </CardHeader>
   );
 }

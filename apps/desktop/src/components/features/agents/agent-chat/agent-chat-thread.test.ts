@@ -42,7 +42,10 @@ const baseModel = {
   todoPanelBottomOffset: 120,
   isPinnedToBottom: true,
   messagesContainerRef: createRef<HTMLDivElement>(),
+  onMessagesPointerDown: () => {},
   onMessagesScroll: () => {},
+  onMessagesTouchMove: () => {},
+  onMessagesWheel: () => {},
 } as const;
 
 describe("AgentChatThread", () => {

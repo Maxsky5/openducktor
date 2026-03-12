@@ -1,13 +1,15 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import {
   CHAT_AUTOSCROLL_THRESHOLD_PX,
+  CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET,
   COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
   COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
   computeComposerTextareaLayout,
   computeTodoPanelBottomOffset,
   isNearBottom,
+  resizeComposerTextareaElement,
   scrollMessagesContainerToBottom,
   useAgentChatLayout,
 } from "./use-agent-chat-layout";
@@ -18,7 +20,13 @@ import {
   }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+const originalResizeObserver = globalThis.ResizeObserver;
+
 describe("use-agent-chat-layout helpers", () => {
+  afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
   test("detects pinned-to-bottom with threshold", () => {
     const element = {
       scrollHeight: 1_000,
@@ -59,6 +67,7 @@ describe("use-agent-chat-layout helpers", () => {
   test("scrollMessagesContainerToBottom repins the latest rows after layout changes", () => {
     const scrollTo = mock(() => {});
     const container = {
+      dataset: {},
       clientHeight: 320,
       scrollHeight: 960,
       scrollTo,
@@ -72,6 +81,41 @@ describe("use-agent-chat-layout helpers", () => {
       behavior: "auto",
     });
     expect(container.scrollTop).toBe(640);
+    expect(container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET]).toBe("640");
+  });
+
+  test("resizeComposerTextareaElement avoids transient collapse when the target height is unchanged", () => {
+    const styleState = {
+      height: "40px",
+      overflowY: "hidden" as const,
+    };
+    const textarea = {
+      getBoundingClientRect: () => ({ height: 40 }),
+      scrollHeight: 40,
+      style: styleState,
+    } as unknown as HTMLTextAreaElement;
+
+    resizeComposerTextareaElement(textarea);
+
+    expect(styleState.height).toBe("44px");
+    expect(styleState.overflowY).toBe("hidden");
+  });
+
+  test("resizeComposerTextareaElement shrinks the composer when content becomes shorter", () => {
+    const styleState = {
+      height: "120px",
+      overflowY: "hidden" as const,
+    };
+    const textarea = {
+      getBoundingClientRect: () => ({ height: 120 }),
+      scrollHeight: 40,
+      style: styleState,
+    } as unknown as HTMLTextAreaElement;
+
+    resizeComposerTextareaElement(textarea);
+
+    expect(styleState.height).toBe("44px");
+    expect(styleState.overflowY).toBe("hidden");
   });
 
   test("repins when active session changes", async () => {

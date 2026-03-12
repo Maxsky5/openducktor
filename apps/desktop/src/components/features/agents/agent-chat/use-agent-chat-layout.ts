@@ -1,8 +1,8 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export const CHAT_AUTOSCROLL_THRESHOLD_PX = 48;
-export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 40;
+export const COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 44;
 export const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 220;
 export const CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET = "odtAutoscrolling";
 export const CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX = 1;
@@ -31,6 +31,42 @@ export const computeComposerTextareaLayout = (
   };
 };
 
+const readComposerTextareaHeight = (textarea: HTMLTextAreaElement): number => {
+  const inlineHeight = Number.parseFloat(textarea.style.height);
+  if (Number.isFinite(inlineHeight) && inlineHeight > 0) {
+    return inlineHeight;
+  }
+  return textarea.getBoundingClientRect().height;
+};
+
+export const resizeComposerTextareaElement = (
+  textarea: HTMLTextAreaElement,
+): {
+  didHeightChange: boolean;
+  overflowY: "auto" | "hidden";
+} => {
+  const currentHeight = readComposerTextareaHeight(textarea);
+  textarea.style.height = "auto";
+  const layout = computeComposerTextareaLayout(textarea.scrollHeight);
+
+  const nextHeight = `${layout.heightPx}px`;
+  let didHeightChange = false;
+  if (textarea.style.height !== nextHeight) {
+    textarea.style.height = nextHeight;
+    didHeightChange = true;
+  } else if (currentHeight !== layout.heightPx) {
+    textarea.style.height = nextHeight;
+    didHeightChange = true;
+  }
+  if (textarea.style.overflowY !== layout.overflowY) {
+    textarea.style.overflowY = layout.overflowY;
+  }
+  return {
+    didHeightChange,
+    overflowY: layout.overflowY,
+  };
+};
+
 export const computeTodoPanelBottomOffset = (_composerFormHeight: number): number => {
   return 12;
 };
@@ -38,7 +74,7 @@ export const computeTodoPanelBottomOffset = (_composerFormHeight: number): numbe
 export const scrollMessagesContainerToBottom = (
   container: Pick<
     HTMLDivElement,
-    "scrollHeight" | "clientHeight" | "scrollTop" | "scrollTo"
+    "dataset" | "scrollHeight" | "clientHeight" | "scrollTop" | "scrollTo"
   > | null,
 ): void => {
   if (!container) {
@@ -46,6 +82,28 @@ export const scrollMessagesContainerToBottom = (
   }
 
   const nextTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] = String(nextTop);
+  container.scrollTo({
+    top: nextTop,
+    behavior: "auto",
+  });
+  container.scrollTop = nextTop;
+};
+
+const adjustMessagesContainerScrollBy = (
+  container: Pick<
+    HTMLDivElement,
+    "dataset" | "scrollHeight" | "clientHeight" | "scrollTop" | "scrollTo"
+  > | null,
+  deltaPx: number,
+): void => {
+  if (!container || !Number.isFinite(deltaPx) || deltaPx === 0) {
+    return;
+  }
+
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const nextTop = Math.min(Math.max(container.scrollTop + deltaPx, 0), maxScrollTop);
+  container.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET] = String(nextTop);
   container.scrollTo({
     top: nextTop,
     behavior: "auto",
@@ -77,6 +135,8 @@ export const useAgentChatLayout = ({
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previousSessionIdRef = useRef<string | null>(activeSessionId);
   const previousComposerFormHeightRef = useRef<number | null>(null);
+  const shouldRepinAfterComposerResizeRef = useRef(false);
+  const composerRepinRafRef = useRef<number | null>(null);
   const [isPinnedToBottom, setIsPinnedToBottom] = useState(true);
   const [composerFormHeight, setComposerFormHeight] = useState(0);
 
@@ -85,14 +145,28 @@ export const useAgentChatLayout = ({
     if (!textarea) {
       return;
     }
-    textarea.style.height = "0px";
-    const layout = computeComposerTextareaLayout(textarea.scrollHeight);
-    textarea.style.height = `${layout.heightPx}px`;
-    textarea.style.overflowY = layout.overflowY;
-  }, []);
+    const previousTextareaHeight = readComposerTextareaHeight(textarea);
+    shouldRepinAfterComposerResizeRef.current = isPinnedToBottom;
+    const resizeResult = resizeComposerTextareaElement(textarea);
+    const nextTextareaHeight = readComposerTextareaHeight(textarea);
+    if (
+      isPinnedToBottom &&
+      (Math.abs(nextTextareaHeight - previousTextareaHeight) > 0.5 ||
+        resizeResult.overflowY === "auto") &&
+      typeof window !== "undefined"
+    ) {
+      if (composerRepinRafRef.current !== null) {
+        window.cancelAnimationFrame(composerRepinRafRef.current);
+      }
+      composerRepinRafRef.current = window.requestAnimationFrame(() => {
+        composerRepinRafRef.current = null;
+        scrollMessagesContainerToBottom(messagesContainerRef.current);
+      });
+    }
+  }, [isPinnedToBottom]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Input string is an explicit resize trigger.
-  useEffect(() => {
+  useLayoutEffect(() => {
     resizeComposerTextarea();
   }, [input, resizeComposerTextarea]);
 
@@ -121,27 +195,48 @@ export const useAgentChatLayout = ({
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousComposerFormHeight = previousComposerFormHeightRef.current;
     previousComposerFormHeightRef.current = composerFormHeight;
-    if (
-      previousComposerFormHeight === null ||
-      previousComposerFormHeight === composerFormHeight ||
-      !isPinnedToBottom
-    ) {
+    if (previousComposerFormHeight === null || previousComposerFormHeight === composerFormHeight) {
       return;
     }
 
-    scrollMessagesContainerToBottom(messagesContainerRef.current);
-  }, [composerFormHeight, isPinnedToBottom]);
+    const shouldRepinAfterComposerResize = shouldRepinAfterComposerResizeRef.current;
+    shouldRepinAfterComposerResizeRef.current = false;
+    if (!shouldRepinAfterComposerResize || typeof window === "undefined") {
+      return;
+    }
+
+    if (composerRepinRafRef.current !== null) {
+      window.cancelAnimationFrame(composerRepinRafRef.current);
+      composerRepinRafRef.current = null;
+    }
+
+    const composerHeightDelta = composerFormHeight - previousComposerFormHeight;
+    adjustMessagesContainerScrollBy(messagesContainerRef.current, composerHeightDelta);
+  }, [composerFormHeight]);
 
   useEffect(() => {
     if (previousSessionIdRef.current === activeSessionId) {
       return;
     }
     previousSessionIdRef.current = activeSessionId;
+    shouldRepinAfterComposerResizeRef.current = false;
+    if (composerRepinRafRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(composerRepinRafRef.current);
+      composerRepinRafRef.current = null;
+    }
     setIsPinnedToBottom(true);
   }, [activeSessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (composerRepinRafRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(composerRepinRafRef.current);
+      }
+    };
+  }, []);
 
   return {
     messagesContainerRef,

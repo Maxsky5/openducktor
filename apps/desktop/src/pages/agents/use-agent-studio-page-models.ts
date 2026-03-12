@@ -1,6 +1,15 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { type UIEvent, useCallback, useMemo, useState } from "react";
+import {
+  type PointerEvent,
+  type TouchEvent,
+  type UIEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type WheelEvent,
+} from "react";
 import {
   type AgentChatModel,
   type AgentStudioTaskTabsModel,
@@ -159,6 +168,11 @@ export function useAgentStudioPageModels({
     input: composer.input,
     activeSessionId: threadSession?.sessionId ?? null,
   });
+  const pendingUserScrollIntentRef = useRef(false);
+
+  const markPendingUserScrollIntent = useCallback((): void => {
+    pendingUserScrollIntentRef.current = true;
+  }, []);
 
   const handleMessagesScroll = useCallback(
     (event: UIEvent<HTMLDivElement>): void => {
@@ -175,9 +189,42 @@ export function useAgentStudioPageModels({
           return;
         }
       }
-      setIsPinnedToBottom(isNearBottom(event.currentTarget));
+
+      if (isNearBottom(event.currentTarget)) {
+        pendingUserScrollIntentRef.current = false;
+        setIsPinnedToBottom(true);
+        return;
+      }
+
+      if (!pendingUserScrollIntentRef.current) {
+        return;
+      }
+
+      pendingUserScrollIntentRef.current = false;
+      setIsPinnedToBottom(false);
     },
     [setIsPinnedToBottom],
+  );
+
+  const handleMessagesPointerDown = useCallback(
+    (_event: PointerEvent<HTMLDivElement>): void => {
+      markPendingUserScrollIntent();
+    },
+    [markPendingUserScrollIntent],
+  );
+
+  const handleMessagesTouchMove = useCallback(
+    (_event: TouchEvent<HTMLDivElement>): void => {
+      markPendingUserScrollIntent();
+    },
+    [markPendingUserScrollIntent],
+  );
+
+  const handleMessagesWheel = useCallback(
+    (_event: WheelEvent<HTMLDivElement>): void => {
+      markPendingUserScrollIntent();
+    },
+    [markPendingUserScrollIntent],
   );
 
   const agentStudioTaskTabsModel = useMemo(
@@ -371,9 +418,19 @@ export function useAgentStudioPageModels({
     () => ({
       isPinnedToBottom,
       messagesContainerRef,
+      onMessagesPointerDown: handleMessagesPointerDown,
       onMessagesScroll: handleMessagesScroll,
+      onMessagesTouchMove: handleMessagesTouchMove,
+      onMessagesWheel: handleMessagesWheel,
     }),
-    [handleMessagesScroll, isPinnedToBottom, messagesContainerRef],
+    [
+      handleMessagesPointerDown,
+      handleMessagesScroll,
+      handleMessagesTouchMove,
+      handleMessagesWheel,
+      isPinnedToBottom,
+      messagesContainerRef,
+    ],
   );
 
   const agentChatThreadModel = useAgentStudioThreadModel({

@@ -1,6 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { RefObject, UIEvent } from "react";
+import type {
+  PointerEventHandler,
+  RefObject,
+  TouchEventHandler,
+  UIEvent,
+  WheelEventHandler,
+} from "react";
 import type {
   AgentChatComposerModel,
   AgentChatModel,
@@ -131,7 +137,10 @@ type AgentChatThreadModelArgs = {
   todoPanelBottomOffset: number;
   isPinnedToBottom: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  onMessagesPointerDown: PointerEventHandler<HTMLDivElement>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
+  onMessagesTouchMove: TouchEventHandler<HTMLDivElement>;
+  onMessagesWheel: WheelEventHandler<HTMLDivElement>;
 };
 
 type AgentChatComposerModelArgs = {
@@ -191,7 +200,10 @@ export const buildAgentChatThreadModel = (
   todoPanelBottomOffset: args.todoPanelBottomOffset,
   isPinnedToBottom: args.isPinnedToBottom,
   messagesContainerRef: args.messagesContainerRef,
+  onMessagesPointerDown: args.onMessagesPointerDown,
   onMessagesScroll: args.onMessagesScroll,
+  onMessagesTouchMove: args.onMessagesTouchMove,
+  onMessagesWheel: args.onMessagesWheel,
 });
 
 export const buildAgentChatComposerModel = (

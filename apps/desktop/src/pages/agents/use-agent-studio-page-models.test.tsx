@@ -443,6 +443,7 @@ describe("useAgentStudioPageModels", () => {
     expect(harness.getLatest().agentChatModel.thread.isPinnedToBottom).toBe(true);
 
     await harness.run((state) => {
+      state.agentChatModel.thread.onMessagesWheel({} as never);
       state.agentChatModel.thread.onMessagesScroll({
         currentTarget: {
           clientHeight: 320,

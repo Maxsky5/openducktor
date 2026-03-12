@@ -90,7 +90,7 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
                 : "@ for files/agents; / for commands; ! for shell"
             }
             value={input}
-            className="!min-h-0 h-10 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
+            className="!min-h-0 h-11 max-h-[220px] resize-none overflow-y-hidden border-0 bg-transparent px-3 py-2.5 text-[15px] leading-6 shadow-none focus-visible:ring-0"
             disabled={!agentStudioReady || isReadOnly || isModelSelectionPending}
             onChange={(event) => onInputChange(event.currentTarget.value)}
             onInput={onComposerTextareaInput}
