@@ -1,6 +1,7 @@
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
+import { relativizeDisplayPath, relativizeSearchSummary } from "./tool-path-utils";
 import { compactText, stripToolPrefix } from "./tool-text-utils";
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
@@ -12,6 +13,40 @@ const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "list",
   "ls",
   "distill",
+]);
+
+const SEARCH_PATH_DISPLAY_TOOL_NAMES = new Set([
+  "glob",
+  "grep",
+  "find",
+  "search",
+  "ast_grep_search",
+]);
+
+const PATH_DISPLAY_TOOL_NAMES = new Set([
+  "read",
+  "cat",
+  "view",
+  "list",
+  "ls",
+  "edit",
+  "multiedit",
+  "write",
+  "create",
+  "file_write",
+  "apply_patch",
+  "str_replace",
+  "str_replace_based_edit_tool",
+  "patch",
+  "insert",
+  "replace",
+  "lsp_diagnostic",
+  "lsp_diagnostics",
+  "lsp_find_references",
+  "lsp_goto_definition",
+  "lsp_prepare_rename",
+  "lsp_symbols",
+  "look_at",
 ]);
 
 const REGULAR_TOOL_SUMMARY_FROM_OUTPUT_TOOL_NAMES = new Set(["task", "subtask", "delegate"]);
@@ -142,10 +177,47 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
   }
 };
 
-export const buildToolSummary = (meta: ToolMeta, content: string): string => {
+const normalizeDisplaySummary = (
+  tool: string,
+  summary: string,
+  workingDirectory?: string | null,
+): string => {
+  if (SEARCH_PATH_DISPLAY_TOOL_NAMES.has(tool)) {
+    return relativizeSearchSummary(summary, workingDirectory);
+  }
+  if (!PATH_DISPLAY_TOOL_NAMES.has(tool)) {
+    return summary;
+  }
+  return relativizeDisplayPath(summary, workingDirectory);
+};
+
+const extractTaskId = (input: Record<string, unknown> | undefined): string | null => {
+  const taskId = input?.taskId;
+  return typeof taskId === "string" && taskId.trim().length > 0 ? taskId.trim() : null;
+};
+
+export const buildToolSummary = (
+  meta: ToolMeta,
+  content: string,
+  workingDirectory?: string | null,
+): string => {
   const lowerTool = meta.tool.toLowerCase();
   const isTodoTool = isTodoToolName(lowerTool);
   const lifecyclePhase = getToolLifecyclePhase(meta);
+
+  if (
+    lowerTool === "read_task" ||
+    lowerTool === "odt_read_task" ||
+    lowerTool.endsWith("_odt_read_task")
+  ) {
+    if (meta.status === "error" && hasNonEmptyText(meta.error)) {
+      return compactText(meta.error, 220);
+    }
+    const taskId = extractTaskId(meta.input);
+    if (taskId) {
+      return taskId;
+    }
+  }
 
   if (isTodoTool) {
     const todoCount = countTodosFromOutput(meta.output) ?? countTodosFromInput(meta.input);
@@ -174,17 +246,21 @@ export const buildToolSummary = (meta: ToolMeta, content: string): string => {
     return compactText(meta.error, 220);
   }
 
+  if (typeof meta.preview === "string" && meta.preview.trim().length > 0) {
+    return compactText(normalizeDisplaySummary(lowerTool, meta.preview, workingDirectory), 160);
+  }
+
   if (meta.title && meta.title.trim().length > 0) {
-    return compactText(meta.title, 160);
+    return compactText(normalizeDisplaySummary(lowerTool, meta.title, workingDirectory), 160);
   }
 
   const path = extractPathFromInput(meta.input);
   const searchSummary = summarizeSearchToolInput(lowerTool, meta.input);
   if (searchSummary) {
-    return compactText(searchSummary, 160);
+    return compactText(relativizeSearchSummary(searchSummary, workingDirectory), 160);
   }
   if (path && lowerTool !== "glob" && lowerTool !== "grep") {
-    return compactText(path, 160);
+    return compactText(relativizeDisplayPath(path, workingDirectory), 160);
   }
 
   const command = meta.input?.command;

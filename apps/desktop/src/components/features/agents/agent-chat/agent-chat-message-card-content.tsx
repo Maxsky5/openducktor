@@ -187,6 +187,7 @@ export type MessageBodyProps = {
   assistantAccentColor: string | undefined;
   timeLabel: string;
   systemPromptBody: string;
+  sessionWorkingDirectory?: string | null | undefined;
 };
 
 export const MessageBody = ({
@@ -195,6 +196,7 @@ export const MessageBody = ({
   assistantAccentColor,
   timeLabel,
   systemPromptBody,
+  sessionWorkingDirectory,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
 
@@ -210,7 +212,13 @@ export const MessageBody = ({
 
   if (meta?.kind === "tool") {
     if (isOdtWorkflowMutationToolName(meta.tool)) {
-      return <WorkflowToolMessage meta={meta} messageTimestamp={message.timestamp} />;
+      return (
+        <WorkflowToolMessage
+          meta={meta}
+          messageTimestamp={message.timestamp}
+          sessionWorkingDirectory={sessionWorkingDirectory}
+        />
+      );
     }
     return (
       <RegularToolMessage
@@ -218,6 +226,7 @@ export const MessageBody = ({
         messageContent={message.content}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
+        sessionWorkingDirectory={sessionWorkingDirectory}
       />
     );
   }

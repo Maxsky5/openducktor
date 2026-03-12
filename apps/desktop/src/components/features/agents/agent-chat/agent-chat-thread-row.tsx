@@ -10,6 +10,7 @@ type AgentChatVirtualRowProps = {
   sessionAgentColors: Record<string, string>;
   sessionRole: AgentSessionState["role"] | null;
   sessionSelectedModel: AgentSessionState["selectedModel"] | null;
+  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
 };
 
 export function AgentChatThreadRow({
@@ -17,6 +18,7 @@ export function AgentChatThreadRow({
   sessionAgentColors,
   sessionRole,
   sessionSelectedModel,
+  sessionWorkingDirectory,
 }: AgentChatVirtualRowProps): ReactElement {
   switch (row.kind) {
     case "turn_duration": {
@@ -31,6 +33,7 @@ export function AgentChatThreadRow({
             sessionRole={sessionRole}
             sessionSelectedModel={sessionSelectedModel}
             sessionAgentColors={sessionAgentColors}
+            sessionWorkingDirectory={sessionWorkingDirectory}
           />
         </div>
       );

@@ -9,6 +9,7 @@ type AgentChatMessageCardProps = {
   sessionRole: AgentRole | null;
   sessionSelectedModel: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
+  sessionWorkingDirectory?: string | null | undefined;
 };
 
 export function AgentChatMessageCard({
@@ -16,6 +17,7 @@ export function AgentChatMessageCard({
   sessionRole,
   sessionSelectedModel,
   sessionAgentColors,
+  sessionWorkingDirectory,
 }: AgentChatMessageCardProps): ReactElement | null {
   const vm = buildAgentChatMessageCardViewModel({
     message,
@@ -45,6 +47,7 @@ export function AgentChatMessageCard({
         assistantAccentColor={vm.assistantAccentColor}
         timeLabel={vm.timeLabel}
         systemPromptBody={vm.systemPromptBody}
+        sessionWorkingDirectory={sessionWorkingDirectory}
       />
     </article>
   );

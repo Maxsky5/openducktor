@@ -1,5 +1,6 @@
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractPathFromInput } from "./tool-input-utils";
+import { relativizeDisplayPath } from "./tool-path-utils";
 
 const FILE_EDIT_TOOLS = new Set([
   "edit",
@@ -26,7 +27,10 @@ export type FileEditData = {
   deletions: number;
 };
 
-export const extractFileEditData = (meta: ToolMeta): FileEditData | null => {
+export const extractFileEditData = (
+  meta: ToolMeta,
+  workingDirectory?: string | null,
+): FileEditData | null => {
   let filePath = extractPathFromInput(meta.input);
 
   if (!filePath && typeof meta.input?.patch === "string") {
@@ -48,6 +52,8 @@ export const extractFileEditData = (meta: ToolMeta): FileEditData | null => {
   if (!filePath) {
     return null;
   }
+
+  filePath = relativizeDisplayPath(filePath, workingDirectory);
 
   const diff =
     typeof meta.metadata?.diff === "string"

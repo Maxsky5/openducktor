@@ -8,6 +8,7 @@ import {
   readUnknownProp,
 } from "./guards";
 import { toTokenTotal } from "./message-normalizers";
+import { deriveToolPreview } from "./tool-preview";
 
 const toDisplayText = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -146,6 +147,12 @@ const buildToolStreamPart = (
   timing: ReturnType<typeof extractPartTiming>,
   metadata: Record<string, unknown> | undefined,
 ): ToolStreamPart => {
+  const preview = deriveToolPreview({
+    tool: part.tool,
+    rawInput: readUnknownProp(toolState, "input"),
+    rawOutput: readUnknownProp(toolState, "output"),
+    ...(metadata ? { metadata } : {}),
+  });
   const base: ToolStreamPart = {
     kind: "tool",
     messageId: part.messageID,
@@ -154,6 +161,7 @@ const buildToolStreamPart = (
     tool: part.tool,
     status: normalizedStatus,
     input: part.state.input,
+    ...(preview ? { preview } : {}),
     ...(metadata ? { metadata } : {}),
     ...timing,
   };
