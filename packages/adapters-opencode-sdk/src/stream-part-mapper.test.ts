@@ -58,6 +58,93 @@ const createToolPart = ({
 };
 
 describe("stream-part-mapper", () => {
+  test("derives preview hints for current tool families", () => {
+    const scenarios = [
+      {
+        label: "shell",
+        part: createToolPart({
+          id: "preview-shell",
+          tool: "bash",
+          status: "running",
+          input: { command: "bun run test --filter @openducktor/desktop" },
+          title: "Run desktop tests",
+        }),
+        expectedPreview: "bun run test --filter @openducktor/desktop",
+      },
+      {
+        label: "skill",
+        part: createToolPart({
+          id: "preview-skill",
+          tool: "skill",
+          status: "completed",
+          input: { name: "clean-ddd-hexagonal" },
+          output: "loaded skill output",
+        }),
+        expectedPreview: "clean-ddd-hexagonal",
+      },
+      {
+        label: "odt read task",
+        part: createToolPart({
+          id: "preview-odt-read",
+          tool: "odt_read_task",
+          status: "completed",
+          input: { taskId: "task-77" },
+          output: {
+            task: {
+              id: "task-77",
+              title: "Improve chat tool previews",
+            },
+          },
+        }),
+        expectedPreview: "task-77",
+      },
+      {
+        label: "question",
+        part: createToolPart({
+          id: "preview-question",
+          tool: "question",
+          status: "completed",
+          input: {
+            questions: [{ question: "Which runtime should we use?" }],
+          },
+        }),
+        expectedPreview: "Which runtime should we use?",
+      },
+      {
+        label: "web",
+        part: createToolPart({
+          id: "preview-web",
+          tool: "webfetch",
+          status: "completed",
+          input: { url: "https://example.com/docs" },
+        }),
+        expectedPreview: "https://example.com/docs",
+      },
+      {
+        label: "context7",
+        part: createToolPart({
+          id: "preview-context7",
+          tool: "context7_query-docs",
+          status: "completed",
+          input: {
+            libraryId: "/vercel/next.js",
+            query: "app router metadata examples",
+          },
+        }),
+        expectedPreview: "app router metadata examples",
+      },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      const mapped = mapPartToAgentStreamPart(scenario.part);
+      expect(mapped).toBeTruthy();
+      if (!mapped || mapped.kind !== "tool") {
+        throw new Error(`Expected mapped tool part for ${scenario.label}.`);
+      }
+      expect(mapped.preview).toBe(scenario.expectedPreview);
+    }
+  });
+
   test("maps completed MCP tool output with isError as tool error part and omits title", () => {
     const part = createToolPart({
       id: "tool-1",
@@ -162,6 +249,7 @@ describe("stream-part-mapper", () => {
       input: {
         todos: [{ id: "todo-1", content: "A" }],
       },
+      preview: "1 todo",
       startedAtMs: 1,
       endedAtMs: 2,
     });

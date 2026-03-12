@@ -90,6 +90,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   });
   const sessionRole = session?.role ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
+  const sessionWorkingDirectory = session?.workingDirectory ?? null;
   const rowKeys = useMemo(() => virtualRows.map((row) => row.key), [virtualRows]);
   const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void>>(new Map());
   const shouldRenderVirtualizedThread = canRenderVirtualRows && typeof window !== "undefined";
@@ -131,6 +132,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           sessionRole={sessionRole}
           sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
+          sessionWorkingDirectory={sessionWorkingDirectory}
         />
       </div>
     );

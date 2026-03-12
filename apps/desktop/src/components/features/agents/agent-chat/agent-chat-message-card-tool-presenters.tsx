@@ -29,6 +29,7 @@ import {
 } from "./agent-chat-message-card-model";
 import type { ToolMeta } from "./agent-chat-message-card-types";
 import { formatAgentDuration } from "./format-agent-duration";
+import { relativizeDisplayPathsInValue } from "./tool-path-utils";
 
 export const assistantRoleIcon = (role: AgentRole): ReactElement => {
   if (role === "spec") {
@@ -103,14 +104,23 @@ const ToolJsonDetails = ({
   );
 };
 
+const formatToolInput = (
+  input: Record<string, unknown>,
+  workingDirectory?: string | null,
+): string => {
+  return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);
+};
+
 type WorkflowToolMessageProps = {
   meta: ToolMeta;
   messageTimestamp: string;
+  sessionWorkingDirectory?: string | null | undefined;
 };
 
 export const WorkflowToolMessage = ({
   meta,
   messageTimestamp,
+  sessionWorkingDirectory,
 }: WorkflowToolMessageProps): ReactElement => {
   const durationMs = getToolDuration(meta, messageTimestamp);
   const hasInput = hasNonEmptyInput(meta.input);
@@ -173,7 +183,7 @@ export const WorkflowToolMessage = ({
                 Input
               </summary>
               <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-current">
-                {JSON.stringify(meta.input, null, 2)}
+                {formatToolInput(meta.input, sessionWorkingDirectory)}
               </pre>
             </details>
           ) : null}
@@ -204,6 +214,7 @@ type RegularToolMessageProps = {
   messageContent: string;
   messageTimestamp: string;
   timeLabel: string;
+  sessionWorkingDirectory?: string | null | undefined;
 };
 
 export const RegularToolMessage = ({
@@ -211,9 +222,10 @@ export const RegularToolMessage = ({
   messageContent,
   messageTimestamp,
   timeLabel,
+  sessionWorkingDirectory,
 }: RegularToolMessageProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const summary = buildToolSummary(meta, messageContent);
+  const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
   const summaryText =
     summary.length > 0
       ? summary
@@ -281,7 +293,7 @@ export const RegularToolMessage = ({
                   Input
                 </summary>
                 <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-foreground">
-                  {JSON.stringify(meta.input, null, 2)}
+                  {formatToolInput(meta.input, sessionWorkingDirectory)}
                 </pre>
               </details>
             ) : null}
@@ -336,7 +348,7 @@ export const RegularToolMessage = ({
 
       {isFileEditTool(meta.tool) &&
         (() => {
-          const fileEditData = extractFileEditData(meta);
+          const fileEditData = extractFileEditData(meta, sessionWorkingDirectory);
           return fileEditData ? <AgentChatFileEditCard data={fileEditData} /> : null;
         })()}
     </div>

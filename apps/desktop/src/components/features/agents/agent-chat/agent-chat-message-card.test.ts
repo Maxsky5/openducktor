@@ -96,6 +96,36 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("fairnest-97f");
   });
 
+  test("renders file tool summaries relative to the session working directory", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "tool-relative-path",
+          role: "tool",
+          content: "Tool read completed",
+          timestamp: "2026-02-22T10:20:35.000Z",
+          meta: {
+            kind: "tool",
+            partId: "part-relative-path",
+            callId: "call-relative-path",
+            tool: "read",
+            status: "completed",
+            preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
+            input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
+            output: "file contents",
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    expect(html).toContain("apps/web/src/contexts/AuthContext.tsx");
+    expect(html).not.toContain("/repo/apps/web/src/contexts/AuthContext.tsx");
+  });
+
   test("renders workflow tool executing state with blue styling and running label", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

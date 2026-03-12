@@ -439,6 +439,32 @@ describe("agent-chat-message-card-model", () => {
       expect(titleSummary.length).toBeLessThanOrEqual(163);
     });
 
+    test("prefers preview hints over tool titles and output, but keeps errors first", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "bash",
+            preview: "bun run test --filter @openducktor/desktop",
+            title: "Run desktop tests",
+            output: "completed shell execution",
+          }),
+          "",
+        ),
+      ).toBe("bun run test --filter @openducktor/desktop");
+
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "skill",
+            status: "error",
+            preview: "clean-ddd-hexagonal",
+            error: "Skill not found",
+          }),
+          "",
+        ),
+      ).toBe("Skill not found");
+    });
+
     test("builds search and path summaries", () => {
       expect(
         buildToolSummary(
@@ -831,6 +857,27 @@ describe("agent-chat-message-card-model", () => {
       });
     });
 
+    test("normalizes file edit paths relative to the session working directory", () => {
+      const data = extractFileEditData(
+        createToolMeta({
+          input: {
+            filePath: "/repo/apps/web/src/contexts/AuthContext.tsx",
+          },
+          metadata: {
+            diff: "--- a/apps/web/src/contexts/AuthContext.tsx\n+++ b/apps/web/src/contexts/AuthContext.tsx\n@@ -1 +1 @@\n-old\n+new",
+          },
+        }),
+        "/repo",
+      );
+
+      expect(data).toEqual({
+        filePath: "apps/web/src/contexts/AuthContext.tsx",
+        diff: "--- a/apps/web/src/contexts/AuthContext.tsx\n+++ b/apps/web/src/contexts/AuthContext.tsx\n@@ -1 +1 @@\n-old\n+new",
+        additions: 1,
+        deletions: 1,
+      });
+    });
+
     test("extracts apply_patch file path and output fallback path", () => {
       const fromPatch = extractFileEditData(
         createToolMeta({
@@ -868,6 +915,91 @@ describe("agent-chat-message-card-model", () => {
           }),
         ),
       ).toBeNull();
+    });
+  });
+
+  describe("tool summary helpers", () => {
+    test("uses input taskId for read_task summaries", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "odt_read_task",
+            input: { taskId: "task-77" },
+            output: '{"task":{"id":"task-77","title":"Improve chat tool previews"}}',
+          }),
+          "",
+        ),
+      ).toBe("task-77");
+    });
+
+    test("preserves read_task error summaries when taskId is present", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "odt_read_task",
+            status: "error",
+            input: { taskId: "task-77" },
+            error: "Task not found",
+          }),
+          "",
+        ),
+      ).toBe("Task not found");
+    });
+
+    test("normalizes read tool paths relative to the session working directory", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "read",
+            preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
+            input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
+          }),
+          "",
+          "/repo",
+        ),
+      ).toBe("apps/web/src/contexts/AuthContext.tsx");
+    });
+
+    test("normalizes lsp diagnostic paths relative to the session working directory", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "lsp_diagnostics",
+            preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
+            input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
+          }),
+          "",
+          "/repo",
+        ),
+      ).toBe("apps/web/src/contexts/AuthContext.tsx");
+    });
+
+    test("normalizes search-style path summaries for ast_grep_search", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "ast_grep_search",
+            preview: "useState in /repo/apps/web/src",
+            input: { query: "useState", path: "/repo/apps/web/src" },
+          }),
+          "",
+          "/repo",
+        ),
+      ).toBe("useState in apps/web/src");
+    });
+
+    test("normalizes look_at paths relative to the session working directory", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "look_at",
+            preview: "/repo/apps/web/src/contexts/AuthContext.tsx",
+            input: { path: "/repo/apps/web/src/contexts/AuthContext.tsx" },
+          }),
+          "",
+          "/repo",
+        ),
+      ).toBe("apps/web/src/contexts/AuthContext.tsx");
     });
   });
 });

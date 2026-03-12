@@ -172,6 +172,7 @@ export type AgentStreamPart =
       callId: string;
       tool: string;
       status: "pending" | "running" | "completed" | "error";
+      preview?: string;
       title?: string;
       input?: Record<string, unknown>;
       output?: string;

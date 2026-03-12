@@ -222,6 +222,7 @@ const historyPartToChatMessage = (
           callId: part.callId,
           tool: part.tool,
           status: part.status,
+          ...(part.preview ? { preview: part.preview } : {}),
           ...(part.title ? { title: part.title } : {}),
           ...(input ? { input } : {}),
           ...(output ? { output } : {}),
