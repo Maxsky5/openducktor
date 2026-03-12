@@ -174,6 +174,7 @@ describe("stream-part-mapper", () => {
       tool: "openducktor_odt_set_spec",
       status: "error",
       input: { taskId: "task-1" },
+      preview: "task-1",
       error: "Task not found",
       metadata: {
         scope: "mcp",
@@ -211,6 +212,7 @@ describe("stream-part-mapper", () => {
       tool: "openducktor_odt_set_spec",
       status: "error",
       input: { taskId: "task-1" },
+      preview: "task-1",
       error: "set_spec is only allowed from open/spec_ready/ready_for_dev (current: in_progress)",
       metadata: {
         structuredContent: {

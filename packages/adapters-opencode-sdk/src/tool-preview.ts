@@ -13,12 +13,23 @@ const SESSION_TOOL_NAMES = new Set([
   "session_search",
 ]);
 const LSP_TOOL_NAMES = new Set([
+  "lsp_diagnostic",
   "lsp_diagnostics",
   "lsp_find_references",
   "lsp_goto_definition",
   "lsp_prepare_rename",
   "lsp_symbols",
 ]);
+
+const normalizeToolName = (value: string): string => {
+  const trimmed = value.trim().toLowerCase();
+  const withoutFunctionsNamespace = trimmed.startsWith("functions.")
+    ? trimmed.slice("functions.".length)
+    : trimmed;
+  return withoutFunctionsNamespace.startsWith("openducktor_odt_")
+    ? withoutFunctionsNamespace.slice("openducktor_".length)
+    : withoutFunctionsNamespace;
+};
 
 const compactText = (value: string, maxLength = 160): string => {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -278,7 +289,7 @@ export const deriveToolPreview = (input: {
   rawOutput: unknown;
   metadata?: Record<string, unknown>;
 }): string | undefined => {
-  const tool = input.tool.trim().toLowerCase();
+  const tool = normalizeToolName(input.tool);
   const rawInput = asUnknownRecord(input.rawInput);
 
   const preview =
@@ -292,7 +303,7 @@ export const deriveToolPreview = (input: {
     (TODO_TOOL_NAMES.has(tool) || tool.endsWith("_todowrite") || tool.endsWith("_todoread")
       ? summarizeTodoTool(rawInput, input.rawOutput)
       : null) ??
-    (tool === "question" || tool.endsWith("_question") || tool.includes("question")
+    (tool === "question" || tool.endsWith("_question")
       ? summarizeQuestionTool(rawInput, input.metadata, input.rawOutput)
       : null) ??
     (TASK_TOOL_NAMES.has(tool)
@@ -307,9 +318,6 @@ export const deriveToolPreview = (input: {
     (tool === "grep_app_searchgithub" ? summarizeGithubSearchTool(rawInput) : null) ??
     (LSP_TOOL_NAMES.has(tool) ? summarizeLspTool(rawInput) : null) ??
     (SESSION_TOOL_NAMES.has(tool) ? summarizeSessionTool(rawInput) : null) ??
-    (tool === "look_at" || tool === "distill" || tool === "prune" || tool === "background_output"
-      ? summarizeGenericInput(rawInput)
-      : null) ??
     summarizeGenericInput(rawInput);
 
   if (!preview) {

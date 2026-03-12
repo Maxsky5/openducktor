@@ -3,7 +3,9 @@ const DISPLAY_PATH_KEYS = new Set([
   "filePath",
   "file_path",
   "path",
+  "paths",
   "file",
+  "files",
   "filename",
   "cwd",
   "directory",
@@ -74,7 +76,7 @@ export const relativizeDisplayPathsInValue = (
       : value;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => relativizeDisplayPathsInValue(entry, workingDirectory));
+    return value.map((entry) => relativizeDisplayPathsInValue(entry, workingDirectory, key));
   }
   if (!value || typeof value !== "object") {
     return value;
