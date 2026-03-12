@@ -57,6 +57,59 @@ fn merge_branch_accepts_canonical_remote_target_branch() {
 }
 
 #[test]
+fn merge_branch_accepts_non_origin_remote_target_branch() {
+    if !git_available() {
+        return;
+    }
+
+    let repo = setup_repo("merge-upstream-target");
+    let git = GitCliPort::new();
+
+    run_git_ok(&repo.path, &["branch", "release"]);
+    run_git_ok(&repo.path, &["branch", "feature/merge-upstream-target"]);
+    run_git_ok(
+        &repo.path,
+        &[
+            "update-ref",
+            "refs/remotes/upstream/release",
+            &run_git_ok(&repo.path, &["rev-parse", "main"]),
+        ],
+    );
+
+    git.switch_branch(&repo.path, "feature/merge-upstream-target", false)
+        .expect("feature branch should be selected");
+    fs::write(repo.path.join("feature.txt"), "feature\n").expect("feature file should write");
+    run_git_ok(&repo.path, &["add", "feature.txt"]);
+    run_git_ok(&repo.path, &["commit", "-m", "feature commit"]);
+
+    let result = git
+        .merge_branch(
+            &repo.path,
+            GitMergeBranchRequest {
+                source_branch: "feature/merge-upstream-target".to_string(),
+                target_branch: "upstream/release".to_string(),
+                source_working_directory: None,
+                method: GitMergeMethod::MergeCommit,
+            },
+        )
+        .expect("merge with non-origin remote target should succeed");
+
+    match result {
+        GitMergeBranchResult::Merged { .. } | GitMergeBranchResult::UpToDate { .. } => {}
+        other => panic!("expected merged/up-to-date result, got {other:?}"),
+    }
+
+    let current_branch = git
+        .get_current_branch(&repo.path)
+        .expect("current branch should resolve after merge");
+    assert_eq!(current_branch.name.as_deref(), Some("release"));
+
+    let feature_contents = fs::read_to_string(repo.path.join("feature.txt"))
+        .expect("merged feature file should exist");
+    assert_eq!(feature_contents, "feature\n");
+}
+
+#[test]
 fn rebase_merge_succeeds_when_source_branch_is_checked_out_in_linked_worktree() {
     if !git_available() {
         return;

@@ -46,7 +46,7 @@ pub(super) fn checkout_branch_from_target_ref(target_branch: &str) -> String {
             return branch.to_string();
         }
     }
-    if let Some(branch) = trimmed.strip_prefix("origin/") {
+    if let Some((_, branch)) = trimmed.split_once('/') {
         if !branch.is_empty() {
             return branch.to_string();
         }
@@ -87,6 +87,7 @@ mod tests {
     #[test]
     fn checkout_branch_from_target_ref_strips_remote_tracking_prefixes() {
         assert_eq!(checkout_branch_from_target_ref("origin/main"), "main");
+        assert_eq!(checkout_branch_from_target_ref("upstream/release"), "release");
         assert_eq!(
             checkout_branch_from_target_ref("refs/remotes/upstream/release"),
             "release"

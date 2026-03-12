@@ -74,6 +74,16 @@ pub(super) struct ResolvedPullRequest {
 }
 
 impl GithubGhCliProvider {
+    fn build_gh_args(host: Option<&str>, args: &[&str]) -> Vec<String> {
+        let mut full_args = Vec::new();
+        if let Some(host) = host.filter(|value| !value.trim().is_empty()) {
+            full_args.push("--hostname".to_string());
+            full_args.push(host.trim().to_string());
+        }
+        full_args.extend(args.iter().map(|value| value.to_string()));
+        full_args
+    }
+
     fn git_remote_names(repo_path: &Path) -> Result<Vec<String>> {
         let (ok, stdout, stderr) = run_command_allow_failure_with_env(
             "git",
@@ -150,12 +160,7 @@ impl GithubGhCliProvider {
     }
 
     fn run_gh(repo_path: &Path, host: Option<&str>, args: &[&str]) -> Result<String> {
-        let mut full_args = Vec::new();
-        if let Some(host) = host.filter(|value| !value.trim().is_empty()) {
-            full_args.push("--hostname".to_string());
-            full_args.push(host.trim().to_string());
-        }
-        full_args.extend(args.iter().map(|value| value.to_string()));
+        let full_args = Self::build_gh_args(host, args);
         let arg_refs = full_args.iter().map(String::as_str).collect::<Vec<_>>();
         run_command_with_env(
             "gh",
@@ -170,12 +175,7 @@ impl GithubGhCliProvider {
         host: Option<&str>,
         args: &[&str],
     ) -> Result<(bool, String, String)> {
-        let mut full_args = Vec::new();
-        if let Some(host) = host.filter(|value| !value.trim().is_empty()) {
-            full_args.push("--hostname".to_string());
-            full_args.push(host.trim().to_string());
-        }
-        full_args.extend(args.iter().map(|value| value.to_string()));
+        let full_args = Self::build_gh_args(host, args);
         let arg_refs = full_args.iter().map(String::as_str).collect::<Vec<_>>();
         run_command_allow_failure_with_env(
             "gh",
@@ -204,6 +204,8 @@ impl GithubGhCliProvider {
         } else {
             return None;
         };
+
+        let host = host.rsplit_once('@').map_or(host, |(_, actual_host)| actual_host);
 
         let mut segments = path.split('/');
         let owner = segments.next()?.trim();
@@ -428,4 +430,39 @@ impl GitHostingProvider for GithubGhCliProvider {
 
 pub(super) fn github_provider() -> GithubGhCliProvider {
     GithubGhCliProvider
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GithubGhCliProvider;
+    use host_domain::GitProviderRepository;
+
+    #[test]
+    fn parse_remote_url_strips_https_userinfo() {
+        assert_eq!(
+            GithubGhCliProvider::parse_remote_url("https://token@github.com/owner/repo.git"),
+            Some(GitProviderRepository {
+                host: "github.com".to_string(),
+                owner: "owner".to_string(),
+                name: "repo".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn build_gh_args_adds_hostname_only_when_present() {
+        assert_eq!(
+            GithubGhCliProvider::build_gh_args(Some("github.mycorp.com"), &["api", "repos/x/y"]),
+            vec![
+                "--hostname".to_string(),
+                "github.mycorp.com".to_string(),
+                "api".to_string(),
+                "repos/x/y".to_string(),
+            ]
+        );
+        assert_eq!(
+            GithubGhCliProvider::build_gh_args(None, &["auth", "status"]),
+            vec!["auth".to_string(), "status".to_string()]
+        );
+    }
 }

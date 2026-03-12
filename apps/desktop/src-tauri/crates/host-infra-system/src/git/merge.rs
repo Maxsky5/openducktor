@@ -83,9 +83,9 @@ impl GitCliPort {
             return self.merge_conflict_or_error(repo_path, "git merge --squash", output);
         }
 
-        let (has_staged_changes, _, _) =
+        let (has_no_staged_changes, _, _) =
             self.run_git_allow_failure(repo_path, &["diff", "--cached", "--quiet"])?;
-        if has_staged_changes {
+        if has_no_staged_changes {
             return Ok(GitMergeBranchResult::UpToDate { output });
         }
 
