@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import { type PropsWithChildren, type ReactElement, useCallback, useMemo } from "react";
 import type {
   AgentStateContextValue,
@@ -8,7 +9,6 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import type { RuntimeKind } from "@openducktor/contracts";
 import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
 import {
   AgentStateContext,

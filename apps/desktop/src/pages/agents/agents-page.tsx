@@ -341,7 +341,13 @@ export function AgentsPage(): ReactElement {
       pullRequest: selection.viewSelectedTask?.pullRequest ?? null,
       ...gitActions,
     }),
-    [diffData, gitActions, gitPanelContextMode, resolvedGitPanelBranch, selection.viewSelectedTask?.pullRequest],
+    [
+      diffData,
+      gitActions,
+      gitPanelContextMode,
+      resolvedGitPanelBranch,
+      selection.viewSelectedTask?.pullRequest,
+    ],
   );
   const rightPanelModel = useMemo(
     () =>

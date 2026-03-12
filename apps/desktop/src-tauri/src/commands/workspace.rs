@@ -320,10 +320,10 @@ impl<R: tauri::Runtime> HookTrustConfirmationPort for TauriHookTrustConfirmation
 #[cfg(test)]
 mod tests {
     use super::{
-        format_hook_list, sanitize_hook_preview, workspace_prepare_trusted_hooks_challenge,
-        workspace_save_repo_settings, workspace_save_settings_snapshot,
-        workspace_update_global_git_config,
-        workspace_set_trusted_hooks, HookSet,
+        format_hook_list, sanitize_hook_preview, workspace_detect_github_repository,
+        workspace_prepare_trusted_hooks_challenge, workspace_save_repo_settings,
+        workspace_save_settings_snapshot, workspace_set_trusted_hooks,
+        workspace_update_global_git_config, HookSet,
     };
     use crate::{AppState, RepoSettingsPayload, SettingsSnapshotPayload};
     use host_application::{AppService, PreparedHookTrustChallenge};
@@ -336,6 +336,7 @@ mod tests {
     use std::{
         fs,
         path::PathBuf,
+        process::Command,
         sync::{Arc, Mutex},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -381,7 +382,12 @@ mod tests {
     ) -> WorkspaceCommandFixture {
         let root = unique_test_dir(prefix);
         let repo = root.join("repo");
-        fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
+        fs::create_dir_all(&repo).expect("git workspace should exist");
+        Command::new("git")
+            .arg("init")
+            .arg(&repo)
+            .status()
+            .expect("git init should succeed");
         let repo_path = repo.to_string_lossy().to_string();
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));

@@ -3,7 +3,9 @@ use crate::{
     PullRequestContentPayload,
 };
 use host_application::{BuildResponseAction, CleanupMode};
-use host_domain::{AgentRuntimeKind, GitMergeMethod, PullRequestRecord, RunSummary, TaskApprovalContext, TaskCard};
+use host_domain::{
+    AgentRuntimeKind, GitMergeMethod, PullRequestRecord, RunSummary, TaskApprovalContext, TaskCard,
+};
 use tauri::{AppHandle, State};
 
 #[tauri::command]
@@ -111,7 +113,11 @@ pub async fn task_approval_context_get(
     repo_path: String,
     task_id: String,
 ) -> Result<TaskApprovalContext, String> {
-    as_error(state.service.task_approval_context_get(&repo_path, &task_id))
+    as_error(
+        state
+            .service
+            .task_approval_context_get(&repo_path, &task_id),
+    )
 }
 
 #[tauri::command]
@@ -135,11 +141,12 @@ pub async fn task_pull_request_upsert(
     task_id: String,
     input: PullRequestContentPayload,
 ) -> Result<PullRequestRecord, String> {
-    as_error(
-        state
-            .service
-            .task_pull_request_upsert(&repo_path, &task_id, &input.title, &input.body),
-    )
+    as_error(state.service.task_pull_request_upsert(
+        &repo_path,
+        &task_id,
+        &input.title,
+        &input.body,
+    ))
 }
 
 #[tauri::command]

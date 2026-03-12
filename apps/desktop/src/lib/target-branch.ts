@@ -31,9 +31,7 @@ export const normalizeTargetBranch = (
   };
 };
 
-export const canonicalTargetBranch = (
-  value: GitTargetBranch | null | undefined,
-): string => {
+export const canonicalTargetBranch = (value: GitTargetBranch | null | undefined): string => {
   const normalized = normalizeTargetBranch(value);
   if (normalized.branch === UPSTREAM_TARGET_BRANCH) {
     return normalized.branch;
@@ -41,13 +39,10 @@ export const canonicalTargetBranch = (
   return normalized.remote ? `${normalized.remote}/${normalized.branch}` : normalized.branch;
 };
 
-export const checkoutTargetBranch = (
-  value: GitTargetBranch | null | undefined,
-): string => normalizeTargetBranch(value).branch;
+export const checkoutTargetBranch = (value: GitTargetBranch | null | undefined): string =>
+  normalizeTargetBranch(value).branch;
 
-export const targetBranchRemote = (
-  value: GitTargetBranch | null | undefined,
-): string | null => {
+export const targetBranchRemote = (value: GitTargetBranch | null | undefined): string | null => {
   const normalized = normalizeTargetBranch(value);
   if (normalized.branch === UPSTREAM_TARGET_BRANCH) {
     return null;

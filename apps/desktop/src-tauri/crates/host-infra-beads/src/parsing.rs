@@ -63,7 +63,9 @@ impl BeadsTaskStore {
     }
 }
 
-fn parse_pull_request_metadata(namespace: Option<&serde_json::Map<String, serde_json::Value>>) -> Option<PullRequestRecord> {
+fn parse_pull_request_metadata(
+    namespace: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Option<PullRequestRecord> {
     let root_value = namespace.and_then(|ns| ns.get("pullRequest"));
     let legacy_value = namespace
         .and_then(|ns| ns.get("delivery"))

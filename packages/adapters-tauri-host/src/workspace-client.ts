@@ -1,10 +1,10 @@
 import {
+  type GitProviderRepository,
+  type GitTargetBranch,
   type GlobalGitConfig,
   gitProviderRepositorySchema,
-  type GitTargetBranch,
   type RepoConfig,
   type RepoGitConfig,
-  type GitProviderRepository,
   type RepoPromptOverrides,
   type RuntimeKind,
   repoConfigSchema,

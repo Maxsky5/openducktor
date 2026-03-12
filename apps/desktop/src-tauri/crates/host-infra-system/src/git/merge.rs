@@ -64,11 +64,7 @@ impl GitCliPort {
         let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &args)?;
         let output = combine_output(stdout, stderr);
         if !ok {
-            return self.merge_conflict_or_error(
-                repo_path,
-                "git merge --no-ff",
-                output,
-            );
+            return self.merge_conflict_or_error(repo_path, "git merge --no-ff", output);
         }
 
         self.finish_merge_result(repo_path, before_head, output)
@@ -84,11 +80,7 @@ impl GitCliPort {
         let (ok, stdout, stderr) = self.run_git_allow_failure(repo_path, &args)?;
         let output = combine_output(stdout, stderr);
         if !ok {
-            return self.merge_conflict_or_error(
-                repo_path,
-                "git merge --squash",
-                output,
-            );
+            return self.merge_conflict_or_error(repo_path, "git merge --squash", output);
         }
 
         let (has_staged_changes, _, _) =
@@ -102,7 +94,10 @@ impl GitCliPort {
             self.run_git_allow_failure(repo_path, &["commit", "-m", commit_message.as_str()])?;
         let commit_output = combine_output(commit_stdout, commit_stderr);
         if !commit_ok {
-            return Err(anyhow!("git commit failed after squash merge: {}", commit_output));
+            return Err(anyhow!(
+                "git commit failed after squash merge: {}",
+                commit_output
+            ));
         }
 
         let merged_output = if output.is_empty() {
@@ -124,9 +119,7 @@ impl GitCliPort {
         target_branch: &str,
         before_head: &str,
     ) -> Result<GitMergeBranchResult> {
-        let rebase_repo_path = source_working_directory
-            .map(Path::new)
-            .unwrap_or(repo_path);
+        let rebase_repo_path = source_working_directory.map(Path::new).unwrap_or(repo_path);
         let rebase_args = ["rebase", target_branch];
         let (rebase_ok, rebase_stdout, rebase_stderr) =
             self.run_git_allow_failure(rebase_repo_path, &rebase_args)?;
@@ -139,7 +132,10 @@ impl GitCliPort {
         let (ff_ok, ff_stdout, ff_stderr) = self.run_git_allow_failure(repo_path, &ff_args)?;
         let ff_output = combine_output(ff_stdout, ff_stderr);
         if !ff_ok {
-            return Err(anyhow!("git merge --ff-only failed after rebase: {}", ff_output));
+            return Err(anyhow!(
+                "git merge --ff-only failed after rebase: {}",
+                ff_output
+            ));
         }
 
         let output = if rebase_output.is_empty() {

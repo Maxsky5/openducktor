@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use host_domain::{
-    AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument, TaskCard,
-    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    AgentSessionDocument, CreateTaskInput, DirectMergeRecord, PullRequestRecord, QaReportDocument,
+    QaVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use std::path::Path;
 
@@ -136,11 +136,35 @@ impl TaskStore for CommandTaskStore {
         Ok(())
     }
 
+    fn set_pull_request(
+        &self,
+        _repo_path: &Path,
+        _task_id: &str,
+        _pull_request: Option<PullRequestRecord>,
+    ) -> anyhow::Result<()> {
+        Err(anyhow!(
+            "unexpected task store set_pull_request call in git command tests"
+        ))
+    }
+
+    fn set_direct_merge_record(
+        &self,
+        _repo_path: &Path,
+        _task_id: &str,
+        _direct_merge: Option<DirectMergeRecord>,
+    ) -> anyhow::Result<()> {
+        Err(anyhow!(
+            "unexpected task store set_direct_merge_record call in git command tests"
+        ))
+    }
+
     fn get_task_metadata(&self, _repo_path: &Path, _task_id: &str) -> anyhow::Result<TaskMetadata> {
         Ok(TaskMetadata {
             spec: empty_spec_document(),
             plan: empty_spec_document(),
             qa_report: None,
+            pull_request: None,
+            direct_merge: None,
             agent_sessions: Vec::new(),
         })
     }

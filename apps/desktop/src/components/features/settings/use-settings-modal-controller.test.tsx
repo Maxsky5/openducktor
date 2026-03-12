@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
@@ -7,28 +7,30 @@ import {
 
 enableReactActEnvironment();
 
-const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => ({
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  repos: {
-    "/repo": {
-      defaultRuntimeKind: "opencode",
-      worktreeBasePath: "/tmp/worktrees",
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      trustedHooks: false,
-      hooks: { preStart: [], postComplete: [] },
-      worktreeFileCopies: [],
-      promptOverrides: {},
-      agentDefaults: {},
+const loadSettingsSnapshot = mock(
+  async (): Promise<SettingsSnapshot> => ({
+    git: {
+      defaultMergeMethod: "merge_commit",
     },
-  },
-  globalPromptOverrides: {},
-}));
+    repos: {
+      "/repo": {
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: "/tmp/worktrees",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        trustedHooks: false,
+        hooks: { preStart: [], postComplete: [] },
+        worktreeFileCopies: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      },
+    },
+    globalPromptOverrides: {},
+  }),
+);
 
 let refreshChecks = mock(async () => {});
 
@@ -72,41 +74,12 @@ mock.module("./use-settings-modal-catalog-state", () => ({
   }),
 }));
 
-mock.module("./use-settings-modal-prompt-validation", () => ({
-  useSettingsModalPromptValidation: () => ({
-    promptValidationState: {
-      totalErrorCount: 0,
-      globalErrorCount: 0,
-      repoErrorCountByPath: {},
-    },
-    hasPromptValidationErrors: false,
-    selectedRepoPromptValidationErrors: {},
-    selectedRepoPromptValidationErrorCount: 0,
-    globalPromptRoleTabErrorCounts: {
-      shared: 0,
-      spec: 0,
-      planner: 0,
-      build: 0,
-      qa: 0,
-    },
-    selectedRepoPromptRoleTabErrorCounts: {
-      shared: 0,
-      spec: 0,
-      planner: 0,
-      build: 0,
-      qa: 0,
-    },
-    settingsSectionErrorCountById: {
-      general: 0,
-      git: 0,
-      repositories: 0,
-      prompts: 0,
-    },
-  }),
-}));
-
 mock.module("./use-settings-modal-draft-actions", () => ({
-  useSettingsModalDraftActions: ({ setSnapshotDraft }: { setSnapshotDraft: (value: unknown) => void }) => ({
+  useSettingsModalDraftActions: ({
+    setSnapshotDraft,
+  }: {
+    setSnapshotDraft: (value: unknown) => void;
+  }) => ({
     updateSelectedRepoConfig: () => setSnapshotDraft,
     updateGlobalGitConfig: () => setSnapshotDraft,
     updateGlobalPromptOverrides: () => setSnapshotDraft,
@@ -124,6 +97,10 @@ const createHookHarness = (open: boolean) =>
   });
 
 describe("useSettingsModalController", () => {
+  afterAll(() => {
+    mock.restore();
+  });
+
   test("does not refresh diagnostics when the modal opens", async () => {
     refreshChecks = mock(async () => {});
     loadSettingsSnapshot.mockClear();

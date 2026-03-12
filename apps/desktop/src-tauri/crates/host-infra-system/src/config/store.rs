@@ -73,10 +73,7 @@ impl AppConfigStore {
         )
     }
 
-    pub fn update_global_git_config(
-        &self,
-        git: super::types::GlobalGitConfig,
-    ) -> Result<()> {
+    pub fn update_global_git_config(&self, git: super::types::GlobalGitConfig) -> Result<()> {
         self.update_config(|config| {
             config.git = git;
             Ok(())

@@ -134,7 +134,11 @@ impl AppService {
         let repo_path_ref = Path::new(prerequisites.repo_path.as_str());
         let start_point = resolve_build_start_point(
             repo_path_ref,
-            prerequisites.repo_config.default_target_branch.canonical().as_str(),
+            prerequisites
+                .repo_config
+                .default_target_branch
+                .canonical()
+                .as_str(),
         )?;
         host_infra_system::run_command(
             "git",

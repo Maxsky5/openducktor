@@ -6,10 +6,10 @@ import type {
   AgentRuntimeConnection,
 } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
+import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { annotateQuestionToolMessage } from "../support/question-messages";
@@ -282,7 +282,9 @@ export const createAgentSessionActions = ({
       loadRepoPromptOverrides(activeRepo),
     ]);
     const modelSelection =
-      selectedModel ?? parentSession.selectedModel ?? (await loadRepoDefaultModel(activeRepo, parentSession.role));
+      selectedModel ??
+      parentSession.selectedModel ??
+      (await loadRepoDefaultModel(activeRepo, parentSession.role));
     const systemPrompt = buildAgentSystemPrompt({
       role: parentSession.role,
       scenario: parentSession.scenario,
@@ -303,7 +305,9 @@ export const createAgentSessionActions = ({
 
     const summary = await adapter.forkSession({
       repoPath: activeRepo,
-      runtimeKind: (parentSession.runtimeKind ?? modelSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND) as string,
+      runtimeKind: (parentSession.runtimeKind ??
+        modelSelection?.runtimeKind ??
+        DEFAULT_RUNTIME_KIND) as string,
       runtimeConnection: {
         endpoint: parentSession.runtimeEndpoint,
         workingDirectory: parentSession.workingDirectory,
@@ -322,8 +326,7 @@ export const createAgentSessionActions = ({
       sessionId: summary.sessionId,
       externalSessionId: summary.externalSessionId,
       taskId: parentSession.taskId,
-      runtimeKind:
-        parentSession.runtimeKind ?? modelSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      runtimeKind: parentSession.runtimeKind ?? modelSelection?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
       role: parentSession.role,
       scenario: parentSession.scenario,
       status: "idle",

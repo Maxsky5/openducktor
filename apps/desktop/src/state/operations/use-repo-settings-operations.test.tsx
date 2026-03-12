@@ -94,7 +94,11 @@ describe("use-repo-settings-operations", () => {
   test("throws when loading without an active workspace", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const harness = createHookHarness({ activeRepo: null, applyWorkspaceRecords, applyWorkspaceRecord });
+    const harness = createHookHarness({
+      activeRepo: null,
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
 
     try {
       await harness.mount();
@@ -109,7 +113,11 @@ describe("use-repo-settings-operations", () => {
   test("throws when saving without an active workspace", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const harness = createHookHarness({ activeRepo: null, applyWorkspaceRecords, applyWorkspaceRecord });
+    const harness = createHookHarness({
+      activeRepo: null,
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
 
     try {
       await harness.mount();

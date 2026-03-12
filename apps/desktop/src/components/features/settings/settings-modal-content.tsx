@@ -118,12 +118,12 @@ export function SettingsModalContent({
 
   if (section === "git") {
     return (
-        <SettingsGitSection
-          git={snapshotDraft.git}
-          runtimeCheck={controller.runtimeCheck}
-          disabled={isInteractionDisabled}
-          onUpdateGit={updateGlobalGitConfig}
-        />
+      <SettingsGitSection
+        git={snapshotDraft.git}
+        runtimeCheck={controller.runtimeCheck}
+        disabled={isInteractionDisabled}
+        onUpdateGit={updateGlobalGitConfig}
+      />
     );
   }
 
@@ -163,7 +163,7 @@ export function SettingsModalContent({
         ) : null}
 
         {repositorySection === "git" ? (
-            <RepositoryGitSection
+          <RepositoryGitSection
             selectedRepoPath={selectedRepoPath}
             selectedRepoConfig={selectedRepoConfig}
             runtimeCheck={controller.runtimeCheck}

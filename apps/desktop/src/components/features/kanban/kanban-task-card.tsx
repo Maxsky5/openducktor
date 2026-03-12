@@ -12,8 +12,8 @@ import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
 } from "@/components/features/kanban/kanban-task-workflow";
-import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
+import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { cn } from "@/lib/utils";

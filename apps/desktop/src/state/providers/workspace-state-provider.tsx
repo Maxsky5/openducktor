@@ -45,12 +45,11 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     detectGithubRepository,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
-  } =
-    useRepoSettingsOperations({
-      activeRepo,
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
-    });
+  } = useRepoSettingsOperations({
+    activeRepo,
+    applyWorkspaceRecords,
+    applyWorkspaceRecord,
+  });
 
   const activeWorkspace = useMemo(
     () => findActiveWorkspace(workspaces, activeRepo),

@@ -449,7 +449,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   test("kickoff config load failure still reports kickoff error after session start", async () => {
-    workspaceGetRepoConfigMock.mockImplementationOnce(async () => {
+    workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => {
       throw new Error("config unavailable");
     });
 
@@ -477,14 +477,16 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   test("malformed kickoff override still reports kickoff error after session start", async () => {
-    workspaceGetRepoConfigMock.mockImplementationOnce(async () => ({
-      promptOverrides: {
-        "kickoff.build_implementation_start": {
-          template: "Kickoff {{unsupported.token}}",
-          baseVersion: 1,
+    workspaceGetRepoConfigMock.mockImplementation(async () => {
+      return {
+        promptOverrides: {
+          "kickoff.build_implementation_start": {
+            template: "Kickoff {{unsupported.token}}",
+            baseVersion: 1,
+          },
         },
-      },
-    }));
+      };
+    });
 
     const renderer = await renderPage();
 

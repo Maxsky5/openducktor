@@ -10,10 +10,7 @@ const branchSourceLabel = (branch: GitBranch): string => {
   return remoteName || "remote";
 };
 
-const branchOptionValue = (
-  branch: GitBranch,
-  valueFormat: "name" | "full_ref",
-): string => {
+const branchOptionValue = (branch: GitBranch, valueFormat: "name" | "full_ref"): string => {
   if (valueFormat === "name") {
     return branch.name;
   }

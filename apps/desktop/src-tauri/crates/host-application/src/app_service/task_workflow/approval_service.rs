@@ -2,9 +2,9 @@ use crate::app_service::git_provider::{github_provider, GitHostingProvider};
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{
-    now_rfc3339, DirectMergeRecord, GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod,
-    GitDiffScope, GitProviderAvailability, GitProviderRepository, GitTargetBranch, PullRequestRecord,
-    TaskApprovalContext, TaskCard, TaskStatus,
+    now_rfc3339, DirectMergeRecord, GitDiffScope, GitMergeBranchRequest, GitMergeBranchResult,
+    GitMergeMethod, GitProviderAvailability, GitProviderRepository, GitTargetBranch,
+    PullRequestRecord, TaskApprovalContext, TaskCard, TaskStatus,
 };
 use std::path::Path;
 
@@ -21,7 +21,9 @@ impl AppService {
         let working_directory = self
             .qa_review_target_get(context.repo.repo_path.as_str(), task_id)?
             .working_directory;
-        let current_branch = self.git_port.get_current_branch(Path::new(&working_directory))?;
+        let current_branch = self
+            .git_port
+            .get_current_branch(Path::new(&working_directory))?;
         if current_branch.detached {
             return Err(anyhow!(
                 "Human approval requires a builder branch, but the latest builder workspace is detached."
@@ -50,7 +52,10 @@ impl AppService {
             has_uncommitted_changes: worktree_status.file_status_counts.total > 0,
             uncommitted_file_count: worktree_status.file_status_counts.total,
             pull_request: metadata.pull_request,
-            providers: vec![github_provider_availability(Path::new(&context.repo.repo_path), &repo_config)],
+            providers: vec![github_provider_availability(
+                Path::new(&context.repo.repo_path),
+                &repo_config,
+            )],
         })
     }
 
@@ -90,11 +95,8 @@ impl AppService {
             approval.working_directory.as_str(),
             approval.source_branch.as_str(),
         )?;
-        self.task_store.set_pull_request(
-            Path::new(&repo_path),
-            task_id,
-            None,
-        )?;
+        self.task_store
+            .set_pull_request(Path::new(&repo_path), task_id, None)?;
         self.task_store.set_direct_merge_record(
             Path::new(&repo_path),
             task_id,
@@ -132,16 +134,20 @@ impl AppService {
             ));
         }
 
-        let github_config = repo_config.git.providers.get("github").cloned().unwrap_or_default();
+        let github_config = repo_config
+            .git
+            .providers
+            .get("github")
+            .cloned()
+            .unwrap_or_default();
         if !github_config.enabled {
             return Err(anyhow!(
                 "GitHub pull request support is not enabled for this repository."
             ));
         }
-        let repository =
-            github_repository_from_config(&repo_config).ok_or_else(|| {
-                anyhow!("GitHub pull request support requires repository coordinates.")
-            })?;
+        let repository = github_repository_from_config(&repo_config).ok_or_else(|| {
+            anyhow!("GitHub pull request support requires repository coordinates.")
+        })?;
         let remote_name = provider.resolve_remote_name(Path::new(&repo_path), &repository)?;
         let auth_status = provider.auth_status(repository.host.as_str())?;
         if !auth_status.authenticated {
@@ -191,7 +197,8 @@ impl AppService {
             )?,
         };
 
-        self.task_store.set_direct_merge_record(Path::new(&repo_path), task_id, None)?;
+        self.task_store
+            .set_direct_merge_record(Path::new(&repo_path), task_id, None)?;
         self.task_store.set_pull_request(
             Path::new(&repo_path),
             task_id,
@@ -218,16 +225,16 @@ impl AppService {
         if !provider.is_available() {
             return Ok(false);
         }
-        let github_repository = github_repository_from_config(
-            &self.workspace_get_repo_config(repo_path.as_str())?,
-        );
+        let github_repository =
+            github_repository_from_config(&self.workspace_get_repo_config(repo_path.as_str())?);
 
         for task in tasks {
             if is_terminal_task_status(&task.status) {
                 continue;
             }
-            let Some(pull_request) =
-                self.task_metadata_get(repo_path.as_str(), task.id.as_str())?.pull_request
+            let Some(pull_request) = self
+                .task_metadata_get(repo_path.as_str(), task.id.as_str())?
+                .pull_request
             else {
                 continue;
             };
@@ -279,9 +286,15 @@ impl AppService {
 
     pub fn auto_detect_git_provider_for_repo(&self, repo_path: &str) -> Result<()> {
         let repo_path = self.resolve_initialized_repo_path(repo_path)?;
-        let mut repo_config = self.workspace_get_repo_config_optional(repo_path.as_str())?
+        let mut repo_config = self
+            .workspace_get_repo_config_optional(repo_path.as_str())?
             .unwrap_or_default();
-        let existing = repo_config.git.providers.get("github").cloned().unwrap_or_default();
+        let existing = repo_config
+            .git
+            .providers
+            .get("github")
+            .cloned()
+            .unwrap_or_default();
         if existing.repository.is_some() {
             return Ok(());
         }
@@ -319,12 +332,13 @@ impl AppService {
         working_directory: &str,
         source_branch: &str,
     ) -> Result<()> {
-        let normalized_repo = std::fs::canonicalize(repo_path)
-            .unwrap_or_else(|_| Path::new(repo_path).to_path_buf());
+        let normalized_repo =
+            std::fs::canonicalize(repo_path).unwrap_or_else(|_| Path::new(repo_path).to_path_buf());
         let normalized_working_directory = std::fs::canonicalize(working_directory)
             .unwrap_or_else(|_| Path::new(working_directory).to_path_buf());
 
-        if normalized_repo != normalized_working_directory && Path::new(working_directory).exists() {
+        if normalized_repo != normalized_working_directory && Path::new(working_directory).exists()
+        {
             let _ = self.git_remove_worktree(repo_path, working_directory, false)?;
         }
 
@@ -387,7 +401,12 @@ fn github_provider_availability(
     repo_config: &host_infra_system::RepoConfig,
 ) -> GitProviderAvailability {
     let provider = github_provider();
-    let config = repo_config.git.providers.get("github").cloned().unwrap_or_default();
+    let config = repo_config
+        .git
+        .providers
+        .get("github")
+        .cloned()
+        .unwrap_or_default();
     if !config.enabled {
         return GitProviderAvailability {
             provider_id: "github".to_string(),
@@ -436,7 +455,8 @@ fn github_provider_availability(
             })),
         };
     }
-    if let Err(error) = provider.resolve_remote_name(repo_path, &to_provider_repository(repository)) {
+    if let Err(error) = provider.resolve_remote_name(repo_path, &to_provider_repository(repository))
+    {
         return GitProviderAvailability {
             provider_id: "github".to_string(),
             enabled: true,
@@ -535,8 +555,14 @@ fn latest_builder_cleanup_target(
         .into_iter()
         .filter(|session| session.role == "build")
         .max_by(|left, right| {
-            let left_key = left.updated_at.as_deref().unwrap_or(left.started_at.as_str());
-            let right_key = right.updated_at.as_deref().unwrap_or(right.started_at.as_str());
+            let left_key = left
+                .updated_at
+                .as_deref()
+                .unwrap_or(left.started_at.as_str());
+            let right_key = right
+                .updated_at
+                .as_deref()
+                .unwrap_or(right.started_at.as_str());
             left_key
                 .cmp(right_key)
                 .then_with(|| left.started_at.cmp(&right.started_at))
@@ -552,19 +578,20 @@ fn latest_builder_cleanup_target(
         return Ok(None);
     }
 
-    let source_branch = if let Some(branch) = preferred_source_branch.filter(|value| !value.trim().is_empty()) {
-        branch.trim().to_string()
-    } else if Path::new(working_directory.as_str()).exists() {
-        let current_branch = service
-            .git_port
-            .get_current_branch(Path::new(working_directory.as_str()))?;
-        match current_branch.name {
-            Some(name) if !name.trim().is_empty() => name,
-            _ => return Ok(None),
-        }
-    } else {
-        return Ok(None);
-    };
+    let source_branch =
+        if let Some(branch) = preferred_source_branch.filter(|value| !value.trim().is_empty()) {
+            branch.trim().to_string()
+        } else if Path::new(working_directory.as_str()).exists() {
+            let current_branch = service
+                .git_port
+                .get_current_branch(Path::new(working_directory.as_str()))?;
+            match current_branch.name {
+                Some(name) if !name.trim().is_empty() => name,
+                _ => return Ok(None),
+            }
+        } else {
+            return Ok(None);
+        };
 
     Ok(Some(BuilderCleanupTarget {
         working_directory,

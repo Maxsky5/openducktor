@@ -89,7 +89,10 @@ export const pullRequestSchema = z.object({
   state: gitPullRequestStateSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
-  lastSyncedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  lastSyncedAt: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().optional(),
+  ),
   mergedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   closedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });

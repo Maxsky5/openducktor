@@ -20,12 +20,12 @@ use host_domain::{
     AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, GitAheadBehind,
     GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
     GitFileDiff, GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
-    GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult,
-    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
-    GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType,
-    PlanSubtaskInput, PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict,
-    RunEvent, RunState, RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard,
-    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
+    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
+    GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType, PlanSubtaskInput,
+    PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
+    RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
+    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -353,7 +353,9 @@ impl TaskStore for FakeTaskStore {
         let mut state = self.state.lock().expect("task store lock poisoned");
         match pull_request.clone() {
             Some(pull_request) => {
-                state.pull_requests.insert(task_id.to_string(), pull_request);
+                state
+                    .pull_requests
+                    .insert(task_id.to_string(), pull_request);
             }
             None => {
                 state.pull_requests.remove(task_id);

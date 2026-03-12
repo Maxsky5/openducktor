@@ -37,8 +37,7 @@ impl AppService {
                 .runs
                 .lock()
                 .map_err(|_| anyhow!("Run state lock poisoned"))?;
-            runs
-                .values()
+            runs.values()
                 .filter(|run| {
                     run.repo_path == repo_path
                         && run.task_id == task_id
@@ -95,7 +94,10 @@ impl AppService {
 
 fn session_sort_key(session: &AgentSessionDocument) -> (&str, &str) {
     (
-        session.updated_at.as_deref().unwrap_or(session.started_at.as_str()),
+        session
+            .updated_at
+            .as_deref()
+            .unwrap_or(session.started_at.as_str()),
         session.started_at.as_str(),
     )
 }

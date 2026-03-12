@@ -16,7 +16,11 @@ pub(super) trait GitHostingProvider: Send + Sync {
     fn is_available(&self) -> bool;
     fn auth_status(&self, host: &str) -> Result<GitProviderAuthStatus>;
     fn detect_repository(&self, repo_path: &Path) -> Result<Option<GitProviderRepository>>;
-    fn resolve_remote_name(&self, repo_path: &Path, repository: &GitProviderRepository) -> Result<String>;
+    fn resolve_remote_name(
+        &self,
+        repo_path: &Path,
+        repository: &GitProviderRepository,
+    ) -> Result<String>;
     fn create_pull_request(
         &self,
         repo_path: &Path,
@@ -153,7 +157,12 @@ impl GithubGhCliProvider {
         }
         full_args.extend(args.iter().map(|value| value.to_string()));
         let arg_refs = full_args.iter().map(String::as_str).collect::<Vec<_>>();
-        run_command_with_env("gh", arg_refs.as_slice(), Some(repo_path), &GIT_PROVIDER_ENV)
+        run_command_with_env(
+            "gh",
+            arg_refs.as_slice(),
+            Some(repo_path),
+            &GIT_PROVIDER_ENV,
+        )
     }
 
     fn run_gh_allow_failure(
@@ -168,7 +177,12 @@ impl GithubGhCliProvider {
         }
         full_args.extend(args.iter().map(|value| value.to_string()));
         let arg_refs = full_args.iter().map(String::as_str).collect::<Vec<_>>();
-        run_command_allow_failure_with_env("gh", arg_refs.as_slice(), Some(repo_path), &GIT_PROVIDER_ENV)
+        run_command_allow_failure_with_env(
+            "gh",
+            arg_refs.as_slice(),
+            Some(repo_path),
+            &GIT_PROVIDER_ENV,
+        )
     }
 
     fn parse_remote_url(url: &str) -> Option<GitProviderRepository> {
@@ -256,8 +270,11 @@ impl GitHostingProvider for GithubGhCliProvider {
             });
         }
 
-        let (ok, stdout, stderr) =
-            Self::run_gh_allow_failure(Path::new("."), None, &["auth", "status", "--hostname", host])?;
+        let (ok, stdout, stderr) = Self::run_gh_allow_failure(
+            Path::new("."),
+            None,
+            &["auth", "status", "--hostname", host],
+        )?;
         let detail = if stderr.trim().is_empty() {
             stdout.trim().to_string()
         } else if stdout.trim().is_empty() {
@@ -302,7 +319,11 @@ impl GitHostingProvider for GithubGhCliProvider {
         Ok(None)
     }
 
-    fn resolve_remote_name(&self, repo_path: &Path, repository: &GitProviderRepository) -> Result<String> {
+    fn resolve_remote_name(
+        &self,
+        repo_path: &Path,
+        repository: &GitProviderRepository,
+    ) -> Result<String> {
         let matches = Self::parsed_git_remotes(repo_path)?
             .into_iter()
             .filter_map(|(remote_name, candidate)| {

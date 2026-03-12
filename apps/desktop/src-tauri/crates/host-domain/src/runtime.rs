@@ -342,6 +342,7 @@ mod tests {
             supports_profiles: true,
             supports_variants: true,
             supports_odt_workflow_tools: true,
+            supports_session_fork: true,
             supports_permission_requests: true,
             supports_question_requests: true,
             supports_todos: true,
@@ -400,6 +401,7 @@ mod tests {
                 supports_profiles: true,
                 supports_variants: true,
                 supports_odt_workflow_tools: false,
+                supports_session_fork: false,
                 supports_permission_requests: true,
                 supports_question_requests: true,
                 supports_todos: true,
@@ -414,7 +416,8 @@ mod tests {
         assert_eq!(
             descriptor.validate_for_openducktor(),
             vec![
-                "missing mandatory capabilities: supports_odt_workflow_tools".to_string(),
+                "missing mandatory capabilities: supports_odt_workflow_tools, supports_session_fork"
+                    .to_string(),
                 "missing required workflow scopes: task, build".to_string(),
             ]
         );

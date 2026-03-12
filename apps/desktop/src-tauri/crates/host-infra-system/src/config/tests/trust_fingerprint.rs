@@ -52,7 +52,10 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
         .repo_config(repo_str.as_str())
         .expect("repo config should exist");
     assert!(repo_config.trusted_hooks);
-    assert_eq!(repo_config.default_target_branch.canonical(), "origin/release");
+    assert_eq!(
+        repo_config.default_target_branch.canonical(),
+        "origin/release"
+    );
 
     let optional = store
         .repo_config_optional(repo_str.as_str())

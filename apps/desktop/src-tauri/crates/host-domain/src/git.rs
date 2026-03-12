@@ -322,8 +322,12 @@ pub struct GitMergeBranchRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum GitMergeBranchResult {
-    Merged { output: String },
-    UpToDate { output: String },
+    Merged {
+        output: String,
+    },
+    UpToDate {
+        output: String,
+    },
     Conflicts {
         #[serde(rename = "conflictedFiles")]
         conflicted_files: Vec<String>,

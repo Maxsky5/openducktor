@@ -7,9 +7,9 @@ use anyhow::anyhow;
 use host_domain::GitPort;
 use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCurrentBranch, GitDiffScope, GitFileDiff,
-    GitFileStatus, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
-    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
-    GitWorktreeStatusSummaryData,
+    GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult, GitPullRequest, GitPullResult,
+    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
+    GitRebaseBranchResult, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
 
 #[derive(Clone)]
@@ -183,6 +183,14 @@ impl GitPort for CommandGitPort {
         _request: GitRebaseAbortRequest,
     ) -> anyhow::Result<GitRebaseAbortResult> {
         panic!("unexpected call: rebase_abort");
+    }
+
+    fn merge_branch(
+        &self,
+        _repo_path: &Path,
+        _request: GitMergeBranchRequest,
+    ) -> anyhow::Result<GitMergeBranchResult> {
+        panic!("unexpected call: merge_branch");
     }
 
     fn get_status(&self, _repo_path: &Path) -> anyhow::Result<Vec<GitFileStatus>> {

@@ -5,8 +5,8 @@ import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-sett
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
-import { useTaskApprovalFlow } from "./use-task-approval-flow";
 import { useKanbanTaskDialogs } from "./use-kanban-task-dialogs";
+import { useTaskApprovalFlow } from "./use-task-approval-flow";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;

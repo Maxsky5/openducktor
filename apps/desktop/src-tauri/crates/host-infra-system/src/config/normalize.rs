@@ -1,7 +1,7 @@
 use super::types::{
     default_branch_prefix, hook_set_fingerprint, normalize_git_target_branch_value,
-    AgentModelDefault, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig, HookSet,
-    OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RuntimeConfig,
+    AgentModelDefault, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
+    HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RuntimeConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -82,7 +82,9 @@ fn normalize_git_provider_repository(value: &mut Option<GitProviderRepository>) 
     }
 }
 
-fn normalize_git_provider_configs(overrides: &mut std::collections::HashMap<String, GitProviderConfig>) {
+fn normalize_git_provider_configs(
+    overrides: &mut std::collections::HashMap<String, GitProviderConfig>,
+) {
     *overrides = std::mem::take(overrides)
         .into_iter()
         .filter_map(|(key, mut entry)| {

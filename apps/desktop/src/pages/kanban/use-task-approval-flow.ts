@@ -1,13 +1,10 @@
-import type { TaskCard, TaskApprovalContext } from "@openducktor/contracts";
+import type { TaskApprovalContext, TaskCard } from "@openducktor/contracts";
 import { buildAgentMessagePrompt } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import {
-  canonicalTargetBranch,
-  checkoutTargetBranch,
-} from "@/lib/target-branch";
+import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -174,17 +171,21 @@ export function useTaskApprovalFlow({
 
   const waitForForkedAssistantReply = useCallback(async (sessionId: string): Promise<string> => {
     const baselineAssistantCount =
-      sessionsRef.current.find((entry) => entry.sessionId === sessionId)?.messages.filter(
-        (message) => message.role === "assistant",
-      ).length ?? 0;
+      sessionsRef.current
+        .find((entry) => entry.sessionId === sessionId)
+        ?.messages.filter((message) => message.role === "assistant").length ?? 0;
 
     for (let attempt = 0; attempt < 240; attempt += 1) {
       const session = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
       if (!session) {
-        throw new Error("Forked Builder session disappeared before the pull request draft completed.");
+        throw new Error(
+          "Forked Builder session disappeared before the pull request draft completed.",
+        );
       }
       if (session.status === "error") {
-        throw new Error("The forked Builder session failed while generating the pull request draft.");
+        throw new Error(
+          "The forked Builder session failed while generating the pull request draft.",
+        );
       }
 
       const assistantMessages = session.messages.filter((message) => message.role === "assistant");
@@ -195,7 +196,9 @@ export function useTaskApprovalFlow({
       await delay(500);
     }
 
-    throw new Error("Timed out while waiting for the forked Builder session to generate the pull request draft.");
+    throw new Error(
+      "Timed out while waiting for the forked Builder session to generate the pull request draft.",
+    );
   }, []);
 
   const createPullRequestWithAi = useCallback(
@@ -204,9 +207,9 @@ export function useTaskApprovalFlow({
         throw new Error("No active repository selected.");
       }
 
-      const latestBuilderRecord = (await host.agentSessionsList(activeRepo, currentState.taskId)).find(
-        (entry) => entry.role === "build",
-      );
+      const latestBuilderRecord = (
+        await host.agentSessionsList(activeRepo, currentState.taskId)
+      ).find((entry) => entry.role === "build");
       if (!latestBuilderRecord) {
         throw new Error("No Builder session is available to fork for pull request drafting.");
       }
@@ -248,7 +251,9 @@ export function useTaskApprovalFlow({
       });
 
       await sendAgentMessage(forkedSessionId, prompt);
-      const generated = parseGeneratedPullRequest(await waitForForkedAssistantReply(forkedSessionId));
+      const generated = parseGeneratedPullRequest(
+        await waitForForkedAssistantReply(forkedSessionId),
+      );
       const pullRequest = await host.taskPullRequestUpsert(
         activeRepo,
         currentState.taskId,
@@ -304,7 +309,8 @@ export function useTaskApprovalFlow({
             pullRequestDraftMode: "generate_ai" as const,
           };
           const loadingToastId = toast.loading("Generating pull request", {
-            description: "OpenDucktor is drafting the title and description. This can take some time.",
+            description:
+              "OpenDucktor is drafting the title and description. This can take some time.",
           });
           reset();
           void (async () => {
@@ -389,11 +395,9 @@ export function useTaskApprovalFlow({
         if (!publishTarget?.remote) {
           throw new Error("The configured target branch does not have a publish remote.");
         }
-        const result = await host.gitPushBranch(
-          activeRepo,
-          checkoutTargetBranch(publishTarget),
-          { remote: publishTarget.remote },
-        );
+        const result = await host.gitPushBranch(activeRepo, checkoutTargetBranch(publishTarget), {
+          remote: publishTarget.remote,
+        });
         if (result.outcome !== "pushed") {
           throw new Error(result.output);
         }
@@ -448,9 +452,7 @@ export function useTaskApprovalFlow({
         }
       },
       onModeChange: (mode) =>
-        setState((current) =>
-          current ? { ...current, mode, errorMessage: null } : current,
-        ),
+        setState((current) => (current ? { ...current, mode, errorMessage: null } : current)),
       onMergeMethodChange: (mergeMethod) =>
         setState((current) =>
           current ? { ...current, mergeMethod, errorMessage: null } : current,

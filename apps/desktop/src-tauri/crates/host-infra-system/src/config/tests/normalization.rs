@@ -224,7 +224,9 @@ fn load_rejects_legacy_string_default_target_branch_values() {
             .expect("config file should be private");
     }
 
-    let error = store.load().expect_err("legacy string target branch should fail");
+    let error = store
+        .load()
+        .expect_err("legacy string target branch should fail");
     assert!(
         error.to_string().contains("Failed parsing config file"),
         "expected parse failure, got: {error}"

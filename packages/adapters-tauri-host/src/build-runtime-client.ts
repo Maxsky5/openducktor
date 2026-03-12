@@ -16,8 +16,8 @@ import {
   runtimeInstanceSummarySchema,
   type SystemCheck,
   systemCheckSchema,
-  taskApprovalContextSchema,
   type TaskCard,
+  taskApprovalContextSchema,
   taskCardSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -323,13 +323,7 @@ export class TauriAgentClient {
   }
 
   async taskPullRequestUpsert(repoPath: string, taskId: string, title: string, body: string) {
-    const pullRequest = await taskPullRequestUpsert(
-      this.invokeFn,
-      repoPath,
-      taskId,
-      title,
-      body,
-    );
+    const pullRequest = await taskPullRequestUpsert(this.invokeFn, repoPath, taskId, title, body);
     this.metadataCache?.invalidate(repoPath, taskId);
     return pullRequest;
   }

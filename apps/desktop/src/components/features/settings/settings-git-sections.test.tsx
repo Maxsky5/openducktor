@@ -3,8 +3,8 @@ import type { RepoConfig, RuntimeCheck } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, create } from "react-test-renderer";
-import { RepositoryGitSection } from "./settings-repository-git-section";
 import { SettingsGitSection } from "./settings-git-section";
+import { RepositoryGitSection } from "./settings-repository-git-section";
 
 const flattenChildrenText = (value: unknown): string => {
   if (typeof value === "string") {
@@ -177,7 +177,8 @@ describe("settings git sections", () => {
 
     const editButton = renderer.root.find(
       (node) =>
-        node.type === "button" && flattenChildrenText(node.props.children).includes("Edit manually"),
+        node.type === "button" &&
+        flattenChildrenText(node.props.children).includes("Edit manually"),
     );
     act(() => {
       editButton.props.onClick();

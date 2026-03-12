@@ -2,7 +2,6 @@ import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openduckto
 import {
   type AgentCatalogPort,
   type AgentEvent,
-  type ForkAgentSessionInput,
   type AgentModelCatalog,
   type AgentSessionHistoryMessage,
   type AgentSessionPort,
@@ -10,6 +9,7 @@ import {
   type AgentSessionTodoItem,
   type AgentWorkspaceInspectionPort,
   type EventUnsubscribe,
+  type ForkAgentSessionInput,
   type ListAgentModelsInput,
   type LoadAgentFileStatusInput,
   type LoadAgentSessionDiffInput,
@@ -162,9 +162,7 @@ export class OpencodeSdkAdapter
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
-    const client = this.createClient(
-      toRuntimeClientInput(input.runtimeConnection, "fork session"),
-    );
+    const client = this.createClient(toRuntimeClientInput(input.runtimeConnection, "fork session"));
     const forked = await client.session.fork({
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,

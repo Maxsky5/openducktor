@@ -4,7 +4,9 @@ use anyhow::{anyhow, Context, Result};
 use host_domain::{
     GitBranch, GitCurrentBranch, GitFileStatus, GitMergeBranchResult, GitMergeMethod, TaskStatus,
 };
-use host_infra_system::{AppConfigStore, GitProviderConfig, GitProviderRepository, HookSet, RepoConfig};
+use host_infra_system::{
+    AppConfigStore, GitProviderConfig, GitProviderRepository, HookSet, RepoConfig,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -267,8 +269,13 @@ fn task_direct_merge_closes_task_records_metadata_and_cleans_builder_workspace()
             && target_branch == "origin/main"
             && *method == GitMergeMethod::Squash
     )));
-    assert!(git.calls.iter().any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
-    assert!(git.calls.iter().any(|call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")));
+    assert!(git
+        .calls
+        .iter()
+        .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+    assert!(git.calls.iter().any(
+        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
+    ));
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -408,7 +415,8 @@ fn approval_actions_reject_dirty_builder_worktree() -> Result<()> {
 }
 
 #[test]
-fn task_approval_context_reports_pull_request_unavailable_when_github_auth_is_missing() -> Result<()> {
+fn task_approval_context_reports_pull_request_unavailable_when_github_auth_is_missing() -> Result<()>
+{
     let _env_lock = lock_env();
     let root = unique_temp_path("approval-auth-unavailable");
     let repo = root.join("repo");
@@ -542,9 +550,18 @@ fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review
     let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
     let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
     let _gh_log_guard = set_env_var("ODT_GH_LOG_FILE", gh_log.to_string_lossy().as_ref());
-    let _create_guard = set_env_var("ODT_GH_CREATE_RESPONSE", create_response.to_string_lossy().as_ref());
-    let _update_guard = set_env_var("ODT_GH_UPDATE_RESPONSE", update_response.to_string_lossy().as_ref());
-    let _fetch_guard = set_env_var("ODT_GH_FETCH_RESPONSE", fetch_response.to_string_lossy().as_ref());
+    let _create_guard = set_env_var(
+        "ODT_GH_CREATE_RESPONSE",
+        create_response.to_string_lossy().as_ref(),
+    );
+    let _update_guard = set_env_var(
+        "ODT_GH_UPDATE_RESPONSE",
+        update_response.to_string_lossy().as_ref(),
+    );
+    let _fetch_guard = set_env_var(
+        "ODT_GH_FETCH_RESPONSE",
+        fetch_response.to_string_lossy().as_ref(),
+    );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, task_state, git_state) = build_service_with_store(
@@ -569,7 +586,8 @@ fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review
     configure_github_remote(&repo, "upstream", "github.com")?;
     service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
 
-    let linked = service.task_pull_request_upsert(repo_path.as_str(), "task-1", "Create PR", "Body")?;
+    let linked =
+        service.task_pull_request_upsert(repo_path.as_str(), "task-1", "Create PR", "Body")?;
     assert_eq!(linked.number, 17);
     assert_eq!(linked.state, "open");
 
@@ -630,9 +648,18 @@ fn task_pull_request_upsert_reuses_existing_open_pull_request() -> Result<()> {
     let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
     let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
     let _gh_log_guard = set_env_var("ODT_GH_LOG_FILE", gh_log.to_string_lossy().as_ref());
-    let _create_guard = set_env_var("ODT_GH_CREATE_RESPONSE", create_response.to_string_lossy().as_ref());
-    let _update_guard = set_env_var("ODT_GH_UPDATE_RESPONSE", update_response.to_string_lossy().as_ref());
-    let _fetch_guard = set_env_var("ODT_GH_FETCH_RESPONSE", fetch_response.to_string_lossy().as_ref());
+    let _create_guard = set_env_var(
+        "ODT_GH_CREATE_RESPONSE",
+        create_response.to_string_lossy().as_ref(),
+    );
+    let _update_guard = set_env_var(
+        "ODT_GH_UPDATE_RESPONSE",
+        update_response.to_string_lossy().as_ref(),
+    );
+    let _fetch_guard = set_env_var(
+        "ODT_GH_FETCH_RESPONSE",
+        fetch_response.to_string_lossy().as_ref(),
+    );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, task_state, git_state) = build_service_with_store(
@@ -678,11 +705,14 @@ fn task_pull_request_upsert_reuses_existing_open_pull_request() -> Result<()> {
             },
         );
 
-    let linked = service.task_pull_request_upsert(repo_path.as_str(), "task-1", "Updated PR", "Body")?;
+    let linked =
+        service.task_pull_request_upsert(repo_path.as_str(), "task-1", "Updated PR", "Body")?;
     assert_eq!(linked.number, 17);
 
     let gh_log_contents = fs::read_to_string(&gh_log)?;
-    assert!(gh_log_contents.contains("--hostname github.mycorp.com api --method PATCH repos/openai/openducktor/pulls/17"));
+    assert!(gh_log_contents.contains(
+        "--hostname github.mycorp.com api --method PATCH repos/openai/openducktor/pulls/17"
+    ));
     assert!(!gh_log_contents.contains("api --method POST repos/openai/openducktor/pulls"));
     assert_eq!(
         git_state
@@ -721,9 +751,18 @@ fn task_pull_request_upsert_reuses_existing_draft_pull_request() -> Result<()> {
     let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
     let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
     let _gh_log_guard = set_env_var("ODT_GH_LOG_FILE", gh_log.to_string_lossy().as_ref());
-    let _create_guard = set_env_var("ODT_GH_CREATE_RESPONSE", create_response.to_string_lossy().as_ref());
-    let _update_guard = set_env_var("ODT_GH_UPDATE_RESPONSE", update_response.to_string_lossy().as_ref());
-    let _fetch_guard = set_env_var("ODT_GH_FETCH_RESPONSE", fetch_response.to_string_lossy().as_ref());
+    let _create_guard = set_env_var(
+        "ODT_GH_CREATE_RESPONSE",
+        create_response.to_string_lossy().as_ref(),
+    );
+    let _update_guard = set_env_var(
+        "ODT_GH_UPDATE_RESPONSE",
+        update_response.to_string_lossy().as_ref(),
+    );
+    let _fetch_guard = set_env_var(
+        "ODT_GH_FETCH_RESPONSE",
+        fetch_response.to_string_lossy().as_ref(),
+    );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, task_state, git_state) = build_service_with_store(
@@ -766,7 +805,12 @@ fn task_pull_request_upsert_reuses_existing_draft_pull_request() -> Result<()> {
             },
         );
 
-    let linked = service.task_pull_request_upsert(repo_path.as_str(), "task-1", "Updated Draft PR", "Body")?;
+    let linked = service.task_pull_request_upsert(
+        repo_path.as_str(),
+        "task-1",
+        "Updated Draft PR",
+        "Body",
+    )?;
     assert_eq!(linked.number, 17);
     assert_eq!(linked.state, "draft");
 
@@ -809,9 +853,18 @@ fn repo_pull_request_sync_closes_tasks_when_linked_pull_request_is_merged() -> R
     let _path_guard = prepend_path(&bin_dir);
     let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
     let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
-    let _create_guard = set_env_var("ODT_GH_CREATE_RESPONSE", create_response.to_string_lossy().as_ref());
-    let _update_guard = set_env_var("ODT_GH_UPDATE_RESPONSE", update_response.to_string_lossy().as_ref());
-    let _fetch_guard = set_env_var("ODT_GH_FETCH_RESPONSE", fetch_response.to_string_lossy().as_ref());
+    let _create_guard = set_env_var(
+        "ODT_GH_CREATE_RESPONSE",
+        create_response.to_string_lossy().as_ref(),
+    );
+    let _update_guard = set_env_var(
+        "ODT_GH_UPDATE_RESPONSE",
+        update_response.to_string_lossy().as_ref(),
+    );
+    let _fetch_guard = set_env_var(
+        "ODT_GH_FETCH_RESPONSE",
+        fetch_response.to_string_lossy().as_ref(),
+    );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, task_state, git_state) = build_service_with_store(
@@ -881,8 +934,13 @@ fn repo_pull_request_sync_closes_tasks_when_linked_pull_request_is_merged() -> R
     drop(state);
 
     let git = git_state.lock().expect("git state lock poisoned");
-    assert!(git.calls.iter().any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
-    assert!(git.calls.iter().any(|call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")));
+    assert!(git
+        .calls
+        .iter()
+        .any(|call| matches!(call, GitCall::RemoveWorktree { .. })));
+    assert!(git.calls.iter().any(
+        |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
+    ));
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -1024,7 +1082,15 @@ fn auto_detect_git_provider_enables_github_from_remote_when_gh_is_missing() -> R
     let root = unique_temp_path("approval-auto-detect");
     let repo = root.join("repo");
     init_git_repo(&repo)?;
-    run_git(&repo, &["remote", "add", "origin", "git@github.com:openai/openducktor.git"])?;
+    run_git(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "git@github.com:openai/openducktor.git",
+        ],
+    )?;
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, _task_state, _git_state) = build_service_with_store(
@@ -1051,11 +1117,17 @@ fn auto_detect_git_provider_enables_github_from_remote_when_gh_is_missing() -> R
     assert!(github.enabled);
     assert!(github.auto_detected);
     assert_eq!(
-        github.repository.as_ref().map(|repository| repository.owner.as_str()),
+        github
+            .repository
+            .as_ref()
+            .map(|repository| repository.owner.as_str()),
         Some("openai"),
     );
     assert_eq!(
-        github.repository.as_ref().map(|repository| repository.name.as_str()),
+        github
+            .repository
+            .as_ref()
+            .map(|repository| repository.name.as_str()),
         Some("openducktor"),
     );
 
@@ -1069,7 +1141,15 @@ fn auto_detect_git_provider_preserves_explicit_github_disable() -> Result<()> {
     let repo = root.join("repo");
     let worktree_base = root.join("worktrees");
     init_git_repo(&repo)?;
-    run_git(&repo, &["remote", "add", "origin", "git@github.com:openai/openducktor.git"])?;
+    run_git(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "git@github.com:openai/openducktor.git",
+        ],
+    )?;
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, _task_state, _git_state) = build_service_with_store(
@@ -1109,7 +1189,10 @@ fn auto_detect_git_provider_preserves_explicit_github_disable() -> Result<()> {
         .ok_or_else(|| anyhow!("github provider should remain configured"))?;
     assert!(!github.enabled);
     assert_eq!(
-        github.repository.as_ref().map(|repository| repository.owner.as_str()),
+        github
+            .repository
+            .as_ref()
+            .map(|repository| repository.owner.as_str()),
         Some("openai"),
     );
 

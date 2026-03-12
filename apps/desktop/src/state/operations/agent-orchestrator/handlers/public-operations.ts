@@ -2,8 +2,8 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
-import type { StartAgentSessionInput } from "./start-session";
 import type { ForkAgentSessionActionInput } from "./session-actions";
+import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;

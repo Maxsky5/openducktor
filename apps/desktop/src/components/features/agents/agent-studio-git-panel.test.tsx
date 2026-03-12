@@ -270,9 +270,7 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     const prLinks = root.findAll(
-      (node) =>
-        node.type === "button" &&
-        String(node.props.className ?? "").includes("text-emerald"),
+      (node) => node.type === "button" && getNodeText(node).includes("PR #110"),
     );
     expect(prLinks.length).toBe(1);
 

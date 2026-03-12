@@ -204,7 +204,7 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
-  test("canonicalizes short rebase target branch names", async () => {
+  test("uses the configured rebase target branch as provided", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         targetBranch: "main",
@@ -218,7 +218,7 @@ describe("useAgentStudioGitActions", () => {
         await state.rebaseOntoTarget();
       });
 
-      expect(gitRebaseBranchMock).toHaveBeenCalledWith("/repo", "origin/main", undefined);
+      expect(gitRebaseBranchMock).toHaveBeenCalledWith("/repo", "main", undefined);
       expect(harness.getLatest().rebaseError).toBeNull();
     } finally {
       await harness.unmount();

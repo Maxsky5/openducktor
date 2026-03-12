@@ -1,4 +1,3 @@
-import { LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { KanbanColumn } from "@/components/features/kanban";
 import { Skeleton } from "@/components/ui/skeleton";

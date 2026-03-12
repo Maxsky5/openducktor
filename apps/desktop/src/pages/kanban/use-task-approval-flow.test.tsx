@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskApprovalContext } from "@openducktor/contracts";
-import { type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import {
   createAgentSessionFixture,
@@ -13,7 +13,9 @@ enableReactActEnvironment();
 const taskApprovalContextGetMock = mock(async (_repoPath: string, _taskId: string) => {
   throw new Error("not configured");
 });
-const taskDirectMergeMock = mock(async () => createTaskCardFixture({ id: "TASK-1", status: "closed" }));
+const taskDirectMergeMock = mock(async () =>
+  createTaskCardFixture({ id: "TASK-1", status: "closed" }),
+);
 const taskPullRequestUpsertMock = mock(async () => ({
   providerId: "github" as const,
   number: 17,
@@ -53,11 +55,13 @@ mock.module("@/state/operations/host", () => ({
     specGet: async () => ({ markdown: "", updatedAt: null }),
     planGet: async () => ({ markdown: "", updatedAt: null }),
     qaGetReport: async () => ({ markdown: "", updatedAt: null }),
+    workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
+    workspaceGetSettingsSnapshot: async () => ({
+      git: { defaultMergeMethod: "merge_commit" as const },
+      repos: {},
+      globalPromptOverrides: {},
+    }),
   },
-}));
-
-mock.module("@/state/operations/prompt-overrides", () => ({
-  loadEffectivePromptOverrides: async () => ({}),
 }));
 
 mock.module("@/lib/open-external-url", () => ({
@@ -68,25 +72,23 @@ mock.module("@openducktor/core", () => ({
   buildAgentMessagePrompt: () => "Generate PR",
 }));
 
-let latestHarnessValue:
-  | {
-      taskApprovalModal: {
-        open: boolean;
-        isLoading: boolean;
-        mode: "direct_merge" | "pull_request";
-        mergeMethod: "merge_commit" | "squash" | "rebase";
-        pullRequestDraftMode: "manual" | "generate_ai";
-        hasUncommittedChanges: boolean;
-        uncommittedFileCount: number;
-        errorMessage: string | null;
-        onModeChange: (mode: "direct_merge" | "pull_request") => void;
-        onPullRequestDraftModeChange: (mode: "manual" | "generate_ai") => void;
-        onConfirm: () => void;
-        onConfirmPush: () => void;
-      } | null;
-      openTaskApproval: (taskId: string) => void;
-    }
-  | null = null;
+let latestHarnessValue: {
+  taskApprovalModal: {
+    open: boolean;
+    isLoading: boolean;
+    mode: "direct_merge" | "pull_request";
+    mergeMethod: "merge_commit" | "squash" | "rebase";
+    pullRequestDraftMode: "manual" | "generate_ai";
+    hasUncommittedChanges: boolean;
+    uncommittedFileCount: number;
+    errorMessage: string | null;
+    onModeChange: (mode: "direct_merge" | "pull_request") => void;
+    onPullRequestDraftModeChange: (mode: "manual" | "generate_ai") => void;
+    onConfirm: () => void;
+    onConfirmPush: () => void;
+  } | null;
+  openTaskApproval: (taskId: string) => void;
+} | null = null;
 
 function createDeferred<TValue>() {
   let resolvePromise!: (value: TValue) => void;
@@ -190,21 +192,19 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("pushes the merged target branch to the target remote", async () => {
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      ({
-        taskId: "TASK-1",
-        taskStatus: "human_review",
-        workingDirectory: "/repo/.worktrees/task-1",
-        sourceBranch: "odt/TASK-1",
-        targetBranch: { remote: "upstream", branch: "main" },
-        publishTarget: { remote: "upstream", branch: "main" },
-        defaultMergeMethod: "merge_commit",
-        hasUncommittedChanges: false,
-        uncommittedFileCount: 0,
-        pullRequest: undefined,
-        providers: [],
-      } satisfies TaskApprovalContext) as unknown as never,
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce({
+      taskId: "TASK-1",
+      taskStatus: "human_review",
+      workingDirectory: "/repo/.worktrees/task-1",
+      sourceBranch: "odt/TASK-1",
+      targetBranch: { remote: "upstream", branch: "main" },
+      publishTarget: { remote: "upstream", branch: "main" },
+      defaultMergeMethod: "merge_commit",
+      hasUncommittedChanges: false,
+      uncommittedFileCount: 0,
+      pullRequest: undefined,
+      providers: [],
+    } satisfies TaskApprovalContext as unknown as never);
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
@@ -253,21 +253,19 @@ describe("useTaskApprovalFlow", () => {
 
   test("closes after direct merge without offering a push step for local-only target branches", async () => {
     const refreshTasksMock = mock(async () => {});
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      ({
-        taskId: "TASK-1",
-        taskStatus: "human_review",
-        workingDirectory: "/repo/.worktrees/task-1",
-        sourceBranch: "odt/TASK-1",
-        targetBranch: { branch: "release/2026.03" },
-        publishTarget: undefined,
-        defaultMergeMethod: "merge_commit",
-        hasUncommittedChanges: false,
-        uncommittedFileCount: 0,
-        pullRequest: undefined,
-        providers: [],
-      } satisfies TaskApprovalContext) as unknown as never,
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce({
+      taskId: "TASK-1",
+      taskStatus: "human_review",
+      workingDirectory: "/repo/.worktrees/task-1",
+      sourceBranch: "odt/TASK-1",
+      targetBranch: { branch: "release/2026.03" },
+      publishTarget: undefined,
+      defaultMergeMethod: "merge_commit",
+      hasUncommittedChanges: false,
+      uncommittedFileCount: 0,
+      pullRequest: undefined,
+      providers: [],
+    } satisfies TaskApprovalContext as unknown as never);
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
@@ -310,28 +308,26 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("closes the modal and shows a reopenable error toast while AI pull request generation runs in background", async () => {
-    taskApprovalContextGetMock.mockResolvedValue(
-      ({
-        taskId: "TASK-1",
-        taskStatus: "human_review",
-        workingDirectory: "/repo/.worktrees/task-1",
-        sourceBranch: "odt/TASK-1",
-        targetBranch: { remote: "origin", branch: "main" },
-        publishTarget: { remote: "origin", branch: "main" },
-        defaultMergeMethod: "merge_commit",
-        hasUncommittedChanges: false,
-        uncommittedFileCount: 0,
-        pullRequest: undefined,
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      } satisfies TaskApprovalContext) as unknown as never,
-    );
+    taskApprovalContextGetMock.mockResolvedValue({
+      taskId: "TASK-1",
+      taskStatus: "human_review",
+      workingDirectory: "/repo/.worktrees/task-1",
+      sourceBranch: "odt/TASK-1",
+      targetBranch: { remote: "origin", branch: "main" },
+      publishTarget: { remote: "origin", branch: "main" },
+      defaultMergeMethod: "merge_commit",
+      hasUncommittedChanges: false,
+      uncommittedFileCount: 0,
+      pullRequest: undefined,
+      providers: [
+        {
+          providerId: "github",
+          enabled: true,
+          available: true,
+          reason: undefined,
+        },
+      ],
+    } satisfies TaskApprovalContext as unknown as never);
     taskPullRequestUpsertMock.mockRejectedValueOnce(new Error("Generation crashed"));
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");

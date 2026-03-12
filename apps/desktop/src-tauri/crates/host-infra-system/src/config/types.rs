@@ -2,18 +2,13 @@ use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GitMergeMethod {
+    #[default]
     MergeCommit,
     Squash,
     Rebase,
-}
-
-impl Default for GitMergeMethod {
-    fn default() -> Self {
-        Self::MergeCommit
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -49,10 +44,7 @@ where
     D: Deserializer<'de>,
 {
     let value = Option::<GitTargetBranch>::deserialize(deserializer)?;
-    let parsed = match value {
-        Some(target) => target,
-        None => default_target_branch(),
-    };
+    let parsed = value.unwrap_or_default();
     Ok(normalize_git_target_branch_value(parsed))
 }
 

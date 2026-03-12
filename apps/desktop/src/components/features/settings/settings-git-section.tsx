@@ -101,7 +101,7 @@ export function SettingsGitSection({
               ? ghLogin
                 ? `Authenticated as ${ghLogin}.`
                 : "Authenticated with GitHub."
-              : ghAuthError ?? "Run `gh auth login` to connect GitHub."}
+              : (ghAuthError ?? "Run `gh auth login` to connect GitHub.")}
           </p>
         </div>
       </div>

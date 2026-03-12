@@ -51,8 +51,8 @@ fn merge_branch_accepts_canonical_remote_target_branch() {
         .expect("current branch should resolve after merge");
     assert_eq!(current_branch.name.as_deref(), Some("main"));
 
-    let feature_contents =
-        fs::read_to_string(repo.path.join("feature.txt")).expect("merged feature file should exist");
+    let feature_contents = fs::read_to_string(repo.path.join("feature.txt"))
+        .expect("merged feature file should exist");
     assert_eq!(feature_contents, "feature\n");
 }
 
@@ -74,7 +74,9 @@ fn rebase_merge_succeeds_when_source_branch_is_checked_out_in_linked_worktree() 
             "add",
             "-b",
             "feature/rebase-worktree",
-            worktree_dir.to_str().expect("worktree path should be valid utf-8"),
+            worktree_dir
+                .to_str()
+                .expect("worktree path should be valid utf-8"),
             "main",
         ],
     );
@@ -106,7 +108,9 @@ fn rebase_merge_succeeds_when_source_branch_is_checked_out_in_linked_worktree() 
                 method: GitMergeMethod::Rebase,
             },
         )
-        .expect("rebase merge should succeed when source branch is checked out in a linked worktree");
+        .expect(
+            "rebase merge should succeed when source branch is checked out in a linked worktree",
+        );
 
     match result {
         GitMergeBranchResult::Merged { .. } | GitMergeBranchResult::UpToDate { .. } => {}
@@ -117,7 +121,7 @@ fn rebase_merge_succeeds_when_source_branch_is_checked_out_in_linked_worktree() 
         .get_current_branch(&repo.path)
         .expect("current branch should resolve after merge");
     assert_eq!(current_branch.name.as_deref(), Some("main"));
-    let feature_contents =
-        fs::read_to_string(repo.path.join("feature.txt")).expect("rebased feature file should exist");
+    let feature_contents = fs::read_to_string(repo.path.join("feature.txt"))
+        .expect("rebased feature file should exist");
     assert_eq!(feature_contents, "feature\n");
 }

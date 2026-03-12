@@ -71,7 +71,7 @@ export function RepositoryGitSection({
     : !runtimeCheck?.ghOk
       ? "Install GitHub CLI (`gh`) to enable provider-backed pull requests."
       : usesDefaultGithubHost && !runtimeCheck.ghAuthOk
-        ? runtimeCheck.ghAuthError ?? "Run `gh auth login` to authenticate GitHub."
+        ? (runtimeCheck.ghAuthError ?? "Run `gh auth login` to authenticate GitHub.")
         : !hasRepositoryCoordinates
           ? "Repository host, owner, and name are still missing."
           : usesDefaultGithubHost
@@ -179,7 +179,7 @@ export function RepositoryGitSection({
       owner: github.repository?.owner ?? "",
       name: github.repository?.name ?? "",
     });
-  }, [github.repository?.host, github.repository?.name, github.repository?.owner, selectedRepoPath]);
+  }, [github.repository?.host, github.repository?.name, github.repository?.owner]);
 
   useEffect(() => {
     if (!selectedRepoPath || disabled || hasRepositoryCoordinates || isDetecting) {

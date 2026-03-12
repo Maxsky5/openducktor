@@ -1,10 +1,6 @@
 import { Check, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type {
   PullRequestDraftMode,
   TaskApprovalModalModel,
@@ -164,9 +164,7 @@ function OptionCard<TValue extends string>({
           <Check className="size-3.5" />
         </span>
       </div>
-      <span className="text-sm text-muted-foreground">
-        {description}
-      </span>
+      <span className="text-sm text-muted-foreground">{description}</span>
     </button>
   );
 }
@@ -335,9 +333,9 @@ export function TaskApprovalModal({
                       </div>
                     ) : (
                       <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-                        OpenDucktor will fork the latest Builder session, generate the pull
-                        request title and description in the background, then create or update the
-                        pull request.
+                        OpenDucktor will fork the latest Builder session, generate the pull request
+                        title and description in the background, then create or update the pull
+                        request.
                       </div>
                     )}
 
@@ -360,14 +358,20 @@ export function TaskApprovalModal({
 
         {model.stage === "push_target" ? (
           <div className="rounded-md border border-border bg-muted/60 p-3 text-sm text-muted-foreground">
-            The merge is already applied locally on <span className="font-mono">{model.targetBranch}</span>.
+            The merge is already applied locally on{" "}
+            <span className="font-mono">{model.targetBranch}</span>.
           </div>
         ) : null}
 
         <DialogFooter className="justify-between">
           {model.stage === "push_target" ? (
             <>
-              <Button type="button" variant="outline" disabled={model.isSubmitting} onClick={model.onSkipPush}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={model.isSubmitting}
+                onClick={model.onSkipPush}
+              >
                 Skip
               </Button>
               <Button type="button" disabled={model.isSubmitting} onClick={model.onConfirmPush}>

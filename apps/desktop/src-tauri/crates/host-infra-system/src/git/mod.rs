@@ -11,9 +11,9 @@ mod worktree;
 use anyhow::{Context, Result};
 use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-    GitDiffScope, GitFileDiff, GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult,
-    GitPort, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
-    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
+    GitDiffScope, GitFileDiff, GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult, GitPort,
+    GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
     GitWorktreeStatusSummaryData,
 };
 use std::path::Path;

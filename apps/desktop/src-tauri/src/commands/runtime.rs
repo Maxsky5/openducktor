@@ -1,6 +1,7 @@
 use crate::{as_error, run_service_blocking, AppState};
 use host_domain::{
-    BeadsCheck, QaReviewTarget, RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary, SystemCheck,
+    BeadsCheck, QaReviewTarget, RuntimeCheck, RuntimeDescriptor, RuntimeInstanceSummary,
+    SystemCheck,
 };
 use tauri::State;
 
@@ -57,7 +58,7 @@ pub async fn qa_review_target_get(
     state: State<'_, AppState>,
     repo_path: String,
     task_id: String,
- ) -> Result<QaReviewTarget, String> {
+) -> Result<QaReviewTarget, String> {
     let service = state.service.clone();
     let result = run_service_blocking("qa_review_target_get", move || {
         service.qa_review_target_get(&repo_path, &task_id)

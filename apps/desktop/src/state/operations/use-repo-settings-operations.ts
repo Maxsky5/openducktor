@@ -155,12 +155,9 @@ export function useRepoSettingsOperations({
     [],
   );
 
-  const saveGlobalGitConfig = useCallback(
-    async (git: GlobalGitConfig): Promise<void> => {
-      await host.workspaceUpdateGlobalGitConfig(git);
-    },
-    [],
-  );
+  const saveGlobalGitConfig = useCallback(async (git: GlobalGitConfig): Promise<void> => {
+    await host.workspaceUpdateGlobalGitConfig(git);
+  }, []);
 
   const saveSettingsSnapshot = useCallback(
     async (snapshot: SettingsSnapshot): Promise<void> => {

@@ -8,8 +8,8 @@ use host_domain::{
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir,
-    run_command_allow_failure_with_env, version_command, GlobalGitConfig, HookSet,
-    PromptOverrides, RepoConfig,
+    run_command_allow_failure_with_env, version_command, GlobalGitConfig, HookSet, PromptOverrides,
+    RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -224,15 +224,16 @@ impl AppService {
 
     pub fn workspace_get_settings_snapshot(
         &self,
-    ) -> Result<(GlobalGitConfig, HashMap<String, RepoConfig>, PromptOverrides)> {
+    ) -> Result<(
+        GlobalGitConfig,
+        HashMap<String, RepoConfig>,
+        PromptOverrides,
+    )> {
         let config = self.config_store.load()?;
         Ok((config.git, config.repos, config.global_prompt_overrides))
     }
 
-    pub fn workspace_update_global_git_config(
-        &self,
-        git: GlobalGitConfig,
-    ) -> Result<()> {
+    pub fn workspace_update_global_git_config(&self, git: GlobalGitConfig) -> Result<()> {
         self.config_store.update_global_git_config(git)
     }
 

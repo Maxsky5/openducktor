@@ -1,4 +1,6 @@
-use super::super::super::{terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget};
+use super::super::super::{
+    terminate_child_process, AgentRuntimeProcess, AppService, RuntimeCleanupTarget,
+};
 use anyhow::{anyhow, Result};
 use std::process::Child;
 

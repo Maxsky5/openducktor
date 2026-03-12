@@ -1,10 +1,10 @@
 import type {
   BeadsCheck,
-  GlobalGitConfig,
   GitBranch,
   GitCurrentBranch,
   GitProviderRepository,
   GitTargetBranch,
+  GlobalGitConfig,
   RunEvent,
   RunSummary,
   RuntimeCheck,
