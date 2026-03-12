@@ -1138,6 +1138,88 @@ describe("agent-orchestrator-session-events", () => {
     expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
   });
 
+  test("matches an older assistant message when the newest same-text message is outside the timestamp window", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          messages: [
+            {
+              id: "assistant-older-match",
+              role: "assistant",
+              content: "Stable output",
+              timestamp: "2026-02-22T08:00:10.000Z",
+            },
+            {
+              id: "assistant-newer-miss",
+              role: "assistant",
+              content: "Stable output",
+              timestamp: "2026-02-22T08:00:20.000Z",
+            },
+          ],
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_message",
+      sessionId: "session-1",
+      messageId: "assistant-final",
+      timestamp: "2026-02-22T08:00:11.000Z",
+      message: "Stable output",
+    });
+
+    expect(sessionsRef.current["session-1"]?.messages).toHaveLength(2);
+    expect(sessionsRef.current["session-1"]?.messages[0]?.id).toBe("assistant-final");
+    expect(sessionsRef.current["session-1"]?.messages[1]?.id).toBe("assistant-newer-miss");
+  });
+
   test("updates live session context usage from step-finish part tokens", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {

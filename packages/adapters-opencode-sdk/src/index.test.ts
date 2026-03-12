@@ -580,6 +580,52 @@ describe("OpencodeSdkAdapter", () => {
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
   });
 
+  test("sendUserMessage falls back to part messageID when response info.id is absent", async () => {
+    const mock = makeMockClient({
+      promptQueue: [
+        {
+          info: {
+            tokens: {
+              input: 100,
+              output: 50,
+            },
+          },
+          parts: [
+            {
+              id: "text-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-from-part-id",
+              type: "text",
+              text: "Recovered from part id.",
+            } as Part,
+          ],
+        } as { info: { [key: string]: unknown }; parts: Part[] },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => events.push(event));
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Recover ids",
+    });
+
+    const assistantMessage = events.find((event) => event.type === "assistant_message");
+    expect(assistantMessage).toMatchObject({
+      type: "assistant_message",
+      messageId: "assistant-from-part-id",
+      message: "Recovered from part id.",
+      totalTokens: 150,
+    });
+  });
+
   test("updateSessionModel refreshes the adapter session model used for subsequent prompts", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({

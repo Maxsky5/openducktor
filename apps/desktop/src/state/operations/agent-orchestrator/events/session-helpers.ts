@@ -1,4 +1,3 @@
-import { startTransition } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { isTodoToolName, settleDanglingTodoToolMessages } from "../../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -62,19 +61,17 @@ export const flushDraftBuffers = (context: SessionEventContext): void => {
   const messageIdByChannel = context.draftMessageIdBySessionRef?.current[context.sessionId];
   const reasoningDraft = resolveDraftFieldState("reasoning", rawByChannel, messageIdByChannel);
 
-  startTransition(() => {
-    context.updateSession(
-      context.sessionId,
-      (current) => ({
-        ...current,
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: reasoningDraft.text,
-        draftReasoningMessageId: reasoningDraft.messageId,
-      }),
-      { persist: false },
-    );
-  });
+  context.updateSession(
+    context.sessionId,
+    (current) => ({
+      ...current,
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: reasoningDraft.text,
+      draftReasoningMessageId: reasoningDraft.messageId,
+    }),
+    { persist: false },
+  );
 };
 
 export const scheduleDraftFlush = (context: SessionEventContext): void => {

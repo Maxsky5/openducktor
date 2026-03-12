@@ -160,6 +160,31 @@ describe("event-stream", () => {
     expect(emitted.some((event) => event.type === "assistant_part")).toBe(true);
   });
 
+  test("replays known assistant parts when the assistant role becomes known later", async () => {
+    const emitted = await runEventStream([
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            id: "text-late-role-1",
+            sessionID: "external-session-1",
+            messageID: "assistant-message-late-role-1",
+            type: "text",
+            text: "Late role text",
+          },
+        },
+      } as unknown as Event,
+      assistantRoleEvent("assistant-message-late-role-1"),
+    ]);
+
+    const partEvents = emitted.filter((event) => event.type === "assistant_part");
+    expect(partEvents).toHaveLength(1);
+    if (partEvents[0]?.type !== "assistant_part" || partEvents[0].part.kind !== "text") {
+      throw new Error("Expected assistant text part event");
+    }
+    expect(partEvents[0].part.text).toBe("Late role text");
+  });
+
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
     const client = makeClientWithEvents([
       {

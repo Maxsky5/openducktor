@@ -58,16 +58,18 @@ const findExistingAssistantMessageIndex = (
       continue;
     }
     if (entry.content.trim() !== normalizedIncoming) {
-      return -1;
+      continue;
     }
     if (entry.timestamp === event.timestamp) {
       return index;
     }
     const existingEpoch = Date.parse(entry.timestamp);
     if (Number.isNaN(existingEpoch) || Number.isNaN(incomingEpoch)) {
-      return -1;
+      continue;
     }
-    return Math.abs(incomingEpoch - existingEpoch) <= 2_000 ? index : -1;
+    if (Math.abs(incomingEpoch - existingEpoch) <= 2_000) {
+      return index;
+    }
   }
 
   return -1;

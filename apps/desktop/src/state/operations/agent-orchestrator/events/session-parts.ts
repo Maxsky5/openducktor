@@ -65,6 +65,16 @@ const clearDraftChannelBuffer = (
   source?: "delta" | "part",
   messageId?: string,
 ): void => {
+  if (channel === "reasoning") {
+    const timeoutId = context.draftFlushTimeoutBySessionRef?.current[context.sessionId];
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+      if (context.draftFlushTimeoutBySessionRef) {
+        delete context.draftFlushTimeoutBySessionRef.current[context.sessionId];
+      }
+    }
+  }
+
   const currentRaw = context.draftRawBySessionRef.current[context.sessionId] ?? {};
   const nextRaw = { ...currentRaw };
   delete nextRaw[channel];
@@ -148,13 +158,6 @@ const upsertLiveAssistantMessage = ({
           ...toAssistantMessageMeta(current, undefined, undefined, model),
           isFinal: false,
         };
-  const nextAssistantMeta =
-    existingMessage?.meta?.kind === "assistant"
-      ? {
-          ...assistantMeta,
-          ...(assistantMeta.isFinal !== undefined ? { isFinal: assistantMeta.isFinal } : {}),
-        }
-      : assistantMeta;
 
   return {
     ...current,
@@ -165,7 +168,7 @@ const upsertLiveAssistantMessage = ({
       role: "assistant",
       content: nextContent,
       timestamp: existingMessage?.timestamp ?? timestamp,
-      meta: nextAssistantMeta,
+      meta: assistantMeta,
     }),
   };
 };

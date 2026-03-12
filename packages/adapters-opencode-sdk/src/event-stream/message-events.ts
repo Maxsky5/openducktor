@@ -42,6 +42,19 @@ const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: s
   return true;
 };
 
+const emitKnownAssistantPartsForMessage = (
+  runtime: EventStreamRuntime,
+  messageId: string,
+  roleHint?: string,
+): void => {
+  for (const part of runtime.partsById.values()) {
+    if (part.messageID !== messageId) {
+      continue;
+    }
+    emitAssistantPart(runtime, part, roleHint);
+  }
+};
+
 const applyPendingDeltas = (runtime: EventStreamRuntime, partId: string, basePart: Part): Part => {
   const pendingDeltas = runtime.pendingDeltasByPartId.get(partId);
   if (!pendingDeltas || pendingDeltas.length === 0) {
@@ -98,6 +111,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
   const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
+  const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
   }
@@ -127,6 +141,15 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
       normalizedParts.push(partWithPendingDelta);
       emitAssistantPart(runtime, partWithPendingDelta, role);
     }
+  }
+
+  if (
+    messageId &&
+    role === "assistant" &&
+    previousRole !== "assistant" &&
+    normalizedParts.length === 0
+  ) {
+    emitKnownAssistantPartsForMessage(runtime, messageId, role);
   }
 
   const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;

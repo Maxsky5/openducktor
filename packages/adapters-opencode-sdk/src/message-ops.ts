@@ -15,7 +15,7 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
-import { normalizeModelInput } from "./payload-mappers";
+import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
@@ -212,7 +212,7 @@ export const sendUserMessage = async (input: {
     responseData.parts,
   );
   const assistantModel = readMessageModelSelection((responseData as { info?: unknown }).info);
-  const responseMessageId = (responseData as { info?: { id?: string } }).info?.id;
+  const responseMessageId = resolveAssistantResponseMessageId(responseData);
   if (assistantMessage.length > 0) {
     if (!responseMessageId) {
       throw new Error("Prompt session returned assistant text without a message id.");

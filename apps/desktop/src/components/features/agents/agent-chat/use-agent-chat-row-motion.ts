@@ -31,6 +31,7 @@ export function useAgentChatRowMotion({
       animationByRowKeyRef.current.clear();
       rowElementByKeyRef.current.clear();
       refCallbackByKeyRef.current.clear();
+      seenRowKeysBySessionRef.current = {};
     };
   }, []);
 
