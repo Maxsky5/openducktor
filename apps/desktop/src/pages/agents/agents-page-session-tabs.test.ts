@@ -247,6 +247,31 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
+  test("keeps workflow role in_progress while the latest role session is still running even if workflow is completed", () => {
+    const states = buildWorkflowStateByRole({
+      task: null,
+      roleWorkflowsByTask: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: false },
+        build: { required: true, canSkip: false, available: false, completed: false },
+        qa: { required: false, canSkip: true, available: false, completed: false },
+      },
+      latestSessionByRole: {
+        spec: buildSession({ role: "spec", status: "running" }),
+        planner: null,
+        build: null,
+        qa: null,
+      },
+    });
+
+    expect(states).toEqual({
+      spec: "in_progress",
+      planner: "available",
+      build: "blocked",
+      qa: "optional",
+    });
+  });
+
   test("does not mark unavailable roles as in_progress when a session exists", () => {
     const states = buildWorkflowStateByRole({
       task: null,

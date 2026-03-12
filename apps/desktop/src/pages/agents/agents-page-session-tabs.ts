@@ -160,6 +160,12 @@ export const buildWorkflowStateByRole = (params: {
 
   for (const role of ALL_AGENT_ROLES) {
     const latestRoleSession = params.latestSessionByRole[role];
+    const hasRunningRoleSession =
+      latestRoleSession?.status === "starting" || latestRoleSession?.status === "running";
+    if (hasRunningRoleSession) {
+      stateByRole[role] = "in_progress";
+      continue;
+    }
     if (role === "build" && qaRejected) {
       stateByRole[role] = "done";
       continue;
@@ -182,10 +188,7 @@ export const buildWorkflowStateByRole = (params: {
       stateByRole[role] = "done";
       continue;
     }
-    const hasStartedRoleSession =
-      latestRoleSession?.status === "starting" ||
-      latestRoleSession?.status === "running" ||
-      latestRoleSession?.status === "idle";
+    const hasStartedRoleSession = latestRoleSession?.status === "idle";
     if (params.roleWorkflowsByTask[role].available && hasStartedRoleSession) {
       stateByRole[role] = "in_progress";
       continue;
