@@ -1,5 +1,13 @@
 use super::*;
 
+fn parse_pull_request_record(value: &Value) -> Option<PullRequestRecord> {
+    serde_json::from_value(value.clone()).ok()
+}
+
+fn parse_direct_merge_record(value: &Value) -> Option<DirectMergeRecord> {
+    serde_json::from_value(value.clone()).ok()
+}
+
 impl BeadsTaskStore {
     fn compact_agent_session_for_storage(
         &self,
@@ -99,6 +107,52 @@ impl BeadsTaskStore {
         Ok(())
     }
 
+    pub(super) fn set_pull_request_impl(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+    ) -> Result<()> {
+        let (mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
+
+        match pull_request {
+            Some(value) => {
+                namespace_map.insert("pullRequest".to_string(), serde_json::to_value(value)?);
+            }
+            None => {
+                namespace_map.remove("pullRequest");
+            }
+        }
+
+        namespace_map.remove("delivery");
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        Ok(())
+    }
+
+    pub(super) fn set_direct_merge_record_impl(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        direct_merge: Option<DirectMergeRecord>,
+    ) -> Result<()> {
+        let (mut root, namespace_key, mut namespace_map) =
+            self.load_namespace(repo_path, task_id)?;
+
+        match direct_merge {
+            Some(value) => {
+                namespace_map.insert("directMerge".to_string(), serde_json::to_value(value)?);
+            }
+            None => {
+                namespace_map.remove("directMerge");
+            }
+        }
+
+        namespace_map.remove("delivery");
+        self.persist_namespace(repo_path, task_id, &namespace_key, &mut root, namespace_map)?;
+        Ok(())
+    }
+
     pub(super) fn get_task_metadata_impl(
         &self,
         repo_path: &Path,
@@ -153,10 +207,33 @@ impl BeadsTaskStore {
             .unwrap_or_default();
         agent_sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
 
+        let pull_request = namespace
+            .and_then(|ns| ns.get("pullRequest"))
+            .and_then(parse_pull_request_record)
+            .or_else(|| {
+                namespace
+                    .and_then(|ns| ns.get("delivery"))
+                    .and_then(Value::as_object)
+                    .and_then(|delivery| delivery.get("linkedPullRequest"))
+                    .and_then(parse_pull_request_record)
+            });
+        let direct_merge = namespace
+            .and_then(|ns| ns.get("directMerge"))
+            .and_then(parse_direct_merge_record)
+            .or_else(|| {
+                namespace
+                    .and_then(|ns| ns.get("delivery"))
+                    .and_then(Value::as_object)
+                    .and_then(|delivery| delivery.get("directMerge"))
+                    .and_then(parse_direct_merge_record)
+            });
+
         Ok(TaskMetadata {
             spec,
             plan,
             qa_report,
+            pull_request,
+            direct_merge,
             agent_sessions,
         })
     }

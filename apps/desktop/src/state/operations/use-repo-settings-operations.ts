@@ -1,6 +1,11 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type {
+  GitProviderRepository,
+  GlobalGitConfig,
+  SettingsSnapshot,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
 import { useCallback } from "react";
-import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
+import { normalizeTargetBranch } from "@/lib/target-branch";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
@@ -8,19 +13,23 @@ import { requireActiveRepo } from "./task-operations-model";
 
 type UseRepoSettingsOperationsArgs = {
   activeRepo: string | null;
-  refreshWorkspaces: () => Promise<void>;
+  applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
+  applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
 
 type UseRepoSettingsOperationsResult = {
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
+  saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
 export function useRepoSettingsOperations({
   activeRepo,
-  refreshWorkspaces,
+  applyWorkspaceRecords,
+  applyWorkspaceRecord,
 }: UseRepoSettingsOperationsArgs): UseRepoSettingsOperationsResult {
   const toInputDefault = useCallback(
     (
@@ -84,7 +93,7 @@ export function useRepoSettingsOperations({
       defaultRuntimeKind: config.defaultRuntimeKind,
       worktreeBasePath: config.worktreeBasePath ?? "",
       branchPrefix: config.branchPrefix,
-      defaultTargetBranch: normalizeCanonicalTargetBranch(config.defaultTargetBranch),
+      defaultTargetBranch: normalizeTargetBranch(config.defaultTargetBranch),
       trustedHooks: config.trustedHooks,
       preStartHooks: config.hooks.preStart,
       postCompleteHooks: config.hooks.postComplete,
@@ -108,7 +117,7 @@ export function useRepoSettingsOperations({
       const qaDefault = toConfigDefault(input.agentDefaults.qa);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
-      const normalizedTargetBranch = normalizeCanonicalTargetBranch(input.defaultTargetBranch);
+      const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
       const agentDefaults = {
         ...(specDefault ? { spec: specDefault } : {}),
         ...(plannerDefault ? { planner: plannerDefault } : {}),
@@ -116,7 +125,7 @@ export function useRepoSettingsOperations({
         ...(qaDefault ? { qa: qaDefault } : {}),
       };
 
-      await host.workspaceSaveRepoSettings(repo, {
+      const workspace = await host.workspaceSaveRepoSettings(repo, {
         defaultRuntimeKind: input.defaultRuntimeKind,
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
@@ -130,27 +139,40 @@ export function useRepoSettingsOperations({
         agentDefaults,
       });
 
-      await refreshWorkspaces();
+      applyWorkspaceRecord(workspace);
     },
-    [activeRepo, refreshWorkspaces, toConfigDefault],
+    [activeRepo, applyWorkspaceRecord, toConfigDefault],
   );
 
   const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
     return host.workspaceGetSettingsSnapshot();
   }, []);
 
+  const detectGithubRepository = useCallback(
+    async (repoPath: string): Promise<GitProviderRepository | null> => {
+      return host.workspaceDetectGithubRepository(repoPath);
+    },
+    [],
+  );
+
+  const saveGlobalGitConfig = useCallback(async (git: GlobalGitConfig): Promise<void> => {
+    await host.workspaceUpdateGlobalGitConfig(git);
+  }, []);
+
   const saveSettingsSnapshot = useCallback(
     async (snapshot: SettingsSnapshot): Promise<void> => {
-      await host.workspaceSaveSettingsSnapshot(snapshot);
-      await refreshWorkspaces();
+      const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
+      applyWorkspaceRecords(workspaces);
     },
-    [refreshWorkspaces],
+    [applyWorkspaceRecords],
   );
 
   return {
     loadRepoSettings,
     saveRepoSettings,
     loadSettingsSnapshot,
+    detectGithubRepository,
+    saveGlobalGitConfig,
     saveSettingsSnapshot,
   };
 }

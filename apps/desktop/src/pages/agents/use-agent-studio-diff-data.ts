@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
+import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { DiffDataState, UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
 
 export type {
@@ -20,7 +20,7 @@ export function useAgentStudioDiffData({
   enablePolling,
   runCompletionRecoverySignal,
 }: UseAgentStudioDiffDataInput): DiffDataState {
-  const targetBranch = normalizeCanonicalTargetBranch(defaultTargetBranch);
+  const targetBranch = canonicalTargetBranch(defaultTargetBranch);
   const {
     worktreePath,
     worktreeResolutionRunId,

@@ -7,8 +7,8 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use crate::app_service::test_support::{
-    build_service_with_git_state_enforced, make_emitter, make_task, spawn_sleep_process,
-    unique_temp_path,
+    build_service_with_git_state_enforced, init_git_repo, make_emitter, make_task,
+    spawn_sleep_process, unique_temp_path,
 };
 use crate::app_service::RunProcess;
 
@@ -189,7 +189,7 @@ fn canonical_repo_path_variants_are_authorized() -> Result<()> {
 
     let root = unique_temp_path("repo-auth-canonical");
     let repo = root.join("repo");
-    fs::create_dir_all(repo.join(".git"))?;
+    init_git_repo(&repo)?;
 
     let canonical_repo = fs::canonicalize(&repo)?.to_string_lossy().to_string();
     service.workspace_add(canonical_repo.as_str())?;
@@ -223,7 +223,11 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some("/tmp/wt".to_string()),
                 branch_prefix: "odt".to_string(),
-                default_target_branch: "origin/main".to_string(),
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),

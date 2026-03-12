@@ -2,6 +2,7 @@ import type {
   CommitsAheadBehind,
   FileDiff,
   FileStatus,
+  GitTargetBranch,
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
@@ -32,7 +33,7 @@ export type UseAgentStudioDiffDataInput = {
   repoPath: string | null;
   sessionWorkingDirectory: string | null;
   sessionRunId: string | null;
-  defaultTargetBranch: string;
+  defaultTargetBranch: GitTargetBranch;
   branchIdentityKey?: string | null;
   enablePolling: boolean;
   runCompletionRecoverySignal?: number;

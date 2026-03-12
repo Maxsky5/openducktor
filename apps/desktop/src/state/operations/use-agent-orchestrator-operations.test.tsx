@@ -214,6 +214,9 @@ describe("use-agent-orchestrator-operations", () => {
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
+      git: {
+        defaultMergeMethod: "merge_commit",
+      },
       repos: {},
       globalPromptOverrides: {},
     });
@@ -432,7 +435,10 @@ describe("use-agent-orchestrator-operations", () => {
       host.workspaceGetRepoConfig = async () => ({
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
-        defaultTargetBranch: "main",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
         trustedHooks: false,
         hooks: {
           preStart: [],
@@ -548,7 +554,10 @@ describe("use-agent-orchestrator-operations", () => {
       host.workspaceGetRepoConfig = async () => ({
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
-        defaultTargetBranch: "main",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
         trustedHooks: false,
         hooks: {
           preStart: [],
@@ -729,7 +738,10 @@ describe("use-agent-orchestrator-operations", () => {
       host.workspaceGetRepoConfig = async () => ({
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
-        defaultTargetBranch: "main",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
         trustedHooks: false,
         hooks: {
           preStart: [],
@@ -826,7 +838,10 @@ describe("use-agent-orchestrator-operations", () => {
       host.workspaceGetRepoConfig = async () => ({
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
-        defaultTargetBranch: "main",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
         trustedHooks: false,
         hooks: {
           preStart: [],
@@ -1107,7 +1122,10 @@ describe("use-agent-orchestrator-operations", () => {
       host.workspaceGetRepoConfig = async () => ({
         defaultRuntimeKind: "opencode" as const,
         branchPrefix: "obp",
-        defaultTargetBranch: "main",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
         trustedHooks: false,
         hooks: {
           preStart: [],

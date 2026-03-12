@@ -16,7 +16,7 @@ export const emptyRepoSettings = (): RepoSettingsInput => ({
   defaultRuntimeKind: DEFAULT_RUNTIME_KIND,
   worktreeBasePath: "",
   branchPrefix: DEFAULT_BRANCH_PREFIX,
-  defaultTargetBranch: DEFAULT_TARGET_BRANCH,
+  defaultTargetBranch: { ...DEFAULT_TARGET_BRANCH },
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],

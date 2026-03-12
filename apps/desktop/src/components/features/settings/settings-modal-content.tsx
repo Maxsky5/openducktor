@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { GeneralSettingsSection } from "./settings-general-section";
+import { SettingsGitSection } from "./settings-git-section";
 import type {
   PromptRoleTabId,
   RepositorySectionId,
@@ -10,6 +11,7 @@ import { RepositorySidebar } from "./settings-modal-sidebars";
 import { PromptOverridesSection } from "./settings-prompt-overrides-section";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
+import { RepositoryGitSection } from "./settings-repository-git-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
 type SettingsModalContentProps = {
@@ -62,6 +64,7 @@ export function SettingsModalContent({
     setSelectedRepoPath,
     retrySelectedRepoBranchesLoad,
     updateSelectedRepoConfig,
+    updateGlobalGitConfig,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
@@ -113,6 +116,17 @@ export function SettingsModalContent({
     );
   }
 
+  if (section === "git") {
+    return (
+      <SettingsGitSection
+        git={snapshotDraft.git}
+        runtimeCheck={controller.runtimeCheck}
+        disabled={isInteractionDisabled}
+        onUpdateGit={updateGlobalGitConfig}
+      />
+    );
+  }
+
   return (
     <div className="grid h-full lg:grid-cols-[240px_minmax(0,1fr)]">
       <RepositorySidebar
@@ -144,6 +158,17 @@ export function SettingsModalContent({
             isLoadingSelectedRepoBranches={isLoadingSelectedRepoBranches}
             onRetrySelectedRepoBranchesLoad={retrySelectedRepoBranchesLoad}
             onPickWorktreeBasePath={pickWorktreeBasePath}
+            onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
+          />
+        ) : null}
+
+        {repositorySection === "git" ? (
+          <RepositoryGitSection
+            selectedRepoPath={selectedRepoPath}
+            selectedRepoConfig={selectedRepoConfig}
+            runtimeCheck={controller.runtimeCheck}
+            disabled={isInteractionDisabled}
+            onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
         ) : null}

@@ -230,7 +230,11 @@ fn qa_review_target_get_prefers_active_build_run() -> Result<()> {
     let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
     let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
     let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "task", host_domain::TaskStatus::AiReview)],
+        vec![make_task(
+            "task-1",
+            "task",
+            host_domain::TaskStatus::AiReview,
+        )],
         vec![],
         GitCurrentBranch {
             name: Some("main".to_string()),
@@ -240,37 +244,37 @@ fn qa_review_target_get_prefers_active_build_run() -> Result<()> {
         config_store,
     );
     service.workspace_add(repo_path.as_str())?;
-    service
-        .runs
-        .lock()
-        .expect("run lock poisoned")
-        .insert(
-            "run-1".to_string(),
-            RunProcess {
-                summary: run_summary_fixture(
-                    repo_path.as_str(),
-                    "task-1",
-                    worktree.to_string_lossy().as_ref(),
-                ),
-                child: spawn_sleep_process(20),
-                _opencode_process_guard: None,
-                repo_path: repo_path.clone(),
-                task_id: "task-1".to_string(),
-                worktree_path: worktree.to_string_lossy().to_string(),
-                repo_config: RepoConfig {
-                    default_runtime_kind: "opencode".to_string(),
-                    worktree_base_path: Some(repo_root.join("worktrees").to_string_lossy().to_string()),
-                    branch_prefix: "obp".to_string(),
-                    default_target_branch: "origin/main".to_string(),
-                    trusted_hooks: true,
-                    trusted_hooks_fingerprint: None,
-                    hooks: HookSet::default(),
-                    worktree_file_copies: Vec::new(),
-                    prompt_overrides: Default::default(),
-                    agent_defaults: Default::default(),
+    service.runs.lock().expect("run lock poisoned").insert(
+        "run-1".to_string(),
+        RunProcess {
+            summary: run_summary_fixture(
+                repo_path.as_str(),
+                "task-1",
+                worktree.to_string_lossy().as_ref(),
+            ),
+            child: spawn_sleep_process(20),
+            _opencode_process_guard: None,
+            repo_path: repo_path.clone(),
+            task_id: "task-1".to_string(),
+            worktree_path: worktree.to_string_lossy().to_string(),
+            repo_config: RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
+                worktree_base_path: Some(repo_root.join("worktrees").to_string_lossy().to_string()),
+                branch_prefix: "obp".to_string(),
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
                 },
+                git: Default::default(),
+                trusted_hooks: true,
+                trusted_hooks_fingerprint: None,
+                hooks: HookSet::default(),
+                worktree_file_copies: Vec::new(),
+                prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
             },
-        );
+        },
+    );
 
     let target = service.qa_review_target_get(repo_path.as_str(), "task-1")?;
     assert_eq!(target.source, QaReviewTargetSource::ActiveBuildRun);
@@ -292,7 +296,11 @@ fn qa_review_target_get_falls_back_to_latest_builder_session_worktree() -> Resul
     let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
     let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
     let (service, task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "task", host_domain::TaskStatus::AiReview)],
+        vec![make_task(
+            "task-1",
+            "task",
+            host_domain::TaskStatus::AiReview,
+        )],
         vec![],
         GitCurrentBranch {
             name: Some("main".to_string()),
@@ -334,7 +342,11 @@ fn qa_review_target_get_rejects_missing_builder_worktree() -> Result<()> {
     let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
     let (service, _task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "task", host_domain::TaskStatus::AiReview)],
+        vec![make_task(
+            "task-1",
+            "task",
+            host_domain::TaskStatus::AiReview,
+        )],
         vec![],
         GitCurrentBranch {
             name: Some("main".to_string()),
@@ -363,7 +375,11 @@ fn qa_review_target_get_rejects_repo_root_builder_session() -> Result<()> {
     let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
     let (service, task_state, _git_state) = build_service_with_store(
-        vec![make_task("task-1", "task", host_domain::TaskStatus::AiReview)],
+        vec![make_task(
+            "task-1",
+            "task",
+            host_domain::TaskStatus::AiReview,
+        )],
         vec![],
         GitCurrentBranch {
             name: Some("main".to_string()),

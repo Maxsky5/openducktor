@@ -109,4 +109,40 @@ describe("KanbanTaskCard active sessions", () => {
 
     expect(html).toContain("QA Rejected");
   });
+
+  test("renders a pull request link badge when the task is linked to a PR", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-4",
+      title: "Ship approval flow",
+      pullRequest: {
+        providerId: "github",
+        number: 110,
+        url: "https://github.com/openai/openducktor/pull/110",
+        state: "open",
+        createdAt: "2026-03-12T12:24:09Z",
+        updatedAt: "2026-03-12T12:24:09Z",
+        lastSyncedAt: undefined,
+        mergedAt: undefined,
+        closedAt: undefined,
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          activeSessions: [],
+          onOpenDetails: noop,
+          onDelegate: noop,
+          onPlan: noop,
+          onBuild: noop,
+        }),
+      ),
+    );
+
+    expect(html).toContain("PR #110");
+    expect(html).toContain("text-emerald");
+  });
 });

@@ -31,6 +31,9 @@ const workspaceGetRepoConfigMock = mock(
   }),
 );
 const workspaceGetSettingsSnapshotMock = mock(async () => ({
+  git: {
+    defaultMergeMethod: "merge_commit" as const,
+  },
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
@@ -85,7 +88,7 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
   defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "",
   branchPrefix: "codex/",
-  defaultTargetBranch: "main",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
@@ -171,6 +174,7 @@ mock.module("@/state", () => ({
     sessions: currentSessionsFixture,
     loadAgentSessions: loadAgentSessionsMock,
     startAgentSession: startAgentSessionMock,
+    forkAgentSession: async () => "session-forked",
     sendAgentMessage: sendAgentMessageMock,
     updateAgentSessionModel: updateAgentSessionModelMock,
   }),
@@ -275,6 +279,9 @@ describe("KanbanPage session start modal flow", () => {
       promptOverrides: {},
     }));
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
+      git: {
+        defaultMergeMethod: "merge_commit" as const,
+      },
       repos: {},
       globalPromptOverrides: {},
     }));
@@ -442,7 +449,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   test("kickoff config load failure still reports kickoff error after session start", async () => {
-    workspaceGetRepoConfigMock.mockImplementationOnce(async () => {
+    workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => {
       throw new Error("config unavailable");
     });
 
@@ -470,14 +477,16 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   test("malformed kickoff override still reports kickoff error after session start", async () => {
-    workspaceGetRepoConfigMock.mockImplementationOnce(async () => ({
-      promptOverrides: {
-        "kickoff.build_implementation_start": {
-          template: "Kickoff {{unsupported.token}}",
-          baseVersion: 1,
+    workspaceGetRepoConfigMock.mockImplementation(async () => {
+      return {
+        promptOverrides: {
+          "kickoff.build_implementation_start": {
+            template: "Kickoff {{unsupported.token}}",
+            baseVersion: 1,
+          },
         },
-      },
-    }));
+      };
+    });
 
     const renderer = await renderPage();
 

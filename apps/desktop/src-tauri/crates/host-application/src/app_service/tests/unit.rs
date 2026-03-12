@@ -49,6 +49,8 @@ fn app_service_new_constructor_is_callable() -> Result<()> {
             latest_qa_report: None,
             agent_sessions: Vec::new(),
             upserted_sessions: Vec::new(),
+            pull_requests: std::collections::HashMap::new(),
+            direct_merge_records: std::collections::HashMap::new(),
         })),
     });
 

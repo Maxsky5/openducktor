@@ -1,6 +1,128 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GitMergeMethod {
+    #[default]
+    MergeCommit,
+    Squash,
+    Rebase,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GitProviderRepository {
+    #[serde(default = "default_github_host")]
+    pub host: String,
+    pub owner: String,
+    pub name: String,
+}
+
+fn default_github_host() -> String {
+    "github.com".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitTargetBranch {
+    #[serde(default)]
+    pub remote: Option<String>,
+    pub branch: String,
+}
+
+pub(super) fn default_target_branch() -> GitTargetBranch {
+    GitTargetBranch {
+        remote: Some("origin".to_string()),
+        branch: "main".to_string(),
+    }
+}
+
+fn deserialize_git_target_branch<'de, D>(deserializer: D) -> Result<GitTargetBranch, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<GitTargetBranch>::deserialize(deserializer)?;
+    let parsed = value.unwrap_or_default();
+    Ok(normalize_git_target_branch_value(parsed))
+}
+
+pub(crate) fn normalize_git_target_branch_value(mut value: GitTargetBranch) -> GitTargetBranch {
+    let branch = value.branch.trim();
+    if branch.is_empty() {
+        return default_target_branch();
+    }
+    value.branch = branch.to_string();
+    if value.branch == "@{upstream}" {
+        value.remote = None;
+        return value;
+    }
+
+    let remote = value.remote.take().and_then(|entry| {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+    value.remote = remote;
+    value
+}
+
+impl Default for GitTargetBranch {
+    fn default() -> Self {
+        default_target_branch()
+    }
+}
+
+impl GitTargetBranch {
+    pub fn canonical(&self) -> String {
+        if self.branch == "@{upstream}" {
+            return self.branch.clone();
+        }
+        match self.remote.as_deref() {
+            Some(remote) => format!("{remote}/{}", self.branch),
+            None => self.branch.clone(),
+        }
+    }
+
+    pub fn display(&self) -> String {
+        self.canonical()
+    }
+
+    pub fn checkout_branch(&self) -> String {
+        self.branch.clone()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GitProviderConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub repository: Option<GitProviderRepository>,
+    #[serde(default)]
+    pub auto_detected: bool,
+}
+
+pub type GitProviderConfigs = HashMap<String, GitProviderConfig>;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoGitConfig {
+    #[serde(default)]
+    pub providers: GitProviderConfigs,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalGitConfig {
+    #[serde(default)]
+    pub default_merge_method: GitMergeMethod,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -79,8 +201,13 @@ pub struct RepoConfig {
     pub worktree_base_path: Option<String>,
     #[serde(default = "default_branch_prefix")]
     pub branch_prefix: String,
-    #[serde(default = "default_target_branch")]
-    pub default_target_branch: String,
+    #[serde(
+        default = "default_target_branch",
+        deserialize_with = "deserialize_git_target_branch"
+    )]
+    pub default_target_branch: GitTargetBranch,
+    #[serde(default)]
+    pub git: RepoGitConfig,
     #[serde(default)]
     pub trusted_hooks: bool,
     #[serde(default)]
@@ -103,10 +230,6 @@ pub(super) fn default_runtime_kind() -> String {
     "opencode".to_string()
 }
 
-pub(super) fn default_target_branch() -> String {
-    "origin/main".to_string()
-}
-
 impl Default for RepoConfig {
     fn default() -> Self {
         Self {
@@ -114,6 +237,7 @@ impl Default for RepoConfig {
             worktree_base_path: None,
             branch_prefix: default_branch_prefix(),
             default_target_branch: default_target_branch(),
+            git: RepoGitConfig::default(),
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),
@@ -217,6 +341,8 @@ pub struct GlobalConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
+    pub git: GlobalGitConfig,
+    #[serde(default)]
     pub global_prompt_overrides: PromptOverrides,
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
@@ -230,6 +356,7 @@ impl Default for GlobalConfig {
             version: 1,
             active_repo: None,
             theme: default_theme(),
+            git: GlobalGitConfig::default(),
             global_prompt_overrides: PromptOverrides::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),
@@ -300,6 +427,6 @@ mod tests {
     #[test]
     fn repo_config_default_target_branch_is_origin_main() {
         let config = RepoConfig::default();
-        assert_eq!(config.default_target_branch, "origin/main");
+        assert_eq!(config.default_target_branch.canonical(), "origin/main");
     }
 }

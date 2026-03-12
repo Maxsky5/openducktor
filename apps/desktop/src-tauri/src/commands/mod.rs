@@ -4,5 +4,6 @@ pub mod documents;
 pub mod git;
 pub(crate) mod issue_type;
 pub mod runtime;
+pub mod system;
 pub mod tasks;
 pub mod workspace;

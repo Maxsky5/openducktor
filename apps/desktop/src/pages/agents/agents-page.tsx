@@ -20,7 +20,7 @@ import {
 } from "@/components/features/task-details";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
-import { UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
+import { normalizeTargetBranch, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import {
   useDelegationEventsContext,
@@ -270,8 +270,8 @@ export function AgentsPage(): ReactElement {
       : null;
   const diffComparisonTarget =
     gitPanelContextMode === "repository"
-      ? UPSTREAM_TARGET_BRANCH
-      : (orchestration.repoSettings?.defaultTargetBranch ?? "origin/main");
+      ? { branch: UPSTREAM_TARGET_BRANCH }
+      : (orchestration.repoSettings?.defaultTargetBranch ?? normalizeTargetBranch(null));
 
   const diffData = useAgentStudioDiffData({
     repoPath: activeRepo,
@@ -338,9 +338,16 @@ export function AgentsPage(): ReactElement {
       ...diffData,
       contextMode: gitPanelContextMode,
       branch: resolvedGitPanelBranch,
+      pullRequest: selection.viewSelectedTask?.pullRequest ?? null,
       ...gitActions,
     }),
-    [diffData, gitActions, gitPanelContextMode, resolvedGitPanelBranch],
+    [
+      diffData,
+      gitActions,
+      gitPanelContextMode,
+      resolvedGitPanelBranch,
+      selection.viewSelectedTask?.pullRequest,
+    ],
   );
   const rightPanelModel = useMemo(
     () =>

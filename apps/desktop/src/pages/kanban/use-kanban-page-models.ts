@@ -6,6 +6,7 @@ import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 import { useKanbanTaskDialogs } from "./use-kanban-task-dialogs";
+import { useTaskApprovalFlow } from "./use-task-approval-flow";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
@@ -17,6 +18,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     sessions,
     loadAgentSessions,
     startAgentSession,
+    forkAgentSession,
     sendAgentMessage,
     updateAgentSessionModel,
   } = useAgentState();
@@ -28,7 +30,6 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     deleteTask,
     deferTask,
     resumeDeferredTask,
-    humanApproveTask,
     humanRequestChangesTask,
   } = useTasksState();
   const navigate = useNavigate();
@@ -64,12 +65,21 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
   }, [refreshTasks]);
+  const { taskApprovalModal, openTaskApproval } = useTaskApprovalFlow({
+    activeRepo,
+    tasks,
+    sessions,
+    loadAgentSessions,
+    forkAgentSession,
+    sendAgentMessage,
+    refreshTasks,
+  });
 
   const onHumanApprove = useCallback(
     (taskId: string): void => {
-      void humanApproveTask(taskId);
+      openTaskApproval(taskId);
     },
-    [humanApproveTask],
+    [openTaskApproval],
   );
 
   const taskDialogs = useKanbanTaskDialogs({
@@ -120,6 +130,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
       onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
     },
     humanReviewFeedbackModal,
+    taskApprovalModal,
     sessionStartModal,
   };
 }

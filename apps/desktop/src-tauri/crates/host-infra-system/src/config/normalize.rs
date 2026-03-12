@@ -1,7 +1,7 @@
 use super::types::{
-    default_branch_prefix, default_target_branch, hook_set_fingerprint, AgentModelDefault,
-    GlobalConfig, HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig,
-    RuntimeConfig,
+    default_branch_prefix, hook_set_fingerprint, normalize_git_target_branch_value,
+    AgentModelDefault, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig,
+    HookSet, OpencodeStartupReadinessConfig, PromptOverrides, RepoConfig, RuntimeConfig,
 };
 
 fn normalize_optional_non_empty(value: Option<String>) -> Option<String> {
@@ -63,15 +63,43 @@ fn normalize_prompt_overrides(overrides: &mut PromptOverrides) {
         .collect();
 }
 
-fn canonicalize_default_target_branch(value: &str) -> String {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return default_target_branch();
+fn normalize_git_provider_repository(value: &mut Option<GitProviderRepository>) {
+    let Some(entry) = value.as_mut() else {
+        return;
+    };
+
+    let host = entry.host.trim();
+    entry.host = if host.is_empty() {
+        "github.com".to_string()
+    } else {
+        host.to_string()
+    };
+    entry.owner = entry.owner.trim().to_string();
+    entry.name = entry.name.trim().to_string();
+
+    if entry.owner.is_empty() || entry.name.is_empty() {
+        *value = None;
     }
-    if trimmed.contains('/') {
-        return trimmed.to_string();
-    }
-    format!("origin/{trimmed}")
+}
+
+fn normalize_git_provider_configs(
+    overrides: &mut std::collections::HashMap<String, GitProviderConfig>,
+) {
+    *overrides = std::mem::take(overrides)
+        .into_iter()
+        .filter_map(|(key, mut entry)| {
+            let normalized_key = key.trim().to_string();
+            if normalized_key.is_empty() {
+                return None;
+            }
+            normalize_git_provider_repository(&mut entry.repository);
+            Some((normalized_key, entry))
+        })
+        .collect();
+}
+
+fn canonicalize_default_target_branch(value: GitTargetBranch) -> GitTargetBranch {
+    normalize_git_target_branch_value(value)
 }
 
 pub fn normalize_hook_set(mut hooks: HookSet) -> HookSet {
@@ -88,7 +116,9 @@ pub(super) fn normalize_repo_config(repo: &mut RepoConfig) {
     } else {
         branch_prefix.to_string()
     };
-    repo.default_target_branch = canonicalize_default_target_branch(&repo.default_target_branch);
+    repo.default_target_branch =
+        canonicalize_default_target_branch(std::mem::take(&mut repo.default_target_branch));
+    normalize_git_provider_configs(&mut repo.git.providers);
     repo.hooks = normalize_hook_set(std::mem::take(&mut repo.hooks));
     normalize_hook_commands(&mut repo.worktree_file_copies);
     let current_fingerprint = hook_set_fingerprint(&repo.hooks);

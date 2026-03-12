@@ -1,8 +1,10 @@
 import type {
   AgentPromptTemplateId,
   GitBranch,
+  GitProviderRepository,
   RepoConfig,
   RepoPromptOverrides,
+  RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
   SettingsSnapshot,
@@ -13,16 +15,31 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
 import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-repo-settings";
-import { useWorkspaceState } from "@/state";
+import { useChecksState, useWorkspaceState } from "@/state";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
-import { normalizeSnapshotForSave } from "./settings-modal-normalization";
+import {
+  normalizeGlobalGitConfigForSave,
+  normalizeSnapshotForSave,
+} from "./settings-modal-normalization";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
+
+type DirtySections = {
+  globalGit: boolean;
+  globalPromptOverrides: boolean;
+  repoSettings: boolean;
+};
+
+const EMPTY_DIRTY_SECTIONS: DirtySections = {
+  globalGit: false,
+  globalPromptOverrides: false,
+  repoSettings: false,
+};
 
 export type SettingsModalController = {
   isLoadingSettings: boolean;
@@ -35,6 +52,7 @@ export type SettingsModalController = {
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
+  runtimeCheck: RuntimeCheck | null;
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
@@ -53,7 +71,11 @@ export type SettingsModalController = {
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
   setSelectedRepoPath: (next: string) => void;
   retrySelectedRepoBranchesLoad: () => void;
+  detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  updateGlobalGitConfig: (
+    updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"],
+  ) => void;
   updateGlobalPromptOverrides: (
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
   ) => void;
@@ -71,15 +93,24 @@ export type SettingsModalController = {
 };
 
 export const useSettingsModalController = (open: boolean): SettingsModalController => {
-  const { activeRepo, loadSettingsSnapshot, saveSettingsSnapshot } = useWorkspaceState();
+  const {
+    activeRepo,
+    loadSettingsSnapshot,
+    detectGithubRepository,
+    saveGlobalGitConfig,
+    saveSettingsSnapshot,
+  } = useWorkspaceState();
+  const { runtimeCheck } = useChecksState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
 
   const [isSaving, setIsSaving] = useState(false);
   const [isPickingWorktreeBasePath, setIsPickingWorktreeBasePath] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [dirtySections, setDirtySections] = useState<DirtySections>(EMPTY_DIRTY_SECTIONS);
 
   const {
+    loadedSnapshot,
     snapshotDraft,
     setSnapshotDraft,
     selectedRepoPath,
@@ -130,23 +161,95 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
   });
 
   const {
-    updateSelectedRepoConfig,
-    updateGlobalPromptOverrides,
-    updateRepoPromptOverrides,
-    updateSelectedRepoAgentDefault,
-    clearSelectedRepoAgentDefault,
+    updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
+    updateGlobalGitConfig: applyGlobalGitConfigUpdate,
+    updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
+    updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
+    updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
+    clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
   } = useSettingsModalDraftActions({
     selectedRepoPath,
     setSnapshotDraft,
   });
 
+  const markDirty = useCallback((section: keyof DirtySections): void => {
+    setDirtySections((current) => {
+      if (current[section]) {
+        return current;
+      }
+      return {
+        ...current,
+        [section]: true,
+      };
+    });
+  }, []);
+
+  const updateSelectedRepoConfig = useCallback(
+    (updater: (current: RepoConfig) => RepoConfig): void => {
+      markDirty("repoSettings");
+      applySelectedRepoConfigUpdate(updater);
+    },
+    [applySelectedRepoConfigUpdate, markDirty],
+  );
+
+  const updateGlobalGitConfig = useCallback(
+    (updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"]): void => {
+      markDirty("globalGit");
+      applyGlobalGitConfigUpdate(updater);
+    },
+    [applyGlobalGitConfigUpdate, markDirty],
+  );
+
+  const updateGlobalPromptOverrides = useCallback(
+    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
+      markDirty("globalPromptOverrides");
+      applyGlobalPromptOverridesUpdate(updater);
+    },
+    [applyGlobalPromptOverridesUpdate, markDirty],
+  );
+
+  const updateRepoPromptOverrides = useCallback(
+    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
+      markDirty("repoSettings");
+      applyRepoPromptOverridesUpdate(updater);
+    },
+    [applyRepoPromptOverridesUpdate, markDirty],
+  );
+
+  const updateSelectedRepoAgentDefault = useCallback(
+    (
+      role: "spec" | "planner" | "build" | "qa",
+      field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
+      value: string,
+    ): void => {
+      markDirty("repoSettings");
+      applySelectedRepoAgentDefaultUpdate(role, field, value);
+    },
+    [applySelectedRepoAgentDefaultUpdate, markDirty],
+  );
+
+  const clearSelectedRepoAgentDefault = useCallback(
+    (role: "spec" | "planner" | "build" | "qa"): void => {
+      markDirty("repoSettings");
+      applyClearSelectedRepoAgentDefault(role);
+    },
+    [applyClearSelectedRepoAgentDefault, markDirty],
+  );
+
   useEffect(() => {
-    if (open) {
+    if (!open) {
+      setDirtySections(EMPTY_DIRTY_SECTIONS);
+      setSaveError(null);
+      clearSettingsError();
+    }
+  }, [clearSettingsError, open]);
+
+  useEffect(() => {
+    if (!open || !loadedSnapshot) {
       return;
     }
-    setSaveError(null);
-    clearSettingsError();
-  }, [clearSettingsError, open]);
+    setDirtySections(EMPTY_DIRTY_SECTIONS);
+  }, [loadedSnapshot, open]);
 
   const pickWorktreeBasePath = useCallback(async (): Promise<void> => {
     setIsPickingWorktreeBasePath(true);
@@ -170,6 +273,42 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     }
   }, [updateSelectedRepoConfig]);
 
+  const detectSelectedRepoGithubRepository = useCallback(async () => {
+    if (!selectedRepoPath) {
+      return null;
+    }
+
+    const detected = await detectGithubRepository(selectedRepoPath);
+    if (!detected) {
+      return null;
+    }
+
+    updateSelectedRepoConfig((repoConfig) => {
+      const currentGithub = repoConfig.git.providers.github ?? {
+        enabled: false,
+        autoDetected: false,
+      };
+      const hasExistingRepository = Boolean(currentGithub.repository);
+
+      return {
+        ...repoConfig,
+        git: {
+          ...repoConfig.git,
+          providers: {
+            ...repoConfig.git.providers,
+            github: {
+              enabled: hasExistingRepository ? currentGithub.enabled : true,
+              autoDetected: true,
+              repository: detected,
+            },
+          },
+        },
+      };
+    });
+
+    return detected;
+  }, [detectGithubRepository, selectedRepoPath, updateSelectedRepoConfig]);
+
   const submit = useCallback(async (): Promise<boolean> => {
     if (!snapshotDraft) {
       return false;
@@ -189,9 +328,35 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     setSaveError(null);
 
     try {
-      await saveSettingsSnapshot(normalizeSnapshotForSave(snapshotDraft));
+      if (
+        !dirtySections.globalGit &&
+        !dirtySections.globalPromptOverrides &&
+        !dirtySections.repoSettings
+      ) {
+        return true;
+      }
 
-      if (typeof window !== "undefined" && activeRepo) {
+      const shouldUseGlobalGitSave =
+        dirtySections.globalGit &&
+        !dirtySections.globalPromptOverrides &&
+        !dirtySections.repoSettings;
+
+      if (shouldUseGlobalGitSave) {
+        const normalizedGit = normalizeGlobalGitConfigForSave(snapshotDraft.git);
+        const loadedGit = loadedSnapshot
+          ? normalizeGlobalGitConfigForSave(loadedSnapshot.git)
+          : null;
+        if (loadedGit && loadedGit.defaultMergeMethod === normalizedGit.defaultMergeMethod) {
+          return true;
+        }
+
+        await saveGlobalGitConfig(normalizedGit);
+      } else {
+        const normalizedSnapshot = normalizeSnapshotForSave(snapshotDraft);
+        await saveSettingsSnapshot(normalizedSnapshot);
+      }
+
+      if (typeof window !== "undefined" && activeRepo && !shouldUseGlobalGitSave) {
         window.dispatchEvent(
           new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
             detail: { repoPath: activeRepo },
@@ -212,8 +377,13 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     }
   }, [
     activeRepo,
+    dirtySections.globalGit,
+    dirtySections.globalPromptOverrides,
+    dirtySections.repoSettings,
     hasPromptValidationErrors,
+    loadedSnapshot,
     promptValidationState.totalErrorCount,
+    saveGlobalGitConfig,
     saveSettingsSnapshot,
     snapshotDraft,
   ]);
@@ -229,6 +399,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     saveError,
     snapshotDraft,
     runtimeDefinitions,
+    runtimeCheck,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
@@ -247,7 +418,9 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     settingsSectionErrorCountById,
     setSelectedRepoPath,
     retrySelectedRepoBranchesLoad,
+    detectSelectedRepoGithubRepository,
     updateSelectedRepoConfig,
+    updateGlobalGitConfig,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,

@@ -101,7 +101,6 @@ export function TaskDetailsSheetBody({
         summaryUpdatedAt={qaSummaryUpdatedAt}
         onLoad={loadQaDocumentSection}
       />
-
       <TaskDetailsMetadata key={`${task.id}:metadata`} task={task} />
       {shouldRenderSubtasks ? <TaskDetailsSubtasks subtasks={subtasks} /> : null}
     </div>

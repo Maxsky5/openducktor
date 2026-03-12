@@ -24,6 +24,7 @@ export function AgentStudioStateProvider({
     sessions,
     loadAgentSessions,
     startAgentSession,
+    forkAgentSession,
     sendAgentMessage,
     stopAgentSession,
     updateAgentSessionModel,
@@ -43,6 +44,7 @@ export function AgentStudioStateProvider({
         sessions,
         loadAgentSessions,
         startAgentSession,
+        forkAgentSession,
         sendAgentMessage,
         stopAgentSession,
         updateAgentSessionModel,
@@ -52,6 +54,7 @@ export function AgentStudioStateProvider({
     [
       answerAgentQuestion,
       loadAgentSessions,
+      forkAgentSession,
       replyAgentPermission,
       sendAgentMessage,
       sessions,

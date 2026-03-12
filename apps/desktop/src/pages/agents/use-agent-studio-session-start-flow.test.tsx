@@ -55,6 +55,9 @@ describe("useAgentStudioSessionStartFlow", () => {
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
+      git: {
+        defaultMergeMethod: "merge_commit",
+      },
       repos: {},
       globalPromptOverrides: {},
     });

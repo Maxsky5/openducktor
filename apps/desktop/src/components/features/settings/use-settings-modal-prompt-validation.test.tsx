@@ -14,6 +14,9 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useSettingsModalPromptValidation, initialProps);
 
 const createSnapshot = (): SettingsSnapshot => ({
+  git: {
+    defaultMergeMethod: "merge_commit",
+  },
   globalPromptOverrides: {
     "system.scenario.spec_initial": {
       template: "invalid {{task.bad}}",
@@ -26,7 +29,10 @@ const createSnapshot = (): SettingsSnapshot => ({
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/a",
       branchPrefix: "obp",
-      defaultTargetBranch: "origin/main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       worktreeFileCopies: [],
@@ -43,7 +49,10 @@ const createSnapshot = (): SettingsSnapshot => ({
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/b",
       branchPrefix: "obp",
-      defaultTargetBranch: "origin/main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       worktreeFileCopies: [],
@@ -67,6 +76,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.promptValidationState.totalErrorCount).toBe(0);
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
+      git: 0,
       repositories: 0,
       prompts: 0,
     });
@@ -91,6 +101,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.selectedRepoPromptRoleTabErrorCounts.build).toBe(1);
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
+      git: 0,
       repositories: 1,
       prompts: 1,
     });

@@ -36,6 +36,39 @@ export type HumanReviewFeedbackModalModel = {
   onConfirm: () => void;
 };
 
+export type TaskApprovalMode = "direct_merge" | "pull_request";
+export type PullRequestDraftMode = "manual" | "generate_ai";
+
+export type TaskApprovalModalModel = {
+  open: boolean;
+  stage: "approval" | "push_target";
+  taskId: string;
+  isLoading: boolean;
+  mode: TaskApprovalMode;
+  mergeMethod: "merge_commit" | "squash" | "rebase";
+  pullRequestDraftMode: PullRequestDraftMode;
+  pullRequestAvailable: boolean;
+  pullRequestUnavailableReason: string | null;
+  hasUncommittedChanges: boolean;
+  uncommittedFileCount: number;
+  pullRequestUrl: string | null;
+  title: string;
+  body: string;
+  targetBranch: string;
+  publishTarget: string | null;
+  isSubmitting: boolean;
+  errorMessage: string | null;
+  onOpenChange: (open: boolean) => void;
+  onModeChange: (mode: TaskApprovalMode) => void;
+  onMergeMethodChange: (mergeMethod: "merge_commit" | "squash" | "rebase") => void;
+  onPullRequestDraftModeChange: (mode: PullRequestDraftMode) => void;
+  onTitleChange: (value: string) => void;
+  onBodyChange: (value: string) => void;
+  onConfirm: () => void;
+  onSkipPush: () => void;
+  onConfirmPush: () => void;
+};
+
 export type KanbanPageHeaderModel = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
@@ -87,5 +120,6 @@ export type KanbanPageModels = {
   taskComposer: KanbanPageTaskComposerModel;
   taskDetailsController: KanbanPageTaskDetailsControllerModel;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
+  taskApprovalModal: TaskApprovalModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
 };

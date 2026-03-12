@@ -1,6 +1,7 @@
 use crate::document::{
     AgentSessionDocument, QaReportDocument, QaVerdict, SpecDocument, TaskMetadata,
 };
+use crate::git::{DirectMergeRecord, PullRequestRecord};
 use crate::task::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
 use anyhow::Result;
 use std::path::Path;
@@ -51,6 +52,18 @@ pub trait TaskStore: Send + Sync {
         repo_path: &Path,
         task_id: &str,
         session: AgentSessionDocument,
+    ) -> Result<()>;
+    fn set_pull_request(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+    ) -> Result<()>;
+    fn set_direct_merge_record(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        direct_merge: Option<DirectMergeRecord>,
     ) -> Result<()>;
     /// Fetch all task metadata (spec, plan, QA report, sessions) in a single CLI call.
     /// Use this when you need multiple metadata fields for the same task to avoid

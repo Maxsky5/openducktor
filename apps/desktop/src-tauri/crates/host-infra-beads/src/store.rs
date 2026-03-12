@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    now_rfc3339, AgentSessionDocument, CreateTaskInput, QaReportDocument, QaVerdict, SpecDocument,
-    TaskCard, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    now_rfc3339, AgentSessionDocument, CreateTaskInput, DirectMergeRecord, PullRequestRecord,
+    QaReportDocument, QaVerdict, SpecDocument, TaskCard, TaskMetadata, TaskStatus, TaskStore,
+    UpdateTaskPatch,
 };
 use host_infra_system::{compute_repo_slug, resolve_central_beads_dir};
 use serde_json::Value;
@@ -170,6 +171,24 @@ impl TaskStore for BeadsTaskStore {
         session: AgentSessionDocument,
     ) -> Result<()> {
         self.upsert_agent_session_impl(repo_path, task_id, session)
+    }
+
+    fn set_pull_request(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+    ) -> Result<()> {
+        self.set_pull_request_impl(repo_path, task_id, pull_request)
+    }
+
+    fn set_direct_merge_record(
+        &self,
+        repo_path: &Path,
+        task_id: &str,
+        direct_merge: Option<DirectMergeRecord>,
+    ) -> Result<()> {
+        self.set_direct_merge_record_impl(repo_path, task_id, direct_merge)
     }
 
     fn get_task_metadata(&self, repo_path: &Path, task_id: &str) -> Result<TaskMetadata> {

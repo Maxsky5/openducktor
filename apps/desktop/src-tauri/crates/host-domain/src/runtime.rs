@@ -43,6 +43,7 @@ impl AgentRuntimeKind {
                     supports_profiles: true,
                     supports_variants: true,
                     supports_odt_workflow_tools: true,
+                    supports_session_fork: true,
                     supports_permission_requests: true,
                     supports_question_requests: true,
                     supports_todos: true,
@@ -123,6 +124,7 @@ pub struct RuntimeCapabilities {
     pub supports_profiles: bool,
     pub supports_variants: bool,
     pub supports_odt_workflow_tools: bool,
+    pub supports_session_fork: bool,
     pub supports_permission_requests: bool,
     pub supports_question_requests: bool,
     pub supports_todos: bool,
@@ -138,6 +140,9 @@ impl RuntimeCapabilities {
         let mut missing = Vec::new();
         if !self.supports_odt_workflow_tools {
             missing.push("supports_odt_workflow_tools");
+        }
+        if !self.supports_session_fork {
+            missing.push("supports_session_fork");
         }
         missing
     }
@@ -337,6 +342,7 @@ mod tests {
             supports_profiles: true,
             supports_variants: true,
             supports_odt_workflow_tools: true,
+            supports_session_fork: true,
             supports_permission_requests: true,
             supports_question_requests: true,
             supports_todos: true,
@@ -395,6 +401,7 @@ mod tests {
                 supports_profiles: true,
                 supports_variants: true,
                 supports_odt_workflow_tools: false,
+                supports_session_fork: false,
                 supports_permission_requests: true,
                 supports_question_requests: true,
                 supports_todos: true,
@@ -409,7 +416,8 @@ mod tests {
         assert_eq!(
             descriptor.validate_for_openducktor(),
             vec![
-                "missing mandatory capabilities: supports_odt_workflow_tools".to_string(),
+                "missing mandatory capabilities: supports_odt_workflow_tools, supports_session_fork"
+                    .to_string(),
                 "missing required workflow scopes: task, build".to_string(),
             ]
         );

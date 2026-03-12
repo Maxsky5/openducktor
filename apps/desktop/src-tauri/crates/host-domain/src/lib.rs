@@ -11,12 +11,14 @@ pub use document::{
     TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
 };
 pub use git::{
-    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-    GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest,
-    GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-    GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-    GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
-    GitWorktreeStatusSummaryData, GitWorktreeSummary,
+    DirectMergeRecord, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
+    GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
+    GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod, GitPort, GitProviderAvailability,
+    GitProviderRepository, GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
+    GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitTargetBranch,
+    GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot,
+    GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, GitWorktreeSummary, PullRequestRecord,
+    TaskApprovalContext,
 };
 pub use runtime::{
     AgentRuntimeKind, QaReviewTarget, QaReviewTargetSource, RunEvent, RunState, RunSummary,
@@ -99,14 +101,14 @@ mod tests {
     fn public_api_exports_compile() {
         use super::{
             AgentSessionDocument, AgentSessionModelSelection, AgentWorkflowState, AgentWorkflows,
-            BeadsCheck, CreateTaskInput, GitBranch, GitCommitAllRequest,
-            GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort,
-            GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest,
-            GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
-            GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData,
-            GitWorktreeStatusSnapshot, GitWorktreeStatusSummary, GitWorktreeStatusSummaryData,
-            GitWorktreeSummary, IssueType, PlanSubtaskInput, QaReportDocument, QaReviewTarget,
-            QaReviewTargetSource, QaVerdict, QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeCheck,
+            BeadsCheck, CreateTaskInput, GitBranch, GitCommitAllRequest, GitCommitAllResult,
+            GitCurrentBranch, GitDiffScope, GitFileStatusCounts, GitPort, GitPullRequest,
+            GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+            GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind,
+            GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot,
+            GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, GitWorktreeSummary, IssueType,
+            PlanSubtaskInput, QaReportDocument, QaReviewTarget, QaReviewTargetSource, QaVerdict,
+            QaWorkflowVerdict, RunEvent, RunState, RunSummary, RuntimeCheck,
             RuntimeInstanceSummary, RuntimeRole, SpecDocument, SystemCheck, TaskAction, TaskCard,
             TaskDocumentPresence, TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
             TaskStatus, TaskStore, UpdateTaskPatch, WorkspaceRecord,

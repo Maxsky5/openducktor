@@ -32,7 +32,10 @@ describe("agent-orchestrator-runtime", () => {
     host.workspaceGetRepoConfig = async () => ({
       defaultRuntimeKind: "opencode",
       branchPrefix: "obp",
-      defaultTargetBranch: "main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: {
         preStart: [],
@@ -363,7 +366,10 @@ describe("agent-orchestrator-runtime", () => {
     host.workspaceGetRepoConfig = async () => ({
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
-      defaultTargetBranch: "main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: {
         preStart: [],
@@ -402,7 +408,10 @@ describe("agent-orchestrator-runtime", () => {
     host.workspaceGetRepoConfig = async () => ({
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
-      defaultTargetBranch: "main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: {
         preStart: [],
@@ -424,6 +433,9 @@ describe("agent-orchestrator-runtime", () => {
       agentDefaults: {},
     });
     host.workspaceGetSettingsSnapshot = async () => ({
+      git: {
+        defaultMergeMethod: "merge_commit",
+      },
       repos: {},
       globalPromptOverrides: {
         "kickoff.spec_initial": {
@@ -473,7 +485,10 @@ describe("agent-orchestrator-runtime", () => {
     host.workspaceGetRepoConfig = async () => ({
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
-      defaultTargetBranch: "main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: {
         preStart: [],
@@ -484,6 +499,9 @@ describe("agent-orchestrator-runtime", () => {
       agentDefaults: {},
     });
     host.workspaceGetSettingsSnapshot = async () => ({
+      git: {
+        defaultMergeMethod: "merge_commit",
+      },
       repos: {},
       globalPromptOverrides,
     });

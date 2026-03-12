@@ -90,9 +90,11 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     if (isLoadingTasks) {
       return;
     }
-    const knownTaskIds = new Set(tasks.map((task) => task.id));
+    const openTaskIds = new Set(
+      tasks.filter((task) => task.status !== "closed").map((task) => task.id),
+    );
     setOpenTaskTabs((current) => {
-      const filtered = current.filter((taskTabId) => knownTaskIds.has(taskTabId));
+      const filtered = current.filter((taskTabId) => openTaskIds.has(taskTabId));
       if (filtered.length === current.length) {
         return current;
       }
@@ -105,6 +107,9 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
       return;
     }
     if (!selectedTask) {
+      return;
+    }
+    if (selectedTask.status === "closed") {
       return;
     }
     setOpenTaskTabs((current) => {

@@ -1,7 +1,6 @@
 import type { CommitsAheadBehind } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
 
 export type AgentStudioRebaseConflictOperation = "rebase" | "pull_rebase";
@@ -522,7 +521,7 @@ export function useAgentStudioGitActions({
 
   const rebaseOntoTarget = useCallback(async (): Promise<void> => {
     await runRebase(
-      normalizeCanonicalTargetBranch(targetBranch),
+      targetBranch,
       "Cannot rebase because target branch is not configured.",
       "Rebase failed.",
     );

@@ -230,7 +230,10 @@ describe("use-workspace-operations", () => {
     const workspaceGetRepoConfig = mock(async () => ({
       defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
-      defaultTargetBranch: "main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: {
         preStart: [],

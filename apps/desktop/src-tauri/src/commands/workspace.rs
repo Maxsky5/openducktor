@@ -50,6 +50,7 @@ pub async fn workspace_update_repo_config(
             worktree_base_path: config.worktree_base_path,
             branch_prefix: config.branch_prefix,
             default_target_branch: config.default_target_branch,
+            git: config.git,
             worktree_file_copies: config.worktree_file_copies,
             prompt_overrides: config.prompt_overrides,
             agent_defaults: config.agent_defaults,
@@ -73,6 +74,7 @@ pub async fn workspace_save_repo_settings<R: tauri::Runtime>(
         worktree_base_path: settings.worktree_base_path,
         branch_prefix: settings.branch_prefix,
         default_target_branch: settings.default_target_branch,
+        git: settings.git,
         trusted_hooks: settings.trusted_hooks,
         hooks: settings.hooks,
         worktree_file_copies: settings.worktree_file_copies,
@@ -118,15 +120,39 @@ pub async fn workspace_get_repo_config(
 }
 
 #[tauri::command]
+pub async fn workspace_detect_github_repository(
+    state: State<'_, AppState>,
+    repo_path: String,
+) -> Result<Option<host_infra_system::GitProviderRepository>, String> {
+    as_error(state.service.workspace_detect_github_repository(&repo_path))
+}
+
+#[tauri::command]
 pub async fn workspace_get_settings_snapshot(
     state: State<'_, AppState>,
 ) -> Result<SettingsSnapshotResponsePayload, String> {
-    let (repos, global_prompt_overrides) =
+    let (git, repos, global_prompt_overrides) =
         as_error(state.service.workspace_get_settings_snapshot())?;
     Ok(SettingsSnapshotResponsePayload {
+        git,
         repos,
         global_prompt_overrides,
     })
+}
+
+#[tauri::command]
+pub async fn workspace_update_global_git_config<R: tauri::Runtime>(
+    state: State<'_, AppState>,
+    _app: AppHandle<R>,
+    git: host_infra_system::GlobalGitConfig,
+) -> Result<(), String> {
+    let service = state.service.clone();
+    as_error(
+        run_service_blocking("workspace_update_global_git_config", move || {
+            service.workspace_update_global_git_config(git)
+        })
+        .await,
+    )
 }
 
 #[tauri::command]
@@ -136,6 +162,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
     snapshot: SettingsSnapshotPayload,
 ) -> Result<Vec<host_domain::WorkspaceRecord>, String> {
     let SettingsSnapshotPayload {
+        git,
         repos,
         global_prompt_overrides,
     } = snapshot;
@@ -145,6 +172,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
     as_error(
         run_service_blocking("workspace_save_settings_snapshot", move || {
             service.workspace_save_settings_snapshot(
+                git,
                 repos,
                 global_prompt_overrides,
                 &confirmation_port,
@@ -292,19 +320,23 @@ impl<R: tauri::Runtime> HookTrustConfirmationPort for TauriHookTrustConfirmation
 #[cfg(test)]
 mod tests {
     use super::{
-        format_hook_list, sanitize_hook_preview, workspace_prepare_trusted_hooks_challenge,
-        workspace_save_repo_settings, workspace_save_settings_snapshot,
-        workspace_set_trusted_hooks, HookSet,
+        format_hook_list, sanitize_hook_preview, workspace_detect_github_repository,
+        workspace_prepare_trusted_hooks_challenge, workspace_save_repo_settings,
+        workspace_save_settings_snapshot, workspace_set_trusted_hooks,
+        workspace_update_global_git_config, HookSet,
     };
     use crate::{AppState, RepoSettingsPayload, SettingsSnapshotPayload};
     use host_application::{AppService, PreparedHookTrustChallenge};
     use host_domain::{TaskStore, WorkspaceRecord, TASK_METADATA_NAMESPACE};
     use host_infra_beads::BeadsTaskStore;
-    use host_infra_system::{hook_set_fingerprint, AppConfigStore, GitCliPort, PromptOverride};
+    use host_infra_system::{
+        hook_set_fingerprint, AppConfigStore, GitCliPort, GlobalGitConfig, PromptOverride,
+    };
     use serde_json::{json, Value};
     use std::{
         fs,
         path::PathBuf,
+        process::Command,
         sync::{Arc, Mutex},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -350,7 +382,12 @@ mod tests {
     ) -> WorkspaceCommandFixture {
         let root = unique_test_dir(prefix);
         let repo = root.join("repo");
-        fs::create_dir_all(repo.join(".git")).expect("fake git workspace should exist");
+        fs::create_dir_all(&repo).expect("git workspace should exist");
+        Command::new("git")
+            .arg("init")
+            .arg(&repo)
+            .status()
+            .expect("git init should succeed");
         let repo_path = repo.to_string_lossy().to_string();
 
         let config_store = AppConfigStore::from_path(root.join("config.json"));
@@ -378,6 +415,8 @@ mod tests {
             .invoke_handler(tauri::generate_handler![
                 workspace_prepare_trusted_hooks_challenge,
                 workspace_set_trusted_hooks,
+                workspace_detect_github_repository,
+                workspace_update_global_git_config,
                 workspace_save_settings_snapshot,
             ])
             .build(mock_context(noop_assets()))
@@ -425,6 +464,15 @@ mod tests {
         tauri::async_runtime::block_on(workspace_save_settings_snapshot(
             state, app_handle, snapshot,
         ))
+    }
+
+    fn run_workspace_update_global_git_config(
+        fixture: &WorkspaceCommandFixture,
+        git: GlobalGitConfig,
+    ) -> Result<(), String> {
+        let state = fixture.app.state::<AppState>();
+        let app_handle = fixture.app.handle().clone();
+        tauri::async_runtime::block_on(workspace_update_global_git_config(state, app_handle, git))
     }
 
     fn run_workspace_save_repo_settings(
@@ -665,11 +713,12 @@ mod tests {
             Some(false),
         );
 
-        let (repos, global_prompt_overrides) = fixture
+        let (git, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         let mut snapshot = SettingsSnapshotPayload {
+            git,
             repos,
             global_prompt_overrides,
         };
@@ -712,11 +761,12 @@ mod tests {
             Some(true),
         );
 
-        let (repos, global_prompt_overrides) = fixture
+        let (git, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         let mut snapshot = SettingsSnapshotPayload {
+            git,
             repos,
             global_prompt_overrides,
         };
@@ -754,6 +804,29 @@ mod tests {
     }
 
     #[test]
+    fn workspace_update_global_git_config_persists_without_snapshot_roundtrip() -> Result<(), String>
+    {
+        let fixture = setup_workspace_command_fixture("update-global-git", HookSet::default());
+
+        run_workspace_update_global_git_config(
+            &fixture,
+            GlobalGitConfig {
+                default_merge_method: host_infra_system::GitMergeMethod::Squash,
+            },
+        )?;
+
+        let config = fixture
+            .service
+            .workspace_get_settings_snapshot()
+            .map_err(|error| error.to_string())?;
+        assert_eq!(
+            config.0.default_merge_method,
+            host_infra_system::GitMergeMethod::Squash
+        );
+        Ok(())
+    }
+
+    #[test]
     fn workspace_save_repo_settings_rejects_blank_default_runtime_kind() {
         let fixture =
             setup_workspace_command_fixture("save-repo-settings-blank-runtime", HookSet::default());
@@ -765,6 +838,7 @@ mod tests {
                 worktree_base_path: None,
                 branch_prefix: None,
                 default_target_branch: None,
+                git: None,
                 trusted_hooks: false,
                 hooks: None,
                 worktree_file_copies: None,
@@ -792,6 +866,7 @@ mod tests {
                 worktree_base_path: None,
                 branch_prefix: None,
                 default_target_branch: None,
+                git: None,
                 trusted_hooks: false,
                 hooks: None,
                 worktree_file_copies: None,
@@ -814,11 +889,12 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-ipc-shared-prompts", HookSet::default());
 
-        let (repos, global_prompt_overrides) = fixture
+        let (git, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         let mut snapshot = SettingsSnapshotPayload {
+            git,
             repos,
             global_prompt_overrides,
         };
@@ -864,6 +940,7 @@ mod tests {
 
         let payload = json!({
             "snapshot": {
+                "git": snapshot.git,
                 "repos": snapshot.repos,
                 "globalPromptOverrides": snapshot.global_prompt_overrides,
             }
@@ -879,7 +956,7 @@ mod tests {
             "snapshot save response should include workspace records"
         );
 
-        let (persisted_repos, persisted_global) = fixture
+        let (_persisted_git, persisted_repos, persisted_global) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;

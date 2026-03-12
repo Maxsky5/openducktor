@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
+import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
 import { isQaRejectedTask } from "@/lib/task-qa";
@@ -48,6 +49,7 @@ export function TaskDetailsSheetHeader({
       <div className="flex flex-wrap items-center gap-2">
         <IssueTypeBadge issueType={task.issueType} />
         <PriorityBadge priority={task.priority} />
+        {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
         {qaRejected ? (
           <Badge
             variant="outline"

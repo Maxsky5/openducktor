@@ -16,6 +16,7 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   parentId: undefined,
   subtaskIds: [],
   assignee: undefined,
+  pullRequest: undefined,
   documentSummary: {
     spec: { has: false },
     plan: { has: false },

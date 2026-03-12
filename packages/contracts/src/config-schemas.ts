@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
+import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 
 const DEFAULT_SOFT_GUARDRAILS = {
@@ -50,7 +51,8 @@ export const repoConfigSchema = z.object({
   defaultRuntimeKind: runtimeKindSchema.default("opencode"),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default("obp"),
-  defaultTargetBranch: z.string().default("origin/main"),
+  defaultTargetBranch: gitTargetBranchSchema.default({ remote: "origin", branch: "main" }),
+  git: repoGitConfigSchema.default({ providers: {} }),
   trustedHooks: z.boolean().default(false),
   trustedHooksFingerprint: nullableToOptional(z.string().min(1)),
   hooks: repoHooksSchema.default({ preStart: [], postComplete: [] }),
@@ -68,6 +70,7 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 export const globalConfigSchema = z.object({
   version: z.literal(1),
   activeRepo: z.string().optional(),
+  git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   recentRepos: z.array(z.string()).default([]),
@@ -75,6 +78,7 @@ export const globalConfigSchema = z.object({
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 
 export const settingsSnapshotSchema = z.object({
+  git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });

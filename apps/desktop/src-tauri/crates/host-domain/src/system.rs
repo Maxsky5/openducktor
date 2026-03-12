@@ -15,6 +15,11 @@ pub struct RuntimeHealth {
 pub struct SystemCheck {
     pub git_ok: bool,
     pub git_version: Option<String>,
+    pub gh_ok: bool,
+    pub gh_version: Option<String>,
+    pub gh_auth_ok: bool,
+    pub gh_auth_login: Option<String>,
+    pub gh_auth_error: Option<String>,
     pub runtimes: Vec<RuntimeHealth>,
     pub beads_ok: bool,
     pub beads_path: Option<String>,
@@ -27,6 +32,11 @@ pub struct SystemCheck {
 pub struct RuntimeCheck {
     pub git_ok: bool,
     pub git_version: Option<String>,
+    pub gh_ok: bool,
+    pub gh_version: Option<String>,
+    pub gh_auth_ok: bool,
+    pub gh_auth_login: Option<String>,
+    pub gh_auth_error: Option<String>,
     pub runtimes: Vec<RuntimeHealth>,
     pub errors: Vec<String>,
 }

@@ -1,3 +1,4 @@
+use crate::git::{DirectMergeRecord, PullRequestRecord};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -165,5 +166,7 @@ pub struct TaskMetadata {
     pub spec: SpecDocument,
     pub plan: SpecDocument,
     pub qa_report: Option<QaReportDocument>,
+    pub pull_request: Option<PullRequestRecord>,
+    pub direct_merge: Option<DirectMergeRecord>,
     pub agent_sessions: Vec<AgentSessionDocument>,
 }

@@ -50,7 +50,7 @@ describe("app-state-context-values", () => {
         defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "",
         branchPrefix: "odt",
-        defaultTargetBranch: "main",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
         trustedHooks: false,
         preStartHooks: [],
         postCompleteHooks: [],
@@ -59,9 +59,14 @@ describe("app-state-context-values", () => {
       }),
       saveRepoSettings: async () => {},
       loadSettingsSnapshot: async () => ({
+        git: {
+          defaultMergeMethod: "merge_commit",
+        },
         repos: {},
         globalPromptOverrides: {},
       }),
+      detectGithubRepository: async () => null,
+      saveGlobalGitConfig: async () => {},
       saveSettingsSnapshot: async () => {},
     });
 
@@ -110,6 +115,7 @@ describe("app-state-context-values", () => {
       sessions: [],
       loadAgentSessions: async () => {},
       startAgentSession: async () => "session",
+      forkAgentSession: async () => "session-forked",
       sendAgentMessage: async () => {},
       stopAgentSession: async () => {},
       updateAgentSessionModel: () => {},

@@ -9,6 +9,7 @@ import {
   type AgentSessionTodoItem,
   type AgentWorkspaceInspectionPort,
   type EventUnsubscribe,
+  type ForkAgentSessionInput,
   type ListAgentModelsInput,
   type LoadAgentFileStatusInput,
   type LoadAgentSessionDiffInput,
@@ -154,6 +155,35 @@ export class OpencodeSdkAdapter
       client,
       startedAt,
       startedMessage: `Resumed ${input.role} session (${input.scenario})`,
+      now: this.now,
+      emit: this.emit.bind(this),
+      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+    });
+  }
+
+  async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
+    const client = this.createClient(toRuntimeClientInput(input.runtimeConnection, "fork session"));
+    const forked = await client.session.fork({
+      directory: input.workingDirectory,
+      sessionID: input.parentExternalSessionId,
+      ...(input.messageId ? { messageID: input.messageId } : {}),
+    });
+    const forkedData = unwrapData(forked, "fork session");
+    const externalSessionId = forkedData.id;
+    const sessionId = input.sessionId?.trim() ? input.sessionId : externalSessionId;
+    const sessionInput = toSessionInput({
+      ...input,
+      sessionId,
+    });
+
+    return registerSession({
+      sessions: this.sessions,
+      sessionId,
+      externalSessionId,
+      sessionInput,
+      client,
+      startedAt: this.now(),
+      startedMessage: `Forked ${input.role} session (${input.scenario})`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),

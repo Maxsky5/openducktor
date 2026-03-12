@@ -1,4 +1,5 @@
 use super::{RepoConfig, TestStoreHarness};
+use crate::GitTargetBranch;
 use serde_json::json;
 use std::fs;
 #[cfg(unix)]
@@ -30,7 +31,11 @@ fn update_repo_config_normalizes_blank_worktree_path() {
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some("   ".to_string()),
                 branch_prefix: "duck".to_string(),
-                default_target_branch: "   ".to_string(),
+                default_target_branch: GitTargetBranch {
+                    remote: None,
+                    branch: "   ".to_string(),
+                },
+                git: Default::default(),
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
@@ -47,11 +52,11 @@ fn update_repo_config_normalizes_blank_worktree_path() {
     let loaded = store.repo_config(&repo_str).expect("load repo config");
     assert!(loaded.worktree_base_path.is_none());
     assert_eq!(loaded.branch_prefix, "duck");
-    assert_eq!(loaded.default_target_branch, "origin/main");
+    assert_eq!(loaded.default_target_branch.canonical(), "origin/main");
 }
 
 #[test]
-fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
+fn update_repo_config_preserves_explicit_local_default_target_branch() {
     let harness = TestStoreHarness::new("canonical-target-branch");
     let store = harness.store();
     let root = harness.root();
@@ -67,7 +72,11 @@ fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: None,
                 branch_prefix: "duck".to_string(),
-                default_target_branch: "main".to_string(),
+                default_target_branch: GitTargetBranch {
+                    remote: None,
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
@@ -79,7 +88,7 @@ fn update_repo_config_canonicalizes_default_target_branch_without_remote() {
         .expect("update config");
 
     let loaded = store.repo_config(&repo_str).expect("load repo config");
-    assert_eq!(loaded.default_target_branch, "origin/main");
+    assert_eq!(loaded.default_target_branch.canonical(), "main");
 }
 
 #[test]
@@ -97,7 +106,9 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         json!({
             "worktreeBasePath": "",
             "branchPrefix": "   ",
-            "defaultTargetBranch": "   ",
+            "defaultTargetBranch": {
+                "branch": "   "
+            },
             "trustedHooks": false,
             "hooks": {
                 "preStart": ["  echo pre  ", "   "],
@@ -153,7 +164,7 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         .expect("repo config");
     assert!(repo_config.worktree_base_path.is_none());
     assert_eq!(repo_config.branch_prefix, "obp");
-    assert_eq!(repo_config.default_target_branch, "origin/main");
+    assert_eq!(repo_config.default_target_branch.canonical(), "origin/main");
     assert_eq!(repo_config.hooks.pre_start, vec!["echo pre".to_string()]);
     assert_eq!(
         repo_config.hooks.post_complete,
@@ -178,4 +189,46 @@ fn load_normalizes_legacy_blank_repo_config_values() {
         .expect("qa review override");
     assert_eq!(qa_review_override.template, "");
     assert_eq!(qa_review_override.base_version, 2);
+}
+
+#[test]
+fn load_rejects_legacy_string_default_target_branch_values() {
+    let harness = TestStoreHarness::new("reject-legacy-target-branch");
+    let store = harness.store();
+    let root = harness.root();
+    let repo = root.join("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    fs::create_dir_all(store.path().parent().expect("config parent")).expect("create config dir");
+    let payload = json!({
+        "version": 1,
+        "activeRepo": repo_str,
+        "repos": {
+            repo_str.clone(): {
+                "defaultTargetBranch": "origin/main"
+            }
+        },
+        "recentRepos": []
+    });
+    fs::write(
+        store.path(),
+        serde_json::to_string_pretty(&payload).expect("serialize payload"),
+    )
+    .expect("write config");
+    #[cfg(unix)]
+    {
+        let parent = store.path().parent().expect("config parent");
+        fs::set_permissions(parent, Permissions::from_mode(0o700))
+            .expect("config directory should be private");
+        fs::set_permissions(store.path(), Permissions::from_mode(0o600))
+            .expect("config file should be private");
+    }
+
+    let error = store
+        .load()
+        .expect_err("legacy string target branch should fail");
+    assert!(
+        error.to_string().contains("Failed parsing config file"),
+        "expected parse failure, got: {error}"
+    );
 }

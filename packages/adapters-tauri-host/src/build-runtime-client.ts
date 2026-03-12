@@ -1,6 +1,8 @@
 import {
   type BeadsCheck,
   beadsCheckSchema,
+  gitMergeMethodSchema,
+  pullRequestSchema,
   type QaReviewTarget,
   qaReviewTargetSchema,
   type RunSummary,
@@ -15,10 +17,12 @@ import {
   type SystemCheck,
   systemCheckSchema,
   type TaskCard,
+  taskApprovalContextSchema,
   taskCardSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
+import type { TaskMetadataCache } from "./task-metadata-cache";
 
 export type BuildRespondAction = "approve" | "deny" | "message";
 export type BuildCleanupMode = "success" | "failure";
@@ -166,6 +170,54 @@ export const humanApprove = async (
   return taskCardSchema.parse(payload);
 };
 
+export const taskApprovalContextGet = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+) => {
+  const payload = await invokeFn<unknown>("task_approval_context_get", {
+    repoPath,
+    taskId,
+  });
+  return taskApprovalContextSchema.parse(payload);
+};
+
+export const taskDirectMerge = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+  mergeMethod: string,
+): Promise<TaskCard> => {
+  const payload = await invokeFn<unknown>("task_direct_merge", {
+    repoPath,
+    taskId,
+    mergeMethod: gitMergeMethodSchema.parse(mergeMethod),
+  });
+  return taskCardSchema.parse(payload);
+};
+
+export const taskPullRequestUpsert = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+  title: string,
+  body: string,
+) => {
+  const payload = await invokeFn<unknown>("task_pull_request_upsert", {
+    repoPath,
+    taskId,
+    input: { title, body },
+  });
+  return pullRequestSchema.parse(payload);
+};
+
+export const repoPullRequestSync = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+): Promise<{ ok: boolean }> => {
+  return invokeFn<{ ok: boolean }>("repo_pull_request_sync", { repoPath });
+};
+
 export const buildRespond = async (
   invokeFn: InvokeFn,
   runId: string,
@@ -188,7 +240,10 @@ export const buildCleanup = async (
 };
 
 export class TauriAgentClient {
-  constructor(private readonly invokeFn: InvokeFn) {}
+  constructor(
+    private readonly invokeFn: InvokeFn,
+    private readonly metadataCache?: TaskMetadataCache,
+  ) {}
 
   async systemCheck(repoPath: string): Promise<SystemCheck> {
     return systemCheck(this.invokeFn, repoPath);
@@ -255,6 +310,28 @@ export class TauriAgentClient {
 
   async humanApprove(repoPath: string, taskId: string): Promise<TaskCard> {
     return humanApprove(this.invokeFn, repoPath, taskId);
+  }
+
+  async taskApprovalContextGet(repoPath: string, taskId: string) {
+    return taskApprovalContextGet(this.invokeFn, repoPath, taskId);
+  }
+
+  async taskDirectMerge(repoPath: string, taskId: string, mergeMethod: string): Promise<TaskCard> {
+    const task = await taskDirectMerge(this.invokeFn, repoPath, taskId, mergeMethod);
+    this.metadataCache?.invalidate(repoPath, taskId);
+    return task;
+  }
+
+  async taskPullRequestUpsert(repoPath: string, taskId: string, title: string, body: string) {
+    const pullRequest = await taskPullRequestUpsert(this.invokeFn, repoPath, taskId, title, body);
+    this.metadataCache?.invalidate(repoPath, taskId);
+    return pullRequest;
+  }
+
+  async repoPullRequestSync(repoPath: string): Promise<{ ok: boolean }> {
+    const result = await repoPullRequestSync(this.invokeFn, repoPath);
+    this.metadataCache?.invalidateRepo(repoPath);
+    return result;
   }
 
   async buildRespond(

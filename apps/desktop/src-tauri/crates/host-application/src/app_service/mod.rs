@@ -19,6 +19,7 @@ use std::time::Instant;
 pub mod build_orchestrator;
 
 mod events;
+mod git_provider;
 mod hook_security;
 mod opencode_runtime;
 mod process_registry;

@@ -2,6 +2,9 @@ import type {
   BeadsCheck,
   GitBranch,
   GitCurrentBranch,
+  GitProviderRepository,
+  GitTargetBranch,
+  GlobalGitConfig,
   RunEvent,
   RunSummary,
   RuntimeCheck,
@@ -30,7 +33,7 @@ export type RepoSettingsInput = {
   worktreeBasePath: string;
   branchPrefix: string;
   /** Default branch used for ahead/behind comparison, rebase, and PR creation. */
-  defaultTargetBranch: string;
+  defaultTargetBranch: GitTargetBranch;
   trustedHooks: boolean;
   preStartHooks: string[];
   postCompleteHooks: string[];
@@ -61,6 +64,8 @@ export type WorkspaceStateContextValue = {
   loadRepoSettings: () => Promise<RepoSettingsInput>;
   saveRepoSettings: (input: RepoSettingsInput) => Promise<void>;
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
+  saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
@@ -122,6 +127,10 @@ export type AgentStateContextValue = {
     startMode?: "reuse_latest" | "fresh";
     requireModelReady?: boolean;
     workingDirectoryOverride?: string | null;
+  }) => Promise<string>;
+  forkAgentSession: (input: {
+    parentSessionId: string;
+    selectedModel?: AgentModelSelection | null;
   }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   stopAgentSession: (sessionId: string) => Promise<void>;

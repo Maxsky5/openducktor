@@ -1,5 +1,6 @@
 mod branch;
 mod commit;
+mod merge;
 mod remote;
 mod status;
 #[cfg(test)]
@@ -10,9 +11,10 @@ mod worktree;
 use anyhow::{Context, Result};
 use host_domain::{
     GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-    GitDiffScope, GitFileDiff, GitFileStatus, GitPort, GitPullRequest, GitPullResult,
-    GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest,
-    GitRebaseBranchResult, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
+    GitDiffScope, GitFileDiff, GitFileStatus, GitMergeBranchRequest, GitMergeBranchResult, GitPort,
+    GitPullRequest, GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
+    GitRebaseBranchRequest, GitRebaseBranchResult, GitWorktreeStatusData,
+    GitWorktreeStatusSummaryData,
 };
 use std::path::Path;
 
@@ -169,5 +171,13 @@ impl GitPort for GitCliPort {
         request: GitRebaseAbortRequest,
     ) -> Result<GitRebaseAbortResult> {
         self.rebase_abort_impl(repo_path, request)
+    }
+
+    fn merge_branch(
+        &self,
+        repo_path: &Path,
+        request: GitMergeBranchRequest,
+    ) -> Result<GitMergeBranchResult> {
+        self.merge_branch_impl(repo_path, request)
     }
 }

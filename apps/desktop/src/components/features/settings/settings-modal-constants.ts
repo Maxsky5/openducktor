@@ -3,8 +3,8 @@ import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { listBuiltinAgentPromptTemplates } from "@openducktor/core";
 import { FolderGit2, type LucideIcon, MessageSquareText, SlidersHorizontal } from "lucide-react";
 
-export type SettingsSectionId = "general" | "repositories" | "prompts";
-export type RepositorySectionId = "configuration" | "agents" | "prompts";
+export type SettingsSectionId = "general" | "git" | "repositories" | "prompts";
+export type RepositorySectionId = "configuration" | "git" | "agents" | "prompts";
 export type PromptRoleTabId = "shared" | "spec" | "planner" | "build" | "qa";
 
 type BuiltinPromptDefinition = ReturnType<typeof listBuiltinAgentPromptTemplates>[number];
@@ -15,6 +15,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   icon: LucideIcon;
 }> = [
   { id: "general", label: "General", icon: SlidersHorizontal },
+  { id: "git", label: "Git", icon: FolderGit2 },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "Prompts", icon: MessageSquareText },
 ];
@@ -24,6 +25,7 @@ export const REPOSITORY_SECTIONS: ReadonlyArray<{
   label: string;
 }> = [
   { id: "configuration", label: "Configuration" },
+  { id: "git", label: "Git" },
   { id: "agents", label: "Agents" },
   { id: "prompts", label: "Repo Prompts" },
 ];
@@ -60,6 +62,7 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "kickoff.build_after_qa_rejected": "Builder Kickoff After QA Rejection",
   "kickoff.build_after_human_request_changes": "Builder Kickoff After Human Changes",
   "kickoff.qa_review": "QA Kickoff",
+  "message.build_pull_request_draft": "Builder Pull Request Draft Message",
   "message.build_rebase_conflict_resolution": "Builder Rebase Conflict Message",
   "permission.read_only.reject": "Read-Only Permission Rejection",
 };
@@ -102,6 +105,8 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
   "kickoff.build_after_human_request_changes":
     "Initial kickoff message sent when Builder restarts after human-requested changes.",
   "kickoff.qa_review": "Initial kickoff message sent when a QA review session is created.",
+  "message.build_pull_request_draft":
+    "Reusable in-session message sent to a forked Builder session to generate pull request title and body.",
   "message.build_rebase_conflict_resolution":
     "Reusable in-session message sent to Builder when a git rebase stops on conflicts.",
   "permission.read_only.reject":

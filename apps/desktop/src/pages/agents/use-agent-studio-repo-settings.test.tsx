@@ -18,7 +18,7 @@ const createSettings = (): RepoSettingsInput => ({
   defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "/worktrees",
   branchPrefix: "codex/",
-  defaultTargetBranch: "main",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],

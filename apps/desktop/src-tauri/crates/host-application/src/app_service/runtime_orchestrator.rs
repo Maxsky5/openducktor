@@ -3,7 +3,9 @@ mod startup;
 
 use super::AppService;
 use anyhow::{anyhow, Result};
-use host_domain::{AgentRuntimeKind, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeRole};
+use host_domain::{
+    AgentRuntimeKind, RunSummary, RuntimeDescriptor, RuntimeInstanceSummary, RuntimeRole,
+};
 use std::collections::HashSet;
 use std::process::Child;
 

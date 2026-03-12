@@ -40,6 +40,11 @@ describe("DiagnosticsPanelSections", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
         runtimes: [
           { kind: "opencode", ok: true, version: "1.2.9 (/Users/dev/.opencode/bin/opencode)" },
         ],
@@ -109,6 +114,11 @@ describe("DiagnosticsPanelSections", () => {
       runtimeCheck: {
         gitOk: true,
         gitVersion: "git version 2.50.1",
+        ghOk: false,
+        ghVersion: null,
+        ghAuthOk: false,
+        ghAuthLogin: null,
+        ghAuthError: "gh not found in PATH",
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["opencode not found in PATH"],
       },

@@ -59,7 +59,7 @@ describe("KanbanPageContent", () => {
     expect(html).not.toContain('data-testid="kanban-refresh-indicator"');
   });
 
-  test("renders a non-blocking refresh indicator when tasks are already visible", async () => {
+  test("does not render a refresh indicator when tasks are already visible", async () => {
     const { KanbanPageContent } = await import("./kanban-page-content");
     const html = renderToStaticMarkup(
       createElement(KanbanPageContent, {
@@ -77,8 +77,8 @@ describe("KanbanPageContent", () => {
       }),
     );
 
-    expect(html).toContain('data-testid="kanban-refresh-indicator"');
-    expect(html).toContain("Refreshing tasks...");
+    expect(html).not.toContain('data-testid="kanban-refresh-indicator"');
+    expect(html).not.toContain("Refreshing tasks...");
     expect(html).not.toContain('data-testid="kanban-loading-overlay"');
   });
 });

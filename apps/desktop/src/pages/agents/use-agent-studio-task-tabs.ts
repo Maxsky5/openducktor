@@ -105,6 +105,7 @@ export function useAgentStudioTaskTabs(args: {
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
   const [intentActiveTaskId, setIntentActiveTaskId] = useState<string | null>(null);
   const [tabsStorageHydratedRepo, setTabsStorageHydratedRepo] = useState<string | null>(null);
+  const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
 
   const deferQueryUpdate = useCallback(
     (updates: QueryUpdate): void => {
@@ -118,6 +119,14 @@ export function useAgentStudioTaskTabs(args: {
   const taskById = useMemo<TaskByIdMap>(
     () => new Map(tasks.map((task): [string, TaskCard] => [task.id, task])),
     [tasks],
+  );
+  const selectableTaskIds = useMemo(
+    () => new Set(tasks.filter((task) => task.status !== "closed").map((task) => task.id)),
+    [tasks],
+  );
+  const selectableOpenTaskTabs = useMemo(
+    () => openTaskTabs.filter((taskTabId) => selectableTaskIds.has(taskTabId)),
+    [openTaskTabs, selectableTaskIds],
   );
 
   const navigateToTask = useCallback(
@@ -139,8 +148,8 @@ export function useAgentStudioTaskTabs(args: {
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeRepo,
-    taskId,
-    openTaskTabs,
+    taskId: taskIdForTabs,
+    openTaskTabs: selectableOpenTaskTabs,
     persistedActiveTaskId,
     intentActiveTaskId,
     tabsStorageHydratedRepo,
@@ -154,7 +163,7 @@ export function useAgentStudioTaskTabs(args: {
 
   useTaskTabPersistence({
     activeRepo,
-    taskId,
+    taskId: taskIdForTabs,
     selectedTask,
     tasks,
     isLoadingTasks,

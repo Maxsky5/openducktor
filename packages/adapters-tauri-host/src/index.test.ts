@@ -137,6 +137,8 @@ describe("TauriHostClient", () => {
       "workspaceUpdateRepoHooks",
       "workspaceGetRepoConfig",
       "workspaceGetSettingsSnapshot",
+      "workspaceUpdateGlobalGitConfig",
+      "workspaceDetectGithubRepository",
       "workspaceSaveSettingsSnapshot",
       "workspacePrepareTrustedHooksChallenge",
       "workspaceSetTrustedHooks",
@@ -391,7 +393,7 @@ describe("TauriHostClient", () => {
           repos: {
             "/repo": {
               branchPrefix: "obp",
-              defaultTargetBranch: "origin/main",
+              defaultTargetBranch: { remote: "origin", branch: "main" },
               trustedHooks: false,
               hooks: { preStart: [], postComplete: [] },
               worktreeFileCopies: [],
@@ -436,7 +438,7 @@ describe("TauriHostClient", () => {
         "/repo": {
           defaultRuntimeKind: "opencode",
           branchPrefix: "obp",
-          defaultTargetBranch: "origin/main",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
           trustedHooks: false,
           hooks: { preStart: [], postComplete: [] },
           worktreeFileCopies: [],
@@ -457,7 +459,7 @@ describe("TauriHostClient", () => {
               "/repo": {
                 defaultRuntimeKind: "opencode",
                 branchPrefix: "obp",
-                defaultTargetBranch: "origin/main",
+                defaultTargetBranch: { remote: "origin", branch: "main" },
                 trustedHooks: false,
                 hooks: { preStart: [], postComplete: [] },
                 worktreeFileCopies: [],
@@ -467,6 +469,59 @@ describe("TauriHostClient", () => {
             },
             globalPromptOverrides: {},
           },
+        },
+      },
+    ]);
+  });
+
+  test("workspaceUpdateGlobalGitConfig uses dedicated IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_update_global_git_config") {
+        return undefined;
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await client.workspaceUpdateGlobalGitConfig({
+      defaultMergeMethod: "squash",
+    });
+
+    expect(calls).toEqual([
+      {
+        command: "workspace_update_global_git_config",
+        args: {
+          git: {
+            defaultMergeMethod: "squash",
+          },
+        },
+      },
+    ]);
+  });
+
+  test("workspaceDetectGithubRepository uses dedicated IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_detect_github_repository") {
+        return {
+          host: "github.com",
+          owner: "openai",
+          name: "openducktor",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.workspaceDetectGithubRepository("/repo");
+
+    expect(result).toEqual({
+      host: "github.com",
+      owner: "openai",
+      name: "openducktor",
+    });
+    expect(calls).toEqual([
+      {
+        command: "workspace_detect_github_repository",
+        args: {
+          repoPath: "/repo",
         },
       },
     ]);
@@ -845,6 +900,7 @@ describe("TauriHostClient", () => {
               supportsOdtWorkflowTools: true,
               supportsPermissionRequests: true,
               supportsQuestionRequests: true,
+              supportsSessionFork: true,
               supportsTodos: true,
               supportsDiff: true,
               supportsFileStatus: true,
@@ -1125,6 +1181,62 @@ describe("TauriHostClient", () => {
     expect(calls.map((entry) => entry.command)).toEqual([
       "task_metadata_get",
       "set_spec",
+      "task_metadata_get",
+    ]);
+  });
+
+  test("metadata cache invalidates after approval mutations and PR sync", async () => {
+    let metadataReadCount = 0;
+    const { client, calls } = createClient((command) => {
+      if (command === "task_metadata_get") {
+        metadataReadCount += 1;
+        return makeTaskMetadataPayload(`Spec V${metadataReadCount}`);
+      }
+      if (command === "task_direct_merge") {
+        return makeTaskCardPayload();
+      }
+      if (command === "task_pull_request_upsert") {
+        return {
+          providerId: "github",
+          repository: {
+            host: "github.com",
+            owner: "openai",
+            name: "openducktor",
+          },
+          number: 17,
+          url: "https://github.com/openai/openducktor/pull/17",
+          title: "PR title",
+          workingDirectory: "/repo/worktrees/task-1",
+          sourceBranch: "odt/task-1",
+          targetBranch: "main",
+          state: "open",
+          createdAt: "2026-02-20T10:00:00Z",
+          updatedAt: "2026-02-20T10:00:00Z",
+        };
+      }
+      if (command === "repo_pull_request_sync") {
+        return { ok: true };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V1");
+    await client.taskDirectMerge("/repo", "task-1", "merge_commit");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V2");
+
+    await client.taskPullRequestUpsert("/repo", "task-1", "Title", "Body");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V3");
+
+    await client.repoPullRequestSync("/repo");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V4");
+
+    expect(calls.map((entry) => entry.command)).toEqual([
+      "task_metadata_get",
+      "task_direct_merge",
+      "task_metadata_get",
+      "task_pull_request_upsert",
+      "task_metadata_get",
+      "repo_pull_request_sync",
       "task_metadata_get",
     ]);
   });

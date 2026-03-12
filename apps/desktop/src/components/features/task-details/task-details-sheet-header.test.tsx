@@ -27,4 +27,32 @@ describe("TaskDetailsSheetHeader", () => {
 
     expect(html).toContain("QA Rejected");
   });
+
+  test("renders pull request tag alongside the other header badges", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-2",
+      pullRequest: {
+        providerId: "github",
+        number: 110,
+        url: "https://github.com/openai/openducktor/pull/110",
+        state: "merged",
+        createdAt: "2026-03-12T12:24:09Z",
+        updatedAt: "2026-03-12T12:24:09Z",
+        lastSyncedAt: undefined,
+        mergedAt: "2026-03-12T12:30:00Z",
+        closedAt: undefined,
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+      }),
+    );
+
+    expect(html).toContain("PR #110");
+    expect(html).toContain("text-violet");
+  });
 });
