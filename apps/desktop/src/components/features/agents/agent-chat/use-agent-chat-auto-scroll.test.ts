@@ -174,6 +174,76 @@ describe("useAgentChatAutoScroll", () => {
     });
   });
 
+  test("jumps to the bottom when the current session becomes scroll-ready again", async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const cancelAnimationFrame = mock((_id: number) => {});
+    setGlobalWindow({
+      cancelAnimationFrame,
+      requestAnimationFrame: mock((callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      }),
+    });
+
+    const { measure, scrollToIndex, virtualizer } = createVirtualizerMock();
+    const { container, scrollToMock } = createContainerMock();
+    container.scrollTop = 0;
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    messagesContainerRef.current = container;
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-1",
+          canScrollToLatest: false,
+          isPinnedToBottom: true,
+          messagesContainerRef,
+          scrollVersion: "session-1:1",
+          shouldVirtualize: false,
+          virtualRowsCount: 3,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    scrollToMock.mockClear();
+    measure.mockClear();
+
+    await act(async () => {
+      renderer?.update(
+        createElement(AutoScrollHarness, {
+          activeSessionId: "session-1",
+          canScrollToLatest: true,
+          isPinnedToBottom: true,
+          messagesContainerRef,
+          scrollVersion: "session-1:1",
+          shouldVirtualize: false,
+          virtualRowsCount: 3,
+          virtualizer,
+        }),
+      );
+      await flush();
+    });
+
+    await act(async () => {
+      drainAnimationFrames(rafCallbacks);
+      await flush();
+    });
+
+    expect(measure).toHaveBeenCalledTimes(0);
+    expect(scrollToIndex).toHaveBeenCalledTimes(0);
+    expect(scrollToMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(container.scrollTop).toBe(640);
+    expect(messagesContainerRef.current?.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET]).toBe("640");
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  });
+
   test("smooth-scrolls on incremental updates while pinned", async () => {
     const rafCallbacks: FrameRequestCallback[] = [];
     setGlobalWindow({

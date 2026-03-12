@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET } from "./use-agent-chat-layout";
+import { CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET, isNearBottom } from "./use-agent-chat-layout";
 import type { AgentChatVirtualizer } from "./use-agent-chat-virtualization";
 
 const CHAT_AUTOSCROLL_DURATION_MS = 500;
@@ -32,6 +32,7 @@ export function useAgentChatAutoScroll({
   virtualizer,
 }: UseAgentChatAutoScrollInput): { isJumpingToLatest: boolean } {
   const previousSessionIdRef = useRef<string | null>(null);
+  const previousCanScrollToLatestRef = useRef(false);
   const previousScrollVersionRef = useRef<string | null>(null);
   const pendingSessionJumpRef = useRef<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -263,6 +264,7 @@ export function useAgentChatAutoScroll({
   useEffect(() => {
     if (!activeSessionId) {
       previousSessionIdRef.current = null;
+      previousCanScrollToLatestRef.current = false;
       previousScrollVersionRef.current = null;
       pendingSessionJumpRef.current = null;
       smoothScrollStateRef.current = null;
@@ -271,11 +273,25 @@ export function useAgentChatAutoScroll({
     }
 
     const previousSessionId = previousSessionIdRef.current;
+    const previousCanScrollToLatest = previousCanScrollToLatestRef.current;
+    previousCanScrollToLatestRef.current = canScrollToLatest;
     const firstSessionSelection = previousSessionId === null;
     const sessionChanged = previousSessionId !== null && previousSessionId !== activeSessionId;
     if (sessionChanged || firstSessionSelection) {
       previousSessionIdRef.current = activeSessionId;
       previousScrollVersionRef.current = scrollVersion;
+      pendingSessionJumpRef.current = activeSessionId;
+    }
+
+    const container = messagesContainerRef.current;
+    const scrollBecameReady = canScrollToLatest && !previousCanScrollToLatest;
+    if (
+      scrollBecameReady &&
+      pendingSessionJumpRef.current !== activeSessionId &&
+      container &&
+      virtualRowsCount > 0 &&
+      !isNearBottom(container)
+    ) {
       pendingSessionJumpRef.current = activeSessionId;
     }
 
@@ -286,7 +302,14 @@ export function useAgentChatAutoScroll({
 
     scheduleScrollToBottom("auto", true);
     pendingSessionJumpRef.current = null;
-  }, [activeSessionId, canScrollToLatest, scheduleScrollToBottom, scrollVersion, virtualRowsCount]);
+  }, [
+    activeSessionId,
+    canScrollToLatest,
+    messagesContainerRef,
+    scheduleScrollToBottom,
+    scrollVersion,
+    virtualRowsCount,
+  ]);
 
   useEffect(() => {
     if (!activeSessionId || !isPinnedToBottom || virtualRowsCount === 0 || !canScrollToLatest) {
