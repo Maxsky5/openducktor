@@ -7,8 +7,9 @@ mod worktree;
 pub use beads::{compute_repo_id, compute_repo_slug, resolve_central_beads_dir};
 pub use config::{
     hook_set_fingerprint, normalize_hook_set, AgentDefaults, AgentModelDefault, AppConfigStore,
-    GlobalConfig, HookSet, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides,
-    RepoConfig, RuntimeConfig, RuntimeConfigStore, SchedulerConfig, SoftGuardrails,
+    GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch, GlobalConfig, GlobalGitConfig,
+    HookSet, OpencodeStartupReadinessConfig, PromptOverride, PromptOverrides, RepoConfig,
+    RepoGitConfig, RuntimeConfig, RuntimeConfigStore, SchedulerConfig, SoftGuardrails,
 };
 pub use git::GitCliPort;
 pub use process::{

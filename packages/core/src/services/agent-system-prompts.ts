@@ -341,6 +341,33 @@ Call odt_qa_approved or odt_qa_rejected exactly once per review pass.`,
     template:
       "Perform QA review now and call exactly one of odt_qa_approved or odt_qa_rejected.\nUse taskId {{task.id}} for every odt_* tool call.",
   },
+  "message.build_pull_request_draft": {
+    id: "message.build_pull_request_draft",
+    purpose: "message",
+    builtinVersion: 1,
+    template: `Generate a pull request title and description for this task.
+
+Requirements:
+- Base the result on the implemented work in this forked builder session.
+- Use the task title, acceptance criteria, spec, plan, latest QA report, and actual code changes.
+- Be specific about the user-visible outcome and major implementation points.
+- Do not mention that this came from an AI, agent, or forked session.
+- Respond with exactly this format:
+Title: <single-line title>
+Description:
+<markdown body>
+
+Task context:
+- id: {{task.id}}
+- title: {{task.title}}
+- issueType: {{task.issueType}}
+- status: {{task.status}}
+- description: {{task.description}}
+- acceptanceCriteria: {{task.acceptanceCriteria}}
+- spec: {{task.specMarkdown}}
+- implementationPlan: {{task.planMarkdown}}
+- latestQaReport: {{task.latestQaReportMarkdown}}`,
+  },
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
     purpose: "message",

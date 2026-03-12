@@ -1,4 +1,9 @@
-import type { RepoConfig, RepoPromptOverrides, SettingsSnapshot } from "@openducktor/contracts";
+import type {
+  GlobalGitConfig,
+  RepoConfig,
+  RepoPromptOverrides,
+  SettingsSnapshot,
+} from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
 import { ensureAgentDefault } from "@/components/features/settings";
@@ -10,6 +15,7 @@ type UseSettingsModalDraftActionsArgs = {
 
 export type SettingsModalDraftActions = {
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  updateGlobalGitConfig: (updater: (current: GlobalGitConfig) => GlobalGitConfig) => void;
   updateGlobalPromptOverrides: (
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
   ) => void;
@@ -68,6 +74,22 @@ export const useSettingsModalDraftActions = ({
     [setSnapshotDraft],
   );
 
+  const updateGlobalGitConfig = useCallback(
+    (updater: (current: GlobalGitConfig) => GlobalGitConfig): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          git: updater(current.git),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
   const updateRepoPromptOverrides = useCallback(
     (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
       updateSelectedRepoConfig((repoConfig) => ({
@@ -113,6 +135,7 @@ export const useSettingsModalDraftActions = ({
 
   return {
     updateSelectedRepoConfig,
+    updateGlobalGitConfig,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,

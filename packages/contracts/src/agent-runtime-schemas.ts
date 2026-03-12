@@ -26,6 +26,7 @@ export const runtimeCapabilitiesSchema = z.object({
   supportsProfiles: z.boolean(),
   supportsVariants: z.boolean(),
   supportsOdtWorkflowTools: z.boolean(),
+  supportsSessionFork: z.boolean(),
   supportsPermissionRequests: z.boolean(),
   supportsQuestionRequests: z.boolean(),
   supportsTodos: z.boolean(),
@@ -41,6 +42,7 @@ export const runtimeCapabilityKeyValues = [
   "supportsProfiles",
   "supportsVariants",
   "supportsOdtWorkflowTools",
+  "supportsSessionFork",
   "supportsPermissionRequests",
   "supportsQuestionRequests",
   "supportsTodos",
@@ -53,6 +55,7 @@ export type RuntimeCapabilityKey = z.infer<typeof runtimeCapabilityKeySchema>;
 
 export const mandatoryRuntimeCapabilityKeys = [
   "supportsOdtWorkflowTools",
+  "supportsSessionFork",
 ] as const satisfies readonly RuntimeCapabilityKey[];
 
 export const optionalRuntimeCapabilityKeys = [
@@ -94,6 +97,7 @@ export const runtimeCapabilityClasses = {
   supportsProfiles: "optional",
   supportsVariants: "optional",
   supportsOdtWorkflowTools: "mandatory",
+  supportsSessionFork: "mandatory",
   supportsPermissionRequests: "optional",
   supportsQuestionRequests: "optional",
   supportsTodos: "optional",

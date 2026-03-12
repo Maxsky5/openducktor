@@ -15,13 +15,19 @@ type HarnessArgs = {
 };
 
 const createInitialSnapshot = (): SettingsSnapshot => ({
+  git: {
+    defaultMergeMethod: "merge_commit",
+  },
   globalPromptOverrides: {},
   repos: {
     "/repo-a": {
       defaultRuntimeKind: "opencode",
       worktreeBasePath: "/tmp/a",
       branchPrefix: "obp",
-      defaultTargetBranch: "origin/main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
       trustedHooks: false,
       hooks: { preStart: [], postComplete: [] },
       worktreeFileCopies: [],

@@ -22,6 +22,7 @@ use commands::build::*;
 use commands::documents::*;
 use commands::git::*;
 use commands::runtime::*;
+use commands::system::*;
 use commands::tasks::*;
 use commands::workspace::*;
 
@@ -108,11 +109,19 @@ struct BuildCompletePayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct PullRequestContentPayload {
+    title: String,
+    body: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RepoConfigPayload {
     default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
-    default_target_branch: Option<String>,
+    default_target_branch: Option<host_infra_system::GitTargetBranch>,
+    git: Option<host_infra_system::RepoGitConfig>,
     worktree_file_copies: Option<Vec<String>>,
     prompt_overrides: Option<host_infra_system::PromptOverrides>,
     agent_defaults: Option<host_infra_system::AgentDefaults>,
@@ -124,7 +133,8 @@ struct RepoSettingsPayload {
     default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
-    default_target_branch: Option<String>,
+    default_target_branch: Option<host_infra_system::GitTargetBranch>,
+    git: Option<host_infra_system::RepoGitConfig>,
     trusted_hooks: bool,
     hooks: Option<host_infra_system::HookSet>,
     worktree_file_copies: Option<Vec<String>>,
@@ -135,6 +145,7 @@ struct RepoSettingsPayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SettingsSnapshotPayload {
+    git: host_infra_system::GlobalGitConfig,
     repos: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,
 }
@@ -142,6 +153,7 @@ struct SettingsSnapshotPayload {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SettingsSnapshotResponsePayload {
+    git: host_infra_system::GlobalGitConfig,
     repos: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,
 }
@@ -228,6 +240,7 @@ fn startup_phase_command_registration(
 ) -> tauri::Builder<tauri::Wry> {
     builder.invoke_handler(tauri::generate_handler![
         system_check,
+        open_external_url,
         runtime_check,
         beads_check,
         workspace_list,
@@ -238,7 +251,9 @@ fn startup_phase_command_registration(
         workspace_update_repo_hooks,
         workspace_prepare_trusted_hooks_challenge,
         workspace_get_repo_config,
+        workspace_detect_github_repository,
         workspace_get_settings_snapshot,
+        workspace_update_global_git_config,
         workspace_save_settings_snapshot,
         workspace_set_trusted_hooks,
         git_get_branches,
@@ -280,6 +295,10 @@ fn startup_phase_command_registration(
         build_blocked,
         build_resumed,
         build_completed,
+        task_approval_context_get,
+        task_direct_merge,
+        task_pull_request_upsert,
+        repo_pull_request_sync,
         human_request_changes,
         human_approve,
         runs_list,
@@ -496,24 +515,50 @@ mod tests {
     #[test]
     fn repo_payloads_deserialize_default_target_branch_field() {
         let config_payload = json!({
-            "defaultTargetBranch": "origin/release"
+            "defaultTargetBranch": {
+                "remote": "origin",
+                "branch": "release"
+            }
         });
         let parsed_config = serde_json::from_value::<RepoConfigPayload>(config_payload)
             .expect("repo config payload should deserialize");
         assert_eq!(
-            parsed_config.default_target_branch.as_deref(),
-            Some("origin/release")
+            parsed_config
+                .default_target_branch
+                .as_ref()
+                .map(host_infra_system::GitTargetBranch::canonical)
+                .as_deref(),
+            Some("origin/release"),
         );
 
         let settings_payload = json!({
             "trustedHooks": false,
-            "defaultTargetBranch": "origin/develop"
+            "defaultTargetBranch": {
+                "remote": "origin",
+                "branch": "develop"
+            }
         });
         let parsed_settings = serde_json::from_value::<RepoSettingsPayload>(settings_payload)
             .expect("repo settings payload should deserialize");
         assert_eq!(
-            parsed_settings.default_target_branch.as_deref(),
-            Some("origin/develop")
+            parsed_settings
+                .default_target_branch
+                .as_ref()
+                .map(host_infra_system::GitTargetBranch::canonical)
+                .as_deref(),
+            Some("origin/develop"),
+        );
+    }
+
+    #[test]
+    fn repo_payloads_reject_legacy_string_default_target_branch_field() {
+        let error = serde_json::from_value::<RepoConfigPayload>(json!({
+            "defaultTargetBranch": "origin/release"
+        }))
+        .expect_err("legacy string target branch should fail deserialization");
+        assert!(
+            error.to_string().contains("invalid type"),
+            "expected serde type error, got: {error}"
         );
     }
 

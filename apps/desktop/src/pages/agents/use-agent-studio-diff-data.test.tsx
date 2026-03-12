@@ -162,7 +162,7 @@ const createBaseArgs = (): HookArgs => ({
   repoPath: "/repo",
   sessionWorkingDirectory: null,
   sessionRunId: null,
-  defaultTargetBranch: "origin/main",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
   branchIdentityKey: null,
   enablePolling: false,
 });
@@ -481,7 +481,7 @@ describe("useAgentStudioDiffData", () => {
   test("reloads compare data when repository branch identity changes", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      defaultTargetBranch: "@{upstream}",
+      defaultTargetBranch: { branch: "@{upstream}" },
       branchIdentityKey: "branch:main",
     });
 
@@ -525,7 +525,7 @@ describe("useAgentStudioDiffData", () => {
 
       await harness.update({
         ...createBaseArgs(),
-        defaultTargetBranch: "@{upstream}",
+        defaultTargetBranch: { branch: "@{upstream}" },
         branchIdentityKey: "branch:feature/switched",
       });
 
@@ -542,7 +542,7 @@ describe("useAgentStudioDiffData", () => {
   test("refresh syncs upstream status changes across cached inactive scope", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      defaultTargetBranch: "@{upstream}",
+      defaultTargetBranch: { branch: "@{upstream}" },
     });
 
     try {
@@ -2475,7 +2475,7 @@ describe("useAgentStudioDiffData", () => {
   test("canonicalizes short target branch names to origin-prefixed refs", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      defaultTargetBranch: "main",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
     });
 
     try {

@@ -240,6 +240,48 @@ describe("use-task-operations", () => {
     }
   });
 
+  test("refreshTasks continues loading task data when pull request sync fails", async () => {
+    const repoPullRequestSync = mock(async () => {
+      throw new Error("gh auth expired");
+    });
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      repoPullRequestSync: host.repoPullRequestSync,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.repoPullRequestSync = repoPullRequestSync;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshTasks();
+      });
+
+      expect(repoPullRequestSync).toHaveBeenCalledWith("/repo");
+      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
+    } finally {
+      await harness.unmount();
+      host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
   test("createTask trims title before sending mutation", async () => {
     const taskCreate = mock(
       async (_repoPath: string, input: TaskCreateInput): Promise<TaskCard> => ({

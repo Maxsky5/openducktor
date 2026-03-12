@@ -17,14 +17,15 @@ use super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    AgentSessionDocument, AgentWorkflows, CreateTaskInput, GitAheadBehind, GitBranch,
-    GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope, GitFileDiff,
-    GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest, GitPullResult, GitPushResult,
+    AgentSessionDocument, AgentWorkflows, CreateTaskInput, DirectMergeRecord, GitAheadBehind,
+    GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch, GitDiffScope,
+    GitFileDiff, GitFileStatus, GitFileStatusCounts, GitMergeBranchRequest, GitMergeBranchResult,
+    GitMergeMethod, GitPort, GitPullRequest, GitPullResult, GitPushResult,
     GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
     GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData, IssueType,
-    PlanSubtaskInput, QaReportDocument, QaVerdict, QaWorkflowVerdict, RunEvent, RunState,
-    RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard, TaskDocumentSummary,
-    TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
+    PlanSubtaskInput, PullRequestRecord, QaReportDocument, QaVerdict, QaWorkflowVerdict,
+    RunEvent, RunState, RunSummary, RuntimeInstanceSummary, SpecDocument, TaskAction, TaskCard,
+    TaskDocumentSummary, TaskMetadata, TaskStatus, TaskStore, UpdateTaskPatch,
 };
 use host_infra_system::{
     AppConfigStore, GlobalConfig, HookSet, OpencodeStartupReadinessConfig, RepoConfig,
@@ -61,6 +62,7 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         assignee: None,
         parent_id: None,
         subtask_ids: Vec::new(),
+        pull_request: None,
         document_summary: TaskDocumentSummary::default(),
         agent_workflows: AgentWorkflows::default(),
         updated_at: "2026-01-01T00:00:00Z".to_string(),
@@ -94,6 +96,8 @@ pub(crate) struct TaskStoreState {
     pub(crate) latest_qa_report: Option<QaReportDocument>,
     pub(crate) agent_sessions: Vec<AgentSessionDocument>,
     pub(crate) upserted_sessions: Vec<(String, AgentSessionDocument)>,
+    pub(crate) pull_requests: HashMap<String, PullRequestRecord>,
+    pub(crate) direct_merge_records: HashMap<String, DirectMergeRecord>,
 }
 
 #[derive(Clone)]
@@ -139,6 +143,7 @@ impl TaskStore for FakeTaskStore {
             assignee: None,
             parent_id: input.parent_id,
             subtask_ids: Vec::new(),
+            pull_request: None,
             document_summary: TaskDocumentSummary::default(),
             agent_workflows: AgentWorkflows::default(),
             updated_at: "2026-01-01T00:00:00Z".to_string(),
@@ -339,6 +344,47 @@ impl TaskStore for FakeTaskStore {
         Ok(())
     }
 
+    fn set_pull_request(
+        &self,
+        _repo_path: &Path,
+        task_id: &str,
+        pull_request: Option<PullRequestRecord>,
+    ) -> Result<()> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        match pull_request.clone() {
+            Some(pull_request) => {
+                state.pull_requests.insert(task_id.to_string(), pull_request);
+            }
+            None => {
+                state.pull_requests.remove(task_id);
+            }
+        }
+        if let Some(task) = state.tasks.iter_mut().find(|task| task.id == task_id) {
+            task.pull_request = pull_request;
+        }
+        Ok(())
+    }
+
+    fn set_direct_merge_record(
+        &self,
+        _repo_path: &Path,
+        task_id: &str,
+        direct_merge: Option<DirectMergeRecord>,
+    ) -> Result<()> {
+        let mut state = self.state.lock().expect("task store lock poisoned");
+        match direct_merge {
+            Some(direct_merge) => {
+                state
+                    .direct_merge_records
+                    .insert(task_id.to_string(), direct_merge);
+            }
+            None => {
+                state.direct_merge_records.remove(task_id);
+            }
+        }
+        Ok(())
+    }
+
     fn get_task_metadata(&self, _repo_path: &Path, _task_id: &str) -> Result<TaskMetadata> {
         let mut state = self.state.lock().expect("task store lock poisoned");
         state.metadata_get_calls.push(_task_id.to_string());
@@ -359,6 +405,8 @@ impl TaskStore for FakeTaskStore {
                 updated_at: None,
             },
             qa_report,
+            pull_request: state.pull_requests.get(_task_id).cloned(),
+            direct_merge: state.direct_merge_records.get(_task_id).cloned(),
             agent_sessions,
         })
     }
@@ -418,6 +466,12 @@ pub(crate) enum GitCall {
         repo_path: String,
         working_dir: Option<String>,
     },
+    MergeBranch {
+        repo_path: String,
+        source_branch: String,
+        target_branch: String,
+        method: GitMergeMethod,
+    },
     GetWorktreeStatus {
         repo_path: String,
         target_branch: String,
@@ -445,6 +499,7 @@ pub(crate) struct GitState {
     pub(crate) commit_all_result: GitCommitAllResult,
     pub(crate) rebase_branch_result: GitRebaseBranchResult,
     pub(crate) rebase_abort_result: GitRebaseAbortResult,
+    pub(crate) merge_branch_result: GitMergeBranchResult,
 }
 
 #[derive(Clone)]
@@ -605,6 +660,21 @@ impl GitPort for FakeGitPort {
             working_dir: request.working_dir,
         });
         Ok(state.rebase_abort_result.clone())
+    }
+
+    fn merge_branch(
+        &self,
+        repo_path: &Path,
+        request: GitMergeBranchRequest,
+    ) -> Result<GitMergeBranchResult> {
+        let mut state = self.state.lock().expect("git state lock poisoned");
+        state.calls.push(GitCall::MergeBranch {
+            repo_path: repo_path.to_string_lossy().to_string(),
+            source_branch: request.source_branch,
+            target_branch: request.target_branch,
+            method: request.method,
+        });
+        Ok(state.merge_branch_result.clone())
     }
 
     fn get_status(&self, _repo_path: &Path) -> Result<Vec<GitFileStatus>> {
@@ -784,6 +854,8 @@ pub(crate) fn build_service_with_git_state_enforced(
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
+        pull_requests: HashMap::new(),
+        direct_merge_records: HashMap::new(),
     }));
     let git_state = Arc::new(Mutex::new(GitState {
         calls: Vec::new(),
@@ -811,6 +883,9 @@ pub(crate) fn build_service_with_git_state_enforced(
         },
         rebase_abort_result: GitRebaseAbortResult::Aborted {
             output: "rebase aborted".to_string(),
+        },
+        merge_branch_result: GitMergeBranchResult::Merged {
+            output: "merge completed".to_string(),
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -847,6 +922,8 @@ pub(crate) fn build_service_with_git_state(
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
+        pull_requests: HashMap::new(),
+        direct_merge_records: HashMap::new(),
     }));
     let git_state = Arc::new(Mutex::new(GitState {
         calls: Vec::new(),
@@ -874,6 +951,9 @@ pub(crate) fn build_service_with_git_state(
         },
         rebase_abort_result: GitRebaseAbortResult::Aborted {
             output: "rebase aborted".to_string(),
+        },
+        merge_branch_result: GitMergeBranchResult::Merged {
+            output: "merge completed".to_string(),
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {
@@ -1252,6 +1332,8 @@ pub(crate) fn build_service_with_store(
         latest_qa_report: None,
         agent_sessions: Vec::new(),
         upserted_sessions: Vec::new(),
+        pull_requests: HashMap::new(),
+        direct_merge_records: HashMap::new(),
     }));
     let git_state = Arc::new(Mutex::new(GitState {
         calls: Vec::new(),
@@ -1279,6 +1361,9 @@ pub(crate) fn build_service_with_store(
         },
         rebase_abort_result: GitRebaseAbortResult::Aborted {
             output: "rebase aborted".to_string(),
+        },
+        merge_branch_result: GitMergeBranchResult::Merged {
+            output: "merge completed".to_string(),
         },
     }));
     let task_store: Arc<dyn TaskStore> = Arc::new(FakeTaskStore {

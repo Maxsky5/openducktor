@@ -165,7 +165,11 @@ export const buildDiagnosticsPanelModel = (
       ),
     },
     rows: runtimeCheck
-      ? [{ label: "Git", value: runtimeCheck.gitVersion ?? "missing" }, ...cliRuntimeRows]
+      ? [
+          { label: "Git", value: runtimeCheck.gitVersion ?? "missing" },
+          { label: "GitHub CLI", value: runtimeCheck.ghVersion ?? "missing" },
+          ...cliRuntimeRows,
+        ]
       : [],
     errors: runtimeDefinitionsError
       ? [runtimeDefinitionsError, ...(runtimeCheck?.errors ?? [])]

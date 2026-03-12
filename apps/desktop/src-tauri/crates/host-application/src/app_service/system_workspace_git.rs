@@ -7,7 +7,8 @@ use host_domain::{
     GitWorktreeSummary, RuntimeCheck, RuntimeHealth, SystemCheck, WorkspaceRecord,
 };
 use host_infra_system::{
-    command_exists, hook_set_fingerprint, resolve_central_beads_dir, version_command, HookSet,
+    command_exists, hook_set_fingerprint, resolve_central_beads_dir,
+    run_command_allow_failure_with_env, version_command, GlobalGitConfig, HookSet,
     PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
@@ -16,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const GH_NON_INTERACTIVE_ENV: [(&str, &str); 1] = [("GH_PROMPT_DISABLED", "1")];
 
 fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String {
     working_dir
@@ -48,12 +50,21 @@ impl AppService {
 
     fn probe_runtime_check() -> RuntimeCheck {
         let git_ok = command_exists("git");
+        let gh_ok = command_exists("gh");
+        let (gh_auth_ok, gh_auth_login, gh_auth_error) = if gh_ok {
+            probe_github_auth_status()
+        } else {
+            (false, None, Some("gh not found in PATH".to_string()))
+        };
         let opencode_binary = resolve_opencode_binary_path();
         let opencode_ok = opencode_binary.is_some();
 
         let mut errors = Vec::new();
         if !git_ok {
             errors.push("git not found in PATH".to_string());
+        }
+        if !gh_ok {
+            errors.push("gh not found in PATH".to_string());
         }
         if !opencode_ok {
             errors.push("opencode not found in PATH".to_string());
@@ -62,6 +73,11 @@ impl AppService {
         RuntimeCheck {
             git_ok,
             git_version: version_command("git", &["--version"]),
+            gh_ok,
+            gh_version: version_command("gh", &["--version"]),
+            gh_auth_ok,
+            gh_auth_login,
+            gh_auth_error,
             runtimes: vec![RuntimeHealth {
                 kind: "opencode".to_string(),
                 ok: opencode_ok,
@@ -148,6 +164,11 @@ impl AppService {
         Ok(SystemCheck {
             git_ok: runtime.git_ok,
             git_version: runtime.git_version,
+            gh_ok: runtime.gh_ok,
+            gh_version: runtime.gh_version,
+            gh_auth_ok: runtime.gh_auth_ok,
+            gh_auth_login: runtime.gh_auth_login,
+            gh_auth_error: runtime.gh_auth_error,
             runtimes: runtime.runtimes,
             beads_ok: beads.beads_ok,
             beads_path: beads.beads_path,
@@ -163,12 +184,14 @@ impl AppService {
     pub fn workspace_add(&self, repo_path: &str) -> Result<WorkspaceRecord> {
         let workspace = self.config_store.add_workspace(repo_path)?;
         self.ensure_repo_initialized(repo_path)?;
+        self.auto_detect_git_provider_for_repo(repo_path)?;
         Ok(workspace)
     }
 
     pub fn workspace_select(&self, repo_path: &str) -> Result<WorkspaceRecord> {
         let workspace = self.config_store.select_workspace(repo_path)?;
         self.ensure_repo_initialized(repo_path)?;
+        self.auto_detect_git_provider_for_repo(repo_path)?;
         Ok(workspace)
     }
 
@@ -201,13 +224,21 @@ impl AppService {
 
     pub fn workspace_get_settings_snapshot(
         &self,
-    ) -> Result<(HashMap<String, RepoConfig>, PromptOverrides)> {
+    ) -> Result<(GlobalGitConfig, HashMap<String, RepoConfig>, PromptOverrides)> {
         let config = self.config_store.load()?;
-        Ok((config.repos, config.global_prompt_overrides))
+        Ok((config.git, config.repos, config.global_prompt_overrides))
+    }
+
+    pub fn workspace_update_global_git_config(
+        &self,
+        git: GlobalGitConfig,
+    ) -> Result<()> {
+        self.config_store.update_global_git_config(git)
     }
 
     pub(super) fn workspace_persist_settings_snapshot(
         &self,
+        git: GlobalGitConfig,
         repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
     ) -> Result<()> {
@@ -220,6 +251,7 @@ impl AppService {
             }
         }
 
+        config.git = git;
         config.global_prompt_overrides = global_prompt_overrides;
         for (repo_path, repo_config) in repos {
             config.repos.insert(repo_path, repo_config);
@@ -476,6 +508,58 @@ impl AppService {
     }
 }
 
+fn probe_github_auth_status() -> (bool, Option<String>, Option<String>) {
+    let result = run_command_allow_failure_with_env(
+        "gh",
+        &["auth", "status", "--hostname", "github.com"],
+        None,
+        &GH_NON_INTERACTIVE_ENV,
+    );
+    let Ok((ok, stdout, stderr)) = result else {
+        return (
+            false,
+            None,
+            Some("Failed to query GitHub authentication status.".to_string()),
+        );
+    };
+
+    let combined = if stderr.trim().is_empty() {
+        stdout.trim().to_string()
+    } else if stdout.trim().is_empty() {
+        stderr.trim().to_string()
+    } else {
+        format!("{}\n{}", stdout.trim(), stderr.trim())
+    };
+
+    if ok {
+        return (true, parse_github_auth_login(combined.as_str()), None);
+    }
+
+    let detail = if combined.is_empty() {
+        "GitHub authentication is not configured. Run `gh auth login`.".to_string()
+    } else {
+        combined
+    };
+    (false, None, Some(detail))
+}
+
+fn parse_github_auth_login(output: &str) -> Option<String> {
+    let account_marker = "account ";
+    let marker_index = output.find(account_marker)?;
+    let login_start = marker_index + account_marker.len();
+    let remainder = output.get(login_start..)?.trim_start();
+    let login = remainder
+        .split(|character: char| character.is_whitespace() || character == '(' || character == '\'')
+        .next()
+        .unwrap_or_default()
+        .trim();
+    if login.is_empty() {
+        None
+    } else {
+        Some(login.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::CachedRuntimeCheck;
@@ -543,6 +627,11 @@ mod tests {
         let cached = RuntimeCheck {
             git_ok: false,
             git_version: Some("cached-git-sentinel".to_string()),
+            gh_ok: false,
+            gh_version: Some("cached-gh-sentinel".to_string()),
+            gh_auth_ok: false,
+            gh_auth_login: None,
+            gh_auth_error: Some("cached-gh-auth-sentinel".to_string()),
             runtimes: vec![RuntimeHealth {
                 kind: "opencode".to_string(),
                 ok: false,
@@ -595,6 +684,11 @@ mod tests {
                 value: RuntimeCheck {
                     git_ok: false,
                     git_version: Some("cached-git-sentinel".to_string()),
+                    gh_ok: false,
+                    gh_version: Some("cached-gh-sentinel".to_string()),
+                    gh_auth_ok: false,
+                    gh_auth_login: None,
+                    gh_auth_error: Some("cached-gh-auth-sentinel".to_string()),
                     runtimes: vec![RuntimeHealth {
                         kind: "opencode".to_string(),
                         ok: false,
@@ -635,6 +729,11 @@ mod tests {
                 value: RuntimeCheck {
                     git_ok: false,
                     git_version: Some("cached-git-sentinel".to_string()),
+                    gh_ok: false,
+                    gh_version: Some("cached-gh-sentinel".to_string()),
+                    gh_auth_ok: false,
+                    gh_auth_login: None,
+                    gh_auth_error: Some("cached-gh-auth-sentinel".to_string()),
                     runtimes: vec![RuntimeHealth {
                         kind: "opencode".to_string(),
                         ok: false,

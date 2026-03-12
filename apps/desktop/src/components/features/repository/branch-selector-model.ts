@@ -10,17 +10,29 @@ const branchSourceLabel = (branch: GitBranch): string => {
   return remoteName || "remote";
 };
 
+const branchOptionValue = (
+  branch: GitBranch,
+  valueFormat: "name" | "full_ref",
+): string => {
+  if (valueFormat === "name") {
+    return branch.name;
+  }
+  return branch.isRemote ? `refs/remotes/${branch.name}` : `refs/heads/${branch.name}`;
+};
+
 type BranchSelectorOptionsArgs = {
   includeBranchNames?: string[];
+  includeOptions?: ComboboxOption[];
+  valueFormat?: "name" | "full_ref";
 };
 
 export const toBranchSelectorOptions = (
   branches: GitBranch[],
   args: BranchSelectorOptionsArgs = {},
 ): ComboboxOption[] => {
-  const { includeBranchNames = [] } = args;
+  const { includeBranchNames = [], includeOptions = [], valueFormat = "name" } = args;
   const options: ComboboxOption[] = branches.map((branch) => ({
-    value: branch.name,
+    value: branchOptionValue(branch, valueFormat),
     label: branch.name,
     secondaryLabel: branchSourceLabel(branch),
     ...(branch.isCurrent ? { description: "current" } : {}),
@@ -28,6 +40,17 @@ export const toBranchSelectorOptions = (
   }));
 
   const existingValues = new Set(options.map((option) => option.value));
+  for (const option of includeOptions) {
+    const trimmedValue = option.value.trim();
+    if (trimmedValue.length === 0 || existingValues.has(trimmedValue)) {
+      continue;
+    }
+    options.push({
+      ...option,
+      value: trimmedValue,
+    });
+    existingValues.add(trimmedValue);
+  }
   for (const branchName of includeBranchNames) {
     const trimmed = branchName.trim();
     if (trimmed.length === 0 || existingValues.has(trimmed)) {

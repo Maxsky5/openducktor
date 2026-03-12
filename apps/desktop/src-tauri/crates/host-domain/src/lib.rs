@@ -11,12 +11,15 @@ pub use document::{
     TaskDocumentSummary, TaskMetadata, TaskQaDocumentPresence,
 };
 pub use git::{
-    GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult, GitCurrentBranch,
-    GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts, GitPort, GitPullRequest,
-    GitPullResult, GitPushResult, GitRebaseAbortRequest, GitRebaseAbortResult,
-    GitRebaseBranchRequest, GitRebaseBranchResult, GitUpstreamAheadBehind, GitWorktreeStatus,
-    GitWorktreeStatusData, GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
-    GitWorktreeStatusSummaryData, GitWorktreeSummary,
+    DirectMergeRecord, GitAheadBehind, GitBranch, GitCommitAllRequest, GitCommitAllResult,
+    GitCurrentBranch, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
+    GitMergeBranchRequest, GitMergeBranchResult, GitMergeMethod, GitPort,
+    GitProviderAvailability, GitProviderRepository, GitPullRequest, GitPullResult, GitPushResult,
+    GitTargetBranch,
+    GitRebaseAbortRequest, GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult,
+    GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot,
+    GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, GitWorktreeSummary,
+    PullRequestRecord, TaskApprovalContext,
 };
 pub use runtime::{
     AgentRuntimeKind, QaReviewTarget, QaReviewTargetSource, RunEvent, RunState, RunSummary,

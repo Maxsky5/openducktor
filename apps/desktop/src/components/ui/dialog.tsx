@@ -53,17 +53,22 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Content
-        data-slot="dialog-content"
-        className={cn(
-          "fixed left-1/2 top-1/2 z-[70] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-6 shadow-xl",
-          className,
-        )}
-        {...props}
+      <div
+        data-slot="dialog-positioner"
+        className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto p-4"
       >
-        {children}
-        {renderedCloseButton}
-      </DialogPrimitive.Content>
+        <DialogPrimitive.Content
+          data-slot="dialog-content"
+          className={cn(
+            "pointer-events-auto relative z-[70] w-full max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto rounded-xl border border-border bg-popover p-6 shadow-xl",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+          {renderedCloseButton}
+        </DialogPrimitive.Content>
+      </div>
     </DialogPortal>
   );
 }

@@ -1,4 +1,5 @@
 use super::{fake_git_workspace, hook_set_fingerprint, HookSet, RepoConfig, TestStoreHarness};
+use crate::GitTargetBranch;
 
 #[test]
 fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
@@ -19,7 +20,11 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                 branch_prefix: "duck".to_string(),
-                default_target_branch: "origin/release".to_string(),
+                default_target_branch: GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "release".to_string(),
+                },
+                git: Default::default(),
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),
@@ -47,7 +52,7 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
         .repo_config(repo_str.as_str())
         .expect("repo config should exist");
     assert!(repo_config.trusted_hooks);
-    assert_eq!(repo_config.default_target_branch, "origin/release");
+    assert_eq!(repo_config.default_target_branch.canonical(), "origin/release");
 
     let optional = store
         .repo_config_optional(repo_str.as_str())
@@ -74,7 +79,11 @@ fn update_repo_hooks_revokes_trust_when_commands_change() {
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(root.join("worktrees").to_string_lossy().to_string()),
                 branch_prefix: "duck".to_string(),
-                default_target_branch: "origin/main".to_string(),
+                default_target_branch: GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),

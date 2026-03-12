@@ -23,6 +23,11 @@ const flush = async (): Promise<void> => {
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
   gitOk: true,
   gitVersion: "2.45.0",
+  ghOk: true,
+  ghVersion: "2.73.0",
+  ghAuthOk: true,
+  ghAuthLogin: "octocat",
+  ghAuthError: null,
   runtimes: [{ kind: "opencode", ok: true, version: "0.12.0" }],
   errors: [],
   ...overrides,

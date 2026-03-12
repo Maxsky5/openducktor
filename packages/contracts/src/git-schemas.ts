@@ -28,6 +28,110 @@ export const gitWorktreeSummarySchema = z.object({
 });
 export type GitWorktreeSummary = z.infer<typeof gitWorktreeSummarySchema>;
 
+export const knownGitProviderIdValues = ["github"] as const;
+export const knownGitProviderIdSchema = z.enum(knownGitProviderIdValues);
+export type KnownGitProviderId = z.infer<typeof knownGitProviderIdSchema>;
+
+export const gitProviderIdSchema = z.string().trim().min(1);
+export type GitProviderId = z.infer<typeof gitProviderIdSchema>;
+
+export const gitMergeMethodSchema = z.enum(["merge_commit", "squash", "rebase"]);
+export type GitMergeMethod = z.infer<typeof gitMergeMethodSchema>;
+
+export const gitProviderRepositorySchema = z.object({
+  host: z.string().trim().min(1).default("github.com"),
+  owner: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+});
+export type GitProviderRepository = z.infer<typeof gitProviderRepositorySchema>;
+
+export const gitTargetBranchSchema = z.object({
+  remote: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    z.string().trim().min(1).optional(),
+  ),
+  branch: z.string().trim().min(1).default("main"),
+});
+export type GitTargetBranch = z.infer<typeof gitTargetBranchSchema>;
+
+export const gitProviderConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  repository: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitProviderRepositorySchema.optional(),
+  ),
+  autoDetected: z.boolean().default(false),
+});
+export type GitProviderConfig = z.infer<typeof gitProviderConfigSchema>;
+
+export const repoGitProviderConfigsSchema = z
+  .record(z.string(), gitProviderConfigSchema)
+  .default({});
+export type RepoGitProviderConfigs = z.infer<typeof repoGitProviderConfigsSchema>;
+
+export const repoGitConfigSchema = z.object({
+  providers: repoGitProviderConfigsSchema,
+});
+export type RepoGitConfig = z.infer<typeof repoGitConfigSchema>;
+
+export const globalGitConfigSchema = z.object({
+  defaultMergeMethod: gitMergeMethodSchema.default("merge_commit"),
+});
+export type GlobalGitConfig = z.infer<typeof globalGitConfigSchema>;
+
+export const gitPullRequestStateSchema = z.enum(["open", "draft", "merged", "closed_unmerged"]);
+export type GitPullRequestState = z.infer<typeof gitPullRequestStateSchema>;
+
+export const pullRequestSchema = z.object({
+  providerId: gitProviderIdSchema,
+  number: z.number().int().positive(),
+  url: z.string().url(),
+  state: gitPullRequestStateSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastSyncedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  mergedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  closedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type PullRequest = z.infer<typeof pullRequestSchema>;
+
+export const directMergeRecordSchema = z.object({
+  method: gitMergeMethodSchema,
+  sourceBranch: z.string().trim().min(1),
+  targetBranch: z.string().trim().min(1),
+  mergedAt: z.string(),
+});
+export type DirectMergeRecord = z.infer<typeof directMergeRecordSchema>;
+
+export const gitProviderAvailabilitySchema = z.object({
+  providerId: gitProviderIdSchema,
+  enabled: z.boolean(),
+  available: z.boolean(),
+  reason: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+});
+export type GitProviderAvailability = z.infer<typeof gitProviderAvailabilitySchema>;
+
+export const taskApprovalContextSchema = z.object({
+  taskId: z.string(),
+  taskStatus: z.string(),
+  workingDirectory: z.string().trim().min(1),
+  sourceBranch: z.string().trim().min(1),
+  targetBranch: gitTargetBranchSchema,
+  publishTarget: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitTargetBranchSchema.optional(),
+  ),
+  defaultMergeMethod: gitMergeMethodSchema,
+  hasUncommittedChanges: z.boolean().default(false),
+  uncommittedFileCount: z.number().int().nonnegative().default(0),
+  pullRequest: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    pullRequestSchema.optional(),
+  ),
+  providers: z.array(gitProviderAvailabilitySchema).default([]),
+});
+export type TaskApprovalContext = z.infer<typeof taskApprovalContextSchema>;
+
 export const gitPushBranchResultSchema = z.discriminatedUnion("outcome", [
   z.object({
     outcome: z.literal("pushed"),

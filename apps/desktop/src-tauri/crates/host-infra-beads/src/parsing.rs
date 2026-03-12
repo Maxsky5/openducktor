@@ -1,5 +1,5 @@
 use anyhow::Result;
-use host_domain::{AgentWorkflows, TaskCard};
+use host_domain::{AgentWorkflows, PullRequestRecord, TaskCard};
 
 use crate::metadata::{
     metadata_bool_qa_required, metadata_document_summary, metadata_namespace, parse_metadata_root,
@@ -25,6 +25,7 @@ impl BeadsTaskStore {
             .and_then(metadata_bool_qa_required)
             .unwrap_or_else(|| default_ai_review_enabled(&issue_type));
         let document_summary = metadata_document_summary(namespace);
+        let pull_request = parse_pull_request_metadata(namespace);
 
         let parent_id = issue.parent.or_else(|| {
             issue.dependencies.iter().find_map(|dependency| {
@@ -53,10 +54,23 @@ impl BeadsTaskStore {
             assignee: issue.owner,
             parent_id,
             subtask_ids: Vec::new(),
+            pull_request,
             document_summary,
             agent_workflows: AgentWorkflows::default(),
             updated_at: issue.updated_at,
             created_at: issue.created_at,
         })
     }
+}
+
+fn parse_pull_request_metadata(namespace: Option<&serde_json::Map<String, serde_json::Value>>) -> Option<PullRequestRecord> {
+    let root_value = namespace.and_then(|ns| ns.get("pullRequest"));
+    let legacy_value = namespace
+        .and_then(|ns| ns.get("delivery"))
+        .and_then(serde_json::Value::as_object)
+        .and_then(|delivery| delivery.get("linkedPullRequest"));
+
+    root_value
+        .or(legacy_value)
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
 }

@@ -1,3 +1,4 @@
+use crate::git::PullRequestRecord;
 use crate::document::{AgentWorkflows, TaskDocumentSummary};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -122,6 +123,8 @@ pub struct TaskCard {
     pub assignee: Option<String>,
     pub parent_id: Option<String>,
     pub subtask_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull_request: Option<PullRequestRecord>,
     pub document_summary: TaskDocumentSummary,
     pub agent_workflows: AgentWorkflows,
     pub updated_at: String,

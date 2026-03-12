@@ -223,7 +223,11 @@ fn workspace_update_repo_config_cannot_register_new_allowlist_entries() {
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some("/tmp/wt".to_string()),
                 branch_prefix: "odt".to_string(),
-                default_target_branch: "origin/main".to_string(),
+                default_target_branch: host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
                 trusted_hooks: false,
                 trusted_hooks_fingerprint: None,
                 hooks: HookSet::default(),

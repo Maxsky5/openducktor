@@ -17,7 +17,10 @@ const createRepoConfig = (): RepoConfig => ({
   defaultRuntimeKind: "opencode",
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  ",
-  defaultTargetBranch: "main",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: {
+    providers: {},
+  },
   trustedHooks: true,
   trustedHooksFingerprint: "fingerprint",
   hooks: {
@@ -145,7 +148,7 @@ describe("settings-modal-normalization", () => {
 
     expect(normalized.defaultRuntimeKind).toBe("opencode");
     expect(normalized.branchPrefix).toBe("obp");
-    expect(normalized.defaultTargetBranch).toBe("origin/main");
+    expect(normalized.defaultTargetBranch).toEqual({ remote: "origin", branch: "main" });
     expect(normalized.worktreeBasePath).toBe("/tmp/worktrees");
     expect(normalized.hooks).toEqual({
       preStart: ["npm ci"],
@@ -177,6 +180,9 @@ describe("settings-modal-normalization", () => {
 
   test("normalizes snapshot repo map and global prompt overrides", () => {
     const snapshot = normalizeSnapshotForSave({
+      git: {
+        defaultMergeMethod: "merge_commit",
+      },
       repos: {
         "/repo-a": createRepoConfig(),
       },
@@ -201,6 +207,9 @@ describe("settings-modal-normalization", () => {
 
   test("selects initial repo using active repo when available", () => {
     const snapshot = {
+      git: {
+        defaultMergeMethod: "merge_commit" as const,
+      },
       repos: {
         "/repo-b": createRepoConfig(),
         "/repo-a": createRepoConfig(),
@@ -210,7 +219,18 @@ describe("settings-modal-normalization", () => {
 
     expect(pickInitialRepoPath(snapshot, "/repo-b")).toBe("/repo-b");
     expect(pickInitialRepoPath(snapshot, "/missing")).toBe("/repo-a");
-    expect(pickInitialRepoPath({ repos: {}, globalPromptOverrides: {} }, null)).toBeNull();
+    expect(
+      pickInitialRepoPath(
+        {
+          git: {
+            defaultMergeMethod: "merge_commit" as const,
+          },
+          repos: {},
+          globalPromptOverrides: {},
+        },
+        null,
+      ),
+    ).toBeNull();
   });
 
   test("resolves inherited preview from global override and builtin", () => {

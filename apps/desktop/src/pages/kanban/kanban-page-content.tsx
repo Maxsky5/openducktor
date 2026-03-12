@@ -104,34 +104,13 @@ function KanbanBoardLoadingOverlay({
   );
 }
 
-function KanbanBoardRefreshingIndicator(): ReactElement {
-  return (
-    <div
-      className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-2"
-      data-testid="kanban-refresh-indicator"
-    >
-      <output
-        aria-live="polite"
-        className="inline-flex items-center gap-2 rounded-full border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-sm"
-      >
-        <LoaderCircle className="size-3.5 animate-spin text-primary" />
-        Refreshing tasks...
-      </output>
-    </div>
-  );
-}
-
 export function KanbanPageContent({ model }: KanbanPageContentProps): ReactElement {
   const totalTaskCount = model.columns.reduce((count, column) => count + column.tasks.length, 0);
   const isBoardLoading = model.isLoadingTasks || model.isSwitchingWorkspace;
   const showBlockingLoader = isBoardLoading && totalTaskCount === 0;
-  const showRefreshingIndicator =
-    model.isLoadingTasks && !model.isSwitchingWorkspace && totalTaskCount > 0;
 
   return (
     <section className="relative min-h-0 min-w-0 flex-1" aria-busy={isBoardLoading}>
-      {showRefreshingIndicator ? <KanbanBoardRefreshingIndicator /> : null}
-
       <div
         className={cn(
           "hide-scrollbar min-h-full w-full max-w-full overflow-x-auto overflow-y-visible transition-opacity duration-150",

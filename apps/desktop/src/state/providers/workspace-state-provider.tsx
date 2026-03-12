@@ -29,6 +29,8 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     refreshBranches,
     switchBranch,
     clearBranchData,
+    applyWorkspaceRecords,
+    applyWorkspaceRecord,
   } = useWorkspaceOperations({
     activeRepo,
     setActiveRepo,
@@ -36,10 +38,18 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     clearActiveBeadsCheck,
   });
 
-  const { loadRepoSettings, saveRepoSettings, loadSettingsSnapshot, saveSettingsSnapshot } =
+  const {
+    loadRepoSettings,
+    saveRepoSettings,
+    loadSettingsSnapshot,
+    detectGithubRepository,
+    saveGlobalGitConfig,
+    saveSettingsSnapshot,
+  } =
     useRepoSettingsOperations({
       activeRepo,
-      refreshWorkspaces,
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
     });
 
   const activeWorkspace = useMemo(
@@ -66,6 +76,8 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         loadRepoSettings,
         saveRepoSettings,
         loadSettingsSnapshot,
+        detectGithubRepository,
+        saveGlobalGitConfig,
         saveSettingsSnapshot,
       }),
     [
@@ -80,6 +92,8 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       branchSyncDegraded,
       loadRepoSettings,
       loadSettingsSnapshot,
+      detectGithubRepository,
+      saveGlobalGitConfig,
       refreshBranches,
       saveRepoSettings,
       saveSettingsSnapshot,

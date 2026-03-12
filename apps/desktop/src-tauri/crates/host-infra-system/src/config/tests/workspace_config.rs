@@ -1,4 +1,5 @@
 use super::{fake_git_workspace, RepoConfig, TestStoreHarness};
+use crate::GitTargetBranch;
 use std::fs;
 
 #[test]
@@ -37,7 +38,11 @@ fn workspace_add_select_and_update_persist_state() {
                 default_runtime_kind: "opencode".to_string(),
                 worktree_base_path: Some(worktrees_path.clone()),
                 branch_prefix: "duck".to_string(),
-                default_target_branch: "origin/main".to_string(),
+                default_target_branch: GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "main".to_string(),
+                },
+                git: Default::default(),
                 trusted_hooks: true,
                 trusted_hooks_fingerprint: None,
                 hooks: Default::default(),

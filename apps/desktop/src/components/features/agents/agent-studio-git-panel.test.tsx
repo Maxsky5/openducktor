@@ -244,6 +244,44 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
+  test("renders a pull request link badge when the selected task has a linked PR", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            pullRequest: {
+              providerId: "github",
+              number: 110,
+              url: "https://github.com/openai/openducktor/pull/110",
+              state: "open",
+              createdAt: "2026-03-12T12:24:09Z",
+              updatedAt: "2026-03-12T12:24:09Z",
+              lastSyncedAt: undefined,
+              mergedAt: undefined,
+              closedAt: undefined,
+            },
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const prLinks = root.findAll(
+      (node) =>
+        node.type === "button" &&
+        String(node.props.className ?? "").includes("text-emerald"),
+    );
+    expect(prLinks.length).toBe(1);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
   test("renders repository mode without target branch or rebase action", async () => {
     const refresh = mock(() => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});

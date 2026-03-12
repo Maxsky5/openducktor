@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
+import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;
@@ -44,11 +44,23 @@ export function RepositoryConfigurationSection({
     );
   }
 
-  const defaultTargetBranchValue = normalizeCanonicalTargetBranch(
-    selectedRepoConfig.defaultTargetBranch,
-  );
+  const defaultTargetBranchValue = canonicalTargetBranch(selectedRepoConfig.defaultTargetBranch);
+  const targetBranchSelectorValue =
+    selectedRepoConfig.defaultTargetBranch.branch === "@{upstream}"
+      ? selectedRepoConfig.defaultTargetBranch.branch
+      : selectedRepoConfig.defaultTargetBranch.remote
+        ? `refs/remotes/${selectedRepoConfig.defaultTargetBranch.remote}/${selectedRepoConfig.defaultTargetBranch.branch}`
+        : `refs/heads/${selectedRepoConfig.defaultTargetBranch.branch}`;
   const defaultTargetBranchOptions = toBranchSelectorOptions(selectedRepoBranches, {
-    includeBranchNames: [defaultTargetBranchValue],
+    valueFormat: "full_ref",
+    includeOptions: [
+      {
+        value: targetBranchSelectorValue,
+        label: defaultTargetBranchValue,
+        secondaryLabel: "configured",
+        searchKeywords: defaultTargetBranchValue.split("/").filter(Boolean),
+      },
+    ],
   });
   const isDefaultTargetBranchPickerDisabled =
     isLoadingSettings ||
@@ -114,7 +126,7 @@ export function RepositoryConfigurationSection({
         <div className="grid gap-2">
           <Label>Default target branch</Label>
           <BranchSelector
-            value={defaultTargetBranchValue}
+            value={targetBranchSelectorValue}
             options={defaultTargetBranchOptions}
             disabled={isDefaultTargetBranchPickerDisabled}
             placeholder={defaultTargetBranchPlaceholder}
@@ -122,7 +134,7 @@ export function RepositoryConfigurationSection({
             onValueChange={(nextBranch) =>
               onUpdateSelectedRepoConfig((repoConfig) => ({
                 ...repoConfig,
-                defaultTargetBranch: nextBranch,
+                defaultTargetBranch: targetBranchFromSelection(nextBranch),
               }))
             }
           />

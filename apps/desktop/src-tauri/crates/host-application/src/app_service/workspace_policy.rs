@@ -3,7 +3,8 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
-    hook_set_fingerprint, normalize_hook_set, AgentDefaults, HookSet, PromptOverrides, RepoConfig,
+    hook_set_fingerprint, normalize_hook_set, AgentDefaults, GitTargetBranch, HookSet,
+    PromptOverrides, RepoConfig, RepoGitConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -17,7 +18,8 @@ pub struct RepoConfigUpdate {
     pub default_runtime_kind: Option<String>,
     pub worktree_base_path: Option<String>,
     pub branch_prefix: Option<String>,
-    pub default_target_branch: Option<String>,
+    pub default_target_branch: Option<GitTargetBranch>,
+    pub git: Option<RepoGitConfig>,
     pub worktree_file_copies: Option<Vec<String>>,
     pub prompt_overrides: Option<PromptOverrides>,
     pub agent_defaults: Option<AgentDefaults>,
@@ -28,7 +30,8 @@ pub struct RepoSettingsUpdate {
     pub default_runtime_kind: Option<String>,
     pub worktree_base_path: Option<String>,
     pub branch_prefix: Option<String>,
-    pub default_target_branch: Option<String>,
+    pub default_target_branch: Option<GitTargetBranch>,
+    pub git: Option<RepoGitConfig>,
     pub trusted_hooks: bool,
     pub hooks: Option<HookSet>,
     pub worktree_file_copies: Option<Vec<String>>,
@@ -98,6 +101,10 @@ impl AppService {
                         .map(|entry| entry.default_target_branch.clone())
                 })
                 .unwrap_or(defaults.default_target_branch),
+            git: update
+                .git
+                .or_else(|| existing.as_ref().map(|entry| entry.git.clone()))
+                .unwrap_or_default(),
             trusted_hooks: existing.as_ref().is_some_and(|entry| entry.trusted_hooks),
             trusted_hooks_fingerprint: existing
                 .as_ref()
@@ -158,6 +165,7 @@ impl AppService {
             default_target_branch: settings
                 .default_target_branch
                 .unwrap_or(existing.default_target_branch),
+            git: settings.git.unwrap_or(existing.git),
             trusted_hooks: settings.trusted_hooks,
             trusted_hooks_fingerprint,
             hooks: normalized_hooks,
@@ -212,6 +220,7 @@ impl AppService {
 
     pub fn workspace_save_settings_snapshot<P: HookTrustConfirmationPort + ?Sized>(
         &self,
+        git: host_infra_system::GlobalGitConfig,
         mut repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
         confirmation_port: &P,
@@ -233,7 +242,7 @@ impl AppService {
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
-        self.workspace_persist_settings_snapshot(repos, global_prompt_overrides)?;
+        self.workspace_persist_settings_snapshot(git, repos, global_prompt_overrides)?;
         self.workspace_list()
     }
 
@@ -507,7 +516,10 @@ mod tests {
         fixture.service.workspace_merge_repo_config(
             fixture.repo_path.as_str(),
             RepoConfigUpdate {
-                default_target_branch: Some("release".to_string()),
+                default_target_branch: Some(host_infra_system::GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "release".to_string(),
+                }),
                 ..RepoConfigUpdate::default()
             },
         )?;
@@ -515,7 +527,7 @@ mod tests {
         let updated = fixture
             .service
             .workspace_get_repo_config(&fixture.repo_path)?;
-        assert_eq!(updated.default_target_branch, "origin/release");
+        assert_eq!(updated.default_target_branch.canonical(), "origin/release");
         assert_eq!(updated.branch_prefix, "abc");
         assert!(updated.trusted_hooks);
         assert_eq!(
@@ -540,6 +552,7 @@ mod tests {
                     worktree_base_path: None,
                     branch_prefix: None,
                     default_target_branch: None,
+                    git: None,
                     trusted_hooks: false,
                     hooks: None,
                     worktree_file_copies: None,
@@ -567,6 +580,7 @@ mod tests {
                 worktree_base_path: None,
                 branch_prefix: None,
                 default_target_branch: None,
+                git: None,
                 trusted_hooks: false,
                 hooks: None,
                 worktree_file_copies: None,
@@ -605,6 +619,7 @@ mod tests {
                     worktree_base_path: None,
                     branch_prefix: None,
                     default_target_branch: None,
+                    git: None,
                     trusted_hooks: true,
                     hooks: Some(HookSet {
                         pre_start: vec!["  echo pre  ".to_string()],
@@ -641,7 +656,7 @@ mod tests {
         );
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (mut repos, mut global_prompt_overrides) =
+        let (git, mut repos, mut global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         global_prompt_overrides.insert(
             "system.shared.workflow_guards".to_string(),
@@ -663,6 +678,7 @@ mod tests {
         repo_config.trusted_hooks_fingerprint = None;
 
         fixture.service.workspace_save_settings_snapshot(
+            git,
             repos,
             global_prompt_overrides,
             &confirmation,

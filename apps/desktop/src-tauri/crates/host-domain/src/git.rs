@@ -26,6 +26,97 @@ pub struct GitWorktreeSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GitMergeMethod {
+    MergeCommit,
+    Squash,
+    Rebase,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitProviderRepository {
+    pub host: String,
+    pub owner: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GitTargetBranch {
+    pub remote: Option<String>,
+    pub branch: String,
+}
+
+impl GitTargetBranch {
+    pub fn canonical(&self) -> String {
+        if self.branch == "@{upstream}" {
+            return self.branch.clone();
+        }
+        match self.remote.as_deref() {
+            Some(remote) => format!("{remote}/{}", self.branch),
+            None => self.branch.clone(),
+        }
+    }
+
+    pub fn display(&self) -> String {
+        self.canonical()
+    }
+
+    pub fn checkout_branch(&self) -> String {
+        self.branch.clone()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequestRecord {
+    pub provider_id: String,
+    pub number: u32,
+    pub url: String,
+    pub state: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_synced_at: Option<String>,
+    pub merged_at: Option<String>,
+    pub closed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DirectMergeRecord {
+    pub method: GitMergeMethod,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub merged_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitProviderAvailability {
+    pub provider_id: String,
+    pub enabled: bool,
+    pub available: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskApprovalContext {
+    pub task_id: String,
+    pub task_status: String,
+    pub working_directory: String,
+    pub source_branch: String,
+    pub target_branch: GitTargetBranch,
+    pub publish_target: Option<GitTargetBranch>,
+    pub default_merge_method: GitMergeMethod,
+    pub has_uncommitted_changes: bool,
+    pub uncommitted_file_count: u32,
+    pub pull_request: Option<PullRequestRecord>,
+    pub providers: Vec<GitProviderAvailability>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum GitPushResult {
     Pushed {
@@ -219,6 +310,27 @@ pub enum GitRebaseAbortResult {
     Aborted { output: String },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitMergeBranchRequest {
+    pub source_branch: String,
+    pub target_branch: String,
+    pub source_working_directory: Option<String>,
+    pub method: GitMergeMethod,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum GitMergeBranchResult {
+    Merged { output: String },
+    UpToDate { output: String },
+    Conflicts {
+        #[serde(rename = "conflictedFiles")]
+        conflicted_files: Vec<String>,
+        output: String,
+    },
+}
+
 pub trait GitPort: Send + Sync {
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<GitBranch>>;
     fn get_current_branch(&self, repo_path: &Path) -> Result<GitCurrentBranch>;
@@ -278,6 +390,11 @@ pub trait GitPort: Send + Sync {
         repo_path: &Path,
         request: GitRebaseAbortRequest,
     ) -> Result<GitRebaseAbortResult>;
+    fn merge_branch(
+        &self,
+        repo_path: &Path,
+        request: GitMergeBranchRequest,
+    ) -> Result<GitMergeBranchResult>;
 }
 
 #[cfg(test)]

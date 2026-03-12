@@ -8,6 +8,7 @@ import { HumanReviewFeedbackModal } from "./human-review-feedback-modal";
 import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanSessionStartModal } from "./kanban-session-start-modal";
+import { TaskApprovalModal } from "./task-approval-modal";
 import { useKanbanPageModels } from "./use-kanban-page-models";
 
 export function KanbanPage(): ReactElement {
@@ -26,6 +27,7 @@ export function KanbanPage(): ReactElement {
       <TaskCreateModal {...models.taskComposer} />
       <TaskDetailsSheetController ref={taskDetailsSheetRef} {...models.taskDetailsController} />
       <HumanReviewFeedbackModal model={models.humanReviewFeedbackModal} />
+      <TaskApprovalModal model={models.taskApprovalModal} />
       <KanbanSessionStartModal model={models.sessionStartModal} />
     </div>
   );

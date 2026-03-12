@@ -205,6 +205,10 @@ export class TauriTaskClient {
     };
   }
 
+  async taskMetadataGet(repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
+    return this.readTaskMetadata(repoPath, taskId);
+  }
+
   async qaGetReport(
     repoPath: string,
     taskId: string,

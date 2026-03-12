@@ -21,6 +21,7 @@ export const agentPromptTemplateIdValues = [
   "kickoff.build_after_qa_rejected",
   "kickoff.build_after_human_request_changes",
   "kickoff.qa_review",
+  "message.build_pull_request_draft",
   "message.build_rebase_conflict_resolution",
   "permission.read_only.reject",
 ] as const;

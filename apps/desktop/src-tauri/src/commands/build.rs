@@ -1,6 +1,9 @@
-use crate::{as_error, run_emitter, run_service_blocking, AppState, BuildCompletePayload};
+use crate::{
+    as_error, run_emitter, run_service_blocking, AppState, BuildCompletePayload,
+    PullRequestContentPayload,
+};
 use host_application::{BuildResponseAction, CleanupMode};
-use host_domain::{AgentRuntimeKind, RunSummary, TaskCard};
+use host_domain::{AgentRuntimeKind, GitMergeMethod, PullRequestRecord, RunSummary, TaskApprovalContext, TaskCard};
 use tauri::{AppHandle, State};
 
 #[tauri::command]
@@ -100,6 +103,56 @@ pub async fn build_completed(
         &task_id,
         input.as_ref().and_then(|entry| entry.summary.as_deref()),
     ))
+}
+
+#[tauri::command]
+pub async fn task_approval_context_get(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<TaskApprovalContext, String> {
+    as_error(state.service.task_approval_context_get(&repo_path, &task_id))
+}
+
+#[tauri::command]
+pub async fn task_direct_merge(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    merge_method: GitMergeMethod,
+) -> Result<TaskCard, String> {
+    as_error(
+        state
+            .service
+            .task_direct_merge(&repo_path, &task_id, merge_method),
+    )
+}
+
+#[tauri::command]
+pub async fn task_pull_request_upsert(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+    input: PullRequestContentPayload,
+) -> Result<PullRequestRecord, String> {
+    as_error(
+        state
+            .service
+            .task_pull_request_upsert(&repo_path, &task_id, &input.title, &input.body),
+    )
+}
+
+#[tauri::command]
+pub async fn repo_pull_request_sync(
+    state: State<'_, AppState>,
+    repo_path: String,
+) -> Result<serde_json::Value, String> {
+    as_error(
+        state
+            .service
+            .repo_pull_request_sync(&repo_path)
+            .map(|ok| serde_json::json!({ "ok": ok })),
+    )
 }
 
 #[tauri::command]

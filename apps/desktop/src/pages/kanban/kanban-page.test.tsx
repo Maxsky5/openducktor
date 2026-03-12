@@ -31,6 +31,9 @@ const workspaceGetRepoConfigMock = mock(
   }),
 );
 const workspaceGetSettingsSnapshotMock = mock(async () => ({
+  git: {
+    defaultMergeMethod: "merge_commit" as const,
+  },
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
@@ -85,7 +88,7 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
   defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "",
   branchPrefix: "codex/",
-  defaultTargetBranch: "main",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
   trustedHooks: false,
   preStartHooks: [],
   postCompleteHooks: [],
@@ -171,6 +174,7 @@ mock.module("@/state", () => ({
     sessions: currentSessionsFixture,
     loadAgentSessions: loadAgentSessionsMock,
     startAgentSession: startAgentSessionMock,
+    forkAgentSession: async () => "session-forked",
     sendAgentMessage: sendAgentMessageMock,
     updateAgentSessionModel: updateAgentSessionModelMock,
   }),
@@ -275,6 +279,9 @@ describe("KanbanPage session start modal flow", () => {
       promptOverrides: {},
     }));
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
+      git: {
+        defaultMergeMethod: "merge_commit" as const,
+      },
       repos: {},
       globalPromptOverrides: {},
     }));

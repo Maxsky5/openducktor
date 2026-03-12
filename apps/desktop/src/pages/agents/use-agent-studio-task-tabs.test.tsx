@@ -480,6 +480,88 @@ describe("useAgentStudioTaskTabs", () => {
     }
   });
 
+  test("removes a task tab when the selected task becomes closed and routes to the first remaining tab", async () => {
+    const memoryStorage = createMemoryStorage();
+    const originalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryStorage,
+    });
+
+    try {
+      memoryStorage.setItem(
+        toTabsStorageKey("/repo"),
+        toPersistedTaskTabs({
+          tabs: ["task-1", "task-2"],
+          activeTaskId: "task-2",
+        }),
+      );
+
+      const taskOne = createTask("task-1");
+      const taskTwo = createTask("task-2");
+      const latestSession = createSession("task-1", "session-1");
+      const updateCalls: Array<Record<string, string | undefined>> = [];
+      const harness = createHookHarness({
+        activeRepo: "/repo",
+        taskId: "task-2",
+        selectedTask: taskTwo,
+        tasks: [taskOne, taskTwo],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-1", latestSession]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.mount();
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+
+      await harness.update({
+        activeRepo: "/repo",
+        taskId: "task-2",
+        selectedTask: createTaskCardFixture({
+          id: "task-2",
+          title: "task-2",
+          status: "closed",
+        }),
+        tasks: [
+          taskOne,
+          createTaskCardFixture({
+            id: "task-2",
+            title: "task-2",
+            status: "closed",
+          }),
+        ],
+        isLoadingTasks: false,
+        latestSessionByTaskId: new Map([["task-1", latestSession]]),
+        updateQuery: (updates) => {
+          updateCalls.push(updates);
+        },
+        clearComposerInput: () => {},
+      });
+
+      await harness.waitFor(() => updateCalls.length > 0);
+
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
+      expect(harness.getLatest().activeTaskTabId).toBe("task-1");
+      expect(updateCalls[0]).toEqual({
+        task: "task-1",
+        session: "session-1",
+        agent: "spec",
+        autostart: undefined,
+        start: undefined,
+      });
+
+      await harness.unmount();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalStorage,
+      });
+    }
+  });
+
   test("clearing active repo skips fallback routing and resets tabs", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;

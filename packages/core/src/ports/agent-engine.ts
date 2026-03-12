@@ -21,6 +21,12 @@ export type ResumeAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
   externalSessionId: string;
 };
 
+export type ForkAgentSessionInput = Omit<AgentSessionContext, "sessionId"> & {
+  sessionId?: string;
+  parentExternalSessionId: string;
+  messageId?: string;
+};
+
 export type SendAgentUserMessageInput = {
   sessionId: string;
   content: string;
@@ -103,6 +109,7 @@ export interface AgentCatalogPort {
 export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
+  forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   hasSession(sessionId: string): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;

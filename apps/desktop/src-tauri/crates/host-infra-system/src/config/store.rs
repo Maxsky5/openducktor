@@ -73,6 +73,16 @@ impl AppConfigStore {
         )
     }
 
+    pub fn update_global_git_config(
+        &self,
+        git: super::types::GlobalGitConfig,
+    ) -> Result<()> {
+        self.update_config(|config| {
+            config.git = git;
+            Ok(())
+        })
+    }
+
     pub fn list_workspaces(&self) -> Result<Vec<WorkspaceRecord>> {
         let config = self.load()?;
         let mut records: Vec<WorkspaceRecord> = config

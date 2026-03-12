@@ -106,7 +106,11 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
             default_runtime_kind: "opencode".to_string(),
             worktree_base_path: Some(worktree_base.clone()),
             branch_prefix: "odt".to_string(),
-            default_target_branch: "origin/main".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
             trusted_hooks: false,
             trusted_hooks_fingerprint: None,
             hooks: HookSet::default(),

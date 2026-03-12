@@ -1,5 +1,10 @@
 import {
+  type GlobalGitConfig,
+  gitProviderRepositorySchema,
+  type GitTargetBranch,
   type RepoConfig,
+  type RepoGitConfig,
+  type GitProviderRepository,
   type RepoPromptOverrides,
   type RuntimeKind,
   repoConfigSchema,
@@ -29,14 +34,15 @@ export type WorkspaceRepoConfigInput = {
   defaultRuntimeKind?: RuntimeKind;
   worktreeBasePath?: string;
   branchPrefix?: string;
-  defaultTargetBranch?: string;
+  defaultTargetBranch?: GitTargetBranch;
+  git?: RepoGitConfig;
   worktreeFileCopies?: string[];
   agentDefaults?: WorkspaceAgentDefaults;
   promptOverrides?: RepoPromptOverrides;
 };
 
 export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {
-  defaultTargetBranch?: string;
+  defaultTargetBranch?: GitTargetBranch;
   trustedHooks: boolean;
   hooks?: WorkspaceRepoHooksInput;
   worktreeFileCopies?: string[];
@@ -141,6 +147,21 @@ export const workspaceSaveSettingsSnapshot = async (
   return parseArray(workspaceRecordSchema, payload);
 };
 
+export const workspaceUpdateGlobalGitConfig = async (
+  invokeFn: InvokeFn,
+  git: GlobalGitConfig,
+): Promise<void> => {
+  await invokeFn<void>("workspace_update_global_git_config", { git });
+};
+
+export const workspaceDetectGithubRepository = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+): Promise<GitProviderRepository | null> => {
+  const payload = await invokeFn<unknown>("workspace_detect_github_repository", { repoPath });
+  return payload === null ? null : gitProviderRepositorySchema.parse(payload);
+};
+
 export const workspaceSetTrustedHooks = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -221,6 +242,14 @@ export class TauriWorkspaceClient {
 
   async workspaceSaveSettingsSnapshot(snapshot: SettingsSnapshot): Promise<WorkspaceRecord[]> {
     return workspaceSaveSettingsSnapshot(this.invokeFn, snapshot);
+  }
+
+  async workspaceUpdateGlobalGitConfig(git: GlobalGitConfig): Promise<void> {
+    return workspaceUpdateGlobalGitConfig(this.invokeFn, git);
+  }
+
+  async workspaceDetectGithubRepository(repoPath: string): Promise<GitProviderRepository | null> {
+    return workspaceDetectGithubRepository(this.invokeFn, repoPath);
   }
 
   async workspacePrepareTrustedHooksChallenge(repoPath: string): Promise<TrustedHooksChallenge> {

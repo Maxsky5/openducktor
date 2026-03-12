@@ -63,6 +63,19 @@ export class TaskMetadataCache {
     this.inFlight.delete(cacheKey);
   }
 
+  invalidateRepo(repoPath: string): void {
+    for (const cacheKey of [...this.cache.keys()]) {
+      if (cacheKey.startsWith(`${repoPath}::`)) {
+        this.cache.delete(cacheKey);
+      }
+    }
+    for (const cacheKey of [...this.inFlight.keys()]) {
+      if (cacheKey.startsWith(`${repoPath}::`)) {
+        this.inFlight.delete(cacheKey);
+      }
+    }
+  }
+
   async get(invokeFn: InvokeFn, repoPath: string, taskId: string): Promise<ParsedTaskMetadata> {
     const cacheKey = this.key(repoPath, taskId);
     const cached = this.cache.get(cacheKey);

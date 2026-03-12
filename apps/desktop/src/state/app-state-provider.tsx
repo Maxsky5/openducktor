@@ -1,4 +1,4 @@
-import { type PropsWithChildren, type ReactElement, useMemo } from "react";
+import { type PropsWithChildren, type ReactElement, useCallback, useMemo } from "react";
 import type {
   AgentStateContextValue,
   ChecksStateContextValue,
@@ -8,6 +8,7 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
+import type { RuntimeKind } from "@openducktor/contracts";
 import { createAgentRuntimeRegistry } from "./agent-runtime-registry";
 import {
   AgentStateContext,
@@ -44,15 +45,16 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     configureRuntimeCatalogOperations(ops);
     return ops;
   }, [runtimeRegistry]);
+  const checkRepoRuntimeHealth = useCallback(
+    (repoPath: string, runtimeKind: RuntimeKind) =>
+      runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind),
+    [runtimeCatalogOperations],
+  );
 
   return (
     <AppRuntimeProvider>
       <SpecStateProvider>
-        <ChecksStateProvider
-          checkRepoRuntimeHealth={(repoPath, runtimeKind) =>
-            runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind)
-          }
-        >
+        <ChecksStateProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
           <TasksStateProvider>
             <AgentStudioStateProvider agentEngine={agentEngine}>
               <DelegationStateProvider>

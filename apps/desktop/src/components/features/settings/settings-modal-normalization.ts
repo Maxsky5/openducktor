@@ -1,11 +1,12 @@
 import type {
   AgentPromptTemplateId,
+  GlobalGitConfig,
   RepoConfig,
   RepoPromptOverrides,
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@/components/features/settings/settings-model";
-import { normalizeCanonicalTargetBranch } from "@/lib/target-branch";
+import { normalizeTargetBranch } from "@/lib/target-branch";
 import { DEFAULT_RUNTIME_KIND } from "@/state/agent-runtime-registry";
 
 const trimNonEmpty = (value: string): string | null => {
@@ -72,7 +73,8 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     defaultRuntimeKind: repo.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND,
     worktreeBasePath: trimNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
-    defaultTargetBranch: normalizeCanonicalTargetBranch(repo.defaultTargetBranch),
+    defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),
+    git: repo.git,
     trustedHooks: repo.trustedHooks,
     trustedHooksFingerprint: repo.trustedHooksFingerprint,
     hooks: {
@@ -90,6 +92,10 @@ export const normalizeRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
   };
 };
 
+export const normalizeGlobalGitConfigForSave = (git: GlobalGitConfig): GlobalGitConfig => ({
+  defaultMergeMethod: git.defaultMergeMethod,
+});
+
 export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSnapshot => {
   const repos = Object.fromEntries(
     Object.entries(snapshot.repos).map(([repoPath, repoConfig]) => [
@@ -99,6 +105,7 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
   );
 
   return {
+    git: normalizeGlobalGitConfigForSave(snapshot.git),
     repos,
     globalPromptOverrides: normalizePromptOverridesForSave(snapshot.globalPromptOverrides),
   };

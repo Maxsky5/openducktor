@@ -21,6 +21,8 @@ const WORKSPACE_METHODS = [
   "workspaceUpdateRepoHooks",
   "workspaceGetRepoConfig",
   "workspaceGetSettingsSnapshot",
+  "workspaceUpdateGlobalGitConfig",
+  "workspaceDetectGithubRepository",
   "workspaceSaveSettingsSnapshot",
   "workspacePrepareTrustedHooksChallenge",
   "workspaceSetTrustedHooks",
@@ -42,6 +44,7 @@ const TASK_METHODS = [
   "setPlan",
   "savePlanDocument",
   "planGet",
+  "taskMetadataGet",
   "qaGetReport",
   "qaApproved",
   "qaRejected",
@@ -63,6 +66,10 @@ const AGENT_METHODS = [
   "buildBlocked",
   "buildResumed",
   "buildCompleted",
+  "taskApprovalContextGet",
+  "taskDirectMerge",
+  "taskPullRequestUpsert",
+  "repoPullRequestSync",
   "humanRequestChanges",
   "humanApprove",
   "buildRespond",
@@ -135,7 +142,7 @@ const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
   const metadataCache = new TaskMetadataCache();
   const workspaceClient = new TauriWorkspaceClient(invokeFn);
   const taskClient = new TauriTaskClient(invokeFn, metadataCache);
-  const agentClient = new TauriAgentClient(invokeFn);
+  const agentClient = new TauriAgentClient(invokeFn, metadataCache);
   const gitClient = new TauriGitClient(invokeFn);
   const hostClient = {} as TauriHostClientApi;
 

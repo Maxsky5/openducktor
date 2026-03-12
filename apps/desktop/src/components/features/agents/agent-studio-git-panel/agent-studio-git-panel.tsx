@@ -173,6 +173,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <GitInfoHeader
           contextMode={model.contextMode ?? "worktree"}
+          pullRequest={model.pullRequest ?? null}
           branch={model.branch}
           targetBranch={model.targetBranch}
           diffScope={model.diffScope}

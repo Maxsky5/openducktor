@@ -12,6 +12,7 @@ import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
 } from "@/components/features/kanban/kanban-task-workflow";
+import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
@@ -61,6 +62,9 @@ const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
   left.issueType === right.issueType &&
   left.priority === right.priority &&
   areStringArraysEqual(left.subtaskIds, right.subtaskIds) &&
+  left.pullRequest?.number === right.pullRequest?.number &&
+  left.pullRequest?.url === right.pullRequest?.url &&
+  left.pullRequest?.state === right.pullRequest?.state &&
   areStringArraysEqual(left.availableActions, right.availableActions);
 
 const areRunningTaskSessionsEqual = (
@@ -199,6 +203,7 @@ function TaskMeta({
         </Badge>
       ) : null}
       {runState ? <RunStateBadge runState={runState} /> : null}
+      {task.pullRequest ? <TaskPullRequestLink pullRequest={task.pullRequest} /> : null}
     </div>
   );
 }

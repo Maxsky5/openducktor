@@ -39,6 +39,8 @@ type UseWorkspaceOperationsResult = {
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
   clearBranchData: () => void;
+  applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
+  applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
 
 export function useWorkspaceOperations({
@@ -111,6 +113,30 @@ export function useWorkspaceOperations({
     previousActiveRepoRef.current = activeRepo;
     activeRepoRef.current = activeRepo;
   }, [activeRepo, clearBranchData]);
+
+  const applyWorkspaceRecords = useCallback(
+    (records: WorkspaceRecord[]): void => {
+      setWorkspaces(records);
+      const active = records.find((entry) => entry.isActive);
+      setActiveRepo(active?.path ?? null);
+    },
+    [setActiveRepo],
+  );
+
+  const applyWorkspaceRecord = useCallback(
+    (record: WorkspaceRecord): void => {
+      setWorkspaces((current) => {
+        const next = current.filter((entry) => entry.path !== record.path);
+        next.push(record);
+        next.sort((left, right) => left.path.localeCompare(right.path));
+        return next;
+      });
+      if (record.isActive) {
+        setActiveRepo(record.path);
+      }
+    },
+    [setActiveRepo],
+  );
 
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string): Promise<void> => {
@@ -352,10 +378,8 @@ export function useWorkspaceOperations({
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
     const data = await host.workspaceList();
-    setWorkspaces(data);
-    const active = data.find((entry) => entry.isActive);
-    setActiveRepo(active?.path ?? null);
-  }, [setActiveRepo]);
+    applyWorkspaceRecords(data);
+  }, [applyWorkspaceRecords]);
 
   const addWorkspace = useCallback(
     async (repoPath: string): Promise<void> => {
@@ -443,5 +467,7 @@ export function useWorkspaceOperations({
     refreshBranches,
     switchBranch,
     clearBranchData,
+    applyWorkspaceRecords,
+    applyWorkspaceRecord,
   };
 }

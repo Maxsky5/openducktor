@@ -107,6 +107,11 @@ export function useTaskOperations({
         return;
       }
 
+      try {
+        await host.repoPullRequestSync(activeRepo);
+      } catch (error) {
+        console.warn("Pull request sync failed during task refresh", errorMessage(error));
+      }
       await refreshTaskData(activeRepo);
     } catch (error) {
       toast.error("Failed to refresh tasks", {

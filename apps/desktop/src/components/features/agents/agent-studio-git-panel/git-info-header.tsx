@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowRight, ArrowUp, GitBranch, RefreshCw, Target } from "lucide-react";
 import type { ReactElement } from "react";
+import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -11,6 +12,7 @@ import type { AgentStudioGitPanelModel } from "./types";
 type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
   | "contextMode"
+  | "pullRequest"
   | "branch"
   | "targetBranch"
   | "commitsAheadBehind"
@@ -104,6 +106,7 @@ function GitActionIconButton({
 
 export function GitInfoHeader({
   contextMode = "worktree",
+  pullRequest,
   branch,
   targetBranch,
   commitsAheadBehind,
@@ -203,9 +206,12 @@ export function GitInfoHeader({
         <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
           {isRepositoryMode ? "Repository context" : "Branch context"}
         </span>
-        <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
-          {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"} changed
-        </Badge>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {pullRequest ? <TaskPullRequestLink pullRequest={pullRequest} /> : null}
+          <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
+            {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"} changed
+          </Badge>
+        </div>
       </div>
 
       <div

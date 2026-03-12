@@ -11,6 +11,7 @@ type UseSettingsModalSnapshotStateArgs = {
 };
 
 export type SettingsModalSnapshotState = {
+  loadedSnapshot: SettingsSnapshot | null;
   snapshotDraft: SettingsSnapshot | null;
   setSnapshotDraft: Dispatch<SetStateAction<SettingsSnapshot | null>>;
   selectedRepoPath: string | null;
@@ -27,6 +28,7 @@ export const useSettingsModalSnapshotState = ({
   activeRepo,
   loadSettingsSnapshot,
 }: UseSettingsModalSnapshotStateArgs): SettingsModalSnapshotState => {
+  const [loadedSnapshot, setLoadedSnapshot] = useState<SettingsSnapshot | null>(null);
   const [snapshotDraft, setSnapshotDraft] = useState<SettingsSnapshot | null>(null);
   const [selectedRepoPath, setSelectedRepoPath] = useState<string | null>(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
@@ -62,6 +64,7 @@ export const useSettingsModalSnapshotState = ({
           return;
         }
 
+        setLoadedSnapshot(snapshot);
         setSnapshotDraft(snapshot);
         setSelectedRepoPath(pickInitialRepoPath(snapshot, activeRepo));
       })
@@ -70,6 +73,7 @@ export const useSettingsModalSnapshotState = ({
           return;
         }
 
+        setLoadedSnapshot(null);
         setSnapshotDraft(null);
         setSelectedRepoPath(null);
         setSettingsError(errorMessage(error));
@@ -101,6 +105,7 @@ export const useSettingsModalSnapshotState = ({
   }, [activeRepo, selectedRepoPath, snapshotDraft]);
 
   return {
+    loadedSnapshot,
     snapshotDraft,
     setSnapshotDraft,
     selectedRepoPath,

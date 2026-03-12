@@ -34,6 +34,26 @@ pub(super) fn resolve_upstream_ref(remote: &str, merge_ref: &str) -> String {
     format!("refs/remotes/{remote}/{branch_ref}")
 }
 
+pub(super) fn checkout_branch_from_target_ref(target_branch: &str) -> String {
+    let trimmed = target_branch.trim();
+    if let Some(local_branch) = trimmed.strip_prefix("refs/heads/") {
+        return local_branch.to_string();
+    }
+    if let Some(remote_ref) = trimmed.strip_prefix("refs/remotes/") {
+        let mut segments = remote_ref.splitn(2, '/');
+        let _remote = segments.next();
+        if let Some(branch) = segments.next() {
+            return branch.to_string();
+        }
+    }
+    if let Some(branch) = trimmed.strip_prefix("origin/") {
+        if !branch.is_empty() {
+            return branch.to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
 pub(super) fn combine_output(stdout: String, stderr: String) -> String {
     match (stdout.trim(), stderr.trim()) {
         ("", "") => String::new(),
@@ -45,7 +65,7 @@ pub(super) fn combine_output(stdout: String, stderr: String) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::combine_output;
+    use super::{checkout_branch_from_target_ref, combine_output};
 
     #[test]
     fn combine_output_prefers_non_empty_streams_and_preserves_both() {
@@ -61,6 +81,21 @@ mod tests {
         assert_eq!(
             combine_output("stdout".to_string(), "stderr".to_string()),
             "stdout\nstderr"
+        );
+    }
+
+    #[test]
+    fn checkout_branch_from_target_ref_strips_remote_tracking_prefixes() {
+        assert_eq!(checkout_branch_from_target_ref("origin/main"), "main");
+        assert_eq!(
+            checkout_branch_from_target_ref("refs/remotes/upstream/release"),
+            "release"
+        );
+        assert_eq!(checkout_branch_from_target_ref("refs/heads/main"), "main");
+        assert_eq!(checkout_branch_from_target_ref("main"), "main");
+        assert_eq!(
+            checkout_branch_from_target_ref("feature/my-branch"),
+            "feature/my-branch"
         );
     }
 }

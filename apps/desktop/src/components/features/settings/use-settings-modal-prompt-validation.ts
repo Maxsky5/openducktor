@@ -88,6 +88,7 @@ export const useSettingsModalPromptValidation = ({
 
   const settingsSectionErrorCountById: Record<SettingsSectionId, number> = {
     general: 0,
+    git: 0,
     repositories: promptValidationState.repoTotalErrorCount,
     prompts: promptValidationState.globalErrorCount,
   };
