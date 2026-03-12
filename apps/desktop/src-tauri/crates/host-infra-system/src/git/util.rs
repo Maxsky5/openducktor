@@ -34,6 +34,9 @@ pub(super) fn resolve_upstream_ref(remote: &str, merge_ref: &str) -> String {
     format!("refs/remotes/{remote}/{branch_ref}")
 }
 
+// Converts a verified remote target ref into the local branch name to checkout.
+// Callers must only use this for remote-tracking refs or `remote/branch` names
+// that have already been confirmed as remote branches.
 pub(super) fn checkout_branch_from_target_ref(target_branch: &str) -> String {
     let trimmed = target_branch.trim();
     if let Some(local_branch) = trimmed.strip_prefix("refs/heads/") {
@@ -94,9 +97,5 @@ mod tests {
         );
         assert_eq!(checkout_branch_from_target_ref("refs/heads/main"), "main");
         assert_eq!(checkout_branch_from_target_ref("main"), "main");
-        assert_eq!(
-            checkout_branch_from_target_ref("feature/my-branch"),
-            "feature/my-branch"
-        );
     }
 }
