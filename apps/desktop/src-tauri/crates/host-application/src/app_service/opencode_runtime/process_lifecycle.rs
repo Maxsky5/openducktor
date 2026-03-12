@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use host_infra_system::command_path;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -146,6 +146,38 @@ fn read_process_snapshot(pid: u32) -> Option<(u32, String)> {
 
 pub(crate) fn process_exists(pid: u32) -> bool {
     read_process_snapshot(pid).is_some()
+}
+
+pub(crate) fn process_is_alive(pid: u32) -> bool {
+    let output = Command::new("ps")
+        .arg("-o")
+        .arg("stat=")
+        .arg("-p")
+        .arg(pid.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+
+    let stat = String::from_utf8_lossy(&output.stdout);
+    let stat = stat.trim();
+    !stat.is_empty() && !stat.starts_with('Z')
+}
+
+pub(crate) fn wait_for_process_exit_by_pid(pid: u32, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if !process_is_alive(pid) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    !process_is_alive(pid)
 }
 
 fn is_opencode_server_command(command: &str) -> bool {

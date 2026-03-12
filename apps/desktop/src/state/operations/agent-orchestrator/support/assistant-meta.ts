@@ -1,17 +1,45 @@
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionContextUsage,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import { mergeModelSelection } from "./models";
 
-const resolveSelectedModelDescriptor = (session: AgentSessionState) => {
-  if (!session.selectedModel || !session.modelCatalog) {
+const resolveModelDescriptor = (
+  session: AgentSessionState,
+  model: AgentSessionState["selectedModel"] | null,
+) => {
+  if (!model || !session.modelCatalog) {
     return null;
   }
   return (
     session.modelCatalog.models.find(
-      (entry) =>
-        entry.providerId === session.selectedModel?.providerId &&
-        entry.modelId === session.selectedModel?.modelId,
+      (entry) => entry.providerId === model.providerId && entry.modelId === model.modelId,
     ) ?? null
   );
+};
+
+export const toSessionContextUsage = (
+  session: AgentSessionState,
+  totalTokens: number | undefined,
+  model?: AgentSessionState["selectedModel"],
+): AgentSessionContextUsage | null => {
+  if (typeof totalTokens !== "number" || totalTokens <= 0) {
+    return null;
+  }
+
+  const effectiveModel = mergeModelSelection(session.selectedModel, model ?? undefined);
+  const modelDescriptor = resolveModelDescriptor(session, effectiveModel);
+
+  return {
+    totalTokens,
+    ...(typeof modelDescriptor?.contextWindow === "number"
+      ? { contextWindow: modelDescriptor.contextWindow }
+      : {}),
+    ...(typeof modelDescriptor?.outputLimit === "number"
+      ? { outputLimit: modelDescriptor.outputLimit }
+      : {}),
+  };
 };
 
 export const toAssistantMessageMeta = (
@@ -21,11 +49,11 @@ export const toAssistantMessageMeta = (
   model?: AgentSessionState["selectedModel"],
 ): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
   const effectiveModel = mergeModelSelection(session.selectedModel, model ?? undefined);
-  const selectedModelDescriptor =
-    model === undefined ? resolveSelectedModelDescriptor(session) : null;
+  const selectedModelDescriptor = resolveModelDescriptor(session, effectiveModel);
   return {
     kind: "assistant",
     agentRole: session.role,
+    isFinal: true,
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
@@ -49,12 +77,31 @@ export const finalizeDraftAssistantMessage = (
   model?: AgentSessionState["selectedModel"],
 ): AgentSessionState => {
   const draft = session.draftAssistantText.trim();
+  const clearedDraftFields = {
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+  } as const;
   if (draft.length === 0) {
-    return session;
+    if (
+      session.draftReasoningText.length === 0 &&
+      session.draftAssistantMessageId === null &&
+      session.draftReasoningMessageId === null
+    ) {
+      return session;
+    }
+
+    return {
+      ...session,
+      ...clearedDraftFields,
+    };
   }
 
   const lastMessage = session.messages[session.messages.length - 1];
-  const alreadyAppended = lastMessage?.role === "assistant" && lastMessage.content.trim() === draft;
+  const alreadyAppended =
+    lastMessage?.role === "assistant" &&
+    (lastMessage.id === session.draftAssistantMessageId || lastMessage.content.trim() === draft);
   if (alreadyAppended) {
     const nextMessages = [...session.messages];
     const lastIndex = nextMessages.length - 1;
@@ -67,18 +114,18 @@ export const finalizeDraftAssistantMessage = (
     }
     return {
       ...session,
-      draftAssistantText: "",
+      ...clearedDraftFields,
       messages: nextMessages,
     };
   }
 
   return {
     ...session,
-    draftAssistantText: "",
+    ...clearedDraftFields,
     messages: [
       ...session.messages,
       {
-        id: crypto.randomUUID(),
+        id: session.draftAssistantMessageId ?? crypto.randomUUID(),
         role: "assistant",
         content: draft,
         timestamp,

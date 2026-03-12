@@ -196,6 +196,11 @@ const makeMockClient = ({
         session.createCalls.push(input);
         return { data: { id: sessionId }, error: undefined };
       },
+      promptAsync: async (input: unknown) => {
+        session.promptCalls.push(input);
+        const queued = session.promptQueue.shift();
+        return { data: queued ?? undefined, error: undefined };
+      },
       prompt: async (input: unknown) => {
         session.promptCalls.push(input);
         const queued = session.promptQueue.shift();
@@ -569,9 +574,90 @@ describe("OpencodeSdkAdapter", () => {
     const assistantMessage = events.find((event) => event.type === "assistant_message");
     expect(assistantMessage).toMatchObject({
       type: "assistant_message",
+      messageId: "assistant-1",
       totalTokens: 1_100,
     });
     expect(events.some((event) => event.type === "session_idle")).toBe(true);
+  });
+
+  test("sendUserMessage falls back to part messageID when response info.id is absent", async () => {
+    const mock = makeMockClient({
+      promptQueue: [
+        {
+          info: {
+            tokens: {
+              input: 100,
+              output: 50,
+            },
+          },
+          parts: [
+            {
+              id: "text-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-from-part-id",
+              type: "text",
+              text: "Recovered from part id.",
+            } as Part,
+          ],
+        } as { info: { [key: string]: unknown }; parts: Part[] },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => events.push(event));
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Recover ids",
+    });
+
+    const assistantMessage = events.find((event) => event.type === "assistant_message");
+    expect(assistantMessage).toMatchObject({
+      type: "assistant_message",
+      messageId: "assistant-from-part-id",
+      message: "Recovered from part id.",
+      totalTokens: 150,
+    });
+  });
+
+  test("updateSessionModel refreshes the adapter session model used for subsequent prompts", async () => {
+    const mock = makeMockClient({});
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    adapter.updateSessionModel({
+      sessionId: "session-1",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "Hephaestus",
+      },
+    });
+
+    await adapter.sendUserMessage({
+      sessionId: "session-1",
+      content: "Continue",
+    });
+
+    expect(mock.session.promptCalls).toHaveLength(1);
+    expect(mock.session.promptCalls[0]).toMatchObject({
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5",
+      },
+      variant: "high",
+      agent: "Hephaestus",
+    });
   });
 
   test("sendUserMessage caches workflow tool discovery across prompts for the same model", async () => {
@@ -809,6 +895,7 @@ describe("OpencodeSdkAdapter", () => {
     expect(messageEvents).toHaveLength(1);
     expect(messageEvents[0]).toMatchObject({
       type: "assistant_message",
+      messageId: "assistant-1",
       message: "Assistant output",
       totalTokens: 1_590,
       model: {
@@ -816,6 +903,69 @@ describe("OpencodeSdkAdapter", () => {
         modelId: "gpt-5",
         profileId: "Hephaestus",
         variant: "high",
+      },
+    });
+  });
+
+  test("includes step-finish total tokens on assistant part events", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+          },
+          parts: [
+            {
+              id: "step-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              type: "step-finish",
+              reason: "tool-calls",
+              tokens: {
+                input: 898,
+                output: 245,
+                reasoning: 0,
+                cache: {
+                  read: 0,
+                  write: 33_879,
+                },
+              },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "spec");
+    await flushAsync();
+
+    expect(events).toContainEqual({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-17T12:00:00Z",
+      part: {
+        kind: "step",
+        messageId: "assistant-1",
+        partId: "step-1",
+        phase: "finish",
+        reason: "tool-calls",
+        totalTokens: 35_022,
       },
     });
   });
@@ -1309,6 +1459,36 @@ describe("OpencodeSdkAdapter", () => {
       mode: "primary",
       color: "#f59e0b",
     });
+  });
+
+  test("listAvailableModels preserves agent names exactly as reported by opencode", async () => {
+    const mock = makeMockClient({
+      agentsResponse: [
+        {
+          name: "Hephaestus (Deep Agent)",
+          description: "Deep agent",
+          mode: "primary",
+          hidden: false,
+          native: false,
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const catalog = await adapter.listAvailableModels({
+      runtimeConnection: defaultRuntimeConnection,
+    });
+
+    expect(catalog.profiles).toEqual([
+      expect.objectContaining({
+        id: "Hephaestus (Deep Agent)",
+        label: "Hephaestus (Deep Agent)",
+        mode: "primary",
+      }),
+    ]);
   });
 
   test("listAvailableToolIds returns normalized tool IDs", async () => {

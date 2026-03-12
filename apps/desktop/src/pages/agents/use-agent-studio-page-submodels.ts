@@ -134,6 +134,7 @@ export const useAgentStudioThreadModel = ({
     () =>
       buildAgentChatThreadModel({
         activeSession: session.threadSession,
+        isSessionViewLoading: session.isContextSwitching,
         roleOptions: ROLE_OPTIONS,
         agentStudioReady: readiness.agentStudioReady,
         agentStudioBlockedReason: readiness.agentStudioBlockedReason,
@@ -156,7 +157,10 @@ export const useAgentStudioThreadModel = ({
         todoPanelBottomOffset: todoPanel.todoPanelBottomOffset,
         isPinnedToBottom: scroll.isPinnedToBottom,
         messagesContainerRef: scroll.messagesContainerRef,
+        onMessagesPointerDown: scroll.onMessagesPointerDown,
         onMessagesScroll: scroll.onMessagesScroll,
+        onMessagesTouchMove: scroll.onMessagesTouchMove,
+        onMessagesWheel: scroll.onMessagesWheel,
       }),
     [
       handleKickoff,
@@ -176,8 +180,12 @@ export const useAgentStudioThreadModel = ({
       readiness.isLoadingChecks,
       scroll.isPinnedToBottom,
       scroll.messagesContainerRef,
+      scroll.onMessagesPointerDown,
       scroll.onMessagesScroll,
+      scroll.onMessagesTouchMove,
+      scroll.onMessagesWheel,
       session.activeSessionAgentColors,
+      session.isContextSwitching,
       session.taskId,
       session.threadSession,
       todoPanel.onToggleTodoPanel,

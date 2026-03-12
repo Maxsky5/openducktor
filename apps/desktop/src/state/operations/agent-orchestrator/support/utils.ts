@@ -1,4 +1,8 @@
-export { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assistant-meta";
+export {
+  finalizeDraftAssistantMessage,
+  toAssistantMessageMeta,
+  toSessionContextUsage,
+} from "./assistant-meta";
 export {
   createRepoStaleGuard,
   isDuplicateAssistantMessage,

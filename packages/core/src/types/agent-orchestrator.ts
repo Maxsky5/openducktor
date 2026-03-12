@@ -187,6 +187,7 @@ export type AgentStreamPart =
       phase: "start" | "finish";
       reason?: string;
       cost?: number;
+      totalTokens?: number;
     }
   | {
       kind: "subtask";
@@ -231,12 +232,15 @@ export type AgentEvent =
       type: "assistant_delta";
       sessionId: string;
       timestamp: string;
+      channel: "text" | "reasoning";
+      messageId?: string;
       delta: string;
     }
   | {
       type: "assistant_message";
       sessionId: string;
       timestamp: string;
+      messageId: string;
       message: string;
       totalTokens?: number;
       model?: AgentModelSelection;

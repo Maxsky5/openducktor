@@ -40,14 +40,14 @@ describe("useAgentStudioTaskHydration", () => {
 
       expect(loadAgentSessions).toHaveBeenCalledTimes(1);
       expect(loadAgentSessions).toHaveBeenCalledWith("task-1");
-      expect(harness.getLatest()["/repo-a:task-1"]).toBeUndefined();
+      expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-1"]).toBeUndefined();
 
       await harness.run(async () => {
         deferred.resolve(undefined);
         await deferred.promise;
       });
 
-      await harness.waitFor((state) => state["/repo-a:task-1"] === true);
+      await harness.waitFor((state) => state.hydratedTasksByRepoAndTask["/repo-a:task-1"] === true);
 
       await harness.update(args);
       expect(loadAgentSessions).toHaveBeenCalledTimes(1);
@@ -118,7 +118,7 @@ describe("useAgentStudioTaskHydration", () => {
     try {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
-      expect(harness.getLatest()["/repo-a:task-1"]).toBeUndefined();
+      expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-1"]).toBeUndefined();
       expect(loadAgentSessions).toHaveBeenCalledTimes(1);
 
       await harness.update(
@@ -128,11 +128,11 @@ describe("useAgentStudioTaskHydration", () => {
         }),
       );
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 2);
-      expect(harness.getLatest()["/repo-a:task-2"]).toBe(true);
+      expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-2"]).toBe(true);
 
       await harness.update(args);
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 3);
-      expect(harness.getLatest()["/repo-a:task-1"]).toBe(true);
+      expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-1"]).toBe(true);
     } finally {
       await harness.unmount();
     }
@@ -155,7 +155,7 @@ describe("useAgentStudioTaskHydration", () => {
         firstLoad.resolve(undefined);
         await firstLoad.promise;
       });
-      await harness.waitFor((state) => state["/repo-a:task-1"] === true);
+      await harness.waitFor((state) => state.hydratedTasksByRepoAndTask["/repo-a:task-1"] === true);
 
       await harness.update(
         createBaseArgs({
@@ -166,7 +166,9 @@ describe("useAgentStudioTaskHydration", () => {
         }),
       );
 
-      await harness.waitFor((state) => state["/repo-a:task-1"] === undefined);
+      await harness.waitFor(
+        (state) => state.hydratedTasksByRepoAndTask["/repo-a:task-1"] === undefined,
+      );
       expect(loadAgentSessions).toHaveBeenCalledTimes(2);
     } finally {
       firstLoad.resolve(undefined);

@@ -26,8 +26,7 @@ type BuildVirtualRowLayoutArgs = {
 };
 
 export const AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT = 40;
-export const AGENT_CHAT_VIRTUAL_OVERSCAN_PX = 480;
-export const AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS = 8;
+export const AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS = 12;
 export const AGENT_CHAT_VIRTUAL_ROW_GAP_PX = 4;
 
 const EMPTY_RANGE: VirtualWindowRange = { startIndex: 0, endIndex: -1 };
@@ -42,15 +41,6 @@ export type AgentChatVirtualRow =
       kind: "message";
       key: string;
       message: AgentChatMessage;
-    }
-  | {
-      kind: "draft";
-      key: string;
-      draftText: string;
-    }
-  | {
-      kind: "thinking";
-      key: string;
     };
 
 export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChatVirtualRow[] {
@@ -60,7 +50,10 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
     const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
     const turnDurationMs = assistantMeta?.durationMs;
     const shouldShowTurnDuration =
-      message.role === "assistant" && typeof turnDurationMs === "number" && turnDurationMs > 0;
+      message.role === "assistant" &&
+      assistantMeta?.isFinal === true &&
+      typeof turnDurationMs === "number" &&
+      turnDurationMs > 0;
 
     if (shouldShowTurnDuration) {
       rows.push({
@@ -79,25 +72,6 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
     });
   }
 
-  if (session.draftAssistantText) {
-    rows.push({
-      kind: "draft",
-      key: `${session.sessionId}:draft`,
-      draftText: session.draftAssistantText,
-    });
-  }
-
-  if (
-    session.status === "running" &&
-    !session.draftAssistantText &&
-    session.pendingQuestions.length === 0
-  ) {
-    rows.push({
-      kind: "thinking",
-      key: `${session.sessionId}:thinking`,
-    });
-  }
-
   return rows;
 }
 
@@ -108,7 +82,8 @@ export function buildAgentChatVirtualRowsSignature(
   const signatureParts: string[] = [
     session.sessionId,
     session.status,
-    session.draftAssistantText,
+    session.draftReasoningText,
+    session.draftReasoningMessageId ?? "",
     String(session.pendingQuestions.length),
   ];
 

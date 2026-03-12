@@ -29,6 +29,9 @@ const buildSession = (
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
   pendingPermissions: Array.from({ length: overrides.pendingPermissions ?? 0 }, (_, index) => ({
     requestId: `perm-${index}`,
     permission: "read",

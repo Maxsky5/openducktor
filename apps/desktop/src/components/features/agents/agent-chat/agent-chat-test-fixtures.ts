@@ -79,6 +79,7 @@ const baseMessage: AgentChatMessage = {
   meta: {
     kind: "assistant",
     agentRole: "spec",
+    isFinal: true,
     providerId: "openai",
     modelId: "gpt-5.3-codex",
     profileId: "Hephaestus (Deep Agent)",
@@ -100,6 +101,9 @@ const baseSession: AgentSessionState = {
   workingDirectory: "/repo",
   messages: [baseMessage],
   draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
   pendingPermissions: [],
   pendingQuestions: [],
   todos: [],

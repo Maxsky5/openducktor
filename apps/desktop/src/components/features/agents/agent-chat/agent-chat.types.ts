@@ -1,6 +1,12 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { LucideIcon } from "lucide-react";
-import type { RefObject, UIEvent } from "react";
+import type {
+  PointerEventHandler,
+  RefObject,
+  TouchEventHandler,
+  UIEvent,
+  WheelEventHandler,
+} from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -13,6 +19,7 @@ export type AgentRoleOption = {
 
 export type AgentChatThreadModel = {
   session: AgentSessionState | null;
+  isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
   blockedReason: string;
@@ -35,7 +42,10 @@ export type AgentChatThreadModel = {
   todoPanelBottomOffset: number;
   isPinnedToBottom: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  onMessagesPointerDown: PointerEventHandler<HTMLDivElement>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
+  onMessagesTouchMove: TouchEventHandler<HTMLDivElement>;
+  onMessagesWheel: WheelEventHandler<HTMLDivElement>;
 };
 
 export type AgentChatComposerModel = {
@@ -75,5 +85,4 @@ export type AgentChatComposerModel = {
 export type AgentChatModel = {
   thread: AgentChatThreadModel;
   composer: AgentChatComposerModel;
-  isContextSwitching: boolean;
 };

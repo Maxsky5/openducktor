@@ -146,6 +146,57 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("onSend clears composer input immediately before send settles", async () => {
+    const sendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const setInput = mock(() => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ sessionId: "session-existing" }),
+      sendAgentMessage,
+      setInput,
+    });
+
+    await harness.mount();
+    let sendPromise: Promise<void> | undefined;
+    await harness.run(async (state) => {
+      sendPromise = state.onSend();
+      expect(setInput).toHaveBeenCalledWith("");
+      expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", "hello world");
+    });
+
+    sendDeferred.resolve();
+    await sendPromise;
+    await harness.unmount();
+  });
+
+  test("onSend restores the cleared input when send fails", async () => {
+    const sendDeferred = createDeferred<void>();
+    const sendAgentMessage = mock(() => sendDeferred.promise);
+    const setInput = mock(() => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({ sessionId: "session-existing" }),
+      sendAgentMessage,
+      setInput,
+    });
+
+    await harness.mount();
+    let sendPromise: Promise<void> | undefined;
+    await harness.run(async (state) => {
+      sendPromise = state.onSend().catch(() => undefined);
+      expect(setInput).toHaveBeenCalledWith("");
+    });
+
+    sendDeferred.reject(new Error("send failed"));
+    await sendPromise;
+
+    expect(setInput).toHaveBeenLastCalledWith("hello world");
+    await harness.unmount();
+  });
+
   test("onSend requests model selection before creating a new session", async () => {
     const requestedSelection = {
       runtimeKind: "opencode",

@@ -78,7 +78,7 @@ const sumTokenBreakdown = (breakdown: TokenBreakdown | null | undefined): number
   return Math.max(0, input + output + reasoning + cacheRead + cacheWrite);
 };
 
-const toTokenTotal = (value: unknown): number | undefined => {
+export const toTokenTotal = (value: unknown): number | undefined => {
   const direct = toFiniteNumber(value);
   if (direct !== null) {
     return Math.max(0, direct);

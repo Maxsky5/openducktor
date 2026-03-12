@@ -3,6 +3,7 @@ import {
   BORDER_RAY_DEFAULT_LENGTH_MAX,
   BORDER_RAY_DEFAULT_LENGTH_MIN,
   BORDER_RAY_DEFAULT_LENGTH_RATIO,
+  BORDER_RAY_DEFAULT_STROKE_WIDTH,
   BORDER_RAY_DEFAULT_TURN_DURATION_MS,
   type BorderRaySize,
   computeBorderRayLength,
@@ -13,7 +14,9 @@ import { cn } from "@/lib/utils";
 
 type BorderRayProps = {
   className?: string;
+  color?: string;
   insetOffset?: number;
+  strokeWidth?: number;
   turnDurationMs?: number;
   rayLengthRatio?: number;
   rayLengthMin?: number;
@@ -52,7 +55,9 @@ function parseCssLength(
 
 export function BorderRay({
   className,
+  color,
   insetOffset = -1,
+  strokeWidth = BORDER_RAY_DEFAULT_STROKE_WIDTH,
   turnDurationMs = BORDER_RAY_DEFAULT_TURN_DURATION_MS,
   rayLengthRatio = BORDER_RAY_DEFAULT_LENGTH_RATIO,
   rayLengthMin = BORDER_RAY_DEFAULT_LENGTH_MIN,
@@ -238,6 +243,8 @@ export function BorderRay({
     ["--odt-border-ray-turn-duration" as string]: `${Math.max(turnDurationMs, 1)}ms`,
     ["--odt-border-ray-perimeter" as string]: `${pathMetrics.perimeter}`,
     ["--odt-border-ray-length" as string]: `${pathMetrics.rayLength}`,
+    ["--odt-border-ray-stroke-width" as string]: `${Math.max(strokeWidth, 0.5)}`,
+    ...(color ? { ["--odt-border-ray-color" as string]: color } : {}),
   };
 
   return (
@@ -249,8 +256,6 @@ export function BorderRay({
       preserveAspectRatio="none"
       style={rayStyle}
     >
-      <path className="odt-border-ray-segment-halo" d={rayGeometry.path} />
-      <path className="odt-border-ray-segment-glow" d={rayGeometry.path} />
       <path ref={pathRef} className="odt-border-ray-segment" d={rayGeometry.path} />
     </svg>
   );

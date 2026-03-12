@@ -274,6 +274,7 @@ describe("AgentChatMessageCard tool duration", () => {
           meta: {
             kind: "assistant",
             agentRole: "planner",
+            isFinal: true,
             profileId: "planner-main",
             modelId: "gpt-5.3-codex",
           },
@@ -323,6 +324,7 @@ describe("AgentChatMessageCard tool duration", () => {
           meta: {
             kind: "assistant",
             agentRole: "planner",
+            isFinal: true,
             profileId: "Hephaestus (Deep Agent)",
             modelId: "gpt-5.3-codex",
           },

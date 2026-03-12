@@ -4,6 +4,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 type UseAgentStudioThreadContextArgs = {
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
+  isSessionHistoryHydrating: boolean;
   contextSwitchVersion: number;
 };
 
@@ -11,19 +12,18 @@ type AgentStudioThreadContext = {
   threadSession: AgentSessionState | null;
   activeSessionId: string | null;
   isContextSwitching: boolean;
-  scrollTrigger: string;
 };
 
 export const useAgentStudioThreadContext = ({
   activeSession,
   isTaskHydrating,
+  isSessionHistoryHydrating,
   contextSwitchVersion,
 }: UseAgentStudioThreadContextArgs): AgentStudioThreadContext => {
-  const [threadSession, setThreadSession] = useState<AgentSessionState | null>(activeSession);
   const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
   const contextSwitchVersionRef = useRef(contextSwitchVersion);
-  const hasObservedContextSwitchRef = useRef(false);
-  const contextSwitchIntentRafRef = useRef<number | null>(null);
+  const clearIntentRafRef = useRef<number | null>(null);
+  const activeSessionId = activeSession?.sessionId ?? null;
 
   useEffect(() => {
     if (contextSwitchVersionRef.current === contextSwitchVersion) {
@@ -31,12 +31,20 @@ export const useAgentStudioThreadContext = ({
     }
 
     contextSwitchVersionRef.current = contextSwitchVersion;
-    hasObservedContextSwitchRef.current = false;
     setIsContextSwitchIntentActive(true);
+  }, [contextSwitchVersion]);
 
-    if (contextSwitchIntentRafRef.current !== null && typeof window !== "undefined") {
-      window.cancelAnimationFrame(contextSwitchIntentRafRef.current);
-      contextSwitchIntentRafRef.current = null;
+  useEffect(() => {
+    if (!isContextSwitchIntentActive) {
+      if (clearIntentRafRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(clearIntentRafRef.current);
+        clearIntentRafRef.current = null;
+      }
+      return;
+    }
+
+    if (isTaskHydrating || isSessionHistoryHydrating) {
+      return;
     }
 
     if (typeof window === "undefined") {
@@ -44,84 +52,36 @@ export const useAgentStudioThreadContext = ({
       return;
     }
 
-    const rafId = window.requestAnimationFrame(() => {
-      const nestedRafId = window.requestAnimationFrame(() => {
-        contextSwitchIntentRafRef.current = null;
-        if (!hasObservedContextSwitchRef.current) {
-          setIsContextSwitchIntentActive(false);
-        }
-      });
-      contextSwitchIntentRafRef.current = nestedRafId;
-    });
-    contextSwitchIntentRafRef.current = rafId;
-  }, [contextSwitchVersion]);
+    if (clearIntentRafRef.current !== null) {
+      window.cancelAnimationFrame(clearIntentRafRef.current);
+      clearIntentRafRef.current = null;
+    }
 
-  useEffect(() => {
-    const nextSessionId = activeSession?.sessionId ?? null;
-    const currentThreadSessionId = threadSession?.sessionId ?? null;
-    if (nextSessionId === currentThreadSessionId) {
-      if (activeSession !== threadSession) {
-        setThreadSession(activeSession);
+    const rafId = window.requestAnimationFrame(() => {
+      clearIntentRafRef.current = null;
+      setIsContextSwitchIntentActive(false);
+    });
+    clearIntentRafRef.current = rafId;
+
+    return () => {
+      if (clearIntentRafRef.current !== null) {
+        window.cancelAnimationFrame(clearIntentRafRef.current);
+        clearIntentRafRef.current = null;
       }
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      setThreadSession(activeSession);
-      return;
-    }
-
-    const rafId = window.requestAnimationFrame(() => {
-      setThreadSession(activeSession);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
     };
-  }, [activeSession, threadSession]);
+  }, [isContextSwitchIntentActive, isSessionHistoryHydrating, isTaskHydrating]);
 
   useEffect(() => {
     return () => {
-      if (contextSwitchIntentRafRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(contextSwitchIntentRafRef.current);
+      if (clearIntentRafRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(clearIntentRafRef.current);
       }
     };
   }, []);
 
-  const activeSessionId = activeSession?.sessionId ?? null;
-  const threadSessionId = threadSession?.sessionId ?? null;
-  const isThreadContextSwitching = activeSessionId !== threadSessionId;
-
-  useEffect(() => {
-    if (!isContextSwitchIntentActive) {
-      return;
-    }
-
-    if (isTaskHydrating || isThreadContextSwitching) {
-      hasObservedContextSwitchRef.current = true;
-      return;
-    }
-
-    if (!hasObservedContextSwitchRef.current) {
-      return;
-    }
-
-    hasObservedContextSwitchRef.current = false;
-    setIsContextSwitchIntentActive(false);
-  }, [isContextSwitchIntentActive, isTaskHydrating, isThreadContextSwitching]);
-
-  const isContextSwitching =
-    isTaskHydrating || isThreadContextSwitching || isContextSwitchIntentActive;
-
-  const activeMessageCount = threadSession?.messages.length ?? 0;
-  const activeDraftScrollBucket = Math.floor((threadSession?.draftAssistantText.length ?? 0) / 48);
-  const activeSessionStatus = threadSession?.status ?? "stopped";
-  const scrollTrigger = `${threadSession?.sessionId ?? "none"}:${activeSessionStatus}:${activeMessageCount}:${threadSession?.pendingQuestions.length ?? 0}:${threadSession?.pendingPermissions.length ?? 0}:${activeDraftScrollBucket}`;
-
   return {
-    threadSession,
+    threadSession: activeSession,
     activeSessionId,
-    isContextSwitching,
-    scrollTrigger,
+    isContextSwitching: isTaskHydrating || isSessionHistoryHydrating || isContextSwitchIntentActive,
   };
 };

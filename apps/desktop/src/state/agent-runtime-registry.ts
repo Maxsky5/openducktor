@@ -132,6 +132,12 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     ).loadSessionTodos(input);
   }
 
+  updateSessionModel(input: Parameters<AgentEnginePort["updateSessionModel"]>[0]) {
+    return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).updateSessionModel(
+      input,
+    );
+  }
+
   sendUserMessage(input: Parameters<AgentEnginePort["sendUserMessage"]>[0]) {
     return this.getAdapter(this.requireSessionRuntimeKind(input.sessionId)).sendUserMessage(input);
   }

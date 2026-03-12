@@ -375,12 +375,20 @@ export function useAgentStudioModelSelection({
   const activeSessionContextUsage = useMemo<AgentStudioContextUsage>(() => {
     return extractLatestContextUsage({
       messages: activeSessionMessages,
+      ...(activeSession?.contextUsage !== undefined
+        ? { liveContextUsage: activeSession.contextUsage }
+        : {}),
       modelDescriptorByKey: activeSessionModelDescriptorByKey,
       ...(typeof selectedModelEntry?.contextWindow === "number"
         ? { fallbackContextWindow: selectedModelEntry.contextWindow }
         : {}),
     });
-  }, [activeSessionMessages, activeSessionModelDescriptorByKey, selectedModelEntry?.contextWindow]);
+  }, [
+    activeSession?.contextUsage,
+    activeSessionMessages,
+    activeSessionModelDescriptorByKey,
+    selectedModelEntry?.contextWindow,
+  ]);
 
   const handleSelectAgent = useCallback(
     (profileId: string) => {

@@ -316,7 +316,9 @@ impl AppService {
                 continue;
             }
             terminate_process_by_pid(pid);
-            if opencode_server_parent_pid(pid) == Some(self.instance_pid) {
+            if !wait_for_process_exit_by_pid(pid, std::time::Duration::from_secs(2))
+                && opencode_server_parent_pid(pid) == Some(self.instance_pid)
+            {
                 surviving_processes.insert(pid, count);
             }
         }

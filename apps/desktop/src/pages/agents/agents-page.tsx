@@ -225,6 +225,7 @@ export function AgentsPage(): ReactElement {
     contextSwitchVersion,
     isLoadingTasks,
     isActiveTaskHydrated: selection.isActiveTaskHydrated,
+    isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
     onCreateTab: selection.handleCreateTab,
     onCloseTab: selection.handleCloseTab,
   } satisfies AgentStudioOrchestrationSelectionContext;

@@ -9,10 +9,11 @@ use std::process::Child;
 pub(crate) use process_lifecycle::{
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, terminate_child_process, terminate_process_by_pid,
+    wait_for_process_exit_by_pid,
 };
 pub(crate) use startup_readiness::{
-    wait_for_local_server_with_process, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
-    StartupCancelEpoch,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
+    wait_for_local_server_with_process,
 };
 
 pub(crate) fn spawn_opencode_server(

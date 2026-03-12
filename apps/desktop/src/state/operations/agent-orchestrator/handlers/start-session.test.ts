@@ -198,6 +198,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
             draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
             pendingPermissions: [],
             pendingQuestions: [],
             todos: [],
@@ -264,6 +267,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
           draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
           pendingPermissions: [],
           pendingQuestions: [],
           todos: [],
@@ -378,6 +384,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
             draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
             pendingPermissions: [],
             pendingQuestions: [],
             todos: [],
@@ -418,6 +427,108 @@ describe("agent-orchestrator/handlers/start-session", () => {
     try {
       await expect(start({ taskId: "task-1", role: "build", selectedModel })).resolves.toBe(
         "fresh-runtime-session",
+      );
+      expect(startCalls).toBe(1);
+    } finally {
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("starts a fresh session instead of reusing when selected agent profile differs", async () => {
+    const selectedModel: AgentModelSelection = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    };
+    let startCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async (input) => {
+      startCalls += 1;
+      expect(input.model).toEqual(selectedModel);
+      return {
+        runtimeKind: "opencode",
+        sessionId: "fresh-profile-session",
+        externalSessionId: "fresh-profile-external",
+        startedAt: "2026-02-22T08:35:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: {
+        current: {
+          reused: {
+            runtimeKind: "opencode",
+            sessionId: "reused",
+            externalSessionId: "external-reused",
+            taskId: "task-1",
+            role: "build",
+            scenario: "build_implementation_start",
+            status: "idle",
+            startedAt: "2026-02-22T08:10:00.000Z",
+            runtimeId: null,
+            runId: "run-2",
+            runtimeEndpoint: "http://127.0.0.1:4444",
+            workingDirectory: "/tmp/repo/worktree",
+            messages: [],
+            draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
+            pendingPermissions: [],
+            pendingQuestions: [],
+            todos: [],
+            modelCatalog: null,
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "high",
+              profileId: "Sisyphus",
+            },
+            isLoadingModelCatalog: false,
+          },
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: "runtime-2",
+        runId: null,
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build", selectedModel })).resolves.toBe(
+        "fresh-profile-session",
       );
       expect(startCalls).toBe(1);
     } finally {
@@ -488,6 +599,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
             workingDirectory: "/tmp/repo/worktree",
             messages: [],
             draftAssistantText: "",
+            draftAssistantMessageId: null,
+            draftReasoningText: "",
+            draftReasoningMessageId: null,
             pendingPermissions: [],
             pendingQuestions: [],
             todos: [],
@@ -570,6 +684,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           workingDirectory: "/tmp/repo/worktree",
           messages: [],
           draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
           pendingPermissions: [],
           pendingQuestions: [],
           todos: [],

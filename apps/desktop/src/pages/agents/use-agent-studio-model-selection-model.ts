@@ -1,6 +1,6 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionContextUsage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { normalizeSelectionForCatalog, pickDefaultSelectionForCatalog } from "./agents-page-utils";
 
@@ -94,13 +94,28 @@ export const toModelDescriptorByKey = (
 
 export const extractLatestContextUsage = ({
   messages,
+  liveContextUsage,
   modelDescriptorByKey,
   fallbackContextWindow,
 }: {
   messages: AgentChatMessage[] | null | undefined;
+  liveContextUsage?: AgentSessionContextUsage | null;
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
 }): AgentStudioContextUsage => {
+  if (liveContextUsage && liveContextUsage.totalTokens > 0) {
+    const contextWindow = liveContextUsage.contextWindow ?? fallbackContextWindow;
+    if (typeof contextWindow === "number" && contextWindow > 0) {
+      return {
+        totalTokens: liveContextUsage.totalTokens,
+        contextWindow,
+        ...(typeof liveContextUsage.outputLimit === "number"
+          ? { outputLimit: liveContextUsage.outputLimit }
+          : {}),
+      };
+    }
+  }
+
   if (!messages) {
     return null;
   }

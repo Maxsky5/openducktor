@@ -12,6 +12,7 @@ import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
 } from "../support/async-side-effects";
+import { normalizePersistedSelection } from "../support/models";
 import {
   createRepoStaleGuard,
   inferScenario,
@@ -194,6 +195,10 @@ const buildInitialSession = ({
     },
   ],
   draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  contextUsage: null,
   pendingPermissions: [],
   pendingQuestions: [],
   todos: [],
@@ -221,9 +226,11 @@ const persistInitialSession = ({
 
 const canReuseSessionForSelectedModel = ({
   sessionRuntimeKind,
+  sessionSelectedModel,
   selectedModel,
 }: {
   sessionRuntimeKind: AgentModelSelection["runtimeKind"] | undefined;
+  sessionSelectedModel: AgentModelSelection | null | undefined;
   selectedModel: AgentModelSelection | null;
 }): boolean => {
   const requestedRuntimeKind = selectedModel?.runtimeKind;
@@ -231,7 +238,22 @@ const canReuseSessionForSelectedModel = ({
     return true;
   }
 
-  return (sessionRuntimeKind ?? DEFAULT_RUNTIME_KIND) === requestedRuntimeKind;
+  if ((sessionRuntimeKind ?? DEFAULT_RUNTIME_KIND) !== requestedRuntimeKind) {
+    return false;
+  }
+  if (!selectedModel) {
+    return true;
+  }
+  if (!sessionSelectedModel) {
+    return true;
+  }
+
+  return (
+    sessionSelectedModel.providerId === selectedModel.providerId &&
+    sessionSelectedModel.modelId === selectedModel.modelId &&
+    (selectedModel.variant ? sessionSelectedModel.variant === selectedModel.variant : true) &&
+    (selectedModel.profileId ? sessionSelectedModel.profileId === selectedModel.profileId : true)
+  );
 };
 
 const applySelectedModelToReusedSession = ({
@@ -329,6 +351,7 @@ const createOrReuseSession = async ({
           existingSession.runtimeKind ??
           existingSession.selectedModel?.runtimeKind ??
           DEFAULT_RUNTIME_KIND,
+        sessionSelectedModel: existingSession.selectedModel,
         selectedModel: input.selectedModel,
       });
       const existingSessionMatchesQaTarget =
@@ -361,6 +384,7 @@ const createOrReuseSession = async ({
             latestPersistedSession.runtimeKind ??
             latestPersistedSession.selectedModel?.runtimeKind ??
             DEFAULT_RUNTIME_KIND,
+          sessionSelectedModel: normalizePersistedSelection(latestPersistedSession.selectedModel),
           selectedModel: input.selectedModel,
         })
       : false;

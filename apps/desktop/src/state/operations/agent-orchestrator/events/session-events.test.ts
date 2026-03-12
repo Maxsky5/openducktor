@@ -17,6 +17,10 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  contextUsage: null,
   pendingPermissions: [],
   pendingQuestions: [],
   todos: [],
@@ -66,6 +70,8 @@ describe("agent-orchestrator-session-events", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
@@ -221,6 +227,8 @@ describe("agent-orchestrator-session-events", () => {
         sessionsRef,
         draftRawBySessionRef: { current: {} },
         draftSourceBySessionRef: { current: {} },
+        draftMessageIdBySessionRef: { current: {} },
+        draftFlushTimeoutBySessionRef: { current: {} },
         turnStartedAtBySessionRef: { current: {} },
         updateSession,
         resolveTurnDurationMs: () => undefined,
@@ -759,6 +767,8 @@ describe("agent-orchestrator-session-events", () => {
     handleEvent({
       type: "assistant_delta",
       sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-message-1",
       delta: "Partial answer",
       timestamp: "2026-02-22T08:00:02.000Z",
     });
@@ -946,6 +956,7 @@ describe("agent-orchestrator-session-events", () => {
     handleEvent({
       type: "assistant_message",
       sessionId: "session-1",
+      messageId: "m1",
       timestamp: "2026-02-22T08:00:03.000Z",
       message: "Final assistant output",
       totalTokens: 42,
@@ -960,6 +971,8 @@ describe("agent-orchestrator-session-events", () => {
     handleEvent({
       type: "assistant_delta",
       sessionId: "session-1",
+      channel: "text",
+      messageId: "m2",
       timestamp: "2026-02-22T08:00:03.500Z",
       delta: "Idle follow-up",
     });
@@ -1026,5 +1039,661 @@ describe("agent-orchestrator-session-events", () => {
         (message) => message.role === "assistant" && message.content.includes("Idle follow-up"),
       ),
     ).toBe(true);
+  });
+
+  test("writes live text parts into transcript messages instead of draft state", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "spec",
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "Hephaestus",
+          },
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "text",
+        messageId: "assistant-live-1",
+        partId: "part-1",
+        text: "First pass",
+        completed: false,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.100Z",
+      part: {
+        kind: "text",
+        messageId: "assistant-live-1",
+        partId: "part-1",
+        text: "First pass refined",
+        completed: true,
+      },
+    });
+
+    const assistantMessages = sessionsRef.current["session-1"]?.messages.filter(
+      (message) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages?.[0]?.id).toBe("assistant-live-1");
+    expect(assistantMessages?.[0]?.content).toBe("First pass refined");
+    expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
+  });
+
+  test("matches an older assistant message when the newest same-text message is outside the timestamp window", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          messages: [
+            {
+              id: "assistant-older-match",
+              role: "assistant",
+              content: "Stable output",
+              timestamp: "2026-02-22T08:00:10.000Z",
+            },
+            {
+              id: "assistant-newer-miss",
+              role: "assistant",
+              content: "Stable output",
+              timestamp: "2026-02-22T08:00:20.000Z",
+            },
+          ],
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_message",
+      sessionId: "session-1",
+      messageId: "assistant-final",
+      timestamp: "2026-02-22T08:00:11.000Z",
+      message: "Stable output",
+    });
+
+    expect(sessionsRef.current["session-1"]?.messages).toHaveLength(2);
+    expect(sessionsRef.current["session-1"]?.messages[0]?.id).toBe("assistant-final");
+    expect(sessionsRef.current["session-1"]?.messages[1]?.id).toBe("assistant-newer-miss");
+  });
+
+  test("updates live session context usage from step-finish part tokens", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "spec",
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "Hephaestus",
+          },
+          modelCatalog: {
+            models: [
+              {
+                id: "openai/gpt-5",
+                providerId: "openai",
+                providerName: "OpenAI",
+                modelId: "gpt-5",
+                modelName: "GPT-5",
+                variants: ["high"],
+                contextWindow: 200_000,
+                outputLimit: 8_192,
+              },
+            ],
+            defaultModelsByProvider: { openai: "gpt-5" },
+          },
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      turnModelBySessionRef: {
+        current: {
+          "session-1": {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "Hephaestus",
+          },
+        },
+      },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "step",
+        messageId: "assistant-live-1",
+        partId: "step-finish-1",
+        phase: "finish",
+        reason: "tool-calls",
+        totalTokens: 35_022,
+      },
+    });
+
+    expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
+      totalTokens: 35_022,
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+    });
+  });
+
+  test("keeps live context usage bound to the in-flight turn model after selection changes", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "anthropic",
+            modelId: "claude-sonnet",
+            profileId: "Hephaestus",
+          },
+          modelCatalog: {
+            models: [
+              {
+                id: "openai/gpt-5",
+                providerId: "openai",
+                providerName: "OpenAI",
+                modelId: "gpt-5",
+                modelName: "GPT-5",
+                variants: ["high"],
+                contextWindow: 200_000,
+                outputLimit: 8_192,
+              },
+              {
+                id: "anthropic/claude-sonnet",
+                providerId: "anthropic",
+                providerName: "Anthropic",
+                modelId: "claude-sonnet",
+                modelName: "Claude Sonnet",
+                variants: [],
+                contextWindow: 100_000,
+                outputLimit: 4_096,
+              },
+            ],
+            defaultModelsByProvider: { openai: "gpt-5", anthropic: "claude-sonnet" },
+          },
+        }),
+      },
+    };
+
+    const turnModelBySessionRef = {
+      current: {
+        "session-1": {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+          profileId: "Hephaestus",
+        },
+      } as Record<string, AgentSessionState["selectedModel"]>,
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      turnModelBySessionRef,
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:02.000Z",
+      part: {
+        kind: "step",
+        messageId: "assistant-live-1",
+        partId: "step-finish-1",
+        phase: "finish",
+        reason: "tool-calls",
+        totalTokens: 35_022,
+      },
+    });
+
+    expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
+      totalTokens: 35_022,
+      contextWindow: 200_000,
+      outputLimit: 8_192,
+    });
+  });
+
+  test("routes reasoning deltas into thinking draft state without finalizing assistant text", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build", status: "idle" }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "reasoning",
+      messageId: "assistant-message-reasoning",
+      delta: "Reason silently",
+      timestamp: "2026-02-22T08:00:02.000Z",
+    });
+
+    expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
+    expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Reason silently");
+
+    handleEvent({
+      type: "session_idle",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("");
+    expect(
+      sessionsRef.current["session-1"]?.messages.some(
+        (message) => message.role === "assistant" && message.content.includes("Reason silently"),
+      ),
+    ).toBe(false);
+  });
+
+  test("flushes buffered text drafts before terminal idle settlement", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build", status: "idle" }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => 120,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_delta",
+      sessionId: "session-1",
+      channel: "text",
+      messageId: "assistant-buffered-1",
+      delta: "Buffered answer",
+      timestamp: "2026-02-22T08:00:02.000Z",
+    });
+
+    expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
+
+    handleEvent({
+      type: "session_idle",
+      sessionId: "session-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+    });
+
+    expect(
+      sessionsRef.current["session-1"]?.messages.some(
+        (message) => message.id === "assistant-buffered-1" && message.content === "Buffered answer",
+      ),
+    ).toBe(true);
+  });
+
+  test("upserts the finalized assistant message instead of appending a duplicate", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_sessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyPermission: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          role: "spec",
+          messages: [
+            {
+              id: "msg-final",
+              role: "assistant",
+              content: "Final answer",
+              timestamp: "2026-02-22T08:00:03.000Z",
+            },
+          ],
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "Hephaestus",
+          },
+        }),
+      },
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[sessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [sessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => 120,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      loadSessionTodos: async () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "assistant_message",
+      sessionId: "session-1",
+      messageId: "msg-final",
+      message: "Final answer",
+      timestamp: "2026-02-22T08:00:04.000Z",
+      model: {
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "Hephaestus",
+      },
+    });
+
+    const assistantMessages = sessionsRef.current["session-1"]?.messages.filter(
+      (entry) => entry.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages?.[0]?.id).toBe("msg-final");
+    expect(assistantMessages?.[0]?.meta?.kind).toBe("assistant");
   });
 });

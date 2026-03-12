@@ -37,6 +37,7 @@ export type AgentChatMessageMeta =
       modelId?: string;
       variant?: string;
       profileId?: string;
+      isFinal?: boolean;
       durationMs?: number;
       totalTokens?: number;
       contextWindow?: number;
@@ -90,6 +91,12 @@ export type AgentQuestionRequest = {
   }>;
 };
 
+export type AgentSessionContextUsage = {
+  totalTokens: number;
+  contextWindow?: number;
+  outputLimit?: number;
+};
+
 export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
@@ -105,6 +112,10 @@ export type AgentSessionState = {
   workingDirectory: string;
   messages: AgentChatMessage[];
   draftAssistantText: string;
+  draftAssistantMessageId: string | null;
+  draftReasoningText: string;
+  draftReasoningMessageId: string | null;
+  contextUsage?: AgentSessionContextUsage | null;
   pendingPermissions: AgentPermissionRequest[];
   pendingQuestions: AgentQuestionRequest[];
   todos: AgentSessionTodoItem[];

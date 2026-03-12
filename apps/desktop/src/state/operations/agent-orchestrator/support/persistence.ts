@@ -70,6 +70,10 @@ export const fromPersistedSessionRecord = (
     workingDirectory: session.workingDirectory,
     messages: [],
     draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    contextUsage: null,
     pendingPermissions: [],
     pendingQuestions: [],
     todos: [],
@@ -139,6 +143,7 @@ const assistantMessageMeta = (
   role: AgentRole,
   selectedModel: AgentModelSelection | null,
   messageModel: AgentModelSelection | undefined,
+  isFinal: boolean,
   durationMs: number | undefined,
   totalTokens: number | undefined,
 ) => {
@@ -146,13 +151,24 @@ const assistantMessageMeta = (
   return {
     kind: "assistant",
     agentRole: role,
+    isFinal,
     ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
     ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
     ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
     ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
-    ...(typeof durationMs === "number" && durationMs > 0 ? { durationMs } : {}),
-    ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
+    ...(isFinal && typeof durationMs === "number" && durationMs > 0 ? { durationMs } : {}),
+    ...(isFinal && typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }>;
+};
+
+const isFinalAssistantHistoryMessage = (message: AgentSessionHistoryMessage): boolean => {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  return message.parts.some(
+    (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
+  );
 };
 
 const userMessageMeta = (messageModel: AgentModelSelection | undefined) => {
@@ -257,6 +273,7 @@ export const historyToChatMessages = (
 
     const content = message.text.trim();
     if (content.length > 0) {
+      const isFinalAssistantMessage = isFinalAssistantHistoryMessage(message);
       const assistantDurationMs = assistantDurationFromHistory(message, previousUserTimestampMs);
       next.push({
         id: `history:text:${message.messageId}`,
@@ -269,8 +286,9 @@ export const historyToChatMessages = (
                 sessionContext.role,
                 sessionContext.selectedModel,
                 message.model,
-                assistantDurationMs,
-                message.totalTokens,
+                isFinalAssistantMessage,
+                isFinalAssistantMessage ? assistantDurationMs : undefined,
+                isFinalAssistantMessage ? message.totalTokens : undefined,
               ),
             }
           : message.role === "user"

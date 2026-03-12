@@ -1,12 +1,25 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { type UIEvent, useCallback, useMemo, useState } from "react";
+import {
+  type PointerEvent,
+  type TouchEvent,
+  type UIEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type WheelEvent,
+} from "react";
 import {
   type AgentChatModel,
   type AgentStudioTaskTabsModel,
   isNearBottom,
   useAgentChatLayout,
 } from "@/components/features/agents";
+import {
+  CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET,
+  CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX,
+} from "@/components/features/agents/agent-chat/use-agent-chat-layout";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -53,6 +66,7 @@ type AgentStudioCoreContext = {
   contextSessionsLength: number;
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
+  isSessionHistoryHydrating: boolean;
   contextSwitchVersion: number;
 };
 
@@ -135,12 +149,12 @@ export function useAgentStudioPageModels({
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
-  const { threadSession, activeSessionId, isContextSwitching, scrollTrigger } =
-    useAgentStudioThreadContext({
-      activeSession: core.activeSession,
-      isTaskHydrating: core.isTaskHydrating,
-      contextSwitchVersion: core.contextSwitchVersion,
-    });
+  const { threadSession, activeSessionId, isContextSwitching } = useAgentStudioThreadContext({
+    activeSession: core.activeSession,
+    isTaskHydrating: core.isTaskHydrating,
+    isSessionHistoryHydrating: core.isSessionHistoryHydrating,
+    contextSwitchVersion: core.contextSwitchVersion,
+  });
 
   const {
     messagesContainerRef,
@@ -152,15 +166,65 @@ export function useAgentStudioPageModels({
     resizeComposerTextarea,
   } = useAgentChatLayout({
     input: composer.input,
-    scrollTrigger,
     activeSessionId: threadSession?.sessionId ?? null,
   });
+  const pendingUserScrollIntentRef = useRef(false);
+
+  const markPendingUserScrollIntent = useCallback((): void => {
+    pendingUserScrollIntentRef.current = true;
+  }, []);
 
   const handleMessagesScroll = useCallback(
     (event: UIEvent<HTMLDivElement>): void => {
-      setIsPinnedToBottom(isNearBottom(event.currentTarget));
+      const marker = event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
+      if (typeof marker === "string") {
+        const expectedScrollTop = Number(marker);
+        delete event.currentTarget.dataset[CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET];
+        if (
+          Number.isFinite(expectedScrollTop) &&
+          Math.abs(event.currentTarget.scrollTop - expectedScrollTop) <=
+            CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX
+        ) {
+          setIsPinnedToBottom(true);
+          return;
+        }
+      }
+
+      if (isNearBottom(event.currentTarget)) {
+        pendingUserScrollIntentRef.current = false;
+        setIsPinnedToBottom(true);
+        return;
+      }
+
+      if (!pendingUserScrollIntentRef.current) {
+        return;
+      }
+
+      pendingUserScrollIntentRef.current = false;
+      setIsPinnedToBottom(false);
     },
     [setIsPinnedToBottom],
+  );
+
+  const handleMessagesPointerDown = useCallback(
+    (_event: PointerEvent<HTMLDivElement>): void => {
+      markPendingUserScrollIntent();
+    },
+    [markPendingUserScrollIntent],
+  );
+
+  const handleMessagesTouchMove = useCallback(
+    (_event: TouchEvent<HTMLDivElement>): void => {
+      markPendingUserScrollIntent();
+    },
+    [markPendingUserScrollIntent],
+  );
+
+  const handleMessagesWheel = useCallback(
+    (_event: WheelEvent<HTMLDivElement>): void => {
+      markPendingUserScrollIntent();
+    },
+    [markPendingUserScrollIntent],
   );
 
   const agentStudioTaskTabsModel = useMemo(
@@ -279,10 +343,11 @@ export function useAgentStudioPageModels({
   const threadSessionContext = useMemo<AgentStudioThreadSessionContext>(
     () => ({
       threadSession,
+      isContextSwitching,
       taskId: core.taskId,
       activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     }),
-    [core.taskId, modelSelection.activeSessionAgentColors, threadSession],
+    [core.taskId, isContextSwitching, modelSelection.activeSessionAgentColors, threadSession],
   );
 
   const threadReadinessContext = useMemo<AgentStudioThreadReadinessContext>(
@@ -353,9 +418,19 @@ export function useAgentStudioPageModels({
     () => ({
       isPinnedToBottom,
       messagesContainerRef,
+      onMessagesPointerDown: handleMessagesPointerDown,
       onMessagesScroll: handleMessagesScroll,
+      onMessagesTouchMove: handleMessagesTouchMove,
+      onMessagesWheel: handleMessagesWheel,
     }),
-    [handleMessagesScroll, isPinnedToBottom, messagesContainerRef],
+    [
+      handleMessagesPointerDown,
+      handleMessagesScroll,
+      handleMessagesTouchMove,
+      handleMessagesWheel,
+      isPinnedToBottom,
+      messagesContainerRef,
+    ],
   );
 
   const agentChatThreadModel = useAgentStudioThreadModel({
@@ -463,9 +538,8 @@ export function useAgentStudioPageModels({
     () => ({
       thread: agentChatThreadModel,
       composer: agentChatComposerModel,
-      isContextSwitching,
     }),
-    [agentChatComposerModel, agentChatThreadModel, isContextSwitching],
+    [agentChatComposerModel, agentChatThreadModel],
   );
 
   return {

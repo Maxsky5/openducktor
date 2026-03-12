@@ -7,6 +7,7 @@ import {
   readStringProp,
   readUnknownProp,
 } from "./guards";
+import { toTokenTotal } from "./message-normalizers";
 
 const toDisplayText = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -235,7 +236,8 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         partId: part.id,
         phase: "start",
       };
-    case "step-finish":
+    case "step-finish": {
+      const totalTokens = toTokenTotal(readUnknownProp(part, "tokens"));
       return {
         kind: "step",
         messageId: part.messageID,
@@ -243,7 +245,9 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         phase: "finish",
         reason: part.reason,
         cost: part.cost,
+        ...(typeof totalTokens === "number" ? { totalTokens } : {}),
       };
+    }
     case "subtask":
       return {
         kind: "subtask",

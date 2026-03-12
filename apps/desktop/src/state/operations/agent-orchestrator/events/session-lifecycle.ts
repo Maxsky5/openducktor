@@ -11,10 +11,22 @@ import {
   normalizeSessionErrorMessage,
   READ_ONLY_ROLES,
   toAssistantMessageMeta,
+  toSessionContextUsage,
   upsertMessage,
 } from "../support/utils";
 import type { SessionEvent, SessionEventContext } from "./session-event-types";
-import { clearDraftBuffers, eventTimestampMs, settleDraftToIdle } from "./session-helpers";
+import {
+  clearDraftBuffers,
+  eventTimestampMs,
+  flushDraftBuffers,
+  settleDraftToIdle,
+} from "./session-helpers";
+
+const clearTurnModelSnapshot = (context: SessionEventContext): void => {
+  if (context.turnModelBySessionRef) {
+    delete context.turnModelBySessionRef.current[context.sessionId];
+  }
+};
 
 type PermissionRequiredEvent = Extract<SessionEvent, { type: "permission_required" }>;
 
@@ -24,6 +36,44 @@ const toPendingPermission = (event: PermissionRequiredEvent) => ({
   patterns: event.patterns,
   ...(event.metadata ? { metadata: event.metadata } : {}),
 });
+
+const findExistingAssistantMessageIndex = (
+  messages: SessionEventContext["sessionsRef"]["current"][string]["messages"],
+  event: Extract<SessionEvent, { type: "assistant_message" }>,
+): number => {
+  const byIdIndex = messages.findIndex((entry) => entry.id === event.messageId);
+  if (byIdIndex >= 0) {
+    return byIdIndex;
+  }
+
+  const normalizedIncoming = event.message.trim();
+  if (normalizedIncoming.length === 0) {
+    return -1;
+  }
+
+  const incomingEpoch = Date.parse(event.timestamp);
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const entry = messages[index];
+    if (!entry || entry.role !== "assistant") {
+      continue;
+    }
+    if (entry.content.trim() !== normalizedIncoming) {
+      continue;
+    }
+    if (entry.timestamp === event.timestamp) {
+      return index;
+    }
+    const existingEpoch = Date.parse(entry.timestamp);
+    if (Number.isNaN(existingEpoch) || Number.isNaN(incomingEpoch)) {
+      continue;
+    }
+    if (Math.abs(incomingEpoch - existingEpoch) <= 2_000) {
+      return index;
+    }
+  }
+
+  return -1;
+};
 
 const shouldAutoRejectPermission = (
   role: AgentRole | undefined,
@@ -125,37 +175,44 @@ export const handleAssistantMessage = (
   context: SessionEventContext,
   event: Extract<SessionEvent, { type: "assistant_message" }>,
 ): void => {
+  flushDraftBuffers(context);
   clearDraftBuffers(context);
   context.updateSession(context.sessionId, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current.messages, event.timestamp);
-    const messageAlreadyPresent = isDuplicateAssistantMessage(
-      settledMessages,
-      event.message,
-      event.timestamp,
-    );
+    const existingMessageIndex = findExistingAssistantMessageIndex(settledMessages, event);
+    const messageAlreadyPresent =
+      existingMessageIndex >= 0 ||
+      isDuplicateAssistantMessage(settledMessages, event.message, event.timestamp);
     const durationMs = context.resolveTurnDurationMs(
       context.sessionId,
       event.timestamp,
       settledMessages,
     );
+    const nextAssistantMessage = {
+      id: event.messageId,
+      role: "assistant" as const,
+      content: event.message,
+      timestamp: event.timestamp,
+      meta: toAssistantMessageMeta(current, durationMs, event.totalTokens, event.model),
+    };
     return {
       ...current,
       draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: "",
+      draftReasoningMessageId: null,
+      contextUsage: toSessionContextUsage(current, event.totalTokens, event.model),
       messages: messageAlreadyPresent
-        ? settledMessages
-        : [
-            ...settledMessages,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: event.message,
-              timestamp: event.timestamp,
-              meta: toAssistantMessageMeta(current, durationMs, event.totalTokens, event.model),
-            },
-          ],
+        ? existingMessageIndex >= 0
+          ? settledMessages.map((entry, index) =>
+              index === existingMessageIndex ? { ...entry, ...nextAssistantMessage } : entry,
+            )
+          : settledMessages
+        : [...settledMessages, nextAssistantMessage],
     };
   });
   context.clearTurnDuration(context.sessionId);
+  clearTurnModelSnapshot(context);
 };
 
 export const handleSessionStatus = (
@@ -208,6 +265,7 @@ export const handleSessionStatus = (
 
   if (settleDraftToIdle(context, event.timestamp)) {
     context.clearTurnDuration(context.sessionId);
+    clearTurnModelSnapshot(context);
   }
 };
 
@@ -215,6 +273,7 @@ export const handlePermissionRequired = (
   context: SessionEventContext,
   event: PermissionRequiredEvent,
 ): void => {
+  flushDraftBuffers(context);
   const role = context.sessionsRef.current[context.sessionId]?.role;
 
   if (role && shouldAutoRejectPermission(role, event)) {
@@ -235,6 +294,7 @@ export const handleQuestionRequired = (
   context: SessionEventContext,
   event: Extract<SessionEvent, { type: "question_required" }>,
 ): void => {
+  flushDraftBuffers(context);
   context.updateSession(context.sessionId, (current) => ({
     ...current,
     pendingQuestions: [
@@ -266,6 +326,7 @@ export const handleSessionError = (
   context: SessionEventContext,
   event: Extract<SessionEvent, { type: "session_error" }>,
 ): void => {
+  flushDraftBuffers(context);
   clearDraftBuffers(context);
   const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
   context.updateSession(context.sessionId, (current) => {
@@ -295,15 +356,18 @@ export const handleSessionError = (
     };
   });
   context.clearTurnDuration(context.sessionId);
+  clearTurnModelSnapshot(context);
 };
 
 export const handleSessionIdle = (
   context: SessionEventContext,
   event: Extract<SessionEvent, { type: "session_idle" }>,
 ): void => {
+  flushDraftBuffers(context);
   clearDraftBuffers(context);
   if (settleDraftToIdle(context, event.timestamp)) {
     context.clearTurnDuration(context.sessionId);
+    clearTurnModelSnapshot(context);
   }
 };
 
@@ -311,6 +375,7 @@ export const handleSessionFinished = (
   context: SessionEventContext,
   event: Extract<SessionEvent, { type: "session_finished" }>,
 ): void => {
+  flushDraftBuffers(context);
   clearDraftBuffers(context);
   context.updateSession(context.sessionId, (current) => {
     const finalized = finalizeDraftAssistantMessage(
@@ -327,4 +392,5 @@ export const handleSessionFinished = (
     };
   });
   context.clearTurnDuration(context.sessionId);
+  clearTurnModelSnapshot(context);
 };

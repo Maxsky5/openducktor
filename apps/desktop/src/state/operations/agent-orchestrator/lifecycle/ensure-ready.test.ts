@@ -47,6 +47,9 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
   pendingPermissions: [],
   pendingQuestions: [],
   todos: [],
@@ -368,6 +371,94 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
+      adapter.resumeSession = originalResumeSession;
+    }
+  });
+
+  test("forwards selected model and profile when resuming a detached session", async () => {
+    let resumedInput:
+      | Parameters<InstanceType<typeof OpencodeSdkAdapter>["resumeSession"]>[0]
+      | null = null;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    const originalResumeSession = adapter.resumeSession;
+    adapter.hasSession = () => false;
+    adapter.resumeSession = async (input) => {
+      resumedInput = input;
+      return {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5.4",
+            variant: "high",
+            profileId: "Hephaestus (Deep Agent)",
+          },
+        }),
+      },
+    };
+
+    const ensureReady = createEnsureSessionReady({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: (_sessionId, updater) => {
+        const current = sessionsRef.current["session-1"];
+        if (!current) {
+          return;
+        }
+        sessionsRef.current["session-1"] = updater(current);
+      },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    try {
+      await ensureReady("session-1");
+      expect(resumedInput).toMatchObject({
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        model: {
+          providerId: "openai",
+          modelId: "gpt-5.4",
+          variant: "high",
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      });
+    } finally {
+      adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
     }
   });

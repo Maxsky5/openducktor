@@ -1,5 +1,11 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { RefObject, UIEvent } from "react";
+import type {
+  PointerEventHandler,
+  RefObject,
+  TouchEventHandler,
+  UIEvent,
+  WheelEventHandler,
+} from "react";
 import type { AgentChatModel } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -23,6 +29,7 @@ export type WorkflowComposerContext = Pick<
 
 export type AgentStudioThreadSessionContext = {
   threadSession: AgentSessionState | null;
+  isContextSwitching: boolean;
   taskId: string;
   activeSessionAgentColors: Record<string, string>;
 };
@@ -63,7 +70,10 @@ export type AgentStudioThreadTodoPanelContext = {
 export type AgentStudioThreadScrollContext = {
   isPinnedToBottom: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  onMessagesPointerDown: PointerEventHandler<HTMLDivElement>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
+  onMessagesTouchMove: TouchEventHandler<HTMLDivElement>;
+  onMessagesWheel: WheelEventHandler<HTMLDivElement>;
 };
 
 export type AgentStudioComposerSessionContext = {

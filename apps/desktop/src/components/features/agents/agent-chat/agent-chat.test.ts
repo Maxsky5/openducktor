@@ -10,6 +10,7 @@ const buildModel = () => ({
       status: "running" as const,
       draftAssistantText: "",
     }),
+    isSessionViewLoading: false,
     roleOptions: TEST_ROLE_OPTIONS,
     agentStudioReady: true,
     blockedReason: "",
@@ -32,7 +33,10 @@ const buildModel = () => ({
     todoPanelBottomOffset: 120,
     isPinnedToBottom: true,
     messagesContainerRef: createRef<HTMLDivElement>(),
+    onMessagesPointerDown: () => {},
     onMessagesScroll: () => {},
+    onMessagesTouchMove: () => {},
+    onMessagesWheel: () => {},
   },
   composer: {
     taskId: "task-1",
@@ -67,7 +71,6 @@ const buildModel = () => ({
     composerTextareaRef: createRef<HTMLTextAreaElement>(),
     onComposerTextareaInput: () => {},
   },
-  isContextSwitching: false,
 });
 
 describe("AgentChat", () => {
@@ -78,7 +81,7 @@ describe("AgentChat", () => {
       }),
     );
 
-    expect(html).toContain("Agent is thinking...");
+    expect(html).toContain("Initial response");
     expect(html).toContain("Send message");
   });
 

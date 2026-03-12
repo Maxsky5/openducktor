@@ -1,6 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { RefObject, UIEvent } from "react";
+import type {
+  PointerEventHandler,
+  RefObject,
+  TouchEventHandler,
+  UIEvent,
+  WheelEventHandler,
+} from "react";
 import type {
   AgentChatComposerModel,
   AgentChatModel,
@@ -108,6 +114,7 @@ export const buildAgentStudioWorkspaceSidebarModel = (args: {
 
 type AgentChatThreadModelArgs = {
   activeSession: AgentSessionState | null;
+  isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
   agentStudioBlockedReason: string;
@@ -130,7 +137,10 @@ type AgentChatThreadModelArgs = {
   todoPanelBottomOffset: number;
   isPinnedToBottom: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  onMessagesPointerDown: PointerEventHandler<HTMLDivElement>;
   onMessagesScroll: (event: UIEvent<HTMLDivElement>) => void;
+  onMessagesTouchMove: TouchEventHandler<HTMLDivElement>;
+  onMessagesWheel: WheelEventHandler<HTMLDivElement>;
 };
 
 type AgentChatComposerModelArgs = {
@@ -167,6 +177,7 @@ export const buildAgentChatThreadModel = (
   args: AgentChatThreadModelArgs,
 ): AgentChatThreadModel => ({
   session: args.activeSession,
+  isSessionViewLoading: args.isSessionViewLoading,
   roleOptions: args.roleOptions,
   agentStudioReady: args.agentStudioReady,
   blockedReason: args.agentStudioBlockedReason,
@@ -189,7 +200,10 @@ export const buildAgentChatThreadModel = (
   todoPanelBottomOffset: args.todoPanelBottomOffset,
   isPinnedToBottom: args.isPinnedToBottom,
   messagesContainerRef: args.messagesContainerRef,
+  onMessagesPointerDown: args.onMessagesPointerDown,
   onMessagesScroll: args.onMessagesScroll,
+  onMessagesTouchMove: args.onMessagesTouchMove,
+  onMessagesWheel: args.onMessagesWheel,
 });
 
 export const buildAgentChatComposerModel = (
@@ -225,12 +239,8 @@ export const buildAgentChatComposerModel = (
 });
 
 export const buildAgentChatModel = (
-  args: AgentChatThreadModelArgs &
-    AgentChatComposerModelArgs & {
-      isContextSwitching?: boolean;
-    },
+  args: AgentChatThreadModelArgs & AgentChatComposerModelArgs,
 ): AgentChatModel => ({
   thread: buildAgentChatThreadModel(args),
   composer: buildAgentChatComposerModel(args),
-  isContextSwitching: args.isContextSwitching ?? false,
 });

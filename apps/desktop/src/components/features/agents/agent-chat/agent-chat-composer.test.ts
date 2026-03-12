@@ -95,10 +95,25 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain("px-4 pb-4");
+    expect(html).toContain("relative border border-input bg-card shadow-md");
     expect(html).toContain("border-l-4");
-    expect(html).toContain("bg-card shadow-md");
     expect(html).toContain("focus-within:shadow-xl");
     expect(html).toContain("border-left-color:#d97706");
+  });
+
+  test("renders a colored border ray while the session is working", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          isSessionWorking: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('class="odt-border-ray"');
+    expect(html).toContain("--odt-border-ray-color:#d97706");
+    expect(html).toContain("--odt-border-ray-stroke-width:2.6");
   });
 
   test("renders read-only mode when selected role is unavailable", () => {

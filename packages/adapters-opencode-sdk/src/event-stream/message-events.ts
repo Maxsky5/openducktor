@@ -20,7 +20,7 @@ import {
   readMessageCompletedAt,
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
-import { applyDeltaToPart } from "./shared";
+import { applyDeltaToPart, isReasoningDeltaField } from "./shared";
 
 const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: string): boolean => {
   const mapped = mapPartToAgentStreamPart(part);
@@ -29,7 +29,7 @@ const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: s
   }
 
   const mappedRole = roleHint ?? runtime.messageRoleById.get(mapped.messageId);
-  if (mappedRole === "user" && mapped.kind === "text") {
+  if (mappedRole !== "assistant") {
     return false;
   }
 
@@ -40,6 +40,19 @@ const emitAssistantPart = (runtime: EventStreamRuntime, part: Part, roleHint?: s
     part: mapped,
   });
   return true;
+};
+
+const emitKnownAssistantPartsForMessage = (
+  runtime: EventStreamRuntime,
+  messageId: string,
+  roleHint?: string,
+): void => {
+  for (const part of runtime.partsById.values()) {
+    if (part.messageID !== messageId) {
+      continue;
+    }
+    emitAssistantPart(runtime, part, roleHint);
+  }
 };
 
 const applyPendingDeltas = (runtime: EventStreamRuntime, partId: string, basePart: Part): Part => {
@@ -98,6 +111,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
   const role = infoRecord ? readStringProp(infoRecord, ["role"]) : undefined;
+  const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
   if (messageId && role) {
     runtime.messageRoleById.set(messageId, role);
   }
@@ -129,6 +143,15 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     }
   }
 
+  if (
+    messageId &&
+    role === "assistant" &&
+    previousRole !== "assistant" &&
+    normalizedParts.length === 0
+  ) {
+    emitKnownAssistantPartsForMessage(runtime, messageId, role);
+  }
+
   const completedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
   const shouldEmitCompletedMessage =
@@ -158,6 +181,7 @@ const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRuntime): b
     type: "assistant_message",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
+    messageId,
     message: visible,
     ...(typeof totalTokens === "number" ? { totalTokens } : {}),
     ...(assistantModel ? { model: assistantModel } : {}),
@@ -201,17 +225,21 @@ const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRuntime):
   if (delta.length === 0) {
     return true;
   }
-  if (messageId) {
-    const deltaRole = runtime.messageRoleById.get(messageId);
-    if (deltaRole === "user") {
-      return true;
-    }
+  if (!messageId) {
+    return true;
   }
+  const deltaRole = runtime.messageRoleById.get(messageId);
+  if (deltaRole !== "assistant") {
+    return true;
+  }
+  const channel = isReasoningDeltaField(field) ? "reasoning" : "text";
 
   runtime.emit(runtime.sessionId, {
     type: "assistant_delta",
     sessionId: runtime.sessionId,
     timestamp: runtime.now(),
+    channel,
+    messageId,
     delta,
   });
   return true;

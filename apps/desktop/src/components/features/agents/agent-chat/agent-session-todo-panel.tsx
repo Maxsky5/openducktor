@@ -74,7 +74,7 @@ export function AgentSessionTodoPanel({
       </button>
 
       {collapsed ? (
-        <div className="mt-2 grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 rounded border border-border bg-muted px-2 py-1.5 text-sm text-foreground">
+        <div className="mt-2 grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2 px-2 py-1.5 text-sm text-foreground">
           <span className="mt-[3px] inline-flex size-4 items-center justify-center">
             {statusIcon(activeTodo.status)}
           </span>

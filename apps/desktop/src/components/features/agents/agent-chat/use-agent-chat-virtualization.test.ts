@@ -6,7 +6,11 @@ import {
   AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT,
   type AgentChatVirtualRow,
 } from "./agent-chat-thread-virtualization";
-import { useAgentChatVirtualization } from "./use-agent-chat-virtualization";
+import {
+  estimateMessageRowHeight,
+  resolveRetainedVirtualWindow,
+  useAgentChatVirtualization,
+} from "./use-agent-chat-virtualization";
 
 (
   globalThis as typeof globalThis & {
@@ -23,6 +27,7 @@ type AgentChatVirtualizationState = {
   activeSessionId: string | null;
   canRenderVirtualRows: boolean;
   hasRenderableSessionRows: boolean;
+  registerStaticMeasurementRowElement: (rowKey: string) => (element: HTMLDivElement | null) => void;
   shouldVirtualize: boolean;
   virtualRows: AgentChatVirtualRow[];
   virtualRowsToRender: Array<{
@@ -44,6 +49,89 @@ const getLatestState = (stateRef: { current: AgentChatVirtualizationState | null
 };
 
 describe("useAgentChatVirtualization", () => {
+  test("uses a more conservative estimate for markdown assistant rows than plain text rows", () => {
+    const plainMessage = buildMessage(
+      "assistant",
+      "This is a plain assistant response with a comparable amount of text for sizing.",
+      {
+        id: "plain-assistant",
+      },
+    );
+    const markdownMessage = buildMessage(
+      "assistant",
+      [
+        "# Heading",
+        "",
+        "- First item",
+        "- Second item",
+        "",
+        "```ts",
+        "const value = 1;",
+        "```",
+      ].join("\n"),
+      {
+        id: "markdown-assistant",
+      },
+    );
+
+    expect(estimateMessageRowHeight(markdownMessage)).toBeGreaterThan(
+      estimateMessageRowHeight(plainMessage),
+    );
+  });
+
+  test("retains the previous virtual window when tanstack returns no items transiently", () => {
+    const firstWindowItem = {
+      index: 12,
+      key: "row-12",
+      lane: 0,
+      size: 80,
+      start: 480,
+      end: 560,
+    } as const;
+
+    const retained = resolveRetainedVirtualWindow({
+      activeSessionId: "session-1",
+      previousWindowState: {
+        sessionId: "session-1",
+        virtualItems: [firstWindowItem],
+      },
+      rowCount: 45,
+      shouldVirtualize: true,
+      virtualItems: [],
+    });
+
+    expect(retained.resolvedVirtualItems).toEqual([firstWindowItem]);
+    expect(retained.nextWindowState.virtualItems).toEqual([firstWindowItem]);
+  });
+
+  test("drops a retained virtual window when the active session changes", () => {
+    const retained = resolveRetainedVirtualWindow({
+      activeSessionId: "session-2",
+      previousWindowState: {
+        sessionId: "session-1",
+        virtualItems: [
+          {
+            index: 12,
+            key: "row-12",
+            lane: 0,
+            size: 80,
+            start: 480,
+            end: 560,
+          } as const,
+        ],
+      },
+      rowCount: 45,
+      shouldVirtualize: true,
+      virtualItems: [],
+    });
+
+    expect(retained.resolvedVirtualItems).toEqual([]);
+    expect(retained.nextWindowState).toEqual({
+      sessionId: "session-2",
+      virtualItems: [],
+    });
+  });
+
   test("returns empty state when no session is active", async () => {
     const messagesContainerRef = createRef<HTMLDivElement>();
     const latestStateRef: { current: AgentChatVirtualizationState | null } = { current: null };
@@ -82,7 +170,7 @@ describe("useAgentChatVirtualization", () => {
       (_, index) =>
         buildMessage("assistant", `Message ${index + 1}`, { id: `message-${index + 1}` }),
     );
-    const session = buildSession({ messages });
+    const session = buildSession({ messages, status: "idle" });
     const messagesContainerRef = createRef<HTMLDivElement>();
     const latestStateRef: { current: AgentChatVirtualizationState | null } = { current: null };
 
@@ -122,7 +210,7 @@ describe("useAgentChatVirtualization", () => {
       (_, index) =>
         buildMessage("assistant", `Message ${index + 1}`, { id: `message-${index + 1}` }),
     );
-    const session = buildSession({ messages });
+    const session = buildSession({ messages, status: "idle" });
     const messagesContainerRef = createRef<HTMLDivElement>();
     const latestStateRef: { current: AgentChatVirtualizationState | null } = { current: null };
 
@@ -171,7 +259,7 @@ describe("useAgentChatVirtualization", () => {
       (_, index) =>
         buildMessage("assistant", `Message ${index + 1}`, { id: `message-${index + 1}` }),
     );
-    const session = buildSession({ messages });
+    const session = buildSession({ messages, status: "idle" });
     const messagesContainerRef = createRef<HTMLDivElement>();
     const latestStateRef: { current: AgentChatVirtualizationState | null } = { current: null };
 
@@ -195,6 +283,43 @@ describe("useAgentChatVirtualization", () => {
         return latest.virtualRows[virtualItem.index]?.key === row.key;
       }),
     ).toBe(true);
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  });
+
+  test("keeps virtualization disabled while a large session is actively running", async () => {
+    const messages = Array.from(
+      { length: AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT + 5 },
+      (_, index) =>
+        buildMessage("assistant", `Message ${index + 1}`, { id: `message-${index + 1}` }),
+    );
+    const session = buildSession({ messages, status: "running" });
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const latestStateRef: { current: AgentChatVirtualizationState | null } = { current: null };
+
+    const Harness = (): null => {
+      latestStateRef.current = useAgentChatVirtualization({
+        session,
+        messagesContainerRef,
+      }) as AgentChatVirtualizationState;
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(Harness));
+      await flush();
+    });
+
+    const latest = getLatestState(latestStateRef);
+    expect(latest.shouldVirtualize).toBe(false);
+    expect(latest.canRenderVirtualRows).toBe(false);
+    expect(latest.virtualRows.length).toBeGreaterThanOrEqual(
+      AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT,
+    );
 
     await act(async () => {
       renderer?.unmount();

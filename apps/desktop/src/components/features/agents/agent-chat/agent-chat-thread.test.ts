@@ -19,6 +19,7 @@ import { AgentChatThread } from "./agent-chat-thread";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const baseModel = {
+  isSessionViewLoading: false,
   roleOptions: TEST_ROLE_OPTIONS,
   agentStudioReady: true,
   blockedReason: "",
@@ -41,7 +42,10 @@ const baseModel = {
   todoPanelBottomOffset: 120,
   isPinnedToBottom: true,
   messagesContainerRef: createRef<HTMLDivElement>(),
+  onMessagesPointerDown: () => {},
   onMessagesScroll: () => {},
+  onMessagesTouchMove: () => {},
+  onMessagesWheel: () => {},
 } as const;
 
 describe("AgentChatThread", () => {
@@ -61,7 +65,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Start Spec");
   });
 
-  test("renders running indicator for active sessions without draft text", () => {
+  test("does not render a synthetic running indicator row", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -75,7 +79,7 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Agent is thinking...");
+    expect(html).not.toContain("Agent is thinking...");
   });
 
   test("renders loading state when active session has no renderable rows yet", () => {
@@ -130,7 +134,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Recheck");
   });
 
-  test("renders stream draft, duration separators, and question cards", () => {
+  test("renders transcript messages and question cards without synthetic draft rows", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -146,8 +150,10 @@ describe("AgentChatThread", () => {
                   durationMs: 1_500,
                 },
               }),
+              buildMessage("assistant", "Streaming message", {
+                id: "assistant-2",
+              }),
             ],
-            draftAssistantText: "Streaming message",
             pendingQuestions: [buildQuestionRequest()],
           }),
         },
@@ -155,7 +161,6 @@ describe("AgentChatThread", () => {
     );
 
     expect(html).toContain("Worked for");
-    expect(html).toContain("Spec (streaming)");
     expect(html).toContain("Streaming message");
     expect(html).toContain("Input needed");
   });

@@ -28,7 +28,7 @@ const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number
 };
 
 describe("agent-chat-thread virtualization helpers", () => {
-  test("buildAgentChatVirtualRows keeps message order and stable synthetic row keys", () => {
+  test("buildAgentChatVirtualRows keeps message order without synthetic draft rows", () => {
     const session = buildSession({
       messages: [
         buildMessage("assistant", "Done", {
@@ -36,13 +36,13 @@ describe("agent-chat-thread virtualization helpers", () => {
           meta: {
             kind: "assistant",
             agentRole: "spec",
+            isFinal: true,
             profileId: "Hephaestus (Deep Agent)",
             durationMs: 1_500,
           },
         }),
         buildMessage("user", "Follow-up", { id: "user-1" }),
       ],
-      draftAssistantText: "Streaming...",
       pendingQuestions: [],
     });
 
@@ -52,9 +52,8 @@ describe("agent-chat-thread virtualization helpers", () => {
       "session-1:assistant-1:duration",
       "session-1:assistant-1",
       "session-1:user-1",
-      "session-1:draft",
     ]);
-    expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message", "draft"]);
+    expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message"]);
   });
 
   test("buildAgentChatVirtualRows keeps row keys distinct across sessions with repeated message ids", () => {
@@ -168,7 +167,7 @@ describe("agent-chat-thread virtualization helpers", () => {
     expect(nextSignature).not.toBe(previousSignature);
   });
 
-  test("buildAgentChatVirtualRows appends thinking row when session is running without draft", () => {
+  test("buildAgentChatVirtualRows does not append synthetic thinking rows", () => {
     const session = buildSession({
       messages: [],
       draftAssistantText: "",
@@ -178,12 +177,30 @@ describe("agent-chat-thread virtualization helpers", () => {
 
     const rows = buildAgentChatVirtualRows(session);
 
-    expect(rows).toEqual([
-      {
-        kind: "thinking",
-        key: "session-1:thinking",
-      },
-    ]);
+    expect(rows).toEqual([]);
+  });
+
+  test("buildAgentChatVirtualRows skips turn duration rows for non-final assistant messages", () => {
+    const session = buildSession({
+      messages: [
+        buildMessage("assistant", "Working", {
+          id: "assistant-live",
+          meta: {
+            kind: "assistant",
+            agentRole: "spec",
+            isFinal: false,
+            profileId: "Hephaestus (Deep Agent)",
+            durationMs: 1_500,
+          },
+        }),
+      ],
+      pendingQuestions: [],
+    });
+
+    const rows = buildAgentChatVirtualRows(session);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message"]);
+    expect(rows[0]?.key).toBe("session-1:assistant-live");
   });
 
   test("range and spacer helpers compute visible window boundaries", () => {

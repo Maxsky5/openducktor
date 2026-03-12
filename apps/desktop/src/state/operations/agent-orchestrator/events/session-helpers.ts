@@ -1,8 +1,15 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { isTodoToolName, settleDanglingTodoToolMessages } from "../../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
-import { finalizeDraftAssistantMessage } from "../support/utils";
-import type { SessionEventContext, SessionPart } from "./session-event-types";
+import { finalizeDraftAssistantMessage, sanitizeStreamingText } from "../support/utils";
+import type {
+  DraftChannel,
+  DraftChannelValueMap,
+  SessionEventContext,
+  SessionPart,
+} from "./session-event-types";
+
+export const DRAFT_FLUSH_DELAY_MS = 32;
 
 export const inferToolPartStatus = (
   part: Extract<SessionPart, { kind: "tool" }>,
@@ -11,13 +18,78 @@ export const inferToolPartStatus = (
 };
 
 export const clearDraftBuffers = (context: SessionEventContext): void => {
+  const timeoutId = context.draftFlushTimeoutBySessionRef?.current[context.sessionId];
+  if (timeoutId !== undefined) {
+    clearTimeout(timeoutId);
+  }
+  if (context.draftFlushTimeoutBySessionRef) {
+    delete context.draftFlushTimeoutBySessionRef.current[context.sessionId];
+  }
   delete context.draftRawBySessionRef.current[context.sessionId];
   delete context.draftSourceBySessionRef.current[context.sessionId];
+  if (context.draftMessageIdBySessionRef) {
+    delete context.draftMessageIdBySessionRef.current[context.sessionId];
+  }
 };
 
 export const eventTimestampMs = (timestamp: string): number => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? Date.now() : parsed;
+};
+
+const resolveDraftFieldState = (
+  channel: DraftChannel,
+  rawByChannel: DraftChannelValueMap<string> | undefined,
+  messageIdByChannel: DraftChannelValueMap<string> | undefined,
+): { text: string; messageId: string | null } => {
+  const raw = rawByChannel?.[channel] ?? "";
+  const text = sanitizeStreamingText(raw);
+  const messageId = text.length > 0 ? (messageIdByChannel?.[channel] ?? null) : null;
+  return { text, messageId };
+};
+
+export const flushDraftBuffers = (context: SessionEventContext): void => {
+  const timeoutId = context.draftFlushTimeoutBySessionRef?.current[context.sessionId];
+  if (timeoutId !== undefined) {
+    clearTimeout(timeoutId);
+    if (context.draftFlushTimeoutBySessionRef) {
+      delete context.draftFlushTimeoutBySessionRef.current[context.sessionId];
+    }
+  }
+
+  const rawByChannel = context.draftRawBySessionRef.current[context.sessionId];
+  const messageIdByChannel = context.draftMessageIdBySessionRef?.current[context.sessionId];
+  const reasoningDraft = resolveDraftFieldState("reasoning", rawByChannel, messageIdByChannel);
+
+  context.updateSession(
+    context.sessionId,
+    (current) => ({
+      ...current,
+      draftAssistantText: "",
+      draftAssistantMessageId: null,
+      draftReasoningText: reasoningDraft.text,
+      draftReasoningMessageId: reasoningDraft.messageId,
+    }),
+    { persist: false },
+  );
+};
+
+export const scheduleDraftFlush = (context: SessionEventContext): void => {
+  const draftFlushTimeoutBySessionRef = context.draftFlushTimeoutBySessionRef;
+  if (!draftFlushTimeoutBySessionRef) {
+    flushDraftBuffers(context);
+    return;
+  }
+
+  const existingTimeoutId = draftFlushTimeoutBySessionRef.current[context.sessionId];
+  if (existingTimeoutId !== undefined) {
+    clearTimeout(existingTimeoutId);
+  }
+
+  draftFlushTimeoutBySessionRef.current[context.sessionId] = setTimeout(() => {
+    delete draftFlushTimeoutBySessionRef.current[context.sessionId];
+    flushDraftBuffers(context);
+  }, DRAFT_FLUSH_DELAY_MS);
 };
 
 const hasMeaningfulToolInputValue = (value: unknown): boolean => {
@@ -47,7 +119,8 @@ export const hasMeaningfulToolInput = (input: Record<string, unknown> | undefine
 
 const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean => {
   return (
-    current.draftAssistantText.trim().length > 0 &&
+    (current.draftAssistantText.trim().length > 0 ||
+      current.draftReasoningText.trim().length > 0) &&
     current.pendingPermissions.length === 0 &&
     current.pendingQuestions.length === 0
   );

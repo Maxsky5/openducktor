@@ -56,6 +56,9 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
   pendingPermissions: [],
   pendingQuestions: [],
   todos: [],
@@ -229,6 +232,7 @@ describe("agents-page-view-model", () => {
 
     const model = buildAgentChatModel({
       activeSession: createSession(),
+      isSessionViewLoading: false,
       roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
       agentStudioReady: true,
       agentStudioBlockedReason: "",
@@ -251,7 +255,10 @@ describe("agents-page-view-model", () => {
       todoPanelBottomOffset: 12,
       isPinnedToBottom: true,
       messagesContainerRef: { current: null },
+      onMessagesPointerDown: () => {},
       onMessagesScroll: () => {},
+      onMessagesTouchMove: () => {},
+      onMessagesWheel: () => {},
       input: "message",
       isReadOnly: false,
       readOnlyReason: null,

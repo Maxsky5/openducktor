@@ -2,6 +2,10 @@ import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core"
 import type { MutableRefObject } from "react";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 
+export type DraftChannel = "text" | "reasoning";
+export type DraftSource = "delta" | "part";
+export type DraftChannelValueMap<T> = Partial<Record<DraftChannel, T>>;
+
 export type UpdateSession = (
   sessionId: string,
   updater: (current: AgentSessionState) => AgentSessionState,
@@ -25,9 +29,14 @@ export type AttachAgentSessionListenerParams = {
   repoPath: string;
   sessionId: string;
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
-  draftRawBySessionRef: MutableRefObject<Record<string, string>>;
-  draftSourceBySessionRef: MutableRefObject<Record<string, "delta" | "part">>;
+  draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
+  draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
+  draftMessageIdBySessionRef?: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
+  draftFlushTimeoutBySessionRef?: MutableRefObject<
+    Record<string, ReturnType<typeof setTimeout> | undefined>
+  >;
   turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
+  turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   updateSession: UpdateSession;
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionId: string) => void;

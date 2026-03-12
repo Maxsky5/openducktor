@@ -141,21 +141,6 @@ describe("AgentStudioHeader", () => {
     expect(html).not.toContain('aria-label="Open task details"');
   });
 
-  test("shows creation lock helper when session creation is disabled", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentStudioHeader, {
-        model: {
-          ...buildModel(),
-          createSessionDisabled: true,
-        },
-      }),
-    );
-
-    expect(html).toContain(
-      "Session creation is locked while the current session is actively running.",
-    );
-  });
-
   test("disables controls when studio is blocked", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioHeader, {
