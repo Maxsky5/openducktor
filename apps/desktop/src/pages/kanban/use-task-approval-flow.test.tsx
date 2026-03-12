@@ -68,10 +68,6 @@ mock.module("@/lib/open-external-url", () => ({
   openExternalUrl: async () => {},
 }));
 
-mock.module("@openducktor/core", () => ({
-  buildAgentMessagePrompt: () => "Generate PR",
-}));
-
 let latestHarnessValue: {
   taskApprovalModal: {
     open: boolean;

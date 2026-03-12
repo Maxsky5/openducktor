@@ -74,21 +74,6 @@ mock.module("./use-settings-modal-catalog-state", () => ({
   }),
 }));
 
-mock.module("./use-settings-modal-draft-actions", () => ({
-  useSettingsModalDraftActions: ({
-    setSnapshotDraft,
-  }: {
-    setSnapshotDraft: (value: unknown) => void;
-  }) => ({
-    updateSelectedRepoConfig: () => setSnapshotDraft,
-    updateGlobalGitConfig: () => setSnapshotDraft,
-    updateGlobalPromptOverrides: () => setSnapshotDraft,
-    updateRepoPromptOverrides: () => setSnapshotDraft,
-    updateSelectedRepoAgentDefault: () => setSnapshotDraft,
-    clearSelectedRepoAgentDefault: () => setSnapshotDraft,
-  }),
-}));
-
 const { useSettingsModalController } = await import("./use-settings-modal-controller");
 
 const createHookHarness = (open: boolean) =>
