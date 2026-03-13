@@ -4,7 +4,7 @@ use host_domain::{
     GitWorktreeStatusSnapshot, GitWorktreeStatusSummary,
 };
 
-pub(super) const GIT_WORKTREE_HASH_VERSION: u32 = 1;
+pub(crate) const GIT_WORKTREE_HASH_VERSION: u32 = 1;
 const FNV1A_64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV1A_64_PRIME: u64 = 0x100000001b3;
 
@@ -85,7 +85,7 @@ fn hash_upstream_ahead_behind(
     }
 }
 
-pub(super) fn hash_worktree_status_payload(
+pub(crate) fn hash_worktree_status_payload(
     current_branch: &GitCurrentBranch,
     file_statuses: &[GitFileStatus],
     target_ahead_behind: &GitAheadBehind,
@@ -111,7 +111,7 @@ pub(super) fn hash_worktree_status_payload(
     hasher.finish_hex()
 }
 
-pub(super) fn hash_worktree_diff_payload(file_diffs: &[GitFileDiff]) -> String {
+pub(crate) fn hash_worktree_diff_payload(file_diffs: &[GitFileDiff]) -> String {
     let mut hasher = Fnv1a64Hasher::new();
     hasher.update_u64(file_diffs.len() as u64);
 
@@ -126,7 +126,7 @@ pub(super) fn hash_worktree_diff_payload(file_diffs: &[GitFileDiff]) -> String {
     hasher.finish_hex()
 }
 
-pub(super) fn hash_worktree_diff_summary_payload(
+pub(crate) fn hash_worktree_diff_summary_payload(
     diff_scope: &GitDiffScope,
     target_ahead_behind: &GitAheadBehind,
     file_status_counts: &GitFileStatusCounts,
@@ -147,14 +147,14 @@ pub(super) fn hash_worktree_diff_summary_payload(
     hasher.finish_hex()
 }
 
-pub(super) struct WorktreeSnapshotMetadata {
-    pub(super) effective_working_dir: String,
-    pub(super) target_branch: String,
-    pub(super) diff_scope: GitDiffScope,
-    pub(super) observed_at_ms: u64,
-    pub(super) hash_version: u32,
-    pub(super) status_hash: String,
-    pub(super) diff_hash: String,
+pub(crate) struct WorktreeSnapshotMetadata {
+    pub(crate) effective_working_dir: String,
+    pub(crate) target_branch: String,
+    pub(crate) diff_scope: GitDiffScope,
+    pub(crate) observed_at_ms: u64,
+    pub(crate) hash_version: u32,
+    pub(crate) status_hash: String,
+    pub(crate) diff_hash: String,
 }
 
 fn snapshot_from_metadata(
@@ -171,7 +171,7 @@ fn snapshot_from_metadata(
     }
 }
 
-pub(super) fn build_worktree_status_with_snapshot(
+pub(crate) fn build_worktree_status_with_snapshot(
     status_data: GitWorktreeStatusData,
     snapshot_metadata: WorktreeSnapshotMetadata,
 ) -> GitWorktreeStatus {
@@ -185,7 +185,7 @@ pub(super) fn build_worktree_status_with_snapshot(
     }
 }
 
-pub(super) fn build_worktree_status_summary_with_snapshot(
+pub(crate) fn build_worktree_status_summary_with_snapshot(
     current_branch: GitCurrentBranch,
     file_status_counts: GitFileStatusCounts,
     target_ahead_behind: GitAheadBehind,

@@ -6,6 +6,7 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bun run --filter @openducktor/desktop dev",
+    "browser:dev": "bun run scripts/browser-dev.ts",
     "tauri": "cd apps/desktop && bun run tauri",
     "tauri:dev": "cd apps/desktop && bun run tauri:dev",
     "tauri:build": "cd apps/desktop && bun run tauri:build",

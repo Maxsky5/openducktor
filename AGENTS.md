@@ -161,7 +161,14 @@ Keep this contract stable. If you change any item below, update all related laye
 - Frontend tests are required for touched behavior.
 - Always run relevant checks before finishing — see Commands section above.
 
+### Browser App Testing
+
+- For end-to-end UI validation in browser mode, use `agent-browser` against the live app served by the real OpenDucktor backend.
+- Treat browser mode as the default way to validate UI work in this repo when browser automation is sufficient.
+- Do **not** run `bun run browser:dev` yourself.
+- Ask the user to start `bun run browser:dev`, then connect to the running app in the browser.
+
 ## Workflow
 
-- Conventional Commits, `codex/` branch prefix.
+- Use Conventional Commits.
 - Verify touched areas with relevant checks before finishing.

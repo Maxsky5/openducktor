@@ -16,6 +16,7 @@ use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, RunEvent as TauriRunEvent};
 
 mod commands;
+mod headless;
 
 use commands::agent_sessions::*;
 use commands::build::*;
@@ -26,14 +27,14 @@ use commands::system::*;
 use commands::tasks::*;
 use commands::workspace::*;
 
-struct AppState {
+pub(crate) struct AppState {
     service: Arc<AppService>,
     #[cfg(test)]
     hook_trust_dialog_test_response: Mutex<Option<bool>>,
 }
 static TRACING_INITIALIZED: OnceLock<()> = OnceLock::new();
 
-fn init_tracing_subscriber() {
+pub(crate) fn init_tracing_subscriber() {
     TRACING_INITIALIZED.get_or_init(|| {
         let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -54,7 +55,7 @@ fn init_tracing_subscriber() {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TaskCreatePayload {
+pub(crate) struct TaskCreatePayload {
     title: String,
     issue_type: String,
     priority: i32,
@@ -67,7 +68,7 @@ struct TaskCreatePayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TaskUpdatePayload {
+pub(crate) struct TaskUpdatePayload {
     title: Option<String>,
     description: Option<String>,
     acceptance_criteria: Option<String>,
@@ -81,20 +82,20 @@ struct TaskUpdatePayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MarkdownPayload {
+pub(crate) struct MarkdownPayload {
     markdown: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PlanPayload {
+pub(crate) struct PlanPayload {
     markdown: String,
     subtasks: Option<Vec<PlanSubtaskPayload>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PlanSubtaskPayload {
+pub(crate) struct PlanSubtaskPayload {
     title: String,
     issue_type: Option<String>,
     priority: Option<i32>,
@@ -103,20 +104,20 @@ struct PlanSubtaskPayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BuildCompletePayload {
+pub(crate) struct BuildCompletePayload {
     summary: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PullRequestContentPayload {
+pub(crate) struct PullRequestContentPayload {
     title: String,
     body: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RepoConfigPayload {
+pub(crate) struct RepoConfigPayload {
     default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
@@ -129,7 +130,7 @@ struct RepoConfigPayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RepoSettingsPayload {
+pub(crate) struct RepoSettingsPayload {
     default_runtime_kind: Option<String>,
     worktree_base_path: Option<String>,
     branch_prefix: Option<String>,
@@ -144,7 +145,7 @@ struct RepoSettingsPayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SettingsSnapshotPayload {
+pub(crate) struct SettingsSnapshotPayload {
     git: host_infra_system::GlobalGitConfig,
     chat: host_infra_system::ChatSettings,
     repos: HashMap<String, host_infra_system::RepoConfig>,
@@ -153,23 +154,39 @@ struct SettingsSnapshotPayload {
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SettingsSnapshotResponsePayload {
+pub(crate) struct SettingsSnapshotResponsePayload {
     git: host_infra_system::GlobalGitConfig,
     chat: host_infra_system::ChatSettings,
     repos: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,
 }
 
-fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
+pub(crate) fn as_error<T>(result: anyhow::Result<T>) -> Result<T, String> {
     result.map_err(|error| format!("{error:#}"))
 }
 
-async fn run_service_blocking<T, F>(operation_name: &'static str, operation: F) -> anyhow::Result<T>
+pub(crate) async fn run_service_blocking<T, F>(
+    operation_name: &'static str,
+    operation: F,
+) -> anyhow::Result<T>
 where
     T: Send + 'static,
     F: FnOnce() -> anyhow::Result<T> + Send + 'static,
 {
     tauri::async_runtime::spawn_blocking(operation)
+        .await
+        .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
+}
+
+pub(crate) async fn run_service_blocking_tokio<T, F>(
+    operation_name: &'static str,
+    operation: F,
+) -> anyhow::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> anyhow::Result<T> + Send + 'static,
+{
+    tokio::task::spawn_blocking(operation)
         .await
         .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
@@ -192,17 +209,17 @@ fn validate_startup_config(
     })?;
     Ok(())
 }
-fn run_emitter(app: AppHandle) -> RunEmitter {
+pub(crate) fn run_emitter(app: AppHandle) -> RunEmitter {
     Arc::new(move |event: RunEvent| {
         let _ = app.emit("openducktor://run-event", event);
     })
 }
 
-fn startup_phase_tracing() {
+pub(crate) fn startup_phase_tracing() {
     init_tracing_subscriber();
 }
 
-fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService>> {
+pub(crate) fn startup_phase_service_bootstrap() -> anyhow::Result<Arc<AppService>> {
     let config_store = AppConfigStore::new().context("failed to initialize config store")?;
     let runtime_config_store = RuntimeConfigStore::from_user_settings_store(&config_store);
     validate_startup_config(&config_store, &runtime_config_store)?;
@@ -233,7 +250,7 @@ fn install_shutdown_signal_handler(service: Arc<AppService>) {
     }
 }
 
-fn startup_phase_shutdown_hooks(service: Arc<AppService>) {
+pub(crate) fn startup_phase_shutdown_hooks(service: Arc<AppService>) {
     install_shutdown_signal_handler(service);
 }
 
@@ -356,6 +373,10 @@ pub fn run() -> anyhow::Result<()> {
     startup_phase_build_tauri_app(service)?.run(startup_phase_exit_shutdown_handler(app_service));
 
     Ok(())
+}
+
+pub async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
+    headless::run_browser_backend(port).await
 }
 
 #[cfg(test)]
@@ -482,6 +503,26 @@ mod tests {
         ));
         let error = result.expect_err("panic in worker should map to join failure");
         assert!(error.to_string().contains("test-join worker join failure"));
+    }
+
+    #[tokio::test]
+    async fn run_service_blocking_tokio_propagates_operation_error() {
+        let result = run_service_blocking_tokio("tokio-test-op", || -> anyhow::Result<()> {
+            Err(anyhow!("service failure"))
+        })
+        .await;
+        let error = result.expect_err("service error should propagate");
+        assert!(error.to_string().contains("service failure"));
+    }
+
+    #[tokio::test]
+    async fn run_service_blocking_tokio_maps_join_failures() {
+        let result = run_service_blocking_tokio("tokio-test-join", || -> anyhow::Result<()> {
+            panic!("simulated join panic")
+        })
+        .await;
+        let error = result.expect_err("panic in worker should map to join failure");
+        assert!(error.to_string().contains("tokio-test-join worker join failure"));
     }
 
     #[test]
