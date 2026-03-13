@@ -150,6 +150,13 @@ pub struct GlobalGitConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatSettings {
+    #[serde(default)]
+    pub show_thinking_messages: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct HookSet {
     #[serde(default)]
     pub pre_start: Vec<String>,
@@ -367,6 +374,8 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub git: GlobalGitConfig,
     #[serde(default)]
+    pub chat: ChatSettings,
+    #[serde(default)]
     pub global_prompt_overrides: PromptOverrides,
     #[serde(default)]
     pub repos: HashMap<String, RepoConfig>,
@@ -381,6 +390,7 @@ impl Default for GlobalConfig {
             active_repo: None,
             theme: default_theme(),
             git: GlobalGitConfig::default(),
+            chat: ChatSettings::default(),
             global_prompt_overrides: PromptOverrides::default(),
             repos: HashMap::new(),
             recent_repos: Vec::new(),

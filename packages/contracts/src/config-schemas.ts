@@ -9,6 +9,10 @@ const DEFAULT_SOFT_GUARDRAILS = {
   backoffSeconds: 30,
 } as const;
 
+const DEFAULT_CHAT_SETTINGS = {
+  showThinkingMessages: false,
+} as const;
+
 const nullableToOptional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
 
@@ -67,10 +71,16 @@ export const repoConfigSchema = z.object({
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
 
+export const chatSettingsSchema = z.object({
+  showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
+});
+export type ChatSettings = z.infer<typeof chatSettingsSchema>;
+
 export const globalConfigSchema = z.object({
   version: z.literal(1),
   activeRepo: z.string().optional(),
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
+  chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   recentRepos: z.array(z.string()).default([]),
@@ -79,6 +89,7 @@ export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 
 export const settingsSnapshotSchema = z.object({
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
+  chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   repos: z.record(z.string(), repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });

@@ -319,6 +319,9 @@ describe("use-repo-settings-operations", () => {
       git: {
         defaultMergeMethod: "merge_commit" as const,
       },
+      chat: {
+        showThinkingMessages: false,
+      },
       repos: {},
       globalPromptOverrides: {},
     }));
@@ -339,6 +342,9 @@ describe("use-repo-settings-operations", () => {
       await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
         git: {
           defaultMergeMethod: "merge_commit",
+        },
+        chat: {
+          showThinkingMessages: false,
         },
         repos: {},
         globalPromptOverrides: {},
@@ -368,6 +374,9 @@ describe("use-repo-settings-operations", () => {
     const snapshot = {
       git: {
         defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
       },
       repos: {},
       globalPromptOverrides: {},
@@ -426,6 +435,9 @@ describe("use-repo-settings-operations", () => {
     const snapshot = {
       git: {
         defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
       },
       repos: {
         "/repo-a": {

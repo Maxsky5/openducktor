@@ -34,6 +34,9 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   git: {
     defaultMergeMethod: "merge_commit" as const,
   },
+  chat: {
+    showThinkingMessages: false,
+  },
   repos: {},
   globalPromptOverrides: {} as RepoPromptOverrides,
 }));
@@ -281,6 +284,9 @@ describe("KanbanPage session start modal flow", () => {
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
       git: {
         defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
       },
       repos: {},
       globalPromptOverrides: {},

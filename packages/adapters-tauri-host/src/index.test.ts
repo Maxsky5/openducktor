@@ -396,10 +396,20 @@ describe("TauriHostClient", () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_get_settings_snapshot") {
         return {
+          git: {
+            defaultMergeMethod: "merge_commit",
+          },
+          chat: {
+            showThinkingMessages: false,
+          },
           repos: {
             "/repo": {
+              defaultRuntimeKind: "opencode",
               branchPrefix: "obp",
               defaultTargetBranch: { remote: "origin", branch: "main" },
+              git: {
+                providers: {},
+              },
               trustedHooks: false,
               hooks: { preStart: [], postComplete: [] },
               worktreeFileCopies: [],
@@ -440,11 +450,20 @@ describe("TauriHostClient", () => {
     });
 
     const result = await client.workspaceSaveSettingsSnapshot({
+      git: {
+        defaultMergeMethod: "merge_commit",
+      },
+      chat: {
+        showThinkingMessages: false,
+      },
       repos: {
         "/repo": {
           defaultRuntimeKind: "opencode",
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },
+          git: {
+            providers: {},
+          },
           trustedHooks: false,
           hooks: { preStart: [], postComplete: [] },
           worktreeFileCopies: [],
@@ -461,11 +480,20 @@ describe("TauriHostClient", () => {
         command: "workspace_save_settings_snapshot",
         args: {
           snapshot: {
+            git: {
+              defaultMergeMethod: "merge_commit",
+            },
+            chat: {
+              showThinkingMessages: false,
+            },
             repos: {
               "/repo": {
                 defaultRuntimeKind: "opencode",
                 branchPrefix: "obp",
                 defaultTargetBranch: { remote: "origin", branch: "main" },
+                git: {
+                  providers: {},
+                },
                 trustedHooks: false,
                 hooks: { preStart: [], postComplete: [] },
                 worktreeFileCopies: [],
