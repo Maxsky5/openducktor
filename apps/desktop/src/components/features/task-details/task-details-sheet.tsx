@@ -13,6 +13,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { canDetectTaskPullRequest } from "@/lib/task-display";
 
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "set_spec",
@@ -30,6 +31,7 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
 export function TaskDetailsSheet({
   task,
   allTasks,
+  runs,
   open,
   onOpenChange,
   workflowActionsEnabled = true,
@@ -43,6 +45,10 @@ export function TaskDetailsSheet({
   onResumeDeferred,
   onHumanApprove,
   onHumanRequestChanges,
+  onDetectPullRequest,
+  onUnlinkPullRequest,
+  detectingPullRequestTaskId = null,
+  unlinkingPullRequestTaskId = null,
   onDelete,
 }: TaskDetailsSheetProps): ReactElement {
   const viewModel = useTaskDetailsSheetViewModel({
@@ -80,6 +86,8 @@ export function TaskDetailsSheet({
     );
   }
 
+  const canDetectPullRequestForTask = canDetectTaskPullRequest(task, runs);
+
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -93,6 +101,18 @@ export function TaskDetailsSheet({
             task={task}
             subtasksCount={viewModel.subtasks.length}
             taskLabels={viewModel.taskLabels}
+            {...(onDetectPullRequest && canDetectPullRequestForTask
+              ? {
+                  onDetectPullRequest: () => onDetectPullRequest(task.id),
+                }
+              : {})}
+            {...(onUnlinkPullRequest
+              ? {
+                  onUnlinkPullRequest: () => onUnlinkPullRequest(task.id),
+                }
+              : {})}
+            {...(detectingPullRequestTaskId === task.id ? { isDetectingPullRequest: true } : {})}
+            {...(unlinkingPullRequestTaskId === task.id ? { isUnlinkingPullRequest: true } : {})}
           />
         </SheetHeader>
 

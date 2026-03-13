@@ -1,8 +1,9 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RunSummary, TaskCard } from "@openducktor/contracts";
 
 export type TaskDetailsSheetProps = {
   task: TaskCard | null;
   allTasks: TaskCard[];
+  runs: RunSummary[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workflowActionsEnabled?: boolean;
@@ -16,5 +17,9 @@ export type TaskDetailsSheetProps = {
   onResumeDeferred?: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
+  onDetectPullRequest?: (taskId: string) => void;
+  onUnlinkPullRequest?: (taskId: string) => void;
+  detectingPullRequestTaskId?: string | null;
+  unlinkingPullRequestTaskId?: string | null;
   onDelete?: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
 };

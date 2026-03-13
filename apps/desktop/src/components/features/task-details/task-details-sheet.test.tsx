@@ -55,6 +55,7 @@ describe("TaskDetailsSheet", () => {
       createElement(TaskDetailsSheet, {
         task,
         allTasks: [task],
+        runs: [],
         open: true,
         onOpenChange: () => {},
       }),

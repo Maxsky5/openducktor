@@ -101,6 +101,7 @@ export type KanbanPageTaskComposerModel = {
 
 export type KanbanPageTaskDetailsControllerModel = {
   allTasks: TaskCard[];
+  runs: RunSummary[];
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -111,6 +112,10 @@ export type KanbanPageTaskDetailsControllerModel = {
   onResumeDeferred: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
+  onDetectPullRequest: (taskId: string) => void;
+  onUnlinkPullRequest: (taskId: string) => void;
+  detectingPullRequestTaskId: string | null;
+  unlinkingPullRequestTaskId: string | null;
   onDelete: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
 };
 

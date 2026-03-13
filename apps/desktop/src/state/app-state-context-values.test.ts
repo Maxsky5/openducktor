@@ -83,9 +83,13 @@ describe("app-state-context-values", () => {
     };
     const tasksValue: TasksStateContextValue = {
       isLoadingTasks: false,
+      detectingPullRequestTaskId: null,
+      unlinkingPullRequestTaskId: null,
       tasks: [],
       runs: [],
       refreshTasks: async () => {},
+      syncPullRequests: async (_taskId: string) => {},
+      unlinkPullRequest: async (_taskId: string) => {},
       createTask: async () => {},
       updateTask: async () => {},
       deleteTask: async () => {},

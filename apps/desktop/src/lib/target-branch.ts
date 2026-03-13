@@ -25,9 +25,25 @@ export const normalizeTargetBranch = (
     };
   }
 
+  let normalizedBranch = branch;
+  let normalizedRemote = remote;
+  if (normalizedBranch.startsWith("refs/heads/")) {
+    normalizedBranch = normalizedBranch.slice("refs/heads/".length);
+  } else if (normalizedBranch.startsWith("refs/remotes/")) {
+    const remoteRef = normalizedBranch.slice("refs/remotes/".length);
+    const slashIndex = remoteRef.indexOf("/");
+    if (slashIndex > 0) {
+      normalizedRemote ??= remoteRef.slice(0, slashIndex);
+      normalizedBranch = remoteRef.slice(slashIndex + 1);
+    }
+  }
+  if (normalizedRemote && normalizedBranch.startsWith(`${normalizedRemote}/`)) {
+    normalizedBranch = normalizedBranch.slice(normalizedRemote.length + 1);
+  }
+
   return {
-    ...(remote ? { remote } : {}),
-    branch,
+    ...(normalizedRemote ? { remote: normalizedRemote } : {}),
+    branch: normalizedBranch,
   };
 };
 

@@ -15,6 +15,17 @@ describe("target-branch helpers", () => {
       remote: "upstream",
       branch: "release",
     });
+    expect(normalizeTargetBranch({ remote: "origin", branch: "origin/main" })).toEqual({
+      remote: "origin",
+      branch: "main",
+    });
+    expect(normalizeTargetBranch({ branch: "refs/remotes/upstream/release" })).toEqual({
+      remote: "upstream",
+      branch: "release",
+    });
+    expect(normalizeTargetBranch({ branch: "refs/heads/release/2026.03" })).toEqual({
+      branch: "release/2026.03",
+    });
     expect(normalizeTargetBranch({ remote: "origin", branch: "" })).toEqual(DEFAULT_TARGET_BRANCH);
   });
 

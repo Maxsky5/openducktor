@@ -26,7 +26,11 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     tasks,
     runs,
     refreshTasks,
+    syncPullRequests,
+    unlinkPullRequest,
     isLoadingTasks,
+    detectingPullRequestTaskId,
+    unlinkingPullRequestTaskId,
     deleteTask,
     deferTask,
     resumeDeferredTask,
@@ -65,6 +69,18 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
   }, [refreshTasks]);
+  const onDetectPullRequest = useCallback(
+    (taskId: string): void => {
+      void syncPullRequests(taskId).catch(() => undefined);
+    },
+    [syncPullRequests],
+  );
+  const onUnlinkPullRequest = useCallback(
+    (taskId: string): void => {
+      void unlinkPullRequest(taskId).catch(() => undefined);
+    },
+    [unlinkPullRequest],
+  );
   const { taskApprovalModal, openTaskApproval } = useTaskApprovalFlow({
     activeRepo,
     tasks,
@@ -113,6 +129,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
     taskComposer: taskDialogs.taskComposer,
     taskDetailsController: {
       allTasks: tasks,
+      runs,
       onPlan,
       onQaStart,
       onQaOpen,
@@ -127,6 +144,10 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
       },
       onHumanApprove,
       onHumanRequestChanges,
+      onDetectPullRequest,
+      onUnlinkPullRequest,
+      detectingPullRequestTaskId,
+      unlinkingPullRequestTaskId,
       onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
     },
     humanReviewFeedbackModal,
