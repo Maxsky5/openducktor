@@ -148,7 +148,7 @@ export function useAgentChatVirtualization({
   useEffect(() => {
     staticMeasurementRefByKeyRef.current.clear();
     staticRowElementByKeyRef.current.clear();
-    resetMeasuredRowHeights();
+    resetMeasuredRowMeasurements();
     setStaticMeasurementRowCount(0);
     if (prepareMeasurementsRafRef.current !== null && typeof window !== "undefined") {
       window.cancelAnimationFrame(prepareMeasurementsRafRef.current);
@@ -167,7 +167,7 @@ export function useAgentChatVirtualization({
     }
 
     setVirtualizationPreparationPhase("static");
-  }, [measurementSignature, resetMeasuredRowHeights, shouldVirtualize]);
+  }, [measurementSignature, resetMeasuredRowMeasurements, shouldVirtualize]);
 
   useEffect(() => {
     if (
