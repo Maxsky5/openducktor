@@ -14,6 +14,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 
+fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
+    path.into_os_string().into_string().map_err(|value| {
+        anyhow!(
+            "{context}: path contains non-UTF-8 data ({})",
+            PathBuf::from(value).display()
+        )
+    })
+}
+
 pub(super) struct BuildPrerequisites {
     pub(super) repo_path: String,
     pub(super) repo_config: RepoConfig,
@@ -91,10 +100,20 @@ impl AppService {
             repo_config.worktree_base_path.as_deref(),
         )
         .with_context(|| {
-            format!("Build blocked: unable to resolve effective worktree base path for {repo_path}")
-        })?
-        .to_string_lossy()
-        .to_string();
+            format!(
+                "Build blocked: unable to resolve effective worktree base path for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath in {}",
+                self.config_store.path().display()
+            )
+        })
+        .and_then(|path| {
+            path_buf_to_utf8(
+                path,
+                &format!(
+                    "Build blocked: effective worktree base path must be valid UTF-8 for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath in {}",
+                    self.config_store.path().display()
+                ),
+            )
+        })?;
 
         validate_hook_trust(repo_path.as_str(), &repo_config)?;
 
