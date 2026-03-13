@@ -19,6 +19,7 @@ export type AgentRoleOption = {
 
 export type AgentChatThreadModel = {
   session: AgentSessionState | null;
+  showThinkingMessages: boolean;
   isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;

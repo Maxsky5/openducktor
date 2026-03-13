@@ -10,6 +10,7 @@ const buildModel = () => ({
       status: "running" as const,
       draftAssistantText: "",
     }),
+    showThinkingMessages: false,
     isSessionViewLoading: false,
     roleOptions: TEST_ROLE_OPTIONS,
     agentStudioReady: true,

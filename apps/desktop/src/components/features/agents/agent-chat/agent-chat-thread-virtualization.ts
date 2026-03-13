@@ -43,10 +43,21 @@ export type AgentChatVirtualRow =
       message: AgentChatMessage;
     };
 
-export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChatVirtualRow[] {
+type BuildAgentChatVirtualRowsOptions = {
+  showThinkingMessages: boolean;
+};
+
+export function buildAgentChatVirtualRows(
+  session: AgentSessionState,
+  { showThinkingMessages }: BuildAgentChatVirtualRowsOptions,
+): AgentChatVirtualRow[] {
   const rows: AgentChatVirtualRow[] = [];
 
   for (const message of session.messages) {
+    if (message.role === "thinking" && !showThinkingMessages) {
+      continue;
+    }
+
     const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
     const turnDurationMs = assistantMeta?.durationMs;
     const shouldShowTurnDuration =
@@ -77,11 +88,13 @@ export function buildAgentChatVirtualRows(session: AgentSessionState): AgentChat
 
 export function buildAgentChatVirtualRowsSignature(
   session: AgentSessionState,
+  showThinkingMessages: boolean,
   resolveMessageIdentityToken: (message: AgentChatMessage) => number,
 ): string {
   const signatureParts: string[] = [
     session.sessionId,
     session.status,
+    showThinkingMessages ? "thinking:on" : "thinking:off",
     session.draftReasoningText,
     session.draftReasoningMessageId ?? "",
     String(session.pendingQuestions.length),

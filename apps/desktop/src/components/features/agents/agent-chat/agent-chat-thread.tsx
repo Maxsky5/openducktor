@@ -16,6 +16,7 @@ import { useAgentChatVirtualization } from "./use-agent-chat-virtualization";
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     session,
+    showThinkingMessages,
     isSessionViewLoading,
     agentStudioReady,
     blockedReason,
@@ -48,6 +49,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     activeSessionId,
     canRenderVirtualRows,
     hasRenderableSessionRows,
+    hasSessionHistory,
     isPreparingVirtualization,
     registerStaticMeasurementRowElement,
     shouldVirtualize,
@@ -56,6 +58,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     virtualizer,
   } = useAgentChatVirtualization({
     session,
+    showThinkingMessages,
     messagesContainerRef,
   });
   const scrollVersion = useMemo(() => {
@@ -233,7 +236,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
                 {renderThreadRow(row, { measureStaticRow: shouldVirtualize })}
               </Fragment>
             ))
-          ) : (
+          ) : hasSessionHistory ? null : (
             <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
               Loading session history...
             </div>

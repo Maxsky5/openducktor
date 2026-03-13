@@ -14,6 +14,7 @@ import {
 
 type UseAgentChatVirtualizationInput = {
   session: AgentSessionState | null;
+  showThinkingMessages: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
 };
 
@@ -25,7 +26,7 @@ type AgentChatVirtualRowsToRenderEntry = {
 };
 
 type RetainedVirtualWindowState = {
-  sessionId: string | null;
+  rowModelSignature: string | null;
   virtualItems: VirtualItem[];
 };
 
@@ -33,6 +34,7 @@ type UseAgentChatVirtualizationResult = {
   activeSessionId: string | null;
   canRenderVirtualRows: boolean;
   hasRenderableSessionRows: boolean;
+  hasSessionHistory: boolean;
   isPreparingVirtualization: boolean;
   registerStaticMeasurementRowElement: (rowKey: string) => RefCallback<HTMLDivElement>;
   shouldVirtualize: boolean;
@@ -45,6 +47,12 @@ type UseAgentChatVirtualRowsResult = {
   activeSessionId: string | null;
   shouldVirtualize: boolean;
   virtualRows: AgentChatVirtualRow[];
+  virtualRowsSignature: string | null;
+};
+
+type UseAgentChatVirtualRowsInput = {
+  session: AgentSessionState | null;
+  showThinkingMessages: boolean;
 };
 
 type UseVirtualRowMeasurementsInput = {
@@ -78,9 +86,11 @@ const CHAT_VIRTUALIZATION_MAX_REVEAL_FRAMES = 24;
 
 export function useAgentChatVirtualization({
   session,
+  showThinkingMessages,
   messagesContainerRef,
 }: UseAgentChatVirtualizationInput): UseAgentChatVirtualizationResult {
-  const { activeSessionId, shouldVirtualize, virtualRows } = useAgentChatVirtualRows(session);
+  const { activeSessionId, shouldVirtualize, virtualRows, virtualRowsSignature } =
+    useAgentChatVirtualRows({ session, showThinkingMessages });
   const {
     estimateRowSize,
     measureStaticRowElement,
@@ -97,8 +107,12 @@ export function useAgentChatVirtualization({
     if (!shouldVirtualize) {
       return "";
     }
-    return [activeSessionId ?? "none", ...virtualRows.map((row) => row.key)].join("\u001f");
-  }, [activeSessionId, shouldVirtualize, virtualRows]);
+    return [
+      activeSessionId ?? "none",
+      showThinkingMessages ? "thinking:on" : "thinking:off",
+      ...virtualRows.map((row) => row.key),
+    ].join("\u001f");
+  }, [activeSessionId, shouldVirtualize, showThinkingMessages, virtualRows]);
   const staticRowElementByKeyRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const staticMeasurementRefByKeyRef = useRef<Map<string, RefCallback<HTMLDivElement>>>(new Map());
   const prepareMeasurementsRafRef = useRef<number | null>(null);
@@ -122,16 +136,19 @@ export function useAgentChatVirtualization({
     activeSessionId,
     shouldVirtualize,
     virtualRows,
+    virtualRowsSignature,
     virtualItems: virtualizer.getVirtualItems(),
   });
   const canRenderVirtualRows = shouldVirtualize && virtualizationPreparationPhase === "ready";
   const hasRenderableSessionRows = virtualRows.length > 0;
+  const hasSessionHistory = session !== null && session.messages.length > 0;
   const isPreparingVirtualization =
     shouldVirtualize && !canRenderVirtualRows && typeof window !== "undefined";
 
   useEffect(() => {
     staticMeasurementRefByKeyRef.current.clear();
     staticRowElementByKeyRef.current.clear();
+    resetMeasuredRowHeights();
     setStaticMeasurementRowCount(0);
     if (prepareMeasurementsRafRef.current !== null && typeof window !== "undefined") {
       window.cancelAnimationFrame(prepareMeasurementsRafRef.current);
@@ -150,7 +167,7 @@ export function useAgentChatVirtualization({
     }
 
     setVirtualizationPreparationPhase("static");
-  }, [measurementSignature, shouldVirtualize]);
+  }, [measurementSignature, resetMeasuredRowHeights, shouldVirtualize]);
 
   useEffect(() => {
     if (
@@ -320,6 +337,7 @@ export function useAgentChatVirtualization({
     activeSessionId,
     canRenderVirtualRows,
     hasRenderableSessionRows,
+    hasSessionHistory,
     isPreparingVirtualization,
     registerStaticMeasurementRowElement,
     shouldVirtualize,
@@ -329,7 +347,10 @@ export function useAgentChatVirtualization({
   };
 }
 
-function useAgentChatVirtualRows(session: AgentSessionState | null): UseAgentChatVirtualRowsResult {
+function useAgentChatVirtualRows({
+  session,
+  showThinkingMessages,
+}: UseAgentChatVirtualRowsInput): UseAgentChatVirtualRowsResult {
   const messageIdentityTokenByMessageRef = useRef<WeakMap<AgentChatMessage, number>>(new WeakMap());
   const nextMessageIdentityTokenRef = useRef(1);
   const virtualRowsCacheRef = useRef<{ signature: string | null; rows: AgentChatVirtualRow[] }>({
@@ -348,7 +369,7 @@ function useAgentChatVirtualRows(session: AgentSessionState | null): UseAgentCha
     return nextToken;
   }, []);
   const virtualRowsSignature = session
-    ? buildAgentChatVirtualRowsSignature(session, resolveMessageIdentityToken)
+    ? buildAgentChatVirtualRowsSignature(session, showThinkingMessages, resolveMessageIdentityToken)
     : null;
   const virtualRows = useMemo(() => {
     const cached = virtualRowsCacheRef.current;
@@ -356,13 +377,13 @@ function useAgentChatVirtualRows(session: AgentSessionState | null): UseAgentCha
       return cached.rows;
     }
 
-    const nextRows = session ? buildAgentChatVirtualRows(session) : [];
+    const nextRows = session ? buildAgentChatVirtualRows(session, { showThinkingMessages }) : [];
     virtualRowsCacheRef.current = {
       signature: virtualRowsSignature,
       rows: nextRows,
     };
     return nextRows;
-  }, [session, virtualRowsSignature]);
+  }, [session, showThinkingMessages, virtualRowsSignature]);
   const shouldVirtualize =
     virtualRows.length >= AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT &&
     session !== null &&
@@ -373,6 +394,7 @@ function useAgentChatVirtualRows(session: AgentSessionState | null): UseAgentCha
     activeSessionId,
     shouldVirtualize,
     virtualRows,
+    virtualRowsSignature,
   };
 }
 
@@ -660,15 +682,17 @@ function useVirtualRowsToRender({
   activeSessionId,
   shouldVirtualize,
   virtualRows,
+  virtualRowsSignature,
   virtualItems,
 }: {
   activeSessionId: string | null;
   shouldVirtualize: boolean;
   virtualRows: AgentChatVirtualRow[];
+  virtualRowsSignature: string | null;
   virtualItems: VirtualItem[];
 }): AgentChatVirtualRowsToRenderEntry[] {
   const lastNonEmptyWindowRef = useRef<RetainedVirtualWindowState>({
-    sessionId: null,
+    rowModelSignature: null,
     virtualItems: [],
   });
 
@@ -677,6 +701,7 @@ function useVirtualRowsToRender({
       activeSessionId,
       previousWindowState: lastNonEmptyWindowRef.current,
       rowCount: virtualRows.length,
+      rowModelSignature: virtualRowsSignature,
       shouldVirtualize,
       virtualItems,
     });
@@ -691,19 +716,21 @@ function useVirtualRowsToRender({
         return { row, virtualItem };
       })
       .filter((entry): entry is AgentChatVirtualRowsToRenderEntry => entry !== null);
-  }, [activeSessionId, shouldVirtualize, virtualItems, virtualRows]);
+  }, [activeSessionId, shouldVirtualize, virtualItems, virtualRows, virtualRowsSignature]);
 }
 
 export function resolveRetainedVirtualWindow({
   activeSessionId,
   previousWindowState,
   rowCount,
+  rowModelSignature,
   shouldVirtualize,
   virtualItems,
 }: {
   activeSessionId: string | null;
   previousWindowState: RetainedVirtualWindowState;
   rowCount: number;
+  rowModelSignature: string | null;
   shouldVirtualize: boolean;
   virtualItems: VirtualItem[];
 }): {
@@ -713,7 +740,7 @@ export function resolveRetainedVirtualWindow({
   if (!shouldVirtualize || !activeSessionId) {
     return {
       nextWindowState: {
-        sessionId: null,
+        rowModelSignature: null,
         virtualItems: [],
       },
       resolvedVirtualItems: [],
@@ -727,17 +754,17 @@ export function resolveRetainedVirtualWindow({
   if (resolvedVirtualItems.length > 0) {
     return {
       nextWindowState: {
-        sessionId: activeSessionId,
+        rowModelSignature,
         virtualItems: resolvedVirtualItems,
       },
       resolvedVirtualItems,
     };
   }
 
-  if (previousWindowState.sessionId !== activeSessionId) {
+  if (previousWindowState.rowModelSignature !== rowModelSignature) {
     return {
       nextWindowState: {
-        sessionId: activeSessionId,
+        rowModelSignature,
         virtualItems: [],
       },
       resolvedVirtualItems: [],
@@ -749,7 +776,7 @@ export function resolveRetainedVirtualWindow({
   });
   return {
     nextWindowState: {
-      sessionId: activeSessionId,
+      rowModelSignature,
       virtualItems: retainedVirtualItems,
     },
     resolvedVirtualItems: retainedVirtualItems,
