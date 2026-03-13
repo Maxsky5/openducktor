@@ -65,14 +65,20 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("scrollMessagesContainerToBottom repins the latest rows after layout changes", () => {
-    const scrollTo = mock(() => {});
     const container = {
       dataset: {},
       clientHeight: 320,
       scrollHeight: 960,
-      scrollTo,
       scrollTop: 40,
     } as unknown as HTMLDivElement;
+    const scrollTo = mock((first?: ScrollToOptions | number, second?: number) => {
+      if (typeof first === "number") {
+        container.scrollTop = second ?? container.scrollTop;
+        return;
+      }
+      container.scrollTop = first?.top ?? container.scrollTop;
+    });
+    container.scrollTo = scrollTo;
 
     scrollMessagesContainerToBottom(container);
 

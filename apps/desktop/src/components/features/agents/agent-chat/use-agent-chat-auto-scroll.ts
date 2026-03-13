@@ -92,7 +92,6 @@ export function useAgentChatAutoScroll({
           top: clampedTop,
           behavior: "auto",
         });
-        container.scrollTop = clampedTop;
       };
 
       if (shouldVirtualize && virtualRowsCount > 0) {

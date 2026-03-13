@@ -103,6 +103,22 @@ export function buildAgentChatVirtualRowsSignature(
   return signatureParts.join("\u001f");
 }
 
+export const resolveAgentChatVirtualRowGapPx = (index: number, rowCount: number): number => {
+  return index < rowCount - 1 ? AGENT_CHAT_VIRTUAL_ROW_GAP_PX : 0;
+};
+
+export const resolveAgentChatVirtualRowSize = ({
+  index,
+  rowCount,
+  rowHeight,
+}: {
+  index: number;
+  rowCount: number;
+  rowHeight: number;
+}): number => {
+  return Math.max(0, rowHeight) + resolveAgentChatVirtualRowGapPx(index, rowCount);
+};
+
 export function buildVirtualRowLayout({ itemHeights, gapPx }: BuildVirtualRowLayoutArgs): {
   itemOffsets: number[];
   totalHeight: number;

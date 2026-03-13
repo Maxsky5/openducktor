@@ -8,6 +8,8 @@ import {
   findVirtualWindowRange,
   getVirtualWindowEdgeOffsets,
   normalizeVirtualWindowRange,
+  resolveAgentChatVirtualRowGapPx,
+  resolveAgentChatVirtualRowSize,
 } from "./agent-chat-thread-virtualization";
 
 const createMessageIdentityResolver = (): ((message: AgentChatMessage) => number) => {
@@ -178,6 +180,13 @@ describe("agent-chat-thread virtualization helpers", () => {
     const rows = buildAgentChatVirtualRows(session);
 
     expect(rows).toEqual([]);
+  });
+
+  test("row size helpers include the virtual gap for every row except the last", () => {
+    expect(resolveAgentChatVirtualRowGapPx(0, 3)).toBe(4);
+    expect(resolveAgentChatVirtualRowGapPx(2, 3)).toBe(0);
+    expect(resolveAgentChatVirtualRowSize({ index: 0, rowCount: 3, rowHeight: 80 })).toBe(84);
+    expect(resolveAgentChatVirtualRowSize({ index: 2, rowCount: 3, rowHeight: 80 })).toBe(80);
   });
 
   test("buildAgentChatVirtualRows skips turn duration rows for non-final assistant messages", () => {
