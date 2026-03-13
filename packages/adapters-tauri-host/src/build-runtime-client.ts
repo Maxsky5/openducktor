@@ -19,6 +19,7 @@ import {
   type TaskCard,
   taskApprovalContextSchema,
   taskCardSchema,
+  taskPullRequestDetectResultSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
@@ -211,6 +212,23 @@ export const taskPullRequestUpsert = async (
   return pullRequestSchema.parse(payload);
 };
 
+export const taskPullRequestUnlink = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+): Promise<{ ok: boolean }> => {
+  return invokeFn<{ ok: boolean }>("task_pull_request_unlink", { repoPath, taskId });
+};
+
+export const taskPullRequestDetect = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  taskId: string,
+) => {
+  const payload = await invokeFn<unknown>("task_pull_request_detect", { repoPath, taskId });
+  return taskPullRequestDetectResultSchema.parse(payload);
+};
+
 export const repoPullRequestSync = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -326,6 +344,18 @@ export class TauriAgentClient {
     const pullRequest = await taskPullRequestUpsert(this.invokeFn, repoPath, taskId, title, body);
     this.metadataCache?.invalidate(repoPath, taskId);
     return pullRequest;
+  }
+
+  async taskPullRequestUnlink(repoPath: string, taskId: string): Promise<{ ok: boolean }> {
+    const result = await taskPullRequestUnlink(this.invokeFn, repoPath, taskId);
+    this.metadataCache?.invalidate(repoPath, taskId);
+    return result;
+  }
+
+  async taskPullRequestDetect(repoPath: string, taskId: string) {
+    const result = await taskPullRequestDetect(this.invokeFn, repoPath, taskId);
+    this.metadataCache?.invalidate(repoPath, taskId);
+    return result;
   }
 
   async repoPullRequestSync(repoPath: string): Promise<{ ok: boolean }> {

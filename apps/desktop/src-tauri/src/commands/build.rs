@@ -5,6 +5,7 @@ use crate::{
 use host_application::{BuildResponseAction, CleanupMode};
 use host_domain::{
     AgentRuntimeKind, GitMergeMethod, PullRequestRecord, RunSummary, TaskApprovalContext, TaskCard,
+    TaskPullRequestDetectResult,
 };
 use tauri::{AppHandle, State};
 
@@ -147,6 +148,29 @@ pub async fn task_pull_request_upsert(
         &input.title,
         &input.body,
     ))
+}
+
+#[tauri::command]
+pub async fn task_pull_request_unlink(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<serde_json::Value, String> {
+    as_error(
+        state
+            .service
+            .task_pull_request_unlink(&repo_path, &task_id)
+            .map(|ok| serde_json::json!({ "ok": ok })),
+    )
+}
+
+#[tauri::command]
+pub async fn task_pull_request_detect(
+    state: State<'_, AppState>,
+    repo_path: String,
+    task_id: String,
+) -> Result<TaskPullRequestDetectResult, String> {
+    as_error(state.service.task_pull_request_detect(&repo_path, &task_id))
 }
 
 #[tauri::command]

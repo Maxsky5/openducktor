@@ -175,6 +175,12 @@ describe("TauriHostClient", () => {
       "buildBlocked",
       "buildResumed",
       "buildCompleted",
+      "taskApprovalContextGet",
+      "taskDirectMerge",
+      "taskPullRequestUpsert",
+      "taskPullRequestUnlink",
+      "taskPullRequestDetect",
+      "repoPullRequestSync",
       "humanRequestChanges",
       "humanApprove",
       "buildRespond",
@@ -1198,20 +1204,35 @@ describe("TauriHostClient", () => {
       if (command === "task_pull_request_upsert") {
         return {
           providerId: "github",
-          repository: {
-            host: "github.com",
-            owner: "openai",
-            name: "openducktor",
-          },
           number: 17,
           url: "https://github.com/openai/openducktor/pull/17",
-          title: "PR title",
-          workingDirectory: "/repo/worktrees/task-1",
-          sourceBranch: "odt/task-1",
-          targetBranch: "main",
           state: "open",
           createdAt: "2026-02-20T10:00:00Z",
           updatedAt: "2026-02-20T10:00:00Z",
+          lastSyncedAt: "2026-02-20T10:00:00Z",
+          mergedAt: null,
+          closedAt: null,
+        };
+      }
+      if (command === "task_pull_request_unlink") {
+        return {
+          ok: true,
+        };
+      }
+      if (command === "task_pull_request_detect") {
+        return {
+          outcome: "linked",
+          pullRequest: {
+            providerId: "github",
+            number: 17,
+            url: "https://github.com/openai/openducktor/pull/17",
+            state: "open",
+            createdAt: "2026-02-20T10:00:00Z",
+            updatedAt: "2026-02-20T10:00:00Z",
+            lastSyncedAt: "2026-02-20T10:00:00Z",
+            mergedAt: null,
+            closedAt: null,
+          },
         };
       }
       if (command === "repo_pull_request_sync") {
@@ -1227,14 +1248,24 @@ describe("TauriHostClient", () => {
     await client.taskPullRequestUpsert("/repo", "task-1", "Title", "Body");
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V3");
 
-    await client.repoPullRequestSync("/repo");
+    await client.taskPullRequestUnlink("/repo", "task-1");
     expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V4");
+
+    await client.taskPullRequestDetect("/repo", "task-1");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V5");
+
+    await client.repoPullRequestSync("/repo");
+    expect((await client.specGet("/repo", "task-1")).markdown).toBe("Spec V6");
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "task_metadata_get",
       "task_direct_merge",
       "task_metadata_get",
       "task_pull_request_upsert",
+      "task_metadata_get",
+      "task_pull_request_unlink",
+      "task_metadata_get",
+      "task_pull_request_detect",
       "task_metadata_get",
       "repo_pull_request_sync",
       "task_metadata_get",

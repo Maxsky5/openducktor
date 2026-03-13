@@ -1,10 +1,10 @@
-use crate::app_service::git_provider::{github_provider, GitHostingProvider};
+use crate::app_service::git_provider::{github_provider, GitHostingProvider, ResolvedPullRequest};
 use crate::app_service::service_core::AppService;
 use anyhow::{anyhow, Result};
 use host_domain::{
     now_rfc3339, DirectMergeRecord, GitDiffScope, GitMergeBranchRequest, GitMergeBranchResult,
     GitMergeMethod, GitProviderAvailability, GitProviderRepository, GitTargetBranch,
-    PullRequestRecord, TaskApprovalContext, TaskCard, TaskStatus,
+    PullRequestRecord, TaskApprovalContext, TaskCard, TaskPullRequestDetectResult, TaskStatus,
 };
 use std::path::Path;
 
@@ -126,38 +126,9 @@ impl AppService {
         let approval = self.task_approval_context_get(repo_path, task_id)?;
         ensure_clean_builder_worktree(&approval)?;
         let repo_path = self.resolve_task_repo_path(repo_path)?;
-        let repo_config = self.workspace_get_repo_config(repo_path.as_str())?;
         let provider = github_provider();
-        if !provider.is_available() {
-            return Err(anyhow!(
-                "GitHub pull request support requires the gh CLI to be installed."
-            ));
-        }
-
-        let github_config = repo_config
-            .git
-            .providers
-            .get("github")
-            .cloned()
-            .unwrap_or_default();
-        if !github_config.enabled {
-            return Err(anyhow!(
-                "GitHub pull request support is not enabled for this repository."
-            ));
-        }
-        let repository = github_repository_from_config(&repo_config).ok_or_else(|| {
-            anyhow!("GitHub pull request support requires repository coordinates.")
-        })?;
+        let repository = self.github_pull_request_repository(repo_path.as_str())?;
         let remote_name = provider.resolve_remote_name(Path::new(&repo_path), &repository)?;
-        let auth_status = provider.auth_status(repository.host.as_str())?;
-        if !auth_status.authenticated {
-            return Err(anyhow!(
-                "{}",
-                auth_status.error.unwrap_or_else(|| {
-                    "GitHub authentication is not configured. Run `gh auth login`.".to_string()
-                })
-            ));
-        }
         match self.git_push_branch(
             repo_path.as_str(),
             Some(approval.working_directory.as_str()),
@@ -218,6 +189,79 @@ impl AppService {
         Ok(pull_request.record)
     }
 
+    pub fn task_pull_request_unlink(&self, repo_path: &str, task_id: &str) -> Result<bool> {
+        let context = self.load_task_context(repo_path, task_id)?;
+        ensure_pull_request_management_status(&context.task.status)?;
+        if self
+            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
+            .pull_request
+            .is_none()
+        {
+            return Err(anyhow!(
+                "Task {task_id} does not have a linked pull request."
+            ));
+        }
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        self.task_store
+            .set_pull_request(Path::new(&repo_path), task_id, None)?;
+        Ok(true)
+    }
+
+    pub fn task_pull_request_detect(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<TaskPullRequestDetectResult> {
+        let context = self.load_task_context(repo_path, task_id)?;
+        ensure_pull_request_management_status(&context.task.status)?;
+        if self
+            .task_metadata_get(context.repo.repo_path.as_str(), task_id)?
+            .pull_request
+            .is_some()
+        {
+            return Err(anyhow!("Task {task_id} already has a linked pull request."));
+        }
+        let repo_config = self.workspace_get_repo_config(context.repo.repo_path.as_str())?;
+        let working_directory = self
+            .qa_review_target_get(context.repo.repo_path.as_str(), task_id)?
+            .working_directory;
+        let current_branch = self
+            .git_port
+            .get_current_branch(Path::new(&working_directory))?;
+        if current_branch.detached {
+            return Err(anyhow!(
+                "Pull request detection requires a builder branch, but the latest builder workspace is detached."
+            ));
+        }
+        let source_branch = current_branch
+            .name
+            .ok_or_else(|| anyhow!("Pull request detection requires a builder branch name."))?;
+        let target_branch =
+            normalize_approval_target_branch(&repo_config.default_target_branch)?.checkout_branch();
+        let repo_path = self.resolve_task_repo_path(repo_path)?;
+        let provider = github_provider();
+        let repository = self.github_pull_request_repository(repo_path.as_str())?;
+        let _remote_name = provider.resolve_remote_name(Path::new(&repo_path), &repository)?;
+        let pull_request = provider.find_open_pull_request_for_branch(
+            Path::new(&repo_path),
+            &repository,
+            source_branch.as_str(),
+        )?;
+
+        let Some(pull_request) = pull_request else {
+            return Ok(TaskPullRequestDetectResult::NotFound {
+                source_branch,
+                target_branch,
+            });
+        };
+
+        let record =
+            self.store_linked_pull_request_metadata(repo_path.as_str(), task_id, pull_request)?;
+        Ok(TaskPullRequestDetectResult::Linked {
+            pull_request: record,
+        })
+    }
+
     pub fn repo_pull_request_sync(&self, repo_path: &str) -> Result<bool> {
         let repo_path = self.resolve_task_repo_path(repo_path)?;
         let tasks = self.task_store.list_tasks(Path::new(&repo_path))?;
@@ -243,7 +287,7 @@ impl AppService {
             }
             if !is_syncable_pull_request_state(pull_request.state.as_str()) {
                 continue;
-            }
+            };
 
             let Some(repository) = github_repository.as_ref() else {
                 continue;
@@ -353,6 +397,60 @@ impl AppService {
 
         Ok(())
     }
+
+    fn github_pull_request_repository(&self, repo_path: &str) -> Result<GitProviderRepository> {
+        let repo_config = self.workspace_get_repo_config(repo_path)?;
+        let provider = github_provider();
+        if !provider.is_available() {
+            return Err(anyhow!(
+                "GitHub pull request support requires the gh CLI to be installed."
+            ));
+        }
+
+        let github_config = repo_config
+            .git
+            .providers
+            .get("github")
+            .cloned()
+            .unwrap_or_default();
+        if !github_config.enabled {
+            return Err(anyhow!(
+                "GitHub pull request support is not enabled for this repository."
+            ));
+        }
+
+        let repository = github_repository_from_config(&repo_config).ok_or_else(|| {
+            anyhow!("GitHub pull request support requires repository coordinates.")
+        })?;
+        let auth_status = provider.auth_status(repository.host.as_str())?;
+        if !auth_status.authenticated {
+            return Err(anyhow!(
+                "{}",
+                auth_status.error.unwrap_or_else(|| {
+                    "GitHub authentication is not configured. Run `gh auth login`.".to_string()
+                })
+            ));
+        }
+
+        Ok(repository)
+    }
+
+    fn store_linked_pull_request_metadata(
+        &self,
+        repo_path: &str,
+        task_id: &str,
+        pull_request: ResolvedPullRequest,
+    ) -> Result<PullRequestRecord> {
+        self.task_store
+            .set_direct_merge_record(Path::new(repo_path), task_id, None)?;
+        self.task_store.set_pull_request(
+            Path::new(repo_path),
+            task_id,
+            Some(pull_request.record.clone()),
+        )?;
+
+        Ok(pull_request.record)
+    }
 }
 
 fn ensure_human_approval_status(status: &TaskStatus) -> Result<()> {
@@ -367,6 +465,19 @@ fn ensure_human_approval_status(status: &TaskStatus) -> Result<()> {
 
 fn is_terminal_task_status(status: &TaskStatus) -> bool {
     matches!(status, TaskStatus::Closed | TaskStatus::Deferred)
+}
+
+fn ensure_pull_request_management_status(status: &TaskStatus) -> Result<()> {
+    if matches!(
+        status,
+        TaskStatus::InProgress | TaskStatus::AiReview | TaskStatus::HumanReview
+    ) {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Pull request management is only available from in_progress, ai_review, or human_review."
+    ))
 }
 
 fn is_syncable_pull_request_state(state: &str) -> bool {
@@ -455,13 +566,16 @@ fn github_provider_availability(
             })),
         };
     }
-    if let Err(error) = provider.resolve_remote_name(repo_path, &to_provider_repository(repository))
-    {
+    let repository = to_provider_repository(repository);
+    if let Err(error) = provider.resolve_remote_name(repo_path, &repository) {
         return GitProviderAvailability {
             provider_id: "github".to_string(),
             enabled: true,
             available: false,
-            reason: Some(error.to_string()),
+            reason: Some(format!(
+                "No matching Git remote is configured for {}/{} on {}: {error}",
+                repository.owner, repository.name, repository.host
+            )),
         };
     }
     GitProviderAvailability {

@@ -69,6 +69,8 @@ const AGENT_METHODS = [
   "taskApprovalContextGet",
   "taskDirectMerge",
   "taskPullRequestUpsert",
+  "taskPullRequestUnlink",
+  "taskPullRequestDetect",
   "repoPullRequestSync",
   "humanRequestChanges",
   "humanApprove",
