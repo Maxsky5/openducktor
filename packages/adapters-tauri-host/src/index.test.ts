@@ -345,6 +345,8 @@ describe("TauriHostClient", () => {
           isActive: true,
           hasConfig: true,
           configuredWorktreeBasePath: "/tmp/worktrees",
+          defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+          effectiveWorktreeBasePath: "/tmp/worktrees",
         };
       }
       throw new Error(`Unexpected command: ${command}`);
@@ -443,6 +445,8 @@ describe("TauriHostClient", () => {
             isActive: true,
             hasConfig: true,
             configuredWorktreeBasePath: "/tmp/worktrees",
+            defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+            effectiveWorktreeBasePath: "/tmp/worktrees",
           },
         ];
       }

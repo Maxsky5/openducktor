@@ -19,7 +19,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   repos: {
     "/repo": {
       defaultRuntimeKind: "opencode",
-      worktreeBasePath: "/tmp/worktrees",
+      worktreeBasePath: undefined,
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {
@@ -44,6 +44,16 @@ let saveSettingsSnapshot = mock(async () => {});
 mock.module("@/state", () => ({
   useWorkspaceState: () => ({
     activeRepo: "/repo",
+    workspaces: [
+      {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+      },
+    ],
     loadSettingsSnapshot,
     detectGithubRepository: async () => null,
     saveGlobalGitConfig,
@@ -175,6 +185,51 @@ describe("useSettingsModalController", () => {
       } else {
         delete (globalThis as typeof globalThis & { window?: unknown }).window;
       }
+    }
+  });
+
+  test("keeps the override blank when unset and exposes the effective worktree path", async () => {
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      expect(harness.getLatest().selectedRepoConfig?.worktreeBasePath).toBeUndefined();
+      expect(harness.getLatest().selectedRepoDefaultWorktreeBasePath).toBe(
+        "/Users/dev/.openducktor/worktrees/repo",
+      );
+      expect(harness.getLatest().selectedRepoEffectiveWorktreeBasePath).toBe(
+        "/Users/dev/.openducktor/worktrees/repo",
+      );
+      expect(harness.getLatest().selectedRepoWorkspace?.configuredWorktreeBasePath).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("previews the draft override before the repository settings are saved", async () => {
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run(async (state) => {
+        state.updateSelectedRepoConfig((repoConfig) => ({
+          ...repoConfig,
+          worktreeBasePath: " /tmp/override-worktrees ",
+        }));
+      });
+
+      expect(harness.getLatest().selectedRepoDefaultWorktreeBasePath).toBe(
+        "/Users/dev/.openducktor/worktrees/repo",
+      );
+      expect(harness.getLatest().selectedRepoEffectiveWorktreeBasePath).toBe(
+        "/tmp/override-worktrees",
+      );
+    } finally {
+      await harness.unmount();
     }
   });
 });

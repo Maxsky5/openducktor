@@ -6,10 +6,22 @@ use super::super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{TaskStatus, TASK_METADATA_NAMESPACE};
-use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, RepoConfig};
+use host_infra_system::{
+    build_branch_name, pick_free_port, remove_worktree, resolve_effective_worktree_base_dir,
+    RepoConfig,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
+
+fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
+    path.into_os_string().into_string().map_err(|value| {
+        anyhow!(
+            "{context}: path contains non-UTF-8 data ({})",
+            PathBuf::from(value).display()
+        )
+    })
+}
 
 pub(super) struct BuildPrerequisites {
     pub(super) repo_path: String,
@@ -83,10 +95,23 @@ impl AppService {
         let repo_path = repo_path.as_str().to_string();
         let repo_config = self.config_store.repo_config(repo_path.as_str())?;
 
-        let worktree_base = repo_config.worktree_base_path.clone().ok_or_else(|| {
-            anyhow!(
-                "Build blocked: configure repos.{repo_path}.worktreeBasePath in {}",
+        let worktree_base = resolve_effective_worktree_base_dir(
+            Path::new(repo_path.as_str()),
+            repo_config.worktree_base_path.as_deref(),
+        )
+        .with_context(|| {
+            format!(
+                "Build blocked: unable to resolve effective worktree base path for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath in {}",
                 self.config_store.path().display()
+            )
+        })
+        .and_then(|path| {
+            path_buf_to_utf8(
+                path,
+                &format!(
+                    "Build blocked: effective worktree base path must be valid UTF-8 for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath in {}",
+                    self.config_store.path().display()
+                ),
             )
         })?;
 

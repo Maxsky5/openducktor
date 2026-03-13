@@ -47,8 +47,12 @@ fn update_repo_config_normalizes_blank_worktree_path() {
         )
         .expect("update config");
 
-    assert!(!updated.has_config);
+    assert!(updated.has_config);
     assert!(updated.configured_worktree_base_path.is_none());
+    assert!(updated
+        .effective_worktree_base_path
+        .as_deref()
+        .is_some_and(|path| path.contains(".openducktor/worktrees/")));
 
     let loaded = store.repo_config(&repo_str).expect("load repo config");
     assert!(loaded.worktree_base_path.is_none());
@@ -125,7 +129,10 @@ fn update_repo_config_normalizes_remote_qualified_default_target_branch_values()
         .expect("update config");
 
     let loaded = store.repo_config(&repo_str).expect("load repo config");
-    assert_eq!(loaded.default_target_branch.remote.as_deref(), Some("origin"));
+    assert_eq!(
+        loaded.default_target_branch.remote.as_deref(),
+        Some("origin")
+    );
     assert_eq!(loaded.default_target_branch.branch, "main");
     assert_eq!(loaded.default_target_branch.canonical(), "origin/main");
 }
@@ -195,8 +202,12 @@ fn load_normalizes_legacy_blank_repo_config_values() {
 
     let workspaces = store.list_workspaces().expect("list workspaces");
     assert_eq!(workspaces.len(), 1);
-    assert!(!workspaces[0].has_config);
+    assert!(workspaces[0].has_config);
     assert!(workspaces[0].configured_worktree_base_path.is_none());
+    assert!(workspaces[0]
+        .effective_worktree_base_path
+        .as_deref()
+        .is_some_and(|path| path.contains(".openducktor/worktrees/")));
 
     let config = store.load().expect("legacy config should load");
     assert!(!config.chat.show_thinking_messages);

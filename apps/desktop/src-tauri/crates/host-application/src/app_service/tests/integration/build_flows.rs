@@ -8,8 +8,12 @@ use host_domain::{
 };
 use host_infra_system::{hook_set_fingerprint, AppConfigStore, GlobalConfig, HookSet, RepoConfig};
 use serde_json::Value;
+#[cfg(unix)]
+use std::ffi::OsString;
 use std::fs;
 use std::net::TcpListener;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -17,13 +21,15 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::app_service::build_orchestrator::{BuildResponseAction, CleanupMode};
+#[cfg(not(unix))]
+use crate::app_service::test_support::remove_env_var;
 use crate::app_service::test_support::{
     build_service_with_git_state, build_service_with_store, create_failing_opencode,
     create_fake_bd, create_fake_opencode, create_orphanable_opencode, empty_patch, init_git_repo,
-    lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive,
-    remove_env_var, set_env_var, spawn_sleep_process, unique_temp_path,
-    wait_for_orphaned_opencode_process, wait_for_path_exists, wait_for_process_exit,
-    write_executable_script, write_private_file, FakeTaskStore, GitCall, TaskStoreState,
+    lock_env, make_emitter, make_session, make_task, prepend_path, process_is_alive, set_env_var,
+    spawn_sleep_process, unique_temp_path, wait_for_orphaned_opencode_process,
+    wait_for_path_exists, wait_for_process_exit, write_executable_script, write_private_file,
+    FakeTaskStore, GitCall, TaskStoreState,
 };
 use crate::app_service::{
     build_opencode_config_content, can_set_plan, default_mcp_workspace_root,
@@ -58,6 +64,32 @@ fn run_command_in(current_dir: &Path, program: &str, args: &[&str]) -> Result<()
         current_dir.display(),
         status
     ))
+}
+
+#[cfg(unix)]
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+#[cfg(unix)]
+impl EnvVarGuard {
+    fn set_os(key: &'static str, value: OsString) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, &value);
+        Self { key, previous }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.clone() {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
 }
 
 #[test]
@@ -490,11 +522,80 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
 }
 
 #[test]
-fn build_start_requires_worktree_base_path() -> Result<()> {
-    let root = unique_temp_path("build-no-worktree-base");
+fn build_start_uses_default_effective_worktree_base_path() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-default-worktree-base");
     let repo = root.join("repo");
     init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let home = root.join("home");
+    fs::create_dir_all(&home)?;
+    let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
     let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let repo_path = repo.to_string_lossy().to_string();
+    let expected_worktree_base =
+        host_infra_system::resolve_default_worktree_base_dir(repo.as_path())?;
+    let (service, _task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "bug", TaskStatus::Open)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            default_runtime_kind: "opencode".to_string(),
+            worktree_base_path: None,
+            branch_prefix: "odt".to_string(),
+            default_target_branch: host_infra_system::GitTargetBranch {
+                remote: Some("origin".to_string()),
+                branch: "main".to_string(),
+            },
+            git: Default::default(),
+            trusted_hooks: true,
+            trusted_hooks_fingerprint: None,
+            hooks: HookSet::default(),
+            worktree_file_copies: Vec::new(),
+            prompt_overrides: Default::default(),
+            agent_defaults: Default::default(),
+        },
+    )?;
+
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    assert_eq!(
+        Path::new(run.worktree_path.as_str()),
+        expected_worktree_base.join("task-1")
+    );
+
+    assert!(service.build_stop(run.run_id.as_str(), emitter.clone())?);
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn build_start_reports_home_or_override_guidance_when_default_worktree_resolution_fails(
+) -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-missing-home-worktree-guidance");
+    let repo = root.join("repo");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let config_path = config_store.path().display().to_string();
     let repo_path = repo.to_string_lossy().to_string();
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
@@ -527,6 +628,11 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
         },
     )?;
 
+    #[cfg(unix)]
+    let _home_guard = EnvVarGuard::set_os("HOME", OsString::from_vec(vec![0xFF]));
+    #[cfg(not(unix))]
+    let _home_guard = remove_env_var("HOME");
+
     let error = service
         .build_start(
             repo_path.as_str(),
@@ -534,10 +640,16 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
             "opencode",
             make_emitter(Arc::new(Mutex::new(Vec::new()))),
         )
-        .expect_err("build_start should require worktree base");
-    assert!(error
-        .to_string()
-        .contains("Build blocked: configure repos."));
+        .expect_err("missing HOME should fail default worktree resolution");
+    let message = error.to_string();
+    assert!(
+        message.contains("Build blocked: unable to resolve effective worktree base path")
+            || message.contains("Build blocked: effective worktree base path must be valid UTF-8")
+    );
+    assert!(message.contains("Ensure HOME is set or configure"));
+    assert!(message.contains("worktreeBasePath"));
+    assert!(message.contains(config_path.as_str()));
+
     let _ = fs::remove_dir_all(root);
     Ok(())
 }

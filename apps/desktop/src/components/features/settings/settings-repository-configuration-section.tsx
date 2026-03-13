@@ -13,6 +13,7 @@ import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-b
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;
+  selectedRepoEffectiveWorktreeBasePath: string | null;
   selectedRepoBranches: GitBranch[];
   selectedRepoBranchesError: string | null;
   isLoadingSettings: boolean;
@@ -26,6 +27,7 @@ type RepositoryConfigurationSectionProps = {
 
 export function RepositoryConfigurationSection({
   selectedRepoConfig,
+  selectedRepoEffectiveWorktreeBasePath,
   selectedRepoBranches,
   selectedRepoBranchesError,
   isLoadingSettings,
@@ -76,7 +78,7 @@ export function RepositoryConfigurationSection({
   return (
     <div className="grid gap-4 p-4">
       <div className="grid gap-2">
-        <Label htmlFor="repo-worktree-path">Worktree base path</Label>
+        <Label htmlFor="repo-worktree-path">Worktree base path override (optional)</Label>
         <div className="flex items-center gap-2">
           <Input
             id="repo-worktree-path"
@@ -103,6 +105,15 @@ export function RepositoryConfigurationSection({
           >
             <FolderOpen className="size-4" />
           </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Leave this blank to use the default worktree location for this repository.
+        </p>
+        <div className="rounded-md border border-border bg-muted/50 p-3">
+          <p className="text-xs font-medium text-foreground">Effective worktree path</p>
+          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+            {selectedRepoEffectiveWorktreeBasePath ?? "Not available"}
+          </p>
         </div>
       </div>
 

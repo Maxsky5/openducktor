@@ -54,6 +54,7 @@ export function SettingsModalContent({
     repoPaths,
     selectedRepoPath,
     selectedRepoConfig,
+    selectedRepoEffectiveWorktreeBasePath,
     selectedRepoBranches,
     isLoadingSelectedRepoBranches,
     selectedRepoBranchesError,
@@ -162,6 +163,7 @@ export function SettingsModalContent({
         {repositorySection === "configuration" ? (
           <RepositoryConfigurationSection
             selectedRepoConfig={selectedRepoConfig}
+            selectedRepoEffectiveWorktreeBasePath={selectedRepoEffectiveWorktreeBasePath}
             selectedRepoBranches={selectedRepoBranches}
             selectedRepoBranchesError={selectedRepoBranchesError}
             isLoadingSettings={isLoadingSettings}

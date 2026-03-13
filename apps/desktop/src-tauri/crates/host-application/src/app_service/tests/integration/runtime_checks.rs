@@ -120,6 +120,10 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
         },
     )?;
     assert!(updated.has_config);
+    assert_eq!(
+        updated.effective_worktree_base_path.as_deref(),
+        Some(worktree_base.as_str())
+    );
 
     let config = service.workspace_get_repo_config(repo_path.as_str())?;
     assert_eq!(config.branch_prefix, "odt");
@@ -142,6 +146,10 @@ fn runtime_beads_system_and_workspace_paths_are_exercised() -> Result<()> {
         Some(host_infra_system::hook_set_fingerprint(&config.hooks).as_str()),
     )?;
     assert!(trusted.has_config);
+    assert_eq!(
+        trusted.effective_worktree_base_path.as_deref(),
+        Some(worktree_base.as_str())
+    );
 
     let records = service.workspace_list()?;
     assert_eq!(records.len(), 1);

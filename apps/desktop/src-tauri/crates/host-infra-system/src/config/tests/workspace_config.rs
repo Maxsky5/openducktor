@@ -1,9 +1,46 @@
 use super::{fake_git_workspace, RepoConfig, TestStoreHarness};
 use crate::GitTargetBranch;
+use std::ffi::OsString;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
+fn lock_env() -> MutexGuard<'static, ()> {
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    ENV_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    #[cfg(unix)]
+    fn set_os(key: &'static str, value: OsString) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, &value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.clone() {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
+}
 
 #[test]
 fn workspace_add_select_and_update_persist_state() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("workspace-flow");
     let store = harness.store();
     let root = harness.root();
@@ -23,8 +60,13 @@ fn workspace_add_select_and_update_persist_state() {
 
     let added = store.add_workspace(&repo_a_str).expect("add workspace");
     assert!(added.is_active);
+    assert!(added.has_config);
     // Path should now be in canonical form
     assert_eq!(added.path, repo_a_canonical);
+    assert!(added
+        .effective_worktree_base_path
+        .as_deref()
+        .is_some_and(|path| path.contains(".openducktor/worktrees/")));
 
     store.add_workspace(&repo_b_str).expect("add second");
     let selected = store.select_workspace(&repo_a_str).expect("select");
@@ -57,6 +99,10 @@ fn workspace_add_select_and_update_persist_state() {
         updated.configured_worktree_base_path.as_deref(),
         Some(worktrees_path.as_str())
     );
+    assert_eq!(
+        updated.effective_worktree_base_path.as_deref(),
+        Some(worktrees_path.as_str())
+    );
 
     let workspaces = store.list_workspaces().expect("list workspaces");
     assert_eq!(workspaces.len(), 2);
@@ -80,6 +126,7 @@ fn workspace_add_select_and_update_persist_state() {
 
 #[test]
 fn add_workspace_rejects_missing_and_non_git_paths() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("workspace-invalid");
     let store = harness.store();
     let root = harness.root();
@@ -99,6 +146,7 @@ fn add_workspace_rejects_missing_and_non_git_paths() {
 
 #[test]
 fn select_and_repo_config_accessors_report_missing_entries() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("workspace-missing-config");
     let store = harness.store();
     let root = harness.root();
@@ -138,6 +186,7 @@ fn select_and_repo_config_accessors_report_missing_entries() {
 
 #[test]
 fn update_repo_config_rejects_unknown_workspace() {
+    let _env_lock = lock_env();
     let harness = TestStoreHarness::new("update-repo-config-missing-workspace");
     let store = harness.store();
     let root = harness.root();
@@ -150,4 +199,41 @@ fn update_repo_config_rejects_unknown_workspace() {
         .expect_err("unknown workspace should be rejected");
 
     assert!(error.to_string().contains("Workspace not found in config"));
+}
+
+#[cfg(unix)]
+#[test]
+fn explicit_worktree_override_does_not_require_home_for_workspace_records() {
+    let _env_lock = lock_env();
+
+    let harness = TestStoreHarness::new("workspace-explicit-override-without-home");
+    let store = harness.store();
+    let root = harness.root();
+    let repo = root.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+    let override_path = root.join("custom-worktrees").to_string_lossy().to_string();
+
+    store.add_workspace(&repo_str).expect("add workspace");
+    let _home_guard = EnvVarGuard::set_os("HOME", OsString::from_vec(vec![0xFF]));
+    let updated = store
+        .update_repo_config(
+            &repo_str,
+            RepoConfig {
+                worktree_base_path: Some(override_path.clone()),
+                ..RepoConfig::default()
+            },
+        )
+        .expect("explicit override should not require HOME");
+
+    assert!(updated.has_config);
+    assert_eq!(
+        updated.configured_worktree_base_path.as_deref(),
+        Some(override_path.as_str())
+    );
+    assert_eq!(updated.default_worktree_base_path, None);
+    assert_eq!(
+        updated.effective_worktree_base_path.as_deref(),
+        Some(override_path.as_str())
+    );
 }

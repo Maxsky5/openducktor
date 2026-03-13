@@ -36,6 +36,10 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
         .expect("repo config update should succeed");
     assert!(updated.is_active, "first update should mark repo active");
     assert!(updated.has_config);
+    assert_eq!(
+        updated.effective_worktree_base_path.as_deref(),
+        updated.configured_worktree_base_path.as_deref()
+    );
 
     let trusted = store
         .set_repo_trust_hooks(
@@ -47,6 +51,10 @@ fn update_repo_config_sets_active_repo_and_trust_roundtrip() {
     assert!(trusted.is_active);
     assert!(trusted.has_config);
     assert!(trusted.configured_worktree_base_path.is_some());
+    assert_eq!(
+        trusted.effective_worktree_base_path.as_deref(),
+        trusted.configured_worktree_base_path.as_deref()
+    );
 
     let repo_config = store
         .repo_config(repo_str.as_str())

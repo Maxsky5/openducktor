@@ -26,13 +26,27 @@ pub fn compute_repo_id(repo_path: &Path) -> Result<String> {
 }
 
 pub fn resolve_central_beads_dir(repo_path: &Path) -> Result<PathBuf> {
+    Ok(resolve_repo_scoped_openducktor_dir(repo_path, "beads")?.join(".beads"))
+}
+
+pub fn resolve_default_worktree_base_dir(repo_path: &Path) -> Result<PathBuf> {
+    resolve_repo_scoped_openducktor_dir(repo_path, "worktrees")
+}
+
+pub fn resolve_effective_worktree_base_dir(
+    repo_path: &Path,
+    configured_worktree_base_path: Option<&str>,
+) -> Result<PathBuf> {
+    match configured_worktree_base_path {
+        Some(configured_path) => Ok(PathBuf::from(configured_path)),
+        None => resolve_default_worktree_base_dir(repo_path),
+    }
+}
+
+fn resolve_repo_scoped_openducktor_dir(repo_path: &Path, namespace: &str) -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("Unable to resolve user home directory"))?;
     let repo_id = compute_repo_id(repo_path)?;
-    Ok(home
-        .join(".openducktor")
-        .join("beads")
-        .join(repo_id)
-        .join(".beads"))
+    Ok(home.join(".openducktor").join(namespace).join(repo_id))
 }
 
 fn canonical_or_absolute(repo_path: &Path) -> Result<PathBuf> {
@@ -81,7 +95,10 @@ fn sanitize_slug(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_repo_id, compute_repo_slug, resolve_central_beads_dir};
+    use super::{
+        compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
+        resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir,
+    };
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -151,5 +168,35 @@ mod tests {
         }
 
         panic!("failed to generate unique beads directory candidate path");
+    }
+
+    #[test]
+    fn default_worktree_base_dir_uses_expected_layout() {
+        let resolved = resolve_default_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"))
+            .expect("worktree base dir");
+        let as_string = resolved.to_string_lossy();
+        assert!(as_string.contains(".openducktor/worktrees/"));
+        assert!(!as_string.ends_with("/.beads"));
+    }
+
+    #[test]
+    fn effective_worktree_base_dir_prefers_configured_override() {
+        let override_path = "/tmp/custom-worktrees";
+        let resolved = resolve_effective_worktree_base_dir(
+            Path::new("/tmp/openducktor-test/repo"),
+            Some(override_path),
+        )
+        .expect("effective worktree base dir");
+        assert_eq!(resolved, PathBuf::from(override_path));
+    }
+
+    #[test]
+    fn effective_worktree_base_dir_uses_default_when_override_missing() {
+        let resolved =
+            resolve_effective_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"), None)
+                .expect("effective worktree base dir");
+        let expected = resolve_default_worktree_base_dir(Path::new("/tmp/openducktor-test/repo"))
+            .expect("default worktree base dir");
+        assert_eq!(resolved, expected);
     }
 }
