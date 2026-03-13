@@ -160,10 +160,8 @@ describe("use-workspace-operations", () => {
       },
     ]);
 
-    const original = {
-      gitGetCurrentBranch: host.gitGetCurrentBranch,
-      gitGetBranches: host.gitGetBranches,
-    };
+    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
+    const originalGitGetBranches = host.gitGetBranches;
     host.gitGetCurrentBranch = gitGetCurrentBranch;
     host.gitGetBranches = gitGetBranches;
 
@@ -247,8 +245,8 @@ describe("use-workspace-operations", () => {
       await act(async () => {
         renderer?.unmount();
       });
-      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
-      host.gitGetBranches = original.gitGetBranches;
+      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      host.gitGetBranches = originalGitGetBranches;
     }
   });
 
