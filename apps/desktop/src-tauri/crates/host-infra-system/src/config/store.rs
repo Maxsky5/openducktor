@@ -5,12 +5,20 @@ use super::persistence::{
     should_enforce_private_parent_permissions,
 };
 use super::types::{hook_set_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
+use crate::{resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir};
 use anyhow::{anyhow, Result};
 use host_domain::WorkspaceRecord;
 use std::path::{Path, PathBuf};
 
-fn has_configured_worktree(repo: &RepoConfig) -> bool {
-    repo.worktree_base_path.is_some()
+fn default_worktree_base_path(repo_path: &str) -> Result<String> {
+    Ok(resolve_default_worktree_base_dir(Path::new(repo_path))?
+        .to_string_lossy()
+        .to_string())
+}
+
+fn effective_worktree_base_path(repo_path: &str, repo: &RepoConfig) -> Result<String> {
+    resolve_effective_worktree_base_dir(Path::new(repo_path), repo.worktree_base_path.as_deref())
+        .map(|path| path.to_string_lossy().to_string())
 }
 
 #[derive(Debug, Clone)]
@@ -85,13 +93,8 @@ impl AppConfigStore {
         let mut records: Vec<WorkspaceRecord> = config
             .repos
             .iter()
-            .map(|(path, repo)| WorkspaceRecord {
-                path: path.clone(),
-                is_active: config.active_repo.as_deref() == Some(path.as_str()),
-                has_config: has_configured_worktree(repo),
-                configured_worktree_base_path: repo.worktree_base_path.clone(),
-            })
-            .collect();
+            .map(|(path, repo)| workspace_record_from_repo(&config, path, repo))
+            .collect::<Result<Vec<_>>>()?;
 
         records.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(records)
@@ -354,10 +357,22 @@ fn workspace_record(config: &GlobalConfig, workspace_key: &str) -> Result<Worksp
         .repos
         .get(workspace_key)
         .ok_or_else(|| anyhow!("Workspace disappeared from config"))?;
+    workspace_record_from_repo(config, workspace_key, repo)
+}
+
+fn workspace_record_from_repo(
+    config: &GlobalConfig,
+    workspace_key: &str,
+    repo: &RepoConfig,
+) -> Result<WorkspaceRecord> {
+    let default_worktree_base_path = default_worktree_base_path(workspace_key)?;
+    let effective_worktree_base_path = effective_worktree_base_path(workspace_key, repo)?;
     Ok(WorkspaceRecord {
         path: workspace_key.to_string(),
         is_active: config.active_repo.as_deref() == Some(workspace_key),
-        has_config: has_configured_worktree(repo),
+        has_config: true,
         configured_worktree_base_path: repo.worktree_base_path.clone(),
+        default_worktree_base_path: Some(default_worktree_base_path),
+        effective_worktree_base_path: Some(effective_worktree_base_path),
     })
 }

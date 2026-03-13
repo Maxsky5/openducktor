@@ -65,6 +65,8 @@ const createWorkspaceRecord = (path = "/repo-a") => ({
   isActive: true,
   hasConfig: true,
   configuredWorktreeBasePath: "/tmp/worktrees",
+  defaultWorktreeBasePath: "/tmp/default-worktrees",
+  effectiveWorktreeBasePath: "/tmp/worktrees",
 });
 
 const inputFixture: RepoSettingsInput = {

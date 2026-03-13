@@ -4,7 +4,10 @@ mod git;
 mod process;
 mod worktree;
 
-pub use beads::{compute_repo_id, compute_repo_slug, resolve_central_beads_dir};
+pub use beads::{
+    compute_repo_id, compute_repo_slug, resolve_central_beads_dir,
+    resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir,
+};
 pub use config::{
     hook_set_fingerprint, normalize_hook_set, AgentDefaults, AgentModelDefault, AppConfigStore,
     ChatSettings, GitMergeMethod, GitProviderConfig, GitProviderRepository, GitTargetBranch,

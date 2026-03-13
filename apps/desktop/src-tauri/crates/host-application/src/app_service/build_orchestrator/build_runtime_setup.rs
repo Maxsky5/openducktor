@@ -6,7 +6,10 @@ use super::super::{
 };
 use anyhow::{anyhow, Context, Result};
 use host_domain::{TaskStatus, TASK_METADATA_NAMESPACE};
-use host_infra_system::{build_branch_name, pick_free_port, remove_worktree, RepoConfig};
+use host_infra_system::{
+    build_branch_name, pick_free_port, remove_worktree, resolve_effective_worktree_base_dir,
+    RepoConfig,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
@@ -83,12 +86,15 @@ impl AppService {
         let repo_path = repo_path.as_str().to_string();
         let repo_config = self.config_store.repo_config(repo_path.as_str())?;
 
-        let worktree_base = repo_config.worktree_base_path.clone().ok_or_else(|| {
-            anyhow!(
-                "Build blocked: configure repos.{repo_path}.worktreeBasePath in {}",
-                self.config_store.path().display()
-            )
-        })?;
+        let worktree_base = resolve_effective_worktree_base_dir(
+            Path::new(repo_path.as_str()),
+            repo_config.worktree_base_path.as_deref(),
+        )
+        .with_context(|| {
+            format!("Build blocked: unable to resolve effective worktree base path for {repo_path}")
+        })?
+        .to_string_lossy()
+        .to_string();
 
         validate_hook_trust(repo_path.as_str(), &repo_config)?;
 

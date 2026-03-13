@@ -490,12 +490,25 @@ fn build_start_and_cleanup_cover_hook_failure_paths() -> Result<()> {
 }
 
 #[test]
-fn build_start_requires_worktree_base_path() -> Result<()> {
-    let root = unique_temp_path("build-no-worktree-base");
+fn build_start_uses_default_effective_worktree_base_path() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("build-default-worktree-base");
     let repo = root.join("repo");
     init_git_repo(&repo)?;
+    let fake_opencode = root.join("opencode");
+    create_fake_opencode(&fake_opencode)?;
+    let home = root.join("home");
+    fs::create_dir_all(&home)?;
+    let _home_guard = set_env_var("HOME", home.to_string_lossy().as_ref());
+    let _opencode_guard = set_env_var(
+        "OPENDUCKTOR_OPENCODE_BINARY",
+        fake_opencode.to_string_lossy().as_ref(),
+    );
+
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let repo_path = repo.to_string_lossy().to_string();
+    let expected_worktree_base =
+        host_infra_system::resolve_default_worktree_base_dir(repo.as_path())?;
     let (service, _task_state, _git_state) = build_service_with_store(
         vec![make_task("task-1", "bug", TaskStatus::Open)],
         vec![],
@@ -527,17 +540,16 @@ fn build_start_requires_worktree_base_path() -> Result<()> {
         },
     )?;
 
-    let error = service
-        .build_start(
-            repo_path.as_str(),
-            "task-1",
-            "opencode",
-            make_emitter(Arc::new(Mutex::new(Vec::new()))),
-        )
-        .expect_err("build_start should require worktree base");
-    assert!(error
-        .to_string()
-        .contains("Build blocked: configure repos."));
+    let emitter = make_emitter(Arc::new(Mutex::new(Vec::new())));
+    let run = service.build_start(repo_path.as_str(), "task-1", "opencode", emitter.clone())?;
+    assert_eq!(
+        Path::new(run.worktree_path.as_str()),
+        expected_worktree_base.join("task-1")
+    );
+
+    assert!(service.build_stop(run.run_id.as_str(), emitter.clone())?);
+    assert!(service.build_cleanup(run.run_id.as_str(), CleanupMode::Failure, emitter)?);
+
     let _ = fs::remove_dir_all(root);
     Ok(())
 }

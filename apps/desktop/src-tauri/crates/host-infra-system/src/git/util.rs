@@ -90,7 +90,10 @@ mod tests {
     #[test]
     fn checkout_branch_from_target_ref_strips_remote_tracking_prefixes() {
         assert_eq!(checkout_branch_from_target_ref("origin/main"), "main");
-        assert_eq!(checkout_branch_from_target_ref("upstream/release"), "release");
+        assert_eq!(
+            checkout_branch_from_target_ref("upstream/release"),
+            "release"
+        );
         assert_eq!(
             checkout_branch_from_target_ref("refs/remotes/upstream/release"),
             "release"

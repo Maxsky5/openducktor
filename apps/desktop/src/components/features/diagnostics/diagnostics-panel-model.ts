@@ -68,7 +68,8 @@ export const buildDiagnosticsPanelModel = (
     isLoadingChecks,
   } = input;
   const repoName = activeRepo?.split("/").filter(Boolean).at(-1) ?? "No repository";
-  const worktreeConfigured = activeWorkspace?.hasConfig ?? false;
+  const effectiveWorktreeBasePath = activeWorkspace?.effectiveWorktreeBasePath ?? null;
+  const worktreeAvailable = Boolean(effectiveWorktreeBasePath);
   const runtimeEntries = runtimeDefinitions.map((definition) => ({
     definition,
     cliHealth: runtimeCheck?.runtimes.find((entry) => entry.kind === definition.kind) ?? null,
@@ -97,7 +98,7 @@ export const buildDiagnosticsPanelModel = (
   }
 
   const setupReasons: string[] = [];
-  if (activeRepo && !worktreeConfigured) {
+  if (activeRepo && !worktreeAvailable) {
     setupReasons.push("Configure worktree path");
   }
 
@@ -113,8 +114,8 @@ export const buildDiagnosticsPanelModel = (
     key: "repository",
     title: "Repository",
     badge: {
-      label: worktreeConfigured ? "Configured" : "Needs setup",
-      variant: worktreeConfigured ? "success" : "warning",
+      label: worktreeAvailable ? "Configured" : "Needs setup",
+      variant: worktreeAvailable ? "success" : "warning",
     },
     rows: activeWorkspace
       ? [
@@ -127,7 +128,7 @@ export const buildDiagnosticsPanelModel = (
           },
           {
             label: "Worktree directory",
-            value: activeWorkspace.configuredWorktreeBasePath ?? "Not configured",
+            value: effectiveWorktreeBasePath ?? "Not available",
             breakAll: true,
             valueClassName: "text-muted-foreground",
           },

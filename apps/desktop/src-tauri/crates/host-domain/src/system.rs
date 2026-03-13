@@ -56,4 +56,6 @@ pub struct WorkspaceRecord {
     pub is_active: bool,
     pub has_config: bool,
     pub configured_worktree_base_path: Option<String>,
+    pub default_worktree_base_path: Option<String>,
+    pub effective_worktree_base_path: Option<String>,
 }

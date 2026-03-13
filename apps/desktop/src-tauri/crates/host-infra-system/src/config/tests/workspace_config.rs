@@ -23,8 +23,13 @@ fn workspace_add_select_and_update_persist_state() {
 
     let added = store.add_workspace(&repo_a_str).expect("add workspace");
     assert!(added.is_active);
+    assert!(added.has_config);
     // Path should now be in canonical form
     assert_eq!(added.path, repo_a_canonical);
+    assert!(added
+        .effective_worktree_base_path
+        .as_deref()
+        .is_some_and(|path| path.contains(".openducktor/worktrees/")));
 
     store.add_workspace(&repo_b_str).expect("add second");
     let selected = store.select_workspace(&repo_a_str).expect("select");
@@ -55,6 +60,10 @@ fn workspace_add_select_and_update_persist_state() {
     assert!(updated.has_config);
     assert_eq!(
         updated.configured_worktree_base_path.as_deref(),
+        Some(worktrees_path.as_str())
+    );
+    assert_eq!(
+        updated.effective_worktree_base_path.as_deref(),
         Some(worktrees_path.as_str())
     );
 

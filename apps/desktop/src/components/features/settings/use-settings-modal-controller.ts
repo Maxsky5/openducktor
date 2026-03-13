@@ -8,9 +8,10 @@ import type {
   RuntimeDescriptor,
   RuntimeKind,
   SettingsSnapshot,
+  WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
@@ -62,6 +63,9 @@ export type SettingsModalController = {
   repoPaths: string[];
   selectedRepoPath: string | null;
   selectedRepoConfig: RepoConfig | null;
+  selectedRepoWorkspace: WorkspaceRecord | null;
+  selectedRepoDefaultWorktreeBasePath: string | null;
+  selectedRepoEffectiveWorktreeBasePath: string | null;
   selectedRepoBranches: GitBranch[];
   isLoadingSelectedRepoBranches: boolean;
   selectedRepoBranchesError: string | null;
@@ -101,6 +105,7 @@ export type SettingsModalController = {
 export const useSettingsModalController = (open: boolean): SettingsModalController => {
   const {
     activeRepo,
+    workspaces,
     loadSettingsSnapshot,
     detectGithubRepository,
     saveGlobalGitConfig,
@@ -178,6 +183,24 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     selectedRepoPath,
     setSnapshotDraft,
   });
+
+  const selectedRepoWorkspace = useMemo(
+    () =>
+      selectedRepoPath
+        ? (workspaces.find((workspace) => workspace.path === selectedRepoPath) ?? null)
+        : null,
+    [selectedRepoPath, workspaces],
+  );
+  const selectedRepoDefaultWorktreeBasePath =
+    selectedRepoWorkspace?.defaultWorktreeBasePath ?? null;
+  const selectedRepoEffectiveWorktreeBasePath = useMemo(() => {
+    const draftWorktreeBasePath = selectedRepoConfig?.worktreeBasePath?.trim();
+    if (draftWorktreeBasePath) {
+      return draftWorktreeBasePath;
+    }
+
+    return selectedRepoDefaultWorktreeBasePath;
+  }, [selectedRepoConfig?.worktreeBasePath, selectedRepoDefaultWorktreeBasePath]);
 
   const markDirty = useCallback((section: keyof DirtySections): void => {
     setDirtySections((current) => {
@@ -437,6 +460,9 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     repoPaths,
     selectedRepoPath,
     selectedRepoConfig,
+    selectedRepoWorkspace,
+    selectedRepoDefaultWorktreeBasePath,
+    selectedRepoEffectiveWorktreeBasePath,
     selectedRepoBranches,
     isLoadingSelectedRepoBranches,
     selectedRepoBranchesError,

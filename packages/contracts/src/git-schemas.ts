@@ -5,6 +5,8 @@ export const workspaceRecordSchema = z.object({
   isActive: z.boolean(),
   hasConfig: z.boolean(),
   configuredWorktreeBasePath: z.string().nullable(),
+  defaultWorktreeBasePath: z.string().nullable(),
+  effectiveWorktreeBasePath: z.string().nullable(),
 });
 export type WorkspaceRecord = z.infer<typeof workspaceRecordSchema>;
 

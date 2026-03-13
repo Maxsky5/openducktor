@@ -138,6 +138,8 @@ const workspace = (path: string, isActive = false): WorkspaceRecord => ({
   isActive,
   hasConfig: true,
   configuredWorktreeBasePath: null,
+  defaultWorktreeBasePath: "/tmp/default-worktrees",
+  effectiveWorktreeBasePath: "/tmp/default-worktrees",
 });
 
 describe("use-workspace-operations", () => {

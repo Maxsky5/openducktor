@@ -50,6 +50,8 @@ describe("buildDiagnosticsPanelModel", () => {
         isActive: true,
         hasConfig: true,
         configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
       },
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -64,7 +66,7 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.summaryState.label).toBe("Checking...");
   });
 
-  test("returns setup-needed summary when worktree directory is missing and no critical checks fail", () => {
+  test("returns setup-needed summary when no effective worktree directory is available", () => {
     const model = buildDiagnosticsPanelModel({
       activeRepo: "/repo",
       activeWorkspace: {
@@ -72,6 +74,8 @@ describe("buildDiagnosticsPanelModel", () => {
         isActive: true,
         hasConfig: false,
         configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: null,
+        effectiveWorktreeBasePath: null,
       },
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -114,7 +118,67 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.sections[0]?.badge.label).toBe("Needs setup");
     expect(model.sections[0]?.rows).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: "Worktree directory", value: "Not configured" }),
+        expect.objectContaining({ label: "Worktree directory", value: "Not available" }),
+      ]),
+    );
+  });
+
+  test("treats repositories using the default worktree path as healthy", () => {
+    const model = buildDiagnosticsPanelModel({
+      activeRepo: "/repo",
+      activeWorkspace: {
+        path: "/repo",
+        isActive: true,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+      },
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: {
+        beadsOk: true,
+        beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
+        beadsError: null,
+      },
+      runtimeHealthByRuntime: {
+        opencode: {
+          runtimeOk: true,
+          runtimeError: null,
+          runtime: runtimeSummary,
+          mcpOk: true,
+          mcpError: null,
+          mcpServerName: "openducktor",
+          mcpServerStatus: "connected",
+          mcpServerError: null,
+          availableToolIds: [],
+          checkedAt: "2026-02-20T12:01:00.000Z",
+          errors: [],
+        },
+      },
+      isLoadingChecks: false,
+    });
+
+    expect(model.summaryState.label).toBe("Healthy");
+    expect(model.sections[0]?.badge.label).toBe("Configured");
+    expect(model.sections[0]?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Worktree directory",
+          value: "/Users/dev/.openducktor/worktrees/repo",
+        }),
       ]),
     );
   });
@@ -127,6 +191,8 @@ describe("buildDiagnosticsPanelModel", () => {
         isActive: true,
         hasConfig: true,
         configuredWorktreeBasePath: "/Users/dev/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/fairnest",
+        effectiveWorktreeBasePath: "/Users/dev/worktrees",
       },
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -193,6 +259,8 @@ describe("buildDiagnosticsPanelModel", () => {
         isActive: true,
         hasConfig: false,
         configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: null,
+        effectiveWorktreeBasePath: null,
       },
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
@@ -258,6 +326,8 @@ describe("buildDiagnosticsPanelModel", () => {
         isActive: true,
         hasConfig: true,
         configuredWorktreeBasePath: "/worktrees",
+        defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
+        effectiveWorktreeBasePath: "/worktrees",
       },
       runtimeDefinitions,
       isLoadingRuntimeDefinitions: false,
