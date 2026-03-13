@@ -15,6 +15,7 @@ import {
   normalizeRepoPath,
   shouldProbeExternalBranchChange,
   shouldReportBranchProbeError,
+  shouldResetBranchStateForRepoChange,
   shouldSkipBranchSwitch,
 } from "./workspace-operations-model";
 
@@ -106,12 +107,12 @@ export function useWorkspaceOperations({
   useEffect(() => {
     const previousActiveRepo = previousActiveRepoRef.current;
 
-    if (previousActiveRepo !== activeRepo) {
-      clearBranchData();
-    }
-
     previousActiveRepoRef.current = activeRepo;
     activeRepoRef.current = activeRepo;
+
+    if (shouldResetBranchStateForRepoChange(previousActiveRepo, activeRepo)) {
+      clearBranchData();
+    }
   }, [activeRepo, clearBranchData]);
 
   const applyWorkspaceRecords = useCallback(
