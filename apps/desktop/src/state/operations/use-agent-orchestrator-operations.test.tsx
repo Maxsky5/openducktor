@@ -19,7 +19,6 @@ const taskFixture: TaskCard = {
   id: "task-1",
   title: "Task",
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status: "open",
   priority: 2,

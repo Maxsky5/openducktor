@@ -166,7 +166,6 @@ impl AppService {
             UpdateTaskPatch {
                 title: None,
                 description: None,
-                acceptance_criteria: None,
                 notes: None,
                 status: Some(target_status),
                 priority: None,

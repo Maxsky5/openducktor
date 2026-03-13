@@ -91,7 +91,7 @@ function SegmentedTabs<TValue extends string>({
 }): ReactElement {
   return (
     <div
-      className="inline-flex h-10 w-full items-center rounded-lg bg-muted p-1"
+      className="inline-flex h-10 w-full items-center gap-2 rounded-lg bg-muted p-1"
       role="tablist"
       aria-label={ariaLabel}
     >

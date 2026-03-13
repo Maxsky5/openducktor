@@ -1,5 +1,7 @@
+import type { KanbanColumnId } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { KanbanColumn } from "@/components/features/kanban";
+import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
@@ -8,41 +10,26 @@ type KanbanPageContentProps = {
   model: KanbanPageContentModel;
 };
 
-const LOADING_LANE_PREVIEWS = [
-  {
-    id: "backlog",
-    accentClass: "bg-muted-foreground/25",
-    surfaceClass: "border-border/90 bg-muted/70 dark:border-border dark:bg-muted/45",
-    headerClass: "border-border/80",
-  },
-  {
-    id: "spec",
-    accentClass: "bg-violet-400/80 dark:bg-violet-500/70",
-    surfaceClass:
-      "border-violet-300/85 dark:border-violet-800/50 bg-violet-100/55 dark:bg-violet-950/20",
-    headerClass: "border-violet-300/75 dark:border-violet-800/40",
-  },
-  {
-    id: "ready",
-    accentClass: "bg-sky-400/80 dark:bg-sky-500/70",
-    surfaceClass: "border-sky-300/85 dark:border-sky-800/50 bg-sky-100/55 dark:bg-sky-950/20",
-    headerClass: "border-sky-300/75 dark:border-sky-800/40",
-  },
-  {
-    id: "build",
-    accentClass: "bg-amber-400/80 dark:bg-amber-500/70",
-    surfaceClass:
-      "border-amber-300/85 dark:border-amber-800/50 bg-amber-100/60 dark:bg-amber-950/20",
-    headerClass: "border-amber-300/75 dark:border-amber-800/40",
-  },
-  {
-    id: "review",
-    accentClass: "bg-indigo-400/80 dark:bg-indigo-500/70",
-    surfaceClass:
-      "border-indigo-300/85 dark:border-indigo-800/50 bg-indigo-100/55 dark:bg-indigo-950/20",
-    headerClass: "border-indigo-300/75 dark:border-indigo-800/40",
-  },
-] as const;
+const LOADING_LANE_PREVIEW_IDS: KanbanColumnId[] = [
+  "open",
+  "spec_ready",
+  "ready_for_dev",
+  "in_progress",
+  "blocked",
+  "ai_review",
+  "human_review",
+  "closed",
+];
+
+const LOADING_LANE_PREVIEWS = LOADING_LANE_PREVIEW_IDS.map((id) => {
+  const theme = laneTheme(id);
+  return {
+    id,
+    accentClass: theme.headerAccentClass,
+    surfaceClass: theme.boardSurfaceClass,
+    headerClass: theme.headerSurfaceClass,
+  };
+});
 
 function KanbanBoardLoadingOverlay({
   isSwitchingWorkspace,
@@ -67,7 +54,12 @@ function KanbanBoardLoadingOverlay({
                 preview.surfaceClass,
               )}
             >
-              <div className={cn("space-y-3 border-b px-4 pb-3 pt-4", preview.headerClass)}>
+              <div
+                className={cn(
+                  "space-y-3 border-b border-border/80 px-4 pb-3 pt-4",
+                  preview.headerClass,
+                )}
+              >
                 <Skeleton className={cn("h-1.5 w-14 rounded-full", preview.accentClass)} />
                 <div className="flex items-center justify-between gap-3">
                   <Skeleton className="h-3 w-24 rounded-full bg-foreground/12 dark:bg-foreground/18" />

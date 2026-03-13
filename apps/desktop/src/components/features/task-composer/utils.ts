@@ -19,9 +19,7 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
       title: "",
       priority: 2,
       description: "",
-      acceptanceCriteria: "",
       labels: [],
-      parentId: "",
     };
   }
 
@@ -31,15 +29,13 @@ export const toComposerState = (task?: TaskCard | null): ComposerState => {
     title: task.title,
     priority: task.priority,
     description: task.description,
-    acceptanceCriteria: task.acceptanceCriteria,
     labels: task.labels,
-    parentId: task.parentId ?? "",
   };
 };
 
 export const issueTypeGuidance = (issueType: IssueType): string => {
   if (issueType === "bug") {
-    return "Capture reproduction context and a concrete acceptance signal for the fix.";
+    return "Capture reproduction context, impact, and a concrete fix target.";
   }
   if (issueType === "epic") {
     return "Use this for umbrella initiatives and then create scoped child tasks under it.";
@@ -63,12 +59,3 @@ export const toPriorityComboboxOptions = (): ComboboxOption[] =>
     label: `${option.label} · ${option.hint}`,
     searchKeywords: [option.hint.toLowerCase(), `priority-${option.value}`],
   }));
-
-export const toParentComboboxOptions = (parentCandidates: TaskCard[]): ComboboxOption[] => [
-  { value: "__none__", label: "No parent", searchKeywords: ["none"] },
-  ...parentCandidates.map((entry) => ({
-    value: entry.id,
-    label: `${entry.id} · ${entry.title}`,
-    searchKeywords: [entry.title.toLowerCase(), entry.issueType, ...entry.labels],
-  })),
-];

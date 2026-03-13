@@ -131,11 +131,6 @@ impl BeadsTaskStore {
             args.push(description);
         }
 
-        if let Some(acceptance_criteria) = normalize_text_option(input.acceptance_criteria) {
-            args.push("--acceptance".to_string());
-            args.push(acceptance_criteria);
-        }
-
         let labels = normalize_labels(input.labels.unwrap_or_default());
         if !labels.is_empty() {
             args.push("--labels".to_string());
@@ -192,11 +187,6 @@ impl BeadsTaskStore {
         if let Some(description) = patch.description {
             args.push("--description".to_string());
             args.push(description);
-        }
-
-        if let Some(acceptance_criteria) = patch.acceptance_criteria {
-            args.push("--acceptance".to_string());
-            args.push(acceptance_criteria);
         }
 
         if let Some(notes) = patch.notes {

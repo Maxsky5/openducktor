@@ -51,7 +51,6 @@ pub(crate) fn make_task(id: &str, issue_type: &str, status: TaskStatus) -> TaskC
         id: id.to_string(),
         title: format!("Task {id}"),
         description: String::new(),
-        acceptance_criteria: String::new(),
         notes: String::new(),
         status,
         priority: 2,
@@ -132,7 +131,6 @@ impl TaskStore for FakeTaskStore {
             id: format!("generated-{}", state.tasks.len() + 1),
             title: input.title,
             description: input.description.unwrap_or_default(),
-            acceptance_criteria: input.acceptance_criteria.unwrap_or_default(),
             notes: String::new(),
             status: TaskStatus::Open,
             priority: input.priority,
@@ -1409,7 +1407,6 @@ pub(crate) fn empty_patch() -> UpdateTaskPatch {
     UpdateTaskPatch {
         title: None,
         description: None,
-        acceptance_criteria: None,
         notes: None,
         status: None,
         priority: None,

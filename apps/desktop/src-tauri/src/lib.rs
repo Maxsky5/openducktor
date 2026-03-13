@@ -60,7 +60,6 @@ pub(crate) struct TaskCreatePayload {
     issue_type: String,
     priority: i32,
     description: Option<String>,
-    acceptance_criteria: Option<String>,
     labels: Option<Vec<String>>,
     ai_review_enabled: Option<bool>,
     parent_id: Option<String>,
@@ -71,7 +70,6 @@ pub(crate) struct TaskCreatePayload {
 pub(crate) struct TaskUpdatePayload {
     title: Option<String>,
     description: Option<String>,
-    acceptance_criteria: Option<String>,
     priority: Option<i32>,
     issue_type: Option<String>,
     ai_review_enabled: Option<bool>,

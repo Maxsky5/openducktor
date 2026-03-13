@@ -19,7 +19,6 @@ export type AgentPromptTaskContext = {
   status: string;
   qaRequired: boolean;
   description?: string;
-  acceptanceCriteria?: string;
   specMarkdown?: string;
   planMarkdown?: string;
   latestQaReportMarkdown?: string;
@@ -42,7 +41,6 @@ export type BuildAgentKickoffPromptInput = {
     status?: string;
     qaRequired?: boolean;
     description?: string;
-    acceptanceCriteria?: string;
     specMarkdown?: string;
     planMarkdown?: string;
     latestQaReportMarkdown?: string;
@@ -69,7 +67,6 @@ export type BuildAgentMessagePromptInput = {
     status?: string;
     qaRequired?: boolean;
     description?: string;
-    acceptanceCriteria?: string;
     specMarkdown?: string;
     planMarkdown?: string;
     latestQaReportMarkdown?: string;
@@ -177,7 +174,6 @@ When asked about which ODT tools are enabled or disabled, answer strictly from t
 - currentStatus: {{task.status}}
 - qaRequired: {{task.qaRequired}}
 - description: {{task.description}}
-- acceptanceCriteria: {{task.acceptanceCriteria}}
 
 Existing documents:
 - spec: {{task.specMarkdown}}
@@ -224,7 +220,7 @@ Plan quality bar:
 You run in a git worktree and execute implementation safely.
 
 Execution policy:
-- Keep changes scoped to task acceptance criteria.
+- Keep changes scoped to task requirements and documented intent.
 - Run relevant checks before completion.
 - If blocked, call odt_build_blocked with a specific reason.
 - When resumed after a blocker, call odt_build_resumed.
@@ -238,7 +234,7 @@ Execution policy:
 You validate implementation quality against task requirements.
 
 QA policy:
-- Verify acceptance criteria and high-risk behavior.
+- Verify task requirements and high-risk behavior.
 - Include failed and passing evidence in report markdown.
 - Call odt_qa_approved only when confidence is strong.
 - Call odt_qa_rejected with precise remediation guidance when quality bar is not met.
@@ -349,7 +345,7 @@ Call odt_qa_approved or odt_qa_rejected exactly once per review pass.`,
 
 Requirements:
 - Base the result on the implemented work in this forked builder session.
-- Use the task title, acceptance criteria, spec, plan, latest QA report, and actual code changes.
+- Use the task title, description, spec, plan, latest QA report, and actual code changes.
 - Be specific about the user-visible outcome and major implementation points.
 - Do not mention that this came from an AI, agent, or forked session.
 - Respond with exactly this format:
@@ -363,7 +359,6 @@ Task context:
 - issueType: {{task.issueType}}
 - status: {{task.status}}
 - description: {{task.description}}
-- acceptanceCriteria: {{task.acceptanceCriteria}}
 - spec: {{task.specMarkdown}}
 - implementationPlan: {{task.planMarkdown}}
 - latestQaReport: {{task.latestQaReportMarkdown}}`,
@@ -458,7 +453,6 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
-    "task.acceptanceCriteria": compact(task.acceptanceCriteria),
     "task.specMarkdown": compact(task.specMarkdown),
     "task.planMarkdown": compact(task.planMarkdown),
     "task.latestQaReportMarkdown": compact(task.latestQaReportMarkdown),

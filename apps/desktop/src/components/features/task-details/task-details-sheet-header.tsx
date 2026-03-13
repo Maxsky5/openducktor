@@ -5,7 +5,7 @@ import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanb
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { canUnlinkTaskPullRequest, statusBadgeVariant, statusLabel } from "@/lib/task-display";
+import { canUnlinkTaskPullRequest, statusBadgeClassName, statusLabel } from "@/lib/task-display";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
 type TaskDetailsSheetHeaderProps = {
@@ -57,7 +57,9 @@ export function TaskDetailsSheetHeader({
           </h2>
           <p className="truncate font-mono text-xs text-muted-foreground">{task.id}</p>
         </div>
-        <Badge variant={statusBadgeVariant(task.status)}>{statusLabel(task.status)}</Badge>
+        <Badge variant="outline" className={statusBadgeClassName(task.status)}>
+          {statusLabel(task.status)}
+        </Badge>
       </div>
 
       <div className="flex flex-wrap items-start gap-2">

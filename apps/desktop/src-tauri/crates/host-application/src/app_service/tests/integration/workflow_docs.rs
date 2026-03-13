@@ -54,7 +54,6 @@ fn task_update_rejects_direct_status_changes() {
             UpdateTaskPatch {
                 title: None,
                 description: None,
-                acceptance_criteria: None,
                 notes: None,
                 status: Some(TaskStatus::Closed),
                 priority: None,
@@ -688,7 +687,6 @@ fn task_create_defaults_ai_review_for_typed_issue_type() -> Result<()> {
             issue_type: IssueType::Task,
             priority: 2,
             description: None,
-            acceptance_criteria: None,
             labels: None,
             ai_review_enabled: None,
             parent_id: None,

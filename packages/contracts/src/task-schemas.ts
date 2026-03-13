@@ -139,7 +139,6 @@ export const taskCardSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().default(""),
-  acceptanceCriteria: z.string().optional().default(""),
   notes: z.string().optional().default(""),
   status: taskStatusSchema,
   priority: taskPrioritySchema.default(2),
@@ -167,7 +166,6 @@ export const taskCreateInputSchema = z.object({
   aiReviewEnabled: z.boolean().optional().default(true),
   priority: taskPrioritySchema.default(2),
   description: z.string().optional(),
-  acceptanceCriteria: z.string().optional(),
   labels: z.array(z.string()).optional(),
   parentId: z.string().optional(),
 });
@@ -176,7 +174,6 @@ export type TaskCreateInput = z.infer<typeof taskCreateInputSchema>;
 export const taskUpdatePatchSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
-  acceptanceCriteria: z.string().optional(),
   notes: z.string().optional(),
   priority: taskPrioritySchema.optional(),
   issueType: issueTypeSchema.optional(),

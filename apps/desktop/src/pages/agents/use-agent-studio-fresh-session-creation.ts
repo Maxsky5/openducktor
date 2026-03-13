@@ -106,7 +106,6 @@ export function useAgentStudioFreshSessionCreation({
                       status: selectedTask.status,
                       qaRequired: selectedTask.aiReviewEnabled,
                       description: selectedTask.description,
-                      acceptanceCriteria: selectedTask.acceptanceCriteria,
                     }
                   : {}),
               },

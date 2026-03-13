@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { TagSelector } from "@/components/ui/tag-selector";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -14,9 +15,7 @@ import type { ComposerMode, ComposerState } from "@/types/task-composer";
 type TaskDetailsFormProps = {
   mode: ComposerMode;
   state: ComposerState;
-  canSelectParent: boolean;
   priorityOptions: ComboboxOption[];
-  parentOptions: ComboboxOption[];
   knownLabels: string[];
   onStateChange: (patch: Partial<ComposerState>) => void;
   onRequestTypeChange: () => void;
@@ -25,9 +24,7 @@ type TaskDetailsFormProps = {
 export function TaskDetailsForm({
   mode,
   state,
-  canSelectParent,
   priorityOptions,
-  parentOptions,
   knownLabels,
   onStateChange,
   onRequestTypeChange,
@@ -36,7 +33,7 @@ export function TaskDetailsForm({
   const SelectedIcon = selectedType?.icon ?? ListTodo;
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="grid gap-2">
         <Label>Issue Type *</Label>
         <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3">
@@ -74,13 +71,14 @@ export function TaskDetailsForm({
         <Label htmlFor="task-title">Title *</Label>
         <Input
           id="task-title"
+          autoFocus
           placeholder="Short task title"
           value={state.title}
           onChange={(event) => onStateChange({ title: event.currentTarget.value })}
         />
       </div>
 
-      <div className={cn("grid gap-4", canSelectParent ? "sm:grid-cols-2" : "sm:grid-cols-1")}>
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="task-priority">Priority *</Label>
           <Combobox
@@ -95,65 +93,30 @@ export function TaskDetailsForm({
             }}
           />
         </div>
-
-        {canSelectParent ? (
-          <div className="grid gap-2">
-            <Label htmlFor="task-parent">Parent (optional)</Label>
-            <Combobox
-              value={state.parentId.length > 0 ? state.parentId : "__none__"}
-              options={parentOptions}
-              searchPlaceholder="Search parent task..."
-              onValueChange={(nextValue) =>
-                onStateChange({ parentId: nextValue === "__none__" ? "" : nextValue })
-              }
+        <div className="grid gap-2">
+          <Label htmlFor="task-ai-review">AI Review</Label>
+          <div className="flex items-center gap-3 pt-2">
+            <Switch
+              id="task-ai-review"
+              checked={state.aiReviewEnabled}
+              onCheckedChange={(checked) => onStateChange({ aiReviewEnabled: checked })}
+              className="h-6 w-11 [&>span]:size-5 [&>span[data-state=checked]]:translate-x-5"
             />
-          </div>
-        ) : null}
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="task-ai-review">AI Review</Label>
-        <label
-          htmlFor="task-ai-review"
-          className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm text-foreground"
-        >
-          <input
-            id="task-ai-review"
-            type="checkbox"
-            className="mt-0.5 size-4 rounded border-input accent-sky-600"
-            checked={state.aiReviewEnabled}
-            onChange={(event) => onStateChange({ aiReviewEnabled: event.currentTarget.checked })}
-          />
-          <span className="space-y-0.5">
-            <span className="block font-semibold text-foreground">
+            <Label htmlFor="task-ai-review" className="font-semibold text-foreground">
               Run QA agent before human review
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              Enabled by default. If disabled, completed tasks go directly to Human Review.
-            </span>
-          </span>
-        </label>
+            </Label>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-2">
         <Label htmlFor="task-description">Description</Label>
         <Textarea
           id="task-description"
-          rows={4}
+          rows={6}
           value={state.description}
           placeholder="Problem context, scope, and expected output."
           onChange={(event) => onStateChange({ description: event.currentTarget.value })}
-        />
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="task-acceptance">Acceptance Criteria</Label>
-        <Textarea
-          id="task-acceptance"
-          rows={3}
-          value={state.acceptanceCriteria}
-          placeholder="Concrete pass/fail criteria."
-          onChange={(event) => onStateChange({ acceptanceCriteria: event.currentTarget.value })}
         />
       </div>
 

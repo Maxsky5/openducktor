@@ -863,7 +863,6 @@ fn list_tasks_cache_is_invalidated_after_update_mutation() -> Result<()> {
         UpdateTaskPatch {
             title: None,
             description: None,
-            acceptance_criteria: None,
             notes: None,
             status: Some(TaskStatus::Blocked),
             priority: None,
@@ -1006,7 +1005,6 @@ fn list_tasks_cache_is_invalidated_after_create_mutation() -> Result<()> {
             issue_type: IssueType::Task,
             priority: 2,
             description: None,
-            acceptance_criteria: None,
             labels: None,
             ai_review_enabled: Some(true),
             parent_id: None,
@@ -1108,7 +1106,6 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
             issue_type: IssueType::Feature,
             priority: 3,
             description: Some("  expose endpoint ".to_string()),
-            acceptance_criteria: Some("  green tests ".to_string()),
             labels: Some(vec![
                 "backend".to_string(),
                 "api".to_string(),
@@ -1138,8 +1135,6 @@ fn create_task_normalizes_payload_and_persists_qa_flag() -> Result<()> {
             "3",
             "--description",
             "expose endpoint",
-            "--acceptance",
-            "green tests",
             "--labels",
             "api,backend",
             "--parent",
@@ -1198,7 +1193,6 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
         UpdateTaskPatch {
             title: Some("Renamed".to_string()),
             description: Some("Updated description".to_string()),
-            acceptance_criteria: Some("Updated acceptance".to_string()),
             notes: Some("Updated notes".to_string()),
             status: Some(TaskStatus::Blocked),
             priority: Some(1),
@@ -1228,8 +1222,6 @@ fn update_task_updates_cli_fields_and_qa_metadata() -> Result<()> {
             "Renamed",
             "--description",
             "Updated description",
-            "--acceptance",
-            "Updated acceptance",
             "--notes",
             "Updated notes",
             "--status",
@@ -1292,7 +1284,6 @@ fn update_task_can_update_only_ai_review_metadata() -> Result<()> {
         UpdateTaskPatch {
             title: None,
             description: None,
-            acceptance_criteria: None,
             notes: None,
             status: None,
             priority: None,

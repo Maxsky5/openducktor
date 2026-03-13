@@ -18,7 +18,6 @@ const baseTask: TaskCard = {
   id: "task-1",
   title: "Add social login",
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status: "open",
   priority: 2,

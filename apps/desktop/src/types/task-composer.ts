@@ -15,9 +15,7 @@ export type ComposerState = {
   title: string;
   priority: number;
   description: string;
-  acceptanceCriteria: string;
   labels: string[];
-  parentId: string;
 };
 
 export type IssueTypeOption = {
@@ -27,7 +25,7 @@ export type IssueTypeOption = {
   icon: LucideIcon;
   accentClass: string;
   iconClass: string;
-  supportsParent: boolean;
+  indicatorClass: string;
 };
 
 export type PriorityOption = {

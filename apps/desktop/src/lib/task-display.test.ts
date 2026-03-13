@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
-import { canDetectTaskPullRequest } from "./task-display";
+import { canDetectTaskPullRequest, statusBadgeClassName } from "./task-display";
 
 const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "TASK-1",
   title: "Task",
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status: "in_progress",
   priority: 2,
@@ -72,5 +71,14 @@ describe("canDetectTaskPullRequest", () => {
         [],
       ),
     ).toBe(true);
+  });
+});
+
+describe("statusBadgeClassName", () => {
+  test("maps workflow review and planning statuses to their dedicated colors", () => {
+    expect(statusBadgeClassName("spec_ready")).toContain("pending");
+    expect(statusBadgeClassName("ready_for_dev")).toContain("info");
+    expect(statusBadgeClassName("ai_review")).toContain("indigo");
+    expect(statusBadgeClassName("human_review")).toContain("cyan");
   });
 });

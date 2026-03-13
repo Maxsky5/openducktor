@@ -12,7 +12,6 @@ const makeTask = (id: string, overrides: Partial<TaskCard> = {}): TaskCard => ({
   id,
   title: id,
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status: "open",
   priority: 2,

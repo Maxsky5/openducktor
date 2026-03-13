@@ -17,7 +17,6 @@ const taskContext = {
   status: "spec_ready",
   qaRequired: true,
   description: "Rebuild agent workflows",
-  acceptanceCriteria: "All agents can transition tasks",
   specMarkdown: "# Purpose",
   planMarkdown: "## Plan",
   latestQaReportMarkdown: "## QA",

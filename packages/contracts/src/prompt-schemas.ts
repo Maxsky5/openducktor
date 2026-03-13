@@ -39,7 +39,6 @@ export const agentPromptPlaceholderValues = [
   "task.status",
   "task.qaRequired",
   "task.description",
-  "task.acceptanceCriteria",
   "task.specMarkdown",
   "task.planMarkdown",
   "task.latestQaReportMarkdown",

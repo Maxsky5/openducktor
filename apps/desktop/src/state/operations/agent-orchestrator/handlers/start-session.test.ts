@@ -17,7 +17,6 @@ const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies)
 const taskFixture = createTaskCardFixture({
   title: "Implement feature",
   description: "desc",
-  acceptanceCriteria: "ac",
   status: "in_progress",
   priority: 1,
 });
