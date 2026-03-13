@@ -56,36 +56,23 @@ const DeferredMarkdownRenderer = ({
   className,
 }: DeferredMarkdownRendererProps): ReactElement | null => {
   const content = markdown.trim();
+  const classNameProps = className ? { className } : {};
 
   if (!content) {
     return null;
   }
 
   if (!hasMarkdownSyntaxHint(content)) {
-    if (className) {
-      return (
-        <PlainTextMarkdownFallback content={content} variant={variant} className={className} />
-      );
-    }
-
-    return <PlainTextMarkdownFallback content={content} variant={variant} />;
-  }
-
-  if (className) {
-    return (
-      <Suspense
-        fallback={
-          <PlainTextMarkdownFallback content={content} variant={variant} className={className} />
-        }
-      >
-        <LazyMarkdownRenderer markdown={content} variant={variant} className={className} />
-      </Suspense>
-    );
+    return <PlainTextMarkdownFallback content={content} variant={variant} {...classNameProps} />;
   }
 
   return (
-    <Suspense fallback={<PlainTextMarkdownFallback content={content} variant={variant} />}>
-      <LazyMarkdownRenderer markdown={content} variant={variant} />
+    <Suspense
+      fallback={
+        <PlainTextMarkdownFallback content={content} variant={variant} {...classNameProps} />
+      }
+    >
+      <LazyMarkdownRenderer markdown={content} variant={variant} {...classNameProps} />
     </Suspense>
   );
 };
