@@ -4,8 +4,8 @@ import {
   isOdtWorkflowMutationToolName,
 } from "@openducktor/core";
 import { Brain, Hammer, MessageSquareQuote } from "lucide-react";
-import type { ReactElement } from "react";
-import { MarkdownRenderer, type MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
+import { lazy, type ReactElement, Suspense } from "react";
+import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
@@ -13,13 +13,17 @@ import {
   getAssistantFooterData,
   roleLabel,
   SYSTEM_PROMPT_PREFIX,
-  toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
 import {
   assistantRoleIcon,
   RegularToolMessage,
   WorkflowToolMessage,
 } from "./agent-chat-message-card-tool-presenters";
+
+const LazyMarkdownRenderer = lazy(async () => {
+  const module = await import("@/components/ui/markdown-renderer");
+  return { default: module.MarkdownRenderer };
+});
 
 const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
   compact: "whitespace-pre-wrap text-[13px] leading-relaxed text-foreground",
@@ -29,34 +33,61 @@ const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
 type PlainTextMarkdownFallbackProps = {
   content: string;
   variant: MarkdownRendererVariant;
+  className?: string;
 };
 
 const PlainTextMarkdownFallback = ({
   content,
   variant,
+  className,
 }: PlainTextMarkdownFallbackProps): ReactElement => {
-  return <p className={PLAIN_TEXT_CLASSES[variant]}>{content}</p>;
+  return <p className={cn(PLAIN_TEXT_CLASSES[variant], className)}>{content}</p>;
 };
 
-type MessageMarkdownContentProps = {
+type DeferredMarkdownRendererProps = {
   markdown: string;
   variant?: MarkdownRendererVariant;
+  className?: string;
 };
 
-const MessageMarkdownContent = ({
+const DeferredMarkdownRenderer = ({
   markdown,
   variant = "document",
-}: MessageMarkdownContentProps): ReactElement | null => {
+  className,
+}: DeferredMarkdownRendererProps): ReactElement | null => {
   const content = markdown.trim();
+
   if (!content) {
     return null;
   }
 
   if (!hasMarkdownSyntaxHint(content)) {
+    if (className) {
+      return (
+        <PlainTextMarkdownFallback content={content} variant={variant} className={className} />
+      );
+    }
+
     return <PlainTextMarkdownFallback content={content} variant={variant} />;
   }
 
-  return <MarkdownRenderer markdown={content} variant={variant} />;
+  if (className) {
+    return (
+      <Suspense
+        fallback={
+          <PlainTextMarkdownFallback content={content} variant={variant} className={className} />
+        }
+      >
+        <LazyMarkdownRenderer markdown={content} variant={variant} className={className} />
+      </Suspense>
+    );
+  }
+
+  return (
+    <Suspense fallback={<PlainTextMarkdownFallback content={content} variant={variant} />}>
+      <LazyMarkdownRenderer markdown={content} variant={variant} />
+    </Suspense>
+  );
 };
 
 export type MessageHeaderProps = {
@@ -101,45 +132,31 @@ export const MessageHeader = ({
 
 type ReasoningMessageProps = {
   content: string;
-  completed: boolean;
-  timeLabel: string;
 };
 
-const ReasoningMessage = ({
-  content,
-  completed,
-  timeLabel,
-}: ReasoningMessageProps): ReactElement => {
-  if (completed) {
-    return (
-      <details className="px-1 py-0.5">
-        <summary className="flex min-h-6 cursor-pointer items-center gap-2 text-xs text-foreground">
-          <Brain className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="shrink-0 font-medium text-muted-foreground">Thinking</span>
-          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {toSingleLineMarkdown(content || "Reasoning complete")}
-          </span>
-          {timeLabel ? (
-            <span className="shrink-0 text-[11px] text-muted-foreground">{timeLabel}</span>
-          ) : null}
-        </summary>
-        <div className="pl-6 pt-2">
-          <MessageMarkdownContent markdown={content || "Reasoning complete"} variant="compact" />
-        </div>
-      </details>
-    );
-  }
+const REASONING_MARKDOWN_CLASS_NAME = cn(
+  "italic text-muted-foreground",
+  "prose-p:my-0 prose-p:text-inherit",
+  "prose-headings:my-1 prose-headings:text-inherit",
+  "prose-ul:my-1 prose-ol:my-1",
+  "prose-li:my-0.5 prose-li:text-inherit",
+  "prose-strong:text-inherit prose-em:text-inherit prose-blockquote:text-inherit",
+  "[&_code]:not-italic [&_pre]:not-italic",
+);
 
+const ReasoningMessage = ({ content }: ReasoningMessageProps): ReactElement => {
   return (
-    <div className="space-y-1 px-1 py-0.5 text-xs text-foreground">
-      <div className="flex min-h-6 items-center gap-2">
-        <Brain className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 font-medium text-muted-foreground">Thinking</span>
-        {timeLabel ? (
-          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{timeLabel}</span>
-        ) : null}
+    <div className="px-1 py-0.5 text-muted-foreground">
+      <div className="space-y-0.5 text-[13px] leading-relaxed">
+        <span className="block text-[11px] font-medium text-muted-foreground">Thinking:</span>
+        <div className="min-w-0">
+          <DeferredMarkdownRenderer
+            markdown={content || "Thinking..."}
+            variant="compact"
+            className={REASONING_MARKDOWN_CLASS_NAME}
+          />
+        </div>
       </div>
-      <MessageMarkdownContent markdown={content || "Thinking..."} variant="compact" />
     </div>
   );
 };
@@ -158,7 +175,7 @@ const AssistantMessage = ({
   const footer = getAssistantFooterData(message, sessionSelectedModel);
   return (
     <div className="space-y-2">
-      <MessageMarkdownContent markdown={message.content} variant="document" />
+      <DeferredMarkdownRenderer markdown={message.content} variant="document" />
       {footer.infoParts.length > 0 ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span
@@ -192,13 +209,7 @@ export const MessageBody = ({
   const meta = message.meta;
 
   if (meta?.kind === "reasoning") {
-    return (
-      <ReasoningMessage
-        content={message.content}
-        completed={meta.completed}
-        timeLabel={timeLabel}
-      />
-    );
+    return <ReasoningMessage content={message.content} />;
   }
 
   if (meta?.kind === "tool") {
@@ -242,7 +253,7 @@ export const MessageBody = ({
           Show system prompt
         </summary>
         <div className="border-t border-border px-2 py-2">
-          <MessageMarkdownContent markdown={systemPromptBody} variant="compact" />
+          <DeferredMarkdownRenderer markdown={systemPromptBody} variant="compact" />
         </div>
       </details>
     );
@@ -275,5 +286,5 @@ export const MessageBody = ({
     );
   }
 
-  return <MessageMarkdownContent markdown={message.content} variant="document" />;
+  return <DeferredMarkdownRenderer markdown={message.content} variant="document" />;
 };

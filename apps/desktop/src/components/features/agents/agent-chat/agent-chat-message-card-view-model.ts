@@ -26,6 +26,7 @@ export type AgentChatMessageCardViewModel = {
   assistantRole: AgentRole | null;
   assistantAccentColor: string | undefined;
   systemPromptBody: string;
+  showSharedHeader: boolean;
   isReasoningMessage: boolean;
   isAssistantMessage: boolean;
   isUserMessage: boolean;
@@ -68,6 +69,7 @@ const resolveUserAgentColor = (
 
 const toArticleClassName = (
   message: AgentChatMessage,
+  isReasoningMessage: boolean,
   isUserMessage: boolean,
   isToolMessage: boolean,
   isWorkflowToolMessage: boolean,
@@ -77,6 +79,10 @@ const toArticleClassName = (
   const meta = message.meta;
   const workflowToolPhase =
     isWorkflowToolMessage && meta?.kind === "tool" ? getToolLifecyclePhase(meta) : null;
+
+  if (isReasoningMessage) {
+    return "text-sm border-none bg-transparent px-0 py-0 text-muted-foreground";
+  }
 
   return cn(
     "text-sm",
@@ -130,12 +136,15 @@ export const buildAgentChatMessageCardViewModel = ({
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
+  const showSharedHeader =
+    !isUserMessage && !isRegularToolMessage && !isReasoningMessage && !isAssistantMessage;
 
   return {
     timeLabel,
     assistantRole,
     assistantAccentColor,
     systemPromptBody,
+    showSharedHeader,
     isReasoningMessage,
     isAssistantMessage,
     isUserMessage,
@@ -147,6 +156,7 @@ export const buildAgentChatMessageCardViewModel = ({
     isRichCardMessage,
     articleClassName: toArticleClassName(
       message,
+      isReasoningMessage,
       isUserMessage,
       isToolMessage,
       isWorkflowToolMessage,
