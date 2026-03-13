@@ -48,7 +48,7 @@ describe("useAgentStudioChatSettings", () => {
     await harness.unmount();
   });
 
-  test("defaults to false when the loaded snapshot omits chat settings", async () => {
+  test("surfaces malformed snapshots that omit chat settings", async () => {
     const loadSettingsSnapshot = mock(
       async (): Promise<SettingsSnapshot> => createSettingsSnapshot(false, false),
     );
@@ -59,8 +59,11 @@ describe("useAgentStudioChatSettings", () => {
 
     await harness.mount();
 
+    await harness.waitFor((state) => state.chatSettingsLoadError !== null);
     expect(harness.getLatest().showThinkingMessages).toBe(false);
-    expect(harness.getLatest().chatSettingsLoadError).toBeNull();
+    expect(harness.getLatest().chatSettingsLoadError?.message).toMatch(
+      /snapshot\.chat\.showThinkingMessages|undefined/,
+    );
 
     await harness.unmount();
   });

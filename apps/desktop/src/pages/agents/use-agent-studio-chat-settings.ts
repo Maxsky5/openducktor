@@ -7,7 +7,7 @@ export const SETTINGS_SNAPSHOT_UPDATED_EVENT = "odt:settings-snapshot-updated";
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
 
 const readShowThinkingMessages = (snapshot: SettingsSnapshot): boolean => {
-  return snapshot.chat?.showThinkingMessages ?? DEFAULT_SHOW_THINKING_MESSAGES;
+  return snapshot.chat.showThinkingMessages;
 };
 
 const createChatSettingsLoadError = (activeRepo: string, cause: unknown): Error => {

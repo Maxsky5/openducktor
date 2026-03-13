@@ -146,7 +146,6 @@ struct RepoSettingsPayload {
 #[serde(rename_all = "camelCase")]
 struct SettingsSnapshotPayload {
     git: host_infra_system::GlobalGitConfig,
-    #[serde(default)]
     chat: host_infra_system::ChatSettings,
     repos: HashMap<String, host_infra_system::RepoConfig>,
     global_prompt_overrides: host_infra_system::PromptOverrides,

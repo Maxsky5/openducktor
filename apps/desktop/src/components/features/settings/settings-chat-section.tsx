@@ -33,7 +33,9 @@ export function SettingsChatSection({
           </div>
           <Switch
             checked={chat.showThinkingMessages}
-            onCheckedChange={(checked) => onUpdateChat(() => ({ showThinkingMessages: checked }))}
+            onCheckedChange={(checked) =>
+              onUpdateChat((current) => ({ ...current, showThinkingMessages: checked }))
+            }
             disabled={disabled}
             aria-label="Show thinking messages in Agent Studio transcript"
           />

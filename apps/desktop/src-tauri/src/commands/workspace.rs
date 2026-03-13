@@ -1020,8 +1020,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_save_settings_snapshot_ipc_defaults_missing_chat_and_roundtrips_true(
-    ) -> Result<(), String> {
+    fn workspace_save_settings_snapshot_ipc_rejects_missing_chat() -> Result<(), String> {
         let fixture =
             setup_workspace_command_fixture("snapshot-chat-roundtrip", HookSet::default());
 
@@ -1037,14 +1036,12 @@ mod tests {
                 "globalPromptOverrides": global_prompt_overrides.clone(),
             }
         });
-        invoke_workspace_save_settings_snapshot_ipc(&fixture, payload_without_chat)
-            .expect("IPC snapshot save should default missing chat settings");
-
-        let (_persisted_git, persisted_chat, persisted_repos, persisted_global) = fixture
-            .service
-            .workspace_get_settings_snapshot()
-            .map_err(|error| error.to_string())?;
-        assert!(!persisted_chat.show_thinking_messages);
+        let error = invoke_workspace_save_settings_snapshot_ipc(&fixture, payload_without_chat)
+            .expect_err("IPC snapshot save should reject missing chat settings");
+        assert!(
+            error.to_string().contains("missing field `chat`"),
+            "unexpected IPC error: {error}"
+        );
 
         let payload_with_chat = json!({
             "snapshot": {
@@ -1052,8 +1049,8 @@ mod tests {
                 "chat": {
                     "showThinkingMessages": true
                 },
-                "repos": persisted_repos,
-                "globalPromptOverrides": persisted_global,
+                "repos": repos,
+                "globalPromptOverrides": global_prompt_overrides,
             }
         });
         invoke_workspace_save_settings_snapshot_ipc(&fixture, payload_with_chat)
