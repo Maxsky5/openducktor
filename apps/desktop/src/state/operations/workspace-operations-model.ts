@@ -44,6 +44,11 @@ export type BranchProbeOutcome =
 
 export const normalizeRepoPath = (repoPath: string): string => repoPath.trim();
 
+export const shouldResetBranchStateForRepoChange = (
+  previousActiveRepo: string | null,
+  nextActiveRepo: string | null,
+): boolean => previousActiveRepo !== null && previousActiveRepo !== nextActiveRepo;
+
 export const shouldProbeExternalBranchChange = ({
   activeRepo,
   isSwitchingWorkspace,

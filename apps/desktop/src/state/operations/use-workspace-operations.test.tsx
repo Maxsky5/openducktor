@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { createElement } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
 import { host } from "./host";
@@ -141,6 +141,115 @@ const workspace = (path: string, isActive = false): WorkspaceRecord => ({
 });
 
 describe("use-workspace-operations", () => {
+  test("hydrates branches when startup activates the persisted repository", async () => {
+    const setActiveRepo = mock(() => {});
+    const gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+    const gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature/startup",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ]);
+
+    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
+    const originalGitGetBranches = host.gitGetBranches;
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+
+    type LifecycleHarnessArgs = HookArgs;
+
+    let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+    let currentArgs: LifecycleHarnessArgs = {
+      activeRepo: null,
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+    };
+
+    const StartupBranchLoader = ({
+      activeRepo,
+      value,
+    }: {
+      activeRepo: string | null;
+      value: ReturnType<typeof useWorkspaceOperations>;
+    }) => {
+      useEffect(() => {
+        if (!activeRepo) {
+          return;
+        }
+        void value.refreshBranches();
+      }, [activeRepo, value.refreshBranches]);
+
+      return null;
+    };
+
+    const Harness = ({ args }: { args: LifecycleHarnessArgs }) => {
+      latest = useWorkspaceOperations(args);
+      return createElement(StartupBranchLoader, {
+        activeRepo: args.activeRepo,
+        value: latest,
+      });
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(createElement(Harness, { args: currentArgs }));
+      });
+      await flush();
+
+      currentArgs = {
+        ...currentArgs,
+        activeRepo: "/repo-a",
+      };
+
+      await act(async () => {
+        renderer?.update(createElement(Harness, { args: currentArgs }));
+      });
+      await flush();
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      const latestValue: ReturnType<typeof useWorkspaceOperations> = latest;
+
+      expect(latestValue.activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+      expect(latestValue.branches).toEqual([
+        {
+          name: "main",
+          isCurrent: true,
+          isRemote: false,
+        },
+        {
+          name: "feature/startup",
+          isCurrent: false,
+          isRemote: false,
+        },
+      ]);
+      expect(latestValue.isLoadingBranches).toBe(false);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      host.gitGetBranches = originalGitGetBranches;
+    }
+  });
+
   test("refreshWorkspaces updates list and active repo", async () => {
     const setActiveRepo = mock(() => {});
     const workspaceList = mock(
@@ -309,6 +418,456 @@ describe("use-workspace-operations", () => {
       host.runtimeEnsure = original.runtimeEnsure;
       host.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
       host.workspaceList = original.workspaceList;
+    }
+  });
+
+  test("hydrates branches after switching between real repositories", async () => {
+    const workspaceSelectDeferred = createDeferred<WorkspaceRecord>();
+    const workspaceSelect = mock(
+      async (): Promise<WorkspaceRecord> => workspaceSelectDeferred.promise,
+    );
+    const workspaceList = mock(
+      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
+    );
+    const workspaceGetRepoConfig = mock(async () => ({
+      defaultRuntimeKind: "opencode" as const,
+      branchPrefix: "obp",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }));
+    const runtimeEnsure = mock(async () => ({
+      kind: "opencode",
+      runtimeId: "runtime-1",
+      repoPath: "/repo-a",
+      taskId: null,
+      role: "workspace" as const,
+      workingDirectory: "/tmp/repo-a",
+      runtimeRoute: {
+        type: "local_http" as const,
+        endpoint: "http://127.0.0.1:3030",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    }));
+    const gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+    const gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature/repo-switch",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ]);
+
+    const originalWorkspaceSelect = host.workspaceSelect;
+    const originalWorkspaceList = host.workspaceList;
+    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+    const originalRuntimeEnsure = host.runtimeEnsure;
+    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
+    const originalGitGetBranches = host.gitGetBranches;
+    host.workspaceSelect = workspaceSelect;
+    host.workspaceList = workspaceList;
+    host.workspaceGetRepoConfig = workspaceGetRepoConfig;
+    host.runtimeEnsure = runtimeEnsure;
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+
+    let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+    let latestActiveRepo: string | null = null;
+
+    const Harness = () => {
+      const [activeRepo, setActiveRepo] = useState<string | null>("/repo-old");
+      const value = useWorkspaceOperations({
+        activeRepo,
+        setActiveRepo,
+        clearTaskData: () => {},
+        clearActiveBeadsCheck: () => {},
+      });
+      const previousRepoRef = useRef(activeRepo);
+
+      latest = value;
+      latestActiveRepo = activeRepo;
+
+      useEffect(() => {
+        if (previousRepoRef.current === activeRepo) {
+          return;
+        }
+
+        previousRepoRef.current = activeRepo;
+
+        if (!activeRepo) {
+          return;
+        }
+
+        void value.refreshBranches();
+      }, [activeRepo, value.refreshBranches]);
+
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(createElement(Harness));
+      });
+      await flush();
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      const latestValueBeforeSelect: ReturnType<typeof useWorkspaceOperations> = latest;
+
+      let selectPromise: Promise<void> | null = null;
+      await act(async () => {
+        selectPromise = latestValueBeforeSelect.selectWorkspace("/repo-a");
+      });
+      await flush();
+
+      expect(latestActiveRepo === "/repo-old").toBe(true);
+      expect(gitGetCurrentBranch).not.toHaveBeenCalled();
+      expect(gitGetBranches).not.toHaveBeenCalled();
+
+      if (!selectPromise) {
+        throw new Error("selectWorkspace promise was not captured");
+      }
+
+      await act(async () => {
+        workspaceSelectDeferred.resolve(workspace("/repo-a", true));
+        await selectPromise;
+      });
+      await flush();
+
+      const currentActiveRepo: string | null = latestActiveRepo;
+      expect(currentActiveRepo === "/repo-a").toBe(true);
+      expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
+      expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
+      expect(workspaceList).toHaveBeenCalled();
+      expect(runtimeEnsure).toHaveBeenCalledWith("opencode", "/repo-a");
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      const latestValue: ReturnType<typeof useWorkspaceOperations> = latest;
+
+      expect(latestValue.activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+      expect(latestValue.branches).toEqual([
+        {
+          name: "main",
+          isCurrent: true,
+          isRemote: false,
+        },
+        {
+          name: "feature/repo-switch",
+          isCurrent: false,
+          isRemote: false,
+        },
+      ]);
+    } finally {
+      workspaceSelectDeferred.resolve(workspace("/repo-a", true));
+      await act(async () => {
+        renderer?.unmount();
+      });
+      host.workspaceSelect = originalWorkspaceSelect;
+      host.workspaceList = originalWorkspaceList;
+      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      host.runtimeEnsure = originalRuntimeEnsure;
+      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      host.gitGetBranches = originalGitGetBranches;
+    }
+  });
+
+  test("preserves current repo branch state when workspace selection fails", async () => {
+    const setActiveRepo = mock(() => {});
+    const clearTaskData = mock(() => {});
+    const clearActiveBeadsCheck = mock(() => {});
+    const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => {
+      throw new Error("workspace switch failed");
+    });
+    const gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+    const gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature/current-repo",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ]);
+
+    const originalWorkspaceSelect = host.workspaceSelect;
+    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
+    const originalGitGetBranches = host.gitGetBranches;
+    host.workspaceSelect = workspaceSelect;
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-old",
+      setActiveRepo,
+      clearTaskData,
+      clearActiveBeadsCheck,
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      expect(harness.getLatest().activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+
+      let thrown: unknown = null;
+      await harness.run(async (value) => {
+        try {
+          await value.selectWorkspace("/repo-a");
+        } catch (error) {
+          thrown = error;
+        }
+      });
+
+      expect(thrown).toBeInstanceOf(Error);
+      expect(workspaceSelect).toHaveBeenCalledWith("/repo-a");
+      expect(setActiveRepo).not.toHaveBeenCalledWith("/repo-a");
+      expect(clearTaskData).not.toHaveBeenCalled();
+      expect(clearActiveBeadsCheck).not.toHaveBeenCalled();
+      expect(harness.getLatest().activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+      expect(harness.getLatest().branches).toEqual([
+        {
+          name: "main",
+          isCurrent: true,
+          isRemote: false,
+        },
+        {
+          name: "feature/current-repo",
+          isCurrent: false,
+          isRemote: false,
+        },
+      ]);
+      expect(toastError).toHaveBeenCalledWith("Failed to switch repository", {
+        description: "workspace switch failed",
+      });
+    } finally {
+      await harness.unmount();
+      host.workspaceSelect = originalWorkspaceSelect;
+      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      host.gitGetBranches = originalGitGetBranches;
+      (toast as { error: typeof toast.error }).error = originalToastError;
+    }
+  });
+
+  test("keeps switched repo active when workspace refresh fails after a successful switch", async () => {
+    const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
+    const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => {
+      throw new Error("workspace list failed");
+    });
+    const workspaceGetRepoConfig = mock(async () => ({
+      defaultRuntimeKind: "opencode" as const,
+      branchPrefix: "obp",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {
+        providers: {},
+      },
+      trustedHooks: false,
+      hooks: {
+        preStart: [],
+        postComplete: [],
+      },
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }));
+    const runtimeEnsure = mock(async () => ({
+      kind: "opencode",
+      runtimeId: "runtime-1",
+      repoPath: "/repo-a",
+      taskId: null,
+      role: "workspace" as const,
+      workingDirectory: "/tmp/repo-a",
+      runtimeRoute: {
+        type: "local_http" as const,
+        endpoint: "http://127.0.0.1:3030",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    }));
+    const gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+    const gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature/repo-switch",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ]);
+
+    const originalWorkspaceSelect = host.workspaceSelect;
+    const originalWorkspaceList = host.workspaceList;
+    const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+    const originalRuntimeEnsure = host.runtimeEnsure;
+    const originalGitGetCurrentBranch = host.gitGetCurrentBranch;
+    const originalGitGetBranches = host.gitGetBranches;
+    host.workspaceSelect = workspaceSelect;
+    host.workspaceList = workspaceList;
+    host.workspaceGetRepoConfig = workspaceGetRepoConfig;
+    host.runtimeEnsure = runtimeEnsure;
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+    let latestActiveRepo: string | null = null;
+
+    const Harness = () => {
+      const [activeRepo, setActiveRepo] = useState<string | null>("/repo-old");
+      const value = useWorkspaceOperations({
+        activeRepo,
+        setActiveRepo,
+        clearTaskData: () => {},
+        clearActiveBeadsCheck: () => {},
+      });
+      const previousRepoRef = useRef(activeRepo);
+      const hasSeededWorkspacesRef = useRef(false);
+
+      latest = value;
+      latestActiveRepo = activeRepo;
+
+      useEffect(() => {
+        if (hasSeededWorkspacesRef.current) {
+          return;
+        }
+
+        hasSeededWorkspacesRef.current = true;
+        value.applyWorkspaceRecords([workspace("/repo-old", true), workspace("/repo-a", false)]);
+      }, [value]);
+
+      useEffect(() => {
+        if (previousRepoRef.current === activeRepo) {
+          return;
+        }
+
+        previousRepoRef.current = activeRepo;
+
+        if (!activeRepo) {
+          return;
+        }
+
+        void value.refreshBranches();
+      }, [activeRepo, value.refreshBranches]);
+
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(createElement(Harness));
+      });
+      await flush();
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      const latestValueBeforeSelect: ReturnType<typeof useWorkspaceOperations> = latest;
+      await act(async () => {
+        await latestValueBeforeSelect.selectWorkspace("/repo-a");
+      });
+      await flush();
+
+      expect(latestActiveRepo === "/repo-a").toBe(true);
+      expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
+      expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
+      expect(toastError).toHaveBeenCalledWith("Repository switched, but workspace refresh failed", {
+        description: "workspace list failed",
+      });
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      const latestValue: ReturnType<typeof useWorkspaceOperations> = latest;
+      expect(latestValue.activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+      expect(latestValue.branches).toEqual([
+        {
+          name: "main",
+          isCurrent: true,
+          isRemote: false,
+        },
+        {
+          name: "feature/repo-switch",
+          isCurrent: false,
+          isRemote: false,
+        },
+      ]);
+      expect(latestValue.workspaces).toEqual([
+        workspace("/repo-old", false),
+        workspace("/repo-a", true),
+      ]);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      host.workspaceSelect = originalWorkspaceSelect;
+      host.workspaceList = originalWorkspaceList;
+      host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+      host.runtimeEnsure = originalRuntimeEnsure;
+      host.gitGetCurrentBranch = originalGitGetCurrentBranch;
+      host.gitGetBranches = originalGitGetBranches;
+      (toast as { error: typeof toast.error }).error = originalToastError;
     }
   });
 

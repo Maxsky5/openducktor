@@ -8,6 +8,7 @@ export function BranchSwitcher(): ReactElement | null {
     activeRepo,
     branches,
     activeBranch,
+    isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
     branchSyncDegraded,
@@ -26,7 +27,7 @@ export function BranchSwitcher(): ReactElement | null {
   }
 
   const isBranchPickerDisabled =
-    isLoadingBranches || isSwitchingBranch || branchOptions.length === 0;
+    isSwitchingWorkspace || isLoadingBranches || isSwitchingBranch || branchOptions.length === 0;
   const branchPlaceholder = activeBranch?.detached
     ? "Detached HEAD"
     : isLoadingBranches
