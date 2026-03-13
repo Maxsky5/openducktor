@@ -140,8 +140,8 @@ export function useTaskOperations({
       setDetectingPullRequestTaskId(taskId);
       try {
         const result = await host.taskPullRequestDetect(repoPath, taskId);
-        await refreshTaskData(repoPath);
         if (result.outcome === "linked") {
+          await refreshTaskData(repoPath);
           toast.success("Pull request linked", {
             description: `PR #${result.pullRequest.number}`,
           });

@@ -491,6 +491,8 @@ describe("use-task-operations", () => {
       });
 
       expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).not.toHaveBeenCalled();
+      expect(runsList).not.toHaveBeenCalled();
       expect(toastWarning).toHaveBeenCalledWith("No pull request found", {
         description: "No open GitHub pull request found for odt/task-1.",
       });

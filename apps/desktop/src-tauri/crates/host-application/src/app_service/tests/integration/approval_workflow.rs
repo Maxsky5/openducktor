@@ -494,7 +494,6 @@ fn task_approval_context_reports_pull_request_unavailable_when_github_auth_is_mi
         .iter()
         .find(|provider| provider.provider_id == "github")
         .ok_or_else(|| anyhow!("github provider missing"))?;
-    dbg!(github);
     assert!(!github.available);
     assert!(github
         .reason
