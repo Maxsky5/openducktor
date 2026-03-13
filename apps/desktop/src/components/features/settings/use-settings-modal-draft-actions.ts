@@ -16,6 +16,9 @@ type UseSettingsModalDraftActionsArgs = {
 export type SettingsModalDraftActions = {
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   updateGlobalGitConfig: (updater: (current: GlobalGitConfig) => GlobalGitConfig) => void;
+  updateGlobalChatSettings: (
+    updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
+  ) => void;
   updateGlobalPromptOverrides: (
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
   ) => void;
@@ -90,6 +93,22 @@ export const useSettingsModalDraftActions = ({
     [setSnapshotDraft],
   );
 
+  const updateGlobalChatSettings = useCallback(
+    (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
+      setSnapshotDraft((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          chat: updater(current.chat),
+        };
+      });
+    },
+    [setSnapshotDraft],
+  );
+
   const updateRepoPromptOverrides = useCallback(
     (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
       updateSelectedRepoConfig((repoConfig) => ({
@@ -136,6 +155,7 @@ export const useSettingsModalDraftActions = ({
   return {
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
+    updateGlobalChatSettings,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,

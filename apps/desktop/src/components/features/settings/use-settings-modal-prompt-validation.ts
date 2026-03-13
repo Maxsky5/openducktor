@@ -91,6 +91,7 @@ export const useSettingsModalPromptValidation = ({
     git: 0,
     repositories: promptValidationState.repoTotalErrorCount,
     prompts: promptValidationState.globalErrorCount,
+    chat: 0,
   };
 
   return {

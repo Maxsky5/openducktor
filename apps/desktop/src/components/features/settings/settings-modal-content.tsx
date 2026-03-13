@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { SettingsChatSection } from "./settings-chat-section";
 import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import type {
@@ -65,6 +66,7 @@ export function SettingsModalContent({
     retrySelectedRepoBranchesLoad,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
+    updateGlobalChatSettings,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
@@ -123,6 +125,16 @@ export function SettingsModalContent({
         runtimeCheck={controller.runtimeCheck}
         disabled={isInteractionDisabled}
         onUpdateGit={updateGlobalGitConfig}
+      />
+    );
+  }
+
+  if (section === "chat") {
+    return (
+      <SettingsChatSection
+        chat={snapshotDraft.chat}
+        disabled={isInteractionDisabled}
+        onUpdateChat={updateGlobalChatSettings}
       />
     );
   }
