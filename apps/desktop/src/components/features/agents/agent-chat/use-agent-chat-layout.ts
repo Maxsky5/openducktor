@@ -79,7 +79,6 @@ export const scrollMessagesContainerToBottom = (
     top: nextTop,
     behavior: "auto",
   });
-  container.scrollTop = nextTop;
 };
 
 const adjustMessagesContainerScrollBy = (
@@ -100,7 +99,6 @@ const adjustMessagesContainerScrollBy = (
     top: nextTop,
     behavior: "auto",
   });
-  container.scrollTop = nextTop;
 };
 
 type UseAgentChatLayoutInput = {
