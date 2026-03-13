@@ -21,6 +21,7 @@ import {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { normalizeTargetBranch, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
+import { canDetectTaskPullRequest } from "@/lib/task-display";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
 import {
   useDelegationEventsContext,
@@ -57,7 +58,15 @@ export function AgentsPage(): ReactElement {
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
-  const { isLoadingTasks, tasks } = useTasksState();
+  const {
+    isLoadingTasks,
+    tasks,
+    runs,
+    syncPullRequests,
+    unlinkPullRequest,
+    detectingPullRequestTaskId,
+    unlinkingPullRequestTaskId,
+  } = useTasksState();
   const {
     sessions,
     loadAgentSessions,
@@ -131,6 +140,18 @@ export function AgentsPage(): ReactElement {
     }
     taskDetailsSheetRef.current?.openTask(selection.viewSelectedTask.id);
   }, [selection.viewSelectedTask]);
+  const handleDetectPullRequest = useCallback(
+    (taskId: string): void => {
+      void syncPullRequests(taskId).catch(() => undefined);
+    },
+    [syncPullRequests],
+  );
+  const handleUnlinkPullRequest = useCallback(
+    (taskId: string): void => {
+      void unlinkPullRequest(taskId).catch(() => undefined);
+    },
+    [unlinkPullRequest],
+  );
 
   useEffect(() => {
     const activeBuildRunId =
@@ -334,20 +355,32 @@ export function AgentsPage(): ReactElement {
     isBuilderSessionWorking: isActiveBuilderWorking,
     onResolveRebaseConflict: handleResolveRebaseConflict,
   });
+  const selectedTask = selection.viewSelectedTask;
   const diffModel = useMemo(
     () => ({
       ...diffData,
       contextMode: gitPanelContextMode,
       branch: resolvedGitPanelBranch,
-      pullRequest: selection.viewSelectedTask?.pullRequest ?? null,
+      pullRequest: selectedTask?.pullRequest ?? null,
+      ...(selectedTask && detectingPullRequestTaskId === selectedTask.id
+        ? { isDetectingPullRequest: true }
+        : {}),
+      ...(selectedTask && !selectedTask.pullRequest && canDetectTaskPullRequest(selectedTask, runs)
+        ? {
+            onDetectPullRequest: () => handleDetectPullRequest(selectedTask.id),
+          }
+        : {}),
       ...gitActions,
     }),
     [
       diffData,
       gitActions,
       gitPanelContextMode,
+      handleDetectPullRequest,
+      detectingPullRequestTaskId,
       resolvedGitPanelBranch,
-      selection.viewSelectedTask?.pullRequest,
+      runs,
+      selectedTask,
     ],
   );
   const rightPanelModel = useMemo(
@@ -417,7 +450,12 @@ export function AgentsPage(): ReactElement {
           <TaskDetailsSheetController
             ref={taskDetailsSheetRef}
             allTasks={tasks}
+            runs={runs}
             workflowActionsEnabled={false}
+            onDetectPullRequest={handleDetectPullRequest}
+            onUnlinkPullRequest={handleUnlinkPullRequest}
+            detectingPullRequestTaskId={detectingPullRequestTaskId}
+            unlinkingPullRequestTaskId={unlinkingPullRequestTaskId}
           />
         </>
       }

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, ArrowUp, GitBranch, RefreshCw, Target } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, GitBranch, Link2, RefreshCw, Target } from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ type GitInfoHeaderProps = Pick<
   | "isCommitting"
   | "isPushing"
   | "isRebasing"
+  | "isDetectingPullRequest"
   | "isGitActionsLocked"
   | "gitActionsLockReason"
   | "showLockReasonBanner"
@@ -34,6 +35,7 @@ type GitInfoHeaderProps = Pick<
   pushBranch: (() => Promise<void>) | null;
   rebaseOntoTarget: (() => Promise<void>) | null;
   pullFromUpstream: (() => Promise<void>) | null;
+  onDetectPullRequest?: (() => Promise<void> | void) | null;
   onRefresh: () => void;
 };
 
@@ -118,6 +120,7 @@ export function GitInfoHeader({
   isCommitting,
   isPushing,
   isRebasing,
+  isDetectingPullRequest,
   isGitActionsLocked,
   gitActionsLockReason,
   showLockReasonBanner,
@@ -126,9 +129,11 @@ export function GitInfoHeader({
   pushBranch,
   rebaseOntoTarget,
   pullFromUpstream,
+  onDetectPullRequest,
   setDiffScope,
   onRefresh,
 }: GitInfoHeaderProps): ReactElement {
+  const showDetectPullRequest = pullRequest == null && onDetectPullRequest != null;
   const isRepositoryMode = contextMode === "repository";
   const trimmedTargetBranch = targetBranch.trim();
   const isDetachedHead = branch == null || branch.trim().length === 0;
@@ -201,7 +206,7 @@ export function GitInfoHeader({
   };
 
   return (
-    <div className="space-y-0 border-b border-border">
+    <div className="flex flex-col border-b border-border">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
         <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
           {isRepositoryMode ? "Repository context" : "Branch context"}
@@ -343,6 +348,22 @@ export function GitInfoHeader({
             }
           />
         </div>
+        {showDetectPullRequest ? (
+          <div className="inline-flex items-center px-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => void onDetectPullRequest()}
+              disabled={Boolean(isDetectingPullRequest)}
+              data-testid="agent-studio-git-detect-pr-button"
+            >
+              <Link2 data-icon="inline-start" />
+              {isDetectingPullRequest ? "Detecting PR" : "Detect PR"}
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (
@@ -354,7 +375,7 @@ export function GitInfoHeader({
         </div>
       ) : null}
 
-      <div className="space-y-1">
+      <div className="flex flex-col gap-1">
         <div
           className="inline-flex h-9 w-full items-center bg-muted p-1 gap-1"
           role="tablist"

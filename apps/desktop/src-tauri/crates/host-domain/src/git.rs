@@ -83,6 +83,21 @@ pub struct PullRequestRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum TaskPullRequestDetectResult {
+    Linked {
+        #[serde(rename = "pullRequest")]
+        pull_request: PullRequestRecord,
+    },
+    NotFound {
+        #[serde(rename = "sourceBranch")]
+        source_branch: String,
+        #[serde(rename = "targetBranch")]
+        target_branch: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DirectMergeRecord {
     pub method: GitMergeMethod,

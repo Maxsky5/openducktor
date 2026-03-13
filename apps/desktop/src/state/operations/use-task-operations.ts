@@ -28,10 +28,14 @@ type UseTaskOperationsResult = {
   tasks: TaskCard[];
   runs: RunSummary[];
   isLoadingTasks: boolean;
+  detectingPullRequestTaskId: string | null;
+  unlinkingPullRequestTaskId: string | null;
   setIsLoadingTasks: (value: boolean) => void;
   clearTaskData: () => void;
   refreshTaskData: (repoPath: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
+  syncPullRequests: (taskId: string) => Promise<void>;
+  unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
@@ -49,10 +53,17 @@ export function useTaskOperations({
   const [tasks, setTasks] = useState<TaskCard[]>([]);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [detectingPullRequestTaskId, setDetectingPullRequestTaskId] = useState<string | null>(null);
+  const [unlinkingPullRequestTaskId, setUnlinkingPullRequestTaskId] = useState<string | null>(null);
   const activeRepoRef = useRef(activeRepo);
 
   useEffect(() => {
+    const previousActiveRepo = activeRepoRef.current;
     activeRepoRef.current = activeRepo;
+    if (previousActiveRepo !== activeRepo) {
+      setDetectingPullRequestTaskId(null);
+      setUnlinkingPullRequestTaskId(null);
+    }
   }, [activeRepo]);
 
   const refreshTaskData = useCallback(async (repoPath: string): Promise<void> => {
@@ -121,6 +132,58 @@ export function useTaskOperations({
       setIsLoadingTasks(false);
     }
   }, [activeRepo, refreshBeadsCheckForRepo, refreshTaskData]);
+
+  const syncPullRequests = useCallback(
+    async (taskId: string): Promise<void> => {
+      const repoPath = requireActiveRepo(activeRepo);
+
+      setDetectingPullRequestTaskId(taskId);
+      try {
+        const result = await host.taskPullRequestDetect(repoPath, taskId);
+        if (result.outcome === "linked") {
+          await refreshTaskData(repoPath);
+          toast.success("Pull request linked", {
+            description: `PR #${result.pullRequest.number}`,
+          });
+          return;
+        }
+        toast.warning("No pull request found", {
+          description: `No open GitHub pull request found for ${result.sourceBranch}.`,
+        });
+      } catch (error) {
+        toast.error("Failed to detect pull request", {
+          description: errorMessage(error),
+        });
+        throw error;
+      } finally {
+        setDetectingPullRequestTaskId((currentTaskId) =>
+          currentTaskId === taskId ? null : currentTaskId,
+        );
+      }
+    },
+    [activeRepo, refreshTaskData],
+  );
+
+  const unlinkPullRequest = useCallback(
+    async (taskId: string): Promise<void> => {
+      setUnlinkingPullRequestTaskId(taskId);
+      try {
+        await runTaskMutation({
+          run: async (repoPath) => {
+            await host.taskPullRequestUnlink(repoPath, taskId);
+          },
+          successTitle: "Pull request unlinked",
+          successDescription: taskId,
+          failureTitle: "Failed to unlink pull request",
+        });
+      } finally {
+        setUnlinkingPullRequestTaskId((currentTaskId) =>
+          currentTaskId === taskId ? null : currentTaskId,
+        );
+      }
+    },
+    [runTaskMutation],
+  );
 
   const createTask = useCallback(
     async (input: TaskCreateInput): Promise<void> => {
@@ -247,16 +310,22 @@ export function useTaskOperations({
     setTasks([]);
     setRuns([]);
     setIsLoadingTasks(false);
+    setDetectingPullRequestTaskId(null);
+    setUnlinkingPullRequestTaskId(null);
   }, []);
 
   return {
     tasks,
     runs,
     isLoadingTasks,
+    detectingPullRequestTaskId,
+    unlinkingPullRequestTaskId,
     setIsLoadingTasks,
     clearTaskData,
     refreshTaskData,
     refreshTasks,
+    syncPullRequests,
+    unlinkPullRequest,
     createTask,
     updateTask,
     deleteTask,

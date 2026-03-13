@@ -175,6 +175,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskApprovalContextSchema",
   "taskCardSchema",
   "taskCreateInputSchema",
+  "taskPullRequestDetectResultSchema",
   "taskMetadataDocumentSchema",
   "taskMetadataPayloadSchema",
   "taskMetadataQaReportSchema",

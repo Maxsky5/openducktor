@@ -185,6 +185,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           isCommitting={model.isCommitting ?? false}
           isPushing={model.isPushing ?? false}
           isRebasing={model.isRebasing ?? false}
+          isDetectingPullRequest={model.isDetectingPullRequest ?? false}
           isGitActionsLocked={model.isGitActionsLocked ?? false}
           gitActionsLockReason={model.gitActionsLockReason ?? null}
           showLockReasonBanner={!hasRebaseConflict && (model.showLockReasonBanner ?? true)}
@@ -193,6 +194,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           pushBranch={model.pushBranch ?? null}
           rebaseOntoTarget={model.rebaseOntoTarget ?? null}
           pullFromUpstream={model.pullFromUpstream ?? null}
+          onDetectPullRequest={model.onDetectPullRequest ?? null}
           setDiffScope={handleDiffScopeChange}
           onRefresh={model.refresh}
         />

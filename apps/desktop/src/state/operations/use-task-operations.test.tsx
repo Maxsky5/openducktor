@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { BeadsCheck, RunSummary, TaskCard, TaskCreateInput } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { toast } from "sonner";
 import { host } from "./host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -277,6 +278,378 @@ describe("use-task-operations", () => {
     } finally {
       await harness.unmount();
       host.repoPullRequestSync = original.repoPullRequestSync;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("syncPullRequests links a detected pull request for the task", async () => {
+    const taskPullRequestDetect = mock(async () => ({
+      outcome: "linked" as const,
+      pullRequest: {
+        providerId: "github",
+        number: 17,
+        url: "https://github.com/openai/openducktor/pull/17",
+        state: "open" as const,
+        createdAt: "2026-02-20T10:00:00Z",
+        updatedAt: "2026-02-20T10:00:00Z",
+        lastSyncedAt: "2026-02-20T10:00:00Z",
+        mergedAt: undefined,
+        closedAt: undefined,
+      },
+    }));
+    const tasksList = mock(async () => [
+      {
+        ...makeTask("A", "human_review"),
+        pullRequest: {
+          providerId: "github",
+          number: 17,
+          url: "https://github.com/openai/openducktor/pull/17",
+          state: "open" as const,
+          createdAt: "2026-02-20T10:00:00Z",
+          updatedAt: "2026-02-20T10:00:00Z",
+          lastSyncedAt: "2026-02-20T10:00:00Z",
+          mergedAt: undefined,
+          closedAt: undefined,
+        },
+      },
+    ]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const originalToastSuccess = toast.success;
+    const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { success: typeof toast.success }).success =
+      toastSuccess as unknown as typeof toast.success;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.syncPullRequests("A");
+      });
+
+      expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(runsList).toHaveBeenCalledWith("/repo");
+      expect(harness.getLatest().tasks[0]?.pullRequest?.number).toBe(17);
+      expect(toastSuccess).toHaveBeenCalledWith("Pull request linked", {
+        description: "PR #17",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.success = originalToastSuccess;
+    }
+  });
+
+  test("syncPullRequests tracks only the detecting task while the request is pending", async () => {
+    const detection = createDeferred<{
+      outcome: "linked";
+      pullRequest: {
+        providerId: "github";
+        number: number;
+        url: string;
+        state: "open";
+        createdAt: string;
+        updatedAt: string;
+        lastSyncedAt: string;
+        mergedAt: undefined;
+        closedAt: undefined;
+      };
+    }>();
+    const taskPullRequestDetect = mock(async () => detection.promise);
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+
+      let syncPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        syncPromise = value.syncPullRequests("A");
+      });
+
+      expect(harness.getLatest().detectingPullRequestTaskId).toBe("A");
+      expect(harness.getLatest().unlinkingPullRequestTaskId).toBeNull();
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+
+      await act(async () => {
+        detection.resolve({
+          outcome: "linked",
+          pullRequest: {
+            providerId: "github",
+            number: 17,
+            url: "https://github.com/openai/openducktor/pull/17",
+            state: "open",
+            createdAt: "2026-02-20T10:00:00Z",
+            updatedAt: "2026-02-20T10:00:00Z",
+            lastSyncedAt: "2026-02-20T10:00:00Z",
+            mergedAt: undefined,
+            closedAt: undefined,
+          },
+        });
+        await syncPromise;
+      });
+      await flush();
+
+      expect(harness.getLatest().detectingPullRequestTaskId).toBeNull();
+    } finally {
+      detection.resolve({
+        outcome: "linked",
+        pullRequest: {
+          providerId: "github",
+          number: 17,
+          url: "https://github.com/openai/openducktor/pull/17",
+          state: "open",
+          createdAt: "2026-02-20T10:00:00Z",
+          updatedAt: "2026-02-20T10:00:00Z",
+          lastSyncedAt: "2026-02-20T10:00:00Z",
+          mergedAt: undefined,
+          closedAt: undefined,
+        },
+      });
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("syncPullRequests warns when no pull request exists for the task branch", async () => {
+    const taskPullRequestDetect = mock(async () => ({
+      outcome: "not_found" as const,
+      sourceBranch: "odt/task-1",
+      targetBranch: "main",
+    }));
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const originalToastWarning = toast.warning;
+    const toastWarning = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { warning: typeof toast.warning }).warning =
+      toastWarning as unknown as typeof toast.warning;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.syncPullRequests("A");
+      });
+
+      expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).not.toHaveBeenCalled();
+      expect(runsList).not.toHaveBeenCalled();
+      expect(toastWarning).toHaveBeenCalledWith("No pull request found", {
+        description: "No open GitHub pull request found for odt/task-1.",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.warning = originalToastWarning;
+    }
+  });
+
+  test("syncPullRequests fails fast when pull request detection errors", async () => {
+    const taskPullRequestDetect = mock(async () => {
+      throw new Error("gh auth expired");
+    });
+    const tasksList = mock(async () => [makeTask("A", "open")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestDetect: host.taskPullRequestDetect,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      let caughtError: unknown = null;
+      await harness.run(async (value) => {
+        try {
+          await value.syncPullRequests("A");
+        } catch (error) {
+          caughtError = error;
+        }
+      });
+
+      expect(caughtError).toBeInstanceOf(Error);
+      expect((caughtError as Error).message).toBe("gh auth expired");
+      expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = original.taskPullRequestDetect;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+    }
+  });
+
+  test("unlinkPullRequest refreshes tasks after removing a linked pull request", async () => {
+    const taskPullRequestUnlink = mock(async () => ({ ok: true }));
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestUnlink: host.taskPullRequestUnlink,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestUnlink = taskPullRequestUnlink;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const originalToastSuccess = toast.success;
+    const toastSuccess = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { success: typeof toast.success }).success =
+      toastSuccess as unknown as typeof toast.success;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.unlinkPullRequest("A");
+      });
+
+      expect(taskPullRequestUnlink).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).toHaveBeenCalledWith("/repo");
+      expect(runsList).toHaveBeenCalledWith("/repo");
+      expect(harness.getLatest().tasks[0]?.pullRequest).toBeUndefined();
+      expect(toastSuccess).toHaveBeenCalledWith("Pull request unlinked", {
+        description: "A",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestUnlink = original.taskPullRequestUnlink;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.success = originalToastSuccess;
+    }
+  });
+
+  test("unlinkPullRequest tracks only the unlinking task while the request is pending", async () => {
+    const unlink = createDeferred<{ ok: boolean }>();
+    const taskPullRequestUnlink = mock(async () => unlink.promise);
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestUnlink: host.taskPullRequestUnlink,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestUnlink = taskPullRequestUnlink;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+
+      let unlinkPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        unlinkPromise = value.unlinkPullRequest("A");
+      });
+
+      expect(harness.getLatest().unlinkingPullRequestTaskId).toBe("A");
+      expect(harness.getLatest().detectingPullRequestTaskId).toBeNull();
+      expect(harness.getLatest().isLoadingTasks).toBe(false);
+
+      await act(async () => {
+        unlink.resolve({ ok: true });
+        await unlinkPromise;
+      });
+      await flush();
+
+      expect(harness.getLatest().unlinkingPullRequestTaskId).toBeNull();
+    } finally {
+      unlink.resolve({ ok: true });
+      await harness.unmount();
+      host.taskPullRequestUnlink = original.taskPullRequestUnlink;
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
     }

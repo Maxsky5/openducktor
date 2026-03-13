@@ -2,7 +2,8 @@
 
 use anyhow::{anyhow, Context, Result};
 use host_domain::{
-    GitBranch, GitCurrentBranch, GitFileStatus, GitMergeBranchResult, GitMergeMethod, TaskStatus,
+    GitBranch, GitCurrentBranch, GitFileStatus, GitMergeBranchResult, GitMergeMethod,
+    TaskPullRequestDetectResult, TaskStatus,
 };
 use host_infra_system::{
     AppConfigStore, GitProviderConfig, GitProviderRepository, HookSet, RepoConfig,
@@ -73,6 +74,10 @@ fn configure_builder_session(
     git_state: &std::sync::Arc<std::sync::Mutex<crate::app_service::test_support::GitState>>,
 ) -> Result<()> {
     fs::create_dir_all(worktree_path)?;
+    let repo_root = Path::new(repo_path);
+    if run_git(repo_root, &["remote", "get-url", "origin"]).is_err() {
+        configure_github_remote(repo_root, "origin", "github.com")?;
+    }
 
     let mut session = make_session("task-1", "session-build");
     session.working_directory = worktree_path.to_string_lossy().to_string();
@@ -179,6 +184,14 @@ case "${1:-}" in
       cat "$ODT_GH_FETCH_RESPONSE"
       exit 0
     fi
+    if [ "$method" = "GET" ] && [ "$path" = "repos/openai/openducktor/pulls" ]; then
+      if [ -n "${ODT_GH_LIST_RESPONSE:-}" ]; then
+        cat "$ODT_GH_LIST_RESPONSE"
+      else
+        printf '[]\n'
+      fi
+      exit 0
+    fi
     echo "unsupported gh api call: $*" >&2
     exit 1
     ;;
@@ -233,6 +246,7 @@ fn task_direct_merge_closes_task_records_metadata_and_cleans_builder_workspace()
         config_store,
     );
     let repo_path = repo.to_string_lossy().to_string();
+    let _ = run_git(&repo, &["remote", "remove", "origin"]);
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -348,11 +362,20 @@ fn task_approval_context_reports_global_merge_default_and_dirty_worktree() -> Re
 
 #[test]
 fn approval_actions_reject_dirty_builder_worktree() -> Result<()> {
+    let _env_lock = lock_env();
     let root = unique_temp_path("approval-dirty-actions");
     let repo = root.join("repo");
     let worktree_base = root.join("worktrees");
     let worktree_path = worktree_base.join("task-1");
     init_git_repo(&repo)?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "0");
+    let _auth_error_guard = set_env_var(
+        "ODT_GH_AUTH_ERROR",
+        "GitHub authentication is not configured. Run gh auth login.",
+    );
 
     let config_store = AppConfigStore::from_path(root.join("config.json"));
     let (service, task_state, git_state) = build_service_with_store(
@@ -374,6 +397,7 @@ fn approval_actions_reject_dirty_builder_worktree() -> Result<()> {
         &task_state,
         &git_state,
     )?;
+    run_git(&repo, &["remote", "remove", "origin"])?;
     service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
 
     {
@@ -452,6 +476,16 @@ fn task_approval_context_reports_pull_request_unavailable_when_github_auth_is_mi
         &task_state,
         &git_state,
     )?;
+    let _ = run_git(&repo, &["remote", "remove", "origin"]);
+    run_git(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "upstream",
+            "git@github.com:someone/else.git",
+        ],
+    )?;
     service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
 
     let context = service.task_approval_context_get(repo_path.as_str(), "task-1")?;
@@ -527,6 +561,58 @@ fn task_approval_context_uses_configured_github_host_for_auth_status() -> Result
 }
 
 #[test]
+fn task_pull_request_unlink_clears_linked_pull_request() -> Result<()> {
+    let root = unique_temp_path("approval-pr-unlink");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::InProgress)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    let _ = run_git(&repo, &["remote", "remove", "origin"]);
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .pull_requests
+        .insert(
+            "task-1".to_string(),
+            host_domain::PullRequestRecord {
+                provider_id: "github".to_string(),
+                number: 17,
+                url: "https://github.com/openai/openducktor/pull/17".to_string(),
+                state: "open".to_string(),
+                created_at: "2026-03-11T10:00:00Z".to_string(),
+                updated_at: "2026-03-11T10:05:00Z".to_string(),
+                last_synced_at: None,
+                merged_at: None,
+                closed_at: None,
+            },
+        );
+
+    assert!(service.task_pull_request_unlink(repo_path.as_str(), "task-1")?);
+    assert!(!task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .pull_requests
+        .contains_key("task-1"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
 fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review() -> Result<()> {
     let _env_lock = lock_env();
     let root = unique_temp_path("approval-pr-create");
@@ -575,6 +661,7 @@ fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review
         config_store,
     );
     let repo_path = repo.to_string_lossy().to_string();
+    let _ = run_git(&repo, &["remote", "remove", "origin"]);
     configure_builder_session(
         repo_path.as_str(),
         &worktree_path,
@@ -583,7 +670,6 @@ fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review
         &task_state,
         &git_state,
     )?;
-    configure_github_remote(&repo, "upstream", "github.com")?;
     service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
 
     let linked =
@@ -617,7 +703,7 @@ fn task_pull_request_upsert_creates_pr_and_transitions_ai_review_to_human_review
             .expect("git state lock poisoned")
             .last_push_remote
             .as_deref(),
-        Some("upstream"),
+        Some("origin"),
     );
 
     let _ = fs::remove_dir_all(root);
@@ -784,7 +870,6 @@ fn task_pull_request_upsert_reuses_existing_draft_pull_request() -> Result<()> {
         &task_state,
         &git_state,
     )?;
-    configure_github_remote(&repo, "upstream", "github.com")?;
     service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
     task_state
         .lock()
@@ -823,8 +908,387 @@ fn task_pull_request_upsert_reuses_existing_draft_pull_request() -> Result<()> {
             .expect("git state lock poisoned")
             .last_push_remote
             .as_deref(),
-        Some("upstream"),
+        Some("origin"),
     );
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_pull_request_detect_links_existing_pull_request_for_builder_branch() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("approval-pr-detect-link");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    let list_response = root.join("list.json");
+    init_git_repo(&repo)?;
+    write_json(
+        &list_response,
+        r#"[{"number":17,"html_url":"https://github.com/openai/openducktor/pull/17","title":"Existing PR","draft":false,"state":"open","created_at":"2026-03-11T10:00:00Z","updated_at":"2026-03-11T10:10:00Z","merged_at":null,"closed_at":null,"head":{"ref":"odt/task-1"},"base":{"ref":"main"}}]"#,
+    )?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
+    let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
+    let _list_guard = set_env_var(
+        "ODT_GH_LIST_RESPONSE",
+        list_response.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::AiReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+
+    let detected = service.task_pull_request_detect(repo_path.as_str(), "task-1")?;
+    match detected {
+        TaskPullRequestDetectResult::Linked { pull_request } => {
+            assert_eq!(pull_request.provider_id, "github");
+            assert_eq!(pull_request.number, 17);
+            assert_eq!(
+                pull_request.url,
+                "https://github.com/openai/openducktor/pull/17"
+            );
+            assert_eq!(pull_request.state, "open");
+            assert_eq!(pull_request.created_at, "2026-03-11T10:00:00Z");
+            assert_eq!(pull_request.updated_at, "2026-03-11T10:10:00Z");
+            assert!(pull_request.last_synced_at.is_some());
+            assert_eq!(pull_request.merged_at, None);
+            assert_eq!(pull_request.closed_at, None);
+        }
+        other => return Err(anyhow!("expected linked detection result, got {other:?}")),
+    }
+
+    let state = task_state.lock().expect("task state lock poisoned");
+    let task = state
+        .tasks
+        .iter()
+        .find(|task| task.id == "task-1")
+        .ok_or_else(|| anyhow!("task not found after detect"))?;
+    assert_eq!(task.status, TaskStatus::AiReview);
+    let pull_request = state
+        .pull_requests
+        .get("task-1")
+        .ok_or_else(|| anyhow!("pull request not linked"))?;
+    assert_eq!(pull_request.number, 17);
+    assert_eq!(pull_request.state, "open");
+    assert!(pull_request.last_synced_at.is_some());
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_pull_request_detect_finds_pull_request_even_when_base_differs_from_default_target_branch(
+) -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("approval-pr-detect-ignores-base");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    let gh_log = root.join("gh.log");
+    let list_response = root.join("list.json");
+    init_git_repo(&repo)?;
+    write_json(
+        &list_response,
+        r#"[{"number":17,"html_url":"https://github.com/openai/openducktor/pull/17","title":"Existing PR","draft":false,"state":"open","created_at":"2026-03-11T10:00:00Z","updated_at":"2026-03-11T10:10:00Z","merged_at":null,"closed_at":null,"head":{"ref":"odt/task-1"},"base":{"ref":"develop"}}]"#,
+    )?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
+    let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
+    let _gh_log_guard = set_env_var("ODT_GH_LOG_FILE", gh_log.to_string_lossy().as_ref());
+    let _list_guard = set_env_var(
+        "ODT_GH_LIST_RESPONSE",
+        list_response.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    let mut repo_config = github_repo_config(&worktree_base);
+    repo_config.default_target_branch.branch = "origin/main".to_string();
+    service.workspace_update_repo_config(repo_path.as_str(), repo_config)?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+
+    let detected = service.task_pull_request_detect(repo_path.as_str(), "task-1")?;
+    match detected {
+        TaskPullRequestDetectResult::Linked { pull_request } => {
+            assert_eq!(pull_request.number, 17);
+        }
+        other => return Err(anyhow!("expected linked detection result, got {other:?}")),
+    }
+
+    let gh_log_contents = fs::read_to_string(&gh_log)?;
+    assert!(!gh_log_contents.contains("base=main"));
+    assert!(gh_log_contents.contains("head=openai:odt/task-1"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_pull_request_detect_queries_by_branch_with_head_owner_filter() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("approval-pr-detect-branch-query");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    let gh_log = root.join("gh.log");
+    let list_response = root.join("list.json");
+    init_git_repo(&repo)?;
+    write_json(
+        &list_response,
+        r#"[{"number":17,"html_url":"https://github.com/openai/openducktor/pull/17","title":"Existing PR","draft":false,"state":"open","created_at":"2026-03-11T10:00:00Z","updated_at":"2026-03-11T10:10:00Z","merged_at":null,"closed_at":null,"head":{"ref":"odt/task-1"},"base":{"ref":"main"}}]"#,
+    )?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
+    let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
+    let _gh_log_guard = set_env_var("ODT_GH_LOG_FILE", gh_log.to_string_lossy().as_ref());
+    let _list_guard = set_env_var(
+        "ODT_GH_LIST_RESPONSE",
+        list_response.to_string_lossy().as_ref(),
+    );
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+
+    let detected = service.task_pull_request_detect(repo_path.as_str(), "task-1")?;
+    match detected {
+        TaskPullRequestDetectResult::Linked { pull_request } => {
+            assert_eq!(pull_request.number, 17);
+        }
+        other => return Err(anyhow!("expected linked detection result, got {other:?}")),
+    }
+
+    let gh_log_contents = fs::read_to_string(&gh_log)?;
+    assert!(gh_log_contents.contains("api --method GET repos/openai/openducktor/pulls"));
+    assert!(gh_log_contents.contains("head=openai:odt/task-1"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_pull_request_detect_returns_not_found_when_no_pull_request_matches() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("approval-pr-detect-not-found");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
+    let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+
+    let detected = service.task_pull_request_detect(repo_path.as_str(), "task-1")?;
+    assert_eq!(
+        detected,
+        TaskPullRequestDetectResult::NotFound {
+            source_branch: "odt/task-1".to_string(),
+            target_branch: "main".to_string(),
+        }
+    );
+    assert!(!task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .pull_requests
+        .contains_key("task-1"));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_pull_request_detect_rejects_tasks_that_already_have_a_linked_pull_request() -> Result<()> {
+    let root = unique_temp_path("approval-pr-detect-existing-link");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+    task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .pull_requests
+        .insert(
+            "task-1".to_string(),
+            host_domain::PullRequestRecord {
+                provider_id: "github".to_string(),
+                number: 17,
+                url: "https://github.com/openai/openducktor/pull/17".to_string(),
+                state: "open".to_string(),
+                created_at: "2026-03-11T10:00:00Z".to_string(),
+                updated_at: "2026-03-11T10:05:00Z".to_string(),
+                last_synced_at: None,
+                merged_at: None,
+                closed_at: None,
+            },
+        );
+
+    let error = service
+        .task_pull_request_detect(repo_path.as_str(), "task-1")
+        .expect_err("existing linked pull request should block detection");
+    assert!(error
+        .to_string()
+        .contains("Task task-1 already has a linked pull request."));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn task_pull_request_detect_requires_matching_push_remote() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("approval-pr-detect-missing-remote");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
+    let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+    run_git(&repo, &["remote", "remove", "origin"])?;
+
+    let error = service
+        .task_pull_request_detect(repo_path.as_str(), "task-1")
+        .expect_err("missing GitHub remote should block detection");
+    assert!(error
+        .to_string()
+        .contains("No git remote matches the configured GitHub repository"));
 
     let _ = fs::remove_dir_all(root);
     Ok(())
@@ -941,6 +1405,57 @@ fn repo_pull_request_sync_closes_tasks_when_linked_pull_request_is_merged() -> R
     assert!(git.calls.iter().any(
         |call| matches!(call, GitCall::DeleteLocalBranch { branch, .. } if branch == "odt/task-1")
     ));
+
+    let _ = fs::remove_dir_all(root);
+    Ok(())
+}
+
+#[test]
+fn repo_pull_request_sync_does_not_discover_pull_requests_for_unlinked_tasks() -> Result<()> {
+    let _env_lock = lock_env();
+    let root = unique_temp_path("approval-pr-sync-no-discovery");
+    let repo = root.join("repo");
+    let worktree_base = root.join("worktrees");
+    let worktree_path = worktree_base.join("task-1");
+    let gh_log = root.join("gh.log");
+    init_git_repo(&repo)?;
+
+    let bin_dir = write_fake_gh(&root)?;
+    let _path_guard = prepend_path(&bin_dir);
+    let _auth_ok_guard = set_env_var("ODT_GH_AUTH_OK", "1");
+    let _auth_login_guard = set_env_var("ODT_GH_AUTH_LOGIN", "octocat");
+    let _gh_log_guard = set_env_var("ODT_GH_LOG_FILE", gh_log.to_string_lossy().as_ref());
+
+    let config_store = AppConfigStore::from_path(root.join("config.json"));
+    let (service, task_state, git_state) = build_service_with_store(
+        vec![make_task("task-1", "task", TaskStatus::HumanReview)],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    let repo_path = repo.to_string_lossy().to_string();
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(repo_path.as_str(), github_repo_config(&worktree_base))?;
+    configure_builder_session(
+        repo_path.as_str(),
+        &worktree_path,
+        "odt/task-1",
+        &service,
+        &task_state,
+        &git_state,
+    )?;
+
+    assert!(service.repo_pull_request_sync(repo_path.as_str())?);
+    assert!(!task_state
+        .lock()
+        .expect("task state lock poisoned")
+        .pull_requests
+        .contains_key("task-1"));
+    assert!(!gh_log.exists() || fs::read_to_string(&gh_log)?.trim().is_empty());
 
     let _ = fs::remove_dir_all(root);
     Ok(())

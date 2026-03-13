@@ -79,9 +79,13 @@ export type ChecksStateContextValue = {
 
 export type TasksStateContextValue = {
   isLoadingTasks: boolean;
+  detectingPullRequestTaskId: string | null;
+  unlinkingPullRequestTaskId: string | null;
   tasks: TaskCard[];
   runs: RunSummary[];
   refreshTasks: () => Promise<void>;
+  syncPullRequests: (taskId: string) => Promise<void>;
+  unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput) => Promise<void>;
   updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;

@@ -55,4 +55,155 @@ describe("TaskDetailsSheetHeader", () => {
     expect(html).toContain("PR #110");
     expect(html).toContain("text-violet");
   });
+
+  test("renders a detect PR button for active review statuses", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-3",
+      status: "human_review",
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        onDetectPullRequest: () => {},
+      }),
+    );
+
+    expect(html).toContain("Detect PR");
+    expect(html).toContain("task-details-detect-pr-button");
+  });
+
+  test("renders unlink PR and hides detect PR when a pull request is already linked", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-3",
+      status: "human_review",
+      pullRequest: {
+        providerId: "github",
+        number: 17,
+        url: "https://github.com/openai/openducktor/pull/17",
+        state: "open",
+        createdAt: "2026-03-12T12:24:09Z",
+        updatedAt: "2026-03-12T12:24:09Z",
+        lastSyncedAt: undefined,
+        mergedAt: undefined,
+        closedAt: undefined,
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        onDetectPullRequest: () => {},
+        onUnlinkPullRequest: () => {},
+      }),
+    );
+
+    expect(html).toContain("PR #17");
+    expect(html).toContain("Unlink PR");
+    expect(html).toContain("task-details-unlink-pr-button");
+    expect(html).not.toContain("task-details-detect-pr-button");
+  });
+
+  test("renders the unlinking state when PR unlink is in flight", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-6",
+      status: "human_review",
+      pullRequest: {
+        providerId: "github",
+        number: 27,
+        url: "https://github.com/openai/openducktor/pull/27",
+        state: "open",
+        createdAt: "2026-03-12T12:24:09Z",
+        updatedAt: "2026-03-12T12:24:09Z",
+        lastSyncedAt: undefined,
+        mergedAt: undefined,
+        closedAt: undefined,
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        onUnlinkPullRequest: () => {},
+        isUnlinkingPullRequest: true,
+      }),
+    );
+
+    expect(html).toContain("Unlinking PR");
+    expect(html).toContain("disabled");
+  });
+
+  test("omits unlink PR for statuses that cannot manage pull requests", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-5",
+      status: "closed",
+      pullRequest: {
+        providerId: "github",
+        number: 21,
+        url: "https://github.com/openai/openducktor/pull/21",
+        state: "merged",
+        createdAt: "2026-03-12T12:24:09Z",
+        updatedAt: "2026-03-12T12:24:09Z",
+        lastSyncedAt: undefined,
+        mergedAt: "2026-03-12T12:30:00Z",
+        closedAt: undefined,
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        onUnlinkPullRequest: () => {},
+      }),
+    );
+
+    expect(html).not.toContain("task-details-unlink-pr-button");
+  });
+
+  test("renders the detecting state when PR detection is in flight", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-3",
+      status: "human_review",
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        onDetectPullRequest: () => {},
+        isDetectingPullRequest: true,
+      }),
+    );
+
+    expect(html).toContain("Detecting PR");
+    expect(html).toContain("disabled");
+  });
+
+  test("omits the detect PR button for non-build statuses", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-4",
+      status: "open",
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        onDetectPullRequest: () => {},
+      }),
+    );
+
+    expect(html).not.toContain("Detect PR");
+    expect(html).not.toContain("task-details-detect-pr-button");
+  });
 });

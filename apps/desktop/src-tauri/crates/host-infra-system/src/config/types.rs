@@ -59,7 +59,7 @@ pub(crate) fn normalize_git_target_branch_value(mut value: GitTargetBranch) -> G
         return value;
     }
 
-    let remote = value.remote.take().and_then(|entry| {
+    let mut remote = value.remote.take().and_then(|entry| {
         let trimmed = entry.trim();
         if trimmed.is_empty() {
             None
@@ -67,6 +67,30 @@ pub(crate) fn normalize_git_target_branch_value(mut value: GitTargetBranch) -> G
             Some(trimmed.to_string())
         }
     });
+
+    if let Some(branch_name) = value.branch.strip_prefix("refs/heads/") {
+        value.branch = branch_name.to_string();
+    } else if let Some(remote_ref) = value.branch.strip_prefix("refs/remotes/") {
+        let mut segments = remote_ref.splitn(2, '/');
+        let parsed_remote = segments.next();
+        let parsed_branch = segments.next();
+        if let (Some(parsed_remote), Some(parsed_branch)) = (parsed_remote, parsed_branch) {
+            if remote.is_none() {
+                remote = Some(parsed_remote.to_string());
+            }
+            value.branch = parsed_branch.to_string();
+        }
+    }
+
+    if let Some(remote_name) = remote.as_deref() {
+        let prefix = format!("{remote_name}/");
+        if let Some(branch_name) = value.branch.strip_prefix(prefix.as_str()) {
+            if !branch_name.is_empty() {
+                value.branch = branch_name.to_string();
+            }
+        }
+    }
+
     value.remote = remote;
     value
 }

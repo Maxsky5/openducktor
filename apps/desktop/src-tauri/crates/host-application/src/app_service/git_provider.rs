@@ -44,6 +44,12 @@ pub(super) trait GitHostingProvider: Send + Sync {
         repository: &GitProviderRepository,
         number: u32,
     ) -> Result<ResolvedPullRequest>;
+    fn find_open_pull_request_for_branch(
+        &self,
+        repo_path: &Path,
+        repository: &GitProviderRepository,
+        source_branch: &str,
+    ) -> Result<Option<ResolvedPullRequest>>;
 }
 
 pub(super) struct GithubGhCliProvider;
@@ -111,24 +117,14 @@ impl GithubGhCliProvider {
     }
 
     fn git_remote_url(repo_path: &Path, remote_name: &str) -> Result<Option<String>> {
-        let (ok, stdout, stderr) = run_command_allow_failure_with_env(
+        let (ok, stdout, _stderr) = run_command_allow_failure_with_env(
             "git",
             &["remote", "get-url", remote_name],
             Some(repo_path),
             &[("GIT_TERMINAL_PROMPT", "0")],
         )?;
         if !ok {
-            let detail = if stderr.trim().is_empty() {
-                stdout
-            } else if stdout.trim().is_empty() {
-                stderr
-            } else {
-                format!("{stdout}\n{stderr}")
-            };
-            return Err(anyhow!(
-                "Failed to read git remote URL for '{remote_name}': {}",
-                detail.trim()
-            ));
+            return Ok(None);
         }
 
         let url = stdout.trim();
@@ -205,7 +201,9 @@ impl GithubGhCliProvider {
             return None;
         };
 
-        let host = host.rsplit_once('@').map_or(host, |(_, actual_host)| actual_host);
+        let host = host
+            .rsplit_once('@')
+            .map_or(host, |(_, actual_host)| actual_host);
 
         let mut segments = path.split('/');
         let owner = segments.next()?.trim();
@@ -252,6 +250,25 @@ impl GithubGhCliProvider {
         let response: GithubPullResponse = serde_json::from_str(payload.as_str())
             .map_err(|error| anyhow!("Failed to parse GitHub pull request response: {error}"))?;
         Ok(Self::normalize_pull_request(response))
+    }
+
+    fn parse_pull_list_response(payload: String) -> Result<Vec<ResolvedPullRequest>> {
+        if let Ok(responses) = serde_json::from_str::<Vec<GithubPullResponse>>(payload.as_str()) {
+            return Ok(responses
+                .into_iter()
+                .map(Self::normalize_pull_request)
+                .collect());
+        }
+
+        let pages = serde_json::from_str::<Vec<Vec<GithubPullResponse>>>(payload.as_str())
+            .map_err(|error| {
+                anyhow!("Failed to parse GitHub pull request list response: {error}")
+            })?;
+        Ok(pages
+            .into_iter()
+            .flatten()
+            .map(Self::normalize_pull_request)
+            .collect())
     }
 
     fn repo_slug(repository: &GitProviderRepository) -> String {
@@ -425,6 +442,37 @@ impl GitHostingProvider for GithubGhCliProvider {
             &["api", &format!("repos/{repo_slug}/pulls/{number}")],
         )?;
         Self::parse_pull_response(payload)
+    }
+
+    fn find_open_pull_request_for_branch(
+        &self,
+        repo_path: &Path,
+        repository: &GitProviderRepository,
+        source_branch: &str,
+    ) -> Result<Option<ResolvedPullRequest>> {
+        let repo_slug = Self::repo_slug(repository);
+        let payload = Self::run_gh(
+            repo_path,
+            Some(repository.host.as_str()),
+            &[
+                "api",
+                "--method",
+                "GET",
+                &format!("repos/{repo_slug}/pulls"),
+                "-f",
+                "state=open",
+                "-f",
+                &format!("head={}:{}", repository.owner, source_branch),
+            ],
+        )?;
+        let mut pull_requests = Self::parse_pull_list_response(payload)?;
+        match pull_requests.len() {
+            0 => Ok(None),
+            1 => Ok(pull_requests.pop()),
+            _ => Err(anyhow!(
+                "Multiple open pull requests were found for branch {source_branch}."
+            )),
+        }
     }
 }
 

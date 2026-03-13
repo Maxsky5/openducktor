@@ -298,6 +298,8 @@ fn startup_phase_command_registration(
         task_approval_context_get,
         task_direct_merge,
         task_pull_request_upsert,
+        task_pull_request_unlink,
+        task_pull_request_detect,
         repo_pull_request_sync,
         human_request_changes,
         human_approve,

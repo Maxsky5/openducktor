@@ -98,6 +98,19 @@ export const pullRequestSchema = z.object({
 });
 export type PullRequest = z.infer<typeof pullRequestSchema>;
 
+export const taskPullRequestDetectResultSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("linked"),
+    pullRequest: pullRequestSchema,
+  }),
+  z.object({
+    outcome: z.literal("not_found"),
+    sourceBranch: z.string().trim().min(1),
+    targetBranch: z.string().trim().min(1),
+  }),
+]);
+export type TaskPullRequestDetectResult = z.infer<typeof taskPullRequestDetectResultSchema>;
+
 export const directMergeRecordSchema = z.object({
   method: gitMergeMethodSchema,
   sourceBranch: z.string().trim().min(1),

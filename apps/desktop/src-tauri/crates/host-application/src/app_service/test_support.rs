@@ -1074,6 +1074,15 @@ pub(crate) fn init_git_repo(path: &Path) -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .arg("remote")
+        .arg("remove")
+        .arg("origin")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
     Ok(())
 }
 

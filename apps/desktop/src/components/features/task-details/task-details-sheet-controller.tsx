@@ -28,6 +28,7 @@ export const TaskDetailsSheetController = forwardRef<
 >(function TaskDetailsSheetController(
   {
     allTasks,
+    runs,
     workflowActionsEnabled,
     onPlan,
     onQaStart,
@@ -39,6 +40,10 @@ export const TaskDetailsSheetController = forwardRef<
     onResumeDeferred,
     onHumanApprove,
     onHumanRequestChanges,
+    onDetectPullRequest,
+    onUnlinkPullRequest,
+    detectingPullRequestTaskId,
+    unlinkingPullRequestTaskId,
     onDelete,
   },
   ref,
@@ -74,6 +79,7 @@ export const TaskDetailsSheetController = forwardRef<
     <TaskDetailsSheet
       task={task}
       allTasks={allTasks}
+      runs={runs}
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
@@ -91,6 +97,10 @@ export const TaskDetailsSheetController = forwardRef<
       {...(onResumeDeferred ? { onResumeDeferred } : {})}
       {...(onHumanApprove ? { onHumanApprove } : {})}
       {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
+      {...(onDetectPullRequest ? { onDetectPullRequest } : {})}
+      {...(onUnlinkPullRequest ? { onUnlinkPullRequest } : {})}
+      {...(detectingPullRequestTaskId !== undefined ? { detectingPullRequestTaskId } : {})}
+      {...(unlinkingPullRequestTaskId !== undefined ? { unlinkingPullRequestTaskId } : {})}
       {...(onDelete ? { onDelete } : {})}
     />
   );

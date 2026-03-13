@@ -14,6 +14,7 @@ const taskDetailsSheetRenderMock = mock(
   (_props: {
     task: TaskCard | null;
     allTasks: TaskCard[];
+    runs: unknown[];
     open: boolean;
     workflowActionsEnabled?: boolean;
     onOpenChange: (open: boolean) => void;
@@ -46,6 +47,7 @@ describe("TaskDetailsSheetController", () => {
       return createElement(TaskDetailsSheetController, {
         ref: controllerRef,
         allTasks: [task],
+        runs: [],
         workflowActionsEnabled: false,
       });
     };
@@ -60,6 +62,7 @@ describe("TaskDetailsSheetController", () => {
       expect.objectContaining({
         task: null,
         allTasks: [task],
+        runs: [],
         open: false,
         workflowActionsEnabled: false,
       }),
@@ -74,8 +77,54 @@ describe("TaskDetailsSheetController", () => {
       expect.objectContaining({
         task,
         allTasks: [task],
+        runs: [],
         open: true,
         workflowActionsEnabled: false,
+      }),
+    );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  test("forwards pull request detection props to the task details sheet", async () => {
+    const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
+
+    const task = createTaskCardFixture({ id: "task-1", title: "Task 1", status: "human_review" });
+    const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
+    const onDetectPullRequest = mock((_taskId: string) => {});
+    const onUnlinkPullRequest = mock((_taskId: string) => {});
+
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(
+        createElement(TaskDetailsSheetController, {
+          ref: controllerRef,
+          allTasks: [task],
+          runs: [],
+          workflowActionsEnabled: false,
+          onDetectPullRequest,
+          onUnlinkPullRequest,
+          detectingPullRequestTaskId: "task-1",
+          unlinkingPullRequestTaskId: "task-1",
+        }),
+      );
+    });
+
+    await act(async () => {
+      controllerRef.current?.openTask(task.id);
+    });
+
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        task,
+        open: true,
+        runs: [],
+        onDetectPullRequest,
+        onUnlinkPullRequest,
+        detectingPullRequestTaskId: "task-1",
+        unlinkingPullRequestTaskId: "task-1",
       }),
     );
 

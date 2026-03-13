@@ -26,6 +26,7 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   commitError?: string | null;
   pushError?: string | null;
   rebaseError?: string | null;
+  isDetectingPullRequest?: boolean;
   commitAll?: (message: string) => Promise<boolean>;
   pushBranch?: () => Promise<void>;
   confirmForcePush?: () => Promise<void>;
@@ -36,5 +37,6 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   abortRebase?: () => Promise<void>;
   askBuilderToResolveRebaseConflict?: () => Promise<void>;
   pullFromUpstream?: () => Promise<void>;
+  onDetectPullRequest?: () => Promise<void> | void;
   onSendReview?: (message: string) => void;
 };

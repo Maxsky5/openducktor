@@ -18,7 +18,7 @@ pub use git::{
     GitRebaseAbortResult, GitRebaseBranchRequest, GitRebaseBranchResult, GitTargetBranch,
     GitUpstreamAheadBehind, GitWorktreeStatus, GitWorktreeStatusData, GitWorktreeStatusSnapshot,
     GitWorktreeStatusSummary, GitWorktreeStatusSummaryData, GitWorktreeSummary, PullRequestRecord,
-    TaskApprovalContext,
+    TaskApprovalContext, TaskPullRequestDetectResult,
 };
 pub use runtime::{
     AgentRuntimeKind, QaReviewTarget, QaReviewTargetSource, RunEvent, RunState, RunSummary,

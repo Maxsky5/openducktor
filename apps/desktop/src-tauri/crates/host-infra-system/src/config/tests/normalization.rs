@@ -92,6 +92,44 @@ fn update_repo_config_preserves_explicit_local_default_target_branch() {
 }
 
 #[test]
+fn update_repo_config_normalizes_remote_qualified_default_target_branch_values() {
+    let harness = TestStoreHarness::new("normalize-remote-qualified-target-branch");
+    let store = harness.store();
+    let root = harness.root();
+    let repo = root.join("repo");
+    fs::create_dir_all(repo.join(".git")).expect("repo");
+    let repo_str = repo.to_string_lossy().to_string();
+
+    store.add_workspace(&repo_str).expect("add workspace");
+    store
+        .update_repo_config(
+            &repo_str,
+            RepoConfig {
+                default_runtime_kind: "opencode".to_string(),
+                worktree_base_path: None,
+                branch_prefix: "duck".to_string(),
+                default_target_branch: GitTargetBranch {
+                    remote: Some("origin".to_string()),
+                    branch: "origin/main".to_string(),
+                },
+                git: Default::default(),
+                trusted_hooks: false,
+                trusted_hooks_fingerprint: None,
+                hooks: Default::default(),
+                worktree_file_copies: Vec::new(),
+                prompt_overrides: Default::default(),
+                agent_defaults: Default::default(),
+            },
+        )
+        .expect("update config");
+
+    let loaded = store.repo_config(&repo_str).expect("load repo config");
+    assert_eq!(loaded.default_target_branch.remote.as_deref(), Some("origin"));
+    assert_eq!(loaded.default_target_branch.branch, "main");
+    assert_eq!(loaded.default_target_branch.canonical(), "origin/main");
+}
+
+#[test]
 fn load_normalizes_legacy_blank_repo_config_values() {
     let harness = TestStoreHarness::new("normalize-legacy");
     let store = harness.store();

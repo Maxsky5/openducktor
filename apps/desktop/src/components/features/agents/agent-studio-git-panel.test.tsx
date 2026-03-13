@@ -280,6 +280,90 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
+  test("renders and triggers the detect PR button when the action is available", async () => {
+    const onDetectPullRequest = mock(async () => {});
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            onDetectPullRequest,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const detectButton = findByTestId(root, "agent-studio-git-detect-pr-button");
+    expect(getNodeText(detectButton)).toContain("Detect PR");
+
+    await act(async () => {
+      detectButton.props.onClick();
+      await flush();
+    });
+
+    expect(onDetectPullRequest).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("omits the detect PR button when no detection action is provided", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(AgentStudioGitPanel, { model: baseModel() }));
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-detect-pr-button")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("omits the detect PR button when a pull request is already linked", async () => {
+    const onDetectPullRequest = mock(async () => {});
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            onDetectPullRequest,
+            pullRequest: {
+              providerId: "github",
+              number: 110,
+              url: "https://github.com/openai/openducktor/pull/110",
+              state: "open",
+              createdAt: "2026-03-12T12:24:09Z",
+              updatedAt: "2026-03-12T12:24:09Z",
+              lastSyncedAt: undefined,
+              mergedAt: undefined,
+              closedAt: undefined,
+            },
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-detect-pr-button")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
   test("renders repository mode without target branch or rebase action", async () => {
     const refresh = mock(() => {});
     const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
