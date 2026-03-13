@@ -5,20 +5,34 @@ use super::persistence::{
     should_enforce_private_parent_permissions,
 };
 use super::types::{hook_set_fingerprint, GlobalConfig, HookSet, RepoConfig, RuntimeConfig};
-use crate::{resolve_default_worktree_base_dir, resolve_effective_worktree_base_dir};
-use anyhow::{anyhow, Result};
+use crate::resolve_default_worktree_base_dir;
+use anyhow::{anyhow, Context, Result};
 use host_domain::WorkspaceRecord;
 use std::path::{Path, PathBuf};
 
+fn path_buf_to_utf8(path: PathBuf, context: &str) -> Result<String> {
+    path.into_os_string().into_string().map_err(|value| {
+        anyhow!(
+            "{context}: path contains non-UTF-8 data ({})",
+            PathBuf::from(value).display()
+        )
+    })
+}
+
 fn default_worktree_base_path(repo_path: &str) -> Result<String> {
-    Ok(resolve_default_worktree_base_dir(Path::new(repo_path))?
-        .to_string_lossy()
-        .to_string())
+    path_buf_to_utf8(
+        resolve_default_worktree_base_dir(Path::new(repo_path))?,
+        &format!(
+            "Failed converting default worktree base path to UTF-8 for {repo_path}. Ensure HOME is set or configure repos.{repo_path}.worktreeBasePath"
+        ),
+    )
 }
 
 fn effective_worktree_base_path(repo_path: &str, repo: &RepoConfig) -> Result<String> {
-    resolve_effective_worktree_base_dir(Path::new(repo_path), repo.worktree_base_path.as_deref())
-        .map(|path| path.to_string_lossy().to_string())
+    match repo.worktree_base_path.as_ref() {
+        Some(configured_path) => Ok(configured_path.clone()),
+        None => default_worktree_base_path(repo_path),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -365,14 +379,26 @@ fn workspace_record_from_repo(
     workspace_key: &str,
     repo: &RepoConfig,
 ) -> Result<WorkspaceRecord> {
-    let default_worktree_base_path = default_worktree_base_path(workspace_key)?;
+    let default_worktree_base_path = match default_worktree_base_path(workspace_key) {
+        Ok(path) => Some(path),
+        Err(error) if repo.worktree_base_path.is_some() => None,
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "Failed resolving default worktree base path for workspace {}. Ensure HOME is set or configure repos.{}.worktreeBasePath",
+                    workspace_key,
+                    workspace_key
+                )
+            })
+        }
+    };
     let effective_worktree_base_path = effective_worktree_base_path(workspace_key, repo)?;
     Ok(WorkspaceRecord {
         path: workspace_key.to_string(),
         is_active: config.active_repo.as_deref() == Some(workspace_key),
         has_config: true,
         configured_worktree_base_path: repo.worktree_base_path.clone(),
-        default_worktree_base_path: Some(default_worktree_base_path),
+        default_worktree_base_path,
         effective_worktree_base_path: Some(effective_worktree_base_path),
     })
 }
