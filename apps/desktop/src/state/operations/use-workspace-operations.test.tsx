@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { createElement } from "react";
+import { createElement, useEffect } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
 import { host } from "./host";
@@ -141,6 +141,117 @@ const workspace = (path: string, isActive = false): WorkspaceRecord => ({
 });
 
 describe("use-workspace-operations", () => {
+  test("hydrates branches when startup activates the persisted repository", async () => {
+    const setActiveRepo = mock(() => {});
+    const gitGetCurrentBranch = mock(async () => ({
+      name: "main",
+      detached: false,
+    }));
+    const gitGetBranches = mock(async () => [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+      {
+        name: "feature/startup",
+        isCurrent: false,
+        isRemote: false,
+      },
+    ]);
+
+    const original = {
+      gitGetCurrentBranch: host.gitGetCurrentBranch,
+      gitGetBranches: host.gitGetBranches,
+    };
+    host.gitGetCurrentBranch = gitGetCurrentBranch;
+    host.gitGetBranches = gitGetBranches;
+
+    type LifecycleHarnessArgs = HookArgs;
+
+    let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
+    let currentArgs: LifecycleHarnessArgs = {
+      activeRepo: null,
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveBeadsCheck: () => {},
+    };
+
+    const StartupBranchLoader = ({
+      activeRepo,
+      value,
+    }: {
+      activeRepo: string | null;
+      value: ReturnType<typeof useWorkspaceOperations>;
+    }) => {
+      useEffect(() => {
+        if (!activeRepo) {
+          return;
+        }
+        void value.refreshBranches();
+      }, [activeRepo, value.refreshBranches]);
+
+      return null;
+    };
+
+    const Harness = ({ args }: { args: LifecycleHarnessArgs }) => {
+      latest = useWorkspaceOperations(args);
+      return createElement(StartupBranchLoader, {
+        activeRepo: args.activeRepo,
+        value: latest,
+      });
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    try {
+      await act(async () => {
+        renderer = TestRenderer.create(createElement(Harness, { args: currentArgs }));
+      });
+      await flush();
+
+      currentArgs = {
+        ...currentArgs,
+        activeRepo: "/repo-a",
+      };
+
+      await act(async () => {
+        renderer?.update(createElement(Harness, { args: currentArgs }));
+      });
+      await flush();
+
+      if (!latest) {
+        throw new Error("Hook not mounted");
+      }
+
+      const latestValue: ReturnType<typeof useWorkspaceOperations> = latest;
+
+      expect(latestValue.activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+      expect(latestValue.branches).toEqual([
+        {
+          name: "main",
+          isCurrent: true,
+          isRemote: false,
+        },
+        {
+          name: "feature/startup",
+          isCurrent: false,
+          isRemote: false,
+        },
+      ]);
+      expect(latestValue.isLoadingBranches).toBe(false);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      host.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      host.gitGetBranches = original.gitGetBranches;
+    }
+  });
+
   test("refreshWorkspaces updates list and active repo", async () => {
     const setActiveRepo = mock(() => {});
     const workspaceList = mock(

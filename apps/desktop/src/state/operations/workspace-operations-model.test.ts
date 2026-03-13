@@ -9,6 +9,7 @@ import {
   normalizeRepoPath,
   shouldProbeExternalBranchChange,
   shouldReportBranchProbeError,
+  shouldResetBranchStateForRepoChange,
   shouldSkipBranchSwitch,
 } from "./workspace-operations-model";
 
@@ -47,6 +48,17 @@ describe("workspace-operations-model", () => {
         isSyncInFlight: false,
       }),
     ).toBe(false);
+  });
+
+  test("does not reset branch state for initial persisted repo hydration", () => {
+    expect(shouldResetBranchStateForRepoChange(null, "/repo")).toBe(false);
+    expect(shouldResetBranchStateForRepoChange(null, null)).toBe(false);
+  });
+
+  test("resets branch state for real repo transitions", () => {
+    expect(shouldResetBranchStateForRepoChange("/repo-a", "/repo-b")).toBe(true);
+    expect(shouldResetBranchStateForRepoChange("/repo-a", null)).toBe(true);
+    expect(shouldResetBranchStateForRepoChange("/repo-a", "/repo-a")).toBe(false);
   });
 
   test("detects branch identity changes", () => {
