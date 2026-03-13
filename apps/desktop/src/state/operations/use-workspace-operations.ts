@@ -67,6 +67,10 @@ export function useWorkspaceOperations({
   const lastKnownRevisionRef = useRef<string | null>(null);
   const activeRepoRef = useRef(activeRepo);
   const previousActiveRepoRef = useRef(activeRepo);
+  const preparedRepoSwitchRef = useRef<{
+    previousRepo: string | null;
+    nextRepo: string;
+  } | null>(null);
   const probeGatesRef = useRef({
     isSwitchingWorkspace,
     isLoadingBranches,
@@ -106,14 +110,44 @@ export function useWorkspaceOperations({
 
   useEffect(() => {
     const previousActiveRepo = previousActiveRepoRef.current;
+    const preparedRepoSwitch = preparedRepoSwitchRef.current;
+    const shouldSkipPreparedRepoReset =
+      preparedRepoSwitch?.previousRepo === previousActiveRepo &&
+      preparedRepoSwitch.nextRepo === activeRepo;
+
+    preparedRepoSwitchRef.current = null;
 
     previousActiveRepoRef.current = activeRepo;
     activeRepoRef.current = activeRepo;
 
-    if (shouldResetBranchStateForRepoChange(previousActiveRepo, activeRepo)) {
+    if (
+      !shouldSkipPreparedRepoReset &&
+      shouldResetBranchStateForRepoChange(previousActiveRepo, activeRepo)
+    ) {
       clearBranchData();
     }
   }, [activeRepo, clearBranchData]);
+
+  const markWorkspaceActiveLocally = useCallback((repoPath: string): void => {
+    setWorkspaces((current) => {
+      let hasMatch = false;
+      const next = current.map((workspace) => {
+        const isActive = workspace.path === repoPath;
+        hasMatch ||= isActive;
+
+        if (workspace.isActive === isActive) {
+          return workspace;
+        }
+
+        return {
+          ...workspace,
+          isActive,
+        };
+      });
+
+      return hasMatch ? next : current;
+    });
+  }, []);
 
   const applyWorkspaceRecords = useCallback(
     (records: WorkspaceRecord[]): void => {
@@ -400,17 +434,26 @@ export function useWorkspaceOperations({
 
   const selectWorkspace = useCallback(
     async (repoPath: string): Promise<void> => {
-      const previousRepo = activeRepo;
       const switchVersion = ++workspaceSwitchVersionRef.current;
+      const previousRepo = activeRepoRef.current;
 
-      setActiveRepo(repoPath);
-      clearTaskData();
-      clearActiveBeadsCheck();
-      clearBranchData();
       setIsSwitchingWorkspace(true);
 
       try {
         await host.workspaceSelect(repoPath);
+        if (workspaceSwitchVersionRef.current !== switchVersion) {
+          return;
+        }
+
+        clearTaskData();
+        clearActiveBeadsCheck();
+        clearBranchData();
+        preparedRepoSwitchRef.current = {
+          previousRepo,
+          nextRepo: repoPath,
+        };
+        setActiveRepo(repoPath);
+
         void host
           .workspaceGetRepoConfig(repoPath)
           .then((repoConfig) =>
@@ -427,7 +470,19 @@ export function useWorkspaceOperations({
         if (workspaceSwitchVersionRef.current !== switchVersion) {
           return;
         }
-        await refreshWorkspaces();
+
+        try {
+          await refreshWorkspaces();
+        } catch (error) {
+          if (workspaceSwitchVersionRef.current !== switchVersion) {
+            return;
+          }
+
+          markWorkspaceActiveLocally(repoPath);
+          toast.error("Repository switched, but workspace refresh failed", {
+            description: errorMessage(error),
+          });
+        }
       } catch (error) {
         if (workspaceSwitchVersionRef.current !== switchVersion) {
           return;
@@ -436,7 +491,6 @@ export function useWorkspaceOperations({
           description: errorMessage(error),
         });
         setIsSwitchingWorkspace(false);
-        setActiveRepo(previousRepo ?? null);
         throw error;
       } finally {
         if (workspaceSwitchVersionRef.current === switchVersion) {
@@ -445,10 +499,10 @@ export function useWorkspaceOperations({
       }
     },
     [
-      activeRepo,
       clearBranchData,
       clearTaskData,
       clearActiveBeadsCheck,
+      markWorkspaceActiveLocally,
       refreshWorkspaces,
       setActiveRepo,
     ],
