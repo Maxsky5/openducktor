@@ -23,7 +23,7 @@ fn map_plan_subtask_payload(
     })
 }
 
-fn map_plan_subtasks(
+pub(crate) fn map_plan_subtasks(
     subtasks: Option<Vec<PlanSubtaskPayload>>,
 ) -> Result<Option<Vec<PlanSubtaskInput>>, String> {
     subtasks

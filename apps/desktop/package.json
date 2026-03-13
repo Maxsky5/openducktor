@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:browser": "VITE_ODT_APP_MODE=browser VITE_ODT_BROWSER_BACKEND_URL=http://127.0.0.1:14327 vite",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

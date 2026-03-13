@@ -1,4 +1,9 @@
 import { createTauriHostClient, type TauriHostClient } from "@openducktor/adapters-tauri-host";
+import {
+  createBrowserLiveHostClient,
+  subscribeBrowserLiveRunEvents,
+} from "@/lib/browser-live-client";
+import { isBrowserAppMode } from "@/lib/browser-mode";
 import { isTauriRuntime } from "@/lib/runtime";
 
 let tauriCoreModulePromise: Promise<typeof import("@tauri-apps/api/core")> | null = null;
@@ -16,6 +21,9 @@ const notAvailable = async <T>(): Promise<T> => {
 
 export const createHostClient = (): TauriHostClient => {
   if (!isTauriRuntime()) {
+    if (isBrowserAppMode()) {
+      return createBrowserLiveHostClient();
+    }
     return createTauriHostClient(notAvailable);
   }
 
@@ -28,6 +36,10 @@ export const createHostClient = (): TauriHostClient => {
 export const subscribeRunEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {
+  if (isBrowserAppMode()) {
+    return subscribeBrowserLiveRunEvents(listener);
+  }
+
   if (!isTauriRuntime()) {
     return () => {};
   }

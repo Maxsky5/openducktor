@@ -3,7 +3,7 @@ use crate::{as_error, AppState, TaskCreatePayload, TaskUpdatePayload};
 use host_domain::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
 use tauri::State;
 
-fn map_task_create_payload(input: TaskCreatePayload) -> Result<CreateTaskInput, String> {
+pub(crate) fn map_task_create_payload(input: TaskCreatePayload) -> Result<CreateTaskInput, String> {
     Ok(CreateTaskInput {
         title: input.title,
         issue_type: parse_issue_type(&input.issue_type, "issueType")?,
@@ -16,7 +16,7 @@ fn map_task_create_payload(input: TaskCreatePayload) -> Result<CreateTaskInput, 
     })
 }
 
-fn map_task_update_payload(patch: TaskUpdatePayload) -> Result<UpdateTaskPatch, String> {
+pub(crate) fn map_task_update_payload(patch: TaskUpdatePayload) -> Result<UpdateTaskPatch, String> {
     let issue_type = match patch.issue_type {
         Some(issue_type) => Some(parse_issue_type(&issue_type, "issueType")?),
         None => None,

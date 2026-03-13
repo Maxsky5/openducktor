@@ -14,7 +14,7 @@ use super::{
     },
 };
 
-pub(super) fn parse_diff_scope(
+pub(crate) fn parse_diff_scope(
     diff_scope: Option<&str>,
 ) -> Result<host_domain::GitDiffScope, String> {
     match diff_scope.unwrap_or("target") {
@@ -26,7 +26,7 @@ pub(super) fn parse_diff_scope(
     }
 }
 
-pub(super) fn require_target_branch(target_branch: &str) -> Result<&str, String> {
+pub(crate) fn require_target_branch(target_branch: &str) -> Result<&str, String> {
     let trimmed_target = target_branch.trim();
     if trimmed_target.is_empty() {
         return Err("targetBranch is required".to_string());
