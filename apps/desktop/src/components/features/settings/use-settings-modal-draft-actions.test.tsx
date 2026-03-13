@@ -18,6 +18,9 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   git: {
     defaultMergeMethod: "merge_commit",
   },
+  chat: {
+    showThinkingMessages: false,
+  },
   globalPromptOverrides: {},
   repos: {
     "/repo-a": {
@@ -91,6 +94,28 @@ describe("useSettingsModalDraftActions", () => {
     expect(snapshot?.globalPromptOverrides["system.role.spec.base"]?.template).toBe(
       "global custom",
     );
+
+    await harness.unmount();
+  });
+
+  test("updates global chat settings without touching unrelated sections", async () => {
+    const harness = createHookHarness({
+      selectedRepoPath: "/repo-a",
+      initialSnapshot: createInitialSnapshot(),
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.updateGlobalChatSettings((chat) => ({
+        ...chat,
+        showThinkingMessages: true,
+      }));
+    });
+
+    const snapshot = harness.getLatest().snapshotDraft;
+    expect(snapshot?.chat.showThinkingMessages).toBe(true);
+    expect(snapshot?.git.defaultMergeMethod).toBe("merge_commit");
+    expect(snapshot?.repos["/repo-a"]?.branchPrefix).toBe("obp");
 
     await harness.unmount();
   });

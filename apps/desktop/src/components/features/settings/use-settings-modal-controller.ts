@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
+import { SETTINGS_SNAPSHOT_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-chat-settings";
 import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-repo-settings";
 import { useChecksState, useWorkspaceState } from "@/state";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -30,12 +31,14 @@ import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-va
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
 
 type DirtySections = {
+  chat: boolean;
   globalGit: boolean;
   globalPromptOverrides: boolean;
   repoSettings: boolean;
 };
 
 const EMPTY_DIRTY_SECTIONS: DirtySections = {
+  chat: false,
   globalGit: false,
   globalPromptOverrides: false,
   repoSettings: false,
@@ -75,6 +78,9 @@ export type SettingsModalController = {
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   updateGlobalGitConfig: (
     updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"],
+  ) => void;
+  updateGlobalChatSettings: (
+    updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
   updateGlobalPromptOverrides: (
     updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
@@ -163,6 +169,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
+    updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
     updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
     updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
     updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
@@ -198,6 +205,14 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
       applyGlobalGitConfigUpdate(updater);
     },
     [applyGlobalGitConfigUpdate, markDirty],
+  );
+
+  const updateGlobalChatSettings = useCallback(
+    (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
+      markDirty("chat");
+      applyGlobalChatSettingsUpdate(updater);
+    },
+    [applyGlobalChatSettingsUpdate, markDirty],
   );
 
   const updateGlobalPromptOverrides = useCallback(
@@ -329,6 +344,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
 
     try {
       if (
+        !dirtySections.chat &&
         !dirtySections.globalGit &&
         !dirtySections.globalPromptOverrides &&
         !dirtySections.repoSettings
@@ -338,8 +354,13 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
 
       const shouldUseGlobalGitSave =
         dirtySections.globalGit &&
+        !dirtySections.chat &&
         !dirtySections.globalPromptOverrides &&
         !dirtySections.repoSettings;
+
+      const shouldDispatchRepoSettingsUpdated =
+        Boolean(activeRepo) && (dirtySections.globalPromptOverrides || dirtySections.repoSettings);
+      let didSaveSettingsSnapshot = false;
 
       if (shouldUseGlobalGitSave) {
         const normalizedGit = normalizeGlobalGitConfigForSave(snapshotDraft.git);
@@ -354,9 +375,18 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
       } else {
         const normalizedSnapshot = normalizeSnapshotForSave(snapshotDraft);
         await saveSettingsSnapshot(normalizedSnapshot);
+        didSaveSettingsSnapshot = true;
       }
 
-      if (typeof window !== "undefined" && activeRepo && !shouldUseGlobalGitSave) {
+      if (typeof window !== "undefined" && didSaveSettingsSnapshot) {
+        window.dispatchEvent(new CustomEvent(SETTINGS_SNAPSHOT_UPDATED_EVENT));
+      }
+
+      if (
+        typeof window !== "undefined" &&
+        shouldDispatchRepoSettingsUpdated &&
+        didSaveSettingsSnapshot
+      ) {
         window.dispatchEvent(
           new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
             detail: { repoPath: activeRepo },
@@ -377,6 +407,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     }
   }, [
     activeRepo,
+    dirtySections.chat,
     dirtySections.globalGit,
     dirtySections.globalPromptOverrides,
     dirtySections.repoSettings,
@@ -421,6 +452,7 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
     detectSelectedRepoGithubRepository,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
+    updateGlobalChatSettings,
     updateGlobalPromptOverrides,
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,

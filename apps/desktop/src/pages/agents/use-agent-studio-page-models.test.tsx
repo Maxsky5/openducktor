@@ -25,6 +25,7 @@ type HookArgsOverrides = {
   sessionActions?: Partial<HookArgs["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
   permissions?: Partial<HookArgs["permissions"]>;
+  chatSettings?: Partial<HookArgs["chatSettings"]>;
   composer?: Partial<HookArgs["composer"]>;
 };
 
@@ -150,6 +151,10 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       onReplyPermission: async () => {},
       ...overrides.permissions,
     },
+    chatSettings: {
+      showThinkingMessages: false,
+      ...overrides.chatSettings,
+    },
     composer: {
       input: "",
       setInput: () => {},
@@ -197,6 +202,7 @@ describe("useAgentStudioPageModels", () => {
       totalTokens: 12,
       contextWindow: 100,
     });
+    expect(state.agentChatModel.thread.showThinkingMessages).toBe(false);
 
     state.agentChatModel.thread.onRefreshChecks();
     state.agentChatModel.thread.onKickoff();
@@ -520,6 +526,42 @@ describe("useAgentStudioPageModels", () => {
     expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
     expect(nextState.agentChatModel.thread.todoPanelCollapsed).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("updates thread model when showThinkingMessages changes without rebuilding composer", async () => {
+    const session = createSession("session-1", "external-1");
+    const baseProps = createHookArgs({
+      core: {
+        activeSession: session,
+        sessionsForTask: [session],
+      },
+      composer: {
+        input: "draft",
+      },
+      chatSettings: {
+        showThinkingMessages: false,
+      },
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialState = harness.getLatest();
+    const initialThreadModel = initialState.agentChatModel.thread;
+    const initialComposerModel = initialState.agentChatModel.composer;
+
+    await harness.update({
+      ...baseProps,
+      chatSettings: {
+        showThinkingMessages: true,
+      },
+    });
+
+    const nextState = harness.getLatest();
+    expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
+    expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(nextState.agentChatModel.thread.showThinkingMessages).toBe(true);
 
     await harness.unmount();
   });

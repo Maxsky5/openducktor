@@ -183,6 +183,9 @@ describe("settings-modal-normalization", () => {
       git: {
         defaultMergeMethod: "merge_commit",
       },
+      chat: {
+        showThinkingMessages: true,
+      },
       repos: {
         "/repo-a": createRepoConfig(),
       },
@@ -196,6 +199,7 @@ describe("settings-modal-normalization", () => {
     });
 
     expect(snapshot.repos["/repo-a"]?.hooks.preStart).toEqual(["npm ci"]);
+    expect(snapshot.chat.showThinkingMessages).toBe(true);
     expect(snapshot.globalPromptOverrides).toEqual({
       "kickoff.spec_initial": {
         template: "global",
@@ -209,6 +213,9 @@ describe("settings-modal-normalization", () => {
     const snapshot = {
       git: {
         defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
       },
       repos: {
         "/repo-b": createRepoConfig(),
@@ -224,6 +231,9 @@ describe("settings-modal-normalization", () => {
         {
           git: {
             defaultMergeMethod: "merge_commit" as const,
+          },
+          chat: {
+            showThinkingMessages: false,
           },
           repos: {},
           globalPromptOverrides: {},

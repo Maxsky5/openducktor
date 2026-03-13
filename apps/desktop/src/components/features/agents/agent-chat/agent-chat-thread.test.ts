@@ -19,6 +19,7 @@ import { AgentChatThread } from "./agent-chat-thread";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const baseModel = {
+  showThinkingMessages: false,
   isSessionViewLoading: false,
   roleOptions: TEST_ROLE_OPTIONS,
   agentStudioReady: true,
@@ -99,6 +100,50 @@ describe("AgentChatThread", () => {
     );
 
     expect(html).toContain("Loading session history...");
+  });
+
+  test("renders blank transcript area when session has messages but all were filtered (e.g., thinking-only with showThinkingMessages=false)", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          showThinkingMessages: false,
+          session: buildSession({
+            status: "stopped",
+            messages: [
+              buildMessage("thinking", "Reasoning trace 1", { id: "thinking-1" }),
+              buildMessage("thinking", "Reasoning trace 2", { id: "thinking-2" }),
+            ],
+            draftAssistantText: "",
+            pendingQuestions: [],
+            pendingPermissions: [],
+          }),
+        },
+      }),
+    );
+
+    expect(html).not.toContain("Loading session history...");
+  });
+
+  test("renders pending question and permission cards below blank transcript when filtered to zero", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...baseModel,
+          showThinkingMessages: false,
+          session: buildSession({
+            status: "stopped",
+            messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],
+            pendingQuestions: [buildQuestionRequest()],
+            pendingPermissions: [buildPermissionRequest()],
+          }),
+        },
+      }),
+    );
+
+    expect(html).not.toContain("Loading session history...");
+    expect(html).toContain("Input needed");
+    expect(html).toContain("Permission request");
   });
 
   test("renders initializing state while autostart session is pending", () => {

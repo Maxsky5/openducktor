@@ -1,9 +1,15 @@
 import type { AgentPromptTemplateId } from "@openducktor/contracts";
 import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { listBuiltinAgentPromptTemplates } from "@openducktor/core";
-import { FolderGit2, type LucideIcon, MessageSquareText, SlidersHorizontal } from "lucide-react";
+import {
+  FolderGit2,
+  type LucideIcon,
+  MessageSquare,
+  MessageSquareText,
+  SlidersHorizontal,
+} from "lucide-react";
 
-export type SettingsSectionId = "general" | "git" | "repositories" | "prompts";
+export type SettingsSectionId = "general" | "git" | "repositories" | "prompts" | "chat";
 export type RepositorySectionId = "configuration" | "git" | "agents" | "prompts";
 export type PromptRoleTabId = "shared" | "spec" | "planner" | "build" | "qa";
 
@@ -18,6 +24,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "git", label: "Git", icon: FolderGit2 },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },
   { id: "prompts", label: "Prompts", icon: MessageSquareText },
+  { id: "chat", label: "Chat", icon: MessageSquare },
 ];
 
 export const REPOSITORY_SECTIONS: ReadonlyArray<{

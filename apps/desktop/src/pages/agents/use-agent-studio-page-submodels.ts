@@ -134,6 +134,7 @@ export const useAgentStudioThreadModel = ({
     () =>
       buildAgentChatThreadModel({
         activeSession: session.threadSession,
+        showThinkingMessages: session.showThinkingMessages,
         isSessionViewLoading: session.isContextSwitching,
         roleOptions: ROLE_OPTIONS,
         agentStudioReady: readiness.agentStudioReady,
@@ -186,6 +187,7 @@ export const useAgentStudioThreadModel = ({
       scroll.onMessagesWheel,
       session.activeSessionAgentColors,
       session.isContextSwitching,
+      session.showThinkingMessages,
       session.taskId,
       session.threadSession,
       todoPanel.onToggleTodoPanel,

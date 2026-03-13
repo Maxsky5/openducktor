@@ -58,6 +58,9 @@ describe("useAgentStudioSessionStartFlow", () => {
       git: {
         defaultMergeMethod: "merge_commit",
       },
+      chat: {
+        showThinkingMessages: false,
+      },
       repos: {},
       globalPromptOverrides: {},
     });

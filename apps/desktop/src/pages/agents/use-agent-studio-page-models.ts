@@ -119,6 +119,10 @@ type AgentStudioComposerContext = {
   setInput: (value: string) => void;
 };
 
+type AgentStudioChatSettingsContext = {
+  showThinkingMessages: boolean;
+};
+
 type UseAgentStudioPageModelsArgs = {
   core: AgentStudioCoreContext;
   taskTabs: AgentStudioTaskTabsContext;
@@ -127,6 +131,7 @@ type UseAgentStudioPageModelsArgs = {
   sessionActions: AgentStudioSessionActionsContext;
   modelSelection: AgentStudioModelSelectionContext;
   permissions: AgentStudioPermissionContext;
+  chatSettings: AgentStudioChatSettingsContext;
   composer: AgentStudioComposerContext;
 };
 
@@ -138,6 +143,7 @@ export function useAgentStudioPageModels({
   sessionActions,
   modelSelection,
   permissions,
+  chatSettings,
   composer,
 }: UseAgentStudioPageModelsArgs): {
   activeTabValue: string;
@@ -343,11 +349,18 @@ export function useAgentStudioPageModels({
   const threadSessionContext = useMemo<AgentStudioThreadSessionContext>(
     () => ({
       threadSession,
+      showThinkingMessages: chatSettings.showThinkingMessages,
       isContextSwitching,
       taskId: core.taskId,
       activeSessionAgentColors: modelSelection.activeSessionAgentColors,
     }),
-    [core.taskId, isContextSwitching, modelSelection.activeSessionAgentColors, threadSession],
+    [
+      chatSettings.showThinkingMessages,
+      core.taskId,
+      isContextSwitching,
+      modelSelection.activeSessionAgentColors,
+      threadSession,
+    ],
   );
 
   const threadReadinessContext = useMemo<AgentStudioThreadReadinessContext>(

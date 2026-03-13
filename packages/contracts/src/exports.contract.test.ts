@@ -15,6 +15,7 @@ import type {
   AgentWorkflowState,
   AgentWorkflows,
   BeadsCheck,
+  ChatSettings,
   CommitsAheadBehind,
   FileDiff,
   FileStatus,
@@ -94,6 +95,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadEntry",
   "parseAgentSessionTodoPayloadList",
   "beadsCheckSchema",
+  "chatSettingsSchema",
   "gitCommitAllRequestSchema",
   "gitCommitAllResultSchema",
   "commitsAheadBehindSchema",
@@ -208,6 +210,7 @@ type ExportedTypeContract = {
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;
   BeadsCheck: BeadsCheck;
+  ChatSettings: ChatSettings;
   CommitsAheadBehind: CommitsAheadBehind;
   GitCommitAllRequest: GitCommitAllRequest;
   GitCommitAllResult: GitCommitAllResult;
@@ -263,5 +266,17 @@ describe("contracts exports contract", () => {
   test("keeps canonical type exports importable from the barrel", () => {
     const compileOnlyTypeContract: ExportedTypeContract | null = null;
     expect(compileOnlyTypeContract).toBeNull();
+  });
+
+  test("defaults missing chat settings to disabled thinking messages", () => {
+    const parsedSnapshot = contracts.settingsSnapshotSchema.parse({
+      git: {
+        defaultMergeMethod: "merge_commit",
+      },
+      repos: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
   });
 });

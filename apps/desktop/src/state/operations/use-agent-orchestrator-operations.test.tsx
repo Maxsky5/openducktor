@@ -217,6 +217,9 @@ describe("use-agent-orchestrator-operations", () => {
       git: {
         defaultMergeMethod: "merge_commit",
       },
+      chat: {
+        showThinkingMessages: false,
+      },
       repos: {},
       globalPromptOverrides: {},
     });

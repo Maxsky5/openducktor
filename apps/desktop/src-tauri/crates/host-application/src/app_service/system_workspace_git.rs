@@ -8,8 +8,8 @@ use host_domain::{
 };
 use host_infra_system::{
     command_exists, hook_set_fingerprint, resolve_central_beads_dir,
-    run_command_allow_failure_with_env, version_command, GlobalGitConfig, HookSet, PromptOverrides,
-    RepoConfig,
+    run_command_allow_failure_with_env, version_command, ChatSettings, GlobalGitConfig, HookSet,
+    PromptOverrides, RepoConfig,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -226,11 +226,17 @@ impl AppService {
         &self,
     ) -> Result<(
         GlobalGitConfig,
+        ChatSettings,
         HashMap<String, RepoConfig>,
         PromptOverrides,
     )> {
         let config = self.config_store.load()?;
-        Ok((config.git, config.repos, config.global_prompt_overrides))
+        Ok((
+            config.git,
+            config.chat,
+            config.repos,
+            config.global_prompt_overrides,
+        ))
     }
 
     pub fn workspace_update_global_git_config(&self, git: GlobalGitConfig) -> Result<()> {
@@ -240,6 +246,7 @@ impl AppService {
     pub(super) fn workspace_persist_settings_snapshot(
         &self,
         git: GlobalGitConfig,
+        chat: ChatSettings,
         repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
     ) -> Result<()> {
@@ -253,6 +260,7 @@ impl AppService {
         }
 
         config.git = git;
+        config.chat = chat;
         config.global_prompt_overrides = global_prompt_overrides;
         for (repo_path, repo_config) in repos {
             config.repos.insert(repo_path, repo_config);
@@ -567,6 +575,7 @@ mod tests {
     use super::RUNTIME_CHECK_CACHE_TTL;
     use crate::app_service::test_support::build_service_with_state;
     use host_domain::{GitPushResult, RuntimeCheck, RuntimeHealth};
+    use host_infra_system::ChatSettings;
     use std::time::{Duration, Instant};
 
     #[test]
@@ -759,5 +768,19 @@ mod tests {
                 .and_then(|entry| entry.version.as_deref()),
             Some("cached-opencode-sentinel")
         );
+    }
+
+    #[test]
+    fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() {
+        let (service, _task_state, _git_state) = build_service_with_state(vec![]);
+
+        let (_git, chat, repos, global_prompt_overrides) = service
+            .workspace_get_settings_snapshot()
+            .expect("settings snapshot should load");
+
+        assert_eq!(chat, ChatSettings::default());
+        assert!(!chat.show_thinking_messages);
+        assert!(repos.is_empty());
+        assert!(global_prompt_overrides.is_empty());
     }
 }

@@ -17,6 +17,9 @@ const createSnapshot = (): SettingsSnapshot => ({
   git: {
     defaultMergeMethod: "merge_commit",
   },
+  chat: {
+    showThinkingMessages: false,
+  },
   globalPromptOverrides: {
     "system.scenario.spec_initial": {
       template: "invalid {{task.bad}}",
@@ -79,6 +82,7 @@ describe("useSettingsModalPromptValidation", () => {
       git: 0,
       repositories: 0,
       prompts: 0,
+      chat: 0,
     });
 
     await harness.unmount();
@@ -104,6 +108,7 @@ describe("useSettingsModalPromptValidation", () => {
       git: 0,
       repositories: 1,
       prompts: 1,
+      chat: 0,
     });
     expect(latest.selectedRepoPromptValidationErrors["kickoff.build_implementation_start"]).toBe(
       "Unsupported placeholder: {{unknown.value}}.",

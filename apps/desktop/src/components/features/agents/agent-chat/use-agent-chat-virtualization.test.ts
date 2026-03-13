@@ -92,10 +92,11 @@ describe("useAgentChatVirtualization", () => {
     const retained = resolveRetainedVirtualWindow({
       activeSessionId: "session-1",
       previousWindowState: {
-        sessionId: "session-1",
+        rowModelSignature: "session-1\u001fthinking:on",
         virtualItems: [firstWindowItem],
       },
       rowCount: 45,
+      rowModelSignature: "session-1\u001fthinking:on",
       shouldVirtualize: true,
       virtualItems: [],
     });
@@ -108,7 +109,7 @@ describe("useAgentChatVirtualization", () => {
     const retained = resolveRetainedVirtualWindow({
       activeSessionId: "session-2",
       previousWindowState: {
-        sessionId: "session-1",
+        rowModelSignature: "session-1\u001fthinking:on",
         virtualItems: [
           {
             index: 12,
@@ -121,13 +122,43 @@ describe("useAgentChatVirtualization", () => {
         ],
       },
       rowCount: 45,
+      rowModelSignature: "session-2\u001fthinking:on",
       shouldVirtualize: true,
       virtualItems: [],
     });
 
     expect(retained.resolvedVirtualItems).toEqual([]);
     expect(retained.nextWindowState).toEqual({
-      sessionId: "session-2",
+      rowModelSignature: "session-2\u001fthinking:on",
+      virtualItems: [],
+    });
+  });
+
+  test("drops a retained virtual window when the row model signature changes", () => {
+    const retained = resolveRetainedVirtualWindow({
+      activeSessionId: "session-1",
+      previousWindowState: {
+        rowModelSignature: "session-1\u001fthinking:on",
+        virtualItems: [
+          {
+            index: 12,
+            key: "row-12",
+            lane: 0,
+            size: 80,
+            start: 480,
+            end: 560,
+          } as const,
+        ],
+      },
+      rowCount: 30,
+      rowModelSignature: "session-1\u001fthinking:off",
+      shouldVirtualize: true,
+      virtualItems: [],
+    });
+
+    expect(retained.resolvedVirtualItems).toEqual([]);
+    expect(retained.nextWindowState).toEqual({
+      rowModelSignature: "session-1\u001fthinking:off",
       virtualItems: [],
     });
   });
@@ -139,6 +170,7 @@ describe("useAgentChatVirtualization", () => {
     const Harness = (): null => {
       latestStateRef.current = useAgentChatVirtualization({
         session: null,
+        showThinkingMessages: true,
         messagesContainerRef,
       }) as AgentChatVirtualizationState;
       return null;
@@ -177,6 +209,7 @@ describe("useAgentChatVirtualization", () => {
     const Harness = (): null => {
       latestStateRef.current = useAgentChatVirtualization({
         session,
+        showThinkingMessages: true,
         messagesContainerRef,
       }) as AgentChatVirtualizationState;
       return null;
@@ -217,6 +250,7 @@ describe("useAgentChatVirtualization", () => {
     const Harness = (): null => {
       latestStateRef.current = useAgentChatVirtualization({
         session,
+        showThinkingMessages: true,
         messagesContainerRef,
       }) as AgentChatVirtualizationState;
       return null;
@@ -253,6 +287,68 @@ describe("useAgentChatVirtualization", () => {
     });
   });
 
+  test("rebuilds the hook row model when showThinkingMessages flips on the same session", async () => {
+    const nonThinkingMessages = Array.from(
+      { length: AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT - 1 },
+      (_, index) => buildMessage("user", `User ${index + 1}`, { id: `user-${index + 1}` }),
+    );
+    const session = buildSession({
+      messages: [
+        buildMessage("thinking", "Reasoning 1", { id: "thinking-1" }),
+        buildMessage("thinking", "Reasoning 2", { id: "thinking-2" }),
+        ...nonThinkingMessages,
+      ],
+      status: "idle",
+    });
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const latestStateRef: { current: AgentChatVirtualizationState | null } = { current: null };
+    let showThinkingMessages = true;
+
+    const Harness = (): null => {
+      latestStateRef.current = useAgentChatVirtualization({
+        session,
+        showThinkingMessages,
+        messagesContainerRef,
+      }) as AgentChatVirtualizationState;
+      return null;
+    };
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(Harness));
+      await flush();
+    });
+
+    const initialState = getLatestState(latestStateRef);
+    expect(initialState.shouldVirtualize).toBe(true);
+    expect(
+      initialState.virtualRows.some(
+        (row) => row.kind === "message" && row.message.role === "thinking",
+      ),
+    ).toBe(true);
+
+    showThinkingMessages = false;
+    await act(async () => {
+      renderer?.update(createElement(Harness));
+      await flush();
+    });
+
+    const hiddenState = getLatestState(latestStateRef);
+    expect(hiddenState.shouldVirtualize).toBe(false);
+    expect(
+      hiddenState.virtualRows.some(
+        (row) => row.kind === "message" && row.message.role === "thinking",
+      ),
+    ).toBe(false);
+    expect(hiddenState.virtualRows).toHaveLength(AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT - 1);
+    expect(hiddenState.virtualRowsToRender).toHaveLength(0);
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  });
+
   test("maps virtual items only to valid row entries", async () => {
     const messages = Array.from(
       { length: AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT + 1 },
@@ -266,6 +362,7 @@ describe("useAgentChatVirtualization", () => {
     const Harness = (): null => {
       latestStateRef.current = useAgentChatVirtualization({
         session,
+        showThinkingMessages: true,
         messagesContainerRef,
       }) as AgentChatVirtualizationState;
       return null;
@@ -303,6 +400,7 @@ describe("useAgentChatVirtualization", () => {
     const Harness = (): null => {
       latestStateRef.current = useAgentChatVirtualization({
         session,
+        showThinkingMessages: true,
         messagesContainerRef,
       }) as AgentChatVirtualizationState;
       return null;

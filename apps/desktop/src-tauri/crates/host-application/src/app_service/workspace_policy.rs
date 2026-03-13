@@ -3,8 +3,8 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use host_domain::WorkspaceRecord;
 use host_infra_system::{
-    hook_set_fingerprint, normalize_hook_set, AgentDefaults, GitTargetBranch, HookSet,
-    PromptOverrides, RepoConfig, RepoGitConfig,
+    hook_set_fingerprint, normalize_hook_set, AgentDefaults, ChatSettings, GitTargetBranch,
+    HookSet, PromptOverrides, RepoConfig, RepoGitConfig,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -221,6 +221,7 @@ impl AppService {
     pub fn workspace_save_settings_snapshot<P: HookTrustConfirmationPort + ?Sized>(
         &self,
         git: host_infra_system::GlobalGitConfig,
+        chat: ChatSettings,
         mut repos: HashMap<String, RepoConfig>,
         global_prompt_overrides: PromptOverrides,
         confirmation_port: &P,
@@ -242,7 +243,7 @@ impl AppService {
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
-        self.workspace_persist_settings_snapshot(git, repos, global_prompt_overrides)?;
+        self.workspace_persist_settings_snapshot(git, chat, repos, global_prompt_overrides)?;
         self.workspace_list()
     }
 
@@ -393,7 +394,8 @@ mod tests {
     use anyhow::{anyhow, Result};
     use host_domain::TaskStore;
     use host_infra_system::{
-        hook_set_fingerprint, AppConfigStore, GitCliPort, HookSet, PromptOverride, RepoConfig,
+        hook_set_fingerprint, AppConfigStore, ChatSettings, GitCliPort, HookSet, PromptOverride,
+        RepoConfig,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -656,8 +658,9 @@ mod tests {
         );
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (git, mut repos, mut global_prompt_overrides) =
+        let (git, mut chat, mut repos, mut global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
+        chat.show_thinking_messages = true;
         global_prompt_overrides.insert(
             "system.shared.workflow_guards".to_string(),
             PromptOverride {
@@ -679,6 +682,7 @@ mod tests {
 
         fixture.service.workspace_save_settings_snapshot(
             git,
+            chat,
             repos,
             global_prompt_overrides,
             &confirmation,
@@ -699,6 +703,31 @@ mod tests {
             Some(expected_fingerprint.as_str())
         );
         assert_eq!(confirmation.request_count(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_save_settings_snapshot_persists_chat_settings_roundtrip() -> Result<()> {
+        let fixture = setup_fixture("snapshot-chat-roundtrip", HookSet::default());
+        let confirmation = RecordingHookTrustConfirmationPort::default();
+
+        let (git, mut chat, repos, global_prompt_overrides) =
+            fixture.service.workspace_get_settings_snapshot()?;
+        assert_eq!(chat, ChatSettings::default());
+        chat.show_thinking_messages = true;
+
+        fixture.service.workspace_save_settings_snapshot(
+            git,
+            chat,
+            repos,
+            global_prompt_overrides,
+            &confirmation,
+        )?;
+
+        let (_persisted_git, persisted_chat, _persisted_repos, _persisted_global_prompt_overrides) =
+            fixture.service.workspace_get_settings_snapshot()?;
+        assert!(persisted_chat.show_thinking_messages);
+        assert_eq!(confirmation.request_count(), 0);
         Ok(())
     }
 

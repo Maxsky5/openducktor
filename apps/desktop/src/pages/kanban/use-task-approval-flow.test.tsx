@@ -58,6 +58,7 @@ mock.module("@/state/operations/host", () => ({
     workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
     workspaceGetSettingsSnapshot: async () => ({
       git: { defaultMergeMethod: "merge_commit" as const },
+      chat: { showThinkingMessages: false },
       repos: {},
       globalPromptOverrides: {},
     }),

@@ -436,6 +436,9 @@ describe("agent-orchestrator-runtime", () => {
       git: {
         defaultMergeMethod: "merge_commit",
       },
+      chat: {
+        showThinkingMessages: false,
+      },
       repos: {},
       globalPromptOverrides: {
         "kickoff.spec_initial": {
@@ -501,6 +504,9 @@ describe("agent-orchestrator-runtime", () => {
     host.workspaceGetSettingsSnapshot = async () => ({
       git: {
         defaultMergeMethod: "merge_commit",
+      },
+      chat: {
+        showThinkingMessages: false,
       },
       repos: {},
       globalPromptOverrides,

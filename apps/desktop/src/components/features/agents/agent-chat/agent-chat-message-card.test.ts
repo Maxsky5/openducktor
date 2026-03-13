@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
+
+const renderToHtml = async (element: ReturnType<typeof createElement>): Promise<string> => {
+  const stream = await renderToReadableStream(element);
+  await stream.allReady;
+  return await new Response(stream).text();
+};
 
 describe("AgentChatMessageCard tool duration", () => {
   test("uses completedAt - inputReadyAt for workflow duration display", () => {
@@ -291,6 +297,39 @@ describe("AgentChatMessageCard tool duration", () => {
 
     expect(html).toContain("Show system prompt");
     expect(html).toContain("Always validate tool inputs");
+  });
+
+  test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
+    const html = await renderToHtml(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "thinking-1",
+          role: "thinking",
+          content: "Inspect the **diff** before applying.\n\n- Keep markdown output",
+          timestamp: "2026-02-22T10:22:15.000Z",
+          meta: {
+            kind: "reasoning",
+            partId: "part-thinking-1",
+            completed: true,
+          },
+        },
+        sessionRole: "build",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Thinking:");
+    expect(html).toContain("space-y-0.5");
+    expect(html).not.toContain("items-baseline");
+    expect(html).toContain("markdown-body");
+    expect(html).toMatch(/(<strong>diff<\/strong>|\*\*diff\*\*)/);
+    expect(html).toContain("diff");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("cursor-pointer");
+    expect(html).not.toContain("lucide-brain");
+    expect(html).not.toContain("10:22:15");
+    expect(html).not.toContain("tracking-wide");
   });
 
   test("renders assistant footer with agent and model labels", () => {

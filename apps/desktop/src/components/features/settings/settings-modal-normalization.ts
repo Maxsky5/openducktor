@@ -106,6 +106,7 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
 
   return {
     git: normalizeGlobalGitConfigForSave(snapshot.git),
+    chat: snapshot.chat,
     repos,
     globalPromptOverrides: normalizePromptOverridesForSave(snapshot.globalPromptOverrides),
   };

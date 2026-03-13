@@ -32,12 +32,7 @@ export function AgentChatMessageCard({
         message={message}
         sessionRole={sessionRole}
         timeLabel={vm.timeLabel}
-        showHeader={
-          !vm.isUserMessage &&
-          !vm.isRegularToolMessage &&
-          !vm.isReasoningMessage &&
-          !vm.isAssistantMessage
-        }
+        showHeader={vm.showSharedHeader}
         assistantRole={vm.assistantRole}
         compactPadding={vm.isRichCardMessage && !vm.isRegularToolMessage}
       />

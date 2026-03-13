@@ -62,6 +62,9 @@ describe("app-state-context-values", () => {
         git: {
           defaultMergeMethod: "merge_commit",
         },
+        chat: {
+          showThinkingMessages: false,
+        },
         repos: {},
         globalPromptOverrides: {},
       }),
