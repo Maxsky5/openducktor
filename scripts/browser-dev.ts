@@ -1,4 +1,6 @@
-const repoRoot = "/Users/20017260/projects/perso/openducktor";
+import { resolve } from "node:path";
+
+const repoRoot = resolve(import.meta.dir, "..");
 const backendPort = process.env.ODT_BROWSER_BACKEND_PORT ?? "14327";
 const backendUrl = `http://127.0.0.1:${backendPort}`;
 
@@ -14,8 +16,13 @@ const backendProcess = Bun.spawn({
 });
 
 let frontendProcess: Bun.Subprocess | null = null;
+let stoppingChildren = false;
 
 const stopChildren = () => {
+  if (stoppingChildren) {
+    return;
+  }
+  stoppingChildren = true;
   backendProcess.kill();
   frontendProcess?.kill();
 };
@@ -47,7 +54,12 @@ const waitForBackend = async (): Promise<void> => {
 };
 
 try {
-  await waitForBackend();
+  await Promise.race([
+    waitForBackend(),
+    backendProcess.exited.then((exitCode) => {
+      throw new Error(`Browser backend exited before startup completed with code ${exitCode}.`);
+    }),
+  ]);
 
   frontendProcess = Bun.spawn({
     cmd: ["bun", "run", "--filter", "@openducktor/desktop", "dev:browser"],
@@ -60,12 +72,26 @@ try {
     stderr: "inherit",
   });
 
-  const [backendExitCode, frontendExitCode] = await Promise.all([
-    backendProcess.exited,
-    frontendProcess.exited,
+  const firstExit = await Promise.race([
+    backendProcess.exited.then((exitCode) => ({
+      exitCode,
+      processName: "backend" as const,
+    })),
+    frontendProcess.exited.then((exitCode) => ({
+      exitCode,
+      processName: "frontend" as const,
+    })),
   ]);
 
-  process.exit(frontendExitCode || backendExitCode);
+  stopChildren();
+
+  if (firstExit.processName === "backend") {
+    await frontendProcess.exited;
+  } else {
+    await backendProcess.exited;
+  }
+
+  process.exit(firstExit.exitCode);
 } catch (error) {
   stopChildren();
   console.error(error instanceof Error ? error.message : String(error));

@@ -178,6 +178,19 @@ where
         .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
 }
 
+pub(crate) async fn run_service_blocking_tokio<T, F>(
+    operation_name: &'static str,
+    operation: F,
+) -> anyhow::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> anyhow::Result<T> + Send + 'static,
+{
+    tokio::task::spawn_blocking(operation)
+        .await
+        .map_err(|error| anyhow!("{operation_name} worker join failure: {error}"))?
+}
+
 fn validate_startup_config(
     config_store: &AppConfigStore,
     runtime_config_store: &RuntimeConfigStore,
@@ -490,6 +503,26 @@ mod tests {
         ));
         let error = result.expect_err("panic in worker should map to join failure");
         assert!(error.to_string().contains("test-join worker join failure"));
+    }
+
+    #[tokio::test]
+    async fn run_service_blocking_tokio_propagates_operation_error() {
+        let result = run_service_blocking_tokio("tokio-test-op", || -> anyhow::Result<()> {
+            Err(anyhow!("service failure"))
+        })
+        .await;
+        let error = result.expect_err("service error should propagate");
+        assert!(error.to_string().contains("service failure"));
+    }
+
+    #[tokio::test]
+    async fn run_service_blocking_tokio_maps_join_failures() {
+        let result = run_service_blocking_tokio("tokio-test-join", || -> anyhow::Result<()> {
+            panic!("simulated join panic")
+        })
+        .await;
+        let error = result.expect_err("panic in worker should map to join failure");
+        assert!(error.to_string().contains("tokio-test-join worker join failure"));
     }
 
     #[test]
