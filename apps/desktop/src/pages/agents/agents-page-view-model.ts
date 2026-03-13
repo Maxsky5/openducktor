@@ -114,6 +114,7 @@ export const buildAgentStudioWorkspaceSidebarModel = (args: {
 
 type AgentChatThreadModelArgs = {
   activeSession: AgentSessionState | null;
+  showThinkingMessages: boolean;
   isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
@@ -177,6 +178,7 @@ export const buildAgentChatThreadModel = (
   args: AgentChatThreadModelArgs,
 ): AgentChatThreadModel => ({
   session: args.activeSession,
+  showThinkingMessages: args.showThinkingMessages,
   isSessionViewLoading: args.isSessionViewLoading,
   roleOptions: args.roleOptions,
   agentStudioReady: args.agentStudioReady,

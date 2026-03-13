@@ -232,6 +232,7 @@ describe("agents-page-view-model", () => {
 
     const model = buildAgentChatModel({
       activeSession: createSession(),
+      showThinkingMessages: true,
       isSessionViewLoading: false,
       roleOptions: [{ role: "spec", label: "Spec", icon: Sparkles }],
       agentStudioReady: true,
@@ -284,6 +285,7 @@ describe("agents-page-view-model", () => {
     });
 
     expect(model.thread.taskSelected).toBe(false);
+    expect(model.thread.showThinkingMessages).toBe(true);
     expect(model.thread.isPinnedToBottom).toBe(true);
     expect(model.composer.contextUsage).toEqual({ totalTokens: 10, contextWindow: 100 });
 

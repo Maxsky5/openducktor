@@ -54,7 +54,7 @@ import { useAgentStudioSelectionController } from "./use-agent-studio-selection-
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
 
 export function AgentsPage(): ReactElement {
-  const { activeRepo, activeBranch, loadRepoSettings } = useWorkspaceState();
+  const { activeRepo, activeBranch, loadRepoSettings, loadSettingsSnapshot } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
@@ -230,6 +230,7 @@ export function AgentsPage(): ReactElement {
 
   const orchestrationWorkspace = {
     activeRepo,
+    loadSettingsSnapshot,
     loadRepoSettings,
   } satisfies AgentStudioOrchestrationWorkspaceContext;
 
@@ -396,8 +397,10 @@ export function AgentsPage(): ReactElement {
     <AgentsPageShell
       activeRepo={activeRepo}
       navigationPersistenceError={navigationPersistenceError}
+      chatSettingsLoadError={orchestration.chatSettingsLoadError}
       activeTabValue={orchestration.activeTabValue}
       onRetryNavigationPersistence={retryNavigationPersistence}
+      onRetryChatSettingsLoad={orchestration.retryChatSettingsLoad}
       onTabValueChange={selection.handleSelectTab}
       taskTabs={
         <AgentStudioTaskTabs

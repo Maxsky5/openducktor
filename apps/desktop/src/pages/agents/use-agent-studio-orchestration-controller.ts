@@ -1,10 +1,11 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { SettingsSnapshot, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { useAgentSessionPermissionActions } from "./use-agent-session-permission-actions";
+import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioModelSelection } from "./use-agent-studio-model-selection";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
@@ -15,6 +16,7 @@ import type { RequestNewSessionStart } from "./use-agent-studio-session-start-ty
 
 export type AgentStudioOrchestrationWorkspaceContext = {
   activeRepo: string | null;
+  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
 };
 
@@ -71,6 +73,8 @@ type UseAgentStudioOrchestrationControllerArgs = {
 
 type UseAgentStudioOrchestrationControllerResult = {
   repoSettings: RepoSettingsInput | null;
+  chatSettingsLoadError: Error | null;
+  retryChatSettingsLoad: () => void;
   activeTabValue: string;
   agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
   agentStudioHeaderModel: ReturnType<typeof useAgentStudioPageModels>["agentStudioHeaderModel"];
@@ -139,6 +143,9 @@ type BuildAgentStudioPageModelsArgsInput = {
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
   permissions: ReturnType<typeof useAgentSessionPermissionActions>;
+  chatSettings: {
+    showThinkingMessages: boolean;
+  };
   composer: AgentStudioOrchestrationComposerContext;
 };
 
@@ -151,6 +158,7 @@ export const buildAgentStudioPageModelsArgs = ({
   sessionActions,
   modelSelection,
   permissions,
+  chatSettings,
   composer,
 }: BuildAgentStudioPageModelsArgsInput): Parameters<typeof useAgentStudioPageModels>[0] => {
   const { activeTaskTabId, ...taskTabs } = tabs;
@@ -174,6 +182,7 @@ export const buildAgentStudioPageModelsArgs = ({
     documents,
     readiness,
     sessionActions,
+    chatSettings,
     modelSelection: {
       ...restOfModelSelection,
       onSelectAgent: handleSelectAgent,
@@ -192,7 +201,7 @@ export function useAgentStudioOrchestrationController({
   composer,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
-  const { activeRepo, loadRepoSettings } = workspace;
+  const { activeRepo, loadRepoSettings, loadSettingsSnapshot } = workspace;
   const {
     viewTaskId,
     viewRole,
@@ -227,6 +236,11 @@ export function useAgentStudioOrchestrationController({
     activeRepo,
     loadRepoSettings,
   });
+  const { showThinkingMessages, chatSettingsLoadError, retryChatSettingsLoad } =
+    useAgentStudioChatSettings({
+      activeRepo,
+      loadSettingsSnapshot,
+    });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
     activeRepo,
@@ -362,6 +376,9 @@ export function useAgentStudioOrchestrationController({
       permissionReplyErrorByRequestId,
       onReplyPermission,
     },
+    chatSettings: {
+      showThinkingMessages,
+    },
     composer,
   });
 
@@ -382,6 +399,8 @@ export function useAgentStudioOrchestrationController({
 
   return {
     repoSettings,
+    chatSettingsLoadError,
+    retryChatSettingsLoad,
     activeTabValue,
     agentStudioTaskTabsModel,
     agentStudioHeaderModel,

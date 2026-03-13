@@ -93,6 +93,9 @@ const baseArgs: BuildArgs = {
     permissionReplyErrorByRequestId: {},
     onReplyPermission: async () => {},
   },
+  chatSettings: {
+    showThinkingMessages: true,
+  },
   composer: {
     input: "hello",
     setInput: () => {},
@@ -111,6 +114,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgent);
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
+    expect(mapped.chatSettings.showThinkingMessages).toBe(true);
     expect(mapped.composer.input).toBe("hello");
   });
 

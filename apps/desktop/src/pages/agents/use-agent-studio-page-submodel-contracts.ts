@@ -29,6 +29,7 @@ export type WorkflowComposerContext = Pick<
 
 export type AgentStudioThreadSessionContext = {
   threadSession: AgentSessionState | null;
+  showThinkingMessages: boolean;
   isContextSwitching: boolean;
   taskId: string;
   activeSessionAgentColors: Record<string, string>;
