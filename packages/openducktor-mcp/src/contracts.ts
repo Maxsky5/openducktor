@@ -9,12 +9,9 @@ export type PlanSubtaskInput = {
   description?: string | undefined;
 };
 
-export type TaskCard = Omit<
-  Pick<
-    CanonicalTaskCard,
-    "id" | "title" | "description" | "status" | "issueType" | "aiReviewEnabled"
-  >,
-  "description"
+export type TaskCard = Pick<
+  CanonicalTaskCard,
+  "id" | "title" | "status" | "issueType" | "aiReviewEnabled"
 > & {
   description?: CanonicalTaskCard["description"];
   parentId?: string;
