@@ -19,6 +19,14 @@ use std::time::{Duration, Instant};
 const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const GH_NON_INTERACTIVE_ENV: [(&str, &str); 1] = [("GH_PROMPT_DISABLED", "1")];
 
+type SettingsSnapshotTuple = (
+    String,
+    GlobalGitConfig,
+    ChatSettings,
+    HashMap<String, RepoConfig>,
+    PromptOverrides,
+);
+
 fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String {
     working_dir
         .map(str::trim)
@@ -224,13 +232,7 @@ impl AppService {
 
     pub fn workspace_get_settings_snapshot(
         &self,
-    ) -> Result<(
-        String,
-        GlobalGitConfig,
-        ChatSettings,
-        HashMap<String, RepoConfig>,
-        PromptOverrides,
-    )> {
+    ) -> Result<SettingsSnapshotTuple> {
         let config = self.config_store.load()?;
         Ok((
             config.theme,

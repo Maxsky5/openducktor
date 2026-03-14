@@ -377,7 +377,7 @@ fn workspace_record_from_repo(
 ) -> Result<WorkspaceRecord> {
     let default_worktree_base_path = match default_worktree_base_path(workspace_key) {
         Ok(path) => Some(path),
-        Err(error) if repo.worktree_base_path.is_some() => None,
+        Err(_error) if repo.worktree_base_path.is_some() => None,
         Err(error) => {
             return Err(error).with_context(|| {
                 format!(
