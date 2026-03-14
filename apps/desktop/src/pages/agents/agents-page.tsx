@@ -162,7 +162,10 @@ function AgentsPageContent({
       onRetryChatSettingsLoad={onRetryChatSettingsLoad}
       onTabValueChange={onTabValueChange}
       taskTabs={
-        <AgentStudioTaskTabs model={taskTabsModel} rightPanelToggleModel={rightPanelToggleModel} />
+        <AgentStudioTaskTabs
+          model={taskTabsModel}
+          {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
+        />
       }
       workspace={
         <AgentsPageWorkspace
@@ -374,7 +377,7 @@ function useAgentsPageRightPanelModel({
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isBuilderSessionWorking: isActiveBuilderWorking,
-    onResolveRebaseConflict,
+    ...(onResolveRebaseConflict ? { onResolveRebaseConflict } : {}),
   });
   const diffModel = useMemo(
     () => ({
@@ -418,8 +421,6 @@ function useAgentsPageRightPanelModel({
 
 type BuildAgentsPageOrchestrationContextsArgs = {
   activeRepo: string | null;
-  loadSettingsSnapshot: AgentStudioOrchestrationWorkspaceContext["loadSettingsSnapshot"];
-  loadRepoSettings: AgentStudioOrchestrationWorkspaceContext["loadRepoSettings"];
   viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
   viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
   viewScenario: AgentStudioOrchestrationSelectionContext["viewScenario"];
@@ -455,8 +456,6 @@ type BuildAgentsPageOrchestrationContextsArgs = {
 
 function buildAgentsPageOrchestrationContexts({
   activeRepo,
-  loadSettingsSnapshot,
-  loadRepoSettings,
   viewTaskId,
   viewRole,
   viewScenario,
@@ -492,8 +491,6 @@ function buildAgentsPageOrchestrationContexts({
   return {
     workspace: {
       activeRepo,
-      loadSettingsSnapshot,
-      loadRepoSettings,
     } satisfies AgentStudioOrchestrationWorkspaceContext,
     selection: {
       viewTaskId,
@@ -531,7 +528,7 @@ function buildAgentsPageOrchestrationContexts({
       updateAgentSessionModel,
       replyAgentPermission,
       answerAgentQuestion,
-      requestNewSessionStart,
+      ...(requestNewSessionStart ? { requestNewSessionStart } : {}),
       openTaskDetails,
     } satisfies AgentStudioOrchestrationActionsContext,
   };
@@ -664,8 +661,6 @@ export function AgentsPage(): ReactElement {
   const orchestration = useAgentStudioOrchestrationController(
     buildAgentsPageOrchestrationContexts({
       activeRepo,
-      loadSettingsSnapshot,
-      loadRepoSettings,
       viewTaskId: selection.viewTaskId,
       viewRole: selection.viewRole,
       viewScenario: selection.viewScenario,
