@@ -59,16 +59,15 @@ export function AgentChatComposer({ model }: { model: AgentChatComposerModel }):
     }
     return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
   }, [selectedModelSelection?.profileId, sessionAgentColors]);
+  const handleSubmit = (): void => {
+    if (sendDisabled) {
+      return;
+    }
+    onSend();
+  };
 
   return (
-    <form
-      ref={composerFormRef}
-      className="px-4 pb-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSend();
-      }}
-    >
+    <form ref={composerFormRef} className="px-4 pb-4" action={handleSubmit}>
       <div className="relative border border-input bg-card shadow-md transition-[border-color,box-shadow,background-color] focus-within:shadow-xl">
         {isSessionWorking ? (
           <BorderRay

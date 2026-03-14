@@ -1,6 +1,6 @@
 import type { GitProviderRepository, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
 import { Github, LoaderCircle, PencilLine, RefreshCcw } from "lucide-react";
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,85 @@ type GithubRepositoryDraft = {
   name: string;
 };
 
+type RepositoryGitSectionUiState = {
+  isManualConfigOpen: boolean;
+  isDetecting: boolean;
+  detectionMessage: string | null;
+};
+
+type RepositoryGitSectionUiAction =
+  | {
+      type: "reset_for_repo";
+      hasRepositoryCoordinates: boolean;
+      hasSelectedRepoPath: boolean;
+    }
+  | {
+      type: "set_manual_config_open";
+      isManualConfigOpen: boolean;
+    }
+  | {
+      type: "toggle_manual_config_open";
+    }
+  | {
+      type: "detection_started";
+    }
+  | {
+      type: "detection_finished";
+    }
+  | {
+      type: "set_detection_result";
+      detectionMessage: string | null;
+      isManualConfigOpen?: boolean;
+    };
+
+const INITIAL_REPOSITORY_GIT_SECTION_UI_STATE: RepositoryGitSectionUiState = {
+  isManualConfigOpen: false,
+  isDetecting: false,
+  detectionMessage: null,
+};
+
+const repositoryGitSectionUiReducer = (
+  state: RepositoryGitSectionUiState,
+  action: RepositoryGitSectionUiAction,
+): RepositoryGitSectionUiState => {
+  switch (action.type) {
+    case "reset_for_repo":
+      return {
+        ...state,
+        detectionMessage: null,
+        isManualConfigOpen: action.hasSelectedRepoPath ? !action.hasRepositoryCoordinates : false,
+      };
+    case "set_manual_config_open":
+      return {
+        ...state,
+        isManualConfigOpen: action.isManualConfigOpen,
+      };
+    case "toggle_manual_config_open":
+      return {
+        ...state,
+        isManualConfigOpen: !state.isManualConfigOpen,
+      };
+    case "detection_started":
+      return {
+        ...state,
+        isDetecting: true,
+      };
+    case "detection_finished":
+      return {
+        ...state,
+        isDetecting: false,
+      };
+    case "set_detection_result":
+      return {
+        ...state,
+        detectionMessage: action.detectionMessage,
+        ...(typeof action.isManualConfigOpen === "boolean"
+          ? { isManualConfigOpen: action.isManualConfigOpen }
+          : {}),
+      };
+  }
+};
+
 export function RepositoryGitSection({
   selectedRepoPath,
   selectedRepoConfig,
@@ -38,9 +117,10 @@ export function RepositoryGitSection({
   onUpdateSelectedRepoConfig,
 }: RepositoryGitSectionProps): ReactElement {
   const attemptedAutoDetectByRepoRef = useRef<Set<string>>(new Set());
-  const [isManualConfigOpen, setIsManualConfigOpen] = useState(false);
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [detectionMessage, setDetectionMessage] = useState<string | null>(null);
+  const [uiState, dispatchUiState] = useReducer(
+    repositoryGitSectionUiReducer,
+    INITIAL_REPOSITORY_GIT_SECTION_UI_STATE,
+  );
   const [repositoryDraft, setRepositoryDraft] = useState<GithubRepositoryDraft>({
     host: "github.com",
     owner: "",
@@ -79,6 +159,7 @@ export function RepositoryGitSection({
             : `GitHub pull requests are configured for ${githubHost}. Authentication for that host is validated during approval.`;
   const providerStatusLabel = github.enabled ? "Pull requests enabled" : "Pull requests disabled";
   const cliStatusLabel = runtimeCheck?.ghOk ? "CLI installed" : "CLI missing";
+  const { detectionMessage, isDetecting, isManualConfigOpen } = uiState;
 
   const buildGithubConfig = useCallback(
     (
@@ -126,51 +207,49 @@ export function RepositoryGitSection({
         return;
       }
 
-      setIsDetecting(true);
+      dispatchUiState({ type: "detection_started" });
       try {
         const detected = await onDetectGithubRepository();
         if (!detected) {
-          setDetectionMessage(
-            "No GitHub origin was detected for this repository. You can still configure it manually.",
-          );
-          if (manual) {
-            setIsManualConfigOpen(true);
-          }
+          dispatchUiState({
+            type: "set_detection_result",
+            detectionMessage:
+              "No GitHub origin was detected for this repository. You can still configure it manually.",
+            ...(manual ? { isManualConfigOpen: true } : {}),
+          });
           return;
         }
 
-        setDetectionMessage(
-          `Detected ${detected.owner}/${detected.name} from origin. Save settings to keep this mapping.`,
-        );
+        dispatchUiState({
+          type: "set_detection_result",
+          detectionMessage: `Detected ${detected.owner}/${detected.name} from origin. Save settings to keep this mapping.`,
+          ...(manual || !hasRepositoryCoordinates ? { isManualConfigOpen: false } : {}),
+        });
         setRepositoryDraft({
           host: detected.host,
           owner: detected.owner,
           name: detected.name,
         });
-        if (manual || !hasRepositoryCoordinates) {
-          setIsManualConfigOpen(false);
-        }
       } catch (error) {
         const reason = error instanceof Error ? error.message : "Detection failed.";
-        setDetectionMessage(reason);
-        if (manual) {
-          setIsManualConfigOpen(true);
-        }
+        dispatchUiState({
+          type: "set_detection_result",
+          detectionMessage: reason,
+          ...(manual ? { isManualConfigOpen: true } : {}),
+        });
       } finally {
-        setIsDetecting(false);
+        dispatchUiState({ type: "detection_finished" });
       }
     },
     [hasRepositoryCoordinates, isDetecting, onDetectGithubRepository, selectedRepoConfig],
   );
 
   useEffect(() => {
-    if (!selectedRepoPath) {
-      setDetectionMessage(null);
-      return;
-    }
-
-    setDetectionMessage(null);
-    setIsManualConfigOpen(!hasRepositoryCoordinates);
+    dispatchUiState({
+      type: "reset_for_repo",
+      hasSelectedRepoPath: selectedRepoPath != null,
+      hasRepositoryCoordinates,
+    });
   }, [hasRepositoryCoordinates, selectedRepoPath]);
 
   useEffect(() => {
@@ -289,7 +368,7 @@ export function RepositoryGitSection({
                   type="button"
                   variant="ghost"
                   disabled={disabled}
-                  onClick={() => setIsManualConfigOpen((current) => !current)}
+                  onClick={() => dispatchUiState({ type: "toggle_manual_config_open" })}
                 >
                   <PencilLine className="size-4" />
                   {isManualConfigOpen ? "Hide manual edit" : "Edit manually"}

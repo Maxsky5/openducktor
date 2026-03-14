@@ -1,5 +1,7 @@
 import {
+  type ComponentProps,
   type ReactElement,
+  type ReactNode,
   startTransition,
   useCallback,
   useEffect,
@@ -53,6 +55,488 @@ import { buildAgentStudioRightPanelModel } from "./use-agent-studio-right-panel"
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
 
+type AgentsPageWorkspaceProps = {
+  hasSelectedTask: boolean;
+  chatContent: ReactElement;
+  isRightPanelVisible: boolean;
+  rightPanelContent: ReactNode;
+};
+
+function AgentsPageWorkspace({
+  hasSelectedTask,
+  chatContent,
+  isRightPanelVisible,
+  rightPanelContent,
+}: AgentsPageWorkspaceProps): ReactElement {
+  if (!hasSelectedTask) {
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
+        Open a task tab to start a workspace.
+      </div>
+    );
+  }
+
+  return (
+    <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
+      <ResizablePanel defaultSize={63} minSize={35}>
+        {chatContent}
+      </ResizablePanel>
+      {isRightPanelVisible ? (
+        <>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={37} minSize={30}>
+            {rightPanelContent}
+          </ResizablePanel>
+        </>
+      ) : null}
+    </ResizablePanelGroup>
+  );
+}
+
+type AgentsPageModalContentProps = {
+  rebaseConflictModal: ReactNode;
+  sessionStartModal: ReactNode;
+  taskDetailsSheet: ReactElement;
+};
+
+function AgentsPageModalContent({
+  rebaseConflictModal,
+  sessionStartModal,
+  taskDetailsSheet,
+}: AgentsPageModalContentProps): ReactElement {
+  return (
+    <>
+      {rebaseConflictModal}
+      {sessionStartModal}
+      {taskDetailsSheet}
+    </>
+  );
+}
+
+type AgentsPageContentProps = {
+  activeRepo: string | null;
+  navigationPersistenceError: Error | null;
+  chatSettingsLoadError: Error | null;
+  activeTabValue: string;
+  onRetryNavigationPersistence: () => void;
+  onRetryChatSettingsLoad: () => void;
+  onTabValueChange: (value: string) => void;
+  taskTabsModel: ComponentProps<typeof AgentStudioTaskTabs>["model"];
+  rightPanelToggleModel: ComponentProps<typeof AgentStudioTaskTabs>["rightPanelToggleModel"];
+  hasSelectedTask: boolean;
+  chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
+  chatModel: ComponentProps<typeof AgentChat>["model"];
+  isRightPanelVisible: boolean;
+  rightPanelModel: ComponentProps<typeof AgentStudioRightPanel>["model"] | null;
+  rebaseConflictModal: ReactNode;
+  sessionStartModal: ReactNode;
+  taskDetailsSheet: ReactElement;
+};
+
+function AgentsPageContent({
+  activeRepo,
+  navigationPersistenceError,
+  chatSettingsLoadError,
+  activeTabValue,
+  onRetryNavigationPersistence,
+  onRetryChatSettingsLoad,
+  onTabValueChange,
+  taskTabsModel,
+  rightPanelToggleModel,
+  hasSelectedTask,
+  chatHeaderModel,
+  chatModel,
+  isRightPanelVisible,
+  rightPanelModel,
+  rebaseConflictModal,
+  sessionStartModal,
+  taskDetailsSheet,
+}: AgentsPageContentProps): ReactElement {
+  return (
+    <AgentsPageShell
+      activeRepo={activeRepo}
+      navigationPersistenceError={navigationPersistenceError}
+      chatSettingsLoadError={chatSettingsLoadError}
+      activeTabValue={activeTabValue}
+      onRetryNavigationPersistence={onRetryNavigationPersistence}
+      onRetryChatSettingsLoad={onRetryChatSettingsLoad}
+      onTabValueChange={onTabValueChange}
+      taskTabs={
+        <AgentStudioTaskTabs model={taskTabsModel} rightPanelToggleModel={rightPanelToggleModel} />
+      }
+      workspace={
+        <AgentsPageWorkspace
+          hasSelectedTask={hasSelectedTask}
+          chatContent={
+            <AgentChat header={<AgentStudioHeader model={chatHeaderModel} />} model={chatModel} />
+          }
+          isRightPanelVisible={isRightPanelVisible}
+          rightPanelContent={
+            rightPanelModel ? <AgentStudioRightPanel model={rightPanelModel} /> : null
+          }
+        />
+      }
+      modalContent={
+        <AgentsPageModalContent
+          rebaseConflictModal={rebaseConflictModal}
+          sessionStartModal={sessionStartModal}
+          taskDetailsSheet={taskDetailsSheet}
+        />
+      }
+    />
+  );
+}
+
+type UseRunCompletionRecoverySignalArgs = {
+  activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  runCompletionSignal: ReturnType<typeof useDelegationEventsContext>["runCompletionSignal"];
+};
+
+function useRunCompletionRecoverySignal({
+  activeSession,
+  runCompletionSignal,
+}: UseRunCompletionRecoverySignalArgs): number {
+  const [runCompletionRecoverySignal, setRunCompletionRecoverySignal] = useState(0);
+  const latestRunCompletionSignalVersionRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const activeBuildRunId = activeSession?.role === "build" ? activeSession.runId : null;
+
+    if (!runCompletionSignal || !activeBuildRunId) {
+      return;
+    }
+
+    if (runCompletionSignal.runId !== activeBuildRunId) {
+      return;
+    }
+
+    if (runCompletionSignal.version === latestRunCompletionSignalVersionRef.current) {
+      return;
+    }
+
+    latestRunCompletionSignalVersionRef.current = runCompletionSignal.version;
+    setRunCompletionRecoverySignal((current) => current + 1);
+  }, [activeSession, runCompletionSignal]);
+
+  return runCompletionRecoverySignal;
+}
+
+type UseAgentStudioReadinessArgs = {
+  activeRepo: string | null;
+  runtimeDefinitions: ReturnType<typeof useRuntimeDefinitionsContext>["runtimeDefinitions"];
+  isLoadingRuntimeDefinitions: ReturnType<
+    typeof useRuntimeDefinitionsContext
+  >["isLoadingRuntimeDefinitions"];
+  runtimeDefinitionsError: ReturnType<
+    typeof useRuntimeDefinitionsContext
+  >["runtimeDefinitionsError"];
+  runtimeHealthByRuntime: ReturnType<typeof useChecksState>["runtimeHealthByRuntime"];
+  isLoadingChecks: boolean;
+};
+
+function useAgentStudioReadiness({
+  activeRepo,
+  runtimeDefinitions,
+  isLoadingRuntimeDefinitions,
+  runtimeDefinitionsError,
+  runtimeHealthByRuntime,
+  isLoadingChecks,
+}: UseAgentStudioReadinessArgs) {
+  const healthyRuntimeDefinition = useMemo(
+    () =>
+      runtimeDefinitions.find((definition) => {
+        const runtimeHealth = runtimeHealthByRuntime[definition.kind];
+        return Boolean(
+          runtimeHealth?.runtimeOk &&
+            (!definition.capabilities.supportsMcpStatus || runtimeHealth.mcpOk),
+        );
+      }) ?? null,
+    [runtimeDefinitions, runtimeHealthByRuntime],
+  );
+  const blockedRuntimeDefinition = useMemo(
+    () =>
+      runtimeDefinitions.find((definition) => {
+        const runtimeHealth = runtimeHealthByRuntime[definition.kind];
+        return Boolean(
+          runtimeHealth &&
+            (!runtimeHealth.runtimeOk ||
+              (definition.capabilities.supportsMcpStatus && !runtimeHealth.mcpOk)),
+        );
+      }) ?? null,
+    [runtimeDefinitions, runtimeHealthByRuntime],
+  );
+  const blockedRuntimeHealth = blockedRuntimeDefinition
+    ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
+    : null;
+
+  const agentStudioReady = Boolean(activeRepo && healthyRuntimeDefinition);
+  const agentStudioBlockedReason = !activeRepo
+    ? "Select a repository to use Agent Studio."
+    : runtimeDefinitionsError
+      ? runtimeDefinitionsError
+      : isLoadingRuntimeDefinitions
+        ? "Loading runtime definitions..."
+        : isLoadingChecks
+          ? "Checking runtime and OpenDucktor MCP health..."
+          : (blockedRuntimeHealth?.runtimeError ??
+            blockedRuntimeHealth?.mcpError ??
+            (runtimeDefinitions.length === 0
+              ? "No agent runtimes are available."
+              : "No configured runtime is ready for Agent Studio."));
+
+  return {
+    agentStudioReady,
+    agentStudioBlockedReason,
+  };
+}
+
+type UseAgentsPageRightPanelModelArgs = {
+  activeRepo: string | null;
+  activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
+  viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
+  viewActiveSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
+  isPanelOpen: boolean;
+  documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
+  repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
+  runCompletionRecoverySignal: number;
+  runs: ReturnType<typeof useTasksState>["runs"];
+  detectingPullRequestTaskId: string | null;
+  onDetectPullRequest: (taskId: string) => void;
+  onResolveRebaseConflict: Parameters<
+    typeof useAgentStudioGitActions
+  >[0]["onResolveRebaseConflict"];
+};
+
+function useAgentsPageRightPanelModel({
+  activeRepo,
+  activeBranch,
+  viewRole,
+  viewActiveSession,
+  viewSelectedTask,
+  panelKind,
+  isPanelOpen,
+  documentsModel,
+  repoSettings,
+  runCompletionRecoverySignal,
+  runs,
+  detectingPullRequestTaskId,
+  onDetectPullRequest,
+  onResolveRebaseConflict,
+}: UseAgentsPageRightPanelModelArgs) {
+  const gitPanelContextMode: "repository" | "worktree" =
+    viewActiveSession?.role === "build" ? "worktree" : "repository";
+  const repositoryBranchIdentityKey =
+    gitPanelContextMode === "repository"
+      ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
+      : null;
+  const diffComparisonTarget =
+    gitPanelContextMode === "repository"
+      ? { branch: UPSTREAM_TARGET_BRANCH }
+      : (repoSettings?.defaultTargetBranch ?? normalizeTargetBranch(null));
+  const shouldLoadVisibleDiffPanel = viewRole === "build" && panelKind === "diff" && isPanelOpen;
+  const diffData = useAgentStudioDiffData({
+    repoPath: shouldLoadVisibleDiffPanel ? activeRepo : null,
+    sessionWorkingDirectory: shouldLoadVisibleDiffPanel
+      ? (viewActiveSession?.workingDirectory ?? null)
+      : null,
+    sessionRunId: shouldLoadVisibleDiffPanel ? (viewActiveSession?.runId ?? null) : null,
+    runCompletionRecoverySignal,
+    defaultTargetBranch: diffComparisonTarget,
+    branchIdentityKey: repositoryBranchIdentityKey,
+    enablePolling: shouldLoadVisibleDiffPanel && Boolean(viewActiveSession),
+  });
+  const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
+    contextMode: gitPanelContextMode,
+    workspaceActiveBranch: activeBranch,
+    diffBranch: diffData.branch,
+  });
+
+  useAgentStudioBuildWorktreeRefresh({
+    viewRole,
+    activeSession: viewActiveSession,
+    refreshWorktree: diffData.refresh,
+  });
+
+  const isActiveBuilderWorking =
+    viewActiveSession?.role === "build" &&
+    (viewActiveSession.status === "running" || viewActiveSession.status === "starting");
+  const gitActions = useAgentStudioGitActions({
+    repoPath: activeRepo,
+    workingDir: diffData.worktreePath,
+    branch: resolvedGitPanelBranch,
+    targetBranch: diffData.targetBranch,
+    upstreamAheadBehind: diffData.upstreamAheadBehind ?? null,
+    detectedConflictedFiles: diffData.fileStatuses
+      .filter((status) => status.status === "unmerged")
+      .map((status) => status.path),
+    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
+    refreshDiffData: diffData.refresh,
+    isBuilderSessionWorking: isActiveBuilderWorking,
+    onResolveRebaseConflict,
+  });
+  const diffModel = useMemo(
+    () => ({
+      ...diffData,
+      contextMode: gitPanelContextMode,
+      branch: resolvedGitPanelBranch,
+      pullRequest: viewSelectedTask?.pullRequest ?? null,
+      ...(viewSelectedTask && detectingPullRequestTaskId === viewSelectedTask.id
+        ? { isDetectingPullRequest: true }
+        : {}),
+      ...(viewSelectedTask &&
+      !viewSelectedTask.pullRequest &&
+      canDetectTaskPullRequest(viewSelectedTask, runs)
+        ? {
+            onDetectPullRequest: () => onDetectPullRequest(viewSelectedTask.id),
+          }
+        : {}),
+      ...gitActions,
+    }),
+    [
+      diffData,
+      gitActions,
+      gitPanelContextMode,
+      onDetectPullRequest,
+      detectingPullRequestTaskId,
+      resolvedGitPanelBranch,
+      runs,
+      viewSelectedTask,
+    ],
+  );
+
+  return {
+    isRightPanelVisible: Boolean(panelKind && isPanelOpen),
+    rightPanelModel: buildAgentStudioRightPanelModel({
+      panelKind,
+      documentsModel,
+      diffModel,
+    }),
+  };
+}
+
+type BuildAgentsPageOrchestrationContextsArgs = {
+  activeRepo: string | null;
+  loadSettingsSnapshot: AgentStudioOrchestrationWorkspaceContext["loadSettingsSnapshot"];
+  loadRepoSettings: AgentStudioOrchestrationWorkspaceContext["loadRepoSettings"];
+  viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
+  viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
+  viewScenario: AgentStudioOrchestrationSelectionContext["viewScenario"];
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  viewSessionsForTask: AgentStudioOrchestrationSelectionContext["viewSessionsForTask"];
+  viewActiveSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  activeTaskTabId: AgentStudioOrchestrationSelectionContext["activeTaskTabId"];
+  taskTabs: AgentStudioOrchestrationSelectionContext["taskTabs"];
+  availableTabTasks: AgentStudioOrchestrationSelectionContext["availableTabTasks"];
+  contextSwitchVersion: AgentStudioOrchestrationSelectionContext["contextSwitchVersion"];
+  isLoadingTasks: AgentStudioOrchestrationSelectionContext["isLoadingTasks"];
+  isActiveTaskHydrated: AgentStudioOrchestrationSelectionContext["isActiveTaskHydrated"];
+  isViewSessionHistoryHydrating: AgentStudioOrchestrationSelectionContext["isViewSessionHistoryHydrating"];
+  onCreateTab: AgentStudioOrchestrationSelectionContext["onCreateTab"];
+  onCloseTab: AgentStudioOrchestrationSelectionContext["onCloseTab"];
+  agentStudioReady: AgentStudioOrchestrationReadinessContext["agentStudioReady"];
+  agentStudioBlockedReason: AgentStudioOrchestrationReadinessContext["agentStudioBlockedReason"];
+  isLoadingChecks: AgentStudioOrchestrationReadinessContext["isLoadingChecks"];
+  refreshChecks: AgentStudioOrchestrationReadinessContext["refreshChecks"];
+  input: AgentStudioOrchestrationComposerContext["input"];
+  setInput: AgentStudioOrchestrationComposerContext["setInput"];
+  updateQuery: AgentStudioOrchestrationActionsContext["updateQuery"];
+  onContextSwitchIntent: AgentStudioOrchestrationActionsContext["onContextSwitchIntent"];
+  startAgentSession: AgentStudioOrchestrationActionsContext["startAgentSession"];
+  sendAgentMessage: AgentStudioOrchestrationActionsContext["sendAgentMessage"];
+  stopAgentSession: AgentStudioOrchestrationActionsContext["stopAgentSession"];
+  updateAgentSessionModel: AgentStudioOrchestrationActionsContext["updateAgentSessionModel"];
+  replyAgentPermission: AgentStudioOrchestrationActionsContext["replyAgentPermission"];
+  answerAgentQuestion: AgentStudioOrchestrationActionsContext["answerAgentQuestion"];
+  requestNewSessionStart: AgentStudioOrchestrationActionsContext["requestNewSessionStart"];
+  openTaskDetails: AgentStudioOrchestrationActionsContext["openTaskDetails"];
+};
+
+function buildAgentsPageOrchestrationContexts({
+  activeRepo,
+  loadSettingsSnapshot,
+  loadRepoSettings,
+  viewTaskId,
+  viewRole,
+  viewScenario,
+  viewSelectedTask,
+  viewSessionsForTask,
+  viewActiveSession,
+  activeTaskTabId,
+  taskTabs,
+  availableTabTasks,
+  contextSwitchVersion,
+  isLoadingTasks,
+  isActiveTaskHydrated,
+  isViewSessionHistoryHydrating,
+  onCreateTab,
+  onCloseTab,
+  agentStudioReady,
+  agentStudioBlockedReason,
+  isLoadingChecks,
+  refreshChecks,
+  input,
+  setInput,
+  updateQuery,
+  onContextSwitchIntent,
+  startAgentSession,
+  sendAgentMessage,
+  stopAgentSession,
+  updateAgentSessionModel,
+  replyAgentPermission,
+  answerAgentQuestion,
+  requestNewSessionStart,
+  openTaskDetails,
+}: BuildAgentsPageOrchestrationContextsArgs) {
+  return {
+    workspace: {
+      activeRepo,
+      loadSettingsSnapshot,
+      loadRepoSettings,
+    } satisfies AgentStudioOrchestrationWorkspaceContext,
+    selection: {
+      viewTaskId,
+      viewRole,
+      viewScenario,
+      viewSelectedTask,
+      viewSessionsForTask,
+      viewActiveSession,
+      activeTaskTabId,
+      taskTabs,
+      availableTabTasks,
+      contextSwitchVersion,
+      isLoadingTasks,
+      isActiveTaskHydrated,
+      isViewSessionHistoryHydrating,
+      onCreateTab,
+      onCloseTab,
+    } satisfies AgentStudioOrchestrationSelectionContext,
+    readiness: {
+      agentStudioReady,
+      agentStudioBlockedReason,
+      isLoadingChecks,
+      refreshChecks,
+    } satisfies AgentStudioOrchestrationReadinessContext,
+    composer: {
+      input,
+      setInput,
+    } satisfies AgentStudioOrchestrationComposerContext,
+    actions: {
+      updateQuery,
+      onContextSwitchIntent,
+      startAgentSession,
+      sendAgentMessage,
+      stopAgentSession,
+      updateAgentSessionModel,
+      replyAgentPermission,
+      answerAgentQuestion,
+      requestNewSessionStart,
+      openTaskDetails,
+    } satisfies AgentStudioOrchestrationActionsContext,
+  };
+}
+
 export function AgentsPage(): ReactElement {
   const { activeRepo, activeBranch } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
@@ -81,8 +565,6 @@ export function AgentsPage(): ReactElement {
   const [searchParams, setSearchParams] = useSearchParams();
   const [input, setInput] = useState("");
   const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
-  const [runCompletionRecoverySignal, setRunCompletionRecoverySignal] = useState(0);
-  const latestRunCompletionSignalVersionRef = useRef<number | null>(null);
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const { runCompletionSignal } = useDelegationEventsContext();
   const { pendingSessionStartRequest, requestNewSessionStart, resolvePendingSessionStart } =
@@ -152,26 +634,10 @@ export function AgentsPage(): ReactElement {
     },
     [unlinkPullRequest],
   );
-
-  useEffect(() => {
-    const activeBuildRunId =
-      selection.viewActiveSession?.role === "build" ? selection.viewActiveSession.runId : null;
-
-    if (!runCompletionSignal || !activeBuildRunId) {
-      return;
-    }
-
-    if (runCompletionSignal.runId !== activeBuildRunId) {
-      return;
-    }
-
-    if (runCompletionSignal.version === latestRunCompletionSignalVersionRef.current) {
-      return;
-    }
-
-    latestRunCompletionSignalVersionRef.current = runCompletionSignal.version;
-    setRunCompletionRecoverySignal((current) => current + 1);
-  }, [runCompletionSignal, selection.viewActiveSession?.runId, selection.viewActiveSession?.role]);
+  const runCompletionRecoverySignal = useRunCompletionRecoverySignal({
+    activeSession: selection.viewActiveSession,
+    runCompletionSignal,
+  });
 
   useAgentStudioQuerySessionSync({
     isLoadingTasks,
@@ -186,143 +652,54 @@ export function AgentsPage(): ReactElement {
     scheduleQueryUpdate,
   });
 
-  const healthyRuntimeDefinition = useMemo(
-    () =>
-      runtimeDefinitions.find((definition) => {
-        const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-        return Boolean(
-          runtimeHealth?.runtimeOk &&
-            (!definition.capabilities.supportsMcpStatus || runtimeHealth.mcpOk),
-        );
-      }) ?? null,
-    [runtimeDefinitions, runtimeHealthByRuntime],
-  );
-  const blockedRuntimeDefinition = useMemo(
-    () =>
-      runtimeDefinitions.find((definition) => {
-        const runtimeHealth = runtimeHealthByRuntime[definition.kind];
-        return Boolean(
-          runtimeHealth &&
-            (!runtimeHealth.runtimeOk ||
-              (definition.capabilities.supportsMcpStatus && !runtimeHealth.mcpOk)),
-        );
-      }) ?? null,
-    [runtimeDefinitions, runtimeHealthByRuntime],
-  );
-  const blockedRuntimeHealth = blockedRuntimeDefinition
-    ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
-    : null;
-
-  const agentStudioReady = Boolean(activeRepo && healthyRuntimeDefinition);
-  const agentStudioBlockedReason = !activeRepo
-    ? "Select a repository to use Agent Studio."
-    : runtimeDefinitionsError
-      ? runtimeDefinitionsError
-      : isLoadingRuntimeDefinitions
-        ? "Loading runtime definitions..."
-        : isLoadingChecks
-          ? "Checking runtime and OpenDucktor MCP health..."
-          : (blockedRuntimeHealth?.runtimeError ??
-            blockedRuntimeHealth?.mcpError ??
-            (runtimeDefinitions.length === 0
-              ? "No agent runtimes are available."
-              : "No configured runtime is ready for Agent Studio."));
-
-  const orchestrationWorkspace = {
+  const { agentStudioReady, agentStudioBlockedReason } = useAgentStudioReadiness({
     activeRepo,
-  } satisfies AgentStudioOrchestrationWorkspaceContext;
-
-  const orchestrationSelection = {
-    viewTaskId: selection.viewTaskId,
-    viewRole: selection.viewRole,
-    viewScenario: selection.viewScenario,
-    viewSelectedTask: selection.viewSelectedTask,
-    viewSessionsForTask: selection.viewSessionsForTask,
-    viewActiveSession: selection.viewActiveSession,
-    activeTaskTabId: selection.activeTaskTabId,
-    taskTabs: selection.taskTabs,
-    availableTabTasks: selection.availableTabTasks,
-    contextSwitchVersion,
-    isLoadingTasks,
-    isActiveTaskHydrated: selection.isActiveTaskHydrated,
-    isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
-    onCreateTab: selection.handleCreateTab,
-    onCloseTab: selection.handleCloseTab,
-  } satisfies AgentStudioOrchestrationSelectionContext;
-
-  const orchestrationReadiness = {
-    agentStudioReady,
-    agentStudioBlockedReason,
+    runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    runtimeHealthByRuntime,
     isLoadingChecks,
-    refreshChecks,
-  } satisfies AgentStudioOrchestrationReadinessContext;
-
-  const orchestrationComposer = {
-    input,
-    setInput,
-  } satisfies AgentStudioOrchestrationComposerContext;
-
-  const orchestrationActions = {
-    updateQuery: scheduleQueryUpdate,
-    onContextSwitchIntent: signalContextSwitchIntent,
-    startAgentSession,
-    sendAgentMessage,
-    stopAgentSession,
-    updateAgentSessionModel,
-    replyAgentPermission,
-    answerAgentQuestion,
-    requestNewSessionStart,
-    openTaskDetails,
-  } satisfies AgentStudioOrchestrationActionsContext;
-
-  const orchestration = useAgentStudioOrchestrationController({
-    workspace: orchestrationWorkspace,
-    selection: orchestrationSelection,
-    readiness: orchestrationReadiness,
-    composer: orchestrationComposer,
-    actions: orchestrationActions,
   });
 
-  const gitPanelContextMode: "repository" | "worktree" =
-    selection.viewActiveSession?.role === "build" ? "worktree" : "repository";
-  const repositoryBranchIdentityKey =
-    gitPanelContextMode === "repository"
-      ? buildAgentStudioGitPanelBranchIdentityKey(activeBranch)
-      : null;
-  const diffComparisonTarget =
-    gitPanelContextMode === "repository"
-      ? { branch: UPSTREAM_TARGET_BRANCH }
-      : (orchestration.repoSettings?.defaultTargetBranch ?? normalizeTargetBranch(null));
-  const shouldLoadVisibleDiffPanel =
-    selection.viewRole === "build" &&
-    orchestration.rightPanel.panelKind === "diff" &&
-    orchestration.rightPanel.isPanelOpen;
+  const orchestration = useAgentStudioOrchestrationController(
+    buildAgentsPageOrchestrationContexts({
+      activeRepo,
+      loadSettingsSnapshot,
+      loadRepoSettings,
+      viewTaskId: selection.viewTaskId,
+      viewRole: selection.viewRole,
+      viewScenario: selection.viewScenario,
+      viewSelectedTask: selection.viewSelectedTask,
+      viewSessionsForTask: selection.viewSessionsForTask,
+      viewActiveSession: selection.viewActiveSession,
+      activeTaskTabId: selection.activeTaskTabId,
+      taskTabs: selection.taskTabs,
+      availableTabTasks: selection.availableTabTasks,
+      contextSwitchVersion,
+      isLoadingTasks,
+      isActiveTaskHydrated: selection.isActiveTaskHydrated,
+      isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
+      onCreateTab: selection.handleCreateTab,
+      onCloseTab: selection.handleCloseTab,
+      agentStudioReady,
+      agentStudioBlockedReason,
+      isLoadingChecks,
+      refreshChecks,
+      input,
+      setInput,
+      updateQuery: scheduleQueryUpdate,
+      onContextSwitchIntent: signalContextSwitchIntent,
+      startAgentSession,
+      sendAgentMessage,
+      stopAgentSession,
+      updateAgentSessionModel,
+      replyAgentPermission,
+      answerAgentQuestion,
+      requestNewSessionStart,
+      openTaskDetails,
+    }),
+  );
 
-  const diffData = useAgentStudioDiffData({
-    repoPath: shouldLoadVisibleDiffPanel ? activeRepo : null,
-    sessionWorkingDirectory: shouldLoadVisibleDiffPanel
-      ? (selection.viewActiveSession?.workingDirectory ?? null)
-      : null,
-    sessionRunId: shouldLoadVisibleDiffPanel ? (selection.viewActiveSession?.runId ?? null) : null,
-    runCompletionRecoverySignal,
-    defaultTargetBranch: diffComparisonTarget,
-    branchIdentityKey: repositoryBranchIdentityKey,
-    enablePolling: shouldLoadVisibleDiffPanel && Boolean(selection.viewActiveSession),
-  });
-  const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
-    contextMode: gitPanelContextMode,
-    workspaceActiveBranch: activeBranch,
-    diffBranch: diffData.branch,
-  });
-  useAgentStudioBuildWorktreeRefresh({
-    viewRole: selection.viewRole,
-    activeSession: selection.viewActiveSession,
-    refreshWorktree: diffData.refresh,
-  });
-  const isActiveBuilderWorking =
-    selection.viewActiveSession?.role === "build" &&
-    (selection.viewActiveSession.status === "running" ||
-      selection.viewActiveSession.status === "starting");
   const {
     pendingRebaseConflictResolutionRequest,
     resolvePendingRebaseConflictResolution,
@@ -343,128 +720,71 @@ export function AgentsPage(): ReactElement {
     startAgentSession,
     sendAgentMessage,
   });
-  const gitActions = useAgentStudioGitActions({
-    repoPath: activeRepo,
-    workingDir: diffData.worktreePath,
-    branch: resolvedGitPanelBranch,
-    targetBranch: diffData.targetBranch,
-    upstreamAheadBehind: diffData.upstreamAheadBehind ?? null,
-    detectedConflictedFiles: diffData.fileStatuses
-      .filter((status) => status.status === "unmerged")
-      .map((status) => status.path),
-    worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
-    refreshDiffData: diffData.refresh,
-    isBuilderSessionWorking: isActiveBuilderWorking,
+  const { isRightPanelVisible, rightPanelModel } = useAgentsPageRightPanelModel({
+    activeRepo,
+    activeBranch,
+    viewRole: selection.viewRole,
+    viewActiveSession: selection.viewActiveSession,
+    viewSelectedTask: selection.viewSelectedTask,
+    panelKind: orchestration.rightPanel.panelKind,
+    isPanelOpen: orchestration.rightPanel.isPanelOpen,
+    documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
+    repoSettings: orchestration.repoSettings,
+    runCompletionRecoverySignal,
+    runs,
+    detectingPullRequestTaskId,
+    onDetectPullRequest: handleDetectPullRequest,
     onResolveRebaseConflict: handleResolveRebaseConflict,
   });
-  const selectedTask = selection.viewSelectedTask;
-  const diffModel = useMemo(
-    () => ({
-      ...diffData,
-      contextMode: gitPanelContextMode,
-      branch: resolvedGitPanelBranch,
-      pullRequest: selectedTask?.pullRequest ?? null,
-      ...(selectedTask && detectingPullRequestTaskId === selectedTask.id
-        ? { isDetectingPullRequest: true }
-        : {}),
-      ...(selectedTask && !selectedTask.pullRequest && canDetectTaskPullRequest(selectedTask, runs)
-        ? {
-            onDetectPullRequest: () => handleDetectPullRequest(selectedTask.id),
-          }
-        : {}),
-      ...gitActions,
-    }),
-    [
-      diffData,
-      gitActions,
-      gitPanelContextMode,
-      handleDetectPullRequest,
-      detectingPullRequestTaskId,
-      resolvedGitPanelBranch,
-      runs,
-      selectedTask,
-    ],
-  );
-  const rightPanelModel = useMemo(
-    () =>
-      buildAgentStudioRightPanelModel({
-        panelKind: orchestration.rightPanel.panelKind,
-        documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
-        diffModel,
-      }),
-    [diffModel, orchestration.agentStudioWorkspaceSidebarModel, orchestration.rightPanel.panelKind],
-  );
-  const content = (
-    <AgentsPageShell
+  const rebaseConflictModal = pendingRebaseConflictResolutionRequest ? (
+    <RebaseConflictResolutionModal
+      key={pendingRebaseConflictResolutionRequest.requestId}
+      request={pendingRebaseConflictResolutionRequest}
+      onResolve={resolvePendingRebaseConflictResolution}
+    />
+  ) : null;
+  const sessionStartModal = pendingSessionStartRequest ? (
+    <AgentStudioSessionStartModalBridge
+      key={pendingSessionStartRequest.requestId}
+      request={pendingSessionStartRequest}
       activeRepo={activeRepo}
-      navigationPersistenceError={navigationPersistenceError}
-      chatSettingsLoadError={orchestration.chatSettingsLoadError}
-      activeTabValue={orchestration.activeTabValue}
-      onRetryNavigationPersistence={retryNavigationPersistence}
-      onRetryChatSettingsLoad={orchestration.retryChatSettingsLoad}
-      onTabValueChange={selection.handleSelectTab}
-      taskTabs={
-        <AgentStudioTaskTabs
-          model={orchestration.agentStudioTaskTabsModel}
-          rightPanelToggleModel={orchestration.rightPanel.rightPanelToggleModel}
-        />
-      }
-      workspace={
-        selection.viewTaskId ? (
-          <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
-            <ResizablePanel defaultSize={63} minSize={35}>
-              <AgentChat
-                header={<AgentStudioHeader model={orchestration.agentStudioHeaderModel} />}
-                model={orchestration.agentChatModel}
-              />
-            </ResizablePanel>
-            {orchestration.rightPanel.panelKind && orchestration.rightPanel.isPanelOpen ? (
-              <>
-                <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={37} minSize={30}>
-                  {rightPanelModel ? <AgentStudioRightPanel model={rightPanelModel} /> : null}
-                </ResizablePanel>
-              </>
-            ) : null}
-          </ResizablePanelGroup>
-        ) : (
-          <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-input bg-card text-sm text-muted-foreground">
-            Open a task tab to start a workspace.
-          </div>
-        )
-      }
-      modalContent={
-        <>
-          {pendingRebaseConflictResolutionRequest ? (
-            <RebaseConflictResolutionModal
-              key={pendingRebaseConflictResolutionRequest.requestId}
-              request={pendingRebaseConflictResolutionRequest}
-              onResolve={resolvePendingRebaseConflictResolution}
-            />
-          ) : null}
-          {pendingSessionStartRequest ? (
-            <AgentStudioSessionStartModalBridge
-              key={pendingSessionStartRequest.requestId}
-              request={pendingSessionStartRequest}
-              activeRepo={activeRepo}
-              repoSettings={orchestration.repoSettings}
-              onResolve={resolvePendingSessionStart}
-            />
-          ) : null}
-          <TaskDetailsSheetController
-            ref={taskDetailsSheetRef}
-            allTasks={tasks}
-            runs={runs}
-            workflowActionsEnabled={false}
-            onDetectPullRequest={handleDetectPullRequest}
-            onUnlinkPullRequest={handleUnlinkPullRequest}
-            detectingPullRequestTaskId={detectingPullRequestTaskId}
-            unlinkingPullRequestTaskId={unlinkingPullRequestTaskId}
-          />
-        </>
-      }
+      repoSettings={orchestration.repoSettings}
+      onResolve={resolvePendingSessionStart}
+    />
+  ) : null;
+  const taskDetailsSheet = (
+    <TaskDetailsSheetController
+      ref={taskDetailsSheetRef}
+      allTasks={tasks}
+      runs={runs}
+      workflowActionsEnabled={false}
+      onDetectPullRequest={handleDetectPullRequest}
+      onUnlinkPullRequest={handleUnlinkPullRequest}
+      detectingPullRequestTaskId={detectingPullRequestTaskId}
+      unlinkingPullRequestTaskId={unlinkingPullRequestTaskId}
     />
   );
-
-  return <DiffWorkerProvider>{content}</DiffWorkerProvider>;
+  return (
+    <DiffWorkerProvider>
+      <AgentsPageContent
+        activeRepo={activeRepo}
+        navigationPersistenceError={navigationPersistenceError}
+        chatSettingsLoadError={orchestration.chatSettingsLoadError}
+        activeTabValue={orchestration.activeTabValue}
+        onRetryNavigationPersistence={retryNavigationPersistence}
+        onRetryChatSettingsLoad={orchestration.retryChatSettingsLoad}
+        onTabValueChange={selection.handleSelectTab}
+        taskTabsModel={orchestration.agentStudioTaskTabsModel}
+        rightPanelToggleModel={orchestration.rightPanel.rightPanelToggleModel}
+        hasSelectedTask={Boolean(selection.viewTaskId)}
+        chatHeaderModel={orchestration.agentStudioHeaderModel}
+        chatModel={orchestration.agentChatModel}
+        isRightPanelVisible={isRightPanelVisible}
+        rightPanelModel={rightPanelModel}
+        rebaseConflictModal={rebaseConflictModal}
+        sessionStartModal={sessionStartModal}
+        taskDetailsSheet={taskDetailsSheet}
+      />
+    </DiffWorkerProvider>
+  );
 }

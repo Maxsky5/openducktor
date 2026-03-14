@@ -1,16 +1,14 @@
 use crate::commands::documents::map_plan_subtasks;
 use crate::commands::git::{
     build_worktree_status_summary_with_snapshot, build_worktree_status_with_snapshot,
-    hash_worktree_diff_payload, hash_worktree_diff_summary_payload,
-    hash_worktree_status_payload, invalidate_worktree_resolution_cache_for_repo,
-    parse_diff_scope, require_target_branch, resolve_working_dir, WorktreeSnapshotMetadata,
-    GIT_WORKTREE_HASH_VERSION,
+    hash_worktree_diff_payload, hash_worktree_diff_summary_payload, hash_worktree_status_payload,
+    invalidate_worktree_resolution_cache_for_repo, parse_diff_scope, require_target_branch,
+    resolve_working_dir, WorktreeSnapshotMetadata, GIT_WORKTREE_HASH_VERSION,
 };
 use crate::commands::tasks::{map_task_create_payload, map_task_update_payload};
 use crate::{
-    run_service_blocking_tokio, startup_phase_service_bootstrap,
-    startup_phase_shutdown_hooks, startup_phase_tracing, BuildCompletePayload,
-    MarkdownPayload, PlanPayload,
+    run_service_blocking_tokio, startup_phase_service_bootstrap, startup_phase_shutdown_hooks,
+    startup_phase_tracing, BuildCompletePayload, MarkdownPayload, PlanPayload,
     PullRequestContentPayload, RepoConfigPayload, RepoSettingsPayload, SettingsSnapshotPayload,
     SettingsSnapshotResponsePayload, TaskCreatePayload, TaskUpdatePayload,
 };
@@ -83,7 +81,10 @@ impl HeadlessEventBus {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst) + 1;
         let event = HeadlessEvent { id, payload };
         {
-            let mut recent = self.recent.lock().expect("browser event buffer should lock");
+            let mut recent = self
+                .recent
+                .lock()
+                .expect("browser event buffer should lock");
             recent.push_back(event.clone());
             if recent.len() > self.capacity {
                 recent.pop_front();
@@ -486,7 +487,9 @@ pub async fn run_browser_backend(port: u16) -> anyhow::Result<()> {
 
     let listener = TcpListener::bind((DEFAULT_BROWSER_BACKEND_HOST, port))
         .await
-        .with_context(|| format!("failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{port}"))?;
+        .with_context(|| {
+            format!("failed to bind browser backend on {DEFAULT_BROWSER_BACKEND_HOST}:{port}")
+        })?;
 
     tracing::info!(
         target: "openducktor.browser-backend",
@@ -555,18 +558,16 @@ fn serialize_value<T: serde::Serialize>(value: T) -> Result<Value, HeadlessComma
 }
 
 fn make_emitter(events: HeadlessEventBus) -> RunEmitter {
-    Arc::new(move |event| {
-        match serde_json::to_string(&event) {
-            Ok(payload) => {
-                events.emit(payload);
-            }
-            Err(error) => {
-                tracing::warn!(
-                    target: "openducktor.browser-backend",
-                    error = %error,
-                    "Failed to serialize run event for browser SSE"
-                );
-            }
+    Arc::new(move |event| match serde_json::to_string(&event) {
+        Ok(payload) => {
+            events.emit(payload);
+        }
+        Err(error) => {
+            tracing::warn!(
+                target: "openducktor.browser-backend",
+                error = %error,
+                "Failed to serialize run event for browser SSE"
+            );
         }
     })
 }
@@ -615,10 +616,9 @@ fn parse_last_event_id(headers: &HeaderMap) -> Result<Option<u64>, HeadlessComma
     let value = last_event_id.to_str().map_err(|error| {
         HeadlessCommandError::bad_request(format!("Invalid Last-Event-ID header: {error}"))
     })?;
-    value
-        .parse::<u64>()
-        .map(Some)
-        .map_err(|error| HeadlessCommandError::bad_request(format!("Invalid Last-Event-ID header: {error}")))
+    value.parse::<u64>().map(Some).map_err(|error| {
+        HeadlessCommandError::bad_request(format!("Invalid Last-Event-ID header: {error}"))
+    })
 }
 
 fn to_sse_event(event: &HeadlessEvent) -> Result<Event, Infallible> {
@@ -698,21 +698,25 @@ async fn dispatch_workspace_command(
         })),
         "workspace_select" => Some(handle_workspace_select(state, args).await),
         "workspace_update_repo_config" => Some(handle_workspace_update_repo_config(state, args)),
-        "workspace_save_repo_settings" => Some(handle_workspace_save_repo_settings(state, args).await),
+        "workspace_save_repo_settings" => {
+            Some(handle_workspace_save_repo_settings(state, args).await)
+        }
         "workspace_update_repo_hooks" => Some(handle_workspace_update_repo_hooks(state, args)),
-        "workspace_prepare_trusted_hooks_challenge" => Some(handle_repo_path_operation(args, |repo_path| {
-            state
-                .service
-                .workspace_prepare_trusted_hooks_challenge(&repo_path)
-        })),
+        "workspace_prepare_trusted_hooks_challenge" => {
+            Some(handle_repo_path_operation(args, |repo_path| {
+                state
+                    .service
+                    .workspace_prepare_trusted_hooks_challenge(&repo_path)
+            }))
+        }
         "workspace_get_repo_config" => Some(handle_repo_path_operation(args, |repo_path| {
             state.service.workspace_get_repo_config(&repo_path)
         })),
-        "workspace_detect_github_repository" => Some(handle_repo_path_operation(args, |repo_path| {
-            state
-                .service
-                .workspace_detect_github_repository(&repo_path)
-        })),
+        "workspace_detect_github_repository" => {
+            Some(handle_repo_path_operation(args, |repo_path| {
+                state.service.workspace_detect_github_repository(&repo_path)
+            }))
+        }
         "workspace_get_settings_snapshot" => Some(handle_workspace_get_settings_snapshot(state)),
         "workspace_update_global_git_config" => {
             Some(handle_workspace_update_global_git_config(state, args).await)
@@ -720,7 +724,9 @@ async fn dispatch_workspace_command(
         "workspace_save_settings_snapshot" => {
             Some(handle_workspace_save_settings_snapshot(state, args).await)
         }
-        "workspace_set_trusted_hooks" => Some(handle_workspace_set_trusted_hooks(state, args).await),
+        "workspace_set_trusted_hooks" => {
+            Some(handle_workspace_set_trusted_hooks(state, args).await)
+        }
         "set_theme" => Some(handle_set_theme(state, args)),
         _ => None,
     }
@@ -744,7 +750,9 @@ async fn dispatch_git_command(
         "git_get_diff" => Some(handle_git_get_diff(state, args)),
         "git_commits_ahead_behind" => Some(handle_git_commits_ahead_behind(state, args)),
         "git_get_worktree_status" => Some(handle_git_get_worktree_status(state, args)),
-        "git_get_worktree_status_summary" => Some(handle_git_get_worktree_status_summary(state, args)),
+        "git_get_worktree_status_summary" => {
+            Some(handle_git_get_worktree_status_summary(state, args))
+        }
         "git_commit_all" => Some(handle_git_commit_all(state, args)),
         "git_pull_branch" => Some(handle_git_pull_branch(state, args)),
         "git_rebase_branch" => Some(handle_git_rebase_branch(state, args)),
@@ -915,11 +923,11 @@ fn handle_workspace_update_repo_config(state: &HeadlessState, args: Value) -> Co
     )
 }
 
-async fn handle_workspace_save_repo_settings(
-    state: &HeadlessState,
-    args: Value,
-) -> CommandResult {
-    let WorkspaceSaveRepoSettingsArgs { repo_path, settings } = deserialize_args(args)?;
+async fn handle_workspace_save_repo_settings(state: &HeadlessState, args: Value) -> CommandResult {
+    let WorkspaceSaveRepoSettingsArgs {
+        repo_path,
+        settings,
+    } = deserialize_args(args)?;
     let service = state.service.clone();
     let confirmation_port = HeadlessHookTrustConfirmationPort;
     let update = RepoSettingsUpdate {
@@ -1011,10 +1019,7 @@ async fn handle_workspace_save_settings_snapshot(
     )
 }
 
-async fn handle_workspace_set_trusted_hooks(
-    state: &HeadlessState,
-    args: Value,
-) -> CommandResult {
+async fn handle_workspace_set_trusted_hooks(state: &HeadlessState, args: Value) -> CommandResult {
     let WorkspaceSetTrustedHooksArgs {
         repo_path,
         trusted,
@@ -1210,13 +1215,7 @@ fn handle_git_get_worktree_status(state: &HeadlessState, args: Value) -> Command
     let diff_hash = hash_worktree_diff_payload(worktree_status.file_diffs.as_slice());
     serialize_value(build_worktree_status_with_snapshot(
         worktree_status,
-        build_worktree_snapshot_metadata(
-            effective,
-            trimmed_target,
-            scope,
-            status_hash,
-            diff_hash,
-        ),
+        build_worktree_snapshot_metadata(effective, trimmed_target, scope, status_hash, diff_hash),
     ))
 }
 
@@ -1252,13 +1251,7 @@ fn handle_git_get_worktree_status_summary(state: &HeadlessState, args: Value) ->
         summary.file_status_counts,
         summary.target_ahead_behind,
         summary.upstream_ahead_behind,
-        build_worktree_snapshot_metadata(
-            effective,
-            trimmed_target,
-            scope,
-            status_hash,
-            diff_hash,
-        ),
+        build_worktree_snapshot_metadata(effective, trimmed_target, scope, status_hash, diff_hash),
     ))
 }
 
@@ -1397,7 +1390,9 @@ fn handle_task_transition(state: &HeadlessState, args: Value) -> CommandResult {
 
 fn handle_task_defer(state: &HeadlessState, args: Value) -> CommandResult {
     handle_repo_task_reason_operation(args, |repo_path, task_id, reason| {
-        state.service.task_defer(&repo_path, &task_id, reason.as_deref())
+        state
+            .service
+            .task_defer(&repo_path, &task_id, reason.as_deref())
     })
 }
 
@@ -1550,7 +1545,9 @@ fn handle_build_completed(state: &HeadlessState, args: Value) -> CommandResult {
 
 fn handle_task_approval_context_get(state: &HeadlessState, args: Value) -> CommandResult {
     handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.task_approval_context_get(&repo_path, &task_id)
+        state
+            .service
+            .task_approval_context_get(&repo_path, &task_id)
     })
 }
 
@@ -1824,7 +1821,13 @@ mod tests {
         let sse = to_sse_event(&event).expect("event should serialize");
 
         let debug = format!("{sse:?}");
-        assert!(debug.contains("id"), "expected event debug output to mention id: {debug}");
-        assert!(debug.contains("7"), "expected event debug output to contain id value: {debug}");
+        assert!(
+            debug.contains("id"),
+            "expected event debug output to mention id: {debug}"
+        );
+        assert!(
+            debug.contains("7"),
+            "expected event debug output to contain id value: {debug}"
+        );
     }
 }

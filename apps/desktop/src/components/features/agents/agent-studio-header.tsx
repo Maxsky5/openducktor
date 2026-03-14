@@ -11,7 +11,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox, type ComboboxGroup } from "@/components/ui/combobox";
@@ -149,13 +149,6 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
   } = model;
 
   const [isCreateSessionMenuOpen, setIsCreateSessionMenuOpen] = useState(false);
-  const [optimisticSelectedRole, setOptimisticSelectedRole] = useState<AgentRole | null>(
-    selectedRole,
-  );
-
-  useEffect(() => {
-    setOptimisticSelectedRole(selectedRole);
-  }, [selectedRole]);
 
   const normalizedTaskTitle = taskTitle?.trim() ?? "";
   const hasTaskTitle = normalizedTaskTitle.length > 0;
@@ -273,7 +266,7 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
         <div className="flex items-center gap-1">
           {workflowSteps.map((entry, index) => {
             const Icon = entry.icon;
-            const isSelected = optimisticSelectedRole === entry.role;
+            const isSelected = selectedRole === entry.role;
             const shouldSpinInProgress = entry.state === "in_progress" && entry.hasRunningSession;
             return (
               <div key={entry.role} className="flex min-w-0 items-center gap-2">
@@ -290,7 +283,6 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
                   disabled={!agentStudioReady}
                   title={workflowStepHint(entry)}
                   onClick={() => {
-                    setOptimisticSelectedRole(entry.role);
                     onWorkflowStepSelect(entry.role, entry.sessionId);
                   }}
                 >

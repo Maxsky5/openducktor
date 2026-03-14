@@ -12,8 +12,8 @@ pub(crate) use process_lifecycle::{
     wait_for_process_exit_by_pid,
 };
 pub(crate) use startup_readiness::{
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
-    wait_for_local_server_with_process,
+    wait_for_local_server_with_process, OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport,
+    StartupCancelEpoch,
 };
 
 pub(crate) fn spawn_opencode_server(

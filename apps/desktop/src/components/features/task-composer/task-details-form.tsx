@@ -71,7 +71,6 @@ export function TaskDetailsForm({
         <Label htmlFor="task-title">Title *</Label>
         <Input
           id="task-title"
-          autoFocus
           placeholder="Short task title"
           value={state.title}
           onChange={(event) => onStateChange({ title: event.currentTarget.value })}

@@ -166,18 +166,24 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
       return;
     }
 
+    let nextModalOpenState: boolean | null = null;
+
     if (closeNonce !== previousCloseNonceRef.current) {
       previousCloseNonceRef.current = closeNonce;
-      setIsRebaseConflictModalOpen(false);
+      nextModalOpenState = false;
     }
 
     if (autoOpenNonce !== previousAutoOpenNonceRef.current) {
       previousAutoOpenNonceRef.current = autoOpenNonce;
-      setIsRebaseConflictModalOpen(true);
+      nextModalOpenState = true;
     }
 
     if (!hasRebaseConflict) {
-      setIsRebaseConflictModalOpen(false);
+      nextModalOpenState = false;
+    }
+
+    if (nextModalOpenState !== null) {
+      setIsRebaseConflictModalOpen(nextModalOpenState);
     }
   }, [hasRebaseConflict, model.rebaseConflictAutoOpenNonce, model.rebaseConflictCloseNonce]);
 

@@ -1,4 +1,4 @@
-import { memo, type ReactElement, startTransition, useEffect, useMemo, useState } from "react";
+import { memo, type ReactElement, startTransition, useEffect, useState } from "react";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 
 type TaskDetailsMarkdownContentProps = {
@@ -9,30 +9,41 @@ type TaskDetailsMarkdownContentProps = {
 
 const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
 
-export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownContent({
+type TaskDetailsRenderedMarkdownProps = {
+  markdown: string;
+  hasLabeledCodeFence: boolean;
+};
+
+function TaskDetailsRenderedMarkdown({
   markdown,
-  empty,
-  active,
-}: TaskDetailsMarkdownContentProps): ReactElement {
-  const hasContent = useMemo(() => /\S/.test(markdown), [markdown]);
-  const hasLabeledCodeFence = useMemo(
-    () => markdown.includes("```") && /```[a-z0-9_-]+/i.test(markdown),
-    [markdown],
+  hasLabeledCodeFence,
+}: TaskDetailsRenderedMarkdownProps): ReactElement {
+  return (
+    <MarkdownRenderer
+      markdown={markdown}
+      variant="document"
+      premiumCodeBlocks={hasLabeledCodeFence}
+      fallback={
+        <p className="text-xs text-muted-foreground">
+          Rendering markdown with syntax highlighting…
+        </p>
+      }
+    />
   );
-  const shouldDeferMarkdown = hasContent && markdown.length >= LARGE_MARKDOWN_DEFER_THRESHOLD;
-  const [isMarkdownReady, setIsMarkdownReady] = useState(() => !shouldDeferMarkdown);
+}
+
+type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
+  active: boolean;
+};
+
+function DeferredTaskDetailsMarkdown({
+  active,
+  markdown,
+  hasLabeledCodeFence,
+}: DeferredTaskDetailsMarkdownProps): ReactElement {
+  const [isMarkdownReady, setIsMarkdownReady] = useState(false);
 
   useEffect(() => {
-    if (!hasContent) {
-      setIsMarkdownReady(true);
-      return;
-    }
-
-    if (!shouldDeferMarkdown) {
-      setIsMarkdownReady(true);
-      return;
-    }
-
     if (!active || isMarkdownReady) {
       return;
     }
@@ -46,35 +57,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
     return () => {
       cancelAnimationFrame(frameId);
     };
-  }, [active, hasContent, isMarkdownReady, shouldDeferMarkdown]);
-
-  useEffect(() => {
-    setIsMarkdownReady(!shouldDeferMarkdown);
-  }, [shouldDeferMarkdown]);
-
-  const markdownNode = useMemo(
-    () => (
-      <MarkdownRenderer
-        markdown={markdown}
-        variant="document"
-        premiumCodeBlocks={hasLabeledCodeFence}
-        fallback={
-          <p className="text-xs text-muted-foreground">
-            Rendering markdown with syntax highlighting…
-          </p>
-        }
-      />
-    ),
-    [hasLabeledCodeFence, markdown],
-  );
-
-  if (!hasContent) {
-    return (
-      <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-        {empty}
-      </p>
-    );
-  }
+  }, [active, isMarkdownReady]);
 
   if (!isMarkdownReady) {
     return (
@@ -86,5 +69,44 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
     );
   }
 
-  return <div className="max-h-84 overflow-y-auto">{markdownNode}</div>;
+  return (
+    <div className="max-h-84 overflow-y-auto">
+      <TaskDetailsRenderedMarkdown markdown={markdown} hasLabeledCodeFence={hasLabeledCodeFence} />
+    </div>
+  );
+}
+
+export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownContent({
+  markdown,
+  empty,
+  active,
+}: TaskDetailsMarkdownContentProps): ReactElement {
+  const hasContent = /\S/.test(markdown);
+  const hasLabeledCodeFence = markdown.includes("```") && /```[a-z0-9_-]+/i.test(markdown);
+  const shouldDeferMarkdown = hasContent && markdown.length >= LARGE_MARKDOWN_DEFER_THRESHOLD;
+
+  if (!hasContent) {
+    return (
+      <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+        {empty}
+      </p>
+    );
+  }
+
+  if (shouldDeferMarkdown) {
+    return (
+      <DeferredTaskDetailsMarkdown
+        key={markdown}
+        active={active}
+        markdown={markdown}
+        hasLabeledCodeFence={hasLabeledCodeFence}
+      />
+    );
+  }
+
+  return (
+    <div className="max-h-84 overflow-y-auto">
+      <TaskDetailsRenderedMarkdown markdown={markdown} hasLabeledCodeFence={hasLabeledCodeFence} />
+    </div>
+  );
 });

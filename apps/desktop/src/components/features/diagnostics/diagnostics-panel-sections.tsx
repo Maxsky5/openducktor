@@ -8,6 +8,10 @@ type DiagnosticsPanelSectionsProps = {
   model: DiagnosticsPanelModel;
 };
 
+type DiagnosticsPanelSectionViewProps = {
+  section: DiagnosticsPanelModel["sections"][number];
+};
+
 const buildRenderEntries = <T,>(
   items: T[],
   toBaseKey: (item: T) => string,
@@ -26,11 +30,7 @@ const buildRenderEntries = <T,>(
   });
 };
 
-const renderSection = ({
-  section,
-}: {
-  section: DiagnosticsPanelModel["sections"][number];
-}): ReactElement => {
+function DiagnosticsPanelSectionView({ section }: DiagnosticsPanelSectionViewProps): ReactElement {
   const rowEntries = buildRenderEntries(section.rows, (row) => `${row.label}:${row.value}`);
   const errorEntries = buildRenderEntries(section.errors, (error) => error);
 
@@ -53,13 +53,15 @@ const renderSection = ({
       )}
     </DiagnosticsSection>
   );
-};
+}
 
 export function DiagnosticsPanelSections({ model }: DiagnosticsPanelSectionsProps): ReactElement {
   return (
     <div className="space-y-3">
       {model.sections.map((section) => (
-        <Fragment key={section.title}>{renderSection({ section })}</Fragment>
+        <Fragment key={section.title}>
+          <DiagnosticsPanelSectionView section={section} />
+        </Fragment>
       ))}
     </div>
   );

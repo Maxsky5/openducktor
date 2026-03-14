@@ -1,5 +1,5 @@
 import { Eye, FilePenLine, LayoutPanelLeft } from "lucide-react";
-import { type ReactElement, type ReactNode, useDeferredValue, useMemo } from "react";
+import { type ReactElement, type ReactNode, useDeferredValue } from "react";
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,10 +87,7 @@ export function TaskDocumentEditor({
   onRetryLoad,
 }: TaskDocumentEditorProps): ReactElement {
   const deferredMarkdown = useDeferredValue(markdown);
-  const lineCount = useMemo(
-    () => (markdown.trim().length === 0 ? 0 : markdown.split(/\r?\n/).length),
-    [markdown],
-  );
+  const lineCount = markdown.trim().length === 0 ? 0 : markdown.split(/\r?\n/).length;
   const showEditor = view !== "preview";
   const showPreview = view !== "write";
   const showMobileSplitHint = view === "split";

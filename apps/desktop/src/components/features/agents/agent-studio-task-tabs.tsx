@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { Circle, CircleAlert, LoaderCircle, Plus, X } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,7 +100,7 @@ export function AgentStudioTaskTabs({
 
   const canOpenCreateDialog = agentStudioReady;
   const hasCreatableTasks = availableTabTasks.length > 0;
-  const hasAnyTab = useMemo(() => tabs.length > 0, [tabs]);
+  const hasAnyTab = tabs.length > 0;
 
   return (
     <div className="bg-studio-chrome px-2 pt-1.5 pb-0">

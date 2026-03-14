@@ -50,6 +50,20 @@ type RenderGroup = {
   options: ComboboxOption[];
 };
 
+type ComboboxOptionLabelProps = {
+  option: Pick<ComboboxOption, "accentColor" | "icon" | "label">;
+  shouldWrap: boolean;
+  containerClassName?: string;
+};
+
+type ComboboxOptionItemProps = {
+  option: ComboboxOption;
+  value: string;
+  shouldWrapOptionLabels: boolean;
+  onValueChange: (value: string) => void;
+  onSelectComplete: () => void;
+};
+
 const comboboxTriggerValueVariants = cva("min-w-0 flex-1 pr-2 text-left", {
   variants: {
     wrap: {
@@ -94,6 +108,65 @@ const comboboxOptionDescriptionVariants = cva("text-xs text-muted-foreground", {
     },
   },
 });
+
+function ComboboxOptionLabel({
+  option,
+  shouldWrap,
+  containerClassName,
+}: ComboboxOptionLabelProps): ReactElement {
+  return (
+    <span className={cn(comboboxOptionLabelRowVariants({ wrap: shouldWrap }), containerClassName)}>
+      {option.icon ? <span className="shrink-0 text-muted-foreground">{option.icon}</span> : null}
+      {option.accentColor ? (
+        <span
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: option.accentColor }}
+        />
+      ) : null}
+      <span className={comboboxOptionLabelTextVariants({ wrap: shouldWrap })}>{option.label}</span>
+    </span>
+  );
+}
+
+function ComboboxOptionItem({
+  option,
+  value,
+  shouldWrapOptionLabels,
+  onValueChange,
+  onSelectComplete,
+}: ComboboxOptionItemProps): ReactElement {
+  return (
+    <CommandItem
+      value={option.value}
+      keywords={[option.label, ...(option.searchKeywords ?? [])]}
+      onSelect={() => {
+        onValueChange(option.value);
+        onSelectComplete();
+      }}
+      className={comboboxOptionItemVariants({ wrap: shouldWrapOptionLabels })}
+    >
+      <div className="min-w-0 flex-1">
+        <ComboboxOptionLabel option={option} shouldWrap={shouldWrapOptionLabels} />
+        {option.description ? (
+          <p className={comboboxOptionDescriptionVariants({ wrap: shouldWrapOptionLabels })}>
+            {option.description}
+          </p>
+        ) : null}
+      </div>
+      {option.secondaryLabel ? (
+        <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">
+          {option.secondaryLabel}
+        </span>
+      ) : null}
+      <Check
+        className={cn(
+          "ml-2 size-4 text-primary transition-opacity",
+          value === option.value ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </CommandItem>
+  );
+}
 
 export function Combobox({
   value,
@@ -147,69 +220,13 @@ export function Combobox({
     return [{ key: "__ungrouped__", options }];
   }, [resolvedGroups, options]);
 
-  const renderOptionLabel = (
-    option: Pick<ComboboxOption, "accentColor" | "icon" | "label">,
-    shouldWrap: boolean,
-    containerClassName?: string,
-  ): ReactElement => (
-    <span className={cn(comboboxOptionLabelRowVariants({ wrap: shouldWrap }), containerClassName)}>
-      {option.icon ? <span className="shrink-0 text-muted-foreground">{option.icon}</span> : null}
-      {option.accentColor ? (
-        <span
-          className="size-2 shrink-0 rounded-full"
-          style={{ backgroundColor: option.accentColor }}
-        />
-      ) : null}
-      <span className={comboboxOptionLabelTextVariants({ wrap: shouldWrap })}>{option.label}</span>
-    </span>
-  );
-
-  const renderOptionItem = (option: ComboboxOption): ReactElement => (
-    <CommandItem
-      key={option.value}
-      value={option.value}
-      keywords={[option.label, ...(option.searchKeywords ?? [])]}
-      onSelect={() => {
-        onValueChange(option.value);
-        setOpen(false);
-      }}
-      className={comboboxOptionItemVariants({ wrap: shouldWrapOptionLabels })}
-    >
-      <div className="min-w-0 flex-1">
-        {renderOptionLabel(option, shouldWrapOptionLabels)}
-        {option.description ? (
-          <p className={comboboxOptionDescriptionVariants({ wrap: shouldWrapOptionLabels })}>
-            {option.description}
-          </p>
-        ) : null}
-      </div>
-      {option.secondaryLabel ? (
-        <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">
-          {option.secondaryLabel}
-        </span>
-      ) : null}
-      <Check
-        className={cn(
-          "ml-2 size-4 text-primary transition-opacity",
-          value === option.value ? "opacity-100" : "opacity-0",
-        )}
-      />
-    </CommandItem>
-  );
-
   useEffect(() => {
-    if (!open || typeof document === "undefined") {
-      setPortalContainer(null);
-      return;
-    }
+    const nextPortalContainer =
+      open && typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+        ? document.activeElement.closest<HTMLElement>("[data-slot='dialog-content']")
+        : null;
 
-    const active = document.activeElement;
-    if (!(active instanceof HTMLElement)) {
-      setPortalContainer(null);
-      return;
-    }
-
-    setPortalContainer(active.closest<HTMLElement>("[data-slot='dialog-content']"));
+    setPortalContainer(nextPortalContainer);
   }, [open]);
 
   return (
@@ -225,7 +242,11 @@ export function Combobox({
           )}
         >
           <span className={comboboxTriggerValueVariants({ wrap: shouldWrapTriggerLabel })}>
-            {selected ? renderOptionLabel(selected, shouldWrapTriggerLabel) : placeholder}
+            {selected ? (
+              <ComboboxOptionLabel option={selected} shouldWrap={shouldWrapTriggerLabel} />
+            ) : (
+              placeholder
+            )}
           </span>
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
@@ -240,7 +261,16 @@ export function Combobox({
             <CommandEmpty>{emptyText}</CommandEmpty>
             {groupsToRender.map((group) => (
               <CommandGroup key={group.key} {...(group.label ? { heading: group.label } : {})}>
-                {group.options.map(renderOptionItem)}
+                {group.options.map((option) => (
+                  <ComboboxOptionItem
+                    key={option.value}
+                    option={option}
+                    value={value}
+                    shouldWrapOptionLabels={shouldWrapOptionLabels}
+                    onValueChange={onValueChange}
+                    onSelectComplete={() => setOpen(false)}
+                  />
+                ))}
               </CommandGroup>
             ))}
           </CommandList>
