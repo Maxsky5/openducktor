@@ -851,7 +851,7 @@ describe("agent-chat-message-card-model", () => {
 
       expect(data).toEqual({
         filePath: "src/app.ts",
-        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n+line",
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n+line\n",
         additions: 2,
         deletions: 1,
       });
@@ -872,7 +872,7 @@ describe("agent-chat-message-card-model", () => {
 
       expect(data).toEqual({
         filePath: "apps/web/src/contexts/AuthContext.tsx",
-        diff: "--- a/apps/web/src/contexts/AuthContext.tsx\n+++ b/apps/web/src/contexts/AuthContext.tsx\n@@ -1 +1 @@\n-old\n+new",
+        diff: "--- a/apps/web/src/contexts/AuthContext.tsx\n+++ b/apps/web/src/contexts/AuthContext.tsx\n@@ -1 +1 @@\n-old\n+new\n",
         additions: 1,
         deletions: 1,
       });
@@ -888,7 +888,7 @@ describe("agent-chat-message-card-model", () => {
       );
       expect(fromPatch).toEqual({
         filePath: "src/patch.ts",
-        diff: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new",
+        diff: "--- a/src/patch.ts\n+++ b/src/patch.ts\n@@ -1 +1 @@\n-old\n+new\n",
         additions: 1,
         deletions: 1,
       });
@@ -900,8 +900,48 @@ describe("agent-chat-message-card-model", () => {
       );
       expect(fromOutput).toEqual({
         filePath: "src/output.ts",
-        diff: "Updated the following files: M src/output.ts\n@@ -1 +1 @@\n-old\n+new",
+        diff: "--- a/src/output.ts\n+++ b/src/output.ts\n@@ -1 +1 @@\n-old\n+new\n",
         additions: 1,
+        deletions: 1,
+      });
+    });
+
+    test("selects the matching file diff from a multi-file patch", () => {
+      const data = extractFileEditData(
+        createToolMeta({
+          input: { filePath: "src/second.ts" },
+          metadata: {
+            diff:
+              "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual({
+        filePath: "src/second.ts",
+        diff: "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+        additions: 2,
+        deletions: 1,
+      });
+    });
+
+    test("extracts a single classic diff section for the current file", () => {
+      const data = extractFileEditData(
+        createToolMeta({
+          input: { filePath: "src/second.ts" },
+          metadata: {
+            diff:
+              "Index: src/first.ts\n==================================================\n--- src/first.ts\n+++ src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+              "Index: src/second.ts\n==================================================\n--- src/second.ts\n+++ src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+          },
+        }),
+      );
+
+      expect(data).toEqual({
+        filePath: "src/second.ts",
+        diff: "--- src/second.ts\n+++ src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+        additions: 2,
         deletions: 1,
       });
     });

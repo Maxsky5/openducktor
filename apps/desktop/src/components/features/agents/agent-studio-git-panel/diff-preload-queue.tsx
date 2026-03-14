@@ -55,7 +55,7 @@ export const DiffPreloadQueue = memo(function DiffPreloadQueue({
   return (
     <>
       {preloadEntries.map((entry) => (
-        <PierreDiffPreloader key={entry.file} patch={entry.diff} />
+        <PierreDiffPreloader key={entry.file} patch={entry.diff} filePath={entry.file} />
       ))}
     </>
   );

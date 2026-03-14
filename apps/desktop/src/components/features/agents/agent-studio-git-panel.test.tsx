@@ -1279,7 +1279,7 @@ describe("AgentStudioGitPanel", () => {
     const root = getRoot(renderer);
     expect(countByTestId(root, "agent-studio-git-file-conflict-indicator")).toBe(1);
     expect(countByTestId(root, "agent-studio-git-file-conflict-slot")).toBe(1);
-    expect(getNodeText(findButtonByText(root, "AGENTS.md"))).toContain("M");
+    expect(getNodeText(findButtonByText(root, "AGENTS.md"))).not.toContain("M");
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -1318,7 +1318,7 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     expect(countByTestId(root, "agent-studio-git-file-conflict-slot")).toBe(0);
-    const fileRowButton = findButtonByText(root, "src/main.ts");
+    const fileRowButton = findButtonByText(root, "main.ts");
 
     const rootText = getNodeText(root);
     expect(rootText).toContain("1 changed file");
@@ -1333,11 +1333,84 @@ describe("AgentStudioGitPanel", () => {
     expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(1);
 
     await act(async () => {
-      findButtonByText(root, "src/main.ts").props.onClick();
+      findButtonByText(root, "main.ts").props.onClick();
       await flush();
     });
 
     expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
+  test("shows basename-first file paths with the full path in the tooltip", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            fileDiffs: [
+              {
+                file: "apps/desktop/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
+                type: "modified",
+                additions: 3,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+            ],
+            fileStatuses: [
+              {
+                path: "apps/desktop/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
+                staged: false,
+                status: "modified",
+              },
+            ],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    const headerNode = findByTestId(root, "agent-studio-git-list-header");
+    const pathNode = findByTestId(root, "agent-studio-git-file-path");
+
+    expect(headerNode.props.className).toContain("flex-wrap");
+    expect(headerNode.props.className).toContain("min-w-0");
+    expect(pathNode.props.title).toBe(
+      "apps/desktop/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
+    );
+    expect(pathNode.props.className).toContain("flex-col");
+    expect(pathNode.props.className).toContain("overflow-hidden");
+    expect(getNodeText(pathNode)).toContain("file-diff-entry.tsx");
+    expect(getNodeText(pathNode)).toContain(
+      "apps/desktop/src/components/features/agents/agent-studio-git-panel",
+    );
+
+    const fileNameNode = pathNode.findAll(
+      (node) => typeof node.type === "string" && node.children.includes("file-diff-entry.tsx"),
+    )[0];
+    const dirNameNode = pathNode.findAll(
+      (node) =>
+        typeof node.type === "string" &&
+        node.children.includes(
+          "apps/desktop/src/components/features/agents/agent-studio-git-panel",
+        ),
+    )[0];
+
+    expect(fileNameNode?.props.className).toContain("block truncate");
+    expect(dirNameNode?.props.className).toContain("block truncate");
+
+    const statsNode = findByTestId(root, "agent-studio-git-file-stats");
+    expect(statsNode.props.className).toContain("min-w-[4.75rem]");
+    expect(statsNode.props.className).toContain("shrink-0");
+    expect(statsNode.props.className).not.toContain("border-l");
+    expect(getNodeText(statsNode)).toContain("+3");
+    expect(getNodeText(statsNode)).toContain("-1");
+    expect(getNodeText(statsNode)).not.toContain("M");
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

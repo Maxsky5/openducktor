@@ -241,8 +241,8 @@ export function BorderRay({
     pointerEvents: "none",
     zIndex: 2,
     ["--odt-border-ray-turn-duration" as string]: `${Math.max(turnDurationMs, 1)}ms`,
-    ["--odt-border-ray-perimeter" as string]: `${pathMetrics.perimeter}`,
-    ["--odt-border-ray-length" as string]: `${pathMetrics.rayLength}`,
+    ["--odt-border-ray-perimeter" as string]: `${pathMetrics.perimeter}px`,
+    ["--odt-border-ray-length" as string]: `${pathMetrics.rayLength}px`,
     ["--odt-border-ray-stroke-width" as string]: `${Math.max(strokeWidth, 0.5)}`,
     ...(color ? { ["--odt-border-ray-color" as string]: color } : {}),
   };

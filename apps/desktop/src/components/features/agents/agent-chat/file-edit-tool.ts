@@ -1,3 +1,4 @@
+import { selectRenderableDiff } from "../renderable-patch";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractPathFromInput } from "./tool-input-utils";
 import { relativizeDisplayPath } from "./tool-path-utils";
@@ -55,7 +56,7 @@ export const extractFileEditData = (
 
   filePath = relativizeDisplayPath(filePath, workingDirectory);
 
-  const diff =
+  const rawDiff =
     typeof meta.metadata?.diff === "string"
       ? meta.metadata.diff
       : typeof meta.input?.patch === "string"
@@ -63,6 +64,8 @@ export const extractFileEditData = (
         : typeof meta.output === "string" && meta.output.includes("@@")
           ? meta.output
           : null;
+
+  const diff = rawDiff ? selectRenderableDiff(rawDiff, filePath) : null;
 
   let additions = 0;
   let deletions = 0;

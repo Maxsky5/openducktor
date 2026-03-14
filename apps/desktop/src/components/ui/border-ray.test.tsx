@@ -16,8 +16,8 @@ describe("BorderRay", () => {
     expect(html).toContain(
       `--odt-border-ray-turn-duration:${BORDER_RAY_DEFAULT_TURN_DURATION_MS}ms`,
     );
-    expect(html).toContain(`--odt-border-ray-perimeter:${BORDER_RAY_DEFAULT_PERIMETER}`);
-    expect(html).toContain(`--odt-border-ray-length:${BORDER_RAY_DEFAULT_LENGTH}`);
+    expect(html).toContain(`--odt-border-ray-perimeter:${BORDER_RAY_DEFAULT_PERIMETER}px`);
+    expect(html).toContain(`--odt-border-ray-length:${BORDER_RAY_DEFAULT_LENGTH}px`);
     expect(html).toContain(`--odt-border-ray-stroke-width:${BORDER_RAY_DEFAULT_STROKE_WIDTH}`);
     expect(html).not.toContain("--kanban-ray-");
   });

@@ -23,10 +23,12 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
   const [isRebaseConflictModalOpen, setIsRebaseConflictModalOpen] = useState(false);
+  const [selectedFileNotificationTick, setSelectedFileNotificationTick] = useState(0);
   const hasRebaseConflict = model.rebaseConflict != null;
   const hasInitializedConflictModalSyncRef = useRef(false);
   const previousAutoOpenNonceRef = useRef(0);
   const previousCloseNonceRef = useRef(0);
+  const pendingSelectedFilesRef = useRef<Array<string | null>>([]);
   const uncommittedFileCount = model.uncommittedFileCount;
   const hasUncommittedFiles = uncommittedFileCount > 0;
   const hasFiles = model.fileDiffs.length > 0;
@@ -40,22 +42,33 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
     [model.fileStatuses],
   );
 
-  const toggleFile = useCallback(
-    (filePath: string): void => {
-      setExpandedFiles((previous) => {
-        const next = new Set(previous);
-        if (next.has(filePath)) {
-          next.delete(filePath);
-          model.setSelectedFile(null);
-        } else {
-          next.add(filePath);
-          model.setSelectedFile(filePath);
-        }
-        return next;
-      });
-    },
-    [model.setSelectedFile],
-  );
+  const toggleFile = useCallback((filePath: string): void => {
+    setExpandedFiles((previous) => {
+      const next = new Set(previous);
+      if (next.has(filePath)) {
+        next.delete(filePath);
+        pendingSelectedFilesRef.current.push(null);
+      } else {
+        next.add(filePath);
+        pendingSelectedFilesRef.current.push(filePath);
+      }
+      return next;
+    });
+    setSelectedFileNotificationTick((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    if (selectedFileNotificationTick === 0 || pendingSelectedFilesRef.current.length === 0) {
+      return;
+    }
+
+    const nextSelectedFiles = pendingSelectedFilesRef.current;
+    pendingSelectedFilesRef.current = [];
+
+    for (const nextSelectedFile of nextSelectedFiles) {
+      model.setSelectedFile(nextSelectedFile);
+    }
+  }, [model.setSelectedFile, selectedFileNotificationTick]);
 
   const handleDiffScopeChange = useCallback(
     (scope: DiffScope): void => {
