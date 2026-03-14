@@ -1042,6 +1042,88 @@ describe("OpencodeSdkAdapter", () => {
     expect(toolPartEvent.part.error).toContain("Task not found");
   });
 
+  test("maps flattened MCP tool error JSON output as error status", async () => {
+    const streamEvents: Event[] = [
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "assistant-1",
+            role: "assistant",
+            sessionID: "session-opencode-1",
+            time: {
+              completed: Date.parse("2026-02-17T12:00:05Z"),
+            },
+            finish: "tool-calls",
+          },
+          parts: [
+            {
+              id: "tool-1",
+              sessionID: "session-opencode-1",
+              messageID: "assistant-1",
+              callID: "call-1",
+              type: "tool",
+              tool: "openducktor_odt_set_plan",
+              state: {
+                status: "completed",
+                input: { taskId: "facebook-oauth" },
+                output: JSON.stringify(
+                  {
+                    ok: false,
+                    error: {
+                      code: "ODT_TOOL_EXECUTION_ERROR",
+                      message: "Only epics can receive subtask proposals during planning.",
+                    },
+                  },
+                  null,
+                  2,
+                ),
+              },
+            },
+          ],
+        },
+      } as unknown as Event,
+    ];
+
+    const mock = makeMockClient({
+      streamEvents,
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents("session-1", (event) => {
+      events.push(event);
+    });
+
+    await startDefaultSession(adapter, "session-1", "planner");
+    await flushAsync();
+
+    const toolPartEvent = events.find((entry) => {
+      if (entry.type !== "assistant_part") {
+        return false;
+      }
+      const part = entry.part;
+      return part.kind === "tool";
+    });
+
+    expect(toolPartEvent).toBeDefined();
+    if (
+      !toolPartEvent ||
+      toolPartEvent.type !== "assistant_part" ||
+      toolPartEvent.part.kind !== "tool"
+    ) {
+      throw new Error("Expected tool part event");
+    }
+
+    expect(toolPartEvent.part.status).toBe("error");
+    expect(toolPartEvent.part.error).toContain(
+      "Only epics can receive subtask proposals during planning.",
+    );
+  });
+
   test("maps todowrite tool part with ended timing to completed even when status is pending", async () => {
     const streamEvents: Event[] = [
       {

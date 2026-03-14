@@ -35,6 +35,24 @@ const toDisplayText = (value: unknown): string | undefined => {
   }
 };
 
+const parseStructuredTextObject = (value: unknown): Record<string, unknown> | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return asUnknownRecord(parsed);
+  } catch {
+    return undefined;
+  }
+};
+
 const outputTextFromMcpPayload = (value: unknown): string | undefined => {
   const content = readUnknownProp(value, "content");
   if (!Array.isArray(content)) {
@@ -62,7 +80,7 @@ const readToolOutputText = (value: unknown): string | undefined => {
 };
 
 const readStructuredToolError = (value: unknown): string | undefined => {
-  const record = asUnknownRecord(value);
+  const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
   if (!record) {
     return undefined;
   }
