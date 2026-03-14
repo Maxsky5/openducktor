@@ -1,8 +1,14 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RepoPromptOverrides } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoConfig,
+  type RepoPromptOverrides,
+} from "@openducktor/contracts";
 import { isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -25,12 +31,9 @@ const deferTaskMock = mock(async () => {});
 const resumeDeferredTaskMock = mock(async () => {});
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
-const workspaceGetRepoConfigMock = mock(
-  async (): Promise<{ promptOverrides: RepoPromptOverrides }> => ({
-    promptOverrides: {},
-  }),
-);
+const workspaceGetRepoConfigMock = mock(async (): Promise<RepoConfig> => createRepoConfigFixture());
 const workspaceGetSettingsSnapshotMock = mock(async () => ({
+  theme: "light" as const,
   git: {
     defaultMergeMethod: "merge_commit" as const,
   },
@@ -115,6 +118,42 @@ const REPO_SETTINGS_FIXTURE: RepoSettingsInput = {
     qa: null,
   },
 };
+
+const createRepoConfigFixture = (promptOverrides: RepoPromptOverrides = {}): RepoConfig => ({
+  defaultRuntimeKind: "opencode",
+  worktreeBasePath: undefined,
+  branchPrefix: "codex/",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  git: {
+    providers: {},
+  },
+  trustedHooks: false,
+  trustedHooksFingerprint: undefined,
+  hooks: {
+    preStart: [],
+    postComplete: [],
+  },
+  worktreeFileCopies: [],
+  promptOverrides,
+  agentDefaults: {
+    spec: {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "spec-agent",
+    },
+    planner: undefined,
+    build: {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "build-agent",
+    },
+    qa: undefined,
+  },
+});
 
 mock.module("sonner", () => ({
   toast: {
@@ -211,17 +250,20 @@ const renderPage = async (): Promise<ReactTestRenderer> => {
   let renderer!: ReactTestRenderer;
   await act(async () => {
     renderer = create(
-      <MemoryRouter initialEntries={["/"]}>
-        <LocationProbe />
-        <KanbanPage />
-      </MemoryRouter>,
+      <QueryProvider useIsolatedClient>
+        <MemoryRouter initialEntries={["/"]}>
+          <LocationProbe />
+          <KanbanPage />
+        </MemoryRouter>
+      </QueryProvider>,
     );
   });
   return renderer;
 };
 
 describe("KanbanPage session start modal flow", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
     currentSessionsFixture = [
       {
@@ -278,10 +320,9 @@ describe("KanbanPage session start modal flow", () => {
     toastErrorMock.mockClear();
     workspaceGetRepoConfigMock.mockClear();
     workspaceGetSettingsSnapshotMock.mockClear();
-    workspaceGetRepoConfigMock.mockImplementation(async () => ({
-      promptOverrides: {},
-    }));
+    workspaceGetRepoConfigMock.mockImplementation(async () => createRepoConfigFixture());
     workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit" as const,
       },
@@ -484,14 +525,12 @@ describe("KanbanPage session start modal flow", () => {
 
   test("malformed kickoff override still reports kickoff error after session start", async () => {
     workspaceGetRepoConfigMock.mockImplementation(async () => {
-      return {
-        promptOverrides: {
-          "kickoff.build_implementation_start": {
-            template: "Kickoff {{unsupported.token}}",
-            baseVersion: 1,
-          },
+      return createRepoConfigFixture({
+        "kickoff.build_implementation_start": {
+          template: "Kickoff {{unsupported.token}}",
+          baseVersion: 1,
         },
-      };
+      });
     });
 
     const renderer = await renderPage();

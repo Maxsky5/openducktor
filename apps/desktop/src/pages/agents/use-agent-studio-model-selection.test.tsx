@@ -353,7 +353,7 @@ describe("useAgentStudioModelSelection", () => {
     );
 
     await harness.mount();
-    await harness.waitFor((state) => state.agentOptions.length > 0);
+    await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
 
     const state = harness.getLatest();
     expect(state.isSelectionCatalogLoading).toBe(false);
@@ -490,6 +490,7 @@ describe("useAgentStudioModelSelection", () => {
       await harness.mount();
       await harness.waitFor(
         (state) =>
+          state.isSelectionCatalogLoading === false &&
           state.selectedModelSelection?.modelId === "gpt-5" &&
           state.selectedModelSelection.variant === "high",
       );
@@ -562,13 +563,7 @@ describe("useAgentStudioModelSelection", () => {
       await harness.update(
         createBaseProps({
           activeRepo: "/repo-b",
-          repoSettings: createRepoSettings({
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "build-agent",
-          }),
+          repoSettings: null,
           loadCatalog: async () => {
             throw new Error("catalog unavailable");
           },

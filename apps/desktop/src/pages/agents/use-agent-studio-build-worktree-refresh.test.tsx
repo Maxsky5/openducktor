@@ -58,8 +58,32 @@ beforeEach(() => {
 });
 
 describe("useAgentStudioBuildWorktreeRefresh", () => {
-  test("refreshes worktree for newly completed mutating build tools", async () => {
+  test("does not refresh immediately for historical completed tool messages on session open", async () => {
     const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        activeSession: createCompletedToolSession("apply_patch", "tool-1"),
+      });
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes worktree for newly completed mutating build tools", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createAgentSessionFixture({
+        sessionId: "build-session-1",
+        role: "build",
+        messages: [],
+      }),
+    });
 
     try {
       await harness.mount();
@@ -89,15 +113,20 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
   });
 
   test("deduplicates completed tool messages within the same session", async () => {
+    const initialSession = createAgentSessionFixture({
+      sessionId: "build-session-1",
+      role: "build",
+      messages: [],
+    });
     const activeSession = createCompletedToolSession("apply_patch", "tool-1");
     const harness = createHookHarness({
       ...createBaseArgs(),
-      activeSession,
+      activeSession: initialSession,
     });
 
     try {
       await harness.mount();
-      expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
 
       await harness.update({
         ...createBaseArgs(),

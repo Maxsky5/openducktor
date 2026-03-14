@@ -1,196 +1,122 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import type { RepoConfig } from "@openducktor/contracts";
 import {
-  createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import {
-  REPO_SETTINGS_UPDATED_EVENT,
-  useAgentStudioRepoSettings,
-} from "./use-agent-studio-repo-settings";
+
+const hostMock = {
+  workspaceGetRepoConfig: mock(
+    async (_repoPath: string): Promise<RepoConfig> => ({
+      defaultRuntimeKind: "opencode",
+      worktreeBasePath: "/worktrees",
+      branchPrefix: "codex/",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: { providers: {} },
+      trustedHooks: false,
+      trustedHooksFingerprint: undefined,
+      hooks: { preStart: [], postComplete: [] },
+      worktreeFileCopies: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    }),
+  ),
+};
+
+mock.module("@/state/operations/host", () => ({
+  host: hostMock,
+}));
+
+const { useAgentStudioRepoSettings } = await import("./use-agent-studio-repo-settings");
 
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRepoSettings>[0];
 
-const createSettings = (): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode" as const,
-  worktreeBasePath: "/worktrees",
-  branchPrefix: "codex/",
-  defaultTargetBranch: { remote: "origin", branch: "main" },
-  trustedHooks: false,
-  preStartHooks: [],
-  postCompleteHooks: [],
-  worktreeFileCopies: [],
-  agentDefaults: {
-    spec: null,
-    planner: null,
-    build: null,
-    qa: null,
-  },
-});
-
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioRepoSettings, initialProps);
 
 describe("useAgentStudioRepoSettings", () => {
-  test("loads repo settings when repository is active", async () => {
-    const settings = createSettings();
-    const loadRepoSettings = mock(async (): Promise<RepoSettingsInput> => settings);
+  test("loads repo settings from the canonical repo config query", async () => {
+    hostMock.workspaceGetRepoConfig.mockClear();
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      loadRepoSettings,
     });
 
     await harness.mount();
+    await harness.waitFor((state) => state.repoSettings !== null);
 
-    expect(loadRepoSettings).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().repoSettings).toEqual(settings);
+    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("/repo");
+    expect(harness.getLatest().repoSettings).toEqual({
+      defaultRuntimeKind: "opencode",
+      worktreeBasePath: "/worktrees",
+      branchPrefix: "codex/",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      trustedHooks: false,
+      preStartHooks: [],
+      postCompleteHooks: [],
+      worktreeFileCopies: [],
+      agentDefaults: {
+        spec: null,
+        planner: null,
+        build: null,
+        qa: null,
+      },
+    });
 
     await harness.unmount();
   });
 
   test("resets settings when active repo becomes null", async () => {
-    const settings = createSettings();
-    const loadRepoSettings = mock(async (): Promise<RepoSettingsInput> => settings);
+    hostMock.workspaceGetRepoConfig.mockClear();
 
     const harness = createHookHarness({
       activeRepo: "/repo",
-      loadRepoSettings,
     });
 
     await harness.mount();
-    expect(harness.getLatest().repoSettings).toEqual(settings);
+    await harness.waitFor((state) => state.repoSettings !== null);
 
-    await harness.update({ activeRepo: null, loadRepoSettings });
+    await harness.update({ activeRepo: null });
+
     expect(harness.getLatest().repoSettings).toBeNull();
 
     await harness.unmount();
   });
 
-  test("reloads settings when repo settings update event is dispatched", async () => {
-    const globalWithWindow = globalThis as typeof globalThis & {
-      window?: EventTarget;
-    };
-    const originalWindow = globalWithWindow.window;
-    const eventWindow = new EventTarget();
-    Object.defineProperty(globalWithWindow, "window", {
-      configurable: true,
-      value: eventWindow,
-    });
-
-    const firstSettings = createSettings();
-    const secondSettings: RepoSettingsInput = {
-      ...createSettings(),
-      branchPrefix: "feature/",
-    };
-
-    let loadCount = 0;
-    const loadRepoSettings = mock(async (): Promise<RepoSettingsInput> => {
-      loadCount += 1;
-      return loadCount === 1 ? firstSettings : secondSettings;
-    });
+  test("switches to the next repository key instead of reusing stale derived state", async () => {
+    hostMock.workspaceGetRepoConfig.mockClear();
+    hostMock.workspaceGetRepoConfig.mockImplementation(
+      async (repoPath: string): Promise<RepoConfig> => ({
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: repoPath === "/repo-a" ? "/worktrees/a" : "/worktrees/b",
+        branchPrefix: repoPath === "/repo-a" ? "feature-a/" : "feature-b/",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        trustedHooks: false,
+        trustedHooksFingerprint: undefined,
+        hooks: { preStart: [], postComplete: [] },
+        worktreeFileCopies: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      }),
+    );
 
     const harness = createHookHarness({
-      activeRepo: "/repo",
-      loadRepoSettings,
+      activeRepo: "/repo-a",
     });
 
     await harness.mount();
-    expect(harness.getLatest().repoSettings).toEqual(firstSettings);
+    await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature-a/");
 
-    await harness.run(() => {
-      eventWindow.dispatchEvent(
-        new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
-          detail: { repoPath: "/repo" },
-        }),
-      );
-    });
+    await harness.update({ activeRepo: "/repo-b" });
+    await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature-b/");
 
-    await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature/");
-    expect(loadRepoSettings).toHaveBeenCalledTimes(2);
-    expect(harness.getLatest().repoSettings).toEqual(secondSettings);
+    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("/repo-a");
+    expect(hostMock.workspaceGetRepoConfig).toHaveBeenCalledWith("/repo-b");
+    expect(harness.getLatest().repoSettings?.worktreeBasePath).toBe("/worktrees/b");
 
     await harness.unmount();
-
-    if (typeof originalWindow === "undefined") {
-      Reflect.deleteProperty(globalWithWindow, "window");
-    } else {
-      Object.defineProperty(globalWithWindow, "window", {
-        configurable: true,
-        value: originalWindow,
-      });
-    }
-  });
-
-  test("keeps the latest event reload result when concurrent loads resolve out of order", async () => {
-    const globalWithWindow = globalThis as typeof globalThis & {
-      window?: EventTarget;
-    };
-    const originalWindow = globalWithWindow.window;
-    const eventWindow = new EventTarget();
-    Object.defineProperty(globalWithWindow, "window", {
-      configurable: true,
-      value: eventWindow,
-    });
-
-    const firstSettings = createSettings();
-    const secondSettings: RepoSettingsInput = {
-      ...createSettings(),
-      branchPrefix: "feature/latest",
-    };
-    const firstLoad = createDeferred<RepoSettingsInput>();
-    const secondLoad = createDeferred<RepoSettingsInput>();
-    let loadCount = 0;
-    const loadRepoSettings = mock((): Promise<RepoSettingsInput> => {
-      loadCount += 1;
-      return loadCount === 1 ? firstLoad.promise : secondLoad.promise;
-    });
-
-    const harness = createHookHarness({
-      activeRepo: "/repo",
-      loadRepoSettings,
-    });
-
-    try {
-      await harness.mount();
-
-      await harness.run(() => {
-        eventWindow.dispatchEvent(
-          new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
-            detail: { repoPath: "/repo" },
-          }),
-        );
-      });
-
-      await harness.run(async () => {
-        secondLoad.resolve(secondSettings);
-        await secondLoad.promise;
-      });
-      await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature/latest");
-
-      await harness.run(async () => {
-        firstLoad.resolve(firstSettings);
-        await firstLoad.promise;
-      });
-
-      expect(loadRepoSettings).toHaveBeenCalledTimes(2);
-      expect(harness.getLatest().repoSettings).toEqual(secondSettings);
-    } finally {
-      firstLoad.resolve(firstSettings);
-      secondLoad.resolve(secondSettings);
-      await harness.unmount();
-
-      if (typeof originalWindow === "undefined") {
-        Reflect.deleteProperty(globalWithWindow, "window");
-      } else {
-        Object.defineProperty(globalWithWindow, "window", {
-          configurable: true,
-          value: originalWindow,
-        });
-      }
-    }
   });
 });

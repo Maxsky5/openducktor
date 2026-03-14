@@ -233,10 +233,6 @@ impl AppConfigStore {
         })
     }
 
-    pub fn get_theme(&self) -> Result<String> {
-        Ok(self.load()?.theme)
-    }
-
     pub fn set_theme(&self, theme: &str) -> Result<()> {
         self.update_config(|config| {
             config.theme = theme.to_string();

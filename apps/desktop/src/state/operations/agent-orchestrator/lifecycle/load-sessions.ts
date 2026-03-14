@@ -13,6 +13,10 @@ import {
 } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { appQueryClient } from "@/lib/query-client";
+import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
+import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
+import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import {
@@ -141,7 +145,7 @@ export const createLoadAgentSessions = ({
     };
 
     const [persisted, repoPromptOverrides] = await Promise.all([
-      host.agentSessionsList(repoPath, taskId),
+      loadAgentSessionListFromQuery(appQueryClient, repoPath, taskId),
       loadRepoPromptOverrides(repoPath),
     ]);
     if (isStaleRepoOperation()) {
@@ -228,7 +232,7 @@ export const createLoadAgentSessions = ({
       runtimeKindsToHydrate.map(async (runtimeKind) => {
         const runtimes = await captureOrchestratorFallback(
           "load-sessions-list-runtimes",
-          async () => host.runtimeList(runtimeKind, repoPath),
+          async () => loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
           {
             tags: { repoPath, taskId, runtimeKind },
             logLevel: "warn",
@@ -245,7 +249,7 @@ export const createLoadAgentSessions = ({
     )
       ? await captureOrchestratorFallback(
           "load-sessions-list-runs",
-          async () => host.runsList(repoPath),
+          async () => loadRepoRunsFromQuery(appQueryClient, repoPath),
           {
             tags: { repoPath, taskId },
             logLevel: "warn",

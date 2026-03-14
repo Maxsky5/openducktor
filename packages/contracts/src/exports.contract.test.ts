@@ -184,6 +184,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskPrioritySchema",
   "taskStatusSchema",
   "taskUpdatePatchSchema",
+  "themeSchema",
   "pullRequestSchema",
   "validatePromptTemplatePlaceholders",
   "validateSpecMarkdown",
@@ -270,6 +271,7 @@ describe("contracts exports contract", () => {
 
   test("defaults missing chat settings to disabled thinking messages", () => {
     const parsedSnapshot = contracts.settingsSnapshotSchema.parse({
+      theme: "light",
       git: {
         defaultMergeMethod: "merge_commit",
       },
@@ -278,5 +280,17 @@ describe("contracts exports contract", () => {
     });
 
     expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
+  });
+
+  test("rejects settings snapshots without a theme", () => {
+    expect(() =>
+      contracts.settingsSnapshotSchema.parse({
+        git: {
+          defaultMergeMethod: "merge_commit",
+        },
+        repos: {},
+        globalPromptOverrides: {},
+      }),
+    ).toThrow();
   });
 });

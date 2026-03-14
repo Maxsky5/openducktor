@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { createElement, type ReactElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { QueryProvider } from "@/lib/query-provider";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
@@ -60,7 +61,13 @@ export const createHookHarness = <Props, State>(
 
   const mount = async (): Promise<void> => {
     await act(async () => {
-      renderer = TestRenderer.create(createElement(Harness, { hookProps: currentProps }));
+      renderer = TestRenderer.create(
+        createElement(
+          QueryProvider,
+          { useIsolatedClient: true },
+          createElement(Harness, { hookProps: currentProps }),
+        ),
+      );
       await flushMicrotasks();
     });
   };
@@ -68,7 +75,13 @@ export const createHookHarness = <Props, State>(
   const update = async (nextProps: Props): Promise<void> => {
     currentProps = nextProps;
     await act(async () => {
-      renderer?.update(createElement(Harness, { hookProps: currentProps }));
+      renderer?.update(
+        createElement(
+          QueryProvider,
+          { useIsolatedClient: true },
+          createElement(Harness, { hookProps: currentProps }),
+        ),
+      );
       await flushMicrotasks();
     });
   };

@@ -44,7 +44,7 @@ export function useAgentStudioTaskHydration({
   }, [activeRepo]);
 
   useEffect(() => {
-    if (!activeRepo || !activeTaskId) {
+    if (!activeRepo || !activeTaskId || activeSessionId) {
       return;
     }
 
@@ -83,13 +83,14 @@ export function useAgentStudioTaskHydration({
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, activeTaskId, hydratedTasksByRepoAndTask, loadAgentSessions]);
+  }, [activeRepo, activeSessionId, activeTaskId, hydratedTasksByRepoAndTask, loadAgentSessions]);
 
   useEffect(() => {
     if (!activeRepo || !activeTaskId || !activeSessionId) {
       return;
     }
 
+    const taskHydrationKey = `${activeRepo}:${activeTaskId}`;
     const sessionHydrationKey = `${activeRepo}:${activeTaskId}:${activeSessionId}`;
     if (hydratedSessionHistoriesByRepoRef.current.has(sessionHydrationKey)) {
       return;
@@ -111,6 +112,15 @@ export function useAgentStudioTaskHydration({
         if (cancelled) {
           return;
         }
+        setHydratedTasksByRepoAndTask((current) => {
+          if (current[taskHydrationKey] === true) {
+            return current;
+          }
+          return {
+            ...current,
+            [taskHydrationKey]: true,
+          };
+        });
         hydratedSessionHistoriesByRepoRef.current.add(sessionHydrationKey);
         setSessionHistoryStatusByRepoKey((current) => ({
           ...current,

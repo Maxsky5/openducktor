@@ -12,6 +12,7 @@ const DEFAULT_SOFT_GUARDRAILS = {
 const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
 } as const;
+const DEFAULT_THEME = "light" as const;
 
 const nullableToOptional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((value) => (value === null ? undefined : value), schema.optional());
@@ -76,9 +77,15 @@ export const chatSettingsSchema = z.object({
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 
+const themeValueSchema = z.enum(["light", "dark"]);
+
+export const themeSchema = themeValueSchema.default(DEFAULT_THEME);
+export type Theme = z.infer<typeof themeValueSchema>;
+
 export const globalConfigSchema = z.object({
   version: z.literal(1),
   activeRepo: z.string().optional(),
+  theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   repos: z.record(z.string(), repoConfigSchema).default({}),
@@ -88,6 +95,7 @@ export const globalConfigSchema = z.object({
 export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 
 export const settingsSnapshotSchema = z.object({
+  theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   chat: chatSettingsSchema.default(DEFAULT_CHAT_SETTINGS),
   repos: z.record(z.string(), repoConfigSchema).default({}),

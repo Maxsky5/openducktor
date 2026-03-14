@@ -1,7 +1,8 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { useEffect, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useWorkspaceState } from "@/state";
-import { host } from "@/state/operations/host";
+import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 
 export type TaskDeleteImpact = {
   hasManagedSessionCleanup: boolean;
@@ -63,37 +64,36 @@ export const TASK_DELETE_IMPACT_ERROR_MESSAGE = "Unable to load linked worktree 
 
 export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDeleteImpact {
   const { activeRepo } = useWorkspaceState();
-  const [impact, setImpact] = useState<TaskDeleteImpact>(EMPTY_DELETE_IMPACT);
+  const taskSessionQueries = useQueries({
+    queries: taskIds.map((taskId) => ({
+      ...(activeRepo
+        ? agentSessionListQueryOptions(activeRepo, taskId)
+        : agentSessionListQueryOptions("", taskId)),
+      enabled: open && Boolean(activeRepo),
+    })),
+  });
 
-  useEffect(() => {
+  return useMemo((): TaskDeleteImpact => {
     if (taskIds.length === 0 || !open || !activeRepo) {
-      setImpact(EMPTY_DELETE_IMPACT);
-      return;
+      return EMPTY_DELETE_IMPACT;
     }
 
-    let cancelled = false;
-    void Promise.all(taskIds.map((taskId) => host.agentSessionsList(activeRepo, taskId)))
-      .then((taskSessions: AgentSessionRecord[][]) => {
-        if (cancelled) {
-          return;
-        }
-        setImpact(getManagedTaskDeleteImpactFromTasks(activeRepo, taskSessions));
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-        setImpact({
-          hasManagedSessionCleanup: false,
-          managedWorktreeCount: 0,
-          impactError: TASK_DELETE_IMPACT_ERROR_MESSAGE,
-        });
-      });
+    const failedQuery = taskSessionQueries.find((query) => query.error != null);
+    if (failedQuery) {
+      return {
+        hasManagedSessionCleanup: false,
+        managedWorktreeCount: 0,
+        impactError: TASK_DELETE_IMPACT_ERROR_MESSAGE,
+      };
+    }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRepo, open, taskIds]);
+    if (taskSessionQueries.some((query) => query.isLoading)) {
+      return EMPTY_DELETE_IMPACT;
+    }
 
-  return impact;
+    return getManagedTaskDeleteImpactFromTasks(
+      activeRepo,
+      taskSessionQueries.map((query) => query.data ?? []),
+    );
+  }, [activeRepo, open, taskIds, taskSessionQueries]);
 }

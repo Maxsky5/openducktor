@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
+import { clearAppQueryClient } from "@/lib/query-client";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -171,7 +172,8 @@ beforeAll(async () => {
   ({ useAgentStudioDiffData } = await import("./use-agent-studio-diff-data"));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await clearAppQueryClient();
   runsListMock.mockClear();
   gitGetWorktreeStatusMock.mockClear();
   gitGetWorktreeStatusSummaryMock.mockClear();

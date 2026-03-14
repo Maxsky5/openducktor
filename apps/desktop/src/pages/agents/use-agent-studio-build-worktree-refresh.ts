@@ -77,7 +77,17 @@ export function useAgentStudioBuildWorktreeRefresh({
 
     if (previousSessionIdRef.current !== activeSession.sessionId) {
       previousSessionIdRef.current = activeSession.sessionId;
-      processedToolMessageKeysRef.current.clear();
+      processedToolMessageKeysRef.current = new Set(
+        activeSession.messages.flatMap((message) => {
+          const meta = message.meta;
+          if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+            return [];
+          }
+
+          return [`${activeSession.sessionId}:${message.id}`];
+        }),
+      );
+      return;
     }
 
     let shouldRefresh = false;

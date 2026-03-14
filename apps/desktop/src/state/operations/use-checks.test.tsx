@@ -7,6 +7,7 @@ import {
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { clearAppQueryClient } from "@/lib/query-client";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
@@ -148,7 +149,8 @@ beforeAll(async () => {
   ({ useChecks } = await import("./use-checks"));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await clearAppQueryClient();
   toastError.mockClear();
   toastSuccess.mockClear();
   checkRepoRuntimeHealthMock.mockClear();

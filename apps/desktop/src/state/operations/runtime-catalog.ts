@@ -291,11 +291,6 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     };
   };
 
-  const catalogCache = new Map<string, AgentModelCatalog>();
-
-  const toCatalogCacheKey = (repoPath: string, runtimeKind: RuntimeKind): string =>
-    `${runtimeKind}::${repoPath}`;
-
   const fetchCatalog = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -311,20 +306,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   const loadRepoRuntimeCatalog = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
-  ): Promise<AgentModelCatalog> => {
-    const cacheKey = toCatalogCacheKey(repoPath, runtimeKind);
-    const cached = catalogCache.get(cacheKey);
-    if (cached) {
-      void fetchCatalog(repoPath, runtimeKind)
-        .then((fresh) => catalogCache.set(cacheKey, fresh))
-        .catch(() => {});
-      return cached;
-    }
-
-    const catalog = await fetchCatalog(repoPath, runtimeKind);
-    catalogCache.set(cacheKey, catalog);
-    return catalog;
-  };
+  ): Promise<AgentModelCatalog> => fetchCatalog(repoPath, runtimeKind);
 
   const checkRepoRuntimeHealth = async (
     repoPath: string,

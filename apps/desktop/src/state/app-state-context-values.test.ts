@@ -61,6 +61,7 @@ describe("app-state-context-values", () => {
       }),
       saveRepoSettings: async () => {},
       loadSettingsSnapshot: async () => ({
+        theme: "light" as const,
         git: {
           defaultMergeMethod: "merge_commit",
         },

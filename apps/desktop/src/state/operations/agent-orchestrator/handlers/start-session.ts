@@ -3,9 +3,10 @@ import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
 import { assertAgentKickoffScenario, buildAgentSystemPrompt } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
+import { appQueryClient } from "@/lib/query-client";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
+import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { host } from "../../host";
 import { requireActiveRepo } from "../../task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
 import {
@@ -372,7 +373,11 @@ const createOrReuseSession = async ({
       }
     }
 
-    const persistedSessions = await host.agentSessionsList(ctx.repoPath, ctx.taskId);
+    const persistedSessions = await loadAgentSessionListFromQuery(
+      appQueryClient,
+      ctx.repoPath,
+      ctx.taskId,
+    );
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
     const latestPersistedSession = pickLatestSession(
       persistedSessions.filter((entry) => entry.role === ctx.role),

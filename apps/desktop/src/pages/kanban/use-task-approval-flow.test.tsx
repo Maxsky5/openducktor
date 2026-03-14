@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { clearAppQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
   createTaskCardFixture,
@@ -57,6 +58,7 @@ mock.module("@/state/operations/host", () => ({
     qaGetReport: async () => ({ markdown: "", updatedAt: null }),
     workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
     workspaceGetSettingsSnapshot: async () => ({
+      theme: "light" as const,
       git: { defaultMergeMethod: "merge_commit" as const },
       chat: { showThinkingMessages: false },
       repos: {},
@@ -103,7 +105,8 @@ function createDeferred<TValue>() {
 }
 
 describe("useTaskApprovalFlow", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
     latestHarnessValue = null;
     taskApprovalContextGetMock.mockClear();
     taskDirectMergeMock.mockClear();

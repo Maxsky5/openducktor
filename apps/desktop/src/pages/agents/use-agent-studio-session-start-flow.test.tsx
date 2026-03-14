@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "@/state/operations/host";
 import {
   createAgentSessionFixture,
@@ -10,6 +11,10 @@ import { kickoffPromptForScenario } from "./agents-page-constants";
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./use-agent-studio-session-start-flow";
 
 enableReactActEnvironment();
+
+beforeEach(async () => {
+  await clearAppQueryClient();
+});
 
 type HookArgs = Parameters<typeof useSessionStartFlow>[0];
 
@@ -55,6 +60,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit",
       },

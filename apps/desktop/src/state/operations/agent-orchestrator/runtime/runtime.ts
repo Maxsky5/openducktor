@@ -7,6 +7,13 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { appQueryClient } from "@/lib/query-client";
+import {
+  loadPlanDocumentFromQuery,
+  loadQaReportDocumentFromQuery,
+  loadSpecDocumentFromQuery,
+} from "../../../queries/documents";
+import { loadRepoConfigFromQuery } from "../../../queries/workspace";
 import { host } from "../../host";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -53,9 +60,9 @@ export const loadTaskDocuments = async (
   taskId: string,
 ): Promise<TaskDocuments> => {
   const [spec, plan, qa] = await Promise.all([
-    host.specGet(repoPath, taskId).then((spec) => spec.markdown),
-    host.planGet(repoPath, taskId).then((plan) => plan.markdown),
-    host.qaGetReport(repoPath, taskId).then((qa) => qa.markdown),
+    loadSpecDocumentFromQuery(appQueryClient, repoPath, taskId).then((spec) => spec.markdown),
+    loadPlanDocumentFromQuery(appQueryClient, repoPath, taskId).then((plan) => plan.markdown),
+    loadQaReportDocumentFromQuery(appQueryClient, repoPath, taskId).then((qa) => qa.markdown),
   ]);
 
   return {
@@ -69,7 +76,7 @@ export const loadRepoDefaultModel = async (
   repoPath: string,
   role: AgentRole,
 ): Promise<AgentModelSelection | null> => {
-  const config = await host.workspaceGetRepoConfig(repoPath);
+  const config = await loadRepoConfigFromQuery(appQueryClient, repoPath);
   const roleDefault = config?.agentDefaults?.[role];
   if (!roleDefault) {
     return null;
@@ -99,7 +106,7 @@ export const loadRepoDefaultRuntimeKind = async (
   repoPath: string,
   role: AgentRole,
 ): Promise<RuntimeKind> => {
-  const config = await host.workspaceGetRepoConfig(repoPath);
+  const config = await loadRepoConfigFromQuery(appQueryClient, repoPath);
   const roleDefault = config?.agentDefaults?.[role];
   return roleDefault?.runtimeKind ?? config?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND;
 };

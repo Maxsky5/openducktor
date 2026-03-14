@@ -188,10 +188,6 @@ export const workspacePrepareTrustedHooksChallenge = async (
   return invokeFn("workspace_prepare_trusted_hooks_challenge", { repoPath });
 };
 
-export const getTheme = async (invokeFn: InvokeFn): Promise<string> => {
-  return invokeFn<string>("get_theme");
-};
-
 export const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {
   await invokeFn<void>("set_theme", { theme });
 };
@@ -262,10 +258,6 @@ export class TauriWorkspaceClient {
     challenge?: TrustedHooksProof,
   ): Promise<WorkspaceRecord> {
     return workspaceSetTrustedHooks(this.invokeFn, repoPath, trusted, challenge);
-  }
-
-  async getTheme(): Promise<string> {
-    return getTheme(this.invokeFn);
   }
 
   async setTheme(theme: string): Promise<void> {

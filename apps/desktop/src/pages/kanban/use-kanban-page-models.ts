@@ -13,7 +13,7 @@ type UseKanbanPageModelsArgs = {
 };
 
 export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs): KanbanPageModels {
-  const { activeRepo, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
+  const { activeRepo, isSwitchingWorkspace } = useWorkspaceState();
   const {
     sessions,
     loadAgentSessions,
@@ -38,10 +38,7 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
   } = useTasksState();
   const navigate = useNavigate();
 
-  const { repoSettings } = useAgentStudioRepoSettings({
-    activeRepo,
-    loadRepoSettings,
-  });
+  const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
 
   const sessionStartFlow = useKanbanSessionStartFlow({
     activeRepo,

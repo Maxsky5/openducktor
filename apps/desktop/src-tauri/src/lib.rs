@@ -144,6 +144,7 @@ pub(crate) struct RepoSettingsPayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SettingsSnapshotPayload {
+    theme: String,
     git: host_infra_system::GlobalGitConfig,
     chat: host_infra_system::ChatSettings,
     repos: HashMap<String, host_infra_system::RepoConfig>,
@@ -153,6 +154,7 @@ pub(crate) struct SettingsSnapshotPayload {
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SettingsSnapshotResponsePayload {
+    theme: String,
     git: host_infra_system::GlobalGitConfig,
     chat: host_infra_system::ChatSettings,
     repos: HashMap<String, host_infra_system::RepoConfig>,
@@ -328,7 +330,6 @@ fn startup_phase_command_registration(
         runtime_ensure,
         agent_sessions_list,
         agent_session_upsert,
-        get_theme,
         set_theme
     ])
 }

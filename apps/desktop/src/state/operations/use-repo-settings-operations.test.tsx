@@ -1,7 +1,9 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { agentPromptTemplateIdValues } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "./host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
@@ -32,7 +34,9 @@ const createHookHarness = (initialArgs: HookArgs) => {
   return {
     mount: async () => {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: initialArgs }));
+        renderer = TestRenderer.create(
+          createElement(QueryProvider, undefined, createElement(Harness, { args: initialArgs })),
+        );
       });
       await flush();
     },
@@ -93,6 +97,68 @@ const inputFixture: RepoSettingsInput = {
 };
 
 describe("use-repo-settings-operations", () => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
+  });
+
+  test("caches settings snapshot reads across repeated calls", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const workspaceGetSettingsSnapshot = mock(async () => ({
+      theme: "light" as const,
+      git: {
+        defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
+      },
+      repos: {},
+      globalPromptOverrides: {},
+    }));
+
+    const original = {
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
+        theme: "light",
+        git: {
+          defaultMergeMethod: "merge_commit",
+        },
+        chat: {
+          showThinkingMessages: false,
+        },
+        repos: {},
+        globalPromptOverrides: {},
+      });
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
+        theme: "light",
+        git: {
+          defaultMergeMethod: "merge_commit",
+        },
+        chat: {
+          showThinkingMessages: false,
+        },
+        repos: {},
+        globalPromptOverrides: {},
+      });
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      await clearAppQueryClient();
+    }
+  });
+
   test("throws when loading without an active workspace", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
@@ -315,9 +381,11 @@ describe("use-repo-settings-operations", () => {
   });
 
   test("loads settings snapshot through atomic IPC route", async () => {
+    await clearAppQueryClient();
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceGetSettingsSnapshot = mock(async () => ({
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit" as const,
       },
@@ -342,6 +410,7 @@ describe("use-repo-settings-operations", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual({
+        theme: "light",
         git: {
           defaultMergeMethod: "merge_commit",
         },
@@ -355,18 +424,33 @@ describe("use-repo-settings-operations", () => {
     } finally {
       await harness.unmount();
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      await clearAppQueryClient();
     }
   });
 
   test("saves settings snapshot atomically and applies returned workspaces", async () => {
+    await clearAppQueryClient();
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const workspaceGetSettingsSnapshot = mock(async () => ({
+      theme: "light" as const,
+      git: {
+        defaultMergeMethod: "merge_commit" as const,
+      },
+      chat: {
+        showThinkingMessages: false,
+      },
+      repos: {},
+      globalPromptOverrides: {},
+    }));
 
     const original = {
       workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
     };
     host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -374,6 +458,7 @@ describe("use-repo-settings-operations", () => {
       applyWorkspaceRecord,
     });
     const snapshot = {
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit" as const,
       },
@@ -389,9 +474,13 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(snapshot);
+      expect(workspaceGetSettingsSnapshot).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      await clearAppQueryClient();
     }
   });
 
@@ -435,6 +524,7 @@ describe("use-repo-settings-operations", () => {
       ]),
     );
     const snapshot = {
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit" as const,
       },

@@ -3,6 +3,7 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "./host";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 
@@ -41,6 +42,10 @@ const taskFixture: TaskCard = {
   updatedAt: "2026-02-22T08:00:00.000Z",
   createdAt: "2026-02-22T08:00:00.000Z",
 };
+
+beforeEach(async () => {
+  await clearAppQueryClient();
+});
 
 const persistedSessionFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
@@ -213,6 +218,7 @@ describe("use-agent-orchestrator-operations", () => {
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
     host.workspaceGetSettingsSnapshot = async () => ({
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit",
       },
