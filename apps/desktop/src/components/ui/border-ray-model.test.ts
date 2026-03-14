@@ -33,8 +33,8 @@ describe("border-ray-model", () => {
     const styles = readFileSync(stylesPath, "utf8");
 
     const durationMatch = styles.match(/--odt-border-ray-turn-duration:\s*([\d.]+)ms\s*;/);
-    const perimeterMatch = styles.match(/--odt-border-ray-perimeter:\s*([\d.]+)\s*;/);
-    const lengthMatch = styles.match(/--odt-border-ray-length:\s*([\d.]+)\s*;/);
+    const perimeterMatch = styles.match(/--odt-border-ray-perimeter:\s*([\d.]+)px\s*;/);
+    const lengthMatch = styles.match(/--odt-border-ray-length:\s*([\d.]+)px\s*;/);
 
     expect(durationMatch).not.toBeNull();
     expect(perimeterMatch).not.toBeNull();

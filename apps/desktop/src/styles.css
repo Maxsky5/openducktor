@@ -373,8 +373,8 @@ pre {
 .odt-border-ray {
   overflow: visible;
   --odt-border-ray-turn-duration: 3000ms;
-  --odt-border-ray-perimeter: 1000;
-  --odt-border-ray-length: 190;
+  --odt-border-ray-perimeter: 1000px;
+  --odt-border-ray-length: 190px;
   --odt-border-ray-stroke-width: 4.4;
   --odt-border-ray-color: rgba(56, 189, 248, 1);
 }
