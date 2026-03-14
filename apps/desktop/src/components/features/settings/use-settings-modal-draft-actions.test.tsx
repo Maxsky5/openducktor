@@ -15,6 +15,7 @@ type HarnessArgs = {
 };
 
 const createInitialSnapshot = (): SettingsSnapshot => ({
+  theme: "light",
   git: {
     defaultMergeMethod: "merge_commit",
   },

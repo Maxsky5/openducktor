@@ -19,6 +19,14 @@ use std::time::{Duration, Instant};
 const RUNTIME_CHECK_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const GH_NON_INTERACTIVE_ENV: [(&str, &str); 1] = [("GH_PROMPT_DISABLED", "1")];
 
+type SettingsSnapshotTuple = (
+    String,
+    GlobalGitConfig,
+    ChatSettings,
+    HashMap<String, RepoConfig>,
+    PromptOverrides,
+);
+
 fn resolve_execution_path(repo_path: &str, working_dir: Option<&str>) -> String {
     working_dir
         .map(str::trim)
@@ -224,14 +232,10 @@ impl AppService {
 
     pub fn workspace_get_settings_snapshot(
         &self,
-    ) -> Result<(
-        GlobalGitConfig,
-        ChatSettings,
-        HashMap<String, RepoConfig>,
-        PromptOverrides,
-    )> {
+    ) -> Result<SettingsSnapshotTuple> {
         let config = self.config_store.load()?;
         Ok((
+            config.theme,
             config.git,
             config.chat,
             config.repos,
@@ -245,6 +249,7 @@ impl AppService {
 
     pub(super) fn workspace_persist_settings_snapshot(
         &self,
+        theme: String,
         git: GlobalGitConfig,
         chat: ChatSettings,
         repos: HashMap<String, RepoConfig>,
@@ -259,6 +264,7 @@ impl AppService {
             }
         }
 
+        config.theme = theme;
         config.git = git;
         config.chat = chat;
         config.global_prompt_overrides = global_prompt_overrides;
@@ -298,10 +304,6 @@ impl AppService {
 
         self.config_store
             .set_repo_trust_hooks(repo_path, false, None)
-    }
-
-    pub fn get_theme(&self) -> Result<String> {
-        self.config_store.get_theme()
     }
 
     pub fn set_theme(&self, theme: &str) -> Result<()> {
@@ -774,7 +776,7 @@ mod tests {
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() {
         let (service, _task_state, _git_state) = build_service_with_state(vec![]);
 
-        let (_git, chat, repos, global_prompt_overrides) = service
+        let (_theme, _git, chat, repos, global_prompt_overrides) = service
             .workspace_get_settings_snapshot()
             .expect("settings snapshot should load");
 

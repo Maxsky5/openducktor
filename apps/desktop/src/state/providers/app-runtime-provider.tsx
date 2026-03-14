@@ -1,13 +1,6 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import {
-  type PropsWithChildren,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { validateRuntimeDefinitionsForOpenDucktor } from "@/lib/agent-runtime";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
   ActiveRepoContext,
@@ -15,25 +8,17 @@ import {
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "../app-state-contexts";
-import { host } from "../operations/host";
+import { runtimeDefinitionsQueryOptions, runtimeQueryKeys } from "../queries/runtime";
 
 export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElement {
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
-  const [runtimeDefinitions, setRuntimeDefinitions] = useState<RuntimeDescriptor[]>([]);
-  const [isLoadingRuntimeDefinitions, setIsLoadingRuntimeDefinitions] = useState(true);
-  const [runtimeDefinitionsError, setRuntimeDefinitionsError] = useState<string | null>(null);
-
-  const requireCompatibleRuntimeDefinitions = useCallback(
-    (runtimeDefinitions: RuntimeDescriptor[]): RuntimeDescriptor[] => {
-      const validationErrors = validateRuntimeDefinitionsForOpenDucktor(runtimeDefinitions);
-      if (validationErrors.length > 0) {
-        throw new Error(validationErrors.join("; "));
-      }
-
-      return runtimeDefinitions;
-    },
-    [],
-  );
+  const queryClient = useQueryClient();
+  const {
+    data: runtimeDefinitions = [],
+    error,
+    isPending: isLoadingRuntimeDefinitions,
+    refetch,
+  } = useQuery(runtimeDefinitionsQueryOptions());
 
   const activeRepoValue = useMemo<ActiveRepoContextValue>(
     () => ({
@@ -43,66 +28,28 @@ export function AppRuntimeProvider({ children }: PropsWithChildren): ReactElemen
     [activeRepo],
   );
 
-  const refreshRuntimeDefinitions = useCallback(async (): Promise<RuntimeDescriptor[]> => {
-    setIsLoadingRuntimeDefinitions(true);
-    setRuntimeDefinitionsError(null);
-    try {
-      const nextDefinitions = requireCompatibleRuntimeDefinitions(
-        await host.runtimeDefinitionsList(),
-      );
-      setRuntimeDefinitions(nextDefinitions);
-      return nextDefinitions;
-    } catch (error) {
-      const message = errorMessage(error);
-      setRuntimeDefinitions([]);
-      setRuntimeDefinitionsError(message);
-      throw error;
-    } finally {
-      setIsLoadingRuntimeDefinitions(false);
-    }
-  }, [requireCompatibleRuntimeDefinitions]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoadingRuntimeDefinitions(true);
-    setRuntimeDefinitionsError(null);
-
-    void host
-      .runtimeDefinitionsList()
-      .then((nextDefinitions) => {
-        if (cancelled) {
-          return;
-        }
-        setRuntimeDefinitions(requireCompatibleRuntimeDefinitions(nextDefinitions));
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-        setRuntimeDefinitions([]);
-        setRuntimeDefinitionsError(errorMessage(error));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingRuntimeDefinitions(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [requireCompatibleRuntimeDefinitions]);
+  const runtimeDefinitionsError = error ? errorMessage(error) : null;
 
   const runtimeDefinitionsValue = useMemo<RuntimeDefinitionsContextValue>(
     () => ({
       runtimeDefinitions,
       isLoadingRuntimeDefinitions,
       runtimeDefinitionsError,
-      refreshRuntimeDefinitions,
+      refreshRuntimeDefinitions: async (): Promise<RuntimeDescriptor[]> => {
+        await queryClient.invalidateQueries({
+          queryKey: runtimeQueryKeys.definitions(),
+        });
+        const refreshResult = await refetch();
+        if (refreshResult.error) {
+          throw refreshResult.error;
+        }
+        return refreshResult.data ?? [];
+      },
     }),
     [
       isLoadingRuntimeDefinitions,
-      refreshRuntimeDefinitions,
+      queryClient,
+      refetch,
       runtimeDefinitions,
       runtimeDefinitionsError,
     ],

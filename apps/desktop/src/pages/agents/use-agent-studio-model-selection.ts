@@ -1,5 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveAgentAccentColor,
@@ -10,6 +11,7 @@ import {
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { loadRepoRuntimeCatalog } from "@/state/operations";
+import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -69,8 +71,6 @@ export function useAgentStudioModelSelection({
   const previousActiveRepoRef = useRef<string | null>(activeRepo);
   const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
-  const [composerCatalog, setComposerCatalog] = useState<AgentModelCatalog | null>(null);
-  const [isLoadingComposerCatalog, setIsLoadingComposerCatalog] = useState(false);
   const [isAwaitingRepoSettingsForActiveRepo, setIsAwaitingRepoSettingsForActiveRepo] =
     useState(false);
   const [draftSelectionByRole, setDraftSelectionByRole] =
@@ -110,7 +110,7 @@ export function useAgentStudioModelSelection({
     if (previousRepoForDefaultsRef.current !== activeRepo) {
       previousRepoForDefaultsRef.current = activeRepo;
       previousRepoSettingsRef.current = repoSettings;
-      setIsAwaitingRepoSettingsForActiveRepo(Boolean(activeRepo));
+      setIsAwaitingRepoSettingsForActiveRepo(Boolean(activeRepo) && repoSettings == null);
       return;
     }
 
@@ -119,43 +119,30 @@ export function useAgentStudioModelSelection({
       return;
     }
 
-    if (previousRepoSettingsRef.current !== repoSettings) {
+    if (repoSettings != null) {
       previousRepoSettingsRef.current = repoSettings;
       setIsAwaitingRepoSettingsForActiveRepo(false);
     }
   }, [activeRepo, isAwaitingRepoSettingsForActiveRepo, repoSettings]);
 
-  useEffect(() => {
-    if (!activeRepo) {
-      setComposerCatalog(null);
-      setIsLoadingComposerCatalog(false);
-      return;
-    }
-    let cancelled = false;
-    setComposerCatalog(null);
-    setIsLoadingComposerCatalog(true);
-    void loadCatalog(activeRepo, composerRuntimeKind)
-      .then((catalog) => {
-        if (!cancelled) {
-          setComposerCatalog(catalog);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setComposerCatalog(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingComposerCatalog(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRepo, composerRuntimeKind, loadCatalog]);
-  const isDraftSelectionTouched = draftSelectionTouchedByRole[role];
+  const composerCatalogQuery = useQuery({
+    ...(activeRepo
+      ? repoRuntimeCatalogQueryOptions(activeRepo, composerRuntimeKind)
+      : repoRuntimeCatalogQueryOptions("", composerRuntimeKind)),
+    enabled: activeRepo !== null && (activeSession == null || activeSession.modelCatalog == null),
+    queryFn: async (): Promise<AgentModelCatalog> => {
+      if (!activeRepo) {
+        throw new Error("No repository selected.");
+      }
+      return loadCatalog(activeRepo, composerRuntimeKind);
+    },
+  });
+  const composerCatalog = composerCatalogQuery.data ?? null;
+  const isLoadingComposerCatalog = composerCatalogQuery.isLoading;
+  const hasDraftSelectionForActiveRepo = previousActiveRepoRef.current === activeRepo;
+  const isDraftSelectionTouched = hasDraftSelectionForActiveRepo
+    ? draftSelectionTouchedByRole[role]
+    : false;
 
   useEffect(() => {
     if (activeSession) {
@@ -214,7 +201,7 @@ export function useAgentStudioModelSelection({
     updateAgentSessionModel(activeSession.sessionId, preferredSelection);
   }, [activeSession, roleDefaultSelection, updateAgentSessionModel]);
 
-  const draftSelection = draftSelectionByRole[role];
+  const draftSelection = hasDraftSelectionForActiveRepo ? draftSelectionByRole[role] : null;
   const roleDefaultSelectionForComposer = useMemo<AgentModelSelection | null>(() => {
     if (activeSession) {
       return roleDefaultSelection;

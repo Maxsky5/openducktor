@@ -180,6 +180,7 @@ describe("settings-modal-normalization", () => {
 
   test("normalizes snapshot repo map and global prompt overrides", () => {
     const snapshot = normalizeSnapshotForSave({
+      theme: "light",
       git: {
         defaultMergeMethod: "merge_commit",
       },
@@ -207,10 +208,12 @@ describe("settings-modal-normalization", () => {
         enabled: false,
       },
     });
+    expect(snapshot.theme).toBe("light");
   });
 
   test("selects initial repo using active repo when available", () => {
     const snapshot = {
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit" as const,
       },
@@ -229,6 +232,7 @@ describe("settings-modal-normalization", () => {
     expect(
       pickInitialRepoPath(
         {
+          theme: "light" as const,
           git: {
             defaultMergeMethod: "merge_commit" as const,
           },

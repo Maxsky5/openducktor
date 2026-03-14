@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/host";
+import { appQueryClient } from "@/lib/query-client";
+import { loadRepoRunsFromQuery, taskQueryKeys } from "@/state/queries/tasks";
 
 const WORKTREE_RESOLUTION_TIMEOUT_MS = 5_000;
 
@@ -231,8 +232,14 @@ export function useAgentStudioWorktreeResolution({
 
     void (async () => {
       try {
+        await appQueryClient.cancelQueries({
+          queryKey: taskQueryKeys.runs(worktreeResolutionRepoPath),
+        });
+        await appQueryClient.invalidateQueries({
+          queryKey: taskQueryKeys.runs(worktreeResolutionRepoPath),
+        });
         const runs = await withTimeout(
-          host.runsList(worktreeResolutionRepoPath),
+          loadRepoRunsFromQuery(appQueryClient, worktreeResolutionRepoPath),
           WORKTREE_RESOLUTION_TIMEOUT_MS,
           `Timed out after ${WORKTREE_RESOLUTION_TIMEOUT_MS}ms while loading runs list.`,
         );

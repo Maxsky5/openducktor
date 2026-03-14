@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
+import { clearAppQueryClient } from "@/lib/query-client";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
@@ -22,6 +23,10 @@ const taskFixture = createTaskCardFixture({
 });
 
 describe("agent-orchestrator/handlers/start-session", () => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
+  });
+
   test("throws when no active repo is selected", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: null,
@@ -1532,6 +1537,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       qaMarkdown: string;
     }>();
     let runtimeCalls = 0;
+    const runtimeStarted = createDeferred<void>();
+    const defaultModelStarted = createDeferred<void>();
     let defaultModelCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
@@ -1561,6 +1568,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       attachSessionListener: () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
+        runtimeStarted.resolve();
         return {
           kind: "opencode",
           runtimeId: null,
@@ -1572,6 +1580,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => docsDeferred.promise,
       loadRepoDefaultModel: async () => {
         defaultModelCalls += 1;
+        defaultModelStarted.resolve();
         return null;
       },
       loadRepoPromptOverrides: async () => ({}),
@@ -1585,7 +1594,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     try {
       const startPromise = start({ taskId: "task-1", role: "build" });
-      await Promise.resolve();
+      await withTimeout(
+        Promise.all([runtimeStarted.promise, defaultModelStarted.promise]).then(() => undefined),
+        50,
+      );
 
       expect(runtimeCalls).toBe(1);
       expect(defaultModelCalls).toBe(1);

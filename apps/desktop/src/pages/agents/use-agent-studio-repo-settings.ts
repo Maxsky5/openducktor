@@ -1,75 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
-export const REPO_SETTINGS_UPDATED_EVENT = "odt:repo-settings-updated";
-
-type RepoSettingsUpdatedEventDetail = {
-  repoPath: string;
-};
-
-export function useAgentStudioRepoSettings(args: {
-  activeRepo: string | null;
-  loadRepoSettings: () => Promise<RepoSettingsInput>;
-}): {
+export function useAgentStudioRepoSettings(args: { activeRepo: string | null }): {
   repoSettings: RepoSettingsInput | null;
 } {
-  const { activeRepo, loadRepoSettings } = args;
-  const [repoSettings, setRepoSettings] = useState<RepoSettingsInput | null>(null);
-  const latestReloadIdRef = useRef(0);
-
-  const reloadRepoSettings = useCallback(() => {
-    if (!activeRepo) {
-      latestReloadIdRef.current += 1;
-      setRepoSettings(null);
-      return () => {};
-    }
-
-    const reloadId = latestReloadIdRef.current + 1;
-    latestReloadIdRef.current = reloadId;
-    let cancelled = false;
-    void loadRepoSettings()
-      .then((settings) => {
-        if (!cancelled && reloadId === latestReloadIdRef.current) {
-          setRepoSettings(settings);
-        }
-      })
-      .catch(() => {
-        if (!cancelled && reloadId === latestReloadIdRef.current) {
-          setRepoSettings(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRepo, loadRepoSettings]);
-
-  useEffect(() => {
-    return reloadRepoSettings();
-  }, [reloadRepoSettings]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const handleRepoSettingsUpdated = (event: Event) => {
-      const customEvent = event as CustomEvent<RepoSettingsUpdatedEventDetail>;
-      const repoPath = customEvent.detail?.repoPath;
-      if (!repoPath || !activeRepo || repoPath !== activeRepo) {
-        return;
-      }
-
-      reloadRepoSettings();
-    };
-
-    window.addEventListener(REPO_SETTINGS_UPDATED_EVENT, handleRepoSettingsUpdated);
-    return () => {
-      window.removeEventListener(REPO_SETTINGS_UPDATED_EVENT, handleRepoSettingsUpdated);
-    };
-  }, [activeRepo, reloadRepoSettings]);
+  const { activeRepo } = args;
+  const { data: repoSettings } = useQuery({
+    ...(activeRepo ? repoConfigQueryOptions(activeRepo) : repoConfigQueryOptions("")),
+    enabled: activeRepo !== null,
+    select: toRepoSettingsInput,
+  });
 
   return {
-    repoSettings,
+    repoSettings: repoSettings ?? null,
   };
 }

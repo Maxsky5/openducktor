@@ -141,7 +141,6 @@ describe("TauriHostClient", () => {
       "workspaceSaveSettingsSnapshot",
       "workspacePrepareTrustedHooksChallenge",
       "workspaceSetTrustedHooks",
-      "getTheme",
       "setTheme",
       "tasksList",
       "taskCreate",
@@ -397,6 +396,7 @@ describe("TauriHostClient", () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_get_settings_snapshot") {
         return {
+          theme: "light",
           git: {
             defaultMergeMethod: "merge_commit",
           },
@@ -426,6 +426,7 @@ describe("TauriHostClient", () => {
 
     const snapshot = await client.workspaceGetSettingsSnapshot();
 
+    expect(snapshot.theme).toBe("light");
     expect(Object.keys(snapshot.repos)).toEqual(["/repo"]);
     expect(calls).toEqual([
       {
@@ -453,6 +454,7 @@ describe("TauriHostClient", () => {
     });
 
     const result = await client.workspaceSaveSettingsSnapshot({
+      theme: "light",
       git: {
         defaultMergeMethod: "merge_commit",
       },
@@ -483,6 +485,7 @@ describe("TauriHostClient", () => {
         command: "workspace_save_settings_snapshot",
         args: {
           snapshot: {
+            theme: "light",
             git: {
               defaultMergeMethod: "merge_commit",
             },

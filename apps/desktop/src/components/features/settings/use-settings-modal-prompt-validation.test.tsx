@@ -14,6 +14,7 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useSettingsModalPromptValidation, initialProps);
 
 const createSnapshot = (): SettingsSnapshot => ({
+  theme: "light",
   git: {
     defaultMergeMethod: "merge_commit",
   },

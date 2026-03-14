@@ -7,6 +7,8 @@ import {
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { clearAppQueryClient } from "@/lib/query-client";
+import { QueryProvider } from "@/lib/query-provider";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
@@ -104,7 +106,13 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
   return {
     mount: async () => {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: currentArgs }));
+        renderer = TestRenderer.create(
+          createElement(
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(Harness, { args: currentArgs }),
+          ),
+        );
       });
       await flush();
     },
@@ -116,7 +124,13 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
           nextArgs.checkRepoRuntimeHealth ?? currentArgs.checkRepoRuntimeHealth,
       };
       await act(async () => {
-        renderer?.update(createElement(Harness, { args: currentArgs }));
+        renderer?.update(
+          createElement(
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(Harness, { args: currentArgs }),
+          ),
+        );
       });
       await flush();
     },
@@ -148,7 +162,8 @@ beforeAll(async () => {
   ({ useChecks } = await import("./use-checks"));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  await clearAppQueryClient();
   toastError.mockClear();
   toastSuccess.mockClear();
   checkRepoRuntimeHealthMock.mockClear();

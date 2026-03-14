@@ -10,6 +10,7 @@ import { AgentSessionPermissionCard } from "./agent-session-permission-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { useAgentChatAutoScroll } from "./use-agent-chat-auto-scroll";
+import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 import { useAgentChatVirtualization } from "./use-agent-chat-virtualization";
 
@@ -90,6 +91,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     shouldVirtualize,
     virtualRowsCount: virtualRows.length,
     virtualizer,
+  });
+  const showLoadingOverlay = useAgentChatLoadingOverlay({
+    sessionId: activeSessionId,
+    isSessionViewLoading,
+    hasRenderableSessionRows,
+    hasSessionHistory,
+    isPreparingVirtualization,
+    isJumpingToLatest,
   });
   const sessionRole = session?.role ?? null;
   const sessionSelectedModel = session?.selectedModel ?? null;
@@ -266,11 +275,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         ))}
       </div>
 
-      {isSessionViewLoading || isPreparingVirtualization || isJumpingToLatest ? (
+      {showLoadingOverlay ? (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-muted">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
             <LoaderCircle className="size-3.5 animate-spin" />
-            Loading session history...
+            Preparing chat...
           </div>
         </div>
       ) : null}

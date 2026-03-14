@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { clearAppQueryClient } from "@/lib/query-client";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createLoadAgentSessions } from "./load-sessions";
@@ -8,6 +9,10 @@ import { createLoadAgentSessions } from "./load-sessions";
 const taskFixture = createTaskCardFixture({ title: "Task" });
 
 describe("agent-orchestrator-load-sessions", () => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
+  });
+
   test("no-ops when active repo is missing", async () => {
     let setCalled = false;
     const loadAgentSessions = createLoadAgentSessions({

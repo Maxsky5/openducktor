@@ -1,7 +1,6 @@
 import type { GitBranch } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import { loadRepoBranches } from "@/state/operations";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { repoBranchesQueryOptions } from "@/state/queries/git";
 
 type UseSettingsModalBranchesStateArgs = {
   open: boolean;
@@ -19,87 +18,33 @@ export const useSettingsModalBranchesState = ({
   open,
   selectedRepoPath,
 }: UseSettingsModalBranchesStateArgs): SettingsModalBranchesState => {
-  const [repoBranchesByPath, setRepoBranchesByPath] = useState<Record<string, GitBranch[]>>({});
-  const [isLoadingRepoBranchesByPath, setIsLoadingRepoBranchesByPath] = useState<
-    Record<string, boolean>
-  >({});
-  const [repoBranchesErrorByPath, setRepoBranchesErrorByPath] = useState<
-    Record<string, string | undefined>
-  >({});
+  const queryClient = useQueryClient();
+  const {
+    data: selectedRepoBranches = [],
+    error,
+    isLoading,
+  } = useQuery({
+    ...(selectedRepoPath
+      ? repoBranchesQueryOptions(selectedRepoPath)
+      : repoBranchesQueryOptions("")),
+    enabled: open && Boolean(selectedRepoPath),
+  });
 
-  useEffect(() => {
-    if (open) {
-      return;
-    }
-    setRepoBranchesByPath({});
-    setIsLoadingRepoBranchesByPath({});
-    setRepoBranchesErrorByPath({});
-  }, [open]);
-
-  const selectedRepoBranches = useMemo(
-    () => (selectedRepoPath ? (repoBranchesByPath[selectedRepoPath] ?? []) : []),
-    [repoBranchesByPath, selectedRepoPath],
-  );
-  const isLoadingSelectedRepoBranches = selectedRepoPath
-    ? Boolean(isLoadingRepoBranchesByPath[selectedRepoPath])
-    : false;
-  const selectedRepoBranchesError = selectedRepoPath
-    ? (repoBranchesErrorByPath[selectedRepoPath] ?? null)
-    : null;
-
-  useEffect(() => {
-    if (!open || !selectedRepoPath) {
-      return;
-    }
-
-    if (
-      repoBranchesByPath[selectedRepoPath] ||
-      isLoadingRepoBranchesByPath[selectedRepoPath] ||
-      repoBranchesErrorByPath[selectedRepoPath]
-    ) {
-      return;
-    }
-
-    setIsLoadingRepoBranchesByPath((current) => ({ ...current, [selectedRepoPath]: true }));
-
-    void loadRepoBranches(selectedRepoPath)
-      .then((branches) => {
-        setRepoBranchesByPath((current) => ({ ...current, [selectedRepoPath]: branches }));
-        setRepoBranchesErrorByPath((current) => ({ ...current, [selectedRepoPath]: undefined }));
-      })
-      .catch((error: unknown) => {
-        setRepoBranchesErrorByPath((current) => ({
-          ...current,
-          [selectedRepoPath]: errorMessage(error),
-        }));
-      })
-      .finally(() => {
-        setIsLoadingRepoBranchesByPath((current) => ({ ...current, [selectedRepoPath]: false }));
-      });
-  }, [
-    isLoadingRepoBranchesByPath,
-    open,
-    repoBranchesByPath,
-    repoBranchesErrorByPath,
-    selectedRepoPath,
-  ]);
-
-  const retrySelectedRepoBranchesLoad = useCallback((): void => {
+  const retrySelectedRepoBranchesLoad = (): void => {
     if (!selectedRepoPath) {
       return;
     }
 
-    setRepoBranchesErrorByPath((current) => ({ ...current, [selectedRepoPath]: undefined }));
-    setRepoBranchesByPath((current) => {
-      const { [selectedRepoPath]: _ignored, ...remaining } = current;
-      return remaining;
+    void queryClient.invalidateQueries({
+      queryKey: repoBranchesQueryOptions(selectedRepoPath).queryKey,
     });
-  }, [selectedRepoPath]);
+  };
 
   return {
-    selectedRepoBranches,
-    isLoadingSelectedRepoBranches,
-    selectedRepoBranchesError,
+    selectedRepoBranches: open && selectedRepoPath ? selectedRepoBranches : [],
+    isLoadingSelectedRepoBranches: open && selectedRepoPath ? isLoading : false,
+    selectedRepoBranchesError:
+      open && selectedRepoPath && error instanceof Error ? error.message : null,
     retrySelectedRepoBranchesLoad,
   };
 };

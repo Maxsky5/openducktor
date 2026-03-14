@@ -1,8 +1,8 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { errorMessage } from "@/lib/errors";
-
-export const SETTINGS_SNAPSHOT_UPDATED_EVENT = "odt:settings-snapshot-updated";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 
 const DEFAULT_SHOW_THINKING_MESSAGES = false;
 
@@ -17,75 +17,36 @@ const createChatSettingsLoadError = (activeRepo: string, cause: unknown): Error 
   );
 };
 
-export function useAgentStudioChatSettings(args: {
-  activeRepo: string | null;
-  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
-}): {
+export function useAgentStudioChatSettings(args: { activeRepo: string | null }): {
   showThinkingMessages: boolean;
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
 } {
-  const { activeRepo, loadSettingsSnapshot } = args;
-  const [showThinkingMessages, setShowThinkingMessages] = useState(DEFAULT_SHOW_THINKING_MESSAGES);
-  const [chatSettingsLoadError, setChatSettingsLoadError] = useState<Error | null>(null);
-  const latestReloadIdRef = useRef(0);
+  const { activeRepo } = args;
 
-  const reloadChatSettings = useCallback(() => {
-    if (!activeRepo) {
-      latestReloadIdRef.current += 1;
-      setShowThinkingMessages(DEFAULT_SHOW_THINKING_MESSAGES);
-      setChatSettingsLoadError(null);
-      return () => {};
-    }
-
-    const repoPath = activeRepo;
-    const reloadId = latestReloadIdRef.current + 1;
-    latestReloadIdRef.current = reloadId;
-    let cancelled = false;
-
-    void loadSettingsSnapshot()
-      .then((snapshot) => {
-        if (!cancelled && reloadId === latestReloadIdRef.current) {
-          setShowThinkingMessages(readShowThinkingMessages(snapshot));
-          setChatSettingsLoadError(null);
-        }
-      })
-      .catch((cause) => {
-        if (!cancelled && reloadId === latestReloadIdRef.current) {
-          setChatSettingsLoadError(createChatSettingsLoadError(repoPath, cause));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRepo, loadSettingsSnapshot]);
+  const {
+    data: showThinkingMessages = DEFAULT_SHOW_THINKING_MESSAGES,
+    error,
+    refetch,
+  } = useQuery({
+    ...settingsSnapshotQueryOptions(),
+    enabled: activeRepo !== null,
+    select: readShowThinkingMessages,
+  });
 
   const retryChatSettingsLoad = useCallback((): void => {
-    reloadChatSettings();
-  }, [reloadChatSettings]);
-
-  useEffect(() => {
-    return reloadChatSettings();
-  }, [reloadChatSettings]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
+    if (!activeRepo) {
       return;
     }
 
-    const handleSettingsSnapshotUpdated = () => {
-      reloadChatSettings();
-    };
+    void refetch();
+  }, [activeRepo, refetch]);
 
-    window.addEventListener(SETTINGS_SNAPSHOT_UPDATED_EVENT, handleSettingsSnapshotUpdated);
-    return () => {
-      window.removeEventListener(SETTINGS_SNAPSHOT_UPDATED_EVENT, handleSettingsSnapshotUpdated);
-    };
-  }, [reloadChatSettings]);
+  const chatSettingsLoadError =
+    activeRepo && error ? createChatSettingsLoadError(activeRepo, error) : null;
 
   return {
-    showThinkingMessages,
+    showThinkingMessages: activeRepo ? showThinkingMessages : DEFAULT_SHOW_THINKING_MESSAGES,
     chatSettingsLoadError,
     retryChatSettingsLoad,
   };

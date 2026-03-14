@@ -4,9 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
+import { appQueryClient } from "@/lib/query-client";
 import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/host";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
+import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
+import {
+  loadPlanDocumentFromQuery,
+  loadQaReportDocumentFromQuery,
+  loadSpecDocumentFromQuery,
+} from "@/state/queries/documents";
+import { loadTaskApprovalContextFromQuery } from "@/state/queries/task-approval";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
@@ -122,7 +130,11 @@ export function useTaskApprovalFlow({
 
       void (async () => {
         try {
-          const approvalContext = await host.taskApprovalContextGet(activeRepo, taskId);
+          const approvalContext = await loadTaskApprovalContextFromQuery(
+            appQueryClient,
+            activeRepo,
+            taskId,
+          );
           if (approvalRequestVersionRef.current !== requestVersion) {
             return;
           }
@@ -208,7 +220,7 @@ export function useTaskApprovalFlow({
       }
 
       const latestBuilderRecord = (
-        await host.agentSessionsList(activeRepo, currentState.taskId)
+        await loadAgentSessionListFromQuery(appQueryClient, activeRepo, currentState.taskId)
       ).find((entry) => entry.role === "build");
       if (!latestBuilderRecord) {
         throw new Error("No Builder session is available to fork for pull request drafting.");
@@ -221,9 +233,9 @@ export function useTaskApprovalFlow({
       const [task, overrides, spec, plan, qa] = await Promise.all([
         Promise.resolve(tasks.find((entry) => entry.id === currentState.taskId) ?? null),
         loadEffectivePromptOverrides(activeRepo),
-        host.specGet(activeRepo, currentState.taskId),
-        host.planGet(activeRepo, currentState.taskId),
-        host.qaGetReport(activeRepo, currentState.taskId),
+        loadSpecDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
+        loadPlanDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
+        loadQaReportDocumentFromQuery(appQueryClient, activeRepo, currentState.taskId),
       ]);
       if (!task) {
         throw new Error(`Task not found: ${currentState.taskId}`);

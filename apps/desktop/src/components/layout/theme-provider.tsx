@@ -1,7 +1,9 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { createHostClient } from "@/lib/host-client";
-
-type Theme = "dark" | "light";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { applyThemeToDocument, readDocumentTheme } from "./theme-dom";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -23,39 +25,56 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 const hostClient = createHostClient();
 
 export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(defaultTheme);
+  const [theme, setThemeState] = useState<Theme>(() => readDocumentTheme(defaultTheme));
+  const queryClient = useQueryClient();
+  const { data: settingsSnapshot } = useQuery(settingsSnapshotQueryOptions());
 
-  // Load theme from config file on mount
   useEffect(() => {
-    hostClient
-      .getTheme()
-      .then((stored) => {
-        const resolved = stored === "dark" ? "dark" : "light";
-        setThemeState(resolved);
-      })
-      .catch(() => {
-        // Fallback to default if config unavailable (e.g. outside Tauri runtime)
-      });
-  }, []);
+    if (!settingsSnapshot) {
+      return;
+    }
 
-  // Apply theme class to <html>
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(theme);
+    const resolved = settingsSnapshot.theme === "dark" ? "dark" : "light";
+    setThemeState((current: Theme) => (current === resolved ? current : resolved));
+  }, [settingsSnapshot]);
+
+  useLayoutEffect(() => {
+    applyThemeToDocument(theme);
   }, [theme]);
 
-  const value = {
-    theme,
-    setTheme: (newTheme: Theme) => {
-      setThemeState(newTheme);
-      // Persist to config file (fire-and-forget)
-      hostClient.setTheme(newTheme).catch(() => {
-        // Fallback: at least keep localStorage for non-Tauri envs
-        localStorage.setItem("openducktor-ui-theme", newTheme);
-      });
-    },
-  };
+  const value = useMemo(
+    () => ({
+      theme,
+      setTheme: (newTheme: Theme) => {
+        const previousTheme = theme;
+        const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(
+          settingsSnapshotQueryOptions().queryKey,
+        );
+        setThemeState(newTheme);
+        queryClient.setQueryData(
+          settingsSnapshotQueryOptions().queryKey,
+          (current: SettingsSnapshot | undefined) => {
+            if (!current) {
+              return current;
+            }
+
+            return {
+              ...current,
+              theme: newTheme,
+            };
+          },
+        );
+        void hostClient.setTheme(newTheme).catch((error) => {
+          console.error("Failed to persist theme change.", error);
+          setThemeState(previousTheme);
+          if (previousSnapshot) {
+            queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, previousSnapshot);
+          }
+        });
+      },
+    }),
+    [queryClient, theme],
+  );
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>

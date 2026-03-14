@@ -1,4 +1,4 @@
-import type { SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -16,8 +16,6 @@ import type { RequestNewSessionStart } from "./use-agent-studio-session-start-ty
 
 export type AgentStudioOrchestrationWorkspaceContext = {
   activeRepo: string | null;
-  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
-  loadRepoSettings: () => Promise<RepoSettingsInput>;
 };
 
 export type AgentStudioOrchestrationSelectionContext = {
@@ -201,7 +199,7 @@ export function useAgentStudioOrchestrationController({
   composer,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
-  const { activeRepo, loadRepoSettings, loadSettingsSnapshot } = workspace;
+  const { activeRepo } = workspace;
   const {
     viewTaskId,
     viewRole,
@@ -232,15 +230,9 @@ export function useAgentStudioOrchestrationController({
     requestNewSessionStart,
   } = actions;
 
-  const { repoSettings } = useAgentStudioRepoSettings({
-    activeRepo,
-    loadRepoSettings,
-  });
+  const { repoSettings } = useAgentStudioRepoSettings({ activeRepo });
   const { showThinkingMessages, chatSettingsLoadError, retryChatSettingsLoad } =
-    useAgentStudioChatSettings({
-      activeRepo,
-      loadSettingsSnapshot,
-    });
+    useAgentStudioChatSettings({ activeRepo });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
     activeRepo,

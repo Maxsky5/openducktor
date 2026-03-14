@@ -1,5 +1,6 @@
 import type { GitBranch } from "@openducktor/contracts";
-import { host } from "./host";
+import { appQueryClient } from "@/lib/query-client";
+import { loadRepoBranchesFromQuery } from "../queries/git";
 
 export const loadRepoBranches = async (repoPath: string): Promise<GitBranch[]> => {
   const normalizedRepoPath = repoPath.trim();
@@ -7,5 +8,5 @@ export const loadRepoBranches = async (repoPath: string): Promise<GitBranch[]> =
     throw new Error("Cannot load repository branches: repository path is empty.");
   }
 
-  return host.gitGetBranches(normalizedRepoPath);
+  return loadRepoBranchesFromQuery(appQueryClient, normalizedRepoPath);
 };

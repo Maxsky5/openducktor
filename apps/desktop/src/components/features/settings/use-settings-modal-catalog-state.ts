@@ -1,8 +1,8 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useEffect, useMemo, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import { loadRepoRuntimeCatalog } from "@/state/operations";
+import { useQueries } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 
 type UseSettingsModalCatalogStateArgs = {
   open: boolean;
@@ -25,69 +25,38 @@ export const useSettingsModalCatalogState = ({
   selectedRepoPath,
   runtimeDefinitions,
 }: UseSettingsModalCatalogStateArgs): SettingsModalCatalogState => {
-  const [catalogsByRuntime, setCatalogsByRuntime] = useState<
-    Record<string, AgentModelCatalog | null>
-  >({});
-  const [catalogErrorsByRuntime, setCatalogErrorsByRuntime] = useState<
-    Record<string, string | null>
-  >({});
-  const [loadingRuntimeKinds, setLoadingRuntimeKinds] = useState<RuntimeKind[]>([]);
   const runtimeKinds = useMemo(
     () => runtimeDefinitions.map((definition) => definition.kind),
     [runtimeDefinitions],
   );
 
-  useEffect(() => {
-    if (!open || !selectedRepoPath || runtimeKinds.length === 0) {
-      setCatalogsByRuntime({});
-      setCatalogErrorsByRuntime({});
-      setLoadingRuntimeKinds([]);
-      return;
-    }
+  const catalogQueries = useQueries({
+    queries: runtimeKinds.map((runtimeKind) => ({
+      ...(selectedRepoPath
+        ? repoRuntimeCatalogQueryOptions(selectedRepoPath, runtimeKind)
+        : repoRuntimeCatalogQueryOptions("", runtimeKind)),
+      enabled: open && Boolean(selectedRepoPath),
+    })),
+  });
 
-    let cancelled = false;
-    setCatalogErrorsByRuntime({});
-    setLoadingRuntimeKinds(runtimeKinds);
+  const catalogsByRuntime = useMemo<Record<string, AgentModelCatalog | null>>(() => {
+    return Object.fromEntries(
+      runtimeKinds.map((runtimeKind, index) => [runtimeKind, catalogQueries[index]?.data ?? null]),
+    );
+  }, [catalogQueries, runtimeKinds]);
 
-    for (const runtimeKind of runtimeKinds) {
-      void loadRepoRuntimeCatalog(selectedRepoPath, runtimeKind)
-        .then((nextCatalog) => {
-          if (cancelled) {
-            return;
-          }
-          setCatalogsByRuntime((current) => ({
-            ...current,
-            [runtimeKind]: nextCatalog,
-          }));
-          setCatalogErrorsByRuntime((current) => ({
-            ...current,
-            [runtimeKind]: null,
-          }));
-        })
-        .catch((error: unknown) => {
-          if (cancelled) {
-            return;
-          }
-          setCatalogsByRuntime((current) => ({
-            ...current,
-            [runtimeKind]: null,
-          }));
-          setCatalogErrorsByRuntime((current) => ({
-            ...current,
-            [runtimeKind]: errorMessage(error),
-          }));
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setLoadingRuntimeKinds((current) => current.filter((entry) => entry !== runtimeKind));
-          }
-        });
-    }
+  const catalogErrorsByRuntime = useMemo<Record<string, string | null>>(() => {
+    return Object.fromEntries(
+      runtimeKinds.map((runtimeKind, index) => {
+        const queryError = catalogQueries[index]?.error;
+        return [runtimeKind, queryError instanceof Error ? queryError.message : null];
+      }),
+    );
+  }, [catalogQueries, runtimeKinds]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [open, runtimeKinds, selectedRepoPath]);
+  const loadingRuntimeKinds = useMemo<RuntimeKind[]>(() => {
+    return runtimeKinds.filter((_runtimeKind, index) => catalogQueries[index]?.isLoading);
+  }, [catalogQueries, runtimeKinds]);
 
   return {
     catalogsByRuntime,

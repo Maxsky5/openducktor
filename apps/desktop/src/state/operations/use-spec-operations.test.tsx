@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { defaultSpecTemplateMarkdown } from "@openducktor/contracts";
 import { createElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
+import { QueryProvider } from "@/lib/query-provider";
 import { host } from "./host";
 import { useSpecOperations } from "./use-spec-operations";
 
@@ -31,7 +32,13 @@ const createHookHarness = (initialArgs: HookArgs) => {
   return {
     mount: async () => {
       await act(async () => {
-        renderer = TestRenderer.create(createElement(Harness, { args: initialArgs }));
+        renderer = TestRenderer.create(
+          createElement(
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(Harness, { args: initialArgs }),
+          ),
+        );
       });
       await flush();
     },

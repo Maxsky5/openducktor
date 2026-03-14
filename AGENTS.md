@@ -120,6 +120,21 @@ Prefer light shades for backgrounds (`bg-sky-50`) and dark for text (`text-sky-7
 - For async form submissions: disable the full form scope, show in-button loading, and preserve pending/error/success feedback.
 - Avoid nested ternaries in app and test code. Prefer named booleans, helper functions, lookup maps, or explicit `if`/`else` control flow so state rules stay readable.
 
+### TanStack Query Rules
+
+- TanStack Query is the default cache and deduplication layer for frontend reads that come from the backend or host adapters.
+- MUST use TanStack Query for server-owned read data that can be requested from multiple places, reused across screens, refreshed, invalidated after mutations, or deduplicated in flight.
+- MUST use TanStack Query for stable host reads such as settings snapshots, repo config, runtime definitions, tasks/runs lists, branches/current branch, diagnostics, session lists, and git status snapshots unless there is a documented exception.
+- MUST define query keys and query option builders in focused modules under `apps/desktop/src/state/queries`.
+- MUST use `useQuery` / `useQueries` / `useSuspenseQuery` in React render paths that read backend-owned data.
+- MUST use `queryClient.fetchQuery`, `ensureQueryData`, `prefetchQuery`, or cache invalidation APIs for imperative backend reads outside render paths.
+- MUST invalidate or update the relevant TanStack Query cache entries after any mutation that changes cached server data.
+- MUST prefer deriving UI state from query results over copying query data into local component state unless the copied state is a true user-editable draft.
+- MUST NOT add new ad hoc request caches, singleton in-flight maps, or `useEffect`+`useState` fetch loops for backend reads when TanStack Query can own that data.
+- MUST NOT use TanStack Query as the primary store for transient UI state, local form drafts, modal visibility, optimistic text input, or event-stream assembly.
+- MUST NOT move live streaming agent transcript state, in-progress tool output, pending permission/question interactions, or other event-driven session state into TanStack Query unless the underlying data becomes request/response based.
+- When adapting existing provider APIs, it is acceptable to keep the provider contract stable while making the underlying read path use TanStack Query.
+
 ## Backend / Tauri
 
 - Register every Tauri command in `tauri::generate_handler!`.

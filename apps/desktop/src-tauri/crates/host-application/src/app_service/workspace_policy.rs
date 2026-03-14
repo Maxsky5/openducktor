@@ -220,6 +220,7 @@ impl AppService {
 
     pub fn workspace_save_settings_snapshot<P: HookTrustConfirmationPort + ?Sized>(
         &self,
+        theme: String,
         git: host_infra_system::GlobalGitConfig,
         chat: ChatSettings,
         mut repos: HashMap<String, RepoConfig>,
@@ -243,7 +244,13 @@ impl AppService {
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
-        self.workspace_persist_settings_snapshot(git, chat, repos, global_prompt_overrides)?;
+        self.workspace_persist_settings_snapshot(
+            theme,
+            git,
+            chat,
+            repos,
+            global_prompt_overrides,
+        )?;
         self.workspace_list()
     }
 
@@ -658,7 +665,7 @@ mod tests {
         );
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (git, mut chat, mut repos, mut global_prompt_overrides) =
+        let (theme, git, mut chat, mut repos, mut global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         chat.show_thinking_messages = true;
         global_prompt_overrides.insert(
@@ -681,6 +688,7 @@ mod tests {
         repo_config.trusted_hooks_fingerprint = None;
 
         fixture.service.workspace_save_settings_snapshot(
+            theme,
             git,
             chat,
             repos,
@@ -711,12 +719,13 @@ mod tests {
         let fixture = setup_fixture("snapshot-chat-roundtrip", HookSet::default());
         let confirmation = RecordingHookTrustConfirmationPort::default();
 
-        let (git, mut chat, repos, global_prompt_overrides) =
+        let (theme, git, mut chat, repos, global_prompt_overrides) =
             fixture.service.workspace_get_settings_snapshot()?;
         assert_eq!(chat, ChatSettings::default());
         chat.show_thinking_messages = true;
 
         fixture.service.workspace_save_settings_snapshot(
+            theme,
             git,
             chat,
             repos,
@@ -724,7 +733,13 @@ mod tests {
             &confirmation,
         )?;
 
-        let (_persisted_git, persisted_chat, _persisted_repos, _persisted_global_prompt_overrides) =
+        let (
+            _persisted_theme,
+            _persisted_git,
+            persisted_chat,
+            _persisted_repos,
+            _persisted_global_prompt_overrides,
+        ) =
             fixture.service.workspace_get_settings_snapshot()?;
         assert!(persisted_chat.show_thinking_messages);
         assert_eq!(confirmation.request_count(), 0);

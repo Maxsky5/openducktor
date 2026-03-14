@@ -15,8 +15,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { pickRepositoryDirectory } from "@/lib/repo-directory";
-import { SETTINGS_SNAPSHOT_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-chat-settings";
-import { REPO_SETTINGS_UPDATED_EVENT } from "@/pages/agents/use-agent-studio-repo-settings";
 import { useChecksState, useWorkspaceState } from "@/state";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
@@ -381,10 +379,6 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
         !dirtySections.globalPromptOverrides &&
         !dirtySections.repoSettings;
 
-      const shouldDispatchRepoSettingsUpdated =
-        Boolean(activeRepo) && (dirtySections.globalPromptOverrides || dirtySections.repoSettings);
-      let didSaveSettingsSnapshot = false;
-
       if (shouldUseGlobalGitSave) {
         const normalizedGit = normalizeGlobalGitConfigForSave(snapshotDraft.git);
         const loadedGit = loadedSnapshot
@@ -398,23 +392,6 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
       } else {
         const normalizedSnapshot = normalizeSnapshotForSave(snapshotDraft);
         await saveSettingsSnapshot(normalizedSnapshot);
-        didSaveSettingsSnapshot = true;
-      }
-
-      if (typeof window !== "undefined" && didSaveSettingsSnapshot) {
-        window.dispatchEvent(new CustomEvent(SETTINGS_SNAPSHOT_UPDATED_EVENT));
-      }
-
-      if (
-        typeof window !== "undefined" &&
-        shouldDispatchRepoSettingsUpdated &&
-        didSaveSettingsSnapshot
-      ) {
-        window.dispatchEvent(
-          new CustomEvent(REPO_SETTINGS_UPDATED_EVENT, {
-            detail: { repoPath: activeRepo },
-          }),
-        );
       }
 
       return true;
@@ -429,7 +406,6 @@ export const useSettingsModalController = (open: boolean): SettingsModalControll
       setIsSaving(false);
     }
   }, [
-    activeRepo,
     dirtySections.chat,
     dirtySections.globalGit,
     dirtySections.globalPromptOverrides,

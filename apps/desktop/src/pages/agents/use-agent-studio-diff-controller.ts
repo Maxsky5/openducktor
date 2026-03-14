@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { host } from "@/state/operations/host";
+import { appQueryClient } from "@/lib/query-client";
+import {
+  loadWorktreeStatusFromQuery,
+  loadWorktreeStatusSummaryFromQuery,
+} from "@/state/queries/git";
 import {
   ALL_LOAD_DATA_MODES,
   ALL_SCOPES,
@@ -187,11 +191,12 @@ export function useAgentStudioDiffController({
       version,
       workingDir: nextWorkingDir,
     }: InFlightRequestContext): Promise<void> => {
-      const summary = await host.gitGetWorktreeStatusSummary(
+      const summary = await loadWorktreeStatusSummaryFromQuery(
+        appQueryClient,
         activeRepoPath,
         activeTargetBranch,
         scope,
-        nextWorkingDir ?? undefined,
+        nextWorkingDir,
       );
 
       if (hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir)) {
@@ -251,11 +256,12 @@ export function useAgentStudioDiffController({
       version,
       workingDir: nextWorkingDir,
     }: InFlightRequestContext): Promise<void> => {
-      const snapshot = await host.gitGetWorktreeStatus(
+      const snapshot = await loadWorktreeStatusFromQuery(
+        appQueryClient,
         activeRepoPath,
         activeTargetBranch,
         scope,
-        nextWorkingDir ?? undefined,
+        nextWorkingDir,
       );
 
       if (hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir)) {

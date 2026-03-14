@@ -721,7 +721,6 @@ async fn dispatch_workspace_command(
             Some(handle_workspace_save_settings_snapshot(state, args).await)
         }
         "workspace_set_trusted_hooks" => Some(handle_workspace_set_trusted_hooks(state, args).await),
-        "get_theme" => Some(handle_get_theme(state)),
         "set_theme" => Some(handle_set_theme(state, args)),
         _ => None,
     }
@@ -955,11 +954,12 @@ fn handle_workspace_update_repo_hooks(state: &HeadlessState, args: Value) -> Com
 }
 
 fn handle_workspace_get_settings_snapshot(state: &HeadlessState) -> CommandResult {
-    let (git, chat, repos, global_prompt_overrides) = state
+    let (theme, git, chat, repos, global_prompt_overrides) = state
         .service
         .workspace_get_settings_snapshot()
         .map_err(service_error)?;
     serialize_value(SettingsSnapshotResponsePayload {
+        theme,
         git,
         chat,
         repos,
@@ -989,6 +989,7 @@ async fn handle_workspace_save_settings_snapshot(
     let service = state.service.clone();
     let confirmation_port = HeadlessHookTrustConfirmationPort;
     let SettingsSnapshotPayload {
+        theme,
         git,
         chat,
         repos,
@@ -997,6 +998,7 @@ async fn handle_workspace_save_settings_snapshot(
     serialize_value(
         run_service_blocking_tokio("workspace_save_settings_snapshot", move || {
             service.workspace_save_settings_snapshot(
+                theme,
                 git,
                 chat,
                 repos,
@@ -1046,10 +1048,6 @@ fn handle_set_theme(state: &HeadlessState, args: Value) -> CommandResult {
     let ThemeArgs { theme } = deserialize_args(args)?;
     state.service.set_theme(&theme).map_err(service_error)?;
     Ok(Value::Null)
-}
-
-fn handle_get_theme(state: &HeadlessState) -> CommandResult {
-    serialize_value(state.service.get_theme().map_err(service_error)?)
 }
 
 fn handle_git_get_current_branch(state: &HeadlessState, args: Value) -> CommandResult {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { RunSummary } from "@openducktor/contracts";
 import { agentPromptTemplateIdValues, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "../../host";
 import { createDeferred, withTimeout } from "../test-utils";
 import {
@@ -28,7 +29,8 @@ const runningRunFixture: RunSummary = {
 };
 
 describe("agent-orchestrator-runtime", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await clearAppQueryClient();
     host.workspaceGetRepoConfig = async () => ({
       defaultRuntimeKind: "opencode",
       branchPrefix: "obp",
@@ -433,6 +435,7 @@ describe("agent-orchestrator-runtime", () => {
       agentDefaults: {},
     });
     host.workspaceGetSettingsSnapshot = async () => ({
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit",
       },
@@ -502,6 +505,7 @@ describe("agent-orchestrator-runtime", () => {
       agentDefaults: {},
     });
     host.workspaceGetSettingsSnapshot = async () => ({
+      theme: "light" as const,
       git: {
         defaultMergeMethod: "merge_commit",
       },

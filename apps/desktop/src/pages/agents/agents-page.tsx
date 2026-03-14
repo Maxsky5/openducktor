@@ -54,7 +54,7 @@ import { useAgentStudioSelectionController } from "./use-agent-studio-selection-
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
 
 export function AgentsPage(): ReactElement {
-  const { activeRepo, activeBranch, loadRepoSettings, loadSettingsSnapshot } = useWorkspaceState();
+  const { activeRepo, activeBranch } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
@@ -128,7 +128,7 @@ export function AgentsPage(): ReactElement {
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    updateQuery,
+    updateQuery: scheduleQueryUpdate,
     loadAgentSessions,
     clearComposerInput,
     onContextSwitchIntent: signalContextSwitchIntent,
@@ -230,8 +230,6 @@ export function AgentsPage(): ReactElement {
 
   const orchestrationWorkspace = {
     activeRepo,
-    loadSettingsSnapshot,
-    loadRepoSettings,
   } satisfies AgentStudioOrchestrationWorkspaceContext;
 
   const orchestrationSelection = {
@@ -265,7 +263,7 @@ export function AgentsPage(): ReactElement {
   } satisfies AgentStudioOrchestrationComposerContext;
 
   const orchestrationActions = {
-    updateQuery,
+    updateQuery: scheduleQueryUpdate,
     onContextSwitchIntent: signalContextSwitchIntent,
     startAgentSession,
     sendAgentMessage,
@@ -295,18 +293,21 @@ export function AgentsPage(): ReactElement {
     gitPanelContextMode === "repository"
       ? { branch: UPSTREAM_TARGET_BRANCH }
       : (orchestration.repoSettings?.defaultTargetBranch ?? normalizeTargetBranch(null));
+  const shouldLoadVisibleDiffPanel =
+    selection.viewRole === "build" &&
+    orchestration.rightPanel.panelKind === "diff" &&
+    orchestration.rightPanel.isPanelOpen;
 
   const diffData = useAgentStudioDiffData({
-    repoPath: activeRepo,
-    sessionWorkingDirectory: selection.viewActiveSession?.workingDirectory ?? null,
-    sessionRunId: selection.viewActiveSession?.runId ?? null,
+    repoPath: shouldLoadVisibleDiffPanel ? activeRepo : null,
+    sessionWorkingDirectory: shouldLoadVisibleDiffPanel
+      ? (selection.viewActiveSession?.workingDirectory ?? null)
+      : null,
+    sessionRunId: shouldLoadVisibleDiffPanel ? (selection.viewActiveSession?.runId ?? null) : null,
     runCompletionRecoverySignal,
     defaultTargetBranch: diffComparisonTarget,
     branchIdentityKey: repositoryBranchIdentityKey,
-    enablePolling:
-      selection.viewRole === "build" &&
-      Boolean(selection.viewActiveSession) &&
-      orchestration.rightPanel.isPanelOpen,
+    enablePolling: shouldLoadVisibleDiffPanel && Boolean(selection.viewActiveSession),
   });
   const resolvedGitPanelBranch = resolveAgentStudioGitPanelBranch({
     contextMode: gitPanelContextMode,

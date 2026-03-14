@@ -131,9 +131,10 @@ pub async fn workspace_detect_github_repository(
 pub async fn workspace_get_settings_snapshot(
     state: State<'_, AppState>,
 ) -> Result<SettingsSnapshotResponsePayload, String> {
-    let (git, chat, repos, global_prompt_overrides) =
+    let (theme, git, chat, repos, global_prompt_overrides) =
         as_error(state.service.workspace_get_settings_snapshot())?;
     Ok(SettingsSnapshotResponsePayload {
+        theme,
         git,
         chat,
         repos,
@@ -163,6 +164,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
     snapshot: SettingsSnapshotPayload,
 ) -> Result<Vec<host_domain::WorkspaceRecord>, String> {
     let SettingsSnapshotPayload {
+        theme,
         git,
         chat,
         repos,
@@ -174,6 +176,7 @@ pub async fn workspace_save_settings_snapshot<R: tauri::Runtime>(
     as_error(
         run_service_blocking("workspace_save_settings_snapshot", move || {
             service.workspace_save_settings_snapshot(
+                theme,
                 git,
                 chat,
                 repos,
@@ -211,11 +214,6 @@ pub async fn workspace_set_trusted_hooks<R: tauri::Runtime>(
         })
         .await,
     )
-}
-
-#[tauri::command]
-pub async fn get_theme(state: State<'_, AppState>) -> Result<String, String> {
-    as_error(state.service.get_theme())
 }
 
 #[tauri::command]
@@ -717,11 +715,12 @@ mod tests {
             Some(false),
         );
 
-        let (git, chat, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         let mut snapshot = SettingsSnapshotPayload {
+            theme,
             git,
             chat,
             repos,
@@ -766,11 +765,12 @@ mod tests {
             Some(true),
         );
 
-        let (git, chat, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         let mut snapshot = SettingsSnapshotPayload {
+            theme,
             git,
             chat,
             repos,
@@ -826,7 +826,7 @@ mod tests {
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         assert_eq!(
-            config.0.default_merge_method,
+            config.1.default_merge_method,
             host_infra_system::GitMergeMethod::Squash
         );
         Ok(())
@@ -895,11 +895,12 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-ipc-shared-prompts", HookSet::default());
 
-        let (git, chat, repos, global_prompt_overrides) = fixture
+        let (theme, git, chat, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
         let mut snapshot = SettingsSnapshotPayload {
+            theme,
             git,
             chat,
             repos,
@@ -948,6 +949,7 @@ mod tests {
 
         let payload = json!({
             "snapshot": {
+                "theme": snapshot.theme,
                 "git": snapshot.git,
                 "chat": snapshot.chat,
                 "repos": snapshot.repos,
@@ -965,7 +967,7 @@ mod tests {
             "snapshot save response should include workspace records"
         );
 
-        let (_persisted_git, persisted_chat, persisted_repos, persisted_global) = fixture
+        let (_persisted_theme, _persisted_git, persisted_chat, persisted_repos, persisted_global) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1009,7 +1011,7 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
 
-        let (_git, chat, _repos, _global_prompt_overrides) = fixture
+        let (_theme, _git, chat, _repos, _global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
@@ -1024,13 +1026,14 @@ mod tests {
         let fixture =
             setup_workspace_command_fixture("snapshot-chat-roundtrip", HookSet::default());
 
-        let (git, _chat, repos, global_prompt_overrides) = fixture
+        let (theme, git, _chat, repos, global_prompt_overrides) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;
 
         let payload_without_chat = json!({
             "snapshot": {
+                "theme": theme.clone(),
                 "git": git.clone(),
                 "repos": repos.clone(),
                 "globalPromptOverrides": global_prompt_overrides.clone(),
@@ -1045,6 +1048,7 @@ mod tests {
 
         let payload_with_chat = json!({
             "snapshot": {
+                "theme": theme,
                 "git": git,
                 "chat": {
                     "showThinkingMessages": true
@@ -1056,7 +1060,7 @@ mod tests {
         invoke_workspace_save_settings_snapshot_ipc(&fixture, payload_with_chat)
             .expect("IPC snapshot save should persist chat settings");
 
-        let (_reloaded_git, reloaded_chat, _reloaded_repos, _reloaded_global) = fixture
+        let (_reloaded_theme, _reloaded_git, reloaded_chat, _reloaded_repos, _reloaded_global) = fixture
             .service
             .workspace_get_settings_snapshot()
             .map_err(|error| error.to_string())?;

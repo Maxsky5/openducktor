@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
 } from "./task-delete-confirm-dialog";
@@ -25,5 +26,11 @@ describe("TaskDeleteConfirmDialog", () => {
     expect(message).toContain("may also be deleted");
     expect(message).toContain("related local branches");
     expect(message).toContain("uncommitted changes");
+  });
+
+  test("uses explicit loading wording while cleanup impact is still resolving", () => {
+    const message = formatManagedSessionCleanupLoadingMessage();
+
+    expect(message).toContain("Checking linked task worktree cleanup impact");
   });
 });

@@ -71,12 +71,13 @@ describe("useAgentStudioTaskHydration", () => {
     try {
       await harness.mount();
 
-      expect(loadAgentSessions).toHaveBeenCalledTimes(2);
-      expect(loadAgentSessions.mock.calls[0]).toEqual(["task-1"]);
-      expect(loadAgentSessions.mock.calls[1]).toEqual([
+      expect(loadAgentSessions).toHaveBeenCalledTimes(1);
+      expect(loadAgentSessions.mock.calls[0]).toEqual([
         "task-1",
         { hydrateHistoryForSessionId: "session-1" },
       ]);
+      await harness.waitFor((state) => state.hydratedTasksByRepoAndTask["/repo-a:task-1"] === true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(true);
 
       await harness.update(
         createBaseArgs({
@@ -84,7 +85,7 @@ describe("useAgentStudioTaskHydration", () => {
           loadAgentSessions,
         }),
       );
-      expect(loadAgentSessions).toHaveBeenCalledTimes(2);
+      expect(loadAgentSessions).toHaveBeenCalledTimes(1);
 
       await harness.update(
         createBaseArgs({
@@ -93,8 +94,8 @@ describe("useAgentStudioTaskHydration", () => {
         }),
       );
 
-      expect(loadAgentSessions).toHaveBeenCalledTimes(3);
-      expect(loadAgentSessions.mock.calls[2]).toEqual([
+      expect(loadAgentSessions).toHaveBeenCalledTimes(2);
+      expect(loadAgentSessions.mock.calls[1]).toEqual([
         "task-1",
         { hydrateHistoryForSessionId: "session-2" },
       ]);

@@ -105,6 +105,7 @@ export const normalizeSnapshotForSave = (snapshot: SettingsSnapshot): SettingsSn
   );
 
   return {
+    theme: snapshot.theme,
     git: normalizeGlobalGitConfigForSave(snapshot.git),
     chat: snapshot.chat,
     repos,

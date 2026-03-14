@@ -5,6 +5,7 @@ import type {
   AgentRole,
   AgentScenario,
 } from "@openducktor/core";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
 import {
@@ -20,6 +21,7 @@ import {
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 import { loadRepoRuntimeCatalog } from "@/state/operations";
+import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   isSameSelection,
@@ -127,8 +129,6 @@ export function useSessionStartModalState({
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
-  const [catalog, setCatalog] = useState<AgentModelCatalog | null>(initialCatalog ?? null);
-  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
   const activeRole = intent?.role ?? null;
   const runtimeOptions = useMemo(
     () => toAgentRuntimeOptions(runtimeDefinitions),
@@ -149,44 +149,24 @@ export function useSessionStartModalState({
     }
   }, [runtimeDefinitions, selectedRuntimeKind]);
 
-  useEffect(() => {
-    if (initialCatalog !== undefined) {
-      setCatalog(initialCatalog);
-      setIsCatalogLoading(false);
-      return;
-    }
+  const catalogQuery = useQuery({
+    ...(activeRepo
+      ? repoRuntimeCatalogQueryOptions(activeRepo, selectedRuntimeKind)
+      : repoRuntimeCatalogQueryOptions("", selectedRuntimeKind)),
+    enabled: initialCatalog === undefined && Boolean(activeRepo) && intent !== null,
+    queryFn: async (): Promise<AgentModelCatalog> => {
+      if (!activeRepo) {
+        throw new Error("No repository selected.");
+      }
+      return loadCatalog(activeRepo, selectedRuntimeKind);
+    },
+  });
 
-    if (!activeRepo) {
-      setCatalog(null);
-      setIsCatalogLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setCatalog(null);
-    setIsCatalogLoading(true);
-    void Promise.resolve()
-      .then(() => loadCatalog(activeRepo, selectedRuntimeKind))
-      .then((nextCatalog) => {
-        if (!cancelled) {
-          setCatalog(nextCatalog);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCatalog(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsCatalogLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeRepo, initialCatalog, loadCatalog, selectedRuntimeKind]);
+  const catalog = initialCatalog ?? catalogQuery.data ?? null;
+  const isCatalogLoading =
+    initialCatalog === undefined && intent !== null && activeRepo !== null
+      ? catalogQuery.isLoading
+      : false;
 
   const closeStartModal = useCallback(() => {
     setIntent(null);

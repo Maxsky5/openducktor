@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsModalContent } from "./settings-modal-content";
 
 const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot => ({
+  theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   chat: { showThinkingMessages: false },
   repos: {},

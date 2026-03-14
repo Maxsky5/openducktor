@@ -1,9 +1,10 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, useEffect, useRef, useState } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
+import { clearAppQueryClient } from "@/lib/query-client";
 import { host } from "./host";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
@@ -81,6 +82,10 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number): Promise<
     }),
   ]);
 };
+
+beforeEach(async () => {
+  await clearAppQueryClient();
+});
 
 type HookArgs = Parameters<typeof useWorkspaceOperations>[0];
 
