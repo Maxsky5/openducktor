@@ -238,7 +238,10 @@ impl GitCliPort {
     }
 
     pub(super) fn get_status_unchecked(&self, repo_path: &Path) -> Result<Vec<GitFileStatus>> {
-        let output = self.run_git(repo_path, &["status", "--porcelain=v1"])?;
+        let output = self.run_git(
+            repo_path,
+            &["status", "--porcelain=v1", "--untracked-files=all"],
+        )?;
         Ok(parse_status_porcelain(&output))
     }
 
@@ -491,20 +494,73 @@ fn build_untracked_file_diffs(
     existing_files: &HashSet<String>,
 ) -> Result<Vec<GitFileDiff>> {
     let mut results = Vec::new();
+    let mut seen_files = existing_files.clone();
 
     for status in file_statuses {
-        if status.status != "untracked" || existing_files.contains(&status.path) {
+        if status.status != "untracked" {
             continue;
         }
 
-        results.push(build_untracked_file_diff(
-            git,
-            repo_path,
-            status.path.as_str(),
-        )?);
+        for file_path in expand_untracked_status_paths(git, repo_path, status.path.as_str())? {
+            if seen_files.contains(&file_path) {
+                continue;
+            }
+
+            results.push(build_untracked_file_diff(
+                git,
+                repo_path,
+                file_path.as_str(),
+            )?);
+            seen_files.insert(file_path);
+        }
     }
 
     Ok(results)
+}
+
+fn expand_untracked_status_paths(
+    git: &GitCliPort,
+    repo_path: &Path,
+    status_path: &str,
+) -> Result<Vec<String>> {
+    let trimmed_path = status_path.trim();
+    if trimmed_path.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    if !repo_path.join(trimmed_path).is_dir() {
+        return Ok(vec![trimmed_path.to_string()]);
+    }
+
+    let args = [
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "--",
+        trimmed_path,
+    ];
+    let (ok, stdout, stderr) = git.run_git_allow_failure(repo_path, &args)?;
+    if !ok {
+        return Err(anyhow!(
+            "git ls-files --others --exclude-standard -- {trimmed_path} failed: {}",
+            combine_output(stdout, stderr)
+        ));
+    }
+
+    let file_paths = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    if file_paths.is_empty() {
+        return Err(anyhow!(
+            "git ls-files --others --exclude-standard -- {trimmed_path} returned no files"
+        ));
+    }
+
+    Ok(file_paths)
 }
 
 fn build_untracked_file_diff(

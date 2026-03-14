@@ -249,6 +249,9 @@ fn get_worktree_status_honors_diff_scope_uncommitted_vs_target() {
     .expect("tracked uncommitted file should write");
     fs::write(repo.path.join("untracked_only.txt"), "new file\n")
         .expect("untracked file should write");
+    fs::create_dir_all(repo.path.join("dir")).expect("untracked directory should write");
+    fs::write(repo.path.join("dir/nested.txt"), "nested file\n")
+        .expect("nested untracked file should write");
 
     let git = GitCliPort::new();
     let target_scope = git
@@ -282,6 +285,15 @@ fn get_worktree_status_honors_diff_scope_uncommitted_vs_target() {
         "target scope should include untracked working tree files"
     );
     assert!(
+        target_scope.file_diffs.iter().any(|diff| {
+            diff.file == "dir/nested.txt"
+                && diff.diff_type == "added"
+                && diff.additions == 1
+                && diff.deletions == 0
+        }),
+        "target scope should expand untracked directories into file diffs"
+    );
+    assert!(
         uncommitted_scope
             .file_diffs
             .iter()
@@ -299,11 +311,35 @@ fn get_worktree_status_honors_diff_scope_uncommitted_vs_target() {
         "uncommitted scope should include untracked file diffs"
     );
     assert!(
+        uncommitted_scope.file_diffs.iter().any(|diff| {
+            diff.file == "dir/nested.txt"
+                && diff.diff_type == "added"
+                && diff.additions == 1
+                && diff.deletions == 0
+                && diff.diff.contains("+++ b/dir/nested.txt")
+        }),
+        "uncommitted scope should expand untracked directories into file diffs"
+    );
+    assert!(
         !uncommitted_scope
             .file_diffs
             .iter()
             .any(|diff| diff.file == "committed_only.txt"),
         "uncommitted scope should exclude already committed feature-only changes"
+    );
+    assert!(
+        uncommitted_scope
+            .file_statuses
+            .iter()
+            .any(|status| status.path == "dir/nested.txt" && status.status == "untracked"),
+        "status output should report untracked files individually"
+    );
+    assert!(
+        !uncommitted_scope
+            .file_statuses
+            .iter()
+            .any(|status| status.path == "dir/"),
+        "status output should not collapse untracked directories"
     );
 }
 
