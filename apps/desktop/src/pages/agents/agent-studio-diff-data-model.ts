@@ -307,7 +307,7 @@ const finalizeCompletedState = (
   return {
     byScope: nextByScope,
     loadedByScope: nextLoadedByScope,
-    isLoading: false,
+    isLoading: previousState.isLoading,
   };
 };
 
@@ -521,7 +521,7 @@ export const applyScopeError = ({
       [scope]: nextScopeSnapshot,
     },
     loadedByScope: nextLoadedByScope,
-    isLoading: false,
+    isLoading: state.isLoading,
   };
 };
 

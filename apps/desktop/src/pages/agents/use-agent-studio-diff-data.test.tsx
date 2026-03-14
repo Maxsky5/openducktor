@@ -1799,6 +1799,93 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("keeps loading active until the latest diff scope request settles", async () => {
+    const targetRequest = createDeferred<GitWorktreeStatus>();
+    const uncommittedRequest = createDeferred<GitWorktreeStatus>();
+
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        const deferred = diffScope === "uncommitted" ? uncommittedRequest : targetRequest;
+        return deferred.promise.then((snapshot) => ({
+          ...snapshot,
+          snapshot: {
+            ...snapshot.snapshot,
+            targetBranch,
+            diffScope: diffScope ?? snapshot.snapshot.diffScope,
+            effectiveWorkingDir: workingDir ?? snapshot.snapshot.effectiveWorkingDir,
+          },
+        }));
+      },
+    );
+
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.isLoading);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      targetRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/target", detached: false },
+          fileStatuses: [{ path: "src/target.ts", status: "M", staged: false }],
+          fileDiffs: [
+            {
+              file: "src/target.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -1 +1 @@",
+            },
+          ],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "target",
+            observedAtMs: 1731000001000,
+          },
+        }),
+      );
+
+      await harness.run(async () => {
+        await Promise.resolve();
+      });
+
+      expect(harness.getLatest().isLoading).toBe(true);
+
+      uncommittedRequest.resolve(
+        withSnapshotHashes({
+          currentBranch: { name: "feature/uncommitted", detached: false },
+          fileStatuses: [{ path: "src/uncommitted.ts", status: "M", staged: false }],
+          fileDiffs: [],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: "/repo",
+            targetBranch: "origin/main",
+            diffScope: "uncommitted",
+            observedAtMs: 1731000002000,
+          },
+        }),
+      );
+
+      await harness.waitFor((state) => !state.isLoading && state.diffScope === "uncommitted");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("replays queued full refreshes after an in-flight refresh settles", async () => {
     const firstRequest = createDeferred<GitWorktreeStatus>();
     const secondRequest = createDeferred<GitWorktreeStatus>();

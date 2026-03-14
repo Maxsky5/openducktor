@@ -120,6 +120,7 @@ export function useAgentStudioDiffController({
   const requestSequenceRef = useRef(0);
   const inFlightScopeRequestRef = useRef(createInFlightState());
   const queuedFullReloadByScopeRef = useRef(createQueuedReloadState());
+  const latestLoadingRequestSequenceRef = useRef<number | null>(null);
   const requestContextKeyRef = useRef<string | null>(null);
 
   const repoPathRef = useRef(repoPath);
@@ -139,7 +140,22 @@ export function useAgentStudioDiffController({
       }
       queuedFullReloadByScopeRef.current[scope] = false;
     }
+    latestLoadingRequestSequenceRef.current = null;
     requestSequenceRef.current = 0;
+  }, []);
+
+  const setBatchLoading = useCallback((isLoading: boolean): void => {
+    setControllerState((previousState) =>
+      previousState.batchState.isLoading === isLoading
+        ? previousState
+        : {
+            ...previousState,
+            batchState: {
+              ...previousState.batchState,
+              isLoading,
+            },
+          },
+    );
   }, []);
 
   const resetControllerState = useCallback(
@@ -312,14 +328,8 @@ export function useAgentStudioDiffController({
       const requestSequence = ++requestSequenceRef.current;
 
       if (showLoading) {
-        setControllerState((previousState) =>
-          previousState.batchState.isLoading
-            ? previousState
-            : {
-                ...previousState,
-                batchState: { ...previousState.batchState, isLoading: true },
-              },
-        );
+        latestLoadingRequestSequenceRef.current = requestSequence;
+        setBatchLoading(true);
       }
 
       try {
@@ -372,6 +382,14 @@ export function useAgentStudioDiffController({
           inFlightScopeRequestRef.current[loadContext.scope][mode] = null;
         }
 
+        if (
+          showLoading &&
+          latestLoadingRequestSequenceRef.current === requestSequence
+        ) {
+          latestLoadingRequestSequenceRef.current = null;
+          setBatchLoading(false);
+        }
+
         if (mode === "full" && queuedFullReloadByScopeRef.current[loadContext.scope]) {
           queuedFullReloadByScopeRef.current[loadContext.scope] = false;
           globalThis.queueMicrotask(() => {
@@ -386,7 +404,7 @@ export function useAgentStudioDiffController({
         }
       }
     },
-    [hasLoadContextChanged, runFullLoad, runSummaryLoad],
+    [hasLoadContextChanged, runFullLoad, runSummaryLoad, setBatchLoading],
   );
 
   const pendingFullReload = controllerState.pendingFullReloads[0];
