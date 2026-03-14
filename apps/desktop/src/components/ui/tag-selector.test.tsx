@@ -84,4 +84,38 @@ describe("TagSelector", () => {
 
     expect(labels).toEqual([]);
   });
+
+  test("prevents empty enter from bubbling to the parent form", () => {
+    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer!: ReactTestRenderer;
+    let prevented = false;
+
+    function Harness() {
+      const [value, setValue] = useState(["backend"]);
+      return (
+        <TagSelector
+          value={value}
+          suggestions={["frontend", "design-system"]}
+          onChange={setValue}
+        />
+      );
+    }
+
+    act(() => {
+      renderer = create(<Harness />);
+    });
+
+    const input = renderer.root.findByType("input");
+
+    act(() => {
+      input.props.onKeyDown({
+        key: "Enter",
+        preventDefault() {
+          prevented = true;
+        },
+      });
+    });
+
+    expect(prevented).toBe(true);
+  });
 });

@@ -73,7 +73,15 @@ export function TagSelector({
       return;
     }
 
-    if ((event.key === "Enter" || event.key === ",") && candidateTag) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (candidateTag) {
+        addTag(candidateTag);
+      }
+      return;
+    }
+
+    if (event.key === "," && candidateTag) {
       event.preventDefault();
       addTag(candidateTag);
       return;
