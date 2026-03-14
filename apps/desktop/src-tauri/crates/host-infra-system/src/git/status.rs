@@ -3,7 +3,7 @@ use host_domain::{
     GitAheadBehind, GitDiffScope, GitFileDiff, GitFileStatus, GitFileStatusCounts,
     GitUpstreamAheadBehind, GitWorktreeStatusData, GitWorktreeStatusSummaryData,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use super::util::{combine_output, normalize_non_empty};
@@ -49,7 +49,8 @@ impl GitCliPort {
         target_branch: Option<&str>,
     ) -> Result<Vec<GitFileDiff>> {
         self.ensure_repository(repo_path)?;
-        self.get_diff_unchecked(repo_path, target_branch)
+        let file_statuses = self.get_status_unchecked(repo_path)?;
+        self.get_diff_unchecked(repo_path, target_branch, file_statuses.as_slice())
     }
 
     pub(super) fn commits_ahead_behind_impl(
@@ -88,10 +89,10 @@ impl GitCliPort {
                     rayon::join(
                         || self.get_status_unchecked(repo_path),
                         || match diff_scope {
-                            GitDiffScope::Target if effective_target_branch.is_none() => {
-                                Ok(Vec::new())
-                            }
-                            _ => self.get_diff_unchecked(repo_path, diff_target),
+                            GitDiffScope::Target if effective_target_branch.is_none() => Ok(None),
+                            _ => self
+                                .load_diff_payload_unchecked(repo_path, diff_target)
+                                .map(Some),
                         },
                     )
                 },
@@ -116,9 +117,20 @@ impl GitCliPort {
             )
         })?;
 
-        let ((file_statuses, file_diffs), (target_ahead_behind, upstream_target_result)) = joined;
+        let ((file_statuses, raw_diff_payload), (target_ahead_behind, upstream_target_result)) =
+            joined;
         let file_statuses = file_statuses?;
-        let file_diffs = file_diffs?;
+        let raw_diff_payload = raw_diff_payload?;
+        let file_diffs = match raw_diff_payload {
+            Some((numstat_stdout, diff_stdout)) => build_file_diffs(
+                self,
+                repo_path,
+                file_statuses.as_slice(),
+                &numstat_stdout,
+                &diff_stdout,
+            )?,
+            None => Vec::new(),
+        };
         let target_ahead_behind = target_ahead_behind?;
 
         let upstream_ahead_behind = match upstream_target_result {
@@ -234,7 +246,25 @@ impl GitCliPort {
         &self,
         repo_path: &Path,
         target_branch: Option<&str>,
+        file_statuses: &[GitFileStatus],
     ) -> Result<Vec<GitFileDiff>> {
+        let (numstat_stdout, diff_stdout) =
+            self.load_diff_payload_unchecked(repo_path, target_branch)?;
+
+        build_file_diffs(
+            self,
+            repo_path,
+            file_statuses,
+            &numstat_stdout,
+            &diff_stdout,
+        )
+    }
+
+    fn load_diff_payload_unchecked(
+        &self,
+        repo_path: &Path,
+        target_branch: Option<&str>,
+    ) -> Result<(String, String)> {
         let diff_spec = target_branch
             .map(|value| value.trim().to_string())
             .unwrap_or_default();
@@ -264,7 +294,7 @@ impl GitCliPort {
             ));
         }
 
-        Ok(build_file_diffs(&numstat_stdout, &diff_stdout))
+        Ok((numstat_stdout, diff_stdout))
     }
 
     pub(super) fn commits_ahead_behind_unchecked(
@@ -347,7 +377,13 @@ fn porcelain_char_to_status(ch: char) -> String {
     .to_string()
 }
 
-fn build_file_diffs(numstat: &str, full_diff: &str) -> Vec<GitFileDiff> {
+fn build_file_diffs(
+    git: &GitCliPort,
+    repo_path: &Path,
+    file_statuses: &[GitFileStatus],
+    numstat: &str,
+    full_diff: &str,
+) -> Result<Vec<GitFileDiff>> {
     let stats: HashMap<String, (u32, u32)> = numstat
         .lines()
         .filter_map(|line| {
@@ -357,7 +393,7 @@ fn build_file_diffs(numstat: &str, full_diff: &str) -> Vec<GitFileDiff> {
             }
             let adds = parts[0].parse::<u32>().unwrap_or(0);
             let dels = parts[1].parse::<u32>().unwrap_or(0);
-            let file = parts[2..].join("\t");
+            let file = normalize_numstat_file_path(parts[2..].join("\t"));
             Some((file, (adds, dels)))
         })
         .collect();
@@ -389,8 +425,153 @@ fn build_file_diffs(numstat: &str, full_diff: &str) -> Vec<GitFileDiff> {
         }
     }
 
+    let existing_files = results
+        .iter()
+        .map(|diff| diff.file.clone())
+        .collect::<HashSet<_>>();
+    results.extend(build_untracked_file_diffs(
+        git,
+        repo_path,
+        file_statuses,
+        &existing_files,
+    )?);
+
     results.sort_by(|a, b| a.file.cmp(&b.file));
-    results
+    Ok(results)
+}
+
+fn normalize_numstat_file_path(file: String) -> String {
+    let mut normalized = file.trim().to_string();
+
+    while let Some(start) = normalized.find('{') {
+        let Some(relative_end) = normalized[start..].find('}') else {
+            break;
+        };
+        let end = start + relative_end;
+        let segment = &normalized[start + 1..end];
+        let Some((_, replacement)) = segment.split_once(" => ") else {
+            break;
+        };
+
+        normalized = format!(
+            "{}{}{}",
+            &normalized[..start],
+            replacement,
+            &normalized[end + 1..]
+        );
+    }
+
+    if let Some(stripped) = normalized.strip_prefix("/dev/null => ") {
+        return stripped.to_string();
+    }
+
+    if let Some(stripped) = normalized.strip_suffix(" => /dev/null") {
+        return stripped.to_string();
+    }
+
+    if normalized.contains(" => ") {
+        let mut parts = normalized.rsplitn(2, " => ");
+        let right = parts.next().unwrap_or_default();
+        let left = parts.next().unwrap_or_default();
+        if !right.is_empty() {
+            return right.to_string();
+        }
+        if !left.is_empty() {
+            return left.to_string();
+        }
+    }
+
+    normalized
+}
+
+fn build_untracked_file_diffs(
+    git: &GitCliPort,
+    repo_path: &Path,
+    file_statuses: &[GitFileStatus],
+    existing_files: &HashSet<String>,
+) -> Result<Vec<GitFileDiff>> {
+    let mut results = Vec::new();
+
+    for status in file_statuses {
+        if status.status != "untracked" || existing_files.contains(&status.path) {
+            continue;
+        }
+
+        results.push(build_untracked_file_diff(
+            git,
+            repo_path,
+            status.path.as_str(),
+        )?);
+    }
+
+    Ok(results)
+}
+
+fn build_untracked_file_diff(
+    git: &GitCliPort,
+    repo_path: &Path,
+    file_path: &str,
+) -> Result<GitFileDiff> {
+    let (numstat_stdout, diff_stdout) = load_no_index_diff_payload(git, repo_path, file_path)?;
+    let diffs = build_file_diffs(git, repo_path, &[], &numstat_stdout, &diff_stdout)?;
+    let diff = diffs
+        .into_iter()
+        .find(|candidate| candidate.file == file_path)
+        .ok_or_else(|| {
+            anyhow!("git diff --no-index produced no matching diff entry for {file_path}")
+        })?;
+
+    Ok(diff)
+}
+
+fn load_no_index_diff_payload(
+    git: &GitCliPort,
+    repo_path: &Path,
+    file_path: &str,
+) -> Result<(String, String)> {
+    let numstat_args = [
+        "diff",
+        "--no-index",
+        "--numstat",
+        "--",
+        "/dev/null",
+        file_path,
+    ];
+    let (numstat_ok, numstat_stdout, numstat_stderr) =
+        git.run_git_allow_failure(repo_path, &numstat_args)?;
+    let numstat_stdout = ensure_non_index_diff_output(
+        numstat_ok,
+        numstat_stdout,
+        numstat_stderr,
+        format!("git diff --no-index --numstat /dev/null {file_path}"),
+    )?;
+
+    let diff_args = ["diff", "--no-index", "--", "/dev/null", file_path];
+    let (diff_ok, diff_stdout, diff_stderr) = git.run_git_allow_failure(repo_path, &diff_args)?;
+    let diff_stdout = ensure_non_index_diff_output(
+        diff_ok,
+        diff_stdout,
+        diff_stderr,
+        format!("git diff --no-index /dev/null {file_path}"),
+    )?;
+
+    Ok((numstat_stdout, diff_stdout))
+}
+
+fn ensure_non_index_diff_output(
+    ok: bool,
+    stdout: String,
+    stderr: String,
+    command_description: String,
+) -> Result<String> {
+    if ok || !stdout.trim().is_empty() {
+        return Ok(stdout);
+    }
+
+    Err(anyhow!(
+        "{command_description} failed: {}",
+        combine_output(stdout, stderr)
+    ))
 }
 
 fn split_diff_by_file(full_diff: &str) -> Vec<(String, String)> {

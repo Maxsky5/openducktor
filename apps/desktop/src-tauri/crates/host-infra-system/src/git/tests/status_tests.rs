@@ -247,6 +247,8 @@ fn get_worktree_status_honors_diff_scope_uncommitted_vs_target() {
         "# OpenDucktor\ntracked-uncommitted-change\n",
     )
     .expect("tracked uncommitted file should write");
+    fs::write(repo.path.join("untracked_only.txt"), "new file\n")
+        .expect("untracked file should write");
 
     let git = GitCliPort::new();
     let target_scope = git
@@ -271,11 +273,30 @@ fn get_worktree_status_honors_diff_scope_uncommitted_vs_target() {
         "target scope should include tracked uncommitted working tree changes"
     );
     assert!(
+        target_scope.file_diffs.iter().any(|diff| {
+            diff.file == "untracked_only.txt"
+                && diff.diff_type == "added"
+                && diff.additions == 1
+                && diff.deletions == 0
+        }),
+        "target scope should include untracked working tree files"
+    );
+    assert!(
         uncommitted_scope
             .file_diffs
             .iter()
             .any(|diff| diff.file == "README.md"),
         "uncommitted scope should include tracked working tree changes"
+    );
+    assert!(
+        uncommitted_scope.file_diffs.iter().any(|diff| {
+            diff.file == "untracked_only.txt"
+                && diff.diff_type == "added"
+                && diff.additions == 1
+                && diff.deletions == 0
+                && diff.diff.contains("+++ b/untracked_only.txt")
+        }),
+        "uncommitted scope should include untracked file diffs"
     );
     assert!(
         !uncommitted_scope
