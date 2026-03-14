@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { CheckSquare, CircleHelp, FileCode, ShieldCheck } from "lucide-react";
+import { CircleHelp, FileCode, ShieldCheck } from "lucide-react";
 import type { ReactElement } from "react";
 import {
   TaskDetailsAsyncDocumentSection,
@@ -10,7 +10,6 @@ import {
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 
 const DESCRIPTION_ICON = <CircleHelp className="size-3.5" />;
-const ACCEPTANCE_CRITERIA_ICON = <CheckSquare className="size-3.5" />;
 const SPEC_ICON = <FileCode className="size-3.5" />;
 const QA_ICON = <ShieldCheck className="size-3.5" />;
 
@@ -60,15 +59,6 @@ export function TaskDetailsSheetBody({
         empty="No description yet."
         defaultExpanded
       />
-      <TaskDetailsDocumentSection
-        key={`${task.id}:acceptance-criteria`}
-        icon={ACCEPTANCE_CRITERIA_ICON}
-        title="Acceptance Criteria"
-        markdown={task.acceptanceCriteria}
-        updatedAt={null}
-        empty="No acceptance criteria yet."
-      />
-
       <TaskDetailsAsyncDocumentSection
         key={`${task.id}:spec`}
         icon={SPEC_ICON}

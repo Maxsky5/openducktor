@@ -154,7 +154,6 @@ export const createEnsureSessionReady = ({
         status: task.status,
         qaRequired: task.aiReviewEnabled,
         description: task.description,
-        acceptanceCriteria: task.acceptanceCriteria,
         specMarkdown: docs.specMarkdown,
         planMarkdown: docs.planMarkdown,
         latestQaReportMarkdown: docs.qaMarkdown,

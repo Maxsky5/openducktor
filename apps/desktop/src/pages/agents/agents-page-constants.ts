@@ -76,7 +76,6 @@ export const kickoffPromptForScenario = (
       status?: string;
       qaRequired?: boolean;
       description?: string;
-      acceptanceCriteria?: string;
       specMarkdown?: string;
       planMarkdown?: string;
       latestQaReportMarkdown?: string;
@@ -104,7 +103,6 @@ export const buildRebaseConflictResolutionPrompt = (
       status?: string;
       qaRequired?: boolean;
       description?: string;
-      acceptanceCriteria?: string;
       specMarkdown?: string;
       planMarkdown?: string;
       latestQaReportMarkdown?: string;

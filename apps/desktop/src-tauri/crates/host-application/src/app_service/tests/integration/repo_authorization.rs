@@ -52,7 +52,6 @@ fn task_update_rejects_unauthorized_repo_before_status_validation() {
             UpdateTaskPatch {
                 title: None,
                 description: None,
-                acceptance_criteria: None,
                 notes: None,
                 status: Some(TaskStatus::Closed),
                 priority: None,

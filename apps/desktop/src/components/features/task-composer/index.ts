@@ -10,6 +10,5 @@ export {
   collectKnownLabels,
   normalizeLines,
   toComposerState,
-  toParentComboboxOptions,
   toPriorityComboboxOptions,
 } from "./utils";

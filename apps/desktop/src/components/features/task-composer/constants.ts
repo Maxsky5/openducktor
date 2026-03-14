@@ -9,7 +9,7 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     icon: Sparkles,
     accentClass: "border-info-border bg-info-surface",
     iconClass: "bg-info-surface text-info-muted",
-    supportsParent: true,
+    indicatorClass: "border-info-border bg-info-surface text-info-muted",
   },
   {
     value: "bug",
@@ -18,7 +18,7 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     icon: Bug,
     accentClass: "border-destructive-border bg-destructive-surface",
     iconClass: "bg-destructive-surface text-destructive-muted",
-    supportsParent: true,
+    indicatorClass: "border-destructive-border bg-destructive-surface text-destructive-muted",
   },
   {
     value: "task",
@@ -27,7 +27,7 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     icon: ListTodo,
     accentClass: "border-input bg-muted/80",
     iconClass: "bg-secondary text-foreground",
-    supportsParent: true,
+    indicatorClass: "border-input bg-secondary text-foreground",
   },
   {
     value: "epic",
@@ -36,7 +36,7 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     icon: Layers3,
     accentClass: "border-pending-border bg-pending-surface",
     iconClass: "bg-pending-surface text-pending-muted",
-    supportsParent: false,
+    indicatorClass: "border-pending-border bg-pending-surface text-pending-muted",
   },
 ];
 

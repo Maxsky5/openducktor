@@ -43,7 +43,6 @@ impl BeadsTaskStore {
             id: issue.id,
             title: issue.title,
             description: issue.description,
-            acceptance_criteria: issue.acceptance_criteria,
             notes: issue.notes,
             status,
             priority: issue.priority,

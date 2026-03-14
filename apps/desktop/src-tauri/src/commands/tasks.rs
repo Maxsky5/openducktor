@@ -9,7 +9,6 @@ pub(crate) fn map_task_create_payload(input: TaskCreatePayload) -> Result<Create
         issue_type: parse_issue_type(&input.issue_type, "issueType")?,
         priority: input.priority,
         description: input.description,
-        acceptance_criteria: input.acceptance_criteria,
         labels: input.labels,
         ai_review_enabled: input.ai_review_enabled,
         parent_id: input.parent_id,
@@ -25,7 +24,6 @@ pub(crate) fn map_task_update_payload(patch: TaskUpdatePayload) -> Result<Update
     Ok(UpdateTaskPatch {
         title: patch.title,
         description: patch.description,
-        acceptance_criteria: patch.acceptance_criteria,
         notes: None,
         status: None,
         priority: patch.priority,
@@ -132,7 +130,6 @@ mod tests {
             issue_type: "epik".to_string(),
             priority: 2,
             description: None,
-            acceptance_criteria: None,
             labels: None,
             ai_review_enabled: None,
             parent_id: None,
@@ -148,7 +145,6 @@ mod tests {
         let error = map_task_update_payload(TaskUpdatePayload {
             title: None,
             description: None,
-            acceptance_criteria: None,
             priority: None,
             issue_type: Some("bugg".to_string()),
             ai_review_enabled: None,
@@ -166,7 +162,6 @@ mod tests {
         let patch = map_task_update_payload(TaskUpdatePayload {
             title: None,
             description: None,
-            acceptance_criteria: None,
             priority: None,
             issue_type: Some("feature".to_string()),
             ai_review_enabled: None,

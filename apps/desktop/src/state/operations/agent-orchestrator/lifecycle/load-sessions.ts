@@ -466,7 +466,6 @@ export const createLoadAgentSessions = ({
                   status: task.status,
                   qaRequired: task.aiReviewEnabled,
                   description: task.description,
-                  acceptanceCriteria: task.acceptanceCriteria,
                   specMarkdown: "",
                   planMarkdown: "",
                   latestQaReportMarkdown: "",

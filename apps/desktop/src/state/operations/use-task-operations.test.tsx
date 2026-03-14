@@ -35,7 +35,6 @@ const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({
   id,
   title: id,
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status,
   priority: 2,
@@ -690,7 +689,6 @@ describe("use-task-operations", () => {
       priority: 2,
       labels: [],
       description: "",
-      acceptanceCriteria: "",
     };
 
     try {
@@ -746,7 +744,6 @@ describe("use-task-operations", () => {
             priority: 2,
             labels: [],
             description: "",
-            acceptanceCriteria: "",
           });
         }),
       ).rejects.toThrow("Select a workspace first.");

@@ -257,7 +257,6 @@ pub(crate) fn normalize_subtask_plan_inputs(
             issue_type: issue_type.clone(),
             priority,
             description,
-            acceptance_criteria: None,
             labels: None,
             ai_review_enabled: Some(default_qa_required_for_issue_type(&issue_type)),
             parent_id: None,

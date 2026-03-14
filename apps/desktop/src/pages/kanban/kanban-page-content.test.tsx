@@ -54,7 +54,7 @@ describe("KanbanPageContent", () => {
     );
 
     expect(html).toContain('data-testid="kanban-loading-overlay"');
-    expect(html.match(/data-testid="kanban-loading-lane"/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(html.match(/data-testid="kanban-loading-lane"/g)?.length).toBe(8);
     expect(html).toContain('data-slot="skeleton"');
     expect(html).not.toContain('data-testid="kanban-refresh-indicator"');
   });

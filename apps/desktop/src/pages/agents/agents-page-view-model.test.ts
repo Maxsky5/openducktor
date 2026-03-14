@@ -15,7 +15,6 @@ const createTaskCard = (id: string): TaskCard => ({
   id,
   title: `Task ${id}`,
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status: "open",
   priority: 2,

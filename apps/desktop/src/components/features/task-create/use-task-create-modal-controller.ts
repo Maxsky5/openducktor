@@ -1,11 +1,10 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { IssueType, TaskCard } from "@openducktor/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TaskDocumentSection } from "@/components/features/task-composer";
 import {
   collectKnownLabels,
-  ISSUE_TYPE_OPTIONS,
+  ISSUE_TYPE_DEFAULTS,
   toComposerState,
-  toParentComboboxOptions,
   toPriorityComboboxOptions,
   useTaskDocumentEditorState,
 } from "@/components/features/task-composer";
@@ -53,6 +52,9 @@ export function useTaskCreateModalController({
   const [step, setStep] = useState<ComposerStep>("type");
   const [editSection, setEditSection] = useState<EditTaskSection>("details");
   const [state, setState] = useState<ComposerState>(() => toComposerState(task));
+  const [selectedCreateIssueType, setSelectedCreateIssueType] = useState<IssueType | null>(
+    task?.issueType ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,6 +97,7 @@ export function useTaskCreateModalController({
     }
 
     setState(toComposerState(task));
+    setSelectedCreateIssueType(task?.issueType ?? null);
     setStep(task ? "details" : "type");
     setEditSection("details");
     setError(null);
@@ -104,33 +107,8 @@ export function useTaskCreateModalController({
     setPendingDiscardIntent(null);
   }, [open, task, taskId]);
 
-  const selectedType = useMemo(
-    () => ISSUE_TYPE_OPTIONS.find((option) => option.value === state.issueType),
-    [state.issueType],
-  );
-  const canSelectParent = selectedType?.supportsParent ?? true;
-
-  useEffect(() => {
-    if (!canSelectParent && state.parentId.length > 0) {
-      setState((current) => ({ ...current, parentId: "" }));
-    }
-  }, [canSelectParent, state.parentId]);
-
-  const parentCandidates = useMemo(
-    () =>
-      tasks
-        .filter((entry) => entry.id !== task?.id)
-        .filter((entry) => entry.issueType === "epic")
-        .sort((left, right) => left.id.localeCompare(right.id)),
-    [task?.id, tasks],
-  );
-
   const knownLabels = useMemo(() => collectKnownLabels(tasks), [tasks]);
   const priorityComboboxOptions = useMemo(() => toPriorityComboboxOptions(), []);
-  const parentComboboxOptions = useMemo(
-    () => toParentComboboxOptions(parentCandidates),
-    [parentCandidates],
-  );
 
   const isSpecDirty =
     documents.spec.loaded && documents.spec.draftMarkdown !== documents.spec.serverMarkdown;
@@ -156,6 +134,16 @@ export function useTaskCreateModalController({
 
   const updateState = (patch: Partial<ComposerState>): void => {
     setState((current) => ({ ...current, ...patch }));
+  };
+
+  const selectCreateIssueType = (issueType: IssueType): void => {
+    setSelectedCreateIssueType(issueType);
+    setState((current) => ({
+      ...current,
+      issueType,
+      aiReviewEnabled: ISSUE_TYPE_DEFAULTS[issueType].aiReviewEnabled,
+    }));
+    setStep("details");
   };
 
   const discardCurrentDocumentDraft = (): void => {
@@ -208,9 +196,9 @@ export function useTaskCreateModalController({
     setIsSubmitting(true);
     try {
       if (mode === "create") {
-        await createTask(toTaskCreateInput(state, canSelectParent));
+        await createTask(toTaskCreateInput(state));
       } else if (task) {
-        await updateTask(task.id, toTaskUpdatePatch(state, canSelectParent));
+        await updateTask(task.id, toTaskUpdatePatch(state));
       }
       onOpenChange(false);
     } catch (reason) {
@@ -278,6 +266,7 @@ export function useTaskCreateModalController({
     taskId,
     step,
     setStep,
+    selectedCreateIssueType,
     editSection,
     state,
     documents,
@@ -286,10 +275,8 @@ export function useTaskCreateModalController({
     activeDocument,
     activeDraft,
     pendingDiscardIntent,
-    canSelectParent,
     knownLabels,
     priorityComboboxOptions,
-    parentComboboxOptions,
     isSpecDirty,
     isPlanDirty,
     isSubmitting,
@@ -300,6 +287,7 @@ export function useTaskCreateModalController({
     footerError,
     isActiveDocumentDirty,
     updateState,
+    selectCreateIssueType,
     setDocumentView,
     updateDocumentDraft,
     loadDocumentSection,

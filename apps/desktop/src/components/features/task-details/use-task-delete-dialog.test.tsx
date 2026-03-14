@@ -20,7 +20,6 @@ const makeTask = (id: string): TaskCard => ({
   id,
   title: id,
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status: "open",
   priority: 2,

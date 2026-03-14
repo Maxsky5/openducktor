@@ -3,7 +3,7 @@ import { GitBranch } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { Badge } from "@/components/ui/badge";
-import { statusBadgeVariant, statusLabel } from "@/lib/task-display";
+import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 
 type TaskDetailsSubtasksProps = {
   subtasks: TaskCard[];
@@ -33,7 +33,7 @@ export const TaskDetailsSubtasks = memo(
                       {subtask.id}
                     </p>
                   </div>
-                  <Badge variant={statusBadgeVariant(subtask.status)}>
+                  <Badge variant="outline" className={statusBadgeClassName(subtask.status)}>
                     {statusLabel(subtask.status)}
                   </Badge>
                 </div>

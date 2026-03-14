@@ -112,7 +112,6 @@ pub struct TaskCard {
     pub id: String,
     pub title: String,
     pub description: String,
-    pub acceptance_criteria: String,
     pub notes: String,
     pub status: TaskStatus,
     pub priority: i32,
@@ -138,7 +137,6 @@ pub struct CreateTaskInput {
     pub issue_type: IssueType,
     pub priority: i32,
     pub description: Option<String>,
-    pub acceptance_criteria: Option<String>,
     pub labels: Option<Vec<String>>,
     pub ai_review_enabled: Option<bool>,
     pub parent_id: Option<String>,
@@ -158,7 +156,6 @@ pub struct PlanSubtaskInput {
 pub struct UpdateTaskPatch {
     pub title: Option<String>,
     pub description: Option<String>,
-    pub acceptance_criteria: Option<String>,
     pub notes: Option<String>,
     pub status: Option<TaskStatus>,
     pub priority: Option<i32>,

@@ -13,9 +13,7 @@ const baseState: ComposerState = {
   title: "  Implement sync  ",
   priority: 2,
   description: "line one\n\nline two",
-  acceptanceCriteria: "a\n\n b ",
   labels: ["backend", "urgent"],
-  parentId: "ep-1",
 };
 
 describe("task-create-modal-model", () => {
@@ -26,26 +24,22 @@ describe("task-create-modal-model", () => {
   });
 
   test("builds create payload with normalized multi-line content", () => {
-    expect(toTaskCreateInput(baseState, true)).toEqual({
+    expect(toTaskCreateInput(baseState)).toEqual({
       title: "Implement sync",
       issueType: "epic",
       aiReviewEnabled: true,
       priority: 2,
       description: "line one\n\nline two",
-      acceptanceCriteria: "a\n\n b",
       labels: ["backend", "urgent"],
-      parentId: "ep-1",
     });
   });
 
-  test("drops parent on create when parent cannot be selected", () => {
-    expect(toTaskCreateInput(baseState, false).parentId).toBeUndefined();
-    expect(toTaskCreateInput({ ...baseState, parentId: "" }, true).parentId).toBeUndefined();
+  test("does not include parent on create", () => {
+    expect(toTaskCreateInput(baseState).parentId).toBeUndefined();
   });
 
-  test("builds update patch and clears parent sentinel", () => {
-    expect(toTaskUpdatePatch({ ...baseState, parentId: "__none__" }, true).parentId).toBe("");
-    expect(toTaskUpdatePatch(baseState, false).parentId).toBe("");
+  test("builds update patch without parent changes", () => {
+    expect(toTaskUpdatePatch(baseState).parentId).toBeUndefined();
   });
 
   test("reports unsaved document changes by active section", () => {

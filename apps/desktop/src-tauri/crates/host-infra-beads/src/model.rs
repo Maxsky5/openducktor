@@ -9,8 +9,6 @@ pub(crate) struct RawIssue {
     #[serde(default)]
     pub(crate) description: String,
     #[serde(default)]
-    pub(crate) acceptance_criteria: String,
-    #[serde(default)]
     pub(crate) notes: String,
     pub(crate) status: String,
     #[serde(default)]

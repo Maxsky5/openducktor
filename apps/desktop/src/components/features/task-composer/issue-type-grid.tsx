@@ -1,22 +1,22 @@
+import type { IssueType } from "@openducktor/contracts";
 import { Check } from "lucide-react";
 import type { ReactElement } from "react";
-import {
-  ISSUE_TYPE_DEFAULTS,
-  ISSUE_TYPE_OPTIONS,
-} from "@/components/features/task-composer/constants";
+import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
 import { cn } from "@/lib/utils";
-import type { ComposerState } from "@/types/task-composer";
 
 type IssueTypeGridProps = {
-  state: ComposerState;
-  onStateChange: (patch: Partial<ComposerState>) => void;
+  selectedIssueType: IssueType | null;
+  onSelectIssueType: (issueType: IssueType) => void;
 };
 
-export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): ReactElement {
+export function IssueTypeGrid({
+  selectedIssueType,
+  onSelectIssueType,
+}: IssueTypeGridProps): ReactElement {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2 mt-5">
       {ISSUE_TYPE_OPTIONS.map((option) => {
-        const selected = state.issueType === option.value;
+        const selected = selectedIssueType === option.value;
         const Icon = option.icon;
         return (
           <button
@@ -24,23 +24,15 @@ export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): Rea
             type="button"
             className={cn(
               "group min-h-36 cursor-pointer rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-              selected
-                ? option.accentClass
-                : "border-border bg-card text-foreground hover:border-input hover:bg-muted",
+              option.accentClass,
             )}
-            onClick={() =>
-              onStateChange({
-                issueType: option.value,
-                aiReviewEnabled: ISSUE_TYPE_DEFAULTS[option.value].aiReviewEnabled,
-                parentId: option.supportsParent ? state.parentId : "",
-              })
-            }
+            onClick={() => onSelectIssueType(option.value)}
           >
             <div className="flex items-start justify-between gap-3">
               <span
                 className={cn(
                   "inline-flex size-9 items-center justify-center rounded-lg",
-                  selected ? option.iconClass : "bg-muted text-muted-foreground",
+                  option.iconClass,
                 )}
               >
                 <Icon className="size-4" />
@@ -48,9 +40,7 @@ export function IssueTypeGrid({ state, onStateChange }: IssueTypeGridProps): Rea
               <span
                 className={cn(
                   "inline-flex size-6 items-center justify-center rounded-full border transition-colors",
-                  selected
-                    ? "border-info-border bg-info-surface text-info-muted"
-                    : "border-input bg-card text-transparent",
+                  selected ? option.indicatorClass : "border-input bg-card text-transparent",
                 )}
               >
                 <Check className="size-3.5" />

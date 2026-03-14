@@ -47,44 +47,42 @@ export function TaskEditSectionSwitcher({
   ];
 
   return (
-    <div className="rounded-xl border border-border bg-muted/50 p-1">
-      <div className="flex flex-wrap gap-1">
-        {sections.map((item) => {
-          const isActive = item.id === section;
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => onSectionChange(item.id)}
-              className={cn(
-                "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
-                disabled ? "cursor-not-allowed opacity-60" : "",
-              )}
-              aria-pressed={isActive}
-            >
-              <Icon className="size-4" />
-              <span>{item.label}</span>
-              {item.hasUnsaved ? (
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                    isActive
-                      ? "bg-primary-foreground text-primary"
-                      : "bg-warning-surface text-warning-muted",
-                  )}
-                >
-                  Unsaved
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+    <div className="inline-flex h-10 w-full items-center gap-2 rounded-lg bg-muted p-1">
+      {sections.map((item) => {
+        const isActive = item.id === section;
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={isActive}
+            disabled={disabled}
+            onClick={() => onSectionChange(item.id)}
+            className={cn(
+              "inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors",
+              isActive
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background hover:text-foreground",
+              disabled ? "pointer-events-none opacity-60" : "",
+            )}
+          >
+            <Icon className="size-4" />
+            <span>{item.label}</span>
+            {item.hasUnsaved ? (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                  isActive
+                    ? "bg-primary-foreground text-primary"
+                    : "bg-warning-surface text-warning-muted",
+                )}
+              >
+                Unsaved
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

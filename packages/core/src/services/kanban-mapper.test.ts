@@ -6,7 +6,6 @@ const makeTask = (partial: Partial<TaskCard> & Pick<TaskCard, "id" | "title">): 
   id: partial.id,
   title: partial.title,
   description: partial.description ?? "",
-  acceptanceCriteria: partial.acceptanceCriteria ?? "",
   notes: partial.notes ?? "",
   status: partial.status ?? "open",
   priority: partial.priority ?? 2,

@@ -1,16 +1,7 @@
 import { Check, Plus, Tag, X } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type KeyboardEvent, type ReactElement, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type TagSelectorProps = {
@@ -28,10 +19,10 @@ export function TagSelector({
   onChange,
   suggestions = [],
   disabled = false,
-  placeholder = "Search or create label",
+  placeholder = "Type a label and press Enter",
 }: TagSelectorProps): ReactElement {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
 
   const selectedSet = useMemo(() => new Set(value), [value]);
   const allSuggestions = useMemo(() => {
@@ -39,25 +30,29 @@ export function TagSelector({
     return Array.from(merged).sort((left, right) => left.localeCompare(right));
   }, [suggestions, value]);
 
-  const filteredSuggestions = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      return allSuggestions;
-    }
-    return allSuggestions.filter((entry) => entry.toLowerCase().includes(q));
-  }, [allSuggestions, query]);
-
   const candidateTag = normalizeTag(query);
+  const filteredSuggestions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return allSuggestions.filter((label) => {
+      if (selectedSet.has(label)) {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+      return label.toLowerCase().includes(normalizedQuery);
+    });
+  }, [allSuggestions, query, selectedSet]);
+
   const canCreateCandidate =
     candidateTag.length > 0 &&
-    !allSuggestions.some((entry) => entry.toLowerCase() === candidateTag.toLowerCase());
+    !allSuggestions.some((label) => label.toLowerCase() === candidateTag.toLowerCase());
+  const shouldShowSuggestions =
+    !disabled && isFocused && (filteredSuggestions.length > 0 || canCreateCandidate);
 
   const addTag = (label: string): void => {
     const normalized = normalizeTag(label);
-    if (!normalized) {
-      return;
-    }
-    if (selectedSet.has(normalized)) {
+    if (!normalized || selectedSet.has(normalized)) {
       return;
     }
     onChange([...value, normalized]);
@@ -68,19 +63,50 @@ export function TagSelector({
     onChange(value.filter((entry) => entry !== label));
   };
 
-  const toggleTag = (label: string): void => {
-    if (selectedSet.has(label)) {
-      removeTag(label);
+  const selectSuggestion = (label: string): void => {
+    addTag(label);
+    setIsFocused(true);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (disabled) {
       return;
     }
-    addTag(label);
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (candidateTag) {
+        addTag(candidateTag);
+      }
+      return;
+    }
+
+    if (event.key === "," && candidateTag) {
+      event.preventDefault();
+      addTag(candidateTag);
+      return;
+    }
+
+    if (event.key === "Backspace" && query.length === 0 && value.length > 0) {
+      event.preventDefault();
+      removeTag(value[value.length - 1] ?? "");
+    }
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-md border border-input bg-card px-2 py-2">
-        {value.length > 0 ? (
-          value.map((label) => (
+    <div
+      className="space-y-2"
+      onFocusCapture={() => setIsFocused(true)}
+      onBlurCapture={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+        setIsFocused(false);
+      }}
+    >
+      <div className="rounded-md border border-input bg-card px-2 py-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
+        <div className="flex min-h-10 flex-wrap items-center gap-2">
+          {value.map((label) => (
             <Badge key={label} variant="secondary" className="gap-1.5 rounded-md px-2 py-1">
               <Tag className="size-3" />
               {label}
@@ -94,61 +120,49 @@ export function TagSelector({
                 <X className="size-3" />
               </button>
             </Badge>
-          ))
-        ) : (
-          <p className="px-1 text-sm text-muted-foreground">No labels selected</p>
-        )}
+          ))}
+
+          <Input
+            value={query}
+            disabled={disabled}
+            placeholder={value.length === 0 ? placeholder : "Add another label"}
+            className="h-8 min-w-[12rem] flex-1 border-0 bg-transparent px-1 py-0 shadow-none focus-visible:ring-0"
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
       </div>
 
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className="h-9 w-full cursor-pointer justify-start"
-          >
-            <Plus className="size-4" />
-            Add labels
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-          <Command>
-            <CommandInput
-              placeholder={placeholder}
-              value={query}
-              onValueChange={(nextValue) => setQuery(nextValue)}
-            />
-            <CommandList>
-              <CommandEmpty>No labels found.</CommandEmpty>
-              <CommandGroup>
-                {canCreateCandidate ? (
-                  <CommandItem
-                    value={`create ${candidateTag}`}
-                    onSelect={() => {
-                      addTag(candidateTag);
-                    }}
-                  >
-                    <Plus className="size-4 text-primary" />
-                    Create "{candidateTag}"
-                  </CommandItem>
-                ) : null}
-                {filteredSuggestions.map((label) => (
-                  <CommandItem key={label} value={label} onSelect={() => toggleTag(label)}>
-                    <Check
-                      className={cn(
-                        "size-4 text-primary transition-opacity",
-                        selectedSet.has(label) ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    <span>{label}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+      {shouldShowSuggestions ? (
+        <div className="rounded-md border border-border bg-popover p-1 shadow-sm">
+          {canCreateCandidate ? (
+            <button
+              type="button"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectSuggestion(candidateTag)}
+            >
+              <Plus className="size-4 text-primary" />
+              Create "{candidateTag}"
+            </button>
+          ) : null}
+
+          {filteredSuggestions.map((label) => (
+            <button
+              key={label}
+              type="button"
+              className={cn(
+                "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+              )}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectSuggestion(label)}
+            >
+              <Check className="size-4 text-primary" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

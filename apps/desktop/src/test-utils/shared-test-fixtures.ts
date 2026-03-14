@@ -5,7 +5,6 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   id: "task-1",
   title: "Task",
   description: "",
-  acceptanceCriteria: "",
   notes: "",
   status: "open",
   priority: 2,

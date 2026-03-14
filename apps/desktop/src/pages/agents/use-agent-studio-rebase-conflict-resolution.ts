@@ -182,7 +182,6 @@ export function useAgentStudioRebaseConflictResolution({
                 status: selection.viewSelectedTask.status,
                 qaRequired: selection.viewSelectedTask.aiReviewEnabled,
                 description: selection.viewSelectedTask.description,
-                acceptanceCriteria: selection.viewSelectedTask.acceptanceCriteria,
               },
             }
           : {}),
