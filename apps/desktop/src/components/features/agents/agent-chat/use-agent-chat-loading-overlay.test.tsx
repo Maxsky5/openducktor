@@ -226,7 +226,7 @@ describe("useAgentChatLoadingOverlay", () => {
       renderer?.update(
         createElement(Harness, {
           sessionId: "session-2",
-          isSessionViewLoading: true,
+          isSessionViewLoading: false,
           hasRenderableSessionRows: false,
           hasSessionHistory: false,
           isPreparingVirtualization: false,

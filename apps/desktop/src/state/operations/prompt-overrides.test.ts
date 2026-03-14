@@ -79,16 +79,26 @@ describe("loadEffectivePromptOverrides", () => {
     const firstLoad = loadEffectivePromptOverrides("/repo");
     const secondLoad = loadEffectivePromptOverrides("/repo");
 
-    expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);
-    expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
-
     repoDeferred.resolve(createRepoConfig());
     settingsDeferred.resolve(createSettingsSnapshot());
 
     const [firstResult, secondResult] = await Promise.all([firstLoad, secondLoad]);
 
+    expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);
+    expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
     expect(firstResult).toEqual(secondResult);
     expect(firstResult["kickoff.spec_initial"]?.template).toBe("global kickoff {{task.id}}");
     expect(firstResult["kickoff.planner_initial"]?.template).toBe("repo planner {{task.id}}");
+  });
+
+  test("normalizes repo paths before deduplicating concurrent loads", async () => {
+    const [firstResult, secondResult] = await Promise.all([
+      loadEffectivePromptOverrides("/repo"),
+      loadEffectivePromptOverrides(" /repo "),
+    ]);
+
+    expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);
+    expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(firstResult).toEqual(secondResult);
   });
 });

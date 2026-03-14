@@ -23,7 +23,6 @@ export const useSettingsModalBranchesState = ({
     data: selectedRepoBranches = [],
     error,
     isLoading,
-    refetch,
   } = useQuery({
     ...(selectedRepoPath
       ? repoBranchesQueryOptions(selectedRepoPath)
@@ -39,7 +38,6 @@ export const useSettingsModalBranchesState = ({
     void queryClient.invalidateQueries({
       queryKey: repoBranchesQueryOptions(selectedRepoPath).queryKey,
     });
-    void refetch();
   };
 
   return {

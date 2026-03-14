@@ -8,12 +8,14 @@ export type TaskDeleteImpact = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   impactError: string | null;
+  isLoadingImpact: boolean;
 };
 
 const EMPTY_DELETE_IMPACT: TaskDeleteImpact = {
   hasManagedSessionCleanup: false,
   managedWorktreeCount: 0,
   impactError: null,
+  isLoadingImpact: false,
 };
 
 const normalizePathForComparison = (path: string): string => {
@@ -52,6 +54,7 @@ export const getManagedTaskDeleteImpact = (
     hasManagedSessionCleanup: managedWorktrees.size > 0,
     managedWorktreeCount: managedWorktrees.size,
     impactError: null,
+    isLoadingImpact: false,
   };
 };
 
@@ -84,11 +87,15 @@ export function useTaskDeleteImpact(taskIds: string[], open: boolean): TaskDelet
         hasManagedSessionCleanup: false,
         managedWorktreeCount: 0,
         impactError: TASK_DELETE_IMPACT_ERROR_MESSAGE,
+        isLoadingImpact: false,
       };
     }
 
     if (taskSessionQueries.some((query) => query.isLoading)) {
-      return EMPTY_DELETE_IMPACT;
+      return {
+        ...EMPTY_DELETE_IMPACT,
+        isLoadingImpact: true,
+      };
     }
 
     return getManagedTaskDeleteImpactFromTasks(

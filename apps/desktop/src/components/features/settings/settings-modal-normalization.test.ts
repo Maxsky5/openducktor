@@ -208,6 +208,7 @@ describe("settings-modal-normalization", () => {
         enabled: false,
       },
     });
+    expect(snapshot.theme).toBe("light");
   });
 
   test("selects initial repo using active repo when available", () => {

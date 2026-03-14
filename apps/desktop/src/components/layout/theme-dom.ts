@@ -1,4 +1,4 @@
-export type Theme = "dark" | "light";
+import type { Theme } from "@openducktor/contracts";
 
 const THEME_CLASS_NAMES = ["light", "dark"] as const;
 

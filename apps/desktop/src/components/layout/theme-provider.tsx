@@ -1,9 +1,9 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { createHostClient } from "@/lib/host-client";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { applyThemeToDocument, readDocumentTheme, type Theme } from "./theme-dom";
+import { applyThemeToDocument, readDocumentTheme } from "./theme-dom";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -35,7 +35,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
     }
 
     const resolved = settingsSnapshot.theme === "dark" ? "dark" : "light";
-    setThemeState((current) => (current === resolved ? current : resolved));
+    setThemeState((current: Theme) => (current === resolved ? current : resolved));
   }, [settingsSnapshot]);
 
   useLayoutEffect(() => {
@@ -46,6 +46,10 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
     () => ({
       theme,
       setTheme: (newTheme: Theme) => {
+        const previousTheme = theme;
+        const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(
+          settingsSnapshotQueryOptions().queryKey,
+        );
         setThemeState(newTheme);
         queryClient.setQueryData(
           settingsSnapshotQueryOptions().queryKey,
@@ -60,7 +64,13 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
             };
           },
         );
-        void hostClient.setTheme(newTheme);
+        void hostClient.setTheme(newTheme).catch((error) => {
+          console.error("Failed to persist theme change.", error);
+          setThemeState(previousTheme);
+          if (previousSnapshot) {
+            queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, previousSnapshot);
+          }
+        });
       },
     }),
     [queryClient, theme],

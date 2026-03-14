@@ -24,6 +24,7 @@ const viewModelMock = {
   isDeleteDialogOpen: false,
   isDeletePending: false,
   deleteError: null,
+  isLoadingDeleteImpact: false,
   hasManagedSessionCleanup: false,
   managedWorktreeCount: 0,
   impactError: null,

@@ -52,6 +52,7 @@ describe("getManagedTaskDeleteImpact", () => {
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 2,
       impactError: null,
+      isLoadingImpact: false,
     });
   });
 
@@ -71,6 +72,7 @@ describe("getManagedTaskDeleteImpact", () => {
       hasManagedSessionCleanup: false,
       managedWorktreeCount: 0,
       impactError: null,
+      isLoadingImpact: false,
     });
   });
 
@@ -84,6 +86,7 @@ describe("getManagedTaskDeleteImpact", () => {
       hasManagedSessionCleanup: true,
       managedWorktreeCount: 1,
       impactError: null,
+      isLoadingImpact: false,
     });
   });
 

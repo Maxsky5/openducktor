@@ -54,7 +54,7 @@ import { useAgentStudioSelectionController } from "./use-agent-studio-selection-
 import { useAgentStudioSessionStartRequest } from "./use-agent-studio-session-start-request";
 
 export function AgentsPage(): ReactElement {
-  const { activeRepo, activeBranch, loadRepoSettings, loadSettingsSnapshot } = useWorkspaceState();
+  const { activeRepo, activeBranch } = useWorkspaceState();
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
@@ -230,8 +230,6 @@ export function AgentsPage(): ReactElement {
 
   const orchestrationWorkspace = {
     activeRepo,
-    loadSettingsSnapshot,
-    loadRepoSettings,
   } satisfies AgentStudioOrchestrationWorkspaceContext;
 
   const orchestrationSelection = {

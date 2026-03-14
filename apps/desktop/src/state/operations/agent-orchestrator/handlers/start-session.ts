@@ -5,7 +5,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
-import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
+import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection } from "../runtime/runtime";
@@ -373,11 +373,10 @@ const createOrReuseSession = async ({
       }
     }
 
-    const persistedSessions = await loadAgentSessionListFromQuery(
-      appQueryClient,
-      ctx.repoPath,
-      ctx.taskId,
-    );
+    const persistedSessions = await appQueryClient.fetchQuery({
+      ...agentSessionListQueryOptions(ctx.repoPath, ctx.taskId),
+      staleTime: 0,
+    });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
     const latestPersistedSession = pickLatestSession(
       persistedSessions.filter((entry) => entry.role === ctx.role),

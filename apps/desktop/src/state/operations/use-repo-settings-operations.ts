@@ -40,6 +40,19 @@ export function useRepoSettingsOperations({
   applyWorkspaceRecord,
 }: UseRepoSettingsOperationsArgs): UseRepoSettingsOperationsResult {
   const queryClient = useQueryClient();
+  const settingsSnapshotQueryKey = settingsSnapshotQueryOptions().queryKey;
+  const repoConfigQueryKeyPrefix = [...workspaceQueryKeys.all, "repo-config"] as const;
+
+  const syncWorkspaceListRecord = useCallback(
+    (workspace: WorkspaceRecord): void => {
+      queryClient.setQueryData(
+        workspaceQueryKeys.list(),
+        (current: WorkspaceRecord[] | undefined) =>
+          current?.map((entry) => (entry.path === workspace.path ? workspace : entry)) ?? current,
+      );
+    },
+    [queryClient],
+  );
 
   const toConfigDefault = useCallback((entry: RepoAgentDefaultInput | null) => {
     if (!entry || !entry.providerId.trim() || !entry.modelId.trim()) {
@@ -99,9 +112,10 @@ export function useRepoSettingsOperations({
       await queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.repoConfig(repo),
       });
+      syncWorkspaceListRecord(workspace);
       applyWorkspaceRecord(workspace);
     },
-    [activeRepo, applyWorkspaceRecord, queryClient, toConfigDefault],
+    [activeRepo, applyWorkspaceRecord, queryClient, syncWorkspaceListRecord, toConfigDefault],
   );
 
   const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
@@ -115,17 +129,37 @@ export function useRepoSettingsOperations({
     [],
   );
 
-  const saveGlobalGitConfig = useCallback(async (git: GlobalGitConfig): Promise<void> => {
-    await host.workspaceUpdateGlobalGitConfig(git);
-  }, []);
+  const saveGlobalGitConfig = useCallback(
+    async (git: GlobalGitConfig): Promise<void> => {
+      await host.workspaceUpdateGlobalGitConfig(git);
+      queryClient.setQueryData(
+        settingsSnapshotQueryKey,
+        (current: SettingsSnapshot | undefined): SettingsSnapshot | undefined =>
+          current
+            ? {
+                ...current,
+                git,
+              }
+            : current,
+      );
+    },
+    [queryClient, settingsSnapshotQueryKey],
+  );
 
   const saveSettingsSnapshot = useCallback(
     async (snapshot: SettingsSnapshot): Promise<void> => {
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
-      queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, snapshot);
+      queryClient.setQueryData(settingsSnapshotQueryKey, snapshot);
+      for (const [repoPath, repoConfig] of Object.entries(snapshot.repos)) {
+        queryClient.setQueryData(workspaceQueryKeys.repoConfig(repoPath), repoConfig);
+      }
+      await queryClient.invalidateQueries({
+        queryKey: repoConfigQueryKeyPrefix,
+      });
+      queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
     },
-    [applyWorkspaceRecords, queryClient],
+    [applyWorkspaceRecords, queryClient, repoConfigQueryKeyPrefix, settingsSnapshotQueryKey],
   );
 
   return {

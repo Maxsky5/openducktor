@@ -426,6 +426,7 @@ describe("TauriHostClient", () => {
 
     const snapshot = await client.workspaceGetSettingsSnapshot();
 
+    expect(snapshot.theme).toBe("light");
     expect(Object.keys(snapshot.repos)).toEqual(["/repo"]);
     expect(calls).toEqual([
       {

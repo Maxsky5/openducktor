@@ -4,10 +4,10 @@ import type {
   RuntimeDescriptor,
   RuntimeKind,
 } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import { appQueryClient } from "@/lib/query-client";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
 import {
   beadsCheckQueryOptions,
@@ -59,30 +59,34 @@ export function useChecks({
   runtimeDefinitions,
   checkRepoRuntimeHealth,
 }: UseChecksArgs): UseChecksResult {
+  const queryClient = useQueryClient();
   const [runtimeCheck, setRuntimeCheck] = useState<RuntimeCheck | null>(null);
   const [activeBeadsCheck, setActiveBeadsCheck] = useState<BeadsCheck | null>(null);
   const [activeRepoRuntimeHealthByRuntime, setActiveRepoRuntimeHealthByRuntime] =
     useState<RepoRuntimeHealthMap>({});
   const [isLoadingChecks, setIsLoadingChecks] = useState(false);
 
-  const refreshRuntimeCheck = useCallback(async (force = false): Promise<RuntimeCheck> => {
-    if (force) {
-      const check = await host.runtimeCheck(true);
-      appQueryClient.setQueryData(checksQueryKeys.runtime(), check);
+  const refreshRuntimeCheck = useCallback(
+    async (force = false): Promise<RuntimeCheck> => {
+      if (force) {
+        const check = await host.runtimeCheck(true);
+        queryClient.setQueryData(checksQueryKeys.runtime(), check);
+        setRuntimeCheck(check);
+        return check;
+      }
+
+      const check = await loadRuntimeCheckFromQuery(queryClient);
       setRuntimeCheck(check);
       return check;
-    }
-
-    const check = await loadRuntimeCheckFromQuery(appQueryClient);
-    setRuntimeCheck(check);
-    return check;
-  }, []);
+    },
+    [queryClient],
+  );
 
   const refreshBeadsCheckForRepo = useCallback(
     async (repoPath: string, force = false): Promise<BeadsCheck> => {
       if (force) {
         const check = await host.beadsCheck(repoPath);
-        appQueryClient.setQueryData(checksQueryKeys.beads(repoPath), check);
+        queryClient.setQueryData(checksQueryKeys.beads(repoPath), check);
 
         if (repoPath === activeRepo) {
           setActiveBeadsCheck(check);
@@ -91,7 +95,7 @@ export function useChecks({
         return check;
       }
 
-      const check = await loadBeadsCheckFromQuery(appQueryClient, repoPath);
+      const check = await loadBeadsCheckFromQuery(queryClient, repoPath);
 
       if (repoPath === activeRepo) {
         setActiveBeadsCheck(check);
@@ -99,7 +103,7 @@ export function useChecks({
 
       return check;
     },
-    [activeRepo],
+    [activeRepo, queryClient],
   );
 
   const refreshRepoRuntimeHealthForRepo = useCallback(
@@ -118,13 +122,13 @@ export function useChecks({
       );
 
       if (force) {
-        await appQueryClient.invalidateQueries({
+        await queryClient.invalidateQueries({
           queryKey: queryOptions.queryKey,
         });
       }
 
       const runtimeHealthByRuntime = await loadRepoRuntimeHealthFromQuery(
-        appQueryClient,
+        queryClient,
         repoPath,
         runtimeDefinitions,
         checkRepoRuntimeHealth,
@@ -136,7 +140,7 @@ export function useChecks({
 
       return runtimeHealthByRuntime;
     },
-    [activeRepo, checkRepoRuntimeHealth, runtimeDefinitions],
+    [activeRepo, checkRepoRuntimeHealth, queryClient, runtimeDefinitions],
   );
 
   const refreshChecks = useCallback(async (): Promise<void> => {
@@ -190,23 +194,26 @@ export function useChecks({
     runtimeDefinitions,
   ]);
 
-  const hasCachedBeadsCheck = useCallback((repoPath: string): boolean => {
-    return appQueryClient.getQueryData(beadsCheckQueryOptions(repoPath).queryKey) !== undefined;
-  }, []);
+  const hasCachedBeadsCheck = useCallback(
+    (repoPath: string): boolean => {
+      return queryClient.getQueryData(beadsCheckQueryOptions(repoPath).queryKey) !== undefined;
+    },
+    [queryClient],
+  );
 
   const hasCachedRepoRuntimeHealth = useCallback(
     (repoPath: string, runtimeKinds: RuntimeKind[]): boolean => {
       return (
-        appQueryClient.getQueryData(checksQueryKeys.runtimeHealth(repoPath, runtimeKinds)) !==
+        queryClient.getQueryData(checksQueryKeys.runtimeHealth(repoPath, runtimeKinds)) !==
         undefined
       );
     },
-    [],
+    [queryClient],
   );
 
   const hasRuntimeCheck = useCallback((): boolean => {
-    return appQueryClient.getQueryData(runtimeCheckQueryOptions().queryKey) !== undefined;
-  }, []);
+    return queryClient.getQueryData(runtimeCheckQueryOptions().queryKey) !== undefined;
+  }, [queryClient]);
 
   const clearActiveBeadsCheck = useCallback(() => {
     setActiveBeadsCheck(null);
@@ -217,6 +224,11 @@ export function useChecks({
   }, []);
 
   useEffect(() => {
+    setRuntimeCheck(
+      (queryClient.getQueryData(runtimeCheckQueryOptions().queryKey) as RuntimeCheck | undefined) ??
+        null,
+    );
+
     if (!activeRepo) {
       setActiveBeadsCheck(null);
       setActiveRepoRuntimeHealthByRuntime({});
@@ -224,19 +236,19 @@ export function useChecks({
     }
 
     setActiveBeadsCheck(
-      (appQueryClient.getQueryData(beadsCheckQueryOptions(activeRepo).queryKey) as
+      (queryClient.getQueryData(beadsCheckQueryOptions(activeRepo).queryKey) as
         | BeadsCheck
         | undefined) ?? null,
     );
     setActiveRepoRuntimeHealthByRuntime(
-      (appQueryClient.getQueryData(
+      (queryClient.getQueryData(
         checksQueryKeys.runtimeHealth(
           activeRepo,
           runtimeDefinitions.map((definition) => definition.kind),
         ),
       ) as RepoRuntimeHealthMap | undefined) ?? buildEmptyRuntimeHealthMap(runtimeDefinitions),
     );
-  }, [activeRepo, runtimeDefinitions]);
+  }, [activeRepo, queryClient, runtimeDefinitions]);
 
   return {
     runtimeCheck,

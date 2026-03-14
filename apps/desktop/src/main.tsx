@@ -23,9 +23,14 @@ const renderApp = (): void => {
 };
 
 const bootstrap = async (): Promise<void> => {
-  const settingsSnapshot = await loadSettingsSnapshotFromQuery(appQueryClient);
-  applyThemeToDocument(settingsSnapshot.theme);
-  renderApp();
+  try {
+    const settingsSnapshot = await loadSettingsSnapshotFromQuery(appQueryClient);
+    applyThemeToDocument(settingsSnapshot.theme);
+  } catch (error) {
+    console.error("Failed to preload settings snapshot before app bootstrap.", error);
+  } finally {
+    renderApp();
+  }
 };
 
 void bootstrap();

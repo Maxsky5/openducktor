@@ -38,6 +38,7 @@ type TaskDetailsSheetViewModel = {
   isDeleteDialogOpen: boolean;
   isDeletePending: boolean;
   deleteError: string | null;
+  isLoadingDeleteImpact: boolean;
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   impactError: string | null;
@@ -88,10 +89,8 @@ export function useTaskDetailsSheetViewModel({
     () => collectDeleteImpactTaskIds(task, taskById),
     [task, taskById],
   );
-  const { hasManagedSessionCleanup, managedWorktreeCount, impactError } = useTaskDeleteImpact(
-    deleteImpactTaskIds,
-    open,
-  );
+  const { hasManagedSessionCleanup, managedWorktreeCount, impactError, isLoadingImpact } =
+    useTaskDeleteImpact(deleteImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
@@ -188,6 +187,7 @@ export function useTaskDetailsSheetViewModel({
     isDeleteDialogOpen,
     isDeletePending,
     deleteError,
+    isLoadingDeleteImpact: isLoadingImpact,
     hasManagedSessionCleanup,
     managedWorktreeCount,
     impactError,

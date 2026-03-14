@@ -232,7 +232,7 @@ export const createLoadAgentSessions = ({
       runtimeKindsToHydrate.map(async (runtimeKind) => {
         const runtimes = await captureOrchestratorFallback(
           "load-sessions-list-runtimes",
-          async () => loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
+          () => loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
           {
             tags: { repoPath, taskId, runtimeKind },
             logLevel: "warn",
@@ -249,7 +249,7 @@ export const createLoadAgentSessions = ({
     )
       ? await captureOrchestratorFallback(
           "load-sessions-list-runs",
-          async () => loadRepoRunsFromQuery(appQueryClient, repoPath),
+          () => loadRepoRunsFromQuery(appQueryClient, repoPath),
           {
             tags: { repoPath, taskId },
             logLevel: "warn",
