@@ -300,14 +300,14 @@ const finalizeCompletedState = (
   nextLoadedByScope: Record<DiffScope, boolean>,
   didChange: boolean,
 ): DiffBatchState => {
-  if (!didChange && nextLoadedByScope === previousState.loadedByScope && !previousState.isLoading) {
+  if (!didChange && nextLoadedByScope === previousState.loadedByScope) {
     return previousState;
   }
 
   return {
     byScope: nextByScope,
     loadedByScope: nextLoadedByScope,
-    isLoading: false,
+    isLoading: previousState.isLoading,
   };
 };
 
@@ -511,7 +511,7 @@ export const applyScopeError = ({
   }
 
   const snapshotsEqual = scopeSnapshotEqual(previousScopeSnapshot, nextScopeSnapshot);
-  if (snapshotsEqual && nextLoadedByScope === state.loadedByScope && !state.isLoading) {
+  if (snapshotsEqual && nextLoadedByScope === state.loadedByScope) {
     return state;
   }
 
@@ -521,7 +521,7 @@ export const applyScopeError = ({
       [scope]: nextScopeSnapshot,
     },
     loadedByScope: nextLoadedByScope,
-    isLoading: false,
+    isLoading: state.isLoading,
   };
 };
 
