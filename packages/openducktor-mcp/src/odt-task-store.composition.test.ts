@@ -7,6 +7,7 @@ import type { TaskDocumentPort } from "./task-document-store";
 const makeTask = (): TaskCard => ({
   id: "task-1",
   title: "Task 1",
+  description: "",
   status: "open",
   issueType: "feature",
   aiReviewEnabled: true,
@@ -17,6 +18,7 @@ describe("OdtTaskStore composition", () => {
     const issue: RawIssue = {
       id: "task-1",
       title: "Task 1",
+      description: "Read the task description from Beads.",
       status: "open",
       issue_type: "feature",
       metadata: {
@@ -79,6 +81,7 @@ describe("OdtTaskStore composition", () => {
     };
 
     expect(result.task.aiReviewEnabled).toBe(false);
+    expect(result.task.description).toBe("Read the task description from Beads.");
     expect(result.documents.spec.markdown).toBe("spec");
   });
 

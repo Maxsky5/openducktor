@@ -103,6 +103,7 @@ export const issueToTaskCard = (issue: RawIssue, metadataNamespace: string): Tas
   return {
     id: issue.id,
     title: issue.title,
+    ...(typeof issue.description === "string" ? { description: issue.description } : {}),
     status: parseBeadsTaskStatus(issue.id, issue.status),
     issueType,
     aiReviewEnabled: qaRequired,

@@ -29,6 +29,25 @@ describe("task mapping entry parsers", () => {
     );
   });
 
+  test("issueToTaskCard preserves task descriptions from Beads issues", () => {
+    const issue: RawIssue = {
+      id: "task-7",
+      title: "Read task description",
+      description: "Return the task description to MCP clients.",
+      status: "open",
+      issue_type: "task",
+    };
+
+    expect(issueToTaskCard(issue, "openducktor")).toMatchObject({
+      id: "task-7",
+      title: "Read task description",
+      description: "Return the task description to MCP clients.",
+      status: "open",
+      issueType: "task",
+      aiReviewEnabled: true,
+    });
+  });
+
   test("parseMarkdownEntries returns only valid markdown metadata entries", () => {
     const parsed = parseMarkdownEntries([
       {

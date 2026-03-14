@@ -13,12 +13,14 @@ export type TaskCard = Pick<
   CanonicalTaskCard,
   "id" | "title" | "status" | "issueType" | "aiReviewEnabled"
 > & {
+  description?: CanonicalTaskCard["description"];
   parentId?: string;
 };
 
 export type RawIssue = {
   id: string;
   title: string;
+  description?: string;
   status: unknown;
   issue_type?: unknown;
   parent?: string | null;
