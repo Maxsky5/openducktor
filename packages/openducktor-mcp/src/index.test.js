@@ -118,7 +118,22 @@ describe("registerOdtTool", () => {
 
     const result = await capturedHandler({ taskId: "task-1" });
     expect(result).toEqual({
-      content: [{ type: "text", text: "Task exploded" }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              ok: false,
+              error: {
+                code: "ODT_TOOL_EXECUTION_ERROR",
+                message: "Task exploded",
+              },
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       structuredContent: {
         ok: false,
         error: {
@@ -152,7 +167,12 @@ describe("registerOdtTool", () => {
     const result = await capturedHandler({});
     expect(result.isError).toBe(true);
     expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toContain("taskId");
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      ok: false,
+      error: {
+        code: "ODT_TOOL_INPUT_INVALID",
+      },
+    });
     expect(result.structuredContent).toMatchObject({
       ok: false,
       error: {

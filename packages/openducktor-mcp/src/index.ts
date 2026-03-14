@@ -36,20 +36,21 @@ const toToolError = (error: unknown): ToolResult => {
     error instanceof Error && error.name === "ZodError"
       ? "ODT_TOOL_INPUT_INVALID"
       : "ODT_TOOL_EXECUTION_ERROR";
+  const errorPayload = {
+    ok: false,
+    error: {
+      code,
+      message,
+    },
+  };
   return {
     content: [
       {
         type: "text",
-        text: message,
+        text: JSON.stringify(errorPayload, null, 2),
       },
     ],
-    structuredContent: {
-      ok: false,
-      error: {
-        code,
-        message,
-      },
-    },
+    structuredContent: errorPayload,
     isError: true,
   };
 };

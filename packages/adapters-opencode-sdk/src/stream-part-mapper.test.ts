@@ -227,6 +227,39 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps completed tool output containing flattened structured error JSON as tool error part", () => {
+    const part = createToolPart({
+      id: "tool-1c",
+      tool: "openducktor_odt_set_plan",
+      status: "completed",
+      input: { taskId: "task-7" },
+      output: JSON.stringify(
+        {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message: "Only epics can receive subtask proposals during planning.",
+          },
+        },
+        null,
+        2,
+      ),
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+    expect(mapped).toEqual({
+      kind: "tool",
+      messageId: "assistant-tool-1c",
+      partId: "tool-1c",
+      callId: "call-tool-1c",
+      tool: "openducktor_odt_set_plan",
+      status: "error",
+      input: { taskId: "task-7" },
+      preview: "task-7",
+      error: "Only epics can receive subtask proposals during planning.",
+    });
+  });
+
   test("maps pending tool with end timing as completed", () => {
     const part = createToolPart({
       id: "tool-2",
