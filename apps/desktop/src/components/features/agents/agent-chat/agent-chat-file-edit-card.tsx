@@ -52,7 +52,7 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
 
   return (
     <div className="my-1.5 overflow-hidden rounded-lg border border-border bg-card text-xs">
-      {data.diff ? <PierreDiffPreloader patch={data.diff} /> : null}
+      {data.diff ? <PierreDiffPreloader patch={data.diff} filePath={data.filePath} /> : null}
 
       {/* Header */}
       <button
@@ -89,7 +89,7 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
       {/* Diff — uses shared PierreDiffViewer, split view for inline chat */}
       {isExpanded && data.diff ? (
         <div className="overflow-auto max-h-[60vh]">
-          <PierreDiffViewer patch={data.diff} diffStyle="split" />
+          <PierreDiffViewer patch={data.diff} filePath={data.filePath} diffStyle="split" />
         </div>
       ) : null}
     </div>
