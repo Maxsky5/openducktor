@@ -117,6 +117,8 @@ export function useAgentStudioDiffController({
   const [diffScope, setDiffScope] = useState<DiffScope>("target");
 
   const versionByScopeAndModeRef = useRef(createVersionState());
+  // Keep this monotonic across context resets so stale completions cannot
+  // collide with a newer loading request after resetRequestTracking clears refs.
   const requestSequenceRef = useRef(0);
   const inFlightScopeRequestRef = useRef(createInFlightState());
   const queuedFullReloadByScopeRef = useRef(createQueuedReloadState());
@@ -141,7 +143,6 @@ export function useAgentStudioDiffController({
       queuedFullReloadByScopeRef.current[scope] = false;
     }
     latestLoadingRequestSequenceRef.current = null;
-    requestSequenceRef.current = 0;
   }, []);
 
   const setBatchLoading = useCallback((isLoading: boolean): void => {
@@ -382,10 +383,7 @@ export function useAgentStudioDiffController({
           inFlightScopeRequestRef.current[loadContext.scope][mode] = null;
         }
 
-        if (
-          showLoading &&
-          latestLoadingRequestSequenceRef.current === requestSequence
-        ) {
+        if (showLoading && latestLoadingRequestSequenceRef.current === requestSequence) {
           latestLoadingRequestSequenceRef.current = null;
           setBatchLoading(false);
         }

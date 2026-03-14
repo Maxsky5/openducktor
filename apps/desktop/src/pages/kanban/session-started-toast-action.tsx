@@ -10,7 +10,7 @@ export const renderSessionStartedToastAction = (
     <Button
       type="button"
       variant="ghost"
-      className="h-auto w-fit p-0 text-sm font-medium !text-foreground underline underline-offset-2 hover:bg-transparent hover:!text-foreground"
+      className="h-auto w-fit p-0 text-sm font-medium text-foreground underline underline-offset-2 hover:bg-transparent hover:!text-foreground"
       onClick={() => onOpen(intent, sessionId)}
     >
       Open in Agent Studio
