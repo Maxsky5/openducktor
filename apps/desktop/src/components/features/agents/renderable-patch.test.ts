@@ -21,6 +21,16 @@ describe("selectRenderableDiff", () => {
       "--- src/second.ts\n+++ src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
     );
   });
+
+  test("ignores file path mentions inside hunk bodies when matching sections", () => {
+    const diff =
+      'diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-import "./old"\n+import "src/target.ts"\n' +
+      "diff --git a/src/target.ts b/src/target.ts\n--- a/src/target.ts\n+++ b/src/target.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+    expect(selectRenderableDiff(diff, "src/target.ts")).toBe(
+      "diff --git a/src/target.ts b/src/target.ts\n--- a/src/target.ts\n+++ b/src/target.ts\n@@ -1 +1 @@\n-old\n+new\n",
+    );
+  });
 });
 
 describe("normalizePatchCandidate", () => {

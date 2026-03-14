@@ -50,7 +50,17 @@ export function patchMatchesFile(candidate: string, filePath: string): boolean {
   const normalizedPath = filePath.replaceAll("\\", "/");
   const quotedPath = normalizedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const suffixPattern = new RegExp(`(^|[\\s"'])((a|b)/)?${quotedPath}($|[\\s"'])`, "m");
-  return suffixPattern.test(candidate.replaceAll("\\", "/"));
+  const headerLines: string[] = [];
+
+  for (const line of candidate.replaceAll("\\", "/").split("\n")) {
+    if (line.startsWith("@@ ")) {
+      break;
+    }
+
+    headerLines.push(line);
+  }
+
+  return suffixPattern.test(headerLines.join("\n"));
 }
 
 function canParseSingularPatch(candidate: string, filePath: string): boolean {
