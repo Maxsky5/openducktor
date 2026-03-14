@@ -11,6 +11,15 @@ Use it when you need to:
 - verify whether a runtime is eligible for integration,
 - and implement the required changes across contracts, adapters, desktop orchestration, and the Rust host.
 
+## Current Support Policy
+
+This guide describes the integration model, not the list of runtimes that are already supported in production.
+
+- The only supported runtime today is OpenCode (`opencode`).
+- Codex is the next planned runtime.
+- OpenDucktor will support open source agent runtimes only.
+- Claude Code is intentionally out of scope.
+
 ## Runtime Vocabulary
 
 OpenDucktor uses several runtime-related payloads. Each one describes a different layer of the system.
@@ -106,6 +115,7 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 | `supportsProfiles` | Optional enhancement | Runtime supports named profiles or agents | Session start flow and repo settings | Profile selectors read this before showing profile choices |
 | `supportsVariants` | Optional enhancement | Runtime supports model variants | Session start flow and repo settings | Variant selectors read this before showing variant choices |
 | `supportsOdtWorkflowTools` | Product-required capability | Runtime can execute ODT workflow tools | Workflow roles and tool policy | Built-in OpenDucktor roles rely on this when the runtime runs ODT tools |
+| `supportsSessionFork` | Product-required capability | Runtime can fork or branch an existing session | Session controls and workflow continuity | Runtime validation rejects integrations that cannot support OpenDucktor's fork-capable session model |
 | `supportsPermissionRequests` | Optional enhancement | Runtime can emit permission prompts | Session event handling | Permission reply flows are only needed if the runtime emits permission prompts |
 | `supportsQuestionRequests` | Optional enhancement | Runtime can emit question prompts | Session event handling | Question reply flows are only needed if the runtime emits question prompts |
 | `supportsTodos` | Optional enhancement | Runtime can list session todo items | Session warmup and event refresh | Todo warmup and refresh logic read from this surface |
@@ -117,7 +127,7 @@ Canonical capability schema: `packages/contracts/src/agent-runtime-schemas.ts`
 
 The current codebase treats runtime integration in three layers:
 
-- `Baseline runtime contract`: session lifecycle, streaming events, model catalog, history, and runtime diagnostics are treated as part of the required OpenDucktor runtime surface rather than as capability toggles.
+- `Baseline runtime contract`: session lifecycle, streaming events, model catalog, history, runtime diagnostics, and session fork support are treated as part of the required OpenDucktor runtime surface rather than as optional capability toggles.
 - `Required workflow scope coverage`: `supportedScopes` must include `workspace`, `task`, and `build`. OpenDucktor does not support runtimes that cover only a subset of roles.
 - `Optional enhancement`: the application can work without these. The UI and runtime-health flow gate these features explicitly instead of assuming support.
 

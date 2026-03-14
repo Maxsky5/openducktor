@@ -11,6 +11,13 @@ Make `AgentRuntime` a first-class concept across OpenDucktor so that adding a ne
 
 OpenCode-specific behavior must remain isolated to adapter/infra layers.
 
+Current product reality:
+
+- The only supported runtime today is OpenCode (`opencode`).
+- Codex is the next planned runtime.
+- OpenDucktor will support open source agent runtimes only.
+- Claude Code is out of scope.
+
 ## Core Domain Model
 
 ### Runtime identity

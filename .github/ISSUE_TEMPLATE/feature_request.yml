@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose an improvement aligned with the current project direction.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion.
+
+        OpenDucktor is still early and intentionally focused. Please frame requests in terms of a concrete problem and the current product constraints:
+        - macOS first
+        - OpenCode only today
+        - Codex planned next
+        - open source runtimes only
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: As a contributor or user, I need ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What do you want to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What alternatives or workarounds have you considered?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and impact
+      description: Which area does this affect and why is it worth prioritizing now?
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I reviewed the current README and CONTRIBUTING guide.
+          required: true
+        - label: I searched for existing issues before opening this request.
+          required: true
