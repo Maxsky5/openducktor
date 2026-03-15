@@ -132,6 +132,7 @@ export const createEnsureSessionReady = ({
       loadTaskDocuments,
       loadRepoPromptOverrides,
     });
+    assertNotStale();
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
       workingDirectoryOverride: session.workingDirectory,
       ...(session.selectedModel?.runtimeKind

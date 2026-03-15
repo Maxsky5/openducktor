@@ -1530,7 +1530,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("starts default-model loading before documents resolve and delays runtime startup", async () => {
+  test("defers default-model loading until after session start when model readiness is optional", async () => {
     const docsDeferred = createDeferred<{
       specMarkdown: string;
       planMarkdown: string;
@@ -1594,15 +1594,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     try {
       const startPromise = start({ taskId: "task-1", role: "build" });
-      await withTimeout(defaultModelStarted.promise, 50);
-
-      expect(defaultModelCalls).toBe(1);
+      await Promise.resolve();
+      expect(defaultModelCalls).toBe(0);
       expect(runtimeCalls).toBe(0);
 
       docsDeferred.resolve({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" });
       await withTimeout(runtimeStarted.promise, 50);
       expect(runtimeCalls).toBe(1);
       await expect(startPromise).resolves.toBe("session-created");
+      await withTimeout(defaultModelStarted.promise, 50);
+      expect(defaultModelCalls).toBe(1);
     } finally {
       docsDeferred.resolve({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" });
       adapter.startSession = originalStartSession;

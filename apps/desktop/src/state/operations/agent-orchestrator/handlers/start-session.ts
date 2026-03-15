@@ -98,7 +98,6 @@ const resolveRuntimeAndModel = async ({
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
-  const defaultModelSelectionPromise = deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
   const { documents: docs, promptOverrides } = await loadSessionPromptInputs({
     repoPath: ctx.repoPath,
     taskId: ctx.taskId,
@@ -119,7 +118,7 @@ const resolveRuntimeAndModel = async ({
   let resolvedDefaultModelSelection: AgentModelSelection | null = null;
   if (requireModelReady) {
     try {
-      resolvedDefaultModelSelection = await defaultModelSelectionPromise;
+      resolvedDefaultModelSelection = await deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
     } catch (error) {
       throw new Error(
         `Failed to load the default model for ${ctx.role} session start: ${errorMessage(error)}`,
@@ -142,7 +141,6 @@ const resolveRuntimeAndModel = async ({
     resolvedScenario,
     systemPrompt,
     promptOverrides,
-    defaultModelSelectionPromise,
     resolvedDefaultModelSelection,
   };
 };
@@ -476,7 +474,6 @@ const createOrReuseSession = async ({
     taskCard: resolved.taskCard,
     ctx: startedCtx,
     promptOverrides: resolved.promptOverrides,
-    defaultModelSelectionPromise: resolved.defaultModelSelectionPromise,
     resolvedDefaultModelSelection: resolved.resolvedDefaultModelSelection,
   };
 };
@@ -566,13 +563,15 @@ const applyResolvedModelSelection = ({
 const maybeApplyDefaultModelSelection = async ({
   selectedModel,
   requireModelReady,
-  defaultModelSelectionPromise,
+  resolvedDefaultModelSelection,
+  loadDefaultModelSelection,
   startedCtx,
   session,
 }: {
   selectedModel: AgentModelSelection | null;
   requireModelReady: boolean;
-  defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
+  resolvedDefaultModelSelection: AgentModelSelection | null;
+  loadDefaultModelSelection: () => Promise<AgentModelSelection | null>;
   startedCtx: StartedSessionContext;
   session: SessionDependencies;
 }): Promise<void> => {
@@ -583,17 +582,9 @@ const maybeApplyDefaultModelSelection = async ({
   const tags = createSessionStartTags(startedCtx);
 
   if (requireModelReady) {
-    let resolvedModel: AgentModelSelection | null;
-    try {
-      resolvedModel = await defaultModelSelectionPromise;
-    } catch (error) {
-      throw new Error(
-        `Failed to load the default model for ${startedCtx.role} session start: ${errorMessage(error)}`,
-      );
-    }
     throwIfRepoStale(startedCtx.isStaleRepoOperation, STALE_START_ERROR);
     applyResolvedModelSelection({
-      resolvedModel,
+      resolvedModel: resolvedDefaultModelSelection,
       startedCtx,
       session,
     });
@@ -602,7 +593,7 @@ const maybeApplyDefaultModelSelection = async ({
 
   runOrchestratorSideEffect(
     "start-session-apply-default-model-selection",
-    defaultModelSelectionPromise.then((defaultModelSelection) => {
+    loadDefaultModelSelection().then((defaultModelSelection) => {
       applyResolvedModelSelection({
         resolvedModel: defaultModelSelection,
         startedCtx,
@@ -732,9 +723,11 @@ export const createStartAgentSession = ({
       });
 
       await maybeApplyDefaultModelSelection({
-        selectedModel: selectedModel ?? startResult.resolvedDefaultModelSelection,
+        selectedModel,
         requireModelReady,
-        defaultModelSelectionPromise: startResult.defaultModelSelectionPromise,
+        resolvedDefaultModelSelection: startResult.resolvedDefaultModelSelection,
+        loadDefaultModelSelection: () =>
+          model.loadRepoDefaultModel(startResult.ctx.repoPath, startResult.ctx.role),
         startedCtx: startResult.ctx,
         session,
       });

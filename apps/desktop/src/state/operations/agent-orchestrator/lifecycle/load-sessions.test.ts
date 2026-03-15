@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import { runtimeQueryKeys } from "@/state/queries/runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createLoadAgentSessions } from "./load-sessions";
@@ -842,6 +843,101 @@ describe("agent-orchestrator-load-sessions", () => {
 
     expect(ensuredRuntimeKinds).toEqual([]);
     expect(state["session-qa-root"]?.messages).toEqual([]);
+  });
+
+  test("invalidates runtime list cache after ensuring a workspace runtime during hydration", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => [],
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [taskFixture] },
+      updateSession,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const queryKey = runtimeQueryKeys.list("opencode", "/tmp/repo");
+    appQueryClient.setQueryData(queryKey, []);
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    const originalRunsList = hostModule.host.runsList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo",
+      },
+    ];
+    hostModule.host.runtimeList = async () => [];
+    hostModule.host.runsList = async () => [];
+    hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => ({
+      kind: runtimeKind,
+      runtimeId: "runtime-shared",
+      repoPath: "/tmp/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/tmp/repo",
+      runtimeRoute: {
+        type: "local_http" as const,
+        endpoint: "http://127.0.0.1:4666",
+      },
+      startedAt: "2026-02-22T08:00:00.000Z",
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    try {
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runsList = originalRunsList;
+      hostModule.host.runtimeEnsure = originalEnsure;
+    }
+
+    expect(appQueryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
   });
 
   test("rehydrates build sessions through a shared runtime when the persisted working directory is an override", async () => {

@@ -10,7 +10,7 @@ import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core"
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { appQueryClient } from "@/lib/query-client";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
-import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
+import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
 import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
@@ -32,15 +32,6 @@ type UpdateSession = (
 ) => void;
 
 type SessionHistoryAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
-type SessionHistoryLoadResult =
-  | {
-      ok: true;
-      history: Awaited<ReturnType<SessionHistoryAdapter["loadSessionHistory"]>>;
-    }
-  | {
-      ok: false;
-      reason: string;
-    };
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
@@ -250,6 +241,13 @@ export const createLoadAgentSessions = ({
       }
       const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
       ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
+      if (runtime) {
+        await appQueryClient.invalidateQueries({
+          queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
+          exact: true,
+          refetchType: "none",
+        });
+      }
       return runtime;
     };
 
@@ -443,15 +441,12 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const historyResult: SessionHistoryLoadResult = {
-        ok: true,
-        history: await adapter.loadSessionHistory({
-          runtimeKind,
-          runtimeConnection,
-          externalSessionId,
-          limit: INITIAL_SESSION_HISTORY_LIMIT,
-        }),
-      };
+      const history = await adapter.loadSessionHistory({
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
+        limit: INITIAL_SESSION_HISTORY_LIMIT,
+      });
       if (isStaleRepoOperation()) {
         return;
       }
@@ -466,7 +461,7 @@ export const createLoadAgentSessions = ({
           promptOverrides: repoPromptOverrides,
           messages: [
             ...preludeMessages,
-            ...historyToChatMessages(historyResult.history, {
+            ...historyToChatMessages(history, {
               role: record.role,
               selectedModel: normalizePersistedSelection(record.selectedModel),
             }),

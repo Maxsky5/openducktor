@@ -310,7 +310,7 @@ export const createAgentSessionActions = ({
     }
 
     const promptContext = await loadSessionPromptContext({
-      repoPath: activeRepo,
+      repoPath,
       taskId: parentSession.taskId,
       role: parentSession.role,
       scenario: parentSession.scenario,
@@ -325,8 +325,6 @@ export const createAgentSessionActions = ({
       (await loadRepoDefaultModel(repoPath, parentSession.role));
     throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     const { promptOverrides, systemPrompt } = promptContext;
-
-    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     const summary = await adapter.forkSession({
       repoPath,
       runtimeKind: (parentSession.runtimeKind ??
