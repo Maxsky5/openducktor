@@ -103,11 +103,19 @@ const attachContainer = async (
   });
 };
 
-const createMultiHarness = (initialPropsList: HookArgs[]) => {
+const createPairHarness = (initialPropsList: [HookArgs, HookArgs]) => {
   let latestStates: HookState[] = [];
 
-  const HarnessGroup = ({ hooks }: { hooks: HookArgs[] }): ReactElement | null => {
-    latestStates = hooks.map((hookProps) => useKanbanVirtualization(hookProps));
+  const HarnessGroup = ({
+    firstHook,
+    secondHook,
+  }: {
+    firstHook: HookArgs;
+    secondHook: HookArgs;
+  }): ReactElement | null => {
+    const firstState = useKanbanVirtualization(firstHook);
+    const secondState = useKanbanVirtualization(secondHook);
+    latestStates = [firstState, secondState];
     return null;
   };
 
@@ -115,7 +123,12 @@ const createMultiHarness = (initialPropsList: HookArgs[]) => {
 
   const mount = async (): Promise<void> => {
     await act(async () => {
-      renderer = TestRenderer.create(createElement(HarnessGroup, { hooks: initialPropsList }));
+      renderer = TestRenderer.create(
+        createElement(HarnessGroup, {
+          firstHook: initialPropsList[0],
+          secondHook: initialPropsList[1],
+        }),
+      );
       await flush();
     });
   };
@@ -143,7 +156,11 @@ const createMultiHarness = (initialPropsList: HookArgs[]) => {
   return { mount, getLatestStates, run, unmount };
 };
 
-const installMockWindow = () => {
+const installMockWindow = ({
+  runAnimationFrameCallbacks = false,
+}: {
+  runAnimationFrameCallbacks?: boolean;
+} = {}) => {
   const globalWithWindow = globalThis as typeof globalThis & {
     window?: Window & typeof globalThis;
   };
@@ -155,7 +172,12 @@ const installMockWindow = () => {
   const removeEventListener = mock(
     (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
   );
-  const requestAnimationFrame = mock((_callback: FrameRequestCallback): number => 1);
+  const requestAnimationFrame = mock((callback: FrameRequestCallback): number => {
+    if (runAnimationFrameCallbacks) {
+      callback(0);
+    }
+    return 1;
+  });
   const cancelAnimationFrame = mock((_handle: number) => {});
 
   globalWithWindow.window = {
@@ -189,25 +211,30 @@ const installMockResizeObserver = () => {
     ResizeObserver?: typeof ResizeObserver;
   };
   const previousResizeObserver = globalWithResizeObserver.ResizeObserver;
-  const callbacks: ResizeObserverCallback[] = [];
+  const activeCallbacks = new Set<ResizeObserverCallback>();
 
   class MockResizeObserver {
+    private callback: ResizeObserverCallback;
+
     constructor(callback: ResizeObserverCallback) {
-      callbacks.push(callback);
+      this.callback = callback;
     }
 
-    observe(_target: Element): void {}
+    observe(_target: Element): void {
+      activeCallbacks.add(this.callback);
+    }
 
     unobserve(_target: Element): void {}
 
-    disconnect(): void {}
+    disconnect(): void {
+      activeCallbacks.delete(this.callback);
+    }
   }
 
-  globalWithResizeObserver.ResizeObserver =
-    MockResizeObserver as unknown as typeof ResizeObserver;
+  globalWithResizeObserver.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 
   const trigger = (): void => {
-    for (const callback of callbacks) {
+    for (const callback of [...activeCallbacks]) {
       callback([], {} as ResizeObserver);
     }
   };
@@ -382,6 +409,35 @@ describe("useKanbanVirtualization", () => {
     }
   });
 
+  test("recomputes the virtual window when the lane container resizes", async () => {
+    const mockWindow = installMockWindow({ runAnimationFrameCallbacks: true });
+    const resizeObserver = installMockResizeObserver();
+    const harness = createHarness({ tasks: createTasks(30) });
+    const getBoundingClientRect = mock(() => ({ top: 120 }));
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        harness.getLatest().containerRef({
+          getBoundingClientRect,
+          closest: () => null,
+        } as unknown as HTMLDivElement);
+      });
+
+      const callsBeforeResize = getBoundingClientRect.mock.calls.length;
+
+      await harness.run(() => {
+        resizeObserver.trigger();
+      });
+
+      expect(getBoundingClientRect.mock.calls.length).toBeGreaterThan(callsBeforeResize);
+    } finally {
+      await harness.unmount();
+      resizeObserver.restore();
+      mockWindow.restore();
+    }
+  });
+
   test("shares global viewport listeners across multiple virtualized lanes", async () => {
     const mockWindow = installMockWindow();
     const scrollContainerAddEventListener = mock(
@@ -396,7 +452,7 @@ describe("useKanbanVirtualization", () => {
       getBoundingClientRect: () => ({ top: 0 }),
       clientHeight: 900,
     } as unknown as HTMLElement;
-    const harness = createMultiHarness([{ tasks: createTasks(30) }, { tasks: createTasks(30) }]);
+    const harness = createPairHarness([{ tasks: createTasks(30) }, { tasks: createTasks(30) }]);
 
     try {
       await harness.mount();

@@ -287,6 +287,7 @@ export function useKanbanVirtualization({
       frameHandle = window.requestAnimationFrame(() => {
         frameHandle = null;
         setMeasurementVersion((current) => current + 1);
+        syncViewportRef.current();
       });
     };
 

@@ -62,10 +62,38 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   onMeasuredHeight: (taskId: string, height: number) => void;
 } & TaskCardHandlers): ReactElement {
   const taskWrapperRef = useRef<HTMLDivElement | null>(null);
+  const taskMeasurementKey = [
+    task.updatedAt ?? "",
+    task.title,
+    task.status,
+    task.issueType,
+    task.priority,
+    task.subtaskIds.join(","),
+    task.availableActions.join(","),
+    task.pullRequest?.number ?? "",
+    task.pullRequest?.state ?? "",
+    task.pullRequest?.url ?? "",
+  ].join("|");
+  const activeSessionsMeasurementKey =
+    activeSessions
+      ?.map(
+        (session) => `${session.sessionId}:${session.role}:${session.scenario}:${session.status}`,
+      )
+      .join("|") ?? "";
+  const measurementTrigger = [
+    measurementVersion,
+    runState ?? "",
+    taskMeasurementKey,
+    activeSessionsMeasurementKey,
+  ].join("::");
 
   useEffect(() => {
     const element = taskWrapperRef.current;
     if (!element) {
+      return;
+    }
+
+    if (measurementTrigger.length === 0) {
       return;
     }
 
@@ -88,7 +116,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     return () => {
       window.cancelAnimationFrame(frameHandle);
     };
-  }, [activeSessions, measurementVersion, onMeasuredHeight, runState, task, task.id]);
+  }, [measurementTrigger, onMeasuredHeight, task.id]);
 
   return (
     <div ref={taskWrapperRef}>
