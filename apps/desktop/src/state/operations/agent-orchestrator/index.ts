@@ -8,15 +8,5 @@ export {
   loadRepoPromptOverrides,
   loadTaskDocuments,
 } from "./runtime/runtime";
-export {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "./support/async-side-effects";
-export {
-  mergeTodoListPreservingOrder,
-  normalizeSelectionForCatalog,
-  now,
-  pickDefaultModel,
-  toPersistedSessionRecord,
-  upsertMessage,
-} from "./support/utils";
+export { runOrchestratorSideEffect } from "./support/async-side-effects";
+export { toPersistedSessionRecord, upsertMessage } from "./support/utils";

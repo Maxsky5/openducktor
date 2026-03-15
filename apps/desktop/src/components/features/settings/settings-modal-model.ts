@@ -9,7 +9,7 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
-export type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
+type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
 type RepoAgentDefaultLike = {
   runtimeKind?: string;
   providerId: string;
@@ -17,7 +17,7 @@ type RepoAgentDefaultLike = {
   variant?: string | undefined;
   profileId?: string | undefined;
 };
-export type RepoAgentDefaultsInput = {
+type RepoAgentDefaultsInput = {
   spec?: RepoAgentDefaultLike | null | undefined;
   planner?: RepoAgentDefaultLike | null | undefined;
   build?: RepoAgentDefaultLike | null | undefined;
@@ -223,7 +223,7 @@ export const removePromptOverride = (
   return next;
 };
 
-export type PromptOverrideValidationErrors = Partial<Record<AgentPromptTemplateId, string>>;
+type PromptOverrideValidationErrors = Partial<Record<AgentPromptTemplateId, string>>;
 
 export const buildPromptOverrideValidationErrors = (
   overrides: RepoPromptOverrides,

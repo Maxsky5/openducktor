@@ -13,12 +13,6 @@ export const FILE_STATUS_COLOR: Record<string, string> = {
   deleted: "text-red-400",
 };
 
-export const FILE_STATUS_BADGE: Record<string, string> = {
-  modified: "M",
-  added: "A",
-  deleted: "D",
-};
-
 export const DIFF_SCOPE_OPTIONS: Array<{
   scope: DiffScope;
   label: string;

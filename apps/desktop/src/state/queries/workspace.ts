@@ -79,7 +79,7 @@ export const repoConfigQueryOptions = (repoPath: string) =>
     staleTime: REPO_CONFIG_STALE_TIME_MS,
   });
 
-export const workspaceListQueryOptions = () =>
+const workspaceListQueryOptions = () =>
   queryOptions({
     queryKey: workspaceQueryKeys.list(),
     queryFn: (): Promise<WorkspaceRecord[]> => host.workspaceList(),

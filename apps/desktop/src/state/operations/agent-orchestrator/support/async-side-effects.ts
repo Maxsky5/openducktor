@@ -2,16 +2,16 @@ import { errorMessage } from "@/lib/errors";
 
 type AsyncTagValue = string | number | boolean | null | undefined;
 
-export type OrchestratorAsyncTags = Record<string, AsyncTagValue>;
+type OrchestratorAsyncTags = Record<string, AsyncTagValue>;
 
-export type OrchestratorAsyncFailure = {
+type OrchestratorAsyncFailure = {
   operation: string;
   reason: string;
   tags: OrchestratorAsyncTags;
   error: unknown;
 };
 
-export type OrchestratorAsyncLogLevel = "error" | "warn" | "none";
+type OrchestratorAsyncLogLevel = "error" | "warn" | "none";
 
 type AsyncFailureOptions = {
   tags?: OrchestratorAsyncTags;

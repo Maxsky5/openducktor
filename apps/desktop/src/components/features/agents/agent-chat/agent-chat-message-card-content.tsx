@@ -77,7 +77,7 @@ const DeferredMarkdownRenderer = ({
   );
 };
 
-export type MessageHeaderProps = {
+type MessageHeaderProps = {
   message: AgentChatMessage;
   sessionRole: AgentRole | null;
   timeLabel: string;
@@ -176,7 +176,7 @@ const AssistantMessage = ({
   );
 };
 
-export type MessageBodyProps = {
+type MessageBodyProps = {
   message: AgentChatMessage;
   sessionSelectedModel: AgentModelSelection | null;
   assistantAccentColor: string | undefined;

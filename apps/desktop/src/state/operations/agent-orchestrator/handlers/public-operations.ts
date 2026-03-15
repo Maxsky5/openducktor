@@ -26,7 +26,7 @@ type CreatePublicOperationsArgs = {
   sessionActions: SessionActions;
 };
 
-export type OrchestratorPublicOperations = {
+type OrchestratorPublicOperations = {
   sessions: AgentSessionState[];
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   startAgentSession: (input: StartAgentSessionInput) => Promise<string>;

@@ -27,7 +27,7 @@ export type AgentStudioPendingPullRebase = {
   upstreamBehind: number;
 };
 
-export type AgentStudioGitActionState = {
+type AgentStudioGitActionState = {
   isCommitting: boolean;
   isPushing: boolean;
   isRebasing: boolean;

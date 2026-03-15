@@ -69,7 +69,7 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
   }
 };
 
-export const isRightPanelKindAvailable = (
+const isRightPanelKindAvailable = (
   kind: AgentStudioRightPanelKind,
   availability: { hasDocumentPanel: boolean; hasDiffPanel: boolean },
 ): boolean => {

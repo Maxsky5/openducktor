@@ -18,7 +18,7 @@ type RegisteredRuntimeAdapter = AgentCatalogPort &
     getRuntimeDefinition(): AgentRuntimeDefinition;
   };
 
-export type AgentRuntimeRegistry = {
+type AgentRuntimeRegistry = {
   defaultRuntimeKind: RuntimeKind;
   registeredRuntimeKinds: RuntimeKind[];
   getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter;

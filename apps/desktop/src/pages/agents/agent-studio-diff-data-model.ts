@@ -74,14 +74,14 @@ export type ScopeSummaryFields = Pick<
   | "diffHash"
 >;
 
-export type SummaryReloadDecision = {
+type SummaryReloadDecision = {
   sharedHashesChanged: boolean;
   scopeHashesChanged: boolean;
   shouldReloadFullScope: boolean;
 };
 
-export const EMPTY_DIFFS: FileDiff[] = [];
-export const EMPTY_STATUSES: FileStatus[] = [];
+const EMPTY_DIFFS: FileDiff[] = [];
+const EMPTY_STATUSES: FileStatus[] = [];
 
 const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   branch: null,
@@ -162,7 +162,7 @@ const hashMetadataEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean =
   left.statusHash === right.statusHash &&
   left.diffHash === right.diffHash;
 
-export const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean => {
+const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean => {
   const canUseHashShortCircuit =
     left.hashVersion !== null &&
     right.hashVersion !== null &&

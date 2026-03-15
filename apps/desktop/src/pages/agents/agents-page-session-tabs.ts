@@ -12,12 +12,12 @@ type PersistedTaskTabsPayload = {
   activeTaskId?: string | null;
 };
 
-export type PersistedTaskTabsState = {
+type PersistedTaskTabsState = {
   tabs: string[];
   activeTaskId: string | null;
 };
 
-export type WorkflowStepState = AgentWorkflowStepState;
+type WorkflowStepState = AgentWorkflowStepState;
 
 export type SessionCreateOption = {
   id: string;

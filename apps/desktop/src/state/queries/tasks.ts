@@ -6,7 +6,7 @@ import { toVisibleTasks } from "../operations/task-operations-model";
 const TASK_DATA_STALE_TIME_MS = 30_000;
 const RUN_DATA_STALE_TIME_MS = 30_000;
 
-export type RepoTaskData = {
+type RepoTaskData = {
   tasks: TaskCard[];
   runs: RunSummary[];
 };
@@ -17,7 +17,7 @@ export const taskQueryKeys = {
   runs: (repoPath: string) => [...taskQueryKeys.all, "runs", repoPath] as const,
 };
 
-export const repoTaskDataQueryOptions = (repoPath: string) =>
+const repoTaskDataQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: taskQueryKeys.repoData(repoPath),
     queryFn: async (): Promise<RepoTaskData> => {
@@ -34,7 +34,7 @@ export const repoTaskDataQueryOptions = (repoPath: string) =>
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
-export const repoRunsQueryOptions = (repoPath: string) =>
+const repoRunsQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: taskQueryKeys.runs(repoPath),
     queryFn: (): Promise<RunSummary[]> => host.runsList(repoPath),

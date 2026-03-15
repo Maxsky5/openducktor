@@ -4,7 +4,7 @@ import { host } from "../operations/host";
 
 const AGENT_SESSION_LIST_STALE_TIME_MS = 30_000;
 
-export const agentSessionQueryKeys = {
+const agentSessionQueryKeys = {
   all: ["agent-sessions"] as const,
   list: (repoPath: string, taskId: string) =>
     [...agentSessionQueryKeys.all, "list", repoPath, taskId] as const,

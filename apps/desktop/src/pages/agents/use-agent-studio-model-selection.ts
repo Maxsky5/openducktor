@@ -38,7 +38,7 @@ type UseAgentStudioModelSelectionArgs = {
   loadCatalog?: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
 };
 
-export type AgentStudioModelSelectionState = {
+type AgentStudioModelSelectionState = {
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
   isSelectionCatalogLoading: boolean;

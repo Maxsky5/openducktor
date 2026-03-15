@@ -32,9 +32,7 @@ type KanbanSimpleRenderModel = {
   visibleTasks: KanbanColumnData["tasks"];
 };
 
-export type KanbanVirtualizationRenderModel =
-  | KanbanSimpleRenderModel
-  | KanbanVirtualizedRenderModel;
+type KanbanVirtualizationRenderModel = KanbanSimpleRenderModel | KanbanVirtualizedRenderModel;
 
 type UseKanbanVirtualizationResult = {
   containerRef: { current: HTMLDivElement | null };

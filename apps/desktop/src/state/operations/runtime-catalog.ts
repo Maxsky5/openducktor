@@ -357,7 +357,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   };
 };
 
-export type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations>;
+type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations>;
 
 export const createHostRuntimeCatalogOperations = (
   getAdapter: (runtimeKind: RuntimeKind) => RuntimeCatalogAdapter,
@@ -402,13 +402,6 @@ export const loadRepoRuntimeCatalog = (
   runtimeKind: RuntimeKind,
 ): Promise<AgentModelCatalog> => {
   return getConfiguredRuntimeCatalogOperations().loadRepoRuntimeCatalog(repoPath, runtimeKind);
-};
-
-export const checkRepoRuntimeHealth = (
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-): Promise<RepoRuntimeHealthCheck> => {
-  return getConfiguredRuntimeCatalogOperations().checkRepoRuntimeHealth(repoPath, runtimeKind);
 };
 
 const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {

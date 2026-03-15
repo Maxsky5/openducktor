@@ -1,1 +1,1 @@
-export { type KanbanLaneTheme, laneTheme } from "@/lib/task-status-presentation";
+export { laneTheme } from "@/lib/task-status-presentation";

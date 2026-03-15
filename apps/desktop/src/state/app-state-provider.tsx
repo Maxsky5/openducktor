@@ -4,7 +4,6 @@ import type {
   AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
-  RepoSettingsInput,
   SpecStateContextValue,
   TasksStateContextValue,
   WorkspaceStateContextValue,
@@ -87,5 +86,3 @@ export const useSpecState = (): SpecStateContextValue =>
 
 export const useAgentState = (): AgentStateContextValue =>
   useRequiredContext(AgentStateContext, "useAgentState");
-
-export type { RepoSettingsInput };

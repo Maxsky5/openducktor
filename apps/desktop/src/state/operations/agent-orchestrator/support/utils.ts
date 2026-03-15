@@ -27,7 +27,7 @@ export {
   historyToChatMessages,
   toPersistedSessionRecord,
 } from "./persistence";
-export { inferScenario, kickoffPrompt, kickoffPromptWithTaskContext } from "./scenario";
+export { inferScenario, kickoffPromptWithTaskContext } from "./scenario";
 export {
   mergeTodoListPreservingOrder,
   parseTodosFromToolInput,

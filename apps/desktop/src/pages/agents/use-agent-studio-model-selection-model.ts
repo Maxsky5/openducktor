@@ -78,7 +78,7 @@ export const resolveSessionSelection = ({
   });
 };
 
-export const toModelDescriptorKey = (providerId: string, modelId: string): string => {
+const toModelDescriptorKey = (providerId: string, modelId: string): string => {
   return `${providerId}::${modelId}`;
 };
 

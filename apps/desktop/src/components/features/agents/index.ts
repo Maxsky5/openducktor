@@ -5,16 +5,7 @@ export type {
   AgentChatThreadModel,
   AgentRoleOption,
 } from "./agent-chat";
-export {
-  AgentChat,
-  CHAT_AUTOSCROLL_THRESHOLD_PX,
-  COMPOSER_TEXTAREA_MAX_HEIGHT_PX,
-  COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
-  computeComposerTextareaLayout,
-  computeTodoPanelBottomOffset,
-  isNearBottom,
-  useAgentChatLayout,
-} from "./agent-chat";
+export { AgentChat, isNearBottom, useAgentChatLayout } from "./agent-chat";
 export { AgentRuntimeCombobox } from "./agent-runtime-combobox";
 export { AgentRuntimeIcon } from "./agent-runtime-icon";
 export type { AgentStudioHeaderModel } from "./agent-studio-header";
@@ -24,21 +15,13 @@ export type {
   AgentStudioRightPanelModel,
   AgentStudioRightPanelToggleModel,
 } from "./agent-studio-right-panel";
-export {
-  AgentStudioRightPanel,
-  AgentStudioRightPanelToggleButton,
-} from "./agent-studio-right-panel";
-export type {
-  AgentStudioTaskTab,
-  AgentStudioTaskTabStatus,
-  AgentStudioTaskTabsModel,
-} from "./agent-studio-task-tabs";
+export { AgentStudioRightPanel } from "./agent-studio-right-panel";
+export type { AgentStudioTaskTab, AgentStudioTaskTabsModel } from "./agent-studio-task-tabs";
 export { AgentStudioTaskTabs } from "./agent-studio-task-tabs";
 export type {
   AgentStudioWorkspaceDocument,
   AgentStudioWorkspaceSidebarModel,
 } from "./agent-studio-workspace-sidebar";
-export { AgentStudioWorkspaceSidebar } from "./agent-studio-workspace-sidebar";
 export {
   toModelGroupsByProvider,
   toModelOptions,

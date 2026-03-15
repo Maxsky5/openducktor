@@ -1,7 +1,7 @@
 import type { RefCallback } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
-export const AGENT_CHAT_ROW_MOTION_DURATION_MS = 1_000;
+const AGENT_CHAT_ROW_MOTION_DURATION_MS = 1_000;
 const AGENT_CHAT_ROW_MOTION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const AGENT_CHAT_ROW_ENTRY_OFFSET_PX = 32;
 

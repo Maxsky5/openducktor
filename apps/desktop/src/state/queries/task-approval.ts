@@ -4,13 +4,13 @@ import { host } from "../operations/host";
 
 const TASK_APPROVAL_CONTEXT_STALE_TIME_MS = 60_000;
 
-export const taskApprovalQueryKeys = {
+const taskApprovalQueryKeys = {
   all: ["task-approval"] as const,
   context: (repoPath: string, taskId: string) =>
     [...taskApprovalQueryKeys.all, "context", repoPath, taskId] as const,
 };
 
-export const taskApprovalContextQueryOptions = (repoPath: string, taskId: string) =>
+const taskApprovalContextQueryOptions = (repoPath: string, taskId: string) =>
   queryOptions({
     queryKey: taskApprovalQueryKeys.context(repoPath, taskId),
     queryFn: (): Promise<TaskApprovalContext> => host.taskApprovalContextGet(repoPath, taskId),

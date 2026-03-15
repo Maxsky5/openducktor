@@ -81,25 +81,4 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
   );
 }
 
-function CommandSeparator({
-  className,
-  ...props
-}: React.ComponentProps<typeof CommandPrimitive.Separator>) {
-  return (
-    <CommandPrimitive.Separator
-      data-slot="command-separator"
-      className={cn("-mx-1 h-px bg-border", className)}
-      {...props}
-    />
-  );
-}
-
-export {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-};
+export { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList };

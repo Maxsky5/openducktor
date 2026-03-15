@@ -10,7 +10,7 @@ type UseSettingsModalCatalogStateArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
 };
 
-export type SettingsModalCatalogState = {
+type SettingsModalCatalogState = {
   catalogsByRuntime: Record<string, AgentModelCatalog | null>;
   catalogErrorsByRuntime: Record<string, string | null>;
   isLoadingCatalog: boolean;

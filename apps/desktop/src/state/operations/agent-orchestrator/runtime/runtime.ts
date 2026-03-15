@@ -29,7 +29,7 @@ export type RuntimeInfo = {
   workingDirectory: string;
 };
 
-export const toRuntimeConnection = (
+const toRuntimeConnection = (
   runtimeEndpoint: string,
   workingDirectory: string,
 ): AgentRuntimeConnection => ({

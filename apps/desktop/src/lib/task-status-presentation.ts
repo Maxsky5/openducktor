@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { KanbanColumnId } from "@openducktor/core";
 
-export type KanbanLaneTheme = {
+type KanbanLaneTheme = {
   boardSurfaceClass: string;
   headerSurfaceClass: string;
   headerAccentClass: string;

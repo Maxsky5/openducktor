@@ -28,7 +28,7 @@ export type ComboboxGroup = {
   options: ComboboxOption[];
 };
 
-export type ComboboxProps = {
+type ComboboxProps = {
   value: string;
   onValueChange: (value: string) => void;
   options: ComboboxOption[];

@@ -25,7 +25,7 @@ import {
 
 type DocumentSection = TaskDocumentSection;
 
-export type PendingDiscardIntent =
+type PendingDiscardIntent =
   | { type: "close-modal" }
   | { type: "switch-section"; next: EditTaskSection };
 

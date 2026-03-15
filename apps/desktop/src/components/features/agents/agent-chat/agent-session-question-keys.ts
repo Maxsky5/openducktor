@@ -2,7 +2,7 @@ import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 
 type AgentQuestion = AgentQuestionRequest["questions"][number];
 
-export type AgentQuestionRenderEntry = {
+type AgentQuestionRenderEntry = {
   question: AgentQuestion;
   key: string;
 };

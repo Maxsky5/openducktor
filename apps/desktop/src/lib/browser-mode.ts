@@ -1,6 +1,6 @@
 const browserEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
 
-export const BROWSER_APP_MODE = "browser";
+const BROWSER_APP_MODE = "browser";
 const DEFAULT_BROWSER_BACKEND_URL = "http://127.0.0.1:14327";
 
 export const isBrowserAppMode = (): boolean => {

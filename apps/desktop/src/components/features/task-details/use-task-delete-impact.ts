@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useWorkspaceState } from "@/state";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 
-export type TaskDeleteImpact = {
+type TaskDeleteImpact = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   impactError: string | null;

@@ -9,11 +9,11 @@ import {
 
 export type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 
-export type ReusableSessionDecision = {
+type ReusableSessionDecision = {
   session: AgentSessionState;
 };
 
-export type AgentStudioSessionSelectionQueryParams = {
+type AgentStudioSessionSelectionQueryParams = {
   taskId: string;
   sessionId: string | undefined;
   role: AgentRole;
@@ -37,7 +37,7 @@ export const resolveReusableSessionForStart = (params: {
   return null;
 };
 
-export const buildSessionSelectionQueryUpdate = (params: {
+const buildSessionSelectionQueryUpdate = (params: {
   taskId: string;
   sessionId: string | undefined;
   role: AgentRole;

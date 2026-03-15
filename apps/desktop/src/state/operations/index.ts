@@ -1,6 +1,4 @@
-export { loadRepoBranches } from "./repo-branches";
 export {
-  checkRepoRuntimeHealth,
   configureRuntimeCatalogOperations,
   createHostRuntimeCatalogOperations,
   loadRepoRuntimeCatalog,
