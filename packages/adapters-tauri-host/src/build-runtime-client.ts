@@ -22,7 +22,7 @@ import {
   taskPullRequestDetectResultSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray } from "./invoke-utils";
+import { parseArray, parseOkResult } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
 
 export type BuildCleanupMode = "success" | "failure";
@@ -30,39 +30,23 @@ export type BuildRespondInput =
   | { action: "approve" }
   | { action: "deny" }
   | { action: "message"; message: string };
-type OkResult = { ok: boolean };
-
-const parseOkResult = (payload: unknown, command: string): OkResult => {
-  if (
-    !payload ||
-    typeof payload !== "object" ||
-    typeof (payload as { ok?: unknown }).ok !== "boolean"
-  ) {
-    throw new Error(`Expected { ok: boolean } payload from host command ${command}`);
-  }
-
-  return {
-    ok: (payload as { ok: boolean }).ok,
-  };
-};
-
 export const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
-  const payload = await invokeFn<unknown>("system_check", { repoPath });
+  const payload = await invokeFn("system_check", { repoPath });
   return systemCheckSchema.parse(payload);
 };
 
 export const runtimeCheck = async (invokeFn: InvokeFn, force = false): Promise<RuntimeCheck> => {
-  const payload = await invokeFn<unknown>("runtime_check", { force });
+  const payload = await invokeFn("runtime_check", { force });
   return runtimeCheckSchema.parse(payload);
 };
 
 export const beadsCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<BeadsCheck> => {
-  const payload = await invokeFn<unknown>("beads_check", { repoPath });
+  const payload = await invokeFn("beads_check", { repoPath });
   return beadsCheckSchema.parse(payload);
 };
 
 export const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<RunSummary[]> => {
-  const payload = await invokeFn<unknown>("runs_list", { repoPath });
+  const payload = await invokeFn("runs_list", { repoPath });
   return parseArray(runSummarySchema, payload);
 };
 
@@ -71,12 +55,12 @@ export const runtimeList = async (
   repoPath: string | undefined,
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary[]> => {
-  const payload = await invokeFn<unknown>("runtime_list", { repoPath, runtimeKind });
+  const payload = await invokeFn("runtime_list", { repoPath, runtimeKind });
   return parseArray(runtimeInstanceSummarySchema, payload);
 };
 
 export const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
-  const payload = await invokeFn<unknown>("runtime_definitions_list", {});
+  const payload = await invokeFn("runtime_definitions_list", {});
   return parseArray(runtimeDescriptorSchema, payload);
 };
 
@@ -85,7 +69,7 @@ export const qaReviewTargetGet = async (
   repoPath: string,
   taskId: string,
 ): Promise<QaReviewTarget> => {
-  const payload = await invokeFn<unknown>("qa_review_target_get", {
+  const payload = await invokeFn("qa_review_target_get", {
     repoPath,
     taskId,
   });
@@ -96,7 +80,7 @@ export const runtimeStop = async (
   invokeFn: InvokeFn,
   runtimeId: string,
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn<unknown>("runtime_stop", {
+  const payload = await invokeFn("runtime_stop", {
     runtimeId,
   });
   return parseOkResult(payload, "runtime_stop");
@@ -107,7 +91,7 @@ export const runtimeEnsure = async (
   repoPath: string,
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary> => {
-  const payload = await invokeFn<unknown>("runtime_ensure", {
+  const payload = await invokeFn("runtime_ensure", {
     repoPath,
     runtimeKind,
   });
@@ -120,7 +104,7 @@ export const buildStart = async (
   taskId: string,
   runtimeKind: RuntimeKind,
 ): Promise<RunSummary> => {
-  const payload = await invokeFn<unknown>("build_start", { repoPath, taskId, runtimeKind });
+  const payload = await invokeFn("build_start", { repoPath, taskId, runtimeKind });
   return runSummarySchema.parse(payload);
 };
 
@@ -130,7 +114,7 @@ export const buildBlocked = async (
   taskId: string,
   reason: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn<unknown>("build_blocked", {
+  const payload = await invokeFn("build_blocked", {
     repoPath,
     taskId,
     reason,
@@ -143,7 +127,7 @@ export const buildResumed = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn<unknown>("build_resumed", {
+  const payload = await invokeFn("build_resumed", {
     repoPath,
     taskId,
   });
@@ -156,7 +140,7 @@ export const buildCompleted = async (
   taskId: string,
   summary?: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn<unknown>("build_completed", {
+  const payload = await invokeFn("build_completed", {
     repoPath,
     taskId,
     input: { summary },
@@ -170,7 +154,7 @@ export const humanRequestChanges = async (
   taskId: string,
   note?: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn<unknown>("human_request_changes", {
+  const payload = await invokeFn("human_request_changes", {
     repoPath,
     taskId,
     note,
@@ -183,7 +167,7 @@ export const humanApprove = async (
   repoPath: string,
   taskId: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn<unknown>("human_approve", {
+  const payload = await invokeFn("human_approve", {
     repoPath,
     taskId,
   });
@@ -195,7 +179,7 @@ export const taskApprovalContextGet = async (
   repoPath: string,
   taskId: string,
 ) => {
-  const payload = await invokeFn<unknown>("task_approval_context_get", {
+  const payload = await invokeFn("task_approval_context_get", {
     repoPath,
     taskId,
   });
@@ -208,7 +192,7 @@ export const taskDirectMerge = async (
   taskId: string,
   mergeMethod: string,
 ): Promise<TaskCard> => {
-  const payload = await invokeFn<unknown>("task_direct_merge", {
+  const payload = await invokeFn("task_direct_merge", {
     repoPath,
     taskId,
     mergeMethod: gitMergeMethodSchema.parse(mergeMethod),
@@ -223,7 +207,7 @@ export const taskPullRequestUpsert = async (
   title: string,
   body: string,
 ) => {
-  const payload = await invokeFn<unknown>("task_pull_request_upsert", {
+  const payload = await invokeFn("task_pull_request_upsert", {
     repoPath,
     taskId,
     input: { title, body },
@@ -236,7 +220,7 @@ export const taskPullRequestUnlink = async (
   repoPath: string,
   taskId: string,
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn<unknown>("task_pull_request_unlink", { repoPath, taskId });
+  const payload = await invokeFn("task_pull_request_unlink", { repoPath, taskId });
   return parseOkResult(payload, "task_pull_request_unlink");
 };
 
@@ -245,7 +229,7 @@ export const taskPullRequestDetect = async (
   repoPath: string,
   taskId: string,
 ) => {
-  const payload = await invokeFn<unknown>("task_pull_request_detect", { repoPath, taskId });
+  const payload = await invokeFn("task_pull_request_detect", { repoPath, taskId });
   return taskPullRequestDetectResultSchema.parse(payload);
 };
 
@@ -253,7 +237,7 @@ export const repoPullRequestSync = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn<unknown>("repo_pull_request_sync", { repoPath });
+  const payload = await invokeFn("repo_pull_request_sync", { repoPath });
   return parseOkResult(payload, "repo_pull_request_sync");
 };
 
@@ -262,7 +246,7 @@ export const buildRespond = async (
   runId: string,
   input: BuildRespondInput,
 ): Promise<{ ok: boolean }> => {
-  const response = await invokeFn<unknown>("build_respond", {
+  const response = await invokeFn("build_respond", {
     runId,
     action: input.action,
     ...(input.action === "message" ? { payload: input.message } : {}),
@@ -271,7 +255,7 @@ export const buildRespond = async (
 };
 
 export const buildStop = async (invokeFn: InvokeFn, runId: string): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn<unknown>("build_stop", { runId });
+  const payload = await invokeFn("build_stop", { runId });
   return parseOkResult(payload, "build_stop");
 };
 
@@ -280,7 +264,7 @@ export const buildCleanup = async (
   runId: string,
   mode: BuildCleanupMode,
 ): Promise<{ ok: boolean }> => {
-  const payload = await invokeFn<unknown>("build_cleanup", { runId, mode });
+  const payload = await invokeFn("build_cleanup", { runId, mode });
   return parseOkResult(payload, "build_cleanup");
 };
 

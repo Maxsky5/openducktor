@@ -97,7 +97,7 @@ export class TaskMetadataCache {
       return inflight;
     }
 
-    const next = invokeFn<unknown>("task_metadata_get", { repoPath, taskId })
+    const next = invokeFn("task_metadata_get", { repoPath, taskId })
       .then((payload) => {
         const parsed = taskMetadataPayloadSchema.parse(payload);
         const metadata = {

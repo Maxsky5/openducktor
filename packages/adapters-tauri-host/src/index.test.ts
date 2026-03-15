@@ -67,9 +67,9 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
 
 const createClient = (resolver: (command: string, args?: Record<string, unknown>) => unknown) => {
   const calls: InvokeCall[] = [];
-  const invoke = async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
+  const invoke = async (command: string, args?: Record<string, unknown>): Promise<unknown> => {
     calls.push({ command, args });
-    return resolver(command, args) as T;
+    return resolver(command, args);
   };
   const client: TauriHostClientType = createTauriHostClient(invoke);
   return { client, calls };
@@ -257,6 +257,48 @@ describe("TauriHostClient", () => {
         },
       },
     ]);
+  });
+
+  test("document mutation commands reject malformed updatedAt payloads", async () => {
+    const { client } = createClient((command) => {
+      switch (command) {
+        case "set_spec":
+          return { updatedAt: 123 };
+        case "spec_save_document":
+          return {};
+        case "set_plan":
+          return null;
+        case "plan_save_document":
+          return { updatedAt: "" };
+        default:
+          throw new Error(`Unexpected command: ${command}`);
+      }
+    });
+
+    await expect(
+      client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
+    ).rejects.toThrow("Expected { updatedAt: string } payload from host command set_spec");
+    await expect(
+      client.saveSpecDocument({
+        repoPath: "/repo",
+        taskId: "task-1",
+        markdown: "# Spec",
+      }),
+    ).rejects.toThrow(
+      "Expected { updatedAt: string } payload from host command spec_save_document",
+    );
+    await expect(
+      client.setPlan({ repoPath: "/repo", taskId: "task-1", markdown: "## Plan" }),
+    ).rejects.toThrow("Expected { updatedAt: string } payload from host command set_plan");
+    await expect(
+      client.savePlanDocument({
+        repoPath: "/repo",
+        taskId: "task-1",
+        markdown: "## Plan",
+      }),
+    ).rejects.toThrow(
+      "Expected { updatedAt: string } payload from host command plan_save_document",
+    );
   });
 
   test("setPlan forwards markdown and subtasks payload", async () => {
@@ -597,6 +639,19 @@ describe("TauriHostClient", () => {
     ]);
   });
 
+  test("taskDelete rejects malformed ack payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "task_delete") {
+        return { ok: "true" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.taskDelete("/repo", "epic-1", true)).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command task_delete",
+    );
+  });
+
   test("git commands use expected IPC routes and payloads", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "git_get_branches") {
@@ -790,6 +845,19 @@ describe("TauriHostClient", () => {
       diffScope: "target",
       workingDir: "/tmp/wt/task-1",
     });
+  });
+
+  test("gitRemoveWorktree rejects malformed ack payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "git_remove_worktree") {
+        return {};
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.gitRemoveWorktree("/repo", "/tmp/wt/task-1")).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command git_remove_worktree",
+    );
   });
 
   test("git commit-all, pull, and rebase parse and reject malformed host payloads", async () => {
