@@ -33,6 +33,8 @@ export const createHostClient = (): TauriHostClient => {
   });
 };
 
+export const hostClient = createHostClient();
+
 export const subscribeRunEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {

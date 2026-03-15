@@ -1,7 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
-import { loadRepoRuntimeCatalog } from "../operations/runtime-catalog";
+import { loadRepoRuntimeCatalog } from "../read-models/runtime-catalog-client";
 
 const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
 

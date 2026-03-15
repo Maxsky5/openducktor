@@ -1,3 +1,1 @@
-import { createHostClient } from "@/lib/host-client";
-
-export const host = createHostClient();
+export { hostClient as host } from "@/lib/host-client";
