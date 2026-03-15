@@ -1,6 +1,7 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { toSessionContextUsage } from "../support/assistant-meta";
-import { sanitizeStreamingText, toAssistantMessageMeta, upsertMessage } from "../support/utils";
+import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
+import { sanitizeStreamingText } from "../support/core";
+import { upsertMessage } from "../support/messages";
 import type {
   DraftChannel,
   SessionEvent,

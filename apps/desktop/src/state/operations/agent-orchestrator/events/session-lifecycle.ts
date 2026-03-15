@@ -5,15 +5,16 @@ import { settleDanglingTodoToolMessages } from "../../agent-tool-messages";
 import { isMutatingPermission } from "../../permission-policy";
 import {
   finalizeDraftAssistantMessage,
-  isDuplicateAssistantMessage,
-  mergeTodoListPreservingOrder,
-  normalizeRetryStatusMessage,
-  normalizeSessionErrorMessage,
-  READ_ONLY_ROLES,
   toAssistantMessageMeta,
   toSessionContextUsage,
-  upsertMessage,
-} from "../support/utils";
+} from "../support/assistant-meta";
+import { isDuplicateAssistantMessage, READ_ONLY_ROLES } from "../support/core";
+import { upsertMessage } from "../support/messages";
+import { mergeTodoListPreservingOrder } from "../support/todos";
+import {
+  normalizeRetryStatusMessage,
+  normalizeSessionErrorMessage,
+} from "../support/tool-messages";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import {
   clearDraftBuffers,
