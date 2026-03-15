@@ -33,6 +33,8 @@ export const ISSUE_TYPE_OPTIONS: IssueTypeOption[] = [
     value: "epic",
     label: "Epic",
     description: "Large initiative that contains multiple subtasks.",
+    disabled: true,
+    disabledText: "Coming soon",
     icon: Layers3,
     accentClass: "border-pending-border bg-pending-surface",
     iconClass: "bg-pending-surface text-pending-muted",

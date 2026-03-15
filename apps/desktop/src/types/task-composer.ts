@@ -26,6 +26,8 @@ export type IssueTypeOption = {
   accentClass: string;
   iconClass: string;
   indicatorClass: string;
+  disabled?: boolean;
+  disabledText?: string;
 };
 
 export type PriorityOption = {
