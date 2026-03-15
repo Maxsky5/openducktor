@@ -155,7 +155,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(persistedSessionId === "session-2").toBe(true);
       expect(errorCalls).toHaveLength(1);
       expect(errorCalls[0]?.[0]).toBe("[agent-orchestrator]");
-      expect(errorCalls[0]?.[1]).toBe("fork-session-load-session-todos");
+      expect(errorCalls[0]?.[1]).toBe("fork-session-warm-session-todos");
     } finally {
       adapter.forkSession = originalForkSession;
       console.error = originalError;

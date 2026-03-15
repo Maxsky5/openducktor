@@ -8,15 +8,13 @@ import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection, type TaskDocuments } from "../runtime/runtime";
-import {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "../support/async-side-effects";
+import { captureOrchestratorFallback } from "../support/async-side-effects";
 import {
   createRepoStaleGuard,
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,
-} from "../support/utils";
+} from "../support/core";
+import { warmSessionData } from "../support/session-warmup";
 
 type EnsureSessionReadyDependencies = {
   activeRepo: string | null;
@@ -212,47 +210,28 @@ export const createEnsureSessionReady = ({
 
     const activeSession = sessionsRef.current[sessionId];
     const runtimeConnection = resolveRuntimeConnection(runtime);
-    const warmSessionData = (targetSession: AgentSessionState): void => {
+    const warmPreparedSession = (targetSession: AgentSessionState): void => {
       const targetRuntimeKind =
         targetSession.runtimeKind ?? targetSession.selectedModel?.runtimeKind;
       if (!targetRuntimeKind) {
         throw new Error(`Runtime kind is required to warm session '${sessionId}'.`);
       }
-      runOrchestratorSideEffect(
-        "ensure-ready-warm-session-todos",
-        loadSessionTodos(
-          sessionId,
-          targetRuntimeKind,
-          runtimeConnection,
-          targetSession.externalSessionId,
-        ),
-        {
-          tags: {
-            repoPath,
-            sessionId,
-            taskId: targetSession.taskId,
-            role: targetSession.role,
-            externalSessionId: targetSession.externalSessionId,
-          },
-        },
-      );
-      if (!targetSession.modelCatalog && !targetSession.isLoadingModelCatalog) {
-        runOrchestratorSideEffect(
-          "ensure-ready-warm-session-model-catalog",
-          loadSessionModelCatalog(sessionId, targetRuntimeKind, runtimeConnection),
-          {
-            tags: {
-              repoPath,
-              sessionId,
-              taskId: targetSession.taskId,
-              role: targetSession.role,
-            },
-          },
-        );
-      }
+      warmSessionData({
+        operationPrefix: "ensure-ready-warm-session",
+        repoPath,
+        sessionId,
+        taskId: targetSession.taskId,
+        role: targetSession.role,
+        runtimeKind: targetRuntimeKind,
+        runtimeConnection,
+        externalSessionId: targetSession.externalSessionId,
+        loadSessionTodos,
+        loadSessionModelCatalog,
+        shouldLoadModelCatalog: !targetSession.modelCatalog && !targetSession.isLoadingModelCatalog,
+      });
     };
     if (activeSession) {
-      warmSessionData(activeSession);
+      warmPreparedSession(activeSession);
     }
   };
 };

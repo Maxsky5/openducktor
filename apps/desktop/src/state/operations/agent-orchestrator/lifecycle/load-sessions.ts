@@ -19,20 +19,17 @@ import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
 import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
+import { toRuntimeConnection } from "../runtime/runtime";
+import { captureOrchestratorFallback } from "../support/async-side-effects";
+import { createRepoStaleGuard, normalizeWorkingDirectory, now } from "../support/core";
+import { upsertMessage } from "../support/messages";
+import { normalizePersistedSelection } from "../support/models";
 import {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "../support/async-side-effects";
-import {
-  createRepoStaleGuard,
   defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
-  normalizePersistedSelection,
-  normalizeWorkingDirectory,
-  now,
-  upsertMessage,
-} from "../support/utils";
+} from "../support/persistence";
+import { warmSessionData } from "../support/session-warmup";
 
 type UpdateSession = (
   sessionId: string,
@@ -115,33 +112,25 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const warmSessionData = (
+    const warmPersistedSession = (
       targetSessionId: string,
       runtimeKind: RuntimeKind,
       runtimeConnection: AgentRuntimeConnection,
       externalSessionId: string,
+      role: AgentSessionState["role"],
     ): void => {
-      runOrchestratorSideEffect(
-        "load-sessions-warm-session-todos",
-        loadSessionTodos(targetSessionId, runtimeKind, runtimeConnection, externalSessionId),
-        {
-          tags: {
-            repoPath,
-            sessionId: targetSessionId,
-            externalSessionId,
-          },
-        },
-      );
-      runOrchestratorSideEffect(
-        "load-sessions-warm-session-model-catalog",
-        loadSessionModelCatalog(targetSessionId, runtimeKind, runtimeConnection),
-        {
-          tags: {
-            repoPath,
-            sessionId: targetSessionId,
-          },
-        },
-      );
+      warmSessionData({
+        operationPrefix: "load-sessions-warm-session",
+        repoPath,
+        sessionId: targetSessionId,
+        taskId,
+        role,
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
+        loadSessionTodos,
+        loadSessionModelCatalog,
+      });
     };
 
     const [persisted, repoPromptOverrides] = await Promise.all([
@@ -202,19 +191,20 @@ export const createLoadAgentSessions = ({
         requestedSession.runtimeEndpoint &&
         requestedSession.workingDirectory
       ) {
-        const runtimeConnection = {
-          endpoint: requestedSession.runtimeEndpoint,
-          workingDirectory: requestedSession.workingDirectory,
-        } satisfies AgentRuntimeConnection;
+        const runtimeConnection = toRuntimeConnection(
+          requestedSession.runtimeEndpoint,
+          requestedSession.workingDirectory,
+        );
         const requestedRuntimeKind =
           requestedSession.runtimeKind ??
           requestedSession.selectedModel?.runtimeKind ??
           DEFAULT_RUNTIME_KIND;
-        warmSessionData(
+        warmPersistedSession(
           requestedSession.sessionId,
           requestedRuntimeKind,
           runtimeConnection,
           requestedSession.externalSessionId,
+          requestedSession.role,
         );
       }
       return;
@@ -392,10 +382,7 @@ export const createLoadAgentSessions = ({
         return;
       }
       const runtimeEndpoint = runtimeResolution.endpoint;
-      const runtimeConnection = {
-        endpoint: runtimeEndpoint,
-        workingDirectory,
-      } satisfies AgentRuntimeConnection;
+      const runtimeConnection = toRuntimeConnection(runtimeEndpoint, workingDirectory);
       const externalSessionId = record.externalSessionId ?? record.sessionId;
       const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
       if (existingSession && existingSession.messages.length > 0) {
@@ -413,7 +400,13 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, recordRuntimeKind, runtimeConnection, externalSessionId);
+        warmPersistedSession(
+          record.sessionId,
+          recordRuntimeKind,
+          runtimeConnection,
+          externalSessionId,
+          record.role,
+        );
         return;
       }
 
@@ -508,7 +501,13 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, recordRuntimeKind, runtimeConnection, externalSessionId);
+        warmPersistedSession(
+          record.sessionId,
+          recordRuntimeKind,
+          runtimeConnection,
+          externalSessionId,
+          record.role,
+        );
         return;
       }
 
@@ -530,7 +529,13 @@ export const createLoadAgentSessions = ({
         }),
         { persist: false },
       );
-      warmSessionData(record.sessionId, recordRuntimeKind, runtimeConnection, externalSessionId);
+      warmPersistedSession(
+        record.sessionId,
+        recordRuntimeKind,
+        runtimeConnection,
+        externalSessionId,
+        record.role,
+      );
     };
 
     for (

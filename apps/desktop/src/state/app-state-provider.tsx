@@ -18,10 +18,7 @@ import {
   useRequiredContext,
   WorkspaceStateContext,
 } from "./app-state-contexts";
-import {
-  configureRuntimeCatalogOperations,
-  createHostRuntimeCatalogOperations,
-} from "./operations";
+import { createHostRuntimeCatalogOperations } from "./operations";
 import {
   AgentStudioStateProvider,
   AppLifecycleStateProvider,
@@ -37,12 +34,10 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   const runtimeRegistry = useMemo(() => createAgentRuntimeRegistry(), []);
   const agentEngine = useMemo(() => runtimeRegistry.createAgentEngine(), [runtimeRegistry]);
   const runtimeCatalogOperations = useMemo(() => {
-    const ops = createHostRuntimeCatalogOperations(
+    return createHostRuntimeCatalogOperations(
       runtimeRegistry.getAdapter,
       runtimeRegistry.getRuntimeDefinition,
     );
-    configureRuntimeCatalogOperations(ops);
-    return ops;
   }, [runtimeRegistry]);
   const checkRepoRuntimeHealth = useCallback(
     (repoPath: string, runtimeKind: RuntimeKind) =>
@@ -51,7 +46,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
   );
 
   return (
-    <AppRuntimeProvider>
+    <AppRuntimeProvider loadRepoRuntimeCatalog={runtimeCatalogOperations.loadRepoRuntimeCatalog}>
       <SpecStateProvider>
         <ChecksStateProvider checkRepoRuntimeHealth={checkRepoRuntimeHealth}>
           <TasksStateProvider>

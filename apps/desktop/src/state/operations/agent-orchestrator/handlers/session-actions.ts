@@ -12,8 +12,8 @@ import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { annotateQuestionToolMessage } from "../support/question-messages";
+import { warmSessionData } from "../support/session-warmup";
 import { now } from "../support/utils";
 import { createStartAgentSession } from "./start-session";
 
@@ -390,34 +390,21 @@ export const createAgentSessionActions = ({
     }));
     attachSessionListener(activeRepo, summary.sessionId);
     void persistSessionSnapshot(nextSession);
-    void loadSessionModelCatalog(
-      summary.sessionId,
-      nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-      {
+    warmSessionData({
+      operationPrefix: "fork-session-warm-session",
+      repoPath: activeRepo,
+      sessionId: summary.sessionId,
+      taskId: nextSession.taskId,
+      role: nextSession.role,
+      runtimeKind: nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      runtimeConnection: {
         endpoint: nextSession.runtimeEndpoint,
         workingDirectory: nextSession.workingDirectory,
       },
-    );
-    runOrchestratorSideEffect(
-      "fork-session-load-session-todos",
-      loadSessionTodos(
-        summary.sessionId,
-        nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-        {
-          endpoint: nextSession.runtimeEndpoint,
-          workingDirectory: nextSession.workingDirectory,
-        },
-        summary.externalSessionId,
-      ),
-      {
-        tags: {
-          repoPath: activeRepo,
-          parentSessionId,
-          sessionId: summary.sessionId,
-          externalSessionId: summary.externalSessionId,
-        },
-      },
-    );
+      externalSessionId: summary.externalSessionId,
+      loadSessionTodos,
+      loadSessionModelCatalog,
+    });
     return summary.sessionId;
   };
 

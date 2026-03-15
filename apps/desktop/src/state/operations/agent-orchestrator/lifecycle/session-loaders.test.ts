@@ -123,7 +123,7 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
     });
   });
 
-  test("records model catalog errors in session messages", async () => {
+  test("rejects model catalog errors after clearing loading state", async () => {
     const harness = createStateHarness(createSession());
     const loadSessionModelCatalog = createLoadSessionModelCatalog({
       adapter: {
@@ -135,12 +135,13 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("session-1", "opencode", runtimeConnection);
+    await expect(
+      loadSessionModelCatalog("session-1", "opencode", runtimeConnection),
+    ).rejects.toThrow("catalog failed");
 
     const session = harness.getState()["session-1"];
     expect(session?.isLoadingModelCatalog).toBe(false);
-    expect(session?.messages[0]?.id).toBe("model-catalog:session-1");
-    expect(session?.messages[0]?.content).toContain("Model catalog unavailable: catalog failed");
+    expect(session?.messages).toEqual([]);
   });
 
   test("rejects invalid model catalog runtime runtimeEndpoint before adapter call", async () => {
@@ -157,17 +158,17 @@ describe("agent-orchestrator/lifecycle/session-loaders", () => {
       updateSession: harness.updateSession,
     });
 
-    await loadSessionModelCatalog("session-1", "opencode", {
-      endpoint: "https://example.com:4444",
-      workingDirectory: "/tmp/repo",
-    });
+    await expect(
+      loadSessionModelCatalog("session-1", "opencode", {
+        endpoint: "https://example.com:4444",
+        workingDirectory: "/tmp/repo",
+      }),
+    ).rejects.toThrow("Session runtime runtimeEndpoint must use the http protocol.");
 
     const session = harness.getState()["session-1"];
     expect(listAvailableModelsCalled).toBe(false);
     expect(session?.isLoadingModelCatalog).toBe(false);
-    expect(session?.messages[0]?.content).toContain(
-      "Model catalog unavailable: Session runtime runtimeEndpoint must use the http protocol.",
-    );
+    expect(session?.messages).toEqual([]);
   });
 
   test("loads todos and merges while preserving existing order", async () => {

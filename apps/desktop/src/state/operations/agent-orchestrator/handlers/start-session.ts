@@ -13,14 +13,10 @@ import {
   captureOrchestratorFallback,
   runOrchestratorSideEffect,
 } from "../support/async-side-effects";
+import { createRepoStaleGuard, normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { normalizePersistedSelection } from "../support/models";
-import {
-  createRepoStaleGuard,
-  inferScenario,
-  kickoffPromptWithTaskContext,
-  normalizeWorkingDirectory,
-  throwIfRepoStale,
-} from "../support/utils";
+import { inferScenario, kickoffPromptWithTaskContext } from "../support/scenario";
+import { warmSessionData } from "../support/session-warmup";
 import type {
   ModelDependencies,
   ResolvedRuntimeAndModel,
@@ -518,7 +514,7 @@ const attachSessionListenerAndGuard = async ({
   });
 };
 
-const warmSessionData = ({
+const warmStartedSession = ({
   startedCtx,
   runtimeInfo,
   model,
@@ -527,34 +523,24 @@ const warmSessionData = ({
   runtimeInfo: RuntimeInfo;
   model: ModelDependencies;
 }): void => {
-  const tags = createSessionStartTags(startedCtx);
   const runtimeConnection = resolveRuntimeConnection(runtimeInfo);
   const runtimeKind = runtimeInfo.runtimeKind ?? startedCtx.summary.runtimeKind;
   if (!runtimeKind) {
     throw new Error(`Runtime kind is required to warm session '${startedCtx.summary.sessionId}'.`);
   }
 
-  runOrchestratorSideEffect(
-    "start-session-warm-session-todos",
-    model.loadSessionTodos(
-      startedCtx.summary.sessionId,
-      runtimeKind,
-      runtimeConnection,
-      startedCtx.summary.externalSessionId,
-    ),
-    {
-      tags: {
-        ...tags,
-        externalSessionId: startedCtx.summary.externalSessionId,
-      },
-    },
-  );
-
-  runOrchestratorSideEffect(
-    "start-session-warm-session-model-catalog",
-    model.loadSessionModelCatalog(startedCtx.summary.sessionId, runtimeKind, runtimeConnection),
-    { tags },
-  );
+  warmSessionData({
+    operationPrefix: "start-session-warm-session",
+    repoPath: startedCtx.repoPath,
+    sessionId: startedCtx.summary.sessionId,
+    taskId: startedCtx.taskId,
+    role: startedCtx.role,
+    runtimeKind,
+    runtimeConnection,
+    externalSessionId: startedCtx.summary.externalSessionId,
+    loadSessionTodos: model.loadSessionTodos,
+    loadSessionModelCatalog: model.loadSessionModelCatalog,
+  });
 };
 
 const applyResolvedModelSelection = ({
@@ -750,7 +736,7 @@ export const createStartAgentSession = ({
         runtime,
       });
 
-      warmSessionData({
+      warmStartedSession({
         startedCtx: startResult.ctx,
         runtimeInfo: startResult.runtimeInfo,
         model,

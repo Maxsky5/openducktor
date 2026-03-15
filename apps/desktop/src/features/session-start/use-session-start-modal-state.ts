@@ -20,7 +20,7 @@ import {
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
-import { loadRepoRuntimeCatalog } from "@/state/operations";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -124,8 +124,10 @@ export function useSessionStartModalState({
   repoSettings,
   runtimeDefinitions,
   initialCatalog,
-  loadCatalog = loadRepoRuntimeCatalog,
+  loadCatalog,
 }: UseSessionStartModalStateArgs): UseSessionStartModalStateResult {
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
+  const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState<RuntimeKind>(DEFAULT_RUNTIME_KIND);
@@ -151,14 +153,14 @@ export function useSessionStartModalState({
 
   const catalogQuery = useQuery({
     ...(activeRepo
-      ? repoRuntimeCatalogQueryOptions(activeRepo, selectedRuntimeKind)
-      : repoRuntimeCatalogQueryOptions("", selectedRuntimeKind)),
+      ? repoRuntimeCatalogQueryOptions(activeRepo, selectedRuntimeKind, loadCatalogForRepo)
+      : repoRuntimeCatalogQueryOptions("", selectedRuntimeKind, loadCatalogForRepo)),
     enabled: initialCatalog === undefined && Boolean(activeRepo) && intent !== null,
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!activeRepo) {
         throw new Error("No repository selected.");
       }
-      return loadCatalog(activeRepo, selectedRuntimeKind);
+      return loadCatalogForRepo(activeRepo, selectedRuntimeKind);
     },
   });
 
