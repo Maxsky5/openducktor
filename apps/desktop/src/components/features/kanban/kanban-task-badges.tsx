@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
+import { assertNever } from "@/lib/assert-never";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
 const ISSUE_TYPE_STYLES: Record<
@@ -125,6 +126,8 @@ const runStateLabel = (value: RunSummary["state"]): string => {
       return "Failed";
     case "stopped":
       return "Stopped";
+    default:
+      return assertNever(value, "Unhandled run state");
   }
 };
 

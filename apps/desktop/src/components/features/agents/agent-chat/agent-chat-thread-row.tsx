@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
@@ -38,5 +39,7 @@ export function AgentChatThreadRow({
         </div>
       );
     }
+    default:
+      return assertNever(row, "Unhandled agent chat row");
   }
 }
