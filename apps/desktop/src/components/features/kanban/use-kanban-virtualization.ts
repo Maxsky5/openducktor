@@ -42,6 +42,7 @@ type KanbanVirtualizationRenderModel = KanbanSimpleRenderModel | KanbanVirtualiz
 type UseKanbanVirtualizationResult = {
   containerRef: (node: HTMLDivElement | null) => void;
   renderModel: KanbanVirtualizationRenderModel;
+  measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
 };
 
@@ -158,6 +159,7 @@ export function useKanbanVirtualization({
   const [measuredHeightsByTaskId, setMeasuredHeightsByTaskId] = useState<Record<string, number>>(
     {},
   );
+  const [measurementVersion, setMeasurementVersion] = useState(0);
   const shouldVirtualize = tasks.length >= VIRTUALIZATION_MIN_TASK_COUNT;
   const containerRef = useCallback((node: HTMLDivElement | null): void => {
     setContainerElement(node);
@@ -267,6 +269,41 @@ export function useKanbanVirtualization({
   }, [containerElement, shouldVirtualize]);
 
   useEffect(() => {
+    if (!shouldVirtualize || !containerElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let frameHandle: number | null = null;
+    const scheduleMeasurementInvalidation = (): void => {
+      if (typeof window === "undefined") {
+        setMeasurementVersion((current) => current + 1);
+        return;
+      }
+
+      if (frameHandle !== null) {
+        return;
+      }
+
+      frameHandle = window.requestAnimationFrame(() => {
+        frameHandle = null;
+        setMeasurementVersion((current) => current + 1);
+      });
+    };
+
+    const observer = new ResizeObserver(() => {
+      scheduleMeasurementInvalidation();
+    });
+
+    observer.observe(containerElement);
+    return () => {
+      observer.disconnect();
+      if (frameHandle !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(frameHandle);
+      }
+    };
+  }, [containerElement, shouldVirtualize]);
+
+  useEffect(() => {
     if (shouldVirtualize) {
       return;
     }
@@ -373,6 +410,7 @@ export function useKanbanVirtualization({
   return {
     containerRef,
     renderModel,
+    measurementVersion,
     onMeasuredHeight,
   };
 }

@@ -184,6 +184,46 @@ const installMockWindow = () => {
   };
 };
 
+const installMockResizeObserver = () => {
+  const globalWithResizeObserver = globalThis as typeof globalThis & {
+    ResizeObserver?: typeof ResizeObserver;
+  };
+  const previousResizeObserver = globalWithResizeObserver.ResizeObserver;
+  const callbacks: ResizeObserverCallback[] = [];
+
+  class MockResizeObserver {
+    constructor(callback: ResizeObserverCallback) {
+      callbacks.push(callback);
+    }
+
+    observe(_target: Element): void {}
+
+    unobserve(_target: Element): void {}
+
+    disconnect(): void {}
+  }
+
+  globalWithResizeObserver.ResizeObserver =
+    MockResizeObserver as unknown as typeof ResizeObserver;
+
+  const trigger = (): void => {
+    for (const callback of callbacks) {
+      callback([], {} as ResizeObserver);
+    }
+  };
+
+  const restore = (): void => {
+    if (typeof previousResizeObserver === "undefined") {
+      delete globalWithResizeObserver.ResizeObserver;
+      return;
+    }
+
+    globalWithResizeObserver.ResizeObserver = previousResizeObserver;
+  };
+
+  return { trigger, restore };
+};
+
 describe("useKanbanVirtualization", () => {
   test("returns a simple render model when virtualization threshold is not met", async () => {
     const harness = createHarness({ tasks: createTasks(5) });
@@ -321,8 +361,41 @@ describe("useKanbanVirtualization", () => {
     }
   });
 
+  test("invalidates visible-card measurements when the lane container resizes", async () => {
+    const resizeObserver = installMockResizeObserver();
+    const harness = createHarness({ tasks: createTasks(30) });
+
+    try {
+      await harness.mount();
+      await attachContainer(harness);
+
+      const initialMeasurementVersion = harness.getLatest().measurementVersion;
+
+      await harness.run(() => {
+        resizeObserver.trigger();
+      });
+
+      expect(harness.getLatest().measurementVersion).toBe(initialMeasurementVersion + 1);
+    } finally {
+      await harness.unmount();
+      resizeObserver.restore();
+    }
+  });
+
   test("shares global viewport listeners across multiple virtualized lanes", async () => {
     const mockWindow = installMockWindow();
+    const scrollContainerAddEventListener = mock(
+      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    );
+    const scrollContainerRemoveEventListener = mock(
+      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    );
+    const scrollContainer = {
+      addEventListener: scrollContainerAddEventListener,
+      removeEventListener: scrollContainerRemoveEventListener,
+      getBoundingClientRect: () => ({ top: 0 }),
+      clientHeight: 900,
+    } as unknown as HTMLElement;
     const harness = createMultiHarness([{ tasks: createTasks(30) }, { tasks: createTasks(30) }]);
 
     try {
@@ -331,17 +404,19 @@ describe("useKanbanVirtualization", () => {
         for (const state of harness.getLatestStates()) {
           state.containerRef({
             getBoundingClientRect: () => ({ top: 0 }),
-            closest: () => null,
-          } as HTMLDivElement);
+            closest: () => scrollContainer,
+          } as unknown as HTMLDivElement);
         }
       });
 
       expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
       expect(mockWindow.requestAnimationFrame).toHaveBeenCalledTimes(1);
+      expect(scrollContainerAddEventListener).toHaveBeenCalledTimes(1);
       expect(harness.getLatestStates()).toHaveLength(2);
 
       await harness.unmount();
       expect(mockWindow.removeEventListener).toHaveBeenCalledTimes(2);
+      expect(scrollContainerRemoveEventListener).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
       mockWindow.restore();

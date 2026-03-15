@@ -44,6 +44,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   runState,
   activeSessions,
+  measurementVersion,
   onMeasuredHeight,
   onOpenDetails,
   onDelegate,
@@ -57,6 +58,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
   activeSessions: RunningTaskSessions | undefined;
+  measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
 } & TaskCardHandlers): ReactElement {
   const taskWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -86,7 +88,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
     return () => {
       window.cancelAnimationFrame(frameHandle);
     };
-  }, [activeSessions, onMeasuredHeight, runState, task, task.id]);
+  }, [activeSessions, measurementVersion, onMeasuredHeight, runState, task, task.id]);
 
   return (
     <div ref={taskWrapperRef}>
@@ -167,6 +169,7 @@ export function KanbanColumn({
   const {
     containerRef: cardsViewportRef,
     renderModel,
+    measurementVersion,
     onMeasuredHeight: handleMeasuredHeight,
   } = useKanbanVirtualization({
     tasks: column.tasks,
@@ -196,6 +199,7 @@ export function KanbanColumn({
                   task={task}
                   runState={runStateByTaskId.get(task.id)}
                   activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
+                  measurementVersion={measurementVersion}
                   onMeasuredHeight={handleMeasuredHeight}
                   onOpenDetails={onOpenDetails}
                   onDelegate={onDelegate}
