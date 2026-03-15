@@ -91,7 +91,7 @@ export const getMcpStatus = async (
   const payload = unwrapData(response, "get mcp status");
   const statusPayload = asUnknownRecord(payload);
   if (!statusPayload) {
-    return {};
+    throw new Error("Invalid MCP status payload: expected an object keyed by server name.");
   }
 
   const statusByServer: Record<string, McpServerStatus> = {};

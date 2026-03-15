@@ -1,4 +1,5 @@
-import type { TaskCard, TaskUpdatePatch } from "@openducktor/contracts";
+import type { TaskUpdatePatch } from "@openducktor/contracts";
+import { toVisibleTasks } from "../read-models/task-read-model";
 
 export const WORKSPACE_REQUIRED_ERROR = "Select a workspace first.";
 export const DEFERRED_BY_USER_REASON = "Deferred by user";
@@ -10,8 +11,7 @@ export const requireActiveRepo = (activeRepo: string | null): string => {
   return activeRepo;
 };
 
-export const toVisibleTasks = (taskList: TaskCard[]): TaskCard[] =>
-  taskList.filter((task) => task.status !== "deferred");
+export { toVisibleTasks };
 
 export const toNormalizedTitle = (title: string): string => title.trim();
 

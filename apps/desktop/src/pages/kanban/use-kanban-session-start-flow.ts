@@ -1,6 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
-import { assertAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,31 +7,20 @@ import type { SessionStartModalModel } from "@/components/features/agents";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
-import { firstScenario, kickoffPromptForScenario } from "../shared/session-start-prompts";
+import { firstScenario } from "../shared/session-start-prompts";
 import { useSessionStartModalCoordinator } from "../shared/use-session-start-modal-coordinator";
+import {
+  buildHumanReviewFeedbackModalModel,
+  confirmHumanReviewFeedbackFlow,
+  createHumanReviewFeedbackState,
+  type HumanReviewFeedbackState,
+  type PendingHumanReviewHydration,
+} from "./kanban-human-review-feedback";
 import type {
   HumanReviewFeedbackModalModel,
   KanbanSessionStartIntent,
 } from "./kanban-page-model-types";
-import { renderSessionStartedToastAction } from "./session-started-toast-action";
-
-const NEW_BUILDER_SESSION_TARGET = "new_session";
-
-type RequestChangesBuildScenario = "build_after_human_request_changes" | "build_after_qa_rejected";
-
-type HumanReviewFeedbackState = {
-  taskId: string;
-  scenario: RequestChangesBuildScenario;
-  message: string;
-  builderSessions: AgentSessionState[];
-  selectedTarget: string;
-};
-
-type PendingHumanReviewHydration = {
-  taskId: string;
-  baselineSessions: AgentSessionState[];
-};
+import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
 type UseKanbanSessionStartFlowArgs = {
   activeRepo: string | null;
@@ -86,53 +74,6 @@ export const resolveKanbanPlanningStartPreference = (
   }
   const task = tasks.find((entry) => entry.id === taskId);
   return task?.status === "spec_ready" ? "continue" : "fresh";
-};
-
-const toPromptTaskContext = (task: TaskCard | undefined) => {
-  if (!task) {
-    return {};
-  }
-
-  return {
-    title: task.title,
-    issueType: task.issueType,
-    status: task.status,
-    qaRequired: task.aiReviewEnabled,
-    description: task.description,
-  };
-};
-
-const resolveRequestChangesScenario = (task: TaskCard | undefined): RequestChangesBuildScenario => {
-  return task?.status === "human_review"
-    ? "build_after_human_request_changes"
-    : "build_after_qa_rejected";
-};
-
-const buildHumanReviewMessage = (
-  task: TaskCard | undefined,
-  taskId: string,
-  scenario: RequestChangesBuildScenario,
-): string => {
-  return kickoffPromptForScenario("build", scenario, taskId, {
-    task: toPromptTaskContext(task),
-  });
-};
-
-const createHumanReviewFeedbackState = (
-  tasks: TaskCard[],
-  taskId: string,
-  builderSessions: AgentSessionState[],
-): HumanReviewFeedbackState => {
-  const task = tasks.find((entry) => entry.id === taskId);
-  const scenario = resolveRequestChangesScenario(task);
-
-  return {
-    taskId,
-    scenario,
-    message: buildHumanReviewMessage(task, taskId, scenario),
-    builderSessions,
-    selectedTarget: builderSessions[0]?.sessionId ?? NEW_BUILDER_SESSION_TARGET,
-  };
 };
 
 export function useKanbanSessionStartFlow({
@@ -298,108 +239,20 @@ export function useKanbanSessionStartFlow({
       void (async () => {
         setIsStartingSession(true);
         try {
-          const sessionId = await startAgentSession({
-            taskId: intent.taskId,
-            role: intent.role,
-            scenario: intent.scenario,
-            selectedModel: selection,
-            sendKickoff: false,
-            startMode: intent.startMode,
-            requireModelReady: true,
+          await startKanbanSessionFlow({
+            activeRepo,
+            intent,
+            selection,
+            startInBackground,
+            tasks,
+            roleLabels,
+            startAgentSession,
+            updateAgentSessionModel,
+            humanRequestChangesTask,
+            closeStartModal,
+            openSessionInAgentStudio,
+            sendAgentMessage,
           });
-
-          if (selection) {
-            updateAgentSessionModel(sessionId, selection);
-          }
-
-          if (intent.beforeStartAction?.action === "human_request_changes") {
-            try {
-              await humanRequestChangesTask(intent.taskId, intent.beforeStartAction.note);
-            } catch {
-              closeStartModal();
-
-              if (startInBackground) {
-                const roleLabel = roleLabels[intent.role] ?? intent.role.toUpperCase();
-                toast.error(`Started ${roleLabel} session, but requesting changes failed.`, {
-                  duration: 10000,
-                  description: renderSessionStartedToastAction(
-                    intent,
-                    sessionId,
-                    openSessionInAgentStudio,
-                  ),
-                });
-              } else {
-                openSessionInAgentStudio(intent, sessionId);
-                toast.error("Session started, but requesting changes failed.");
-              }
-
-              return;
-            }
-          }
-
-          closeStartModal();
-
-          if (startInBackground) {
-            const roleLabel = roleLabels[intent.role] ?? intent.role.toUpperCase();
-            toast.success(`Started ${roleLabel} session in background for ${intent.taskId}.`, {
-              duration: 10000,
-              description: renderSessionStartedToastAction(
-                intent,
-                sessionId,
-                openSessionInAgentStudio,
-              ),
-            });
-          } else {
-            openSessionInAgentStudio(intent, sessionId);
-          }
-
-          const effectivePostStartAction =
-            startInBackground && intent.postStartAction === "none"
-              ? "kickoff"
-              : intent.postStartAction;
-
-          if (effectivePostStartAction !== "none") {
-            const buildPostStartMessage = async (): Promise<string> => {
-              if (effectivePostStartAction === "send_message") {
-                const message = intent.message?.trim() ?? "";
-                if (!message) {
-                  throw new Error("Feedback message is required before sending.");
-                }
-                return message;
-              }
-
-              const promptOverrides = activeRepo
-                ? await loadEffectivePromptOverrides(activeRepo)
-                : undefined;
-              const intentTask = tasks.find((entry) => entry.id === intent.taskId);
-              const kickoffScenario = assertAgentKickoffScenario(intent.scenario);
-              return kickoffPromptForScenario(intent.role, kickoffScenario, intent.taskId, {
-                overrides: promptOverrides ?? {},
-                task: toPromptTaskContext(intentTask),
-              });
-            };
-
-            const failureMessage =
-              effectivePostStartAction === "kickoff"
-                ? "Session started, but kickoff message failed."
-                : "Session started, but feedback message failed.";
-
-            if (startInBackground) {
-              void (async () => {
-                try {
-                  await sendAgentMessage(sessionId, await buildPostStartMessage());
-                } catch {
-                  toast.error(failureMessage);
-                }
-              })();
-            } else {
-              try {
-                await sendAgentMessage(sessionId, await buildPostStartMessage());
-              } catch {
-                toast.error(failureMessage);
-              }
-            }
-          }
         } catch {
           toast.error("Failed to start the session.");
         } finally {
@@ -551,51 +404,20 @@ export function useKanbanSessionStartFlow({
       return;
     }
 
-    const trimmedMessage = humanReviewFeedbackState.message.trim();
-    if (trimmedMessage.length === 0) {
-      toast.error("Feedback message is required.");
-      return;
-    }
-
-    if (humanReviewFeedbackState.selectedTarget === NEW_BUILDER_SESSION_TARGET) {
-      setHumanReviewFeedbackState(null);
-      openSessionStartModal({
-        taskId: humanReviewFeedbackState.taskId,
-        role: "build",
-        scenario: humanReviewFeedbackState.scenario,
-        startMode: "fresh",
-        postStartAction: "send_message",
-        message: trimmedMessage,
-        beforeStartAction: {
-          action: "human_request_changes",
-          note: trimmedMessage,
-        },
-      });
-      return;
-    }
-
-    const existingBuilderSession = humanReviewFeedbackState.builderSessions.find(
-      (session) => session.sessionId === humanReviewFeedbackState.selectedTarget,
-    );
-    if (!existingBuilderSession) {
-      toast.error("The selected builder session is no longer available for this task.");
-      return;
-    }
-
     void (async () => {
       setIsSubmittingHumanReviewFeedback(true);
       try {
-        await humanRequestChangesTask(humanReviewFeedbackState.taskId, trimmedMessage);
-        await loadAgentSessions(humanReviewFeedbackState.taskId, {
-          hydrateHistoryForSessionId: existingBuilderSession.sessionId,
+        await confirmHumanReviewFeedbackFlow({
+          state: humanReviewFeedbackState,
+          humanRequestChangesTask,
+          loadAgentSessions,
+          openSessionStartModal,
+          openAgentStudioSession,
+          sendAgentMessage,
+          onDismiss: () => {
+            setHumanReviewFeedbackState(null);
+          },
         });
-        setHumanReviewFeedbackState(null);
-        openAgentStudioSession(humanReviewFeedbackState.taskId, existingBuilderSession);
-        try {
-          await sendAgentMessage(existingBuilderSession.sessionId, trimmedMessage);
-        } catch {
-          toast.error("Changes requested, but feedback message failed.");
-        }
       } finally {
         setIsSubmittingHumanReviewFeedback(false);
       }
@@ -614,33 +436,10 @@ export function useKanbanSessionStartFlow({
       return null;
     }
 
-    const targetOptions = [
-      {
-        value: NEW_BUILDER_SESSION_TARGET,
-        label: "Start a new builder session",
-        description:
-          "Open session setup, pick the model, then send this feedback as the first message.",
-      },
-      ...humanReviewFeedbackState.builderSessions.map((session, index) => ({
-        value: session.sessionId,
-        label: `Builder session ${session.sessionId.slice(0, 8)}`,
-        description: `Started ${new Date(session.startedAt).toLocaleString()} (${session.status}).`,
-        ...(index === 0 ? { secondaryLabel: "Latest" } : {}),
-      })),
-    ];
-
-    return {
-      open: true,
-      taskId: humanReviewFeedbackState.taskId,
-      selectedTarget: humanReviewFeedbackState.selectedTarget,
-      targetOptions,
-      message: humanReviewFeedbackState.message,
+    return buildHumanReviewFeedbackModalModel({
+      state: humanReviewFeedbackState,
       isSubmitting: isSubmittingHumanReviewFeedback,
-      onOpenChange: (nextOpen: boolean) => {
-        if (!nextOpen) {
-          closeHumanReviewFeedbackModal();
-        }
-      },
+      onDismiss: closeHumanReviewFeedbackModal,
       onTargetChange: (selectedTarget: string) => {
         setHumanReviewFeedbackState((current: HumanReviewFeedbackState | null) =>
           current ? { ...current, selectedTarget } : current,
@@ -652,7 +451,7 @@ export function useKanbanSessionStartFlow({
         );
       },
       onConfirm: confirmHumanReviewFeedback,
-    };
+    });
   }, [
     closeHumanReviewFeedbackModal,
     confirmHumanReviewFeedback,

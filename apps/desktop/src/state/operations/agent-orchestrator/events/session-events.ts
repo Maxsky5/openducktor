@@ -1,8 +1,9 @@
 import type {
   AttachAgentSessionListenerParams,
   SessionEvent,
-  SessionEventContext,
+  SessionEventHandlerContext,
 } from "./session-event-types";
+import { createSessionEventHandlerContext } from "./session-event-types";
 import {
   handleAssistantMessage,
   handlePermissionRequired,
@@ -18,40 +19,40 @@ import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
 
 const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 200;
 
-const handleSessionEvent = (context: SessionEventContext, event: SessionEvent): void => {
+const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionEvent): void => {
   switch (event.type) {
     case "session_started":
-      handleSessionStarted(context, event);
+      handleSessionStarted(context.lifecycle, event);
       return;
     case "assistant_delta":
-      handleAssistantDelta(context, event);
+      handleAssistantDelta(context.parts, event);
       return;
     case "assistant_part":
-      handleAssistantPart(context, event);
+      handleAssistantPart(context.parts, event);
       return;
     case "assistant_message":
-      handleAssistantMessage(context, event);
+      handleAssistantMessage(context.lifecycle, event);
       return;
     case "session_status":
-      handleSessionStatus(context, event);
+      handleSessionStatus(context.lifecycle, event);
       return;
     case "permission_required":
-      handlePermissionRequired(context, event);
+      handlePermissionRequired(context.lifecycle, event);
       return;
     case "question_required":
-      handleQuestionRequired(context, event);
+      handleQuestionRequired(context.lifecycle, event);
       return;
     case "session_todos_updated":
-      handleSessionTodosUpdated(context, event);
+      handleSessionTodosUpdated(context.lifecycle, event);
       return;
     case "session_error":
-      handleSessionError(context, event);
+      handleSessionError(context.lifecycle, event);
       return;
     case "session_idle":
-      handleSessionIdle(context, event);
+      handleSessionIdle(context.lifecycle, event);
       return;
     case "session_finished":
-      handleSessionFinished(context, event);
+      handleSessionFinished(context.lifecycle, event);
       return;
     case "tool_call":
     case "tool_result":
@@ -82,6 +83,7 @@ const isImmediateSessionEvent = (event: SessionEvent): boolean => {
 export const attachAgentSessionListener = (
   context: AttachAgentSessionListenerParams,
 ): (() => void) => {
+  const handlerContext = createSessionEventHandlerContext(context);
   let queuedEvents: SessionEvent[] = [];
   let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -98,7 +100,7 @@ export const attachAgentSessionListener = (
     const eventsToHandle = queuedEvents;
     queuedEvents = [];
     for (const queuedEvent of eventsToHandle) {
-      handleSessionEvent(context, queuedEvent);
+      handleSessionEvent(handlerContext, queuedEvent);
     }
   };
 
@@ -119,7 +121,7 @@ export const attachAgentSessionListener = (
   const unsubscribe = context.adapter.subscribeEvents(context.sessionId, (event) => {
     if (isImmediateSessionEvent(event)) {
       flushQueuedEvents();
-      handleSessionEvent(context, event);
+      handleSessionEvent(handlerContext, event);
       return;
     }
 

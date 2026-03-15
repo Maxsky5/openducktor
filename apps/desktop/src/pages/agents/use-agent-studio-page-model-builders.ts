@@ -49,10 +49,7 @@ export type WorkflowModelContext = {
 };
 
 const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
-  if (!task) {
-    return false;
-  }
-  return task.status === "human_review";
+  return task?.status === "human_review";
 };
 
 export const buildWorkflowModelContext = ({

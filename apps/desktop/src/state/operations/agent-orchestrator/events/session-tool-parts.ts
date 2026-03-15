@@ -11,7 +11,11 @@ import {
   resolveToolMessageId,
   upsertMessage,
 } from "../support/utils";
-import type { SessionEventContext, SessionPart, SessionPartEvent } from "./session-event-types";
+import type {
+  SessionPart,
+  SessionPartEvent,
+  SessionToolPartEventContext,
+} from "./session-event-types";
 import {
   eventTimestampMs,
   hasMeaningfulToolInput,
@@ -196,7 +200,7 @@ const composeToolPartSessionUpdate = ({
 };
 
 export const handleToolPart = (
-  context: SessionEventContext,
+  context: SessionToolPartEventContext,
   event: SessionPartEvent,
   part: ToolPart,
   streamMessageKey: string,
@@ -211,8 +215,8 @@ export const handleToolPart = (
   let shouldRefreshTaskData = false;
   let shouldRefreshSessionTodos = false;
 
-  context.updateSession(
-    context.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
     (current) => {
       const { nextState, refreshDecision } = composeToolPartSessionUpdate({
         current,
@@ -239,11 +243,11 @@ export const handleToolPart = (
   if (shouldRefreshTaskData) {
     runOrchestratorSideEffect(
       "session-events-refresh-task-data",
-      context.refreshTaskData(context.repoPath),
+      context.refresh.refreshTaskData(context.refresh.repoPath),
       {
         tags: {
-          repoPath: context.repoPath,
-          sessionId: context.sessionId,
+          repoPath: context.refresh.repoPath,
+          sessionId: context.store.sessionId,
           tool: part.tool,
         },
       },

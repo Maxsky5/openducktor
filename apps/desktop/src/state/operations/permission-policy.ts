@@ -99,11 +99,7 @@ export const isReadOnlyShellCommand = (command: string): boolean => {
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-  if (segments.length === 0) {
-    return false;
-  }
-
-  return segments.every((segment) => isReadOnlyShellSegment(segment));
+  return segments.length > 0 && segments.every((segment) => isReadOnlyShellSegment(segment));
 };
 
 export const isMutatingPermission = (

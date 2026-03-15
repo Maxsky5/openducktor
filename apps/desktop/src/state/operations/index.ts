@@ -1,7 +1,7 @@
+export { loadRepoRuntimeCatalog } from "../read-models/runtime-catalog-client";
 export {
   configureRuntimeCatalogOperations,
   createHostRuntimeCatalogOperations,
-  loadRepoRuntimeCatalog,
 } from "./runtime-catalog";
 export { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
 export { useChecks } from "./use-checks";

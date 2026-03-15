@@ -1,7 +1,7 @@
 import type { RunSummary, TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
-import { host } from "../operations/host";
-import { toVisibleTasks } from "../operations/task-operations-model";
+import { hostClient as host } from "@/lib/host-client";
+import { toVisibleTasks } from "../read-models/task-read-model";
 
 const TASK_DATA_STALE_TIME_MS = 30_000;
 const RUN_DATA_STALE_TIME_MS = 30_000;

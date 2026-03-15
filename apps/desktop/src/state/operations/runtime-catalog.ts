@@ -7,6 +7,7 @@ import type {
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+import { configureRuntimeCatalogClient } from "../read-models/runtime-catalog-client";
 import { host } from "./host";
 
 type RuntimeMcpServerStatus = {
@@ -357,7 +358,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   };
 };
 
-type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations>;
+export type RuntimeCatalogOperations = ReturnType<typeof createRuntimeCatalogOperations>;
 
 export const createHostRuntimeCatalogOperations = (
   getAdapter: (runtimeKind: RuntimeKind) => RuntimeCatalogAdapter,
@@ -382,26 +383,10 @@ export const createHostRuntimeCatalogOperations = (
       getAdapter(runtimeKind).shouldRestartRuntimeForMcpStatusError(message),
   });
 
-let configuredRuntimeCatalogOperations: RuntimeCatalogOperations | null = null;
-
 export const configureRuntimeCatalogOperations = (operations: RuntimeCatalogOperations): void => {
-  configuredRuntimeCatalogOperations = operations;
-};
-
-const getConfiguredRuntimeCatalogOperations = (): RuntimeCatalogOperations => {
-  if (!configuredRuntimeCatalogOperations) {
-    throw new Error(
-      "Runtime catalog operations are not configured. Initialize them from AppStateProvider before use.",
-    );
-  }
-  return configuredRuntimeCatalogOperations;
-};
-
-export const loadRepoRuntimeCatalog = (
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-): Promise<AgentModelCatalog> => {
-  return getConfiguredRuntimeCatalogOperations().loadRepoRuntimeCatalog(repoPath, runtimeKind);
+  configureRuntimeCatalogClient({
+    loadRepoRuntimeCatalog: operations.loadRepoRuntimeCatalog,
+  });
 };
 
 const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {

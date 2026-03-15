@@ -4,9 +4,9 @@ import { sanitizeStreamingText, toAssistantMessageMeta, upsertMessage } from "..
 import type {
   DraftChannel,
   SessionEvent,
-  SessionEventContext,
   SessionPart,
   SessionPartEvent,
+  SessionPartEventContext,
 } from "./session-event-types";
 import {
   createPrePartTodoSettlement,
@@ -17,9 +17,9 @@ import { handleToolPart } from "./session-tool-parts";
 
 type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
 
-const markSessionRunning = (context: SessionEventContext): void => {
-  context.updateSession(
-    context.sessionId,
+const markSessionRunning = (context: SessionPartEventContext): void => {
+  context.store.updateSession(
+    context.store.sessionId,
     (current) =>
       current.status === "running"
         ? current
@@ -32,27 +32,29 @@ const markSessionRunning = (context: SessionEventContext): void => {
 };
 
 const updateDraftChannelBuffer = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   channel: DraftChannel,
   raw: string,
   messageId: string | undefined,
   source: "delta" | "part",
 ): void => {
-  const currentRaw = context.draftRawBySessionRef.current[context.sessionId] ?? {};
-  context.draftRawBySessionRef.current[context.sessionId] = {
+  const currentRaw = context.drafts.draftRawBySessionRef.current[context.store.sessionId] ?? {};
+  context.drafts.draftRawBySessionRef.current[context.store.sessionId] = {
     ...currentRaw,
     [channel]: raw,
   };
 
-  const currentSource = context.draftSourceBySessionRef.current[context.sessionId] ?? {};
-  context.draftSourceBySessionRef.current[context.sessionId] = {
+  const currentSource =
+    context.drafts.draftSourceBySessionRef.current[context.store.sessionId] ?? {};
+  context.drafts.draftSourceBySessionRef.current[context.store.sessionId] = {
     ...currentSource,
     [channel]: source,
   };
 
-  if (context.draftMessageIdBySessionRef) {
-    const currentMessageIds = context.draftMessageIdBySessionRef.current[context.sessionId] ?? {};
-    context.draftMessageIdBySessionRef.current[context.sessionId] = {
+  if (context.drafts.draftMessageIdBySessionRef) {
+    const currentMessageIds =
+      context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] ?? {};
+    context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] = {
       ...currentMessageIds,
       ...(messageId ? { [channel]: messageId } : {}),
     };
@@ -60,28 +62,30 @@ const updateDraftChannelBuffer = (
 };
 
 const clearDraftChannelBuffer = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   channel: DraftChannel,
   source?: "delta" | "part",
   messageId?: string,
 ): void => {
   if (channel === "reasoning") {
-    const timeoutId = context.draftFlushTimeoutBySessionRef?.current[context.sessionId];
+    const timeoutId =
+      context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.sessionId];
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
-      if (context.draftFlushTimeoutBySessionRef) {
-        delete context.draftFlushTimeoutBySessionRef.current[context.sessionId];
+      if (context.drafts.draftFlushTimeoutBySessionRef) {
+        delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.sessionId];
       }
     }
   }
 
-  const currentRaw = context.draftRawBySessionRef.current[context.sessionId] ?? {};
+  const currentRaw = context.drafts.draftRawBySessionRef.current[context.store.sessionId] ?? {};
   const nextRaw = { ...currentRaw };
   delete nextRaw[channel];
-  context.draftRawBySessionRef.current[context.sessionId] = nextRaw;
+  context.drafts.draftRawBySessionRef.current[context.store.sessionId] = nextRaw;
 
-  const currentSource = context.draftSourceBySessionRef.current[context.sessionId] ?? {};
-  context.draftSourceBySessionRef.current[context.sessionId] =
+  const currentSource =
+    context.drafts.draftSourceBySessionRef.current[context.store.sessionId] ?? {};
+  context.drafts.draftSourceBySessionRef.current[context.store.sessionId] =
     source === undefined
       ? Object.fromEntries(Object.entries(currentSource).filter(([key]) => key !== channel))
       : {
@@ -89,9 +93,10 @@ const clearDraftChannelBuffer = (
           [channel]: source,
         };
 
-  if (context.draftMessageIdBySessionRef) {
-    const currentMessageIds = context.draftMessageIdBySessionRef.current[context.sessionId] ?? {};
-    context.draftMessageIdBySessionRef.current[context.sessionId] =
+  if (context.drafts.draftMessageIdBySessionRef) {
+    const currentMessageIds =
+      context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] ?? {};
+    context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId] =
       messageId === undefined
         ? Object.fromEntries(Object.entries(currentMessageIds).filter(([key]) => key !== channel))
         : {
@@ -104,7 +109,7 @@ const clearDraftChannelBuffer = (
 const toReasoningMessageId = (messageId: string): string => `thinking:${messageId}`;
 
 const resolvePartModelSelection = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   current: AgentSessionState,
   messageId: string,
 ): AgentSessionState["selectedModel"] | null => {
@@ -124,7 +129,7 @@ const resolvePartModelSelection = (
     };
   }
 
-  const turnModel = context.turnModelBySessionRef?.current[context.sessionId];
+  const turnModel = context.turn.turnModelBySessionRef?.current[context.store.sessionId];
   return turnModel ?? current.selectedModel ?? null;
 };
 
@@ -174,7 +179,7 @@ const upsertLiveAssistantMessage = ({
 };
 
 export const handleAssistantDelta = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   event: Extract<SessionEvent, { type: "assistant_delta" }>,
 ): void => {
   if (event.channel === "text") {
@@ -184,8 +189,8 @@ export const handleAssistantDelta = (
     const messageId = event.messageId;
     markSessionRunning(context);
     clearDraftChannelBuffer(context, "text");
-    context.updateSession(
-      context.sessionId,
+    context.store.updateSession(
+      context.store.sessionId,
       (current) => {
         const existingMessage = current.messages.find((entry) => entry.id === messageId);
         const baseContent = existingMessage?.role === "assistant" ? existingMessage.content : "";
@@ -205,11 +210,14 @@ export const handleAssistantDelta = (
     return;
   }
 
-  if (context.draftSourceBySessionRef.current[context.sessionId]?.[event.channel] === "part") {
+  if (
+    context.drafts.draftSourceBySessionRef.current[context.store.sessionId]?.[event.channel] ===
+    "part"
+  ) {
     return;
   }
   const nextRaw = `${
-    context.draftRawBySessionRef.current[context.sessionId]?.[event.channel] ?? ""
+    context.drafts.draftRawBySessionRef.current[context.store.sessionId]?.[event.channel] ?? ""
   }${event.delta}`;
   updateDraftChannelBuffer(context, event.channel, nextRaw, event.messageId, "delta");
   markSessionRunning(context);
@@ -217,11 +225,11 @@ export const handleAssistantDelta = (
 };
 
 const settleSessionBeforeDraftUpdate = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   prepareCurrent: PrepareCurrent,
 ): void => {
-  context.updateSession(
-    context.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       return prepared.status === "running"
@@ -236,7 +244,7 @@ const settleSessionBeforeDraftUpdate = (
 };
 
 const handleTextPart = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   event: SessionPartEvent,
   part: Extract<SessionPart, { kind: "text" }>,
   prepareCurrent: PrepareCurrent,
@@ -245,8 +253,8 @@ const handleTextPart = (
     return;
   }
   clearDraftChannelBuffer(context, "text");
-  context.updateSession(
-    context.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       if (part.text.trim().length === 0) {
@@ -274,7 +282,7 @@ const handleTextPart = (
 };
 
 const handleReasoningPart = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   event: SessionPartEvent,
   part: Extract<SessionPart, { kind: "reasoning" }>,
   prepareCurrent: PrepareCurrent,
@@ -288,8 +296,8 @@ const handleReasoningPart = (
   }
 
   clearDraftChannelBuffer(context, "reasoning");
-  context.updateSession(
-    context.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       const messageId = toReasoningMessageId(part.messageId);
@@ -328,14 +336,14 @@ const handleReasoningPart = (
 };
 
 const handleSubtaskPart = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   event: SessionPartEvent,
   part: Extract<SessionPart, { kind: "subtask" }>,
   streamMessageKey: string,
   prepareCurrent: PrepareCurrent,
 ): void => {
-  context.updateSession(
-    context.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       return {
@@ -361,7 +369,7 @@ const handleSubtaskPart = (
 };
 
 const handleStepPart = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   part: Extract<SessionPart, { kind: "step" }>,
   prepareCurrent: PrepareCurrent,
 ): void => {
@@ -369,8 +377,8 @@ const handleStepPart = (
     return;
   }
 
-  context.updateSession(
-    context.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
     (current) => {
       const prepared = prepareCurrent(current);
       const model = resolvePartModelSelection(context, prepared, part.messageId);
@@ -395,7 +403,7 @@ const handleStepPart = (
 };
 
 export const handleAssistantPart = (
-  context: SessionEventContext,
+  context: SessionPartEventContext,
   event: SessionPartEvent,
 ): void => {
   const part = event.part;
