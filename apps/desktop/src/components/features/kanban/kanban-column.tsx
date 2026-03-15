@@ -74,21 +74,19 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       }
     };
 
-    reportHeight();
-
-    if (typeof ResizeObserver === "undefined") {
+    if (typeof window === "undefined") {
+      reportHeight();
       return;
     }
 
-    const observer = new ResizeObserver(() => {
+    const frameHandle = window.requestAnimationFrame(() => {
       reportHeight();
     });
 
-    observer.observe(element);
     return () => {
-      observer.disconnect();
+      window.cancelAnimationFrame(frameHandle);
     };
-  }, [onMeasuredHeight, task.id]);
+  }, [activeSessions, onMeasuredHeight, runState, task, task.id]);
 
   return (
     <div ref={taskWrapperRef}>

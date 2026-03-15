@@ -90,6 +90,59 @@ const createHarness = (initialProps: HookArgs) => {
   return { mount, update, run, getLatest, unmount };
 };
 
+const attachContainer = async (
+  harness: Pick<ReturnType<typeof createHarness>, "getLatest" | "run">,
+  container?: Partial<HTMLDivElement>,
+): Promise<void> => {
+  await harness.run(() => {
+    harness.getLatest().containerRef({
+      getBoundingClientRect: () => ({ top: 0 }),
+      closest: () => null,
+      ...container,
+    } as HTMLDivElement);
+  });
+};
+
+const createMultiHarness = (initialPropsList: HookArgs[]) => {
+  let latestStates: HookState[] = [];
+
+  const HarnessGroup = ({ hooks }: { hooks: HookArgs[] }): ReactElement | null => {
+    latestStates = hooks.map((hookProps) => useKanbanVirtualization(hookProps));
+    return null;
+  };
+
+  let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+  const mount = async (): Promise<void> => {
+    await act(async () => {
+      renderer = TestRenderer.create(createElement(HarnessGroup, { hooks: initialPropsList }));
+      await flush();
+    });
+  };
+
+  const getLatestStates = (): HookState[] => latestStates;
+
+  const run = async (fn: () => void): Promise<void> => {
+    await act(async () => {
+      fn();
+      await flush();
+    });
+  };
+
+  const unmount = async (): Promise<void> => {
+    if (!renderer) {
+      return;
+    }
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  };
+
+  return { mount, getLatestStates, run, unmount };
+};
+
 const installMockWindow = () => {
   const globalWithWindow = globalThis as typeof globalThis & {
     window?: Window & typeof globalThis;
@@ -222,6 +275,7 @@ describe("useKanbanVirtualization", () => {
 
     try {
       await harness.mount();
+      await attachContainer(harness);
       expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
       expect(mockWindow.requestAnimationFrame).toHaveBeenCalledTimes(1);
 
@@ -247,10 +301,10 @@ describe("useKanbanVirtualization", () => {
       await harness.mount();
 
       await harness.run(() => {
-        harness.getLatest().containerRef.current = {
+        harness.getLatest().containerRef({
           getBoundingClientRect,
           closest: () => null,
-        } as unknown as HTMLDivElement;
+        } as unknown as HTMLDivElement);
       });
 
       const callsBeforeMeasure = getBoundingClientRect.mock.calls.length;
@@ -261,6 +315,33 @@ describe("useKanbanVirtualization", () => {
 
       expect(getBoundingClientRect.mock.calls.length).toBeGreaterThan(callsBeforeMeasure);
       expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+      mockWindow.restore();
+    }
+  });
+
+  test("shares global viewport listeners across multiple virtualized lanes", async () => {
+    const mockWindow = installMockWindow();
+    const harness = createMultiHarness([{ tasks: createTasks(30) }, { tasks: createTasks(30) }]);
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        for (const state of harness.getLatestStates()) {
+          state.containerRef({
+            getBoundingClientRect: () => ({ top: 0 }),
+            closest: () => null,
+          } as HTMLDivElement);
+        }
+      });
+
+      expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
+      expect(mockWindow.requestAnimationFrame).toHaveBeenCalledTimes(1);
+      expect(harness.getLatestStates()).toHaveLength(2);
+
+      await harness.unmount();
+      expect(mockWindow.removeEventListener).toHaveBeenCalledTimes(2);
     } finally {
       await harness.unmount();
       mockWindow.restore();
