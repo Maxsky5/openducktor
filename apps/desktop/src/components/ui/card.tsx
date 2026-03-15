@@ -18,8 +18,12 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("flex flex-col gap-1.5 px-5 pt-5", className)} {...props} />;
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"h3">) {
-  return <h3 className={cn("text-base font-semibold tracking-tight", className)} {...props} />;
+function CardTitle({ className, children, ...props }: React.ComponentProps<"h3">) {
+  return (
+    <h3 className={cn("text-base font-semibold tracking-tight", className)} {...props}>
+      {children}
+    </h3>
+  );
 }
 
 function CardDescription({ className, ...props }: React.ComponentProps<"p">) {

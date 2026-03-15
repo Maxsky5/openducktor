@@ -1,13 +1,11 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { CircleHelp, FileCode, ShieldCheck } from "lucide-react";
 import type { ReactElement } from "react";
-import {
-  TaskDetailsAsyncDocumentSection,
-  TaskDetailsDocumentSection,
-  TaskDetailsMetadata,
-  TaskDetailsSubtasks,
-} from "@/components/features/task-details";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { TaskDetailsAsyncDocumentSection } from "./task-details-async-document-section";
+import { TaskDetailsDocumentSection } from "./task-details-document-section";
+import { TaskDetailsMetadata } from "./task-details-metadata";
+import { TaskDetailsSubtasks } from "./task-details-subtasks";
+import type { TaskDocumentState } from "./use-task-documents";
 
 const DESCRIPTION_ICON = <CircleHelp className="size-3.5" />;
 const SPEC_ICON = <FileCode className="size-3.5" />;

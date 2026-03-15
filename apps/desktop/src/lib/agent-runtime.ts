@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createElement } from "react";
-import { AgentRuntimeIcon } from "@/components/features/agents";
+import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import type { ComboboxOption } from "@/components/ui/combobox";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
