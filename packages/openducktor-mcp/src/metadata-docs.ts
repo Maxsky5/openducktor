@@ -1,3 +1,4 @@
+import type { QaReportVerdict } from "@openducktor/contracts";
 import type { JsonObject, RawIssue } from "./contracts";
 import {
   ensureObject,
@@ -18,7 +19,7 @@ export type TaskDocumentsSnapshot = {
   latestQaReport: {
     markdown: string;
     updatedAt: string | null;
-    verdict: "approved" | "rejected" | null;
+    verdict: QaReportVerdict | null;
   };
 };
 

@@ -1,5 +1,6 @@
 import {
   type AgentSessionRecord,
+  type PlanSubtaskInput,
   type TaskCard,
   type TaskCreateInput,
   type TaskStatus,
@@ -24,13 +25,6 @@ export type SaveSpecDocumentInput = {
   repoPath: string;
   taskId: string;
   markdown: string;
-};
-
-export type PlanSubtaskInput = {
-  title: string;
-  issueType?: "task" | "feature" | "bug";
-  priority?: number;
-  description?: string;
 };
 
 export type SetPlanInput = {

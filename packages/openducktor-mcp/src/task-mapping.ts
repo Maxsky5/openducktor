@@ -1,3 +1,4 @@
+import { qaReportVerdictSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import { parseBeadsIssueType, parseBeadsTaskStatus } from "./beads-task-parsing";
 import type { JsonObject, MarkdownEntry, QaEntry, RawIssue, TaskCard } from "./contracts";
@@ -30,7 +31,7 @@ const MarkdownEntrySchema = z.object({
 });
 
 const QaEntrySchema = MarkdownEntrySchema.extend({
-  verdict: z.enum(["approved", "rejected"]),
+  verdict: qaReportVerdictSchema,
 });
 
 const parseTypedEntries = <T>(schema: z.ZodType<T>, value: unknown): T[] => {
