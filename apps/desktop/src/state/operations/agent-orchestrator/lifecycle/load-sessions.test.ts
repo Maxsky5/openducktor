@@ -233,7 +233,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       },
     ];
-    hostModule.host.runtimeList = async (runtimeKind) => [
+    hostModule.host.runtimeList = async (_repoPath, runtimeKind = "opencode") => [
       {
         kind: runtimeKind,
         runtimeId: "runtime-1",
@@ -254,7 +254,7 @@ describe("agent-orchestrator-load-sessions", () => {
         },
       },
     ];
-    hostModule.host.runtimeEnsure = async (runtimeKind, _repoPath) => {
+    hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
       return {
         kind: runtimeKind,
@@ -575,7 +575,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
     ];
     hostModule.host.runtimeList = async () => [];
-    hostModule.host.runtimeEnsure = async (runtimeKind) => {
+    hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
       return {
         kind: runtimeKind,
@@ -694,7 +694,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
     ];
     hostModule.host.runsList = async () => [];
-    hostModule.host.runtimeEnsure = async (runtimeKind) => {
+    hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
       return {
         kind: runtimeKind,

@@ -1,3 +1,4 @@
+import type { BuildRespondInput } from "@openducktor/adapters-tauri-host";
 import { useCallback } from "react";
 import { loadRepoDefaultRuntimeKind } from "./agent-orchestrator/runtime/runtime";
 import { host } from "./host";
@@ -10,11 +11,7 @@ type UseDelegationOperationsArgs = {
 
 type UseDelegationOperationsResult = {
   delegateTask: (taskId: string) => Promise<void>;
-  delegateRespond: (
-    runId: string,
-    action: "approve" | "deny" | "message",
-    payload?: string,
-  ) => Promise<void>;
+  delegateRespond: (runId: string, input: BuildRespondInput) => Promise<void>;
   delegateStop: (runId: string) => Promise<void>;
   delegateCleanup: (runId: string, mode: "success" | "failure") => Promise<void>;
 };
@@ -35,8 +32,8 @@ export function useDelegationOperations({
   );
 
   const delegateRespond = useCallback(
-    async (runId: string, action: "approve" | "deny" | "message", payload?: string) => {
-      await host.buildRespond(runId, action, payload);
+    async (runId: string, input: BuildRespondInput) => {
+      await host.buildRespond(runId, input);
       if (activeRepo) {
         await refreshTaskData(activeRepo);
       }

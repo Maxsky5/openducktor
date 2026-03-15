@@ -267,7 +267,7 @@ export const createLoadAgentSessions = ({
       }
       const runtime = await captureOrchestratorFallback(
         "load-sessions-ensure-workspace-runtime",
-        async () => host.runtimeEnsure(runtimeKind, repoPath),
+        async () => host.runtimeEnsure(repoPath, runtimeKind),
         {
           tags: { repoPath, taskId, runtimeKind },
           logLevel: "warn",

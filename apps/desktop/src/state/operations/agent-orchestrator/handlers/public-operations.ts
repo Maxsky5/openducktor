@@ -46,52 +46,33 @@ export type OrchestratorPublicOperations = {
 const sortByStartedAtDesc = (a: AgentSessionState, b: AgentSessionState): number =>
   a.startedAt > b.startedAt ? -1 : a.startedAt < b.startedAt ? 1 : 0;
 
+const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    toast.error(title, {
+      description: errorMessage(error),
+    });
+    throw error;
+  }
+};
+
 export const createOrchestratorPublicOperations = ({
   sessionsById,
   loadAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): OrchestratorPublicOperations => ({
   sessions: Object.values(sessionsById).sort(sortByStartedAtDesc),
-  loadAgentSessions: async (taskId: string, options?: AgentSessionLoadOptions): Promise<void> => {
-    try {
-      await loadAgentSessions(taskId, options);
-    } catch (error) {
-      toast.error("Failed to load agent sessions", {
-        description: errorMessage(error),
-      });
-      throw error;
-    }
-  },
-  startAgentSession: async (input: StartAgentSessionInput): Promise<string> => {
-    try {
-      return await sessionActions.startAgentSession(input);
-    } catch (error) {
-      toast.error("Failed to start agent session", {
-        description: errorMessage(error),
-      });
-      throw error;
-    }
-  },
-  forkAgentSession: async (input: ForkAgentSessionActionInput): Promise<string> => {
-    try {
-      return await sessionActions.forkAgentSession(input);
-    } catch (error) {
-      toast.error("Failed to fork agent session", {
-        description: errorMessage(error),
-      });
-      throw error;
-    }
-  },
-  sendAgentMessage: async (sessionId: string, content: string): Promise<void> => {
-    try {
-      await sessionActions.sendAgentMessage(sessionId, content);
-    } catch (error) {
-      toast.error("Failed to send message", {
-        description: errorMessage(error),
-      });
-      throw error;
-    }
-  },
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>
+    withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
+  startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
+    withErrorToast("Failed to start agent session", () => sessionActions.startAgentSession(input)),
+  forkAgentSession: (input: ForkAgentSessionActionInput): Promise<string> =>
+    withErrorToast("Failed to fork agent session", () => sessionActions.forkAgentSession(input)),
+  sendAgentMessage: (sessionId: string, content: string): Promise<void> =>
+    withErrorToast("Failed to send message", () =>
+      sessionActions.sendAgentMessage(sessionId, content),
+    ),
   stopAgentSession: sessionActions.stopAgentSession,
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
   replyAgentPermission: sessionActions.replyAgentPermission,

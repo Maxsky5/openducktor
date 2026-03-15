@@ -1,3 +1,4 @@
+import type { BuildRespondInput } from "@openducktor/adapters-tauri-host";
 import type {
   BeadsCheck,
   GitBranch,
@@ -99,11 +100,7 @@ export type TasksStateContextValue = {
 export type DelegationStateContextValue = {
   events: RunEvent[];
   delegateTask: (taskId: string) => Promise<void>;
-  delegateRespond: (
-    runId: string,
-    action: "approve" | "deny" | "message",
-    payload?: string,
-  ) => Promise<void>;
+  delegateRespond: (runId: string, input: BuildRespondInput) => Promise<void>;
   delegateStop: (runId: string) => Promise<void>;
   delegateCleanup: (runId: string, mode: "success" | "failure") => Promise<void>;
 };

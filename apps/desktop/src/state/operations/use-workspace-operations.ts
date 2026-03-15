@@ -483,7 +483,7 @@ export function useWorkspaceOperations({
 
         void loadRepoConfigFromQuery(appQueryClient, repoPath)
           .then((repoConfig) =>
-            host.runtimeEnsure(repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND, repoPath),
+            host.runtimeEnsure(repoPath, repoConfig?.defaultRuntimeKind ?? DEFAULT_RUNTIME_KIND),
           )
           .catch((error) => {
             if (workspaceSwitchVersionRef.current !== switchVersion) {

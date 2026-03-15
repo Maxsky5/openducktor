@@ -204,8 +204,16 @@ describe("use-spec-operations", () => {
       expect(specGet).toHaveBeenCalledWith("/repo-a", "task-1");
       expect(planGet).toHaveBeenCalledWith("/repo-a", "task-1");
       expect(qaGetReport).toHaveBeenCalledWith("/repo-a", "task-1");
-      expect(saveSpecDocument).toHaveBeenCalledWith("/repo-a", "task-1", "# Spec Doc");
-      expect(savePlanDocument).toHaveBeenCalledWith("/repo-a", "task-1", "# Plan Doc");
+      expect(saveSpecDocument).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        taskId: "task-1",
+        markdown: "# Spec Doc",
+      });
+      expect(savePlanDocument).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        taskId: "task-1",
+        markdown: "# Plan Doc",
+      });
     } finally {
       await harness.unmount();
       host.specGet = original.specGet;

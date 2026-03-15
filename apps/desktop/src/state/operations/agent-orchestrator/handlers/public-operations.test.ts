@@ -114,6 +114,35 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
+  test("shows toast and rethrows fork errors", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "");
+    toast.error = toastError;
+
+    const operations = createOrchestratorPublicOperations({
+      sessionsById: {},
+      loadAgentSessions: async () => {},
+      sessionActions: createSessionActions({
+        forkAgentSession: async () => {
+          throw new Error("fork failed");
+        },
+      }),
+    });
+
+    try {
+      await expect(
+        operations.forkAgentSession({
+          parentSessionId: "session-1",
+        }),
+      ).rejects.toThrow("fork failed");
+      expect(toastError).toHaveBeenCalledWith("Failed to fork agent session", {
+        description: "fork failed",
+      });
+    } finally {
+      toast.error = originalToastError;
+    }
+  });
+
   test("shows toast and rethrows send errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");

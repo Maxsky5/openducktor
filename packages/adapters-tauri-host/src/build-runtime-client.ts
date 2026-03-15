@@ -25,8 +25,26 @@ import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
 
-export type BuildRespondAction = "approve" | "deny" | "message";
 export type BuildCleanupMode = "success" | "failure";
+export type BuildRespondInput =
+  | { action: "approve" }
+  | { action: "deny" }
+  | { action: "message"; message: string };
+type OkResult = { ok: boolean };
+
+const parseOkResult = (payload: unknown, command: string): OkResult => {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    typeof (payload as { ok?: unknown }).ok !== "boolean"
+  ) {
+    throw new Error(`Expected { ok: boolean } payload from host command ${command}`);
+  }
+
+  return {
+    ok: (payload as { ok: boolean }).ok,
+  };
+};
 
 export const systemCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<SystemCheck> => {
   const payload = await invokeFn<unknown>("system_check", { repoPath });
@@ -50,8 +68,8 @@ export const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<R
 
 export const runtimeList = async (
   invokeFn: InvokeFn,
-  runtimeKind: RuntimeKind,
   repoPath?: string,
+  runtimeKind?: RuntimeKind,
 ): Promise<RuntimeInstanceSummary[]> => {
   const payload = await invokeFn<unknown>("runtime_list", { repoPath, runtimeKind });
   return parseArray(runtimeInstanceSummarySchema, payload);
@@ -78,19 +96,20 @@ export const runtimeStop = async (
   invokeFn: InvokeFn,
   runtimeId: string,
 ): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("runtime_stop", {
+  const payload = await invokeFn<unknown>("runtime_stop", {
     runtimeId,
   });
+  return parseOkResult(payload, "runtime_stop");
 };
 
 export const runtimeEnsure = async (
   invokeFn: InvokeFn,
-  runtimeKind: RuntimeKind,
   repoPath: string,
+  runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary> => {
   const payload = await invokeFn<unknown>("runtime_ensure", {
-    runtimeKind,
     repoPath,
+    runtimeKind,
   });
   return runtimeInstanceSummarySchema.parse(payload);
 };
@@ -217,7 +236,8 @@ export const taskPullRequestUnlink = async (
   repoPath: string,
   taskId: string,
 ): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("task_pull_request_unlink", { repoPath, taskId });
+  const payload = await invokeFn<unknown>("task_pull_request_unlink", { repoPath, taskId });
+  return parseOkResult(payload, "task_pull_request_unlink");
 };
 
 export const taskPullRequestDetect = async (
@@ -233,20 +253,26 @@ export const repoPullRequestSync = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("repo_pull_request_sync", { repoPath });
+  const payload = await invokeFn<unknown>("repo_pull_request_sync", { repoPath });
+  return parseOkResult(payload, "repo_pull_request_sync");
 };
 
 export const buildRespond = async (
   invokeFn: InvokeFn,
   runId: string,
-  action: BuildRespondAction,
-  payload?: string,
+  input: BuildRespondInput,
 ): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("build_respond", { runId, action, payload });
+  const response = await invokeFn<unknown>("build_respond", {
+    runId,
+    action: input.action,
+    ...(input.action === "message" ? { payload: input.message } : {}),
+  });
+  return parseOkResult(response, "build_respond");
 };
 
 export const buildStop = async (invokeFn: InvokeFn, runId: string): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("build_stop", { runId });
+  const payload = await invokeFn<unknown>("build_stop", { runId });
+  return parseOkResult(payload, "build_stop");
 };
 
 export const buildCleanup = async (
@@ -254,7 +280,8 @@ export const buildCleanup = async (
   runId: string,
   mode: BuildCleanupMode,
 ): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("build_cleanup", { runId, mode });
+  const payload = await invokeFn<unknown>("build_cleanup", { runId, mode });
+  return parseOkResult(payload, "build_cleanup");
 };
 
 export class TauriAgentClient {
@@ -280,10 +307,10 @@ export class TauriAgentClient {
   }
 
   async runtimeList(
-    runtimeKind: RuntimeKind,
     repoPath?: string,
+    runtimeKind?: RuntimeKind,
   ): Promise<RuntimeInstanceSummary[]> {
-    return runtimeList(this.invokeFn, runtimeKind, repoPath);
+    return runtimeList(this.invokeFn, repoPath, runtimeKind);
   }
 
   async runtimeDefinitionsList(): Promise<RuntimeDescriptor[]> {
@@ -298,8 +325,8 @@ export class TauriAgentClient {
     return runtimeStop(this.invokeFn, runtimeId);
   }
 
-  async runtimeEnsure(runtimeKind: RuntimeKind, repoPath: string): Promise<RuntimeInstanceSummary> {
-    return runtimeEnsure(this.invokeFn, runtimeKind, repoPath);
+  async runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<RuntimeInstanceSummary> {
+    return runtimeEnsure(this.invokeFn, repoPath, runtimeKind);
   }
 
   async buildStart(
@@ -364,12 +391,8 @@ export class TauriAgentClient {
     return result;
   }
 
-  async buildRespond(
-    runId: string,
-    action: BuildRespondAction,
-    payload?: string,
-  ): Promise<{ ok: boolean }> {
-    return buildRespond(this.invokeFn, runId, action, payload);
+  async buildRespond(runId: string, input: BuildRespondInput): Promise<{ ok: boolean }> {
+    return buildRespond(this.invokeFn, runId, input);
   }
 
   async buildStop(runId: string): Promise<{ ok: boolean }> {

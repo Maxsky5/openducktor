@@ -80,7 +80,11 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
   const saveSpecDocument = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
       const repo = requireActiveRepo(activeRepo);
-      const saved = await host.saveSpecDocument(repo, taskId, markdown);
+      const saved = await host.saveSpecDocument({
+        repoPath: repo,
+        taskId,
+        markdown,
+      });
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.spec(repo, taskId),
       });
@@ -92,7 +96,11 @@ export function useSpecOperations({ activeRepo }: UseSpecOperationsArgs): UseSpe
   const savePlanDocument = useCallback(
     async (taskId: string, markdown: string): Promise<{ updatedAt: string }> => {
       const repo = requireActiveRepo(activeRepo);
-      const saved = await host.savePlanDocument(repo, taskId, markdown);
+      const saved = await host.savePlanDocument({
+        repoPath: repo,
+        taskId,
+        markdown,
+      });
       await queryClient.invalidateQueries({
         queryKey: documentQueryKeys.plan(repo, taskId),
       });

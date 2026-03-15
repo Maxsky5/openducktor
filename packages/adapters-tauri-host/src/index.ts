@@ -138,6 +138,7 @@ const bindDelegates = <
 };
 
 export type TauriHostClient = TauriHostClientApi & PlannerTools;
+export type { BuildRespondInput } from "./build-runtime-client";
 
 const createTauriHostClientApi = (invokeFn: InvokeFn): TauriHostClientApi => {
   const metadataCache = new TaskMetadataCache();
