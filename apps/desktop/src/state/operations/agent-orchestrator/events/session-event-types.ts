@@ -49,4 +49,120 @@ export type AttachAgentSessionListenerParams = {
   ) => Promise<void>;
 };
 
-export type SessionEventContext = AttachAgentSessionListenerParams;
+export type SessionStoreContext = Pick<
+  AttachAgentSessionListenerParams,
+  "sessionId" | "sessionsRef" | "updateSession"
+>;
+
+export type SessionDraftContext = Pick<
+  AttachAgentSessionListenerParams,
+  | "sessionId"
+  | "draftRawBySessionRef"
+  | "draftSourceBySessionRef"
+  | "draftMessageIdBySessionRef"
+  | "draftFlushTimeoutBySessionRef"
+>;
+
+export type SessionTurnContext = Pick<
+  AttachAgentSessionListenerParams,
+  | "sessionId"
+  | "turnStartedAtBySessionRef"
+  | "turnModelBySessionRef"
+  | "resolveTurnDurationMs"
+  | "clearTurnDuration"
+>;
+
+export type SessionPermissionContext = Pick<AttachAgentSessionListenerParams, "adapter">;
+
+export type SessionRefreshContext = Pick<
+  AttachAgentSessionListenerParams,
+  "repoPath" | "refreshTaskData" | "loadSessionTodos"
+>;
+
+export type SessionLifecycleEventContext = {
+  store: SessionStoreContext;
+  drafts: SessionDraftContext;
+  turn: SessionTurnContext;
+  permissions: SessionPermissionContext;
+};
+
+export type SessionPartEventContext = {
+  store: SessionStoreContext;
+  drafts: SessionDraftContext;
+  turn: SessionTurnContext;
+  refresh: SessionRefreshContext;
+};
+
+export type SessionToolPartEventContext = Pick<SessionPartEventContext, "store" | "refresh">;
+
+export type SessionEventHandlerContext = {
+  lifecycle: SessionLifecycleEventContext;
+  parts: SessionPartEventContext;
+};
+
+export const createSessionEventHandlerContext = (
+  context: AttachAgentSessionListenerParams,
+): SessionEventHandlerContext => ({
+  lifecycle: {
+    store: {
+      sessionId: context.sessionId,
+      sessionsRef: context.sessionsRef,
+      updateSession: context.updateSession,
+    },
+    drafts: {
+      sessionId: context.sessionId,
+      draftRawBySessionRef: context.draftRawBySessionRef,
+      draftSourceBySessionRef: context.draftSourceBySessionRef,
+      ...(context.draftMessageIdBySessionRef
+        ? { draftMessageIdBySessionRef: context.draftMessageIdBySessionRef }
+        : {}),
+      ...(context.draftFlushTimeoutBySessionRef
+        ? { draftFlushTimeoutBySessionRef: context.draftFlushTimeoutBySessionRef }
+        : {}),
+    },
+    turn: {
+      sessionId: context.sessionId,
+      turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
+      ...(context.turnModelBySessionRef
+        ? { turnModelBySessionRef: context.turnModelBySessionRef }
+        : {}),
+      resolveTurnDurationMs: context.resolveTurnDurationMs,
+      clearTurnDuration: context.clearTurnDuration,
+    },
+    permissions: {
+      adapter: context.adapter,
+    },
+  },
+  parts: {
+    store: {
+      sessionId: context.sessionId,
+      sessionsRef: context.sessionsRef,
+      updateSession: context.updateSession,
+    },
+    drafts: {
+      sessionId: context.sessionId,
+      draftRawBySessionRef: context.draftRawBySessionRef,
+      draftSourceBySessionRef: context.draftSourceBySessionRef,
+      ...(context.draftMessageIdBySessionRef
+        ? { draftMessageIdBySessionRef: context.draftMessageIdBySessionRef }
+        : {}),
+      ...(context.draftFlushTimeoutBySessionRef
+        ? { draftFlushTimeoutBySessionRef: context.draftFlushTimeoutBySessionRef }
+        : {}),
+    },
+    turn: {
+      sessionId: context.sessionId,
+      turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
+      ...(context.turnModelBySessionRef
+        ? { turnModelBySessionRef: context.turnModelBySessionRef }
+        : {}),
+      resolveTurnDurationMs: context.resolveTurnDurationMs,
+      clearTurnDuration: context.clearTurnDuration,
+    },
+    refresh: {
+      repoPath: context.repoPath,
+      refreshTaskData: context.refreshTaskData,
+      loadSessionTodos: context.loadSessionTodos,
+    },
+  },
+});

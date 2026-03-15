@@ -5,8 +5,9 @@ import { finalizeDraftAssistantMessage, sanitizeStreamingText } from "../support
 import type {
   DraftChannel,
   DraftChannelValueMap,
-  SessionEventContext,
+  SessionLifecycleEventContext,
   SessionPart,
+  SessionPartEventContext,
 } from "./session-event-types";
 
 const DRAFT_FLUSH_DELAY_MS = 32;
@@ -17,18 +18,20 @@ export const inferToolPartStatus = (
   return part.status;
 };
 
-export const clearDraftBuffers = (context: SessionEventContext): void => {
-  const timeoutId = context.draftFlushTimeoutBySessionRef?.current[context.sessionId];
+export const clearDraftBuffers = (
+  context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
+): void => {
+  const timeoutId = context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.sessionId];
   if (timeoutId !== undefined) {
     clearTimeout(timeoutId);
   }
-  if (context.draftFlushTimeoutBySessionRef) {
-    delete context.draftFlushTimeoutBySessionRef.current[context.sessionId];
+  if (context.drafts.draftFlushTimeoutBySessionRef) {
+    delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.sessionId];
   }
-  delete context.draftRawBySessionRef.current[context.sessionId];
-  delete context.draftSourceBySessionRef.current[context.sessionId];
-  if (context.draftMessageIdBySessionRef) {
-    delete context.draftMessageIdBySessionRef.current[context.sessionId];
+  delete context.drafts.draftRawBySessionRef.current[context.store.sessionId];
+  delete context.drafts.draftSourceBySessionRef.current[context.store.sessionId];
+  if (context.drafts.draftMessageIdBySessionRef) {
+    delete context.drafts.draftMessageIdBySessionRef.current[context.store.sessionId];
   }
 };
 
@@ -48,21 +51,24 @@ const resolveDraftFieldState = (
   return { text, messageId };
 };
 
-export const flushDraftBuffers = (context: SessionEventContext): void => {
-  const timeoutId = context.draftFlushTimeoutBySessionRef?.current[context.sessionId];
+export const flushDraftBuffers = (
+  context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
+): void => {
+  const timeoutId = context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.sessionId];
   if (timeoutId !== undefined) {
     clearTimeout(timeoutId);
-    if (context.draftFlushTimeoutBySessionRef) {
-      delete context.draftFlushTimeoutBySessionRef.current[context.sessionId];
+    if (context.drafts.draftFlushTimeoutBySessionRef) {
+      delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.sessionId];
     }
   }
 
-  const rawByChannel = context.draftRawBySessionRef.current[context.sessionId];
-  const messageIdByChannel = context.draftMessageIdBySessionRef?.current[context.sessionId];
+  const rawByChannel = context.drafts.draftRawBySessionRef.current[context.store.sessionId];
+  const messageIdByChannel =
+    context.drafts.draftMessageIdBySessionRef?.current[context.store.sessionId];
   const reasoningDraft = resolveDraftFieldState("reasoning", rawByChannel, messageIdByChannel);
 
-  context.updateSession(
-    context.sessionId,
+  context.store.updateSession(
+    context.store.sessionId,
     (current) => ({
       ...current,
       draftAssistantText: "",
@@ -74,20 +80,22 @@ export const flushDraftBuffers = (context: SessionEventContext): void => {
   );
 };
 
-export const scheduleDraftFlush = (context: SessionEventContext): void => {
-  const draftFlushTimeoutBySessionRef = context.draftFlushTimeoutBySessionRef;
+export const scheduleDraftFlush = (
+  context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
+): void => {
+  const draftFlushTimeoutBySessionRef = context.drafts.draftFlushTimeoutBySessionRef;
   if (!draftFlushTimeoutBySessionRef) {
     flushDraftBuffers(context);
     return;
   }
 
-  const existingTimeoutId = draftFlushTimeoutBySessionRef.current[context.sessionId];
+  const existingTimeoutId = draftFlushTimeoutBySessionRef.current[context.store.sessionId];
   if (existingTimeoutId !== undefined) {
     clearTimeout(existingTimeoutId);
   }
 
-  draftFlushTimeoutBySessionRef.current[context.sessionId] = setTimeout(() => {
-    delete draftFlushTimeoutBySessionRef.current[context.sessionId];
+  draftFlushTimeoutBySessionRef.current[context.store.sessionId] = setTimeout(() => {
+    delete draftFlushTimeoutBySessionRef.current[context.store.sessionId];
     flushDraftBuffers(context);
   }, DRAFT_FLUSH_DELAY_MS);
 };
@@ -126,13 +134,16 @@ const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean =>
   );
 };
 
-export const settleDraftToIdle = (context: SessionEventContext, timestamp: string): boolean => {
+export const settleDraftToIdle = (
+  context: Pick<SessionLifecycleEventContext, "store" | "turn">,
+  timestamp: string,
+): boolean => {
   let shouldClear = false;
-  context.updateSession(context.sessionId, (current) => {
+  context.store.updateSession(context.store.sessionId, (current) => {
     const finalized = finalizeDraftAssistantMessage(
       current,
       timestamp,
-      context.resolveTurnDurationMs(context.sessionId, timestamp, current.messages),
+      context.turn.resolveTurnDurationMs(context.store.sessionId, timestamp, current.messages),
     );
     shouldClear = shouldClearTurnFromCurrentState(current);
     return {
@@ -171,21 +182,23 @@ export const createPrePartTodoSettlement = (
   };
 };
 
-export const refreshTodosFromSessionRef = (context: SessionEventContext): void => {
-  const session = context.sessionsRef.current[context.sessionId];
+export const refreshTodosFromSessionRef = (
+  context: Pick<SessionPartEventContext, "store" | "refresh">,
+): void => {
+  const session = context.store.sessionsRef.current[context.store.sessionId];
   if (!session) {
     return;
   }
   const runtimeKind = session.runtimeKind ?? session.selectedModel?.runtimeKind;
   if (!runtimeKind) {
     throw new Error(
-      `Runtime kind is required to refresh todos for session '${context.sessionId}'.`,
+      `Runtime kind is required to refresh todos for session '${context.store.sessionId}'.`,
     );
   }
   runOrchestratorSideEffect(
     "session-events-refresh-todos",
-    context.loadSessionTodos(
-      context.sessionId,
+    context.refresh.loadSessionTodos(
+      context.store.sessionId,
       runtimeKind,
       {
         endpoint: session.runtimeEndpoint,
@@ -195,8 +208,8 @@ export const refreshTodosFromSessionRef = (context: SessionEventContext): void =
     ),
     {
       tags: {
-        repoPath: context.repoPath,
-        sessionId: context.sessionId,
+        repoPath: context.refresh.repoPath,
+        sessionId: context.store.sessionId,
         taskId: session.taskId,
         role: session.role,
         externalSessionId: session.externalSessionId,
