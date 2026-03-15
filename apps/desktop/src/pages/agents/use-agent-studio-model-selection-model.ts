@@ -2,7 +2,10 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentChatMessage, AgentSessionContextUsage } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { normalizeSelectionForCatalog, pickDefaultSelectionForCatalog } from "./agents-page-utils";
+import {
+  normalizeSelectionForCatalog,
+  pickDefaultSelectionForCatalog,
+} from "./agents-page-selection";
 
 export type AgentStudioContextUsage = {
   totalTokens: number;

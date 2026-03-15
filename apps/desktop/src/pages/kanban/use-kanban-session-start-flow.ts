@@ -9,7 +9,7 @@ import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
-import { firstScenario, kickoffPromptForScenario } from "../agents/agents-page-constants";
+import { firstScenario, kickoffPromptForScenario } from "../shared/session-start-prompts";
 import { useSessionStartModalCoordinator } from "../shared/use-session-start-modal-coordinator";
 import type {
   HumanReviewFeedbackModalModel,

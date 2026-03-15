@@ -5,8 +5,8 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { toTabsStorageKey } from "./agents-page-selection";
 import { toPersistedTaskTabs } from "./agents-page-session-tabs";
-import { toTabsStorageKey } from "./agents-page-utils";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 enableReactActEnvironment();

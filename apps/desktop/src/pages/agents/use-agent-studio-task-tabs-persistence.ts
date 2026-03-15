@@ -1,12 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { type Dispatch, type SetStateAction, useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
+import { toTabsStorageKey } from "./agents-page-selection";
 import {
   canPersistTaskTabs,
   parsePersistedTaskTabs,
   toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
-import { toTabsStorageKey } from "./agents-page-utils";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
