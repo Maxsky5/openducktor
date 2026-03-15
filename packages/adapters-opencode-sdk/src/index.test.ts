@@ -403,6 +403,7 @@ const startDefaultSession = async (
 };
 
 const defaultLoadSessionTodosInput = {
+  runtimeKind: "opencode" as const,
   runtimeConnection: defaultRuntimeConnection,
   externalSessionId: "session-opencode-1",
 };
