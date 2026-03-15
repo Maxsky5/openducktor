@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentScenario } from "@openducktor/core";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
+import type { RequestNewSessionStart } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -12,7 +13,6 @@ import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
-import type { RequestNewSessionStart } from "./use-agent-studio-session-start-types";
 
 export type AgentStudioOrchestrationWorkspaceContext = {
   activeRepo: string | null;

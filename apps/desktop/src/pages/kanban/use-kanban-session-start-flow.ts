@@ -4,11 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
+import { firstScenario, useSessionStartModalCoordinator } from "@/features/session-start";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import { firstScenario } from "../shared/session-start-prompts";
-import { useSessionStartModalCoordinator } from "../shared/use-session-start-modal-coordinator";
 import {
   buildHumanReviewFeedbackModalModel,
   confirmHumanReviewFeedbackFlow,

@@ -1,5 +1,6 @@
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
+import type { NewSessionStartRequest, SessionStartRequestReason } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import {
@@ -8,10 +9,6 @@ import {
   type QueryUpdate,
   resolveReusableSessionForStart,
 } from "./use-agent-studio-session-action-helpers";
-import type {
-  NewSessionStartRequest,
-  SessionStartRequestReason,
-} from "./use-agent-studio-session-start-types";
 
 type UseAgentStudioSessionStartSessionArgs = {
   taskId: string;
