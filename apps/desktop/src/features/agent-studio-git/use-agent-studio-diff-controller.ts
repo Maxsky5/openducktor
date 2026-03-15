@@ -223,18 +223,14 @@ export function useAgentStudioDiffController({
       };
 
       setControllerState((previousState) => {
-        const {
-          invalidatedScopes,
-          nextState,
-          nextLatestSharedSequence,
-          shouldReloadFullScope,
-        } = applySummarySnapshot({
-          state: previousState.batchState,
-          scope,
-          summaryFields,
-          requestSequence,
-          latestSharedSequence: previousState.latestSharedSequence,
-        });
+        const { invalidatedScopes, nextState, nextLatestSharedSequence, shouldReloadFullScope } =
+          applySummarySnapshot({
+            state: previousState.batchState,
+            scope,
+            summaryFields,
+            requestSequence,
+            latestSharedSequence: previousState.latestSharedSequence,
+          });
         const nextPendingFullReloads = shouldReloadFullScope
           ? enqueuePendingFullReload(previousState.pendingFullReloads, loadContext)
           : previousState.pendingFullReloads;

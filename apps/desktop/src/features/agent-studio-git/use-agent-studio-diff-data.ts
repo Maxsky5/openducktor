@@ -89,12 +89,9 @@ export function useAgentStudioDiffData({
     worktreeResolutionError,
   ]);
 
-  const setSelectedFile = useCallback(
-    (path: string | null): void => {
-      setSelectedFileState(path);
-    },
-    [],
-  );
+  const setSelectedFile = useCallback((path: string | null): void => {
+    setSelectedFileState(path);
+  }, []);
 
   const displayError = worktreeResolutionError ?? activeScopeState.error;
   const isLoading = state.isLoading || isWorktreeResolutionResolving;
