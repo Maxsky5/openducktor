@@ -561,6 +561,101 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("forces the first inactive-scope reload after branch identity changes", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      defaultTargetBranch: { branch: "@{upstream}" },
+      branchIdentityKey: "branch:main",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor((state) => state.diffScope === "target");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+
+      gitGetWorktreeStatusMock.mockImplementation(
+        async (
+          _repoPath: string,
+          targetBranch: string,
+          diffScope?: "target" | "uncommitted",
+          workingDir?: string,
+        ): Promise<GitWorktreeStatus> =>
+          withSnapshotHashes({
+            currentBranch: { name: "feature/switched", detached: false },
+            fileStatuses:
+              (diffScope ?? "target") === "target"
+                ? [{ path: "src/switched.ts", status: "M", staged: false }]
+                : [{ path: "src/worktree-switched.ts", status: "M", staged: false }],
+            fileDiffs:
+              (diffScope ?? "target") === "target"
+                ? [
+                    {
+                      file: "src/switched.ts",
+                      type: "modified",
+                      additions: 5,
+                      deletions: 1,
+                      diff: "@@ -1 +1,5 @@",
+                    },
+                  ]
+                : [
+                    {
+                      file: "src/worktree-switched.ts",
+                      type: "modified",
+                      additions: 3,
+                      deletions: 0,
+                      diff: "@@ -1 +1,3 @@",
+                    },
+                  ],
+            targetAheadBehind: { ahead: 2, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: workingDir ?? "/repo",
+              targetBranch,
+              diffScope: diffScope ?? "target",
+              observedAtMs: 1731000000300,
+            },
+          }),
+      );
+
+      await harness.update({
+        ...createBaseArgs(),
+        defaultTargetBranch: { branch: "@{upstream}" },
+        branchIdentityKey: "branch:feature/switched",
+      });
+
+      await harness.waitFor((state) => state.branch === "feature/switched");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 4);
+      await harness.waitFor((state) => state.diffScope === "uncommitted");
+
+      expect(harness.getLatest().fileDiffs).toEqual([
+        {
+          file: "src/worktree-switched.ts",
+          type: "modified",
+          additions: 3,
+          deletions: 0,
+          diff: "@@ -1 +1,3 @@",
+        },
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refresh syncs upstream status changes across cached inactive scope", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),

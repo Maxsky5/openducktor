@@ -157,7 +157,7 @@ export function useAgentStudioDiffController({
       }
       queuedFullReloadByScopeRef.current[scope] = false;
       queuedFullReloadForceByScopeRef.current[scope] = false;
-      invalidatedFullReloadByScopeRef.current[scope] = false;
+      invalidatedFullReloadByScopeRef.current[scope] = true;
     }
     latestLoadingRequestSequenceRef.current = null;
   }, []);
@@ -284,6 +284,7 @@ export function useAgentStudioDiffController({
         return;
       }
 
+      invalidatedFullReloadByScopeRef.current[scope] = false;
       const nextScopeSnapshot = toScopeSnapshot(snapshot);
       setControllerState((previousState) => {
         const { nextState, nextLatestSharedSequence } = applyFullSnapshot({
@@ -511,7 +512,6 @@ export function useAgentStudioDiffController({
     }
 
     const shouldForce = invalidatedFullReloadByScopeRef.current[diffScope];
-    invalidatedFullReloadByScopeRef.current[diffScope] = false;
 
     void loadData(true, {
       repoPath,
