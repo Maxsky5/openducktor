@@ -654,6 +654,24 @@ fn resolve_authorized_working_dir(
     resolve_working_dir(repo_path, working_dir).map_err(request_error)
 }
 
+fn require_git_commit_message(message: &str) -> Result<String, HeadlessCommandError> {
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return Err(HeadlessCommandError::bad_request("message is required"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn require_git_rebase_target_branch(target_branch: &str) -> Result<String, HeadlessCommandError> {
+    let trimmed = target_branch.trim();
+    if trimmed.is_empty() {
+        return Err(HeadlessCommandError::bad_request(
+            "targetBranch is required",
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
 async fn dispatch_command(
     state: &HeadlessState,
     command: &str,
@@ -679,19 +697,44 @@ async fn dispatch_command(
 
 type CommandResult = Result<Value, HeadlessCommandError>;
 
+async fn run_headless_blocking<T, F>(
+    operation_name: &'static str,
+    operation: F,
+) -> Result<T, HeadlessCommandError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> anyhow::Result<T> + Send + 'static,
+{
+    run_service_blocking_tokio(operation_name, operation)
+        .await
+        .map_err(service_error)
+}
+
 async fn dispatch_workspace_command(
     state: &HeadlessState,
     command: &str,
     args: Value,
 ) -> Option<CommandResult> {
     match command {
-        "system_check" => Some(handle_repo_path_operation(args, |repo_path| {
-            state.service.system_check(&repo_path)
-        })),
-        "runtime_check" => Some(handle_runtime_check(state, args)),
-        "beads_check" => Some(handle_repo_path_operation(args, |repo_path| {
-            state.service.beads_check(&repo_path)
-        })),
+        "system_check" => Some(
+            handle_repo_path_operation_blocking(
+                state,
+                args,
+                "system_check",
+                |service, repo_path| service.system_check(&repo_path),
+            )
+            .await,
+        ),
+        "runtime_check" => Some(handle_runtime_check(state, args).await),
+        "beads_check" => Some(
+            handle_repo_path_operation_blocking(
+                state,
+                args,
+                "beads_check",
+                |service, repo_path| service.beads_check(&repo_path),
+            )
+            .await,
+        ),
         "workspace_list" => Some(handle_workspace_list(state)),
         "workspace_add" => Some(handle_repo_path_operation(args, |repo_path| {
             state.service.workspace_add(&repo_path)
@@ -738,25 +781,31 @@ async fn dispatch_git_command(
     args: Value,
 ) -> Option<CommandResult> {
     match command {
-        "git_get_branches" => Some(handle_repo_path_operation(args, |repo_path| {
-            state.service.git_get_branches(&repo_path)
-        })),
-        "git_get_current_branch" => Some(handle_git_get_current_branch(state, args)),
-        "git_switch_branch" => Some(handle_git_switch_branch(state, args)),
-        "git_create_worktree" => Some(handle_git_create_worktree(state, args)),
-        "git_remove_worktree" => Some(handle_git_remove_worktree(state, args)),
-        "git_push_branch" => Some(handle_git_push_branch(state, args)),
-        "git_get_status" => Some(handle_git_get_status(state, args)),
-        "git_get_diff" => Some(handle_git_get_diff(state, args)),
-        "git_commits_ahead_behind" => Some(handle_git_commits_ahead_behind(state, args)),
-        "git_get_worktree_status" => Some(handle_git_get_worktree_status(state, args)),
+        "git_get_branches" => Some(
+            handle_repo_path_operation_blocking(
+                state,
+                args,
+                "git_get_branches",
+                |service, repo_path| service.git_get_branches(&repo_path),
+            )
+            .await,
+        ),
+        "git_get_current_branch" => Some(handle_git_get_current_branch(state, args).await),
+        "git_switch_branch" => Some(handle_git_switch_branch(state, args).await),
+        "git_create_worktree" => Some(handle_git_create_worktree(state, args).await),
+        "git_remove_worktree" => Some(handle_git_remove_worktree(state, args).await),
+        "git_push_branch" => Some(handle_git_push_branch(state, args).await),
+        "git_get_status" => Some(handle_git_get_status(state, args).await),
+        "git_get_diff" => Some(handle_git_get_diff(state, args).await),
+        "git_commits_ahead_behind" => Some(handle_git_commits_ahead_behind(state, args).await),
+        "git_get_worktree_status" => Some(handle_git_get_worktree_status(state, args).await),
         "git_get_worktree_status_summary" => {
-            Some(handle_git_get_worktree_status_summary(state, args))
+            Some(handle_git_get_worktree_status_summary(state, args).await)
         }
-        "git_commit_all" => Some(handle_git_commit_all(state, args)),
-        "git_pull_branch" => Some(handle_git_pull_branch(state, args)),
-        "git_rebase_branch" => Some(handle_git_rebase_branch(state, args)),
-        "git_rebase_abort" => Some(handle_git_rebase_abort(state, args)),
+        "git_commit_all" => Some(handle_git_commit_all(state, args).await),
+        "git_pull_branch" => Some(handle_git_pull_branch(state, args).await),
+        "git_rebase_branch" => Some(handle_git_rebase_branch(state, args).await),
+        "git_rebase_abort" => Some(handle_git_rebase_abort(state, args).await),
         _ => None,
     }
 }
@@ -767,25 +816,28 @@ async fn dispatch_task_command(
     args: Value,
 ) -> Option<CommandResult> {
     match command {
-        "tasks_list" => Some(handle_repo_path_operation(args, |repo_path| {
-            state.service.tasks_list(&repo_path)
-        })),
-        "task_create" => Some(handle_task_create(state, args)),
-        "task_update" => Some(handle_task_update(state, args)),
-        "task_delete" => Some(handle_task_delete(state, args)),
-        "task_transition" => Some(handle_task_transition(state, args)),
-        "task_defer" => Some(handle_task_defer(state, args)),
-        "task_resume_deferred" => Some(handle_task_resume_deferred(state, args)),
-        "spec_get" => Some(handle_spec_get(state, args)),
-        "task_metadata_get" => Some(handle_task_metadata_get(state, args)),
-        "set_spec" => Some(handle_set_spec(state, args)),
-        "spec_save_document" => Some(handle_spec_save_document(state, args)),
-        "plan_get" => Some(handle_plan_get(state, args)),
-        "set_plan" => Some(handle_set_plan(state, args)),
-        "plan_save_document" => Some(handle_plan_save_document(state, args)),
-        "qa_get_report" => Some(handle_qa_get_report(state, args)),
-        "qa_approved" => Some(handle_qa_approved(state, args)),
-        "qa_rejected" => Some(handle_qa_rejected(state, args)),
+        "tasks_list" => Some(
+            handle_repo_path_operation_blocking(state, args, "tasks_list", |service, repo_path| {
+                service.tasks_list(&repo_path)
+            })
+            .await,
+        ),
+        "task_create" => Some(handle_task_create(state, args).await),
+        "task_update" => Some(handle_task_update(state, args).await),
+        "task_delete" => Some(handle_task_delete(state, args).await),
+        "task_transition" => Some(handle_task_transition(state, args).await),
+        "task_defer" => Some(handle_task_defer(state, args).await),
+        "task_resume_deferred" => Some(handle_task_resume_deferred(state, args).await),
+        "spec_get" => Some(handle_spec_get(state, args).await),
+        "task_metadata_get" => Some(handle_task_metadata_get(state, args).await),
+        "set_spec" => Some(handle_set_spec(state, args).await),
+        "spec_save_document" => Some(handle_spec_save_document(state, args).await),
+        "plan_get" => Some(handle_plan_get(state, args).await),
+        "set_plan" => Some(handle_set_plan(state, args).await),
+        "plan_save_document" => Some(handle_plan_save_document(state, args).await),
+        "qa_get_report" => Some(handle_qa_get_report(state, args).await),
+        "qa_approved" => Some(handle_qa_approved(state, args).await),
+        "qa_rejected" => Some(handle_qa_rejected(state, args).await),
         "build_blocked" => Some(handle_build_blocked(state, args)),
         "build_resumed" => Some(handle_build_resumed(state, args)),
         "build_completed" => Some(handle_build_completed(state, args)),
@@ -812,10 +864,10 @@ async fn dispatch_runtime_command(
         "build_stop" => Some(handle_build_stop(state, args)),
         "build_cleanup" => Some(handle_build_cleanup(state, args)),
         "runs_list" => Some(handle_runs_list(state, args)),
-        "runtime_definitions_list" => Some(handle_runtime_definitions_list(state)),
-        "runtime_list" => Some(handle_runtime_list(state, args)),
+        "runtime_definitions_list" => Some(handle_runtime_definitions_list(state).await),
+        "runtime_list" => Some(handle_runtime_list(state, args).await),
         "qa_review_target_get" => Some(handle_qa_review_target_get(state, args).await),
-        "runtime_stop" => Some(handle_runtime_stop(state, args)),
+        "runtime_stop" => Some(handle_runtime_stop(state, args).await),
         "runtime_ensure" => Some(handle_runtime_ensure(state, args).await),
         "agent_sessions_list" => Some(handle_agent_sessions_list(state, args)),
         "agent_session_upsert" => Some(handle_agent_session_upsert(state, args)),
@@ -832,6 +884,23 @@ where
     serialize_value(operation(repo_path).map_err(service_error)?)
 }
 
+async fn handle_repo_path_operation_blocking<T, F>(
+    state: &HeadlessState,
+    args: Value,
+    operation_name: &'static str,
+    operation: F,
+) -> CommandResult
+where
+    T: serde::Serialize + Send + 'static,
+    F: FnOnce(Arc<AppService>, String) -> anyhow::Result<T> + Send + 'static,
+{
+    let RepoPathArgs { repo_path } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_headless_blocking(operation_name, move || operation(service, repo_path)).await?,
+    )
+}
+
 fn handle_repo_task_operation<T, F>(args: Value, operation: F) -> CommandResult
 where
     T: serde::Serialize,
@@ -839,6 +908,26 @@ where
 {
     let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
     serialize_value(operation(repo_path, task_id).map_err(service_error)?)
+}
+
+async fn handle_repo_task_operation_blocking<T, F>(
+    state: &HeadlessState,
+    args: Value,
+    operation_name: &'static str,
+    operation: F,
+) -> CommandResult
+where
+    T: serde::Serialize + Send + 'static,
+    F: FnOnce(Arc<AppService>, String, String) -> anyhow::Result<T> + Send + 'static,
+{
+    let RepoTaskArgs { repo_path, task_id } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_headless_blocking(operation_name, move || {
+            operation(service, repo_path, task_id)
+        })
+        .await?,
+    )
 }
 
 fn handle_repo_task_reason_operation<T, F>(args: Value, operation: F) -> CommandResult
@@ -852,6 +941,32 @@ where
         reason,
     } = deserialize_args(args)?;
     serialize_value(operation(repo_path, task_id, reason).map_err(service_error)?)
+}
+
+async fn handle_repo_task_reason_operation_blocking<T, F>(
+    state: &HeadlessState,
+    args: Value,
+    operation_name: &'static str,
+    operation: F,
+) -> CommandResult
+where
+    T: serde::Serialize + Send + 'static,
+    F: FnOnce(Arc<AppService>, String, String, Option<String>) -> anyhow::Result<T>
+        + Send
+        + 'static,
+{
+    let RepoTaskReasonArgs {
+        repo_path,
+        task_id,
+        reason,
+    } = deserialize_args(args)?;
+    let service = state.service.clone();
+    serialize_value(
+        run_headless_blocking(operation_name, move || {
+            operation(service, repo_path, task_id, reason)
+        })
+        .await?,
+    )
 }
 
 fn build_worktree_snapshot_metadata(
@@ -877,13 +992,15 @@ fn invalidate_repo_worktree_cache(repo_path: &str) -> Result<(), HeadlessCommand
         .map_err(|error| HeadlessCommandError::internal(error.to_string()))
 }
 
-fn handle_runtime_check(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_runtime_check(state: &HeadlessState, args: Value) -> CommandResult {
     let RuntimeCheckArgs { force } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let force = force.unwrap_or(false);
     serialize_value(
-        state
-            .service
-            .runtime_check_with_refresh(force.unwrap_or(false))
-            .map_err(service_error)?,
+        run_headless_blocking("runtime_check", move || {
+            service.runtime_check_with_refresh(force)
+        })
+        .await?,
     )
 }
 
@@ -1055,70 +1172,80 @@ fn handle_set_theme(state: &HeadlessState, args: Value) -> CommandResult {
     Ok(Value::Null)
 }
 
-fn handle_git_get_current_branch(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_get_current_branch(state: &HeadlessState, args: Value) -> CommandResult {
     let GitCurrentBranchArgs {
         repo_path,
         working_dir,
     } = deserialize_args(args)?;
     let effective = resolve_authorized_working_dir(state, &repo_path, working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_port()
-            .get_current_branch(std::path::Path::new(&effective))
-            .map_err(service_error)?,
+        run_headless_blocking("git_get_current_branch", move || {
+            service
+                .git_port()
+                .get_current_branch(std::path::Path::new(&effective))
+        })
+        .await?,
     )
 }
 
-fn handle_git_switch_branch(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_switch_branch(state: &HeadlessState, args: Value) -> CommandResult {
     let GitSwitchBranchArgs {
         repo_path,
         branch,
         create,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
+    let create = create.unwrap_or(false);
     serialize_value(
-        state
-            .service
-            .git_switch_branch(&repo_path, &branch, create.unwrap_or(false))
-            .map_err(service_error)?,
+        run_headless_blocking("git_switch_branch", move || {
+            service.git_switch_branch(&repo_path, &branch, create)
+        })
+        .await?,
     )
 }
 
-fn handle_git_create_worktree(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_create_worktree(state: &HeadlessState, args: Value) -> CommandResult {
     let GitCreateWorktreeArgs {
         repo_path,
         worktree_path,
         branch,
         create_branch,
     } = deserialize_args(args)?;
-    let summary = state
-        .service
-        .git_create_worktree(
-            &repo_path,
+    let service = state.service.clone();
+    let create_branch = create_branch.unwrap_or(false);
+    let repo_path_for_worker = repo_path.clone();
+    let summary = run_headless_blocking("git_create_worktree", move || {
+        service.git_create_worktree(
+            &repo_path_for_worker,
             &worktree_path,
             &branch,
-            create_branch.unwrap_or(false),
+            create_branch,
         )
-        .map_err(service_error)?;
+    })
+    .await?;
     invalidate_repo_worktree_cache(&repo_path)?;
     serialize_value(summary)
 }
 
-fn handle_git_remove_worktree(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_remove_worktree(state: &HeadlessState, args: Value) -> CommandResult {
     let GitRemoveWorktreeArgs {
         repo_path,
         worktree_path,
         force,
     } = deserialize_args(args)?;
-    let removed = state
-        .service
-        .git_remove_worktree(&repo_path, &worktree_path, force.unwrap_or(false))
-        .map_err(service_error)?;
+    let service = state.service.clone();
+    let force = force.unwrap_or(false);
+    let repo_path_for_worker = repo_path.clone();
+    let removed = run_headless_blocking("git_remove_worktree", move || {
+        service.git_remove_worktree(&repo_path_for_worker, &worktree_path, force)
+    })
+    .await?;
     invalidate_repo_worktree_cache(&repo_path)?;
     Ok(json!({ "ok": removed }))
 }
 
-fn handle_git_push_branch(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_push_branch(state: &HeadlessState, args: Value) -> CommandResult {
     let GitPushBranchArgs {
         repo_path,
         branch,
@@ -1128,84 +1255,101 @@ fn handle_git_push_branch(state: &HeadlessState, args: Value) -> CommandResult {
         force_with_lease,
     } = deserialize_args(args)?;
     let effective = resolve_authorized_working_dir(state, &repo_path, working_dir.as_deref())?;
+    let service = state.service.clone();
+    let set_upstream = set_upstream.unwrap_or(false);
+    let force_with_lease = force_with_lease.unwrap_or(false);
     serialize_value(
-        state
-            .service
-            .git_push_branch(
+        run_headless_blocking("git_push_branch", move || {
+            service.git_push_branch(
                 &repo_path,
                 Some(effective.as_str()),
                 remote.as_deref(),
                 &branch,
-                set_upstream.unwrap_or(false),
-                force_with_lease.unwrap_or(false),
+                set_upstream,
+                force_with_lease,
             )
-            .map_err(service_error)?,
+        })
+        .await?,
     )
 }
 
-fn handle_git_get_status(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_get_status(state: &HeadlessState, args: Value) -> CommandResult {
     let GitStatusArgs {
         repo_path,
         working_dir,
     } = deserialize_args(args)?;
     let effective = resolve_authorized_working_dir(state, &repo_path, working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_port()
-            .get_status(std::path::Path::new(&effective))
-            .map_err(service_error)?,
+        run_headless_blocking("git_get_status", move || {
+            service
+                .git_port()
+                .get_status(std::path::Path::new(&effective))
+        })
+        .await?,
     )
 }
 
-fn handle_git_get_diff(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_get_diff(state: &HeadlessState, args: Value) -> CommandResult {
     let GitDiffArgs {
         repo_path,
         target_branch,
         working_dir,
     } = deserialize_args(args)?;
     let effective = resolve_authorized_working_dir(state, &repo_path, working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_port()
-            .get_diff(std::path::Path::new(&effective), target_branch.as_deref())
-            .map_err(service_error)?,
+        run_headless_blocking("git_get_diff", move || {
+            service
+                .git_port()
+                .get_diff(std::path::Path::new(&effective), target_branch.as_deref())
+        })
+        .await?,
     )
 }
 
-fn handle_git_commits_ahead_behind(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_commits_ahead_behind(state: &HeadlessState, args: Value) -> CommandResult {
     let GitAheadBehindArgs {
         repo_path,
         target_branch,
         working_dir,
     } = deserialize_args(args)?;
     let effective = resolve_authorized_working_dir(state, &repo_path, working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_port()
-            .commits_ahead_behind(std::path::Path::new(&effective), &target_branch)
-            .map_err(service_error)?,
+        run_headless_blocking("git_commits_ahead_behind", move || {
+            service
+                .git_port()
+                .commits_ahead_behind(std::path::Path::new(&effective), &target_branch)
+        })
+        .await?,
     )
 }
 
-fn handle_git_get_worktree_status(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_get_worktree_status(state: &HeadlessState, args: Value) -> CommandResult {
     let GitWorktreeStatusArgs {
         repo_path,
         target_branch,
         diff_scope,
         working_dir,
     } = deserialize_args(args)?;
-    let trimmed_target = require_target_branch(&target_branch).map_err(request_error)?;
+    let trimmed_target = require_target_branch(&target_branch)
+        .map_err(request_error)?
+        .to_string();
     let scope = parse_diff_scope(diff_scope.as_deref()).map_err(request_error)?;
     let effective = resolve_authorized_working_dir(state, &repo_path, working_dir.as_deref())?;
-    let repo = std::path::Path::new(&effective);
-    let worktree_status = state
-        .service
-        .git_port()
-        .get_worktree_status(repo, trimmed_target, scope.clone())
-        .map_err(service_error)?;
+    let service = state.service.clone();
+    let effective_for_worker = effective.clone();
+    let trimmed_target_for_worker = trimmed_target.clone();
+    let scope_for_worker = scope.clone();
+    let worktree_status = run_headless_blocking("git_get_worktree_status", move || {
+        service.git_port().get_worktree_status(
+            std::path::Path::new(&effective_for_worker),
+            &trimmed_target_for_worker,
+            scope_for_worker,
+        )
+    })
+    .await?;
     let status_hash = hash_worktree_status_payload(
         &worktree_status.current_branch,
         worktree_status.file_statuses.as_slice(),
@@ -1215,26 +1359,37 @@ fn handle_git_get_worktree_status(state: &HeadlessState, args: Value) -> Command
     let diff_hash = hash_worktree_diff_payload(worktree_status.file_diffs.as_slice());
     serialize_value(build_worktree_status_with_snapshot(
         worktree_status,
-        build_worktree_snapshot_metadata(effective, trimmed_target, scope, status_hash, diff_hash),
+        build_worktree_snapshot_metadata(effective, &trimmed_target, scope, status_hash, diff_hash),
     ))
 }
 
-fn handle_git_get_worktree_status_summary(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_get_worktree_status_summary(
+    state: &HeadlessState,
+    args: Value,
+) -> CommandResult {
     let GitWorktreeStatusArgs {
         repo_path,
         target_branch,
         diff_scope,
         working_dir,
     } = deserialize_args(args)?;
-    let trimmed_target = require_target_branch(&target_branch).map_err(request_error)?;
+    let trimmed_target = require_target_branch(&target_branch)
+        .map_err(request_error)?
+        .to_string();
     let scope = parse_diff_scope(diff_scope.as_deref()).map_err(request_error)?;
     let effective = resolve_authorized_working_dir(state, &repo_path, working_dir.as_deref())?;
-    let repo = std::path::Path::new(&effective);
-    let summary = state
-        .service
-        .git_port()
-        .get_worktree_status_summary(repo, trimmed_target, scope.clone())
-        .map_err(service_error)?;
+    let service = state.service.clone();
+    let effective_for_worker = effective.clone();
+    let trimmed_target_for_worker = trimmed_target.clone();
+    let scope_for_worker = scope.clone();
+    let summary = run_headless_blocking("git_get_worktree_status_summary", move || {
+        service.git_port().get_worktree_status_summary(
+            std::path::Path::new(&effective_for_worker),
+            &trimmed_target_for_worker,
+            scope_for_worker,
+        )
+    })
+    .await?;
     let status_hash = hash_worktree_status_payload(
         &summary.current_branch,
         summary.file_statuses.as_slice(),
@@ -1251,11 +1406,11 @@ fn handle_git_get_worktree_status_summary(state: &HeadlessState, args: Value) ->
         summary.file_status_counts,
         summary.target_ahead_behind,
         summary.upstream_ahead_behind,
-        build_worktree_snapshot_metadata(effective, trimmed_target, scope, status_hash, diff_hash),
+        build_worktree_snapshot_metadata(effective, &trimmed_target, scope, status_hash, diff_hash),
     ))
 }
 
-fn handle_git_commit_all(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_commit_all(state: &HeadlessState, args: Value) -> CommandResult {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct GitCommitAllArgs {
@@ -1265,36 +1420,43 @@ fn handle_git_commit_all(state: &HeadlessState, args: Value) -> CommandResult {
     }
 
     let request: GitCommitAllArgs = deserialize_args(args)?;
+    let message = require_git_commit_message(&request.message)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_commit_all(
+        run_headless_blocking("git_commit_all", move || {
+            service.git_commit_all(
                 &request.repo_path,
                 host_domain::GitCommitAllRequest {
-                    working_dir: request.working_dir,
-                    message: request.message,
+                    working_dir: Some(effective),
+                    message,
                 },
             )
-            .map_err(service_error)?,
+        })
+        .await?,
     )
 }
 
-fn handle_git_pull_branch(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_pull_branch(state: &HeadlessState, args: Value) -> CommandResult {
     let request: GitPullBranchArgs = deserialize_args(args)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_pull_branch(
+        run_headless_blocking("git_pull_branch", move || {
+            service.git_pull_branch(
                 &request.repo_path,
                 host_domain::GitPullRequest {
-                    working_dir: request.working_dir,
+                    working_dir: Some(effective),
                 },
             )
-            .map_err(service_error)?,
+        })
+        .await?,
     )
 }
 
-fn handle_git_rebase_branch(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_rebase_branch(state: &HeadlessState, args: Value) -> CommandResult {
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct GitRebaseBranchArgs {
@@ -1304,210 +1466,250 @@ fn handle_git_rebase_branch(state: &HeadlessState, args: Value) -> CommandResult
     }
 
     let request: GitRebaseBranchArgs = deserialize_args(args)?;
+    let target_branch = require_git_rebase_target_branch(&request.target_branch)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_rebase_branch(
+        run_headless_blocking("git_rebase_branch", move || {
+            service.git_rebase_branch(
                 &request.repo_path,
                 host_domain::GitRebaseBranchRequest {
-                    working_dir: request.working_dir,
-                    target_branch: request.target_branch,
+                    working_dir: Some(effective),
+                    target_branch,
                 },
             )
-            .map_err(service_error)?,
+        })
+        .await?,
     )
 }
 
-fn handle_git_rebase_abort(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_git_rebase_abort(state: &HeadlessState, args: Value) -> CommandResult {
     let request: GitRebaseAbortArgs = deserialize_args(args)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .git_rebase_abort(
+        run_headless_blocking("git_rebase_abort", move || {
+            service.git_rebase_abort(
                 &request.repo_path,
                 host_domain::GitRebaseAbortRequest {
-                    working_dir: request.working_dir,
+                    working_dir: Some(effective),
                 },
             )
-            .map_err(service_error)?,
+        })
+        .await?,
     )
 }
 
-fn handle_task_create(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_task_create(state: &HeadlessState, args: Value) -> CommandResult {
     let TaskCreateArgs { repo_path, input } = deserialize_args(args)?;
     let create = map_task_create_payload(input).map_err(request_error)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .task_create(&repo_path, create)
-            .map_err(service_error)?,
+        run_headless_blocking("task_create", move || {
+            service.task_create(&repo_path, create)
+        })
+        .await?,
     )
 }
 
-fn handle_task_update(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_task_update(state: &HeadlessState, args: Value) -> CommandResult {
     let TaskUpdateArgs {
         repo_path,
         task_id,
         patch,
     } = deserialize_args(args)?;
     let mapped = map_task_update_payload(patch).map_err(request_error)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .task_update(&repo_path, &task_id, mapped)
-            .map_err(service_error)?,
+        run_headless_blocking("task_update", move || {
+            service.task_update(&repo_path, &task_id, mapped)
+        })
+        .await?,
     )
 }
 
-fn handle_task_delete(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_task_delete(state: &HeadlessState, args: Value) -> CommandResult {
     let TaskDeleteArgs {
         repo_path,
         task_id,
         delete_subtasks,
     } = deserialize_args(args)?;
-    let ok = state
-        .service
-        .task_delete(&repo_path, &task_id, delete_subtasks.unwrap_or(false))
-        .map(|()| true)
-        .map_err(service_error)?;
+    let service = state.service.clone();
+    let delete_subtasks = delete_subtasks.unwrap_or(false);
+    let ok = run_headless_blocking("task_delete", move || {
+        service
+            .task_delete(&repo_path, &task_id, delete_subtasks)
+            .map(|()| true)
+    })
+    .await?;
     Ok(json!({ "ok": ok }))
 }
 
-fn handle_task_transition(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_task_transition(state: &HeadlessState, args: Value) -> CommandResult {
     let TaskTransitionArgs {
         repo_path,
         task_id,
         status,
         reason,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .task_transition(&repo_path, &task_id, status, reason.as_deref())
-            .map_err(service_error)?,
+        run_headless_blocking("task_transition", move || {
+            service.task_transition(&repo_path, &task_id, status, reason.as_deref())
+        })
+        .await?,
     )
 }
 
-fn handle_task_defer(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_reason_operation(args, |repo_path, task_id, reason| {
-        state
-            .service
-            .task_defer(&repo_path, &task_id, reason.as_deref())
-    })
+async fn handle_task_defer(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_reason_operation_blocking(
+        state,
+        args,
+        "task_defer",
+        |service, repo_path, task_id, reason| {
+            service.task_defer(&repo_path, &task_id, reason.as_deref())
+        },
+    )
+    .await
 }
 
-fn handle_task_resume_deferred(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.task_resume_deferred(&repo_path, &task_id)
-    })
+async fn handle_task_resume_deferred(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_operation_blocking(
+        state,
+        args,
+        "task_resume_deferred",
+        |service, repo_path, task_id| service.task_resume_deferred(&repo_path, &task_id),
+    )
+    .await
 }
 
-fn handle_spec_get(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.spec_get(&repo_path, &task_id)
+async fn handle_spec_get(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_operation_blocking(state, args, "spec_get", |service, repo_path, task_id| {
+        service.spec_get(&repo_path, &task_id)
     })
+    .await
 }
 
-fn handle_task_metadata_get(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.task_metadata_get(&repo_path, &task_id)
-    })
+async fn handle_task_metadata_get(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_operation_blocking(
+        state,
+        args,
+        "task_metadata_get",
+        |service, repo_path, task_id| service.task_metadata_get(&repo_path, &task_id),
+    )
+    .await
 }
 
-fn handle_set_spec(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_set_spec(state: &HeadlessState, args: Value) -> CommandResult {
     let SetSpecArgs {
         repo_path,
         task_id,
         markdown,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .set_spec(&repo_path, &task_id, &markdown)
-            .map_err(service_error)?,
+        run_headless_blocking("set_spec", move || {
+            service.set_spec(&repo_path, &task_id, &markdown)
+        })
+        .await?,
     )
 }
 
-fn handle_spec_save_document(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_spec_save_document(state: &HeadlessState, args: Value) -> CommandResult {
     let SetSpecArgs {
         repo_path,
         task_id,
         markdown,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .save_spec_document(&repo_path, &task_id, &markdown)
-            .map_err(service_error)?,
+        run_headless_blocking("spec_save_document", move || {
+            service.save_spec_document(&repo_path, &task_id, &markdown)
+        })
+        .await?,
     )
 }
 
-fn handle_plan_get(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.plan_get(&repo_path, &task_id)
+async fn handle_plan_get(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_operation_blocking(state, args, "plan_get", |service, repo_path, task_id| {
+        service.plan_get(&repo_path, &task_id)
     })
+    .await
 }
 
-fn handle_set_plan(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_set_plan(state: &HeadlessState, args: Value) -> CommandResult {
     let SetPlanArgs {
         repo_path,
         task_id,
         input,
     } = deserialize_args(args)?;
     let mapped_subtasks = map_plan_subtasks(input.subtasks).map_err(request_error)?;
+    let markdown = input.markdown;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .set_plan(&repo_path, &task_id, &input.markdown, mapped_subtasks)
-            .map_err(service_error)?,
+        run_headless_blocking("set_plan", move || {
+            service.set_plan(&repo_path, &task_id, &markdown, mapped_subtasks)
+        })
+        .await?,
     )
 }
 
-fn handle_plan_save_document(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_plan_save_document(state: &HeadlessState, args: Value) -> CommandResult {
     let SetSpecArgs {
         repo_path,
         task_id,
         markdown,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .save_plan_document(&repo_path, &task_id, &markdown)
-            .map_err(service_error)?,
+        run_headless_blocking("plan_save_document", move || {
+            service.save_plan_document(&repo_path, &task_id, &markdown)
+        })
+        .await?,
     )
 }
 
-fn handle_qa_get_report(state: &HeadlessState, args: Value) -> CommandResult {
-    handle_repo_task_operation(args, |repo_path, task_id| {
-        state.service.qa_get_report(&repo_path, &task_id)
-    })
+async fn handle_qa_get_report(state: &HeadlessState, args: Value) -> CommandResult {
+    handle_repo_task_operation_blocking(
+        state,
+        args,
+        "qa_get_report",
+        |service, repo_path, task_id| service.qa_get_report(&repo_path, &task_id),
+    )
+    .await
 }
 
-fn handle_qa_approved(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_qa_approved(state: &HeadlessState, args: Value) -> CommandResult {
     let MarkdownInputArgs {
         repo_path,
         task_id,
         input,
     } = deserialize_args(args)?;
+    let markdown = input.markdown;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .qa_approved(&repo_path, &task_id, &input.markdown)
-            .map_err(service_error)?,
+        run_headless_blocking("qa_approved", move || {
+            service.qa_approved(&repo_path, &task_id, &markdown)
+        })
+        .await?,
     )
 }
 
-fn handle_qa_rejected(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_qa_rejected(state: &HeadlessState, args: Value) -> CommandResult {
     let MarkdownInputArgs {
         repo_path,
         task_id,
         input,
     } = deserialize_args(args)?;
+    let markdown = input.markdown;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .qa_rejected(&repo_path, &task_id, &input.markdown)
-            .map_err(service_error)?,
+        run_headless_blocking("qa_rejected", move || {
+            service.qa_rejected(&repo_path, &task_id, &markdown)
+        })
+        .await?,
     )
 }
 
@@ -1691,7 +1893,7 @@ fn handle_runs_list(state: &HeadlessState, args: Value) -> CommandResult {
     )
 }
 
-fn handle_runtime_definitions_list(state: &HeadlessState) -> CommandResult {
+async fn handle_runtime_definitions_list(state: &HeadlessState) -> CommandResult {
     serialize_value(
         state
             .service
@@ -1700,16 +1902,17 @@ fn handle_runtime_definitions_list(state: &HeadlessState) -> CommandResult {
     )
 }
 
-fn handle_runtime_list(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_runtime_list(state: &HeadlessState, args: Value) -> CommandResult {
     let RuntimeListArgs {
         runtime_kind,
         repo_path,
     } = deserialize_args(args)?;
+    let service = state.service.clone();
     serialize_value(
-        state
-            .service
-            .runtime_list(&runtime_kind, repo_path.as_deref())
-            .map_err(service_error)?,
+        run_headless_blocking("runtime_list", move || {
+            service.runtime_list(&runtime_kind, repo_path.as_deref())
+        })
+        .await?,
     )
 }
 
@@ -1725,13 +1928,14 @@ async fn handle_qa_review_target_get(state: &HeadlessState, args: Value) -> Comm
     )
 }
 
-fn handle_runtime_stop(state: &HeadlessState, args: Value) -> CommandResult {
+async fn handle_runtime_stop(state: &HeadlessState, args: Value) -> CommandResult {
     let RuntimeStopArgs { runtime_id } = deserialize_args(args)?;
+    let service = state.service.clone();
     Ok(json!({
-        "ok": state
-            .service
-            .runtime_stop(&runtime_id)
-            .map_err(service_error)?
+        "ok": run_headless_blocking("runtime_stop", move || {
+            service.runtime_stop(&runtime_id)
+        })
+        .await?
     }))
 }
 
@@ -1773,6 +1977,7 @@ fn handle_agent_session_upsert(state: &HeadlessState, args: Value) -> CommandRes
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::anyhow;
 
     #[test]
     fn parse_last_event_id_accepts_valid_header() {
@@ -1829,5 +2034,49 @@ mod tests {
             debug.contains("7"),
             "expected event debug output to contain id value: {debug}"
         );
+    }
+
+    #[test]
+    fn require_git_commit_message_rejects_blank_values() {
+        let error =
+            require_git_commit_message("   ").expect_err("blank commit message should fail");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.message, "message is required");
+    }
+
+    #[test]
+    fn require_git_rebase_target_branch_rejects_blank_values() {
+        let error =
+            require_git_rebase_target_branch("   ").expect_err("blank target branch should fail");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.message, "targetBranch is required");
+    }
+
+    #[tokio::test]
+    async fn run_headless_blocking_propagates_operation_error() {
+        let error = run_headless_blocking("headless-test-op", || -> anyhow::Result<()> {
+            Err(anyhow!("service failure"))
+        })
+        .await
+        .expect_err("service error should propagate");
+
+        assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(error.message.contains("service failure"));
+    }
+
+    #[tokio::test]
+    async fn run_headless_blocking_maps_join_failures() {
+        let error = run_headless_blocking("headless-test-join", || -> anyhow::Result<()> {
+            panic!("simulated join panic")
+        })
+        .await
+        .expect_err("panic in worker should map to join failure");
+
+        assert_eq!(error.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(error
+            .message
+            .contains("headless-test-join worker join failure"));
     }
 }

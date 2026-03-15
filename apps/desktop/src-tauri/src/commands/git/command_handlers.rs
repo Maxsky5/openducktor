@@ -1,4 +1,4 @@
-use crate::{as_error, AppState};
+use crate::{as_error, run_service_blocking, AppState};
 use std::{
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -39,7 +39,12 @@ pub async fn git_get_branches(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<Vec<host_domain::GitBranch>, String> {
-    as_error(state.service.git_get_branches(&repo_path))
+    let service = state.service.clone();
+    let result = run_service_blocking("git_get_branches", move || {
+        service.git_get_branches(&repo_path)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -53,12 +58,12 @@ pub async fn git_get_current_branch(
         .ensure_repo_authorized(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
-    as_error(
-        state
-            .service
-            .git_port()
-            .get_current_branch(Path::new(&effective)),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("git_get_current_branch", move || {
+        service.git_port().get_current_branch(Path::new(&effective))
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -68,11 +73,13 @@ pub async fn git_switch_branch(
     branch: String,
     create: Option<bool>,
 ) -> Result<host_domain::GitCurrentBranch, String> {
-    as_error(
-        state
-            .service
-            .git_switch_branch(&repo_path, &branch, create.unwrap_or(false)),
-    )
+    let service = state.service.clone();
+    let create = create.unwrap_or(false);
+    let result = run_service_blocking("git_switch_branch", move || {
+        service.git_switch_branch(&repo_path, &branch, create)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -83,12 +90,19 @@ pub async fn git_create_worktree(
     branch: String,
     create_branch: Option<bool>,
 ) -> Result<host_domain::GitWorktreeSummary, String> {
-    let summary = as_error(state.service.git_create_worktree(
-        &repo_path,
-        &worktree_path,
-        &branch,
-        create_branch.unwrap_or(false),
-    ))?;
+    let service = state.service.clone();
+    let create_branch = create_branch.unwrap_or(false);
+    let repo_path_for_worker = repo_path.clone();
+    let result = run_service_blocking("git_create_worktree", move || {
+        service.git_create_worktree(
+            &repo_path_for_worker,
+            &worktree_path,
+            &branch,
+            create_branch,
+        )
+    })
+    .await;
+    let summary = as_error(result)?;
     invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
     Ok(summary)
 }
@@ -100,11 +114,14 @@ pub async fn git_remove_worktree(
     worktree_path: String,
     force: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let removed = as_error(state.service.git_remove_worktree(
-        &repo_path,
-        &worktree_path,
-        force.unwrap_or(false),
-    ))?;
+    let service = state.service.clone();
+    let force = force.unwrap_or(false);
+    let repo_path_for_worker = repo_path.clone();
+    let result = run_service_blocking("git_remove_worktree", move || {
+        service.git_remove_worktree(&repo_path_for_worker, &worktree_path, force)
+    })
+    .await;
+    let removed = as_error(result)?;
     invalidate_worktree_resolution_cache_for_repo(&repo_path)?;
     Ok(serde_json::json!({ "ok": removed }))
 }
@@ -125,14 +142,21 @@ pub async fn git_push_branch(
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
-    as_error(state.service.git_push_branch(
-        &repo_path,
-        Some(effective.as_str()),
-        remote.as_deref(),
-        &branch,
-        set_upstream.unwrap_or(false),
-        force_with_lease.unwrap_or(false),
-    ))
+    let service = state.service.clone();
+    let set_upstream = set_upstream.unwrap_or(false);
+    let force_with_lease = force_with_lease.unwrap_or(false);
+    let result = run_service_blocking("git_push_branch", move || {
+        service.git_push_branch(
+            &repo_path,
+            Some(effective.as_str()),
+            remote.as_deref(),
+            &branch,
+            set_upstream,
+            force_with_lease,
+        )
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -146,7 +170,12 @@ pub async fn git_get_status(
         .ensure_repo_authorized(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
-    as_error(state.service.git_port().get_status(Path::new(&effective)))
+    let service = state.service.clone();
+    let result = run_service_blocking("git_get_status", move || {
+        service.git_port().get_status(Path::new(&effective))
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -161,12 +190,14 @@ pub async fn git_get_diff(
         .ensure_repo_authorized(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
-    as_error(
-        state
-            .service
+    let service = state.service.clone();
+    let result = run_service_blocking("git_get_diff", move || {
+        service
             .git_port()
-            .get_diff(Path::new(&effective), target_branch.as_deref()),
-    )
+            .get_diff(Path::new(&effective), target_branch.as_deref())
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -181,12 +212,14 @@ pub async fn git_commits_ahead_behind(
         .ensure_repo_authorized(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
-    as_error(
-        state
-            .service
+    let service = state.service.clone();
+    let result = run_service_blocking("git_commits_ahead_behind", move || {
+        service
             .git_port()
-            .commits_ahead_behind(Path::new(&effective), &target_branch),
-    )
+            .commits_ahead_behind(Path::new(&effective), &target_branch)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -197,7 +230,7 @@ pub async fn git_get_worktree_status(
     diff_scope: Option<String>,
     working_dir: Option<String>,
 ) -> Result<host_domain::GitWorktreeStatus, String> {
-    let trimmed_target = require_target_branch(&target_branch)?;
+    let trimmed_target = require_target_branch(&target_branch)?.to_string();
     let scope = parse_diff_scope(diff_scope.as_deref())?;
 
     let _ = state
@@ -205,12 +238,20 @@ pub async fn git_get_worktree_status(
         .ensure_repo_authorized(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
-    let repo = Path::new(&effective);
-    let worktree_status = as_error(state.service.git_port().get_worktree_status(
-        repo,
-        trimmed_target,
-        scope.clone(),
-    ))?;
+    let service = state.service.clone();
+    let effective_for_worker = effective.clone();
+    let trimmed_target_for_worker = trimmed_target.clone();
+    let scope_for_worker = scope.clone();
+    let worktree_status = as_error(
+        run_service_blocking("git_get_worktree_status", move || {
+            service.git_port().get_worktree_status(
+                Path::new(&effective_for_worker),
+                &trimmed_target_for_worker,
+                scope_for_worker,
+            )
+        })
+        .await,
+    )?;
     let observed_at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -227,7 +268,7 @@ pub async fn git_get_worktree_status(
         worktree_status,
         WorktreeSnapshotMetadata {
             effective_working_dir: effective,
-            target_branch: trimmed_target.to_string(),
+            target_branch: trimmed_target,
             diff_scope: scope,
             observed_at_ms,
             hash_version: GIT_WORKTREE_HASH_VERSION,
@@ -245,7 +286,7 @@ pub async fn git_get_worktree_status_summary(
     diff_scope: Option<String>,
     working_dir: Option<String>,
 ) -> Result<host_domain::GitWorktreeStatusSummary, String> {
-    let trimmed_target = require_target_branch(&target_branch)?;
+    let trimmed_target = require_target_branch(&target_branch)?.to_string();
     let scope = parse_diff_scope(diff_scope.as_deref())?;
 
     let _ = state
@@ -253,12 +294,20 @@ pub async fn git_get_worktree_status_summary(
         .ensure_repo_authorized(&repo_path)
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
-    let repo = Path::new(&effective);
-    let worktree_status = as_error(state.service.git_port().get_worktree_status_summary(
-        repo,
-        trimmed_target,
-        scope.clone(),
-    ))?;
+    let service = state.service.clone();
+    let effective_for_worker = effective.clone();
+    let trimmed_target_for_worker = trimmed_target.clone();
+    let scope_for_worker = scope.clone();
+    let worktree_status = as_error(
+        run_service_blocking("git_get_worktree_status_summary", move || {
+            service.git_port().get_worktree_status_summary(
+                Path::new(&effective_for_worker),
+                &trimmed_target_for_worker,
+                scope_for_worker,
+            )
+        })
+        .await,
+    )?;
 
     let observed_at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -283,7 +332,7 @@ pub async fn git_get_worktree_status_summary(
         worktree_status.upstream_ahead_behind,
         WorktreeSnapshotMetadata {
             effective_working_dir: effective,
-            target_branch: trimmed_target.to_string(),
+            target_branch: trimmed_target,
             diff_scope: scope,
             observed_at_ms,
             hash_version: GIT_WORKTREE_HASH_VERSION,
@@ -310,13 +359,16 @@ pub async fn git_commit_all(
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
-    as_error(state.service.git_commit_all(
-        &repo_path,
-        host_domain::GitCommitAllRequest {
-            working_dir: Some(effective),
-            message: message.trim().to_string(),
-        },
-    ))
+    let request = host_domain::GitCommitAllRequest {
+        working_dir: Some(effective),
+        message: message.trim().to_string(),
+    };
+    let service = state.service.clone();
+    let result = run_service_blocking("git_commit_all", move || {
+        service.git_commit_all(&repo_path, request)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -331,12 +383,15 @@ pub async fn git_pull_branch(
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
-    as_error(state.service.git_pull_branch(
-        &repo_path,
-        host_domain::GitPullRequest {
-            working_dir: Some(effective),
-        },
-    ))
+    let request = host_domain::GitPullRequest {
+        working_dir: Some(effective),
+    };
+    let service = state.service.clone();
+    let result = run_service_blocking("git_pull_branch", move || {
+        service.git_pull_branch(&repo_path, request)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -356,13 +411,16 @@ pub async fn git_rebase_branch(
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
-    as_error(state.service.git_rebase_branch(
-        &repo_path,
-        host_domain::GitRebaseBranchRequest {
-            working_dir: Some(effective),
-            target_branch: target_branch.trim().to_string(),
-        },
-    ))
+    let request = host_domain::GitRebaseBranchRequest {
+        working_dir: Some(effective),
+        target_branch: target_branch.trim().to_string(),
+    };
+    let service = state.service.clone();
+    let result = run_service_blocking("git_rebase_branch", move || {
+        service.git_rebase_branch(&repo_path, request)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -377,10 +435,13 @@ pub async fn git_rebase_abort(
         .map_err(|e| e.to_string())?;
     let effective = resolve_working_dir(&repo_path, working_dir.as_deref())?;
 
-    as_error(state.service.git_rebase_abort(
-        &repo_path,
-        host_domain::GitRebaseAbortRequest {
-            working_dir: Some(effective),
-        },
-    ))
+    let request = host_domain::GitRebaseAbortRequest {
+        working_dir: Some(effective),
+    };
+    let service = state.service.clone();
+    let result = run_service_blocking("git_rebase_abort", move || {
+        service.git_rebase_abort(&repo_path, request)
+    })
+    .await;
+    as_error(result)
 }

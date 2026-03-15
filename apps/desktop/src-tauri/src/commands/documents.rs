@@ -1,5 +1,7 @@
 use super::issue_type::parse_issue_type;
-use crate::{as_error, AppState, MarkdownPayload, PlanPayload, PlanSubtaskPayload};
+use crate::{
+    as_error, run_service_blocking, AppState, MarkdownPayload, PlanPayload, PlanSubtaskPayload,
+};
 use host_domain::{PlanSubtaskInput, SpecDocument, TaskCard, TaskMetadata};
 use tauri::State;
 
@@ -43,7 +45,10 @@ pub async fn spec_get(
     repo_path: String,
     task_id: String,
 ) -> Result<SpecDocument, String> {
-    as_error(state.service.spec_get(&repo_path, &task_id))
+    let service = state.service.clone();
+    let result =
+        run_service_blocking("spec_get", move || service.spec_get(&repo_path, &task_id)).await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -52,7 +57,12 @@ pub async fn task_metadata_get(
     repo_path: String,
     task_id: String,
 ) -> Result<TaskMetadata, String> {
-    as_error(state.service.task_metadata_get(&repo_path, &task_id))
+    let service = state.service.clone();
+    let result = run_service_blocking("task_metadata_get", move || {
+        service.task_metadata_get(&repo_path, &task_id)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -62,7 +72,12 @@ pub async fn set_spec(
     task_id: String,
     markdown: String,
 ) -> Result<SpecDocument, String> {
-    as_error(state.service.set_spec(&repo_path, &task_id, &markdown))
+    let service = state.service.clone();
+    let result = run_service_blocking("set_spec", move || {
+        service.set_spec(&repo_path, &task_id, &markdown)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -72,11 +87,12 @@ pub async fn spec_save_document(
     task_id: String,
     markdown: String,
 ) -> Result<SpecDocument, String> {
-    as_error(
-        state
-            .service
-            .save_spec_document(&repo_path, &task_id, &markdown),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("spec_save_document", move || {
+        service.save_spec_document(&repo_path, &task_id, &markdown)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -85,7 +101,10 @@ pub async fn plan_get(
     repo_path: String,
     task_id: String,
 ) -> Result<SpecDocument, String> {
-    as_error(state.service.plan_get(&repo_path, &task_id))
+    let service = state.service.clone();
+    let result =
+        run_service_blocking("plan_get", move || service.plan_get(&repo_path, &task_id)).await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -96,11 +115,13 @@ pub async fn set_plan(
     input: PlanPayload,
 ) -> Result<SpecDocument, String> {
     let mapped_subtasks = map_plan_subtasks(input.subtasks)?;
-    as_error(
-        state
-            .service
-            .set_plan(&repo_path, &task_id, &input.markdown, mapped_subtasks),
-    )
+    let markdown = input.markdown;
+    let service = state.service.clone();
+    let result = run_service_blocking("set_plan", move || {
+        service.set_plan(&repo_path, &task_id, &markdown, mapped_subtasks)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -110,11 +131,12 @@ pub async fn plan_save_document(
     task_id: String,
     markdown: String,
 ) -> Result<SpecDocument, String> {
-    as_error(
-        state
-            .service
-            .save_plan_document(&repo_path, &task_id, &markdown),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("plan_save_document", move || {
+        service.save_plan_document(&repo_path, &task_id, &markdown)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -123,7 +145,12 @@ pub async fn qa_get_report(
     repo_path: String,
     task_id: String,
 ) -> Result<SpecDocument, String> {
-    as_error(state.service.qa_get_report(&repo_path, &task_id))
+    let service = state.service.clone();
+    let result = run_service_blocking("qa_get_report", move || {
+        service.qa_get_report(&repo_path, &task_id)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -133,11 +160,13 @@ pub async fn qa_approved(
     task_id: String,
     input: MarkdownPayload,
 ) -> Result<TaskCard, String> {
-    as_error(
-        state
-            .service
-            .qa_approved(&repo_path, &task_id, &input.markdown),
-    )
+    let markdown = input.markdown;
+    let service = state.service.clone();
+    let result = run_service_blocking("qa_approved", move || {
+        service.qa_approved(&repo_path, &task_id, &markdown)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -147,11 +176,13 @@ pub async fn qa_rejected(
     task_id: String,
     input: MarkdownPayload,
 ) -> Result<TaskCard, String> {
-    as_error(
-        state
-            .service
-            .qa_rejected(&repo_path, &task_id, &input.markdown),
-    )
+    let markdown = input.markdown;
+    let service = state.service.clone();
+    let result = run_service_blocking("qa_rejected", move || {
+        service.qa_rejected(&repo_path, &task_id, &markdown)
+    })
+    .await;
+    as_error(result)
 }
 
 #[cfg(test)]
