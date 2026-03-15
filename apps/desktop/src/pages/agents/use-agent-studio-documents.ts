@@ -3,7 +3,7 @@ import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-utils";
+import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
 
 type UseAgentStudioDocumentsArgs = {
   activeRepo?: string | null;

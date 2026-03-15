@@ -4,7 +4,7 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { toContextStorageKey } from "./agents-page-utils";
+import { toContextStorageKey } from "./agents-page-selection";
 import { useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
 
 enableReactActEnvironment();

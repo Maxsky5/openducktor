@@ -27,7 +27,7 @@ import {
   isSameSelection,
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
-} from "../agents/agents-page-utils";
+} from "./session-start-selection";
 
 export type SessionStartModalSource = "agent_studio" | "kanban";
 export type SessionStartPostAction = "none" | "kickoff" | "send_message";

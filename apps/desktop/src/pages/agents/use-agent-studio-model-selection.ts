@@ -19,7 +19,7 @@ import {
   isSameSelection,
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
-} from "./agents-page-utils";
+} from "./agents-page-selection";
 import {
   type AgentStudioContextUsage,
   extractLatestContextUsage,

@@ -3,8 +3,8 @@ import { useCallback } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { SCENARIO_LABELS } from "../agents/agents-page-constants";
-import type { SessionStartRequestReason } from "../agents/use-agent-studio-session-start-types";
+import { SCENARIO_LABELS } from "./session-start-prompts";
+import type { SessionStartRequestReason } from "./session-start-types";
 import {
   type SessionStartModalIntent,
   type SessionStartPostAction,
