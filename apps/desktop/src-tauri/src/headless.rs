@@ -654,6 +654,24 @@ fn resolve_authorized_working_dir(
     resolve_working_dir(repo_path, working_dir).map_err(request_error)
 }
 
+fn require_git_commit_message(message: &str) -> Result<String, HeadlessCommandError> {
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        return Err(HeadlessCommandError::bad_request("message is required"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn require_git_rebase_target_branch(target_branch: &str) -> Result<String, HeadlessCommandError> {
+    let trimmed = target_branch.trim();
+    if trimmed.is_empty() {
+        return Err(HeadlessCommandError::bad_request(
+            "targetBranch is required",
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
 async fn dispatch_command(
     state: &HeadlessState,
     command: &str,
@@ -1402,14 +1420,17 @@ async fn handle_git_commit_all(state: &HeadlessState, args: Value) -> CommandRes
     }
 
     let request: GitCommitAllArgs = deserialize_args(args)?;
+    let message = require_git_commit_message(&request.message)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
     let service = state.service.clone();
     serialize_value(
         run_headless_blocking("git_commit_all", move || {
             service.git_commit_all(
                 &request.repo_path,
                 host_domain::GitCommitAllRequest {
-                    working_dir: request.working_dir,
-                    message: request.message,
+                    working_dir: Some(effective),
+                    message,
                 },
             )
         })
@@ -1419,13 +1440,15 @@ async fn handle_git_commit_all(state: &HeadlessState, args: Value) -> CommandRes
 
 async fn handle_git_pull_branch(state: &HeadlessState, args: Value) -> CommandResult {
     let request: GitPullBranchArgs = deserialize_args(args)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
     let service = state.service.clone();
     serialize_value(
         run_headless_blocking("git_pull_branch", move || {
             service.git_pull_branch(
                 &request.repo_path,
                 host_domain::GitPullRequest {
-                    working_dir: request.working_dir,
+                    working_dir: Some(effective),
                 },
             )
         })
@@ -1443,14 +1466,17 @@ async fn handle_git_rebase_branch(state: &HeadlessState, args: Value) -> Command
     }
 
     let request: GitRebaseBranchArgs = deserialize_args(args)?;
+    let target_branch = require_git_rebase_target_branch(&request.target_branch)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
     let service = state.service.clone();
     serialize_value(
         run_headless_blocking("git_rebase_branch", move || {
             service.git_rebase_branch(
                 &request.repo_path,
                 host_domain::GitRebaseBranchRequest {
-                    working_dir: request.working_dir,
-                    target_branch: request.target_branch,
+                    working_dir: Some(effective),
+                    target_branch,
                 },
             )
         })
@@ -1460,13 +1486,15 @@ async fn handle_git_rebase_branch(state: &HeadlessState, args: Value) -> Command
 
 async fn handle_git_rebase_abort(state: &HeadlessState, args: Value) -> CommandResult {
     let request: GitRebaseAbortArgs = deserialize_args(args)?;
+    let effective =
+        resolve_authorized_working_dir(state, &request.repo_path, request.working_dir.as_deref())?;
     let service = state.service.clone();
     serialize_value(
         run_headless_blocking("git_rebase_abort", move || {
             service.git_rebase_abort(
                 &request.repo_path,
                 host_domain::GitRebaseAbortRequest {
-                    working_dir: request.working_dir,
+                    working_dir: Some(effective),
                 },
             )
         })
@@ -1866,12 +1894,11 @@ fn handle_runs_list(state: &HeadlessState, args: Value) -> CommandResult {
 }
 
 async fn handle_runtime_definitions_list(state: &HeadlessState) -> CommandResult {
-    let service = state.service.clone();
     serialize_value(
-        run_headless_blocking("runtime_definitions_list", move || {
-            service.runtime_definitions_list()
-        })
-        .await?,
+        state
+            .service
+            .runtime_definitions_list()
+            .map_err(service_error)?,
     )
 }
 
@@ -2007,6 +2034,24 @@ mod tests {
             debug.contains("7"),
             "expected event debug output to contain id value: {debug}"
         );
+    }
+
+    #[test]
+    fn require_git_commit_message_rejects_blank_values() {
+        let error =
+            require_git_commit_message("   ").expect_err("blank commit message should fail");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.message, "message is required");
+    }
+
+    #[test]
+    fn require_git_rebase_target_branch_rejects_blank_values() {
+        let error =
+            require_git_rebase_target_branch("   ").expect_err("blank target branch should fail");
+
+        assert_eq!(error.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.message, "targetBranch is required");
     }
 
     #[tokio::test]

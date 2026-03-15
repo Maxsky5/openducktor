@@ -44,12 +44,7 @@ pub async fn beads_check(
 pub async fn runtime_definitions_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<RuntimeDescriptor>, String> {
-    let service = state.service.clone();
-    let result = run_service_blocking("runtime_definitions_list", move || {
-        service.runtime_definitions_list()
-    })
-    .await;
-    as_error(result)
+    as_error(state.service.runtime_definitions_list())
 }
 
 #[tauri::command]
