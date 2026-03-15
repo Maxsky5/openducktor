@@ -15,7 +15,7 @@ Current product reality:
 
 - The only supported runtime today is OpenCode (`opencode`).
 - Codex is the next planned runtime.
-- OpenDucktor will support open source agent runtimes only.
+- OpenDucktor will support open-source agent runtimes only.
 - Claude Code is out of scope.
 
 ## Core Domain Model

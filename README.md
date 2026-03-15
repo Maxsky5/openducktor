@@ -20,7 +20,8 @@ If you want to follow the project, treat the current codebase as an active proto
 - Supported task backend: Beads.
 - Supported agent runtime today: OpenCode (`opencode`) only.
 - Next planned runtime: Codex.
-- Runtime policy: OpenDucktor will support open source agent runtimes only (I'm watching you Claude Code).
+- Runtime policy: OpenDucktor will support open-source agent runtimes only.
+- Explicitly out of scope: Claude Code.
 
 ## What OpenDucktor Does
 
@@ -48,7 +49,7 @@ OpenDucktor is built around a workflow where tasks live in Beads and agent work 
 
 OpenDucktor currently targets local macOS development.
 
-- Bun `1.3.5` or newer
+- Bun `1.3.5`
 - Rust stable toolchain
 - Xcode Command Line Tools
 - `git`
@@ -83,8 +84,8 @@ bun run lint
 bun run typecheck
 bun run test
 bun run build
-cd apps/desktop/src-tauri && cargo check
-cd apps/desktop/src-tauri && cargo test
+bun run check:rust
+bun run test:rust
 ```
 
 ### Local Data And Config

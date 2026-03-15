@@ -9,8 +9,8 @@
 - [ ] `bun run typecheck`
 - [ ] `bun run test`
 - [ ] `bun run build`
-- [ ] `cd apps/desktop/src-tauri && cargo check`
-- [ ] `cd apps/desktop/src-tauri && cargo test`
+- [ ] `bun run check:rust`
+- [ ] `bun run test:rust`
 - [ ] Not applicable
 
 ## Checklist

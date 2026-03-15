@@ -15,7 +15,7 @@ Please keep these constraints in mind when proposing or implementing changes:
 - OpenDucktor currently focuses on macOS only.
 - The only supported agent runtime today is OpenCode (`opencode`).
 - Codex is the next planned runtime, but it is not implemented yet.
-- OpenDucktor will support open source agent runtimes only.
+- OpenDucktor will support open-source agent runtimes only.
 - Claude Code is intentionally out of scope.
 - Beads is the V1 source of truth for tasks.
 
@@ -23,7 +23,7 @@ Please keep these constraints in mind when proposing or implementing changes:
 
 Required local tooling:
 
-- Bun `1.3.5` or newer
+- Bun `1.3.5`
 - Rust stable
 - Xcode Command Line Tools
 - `git`
@@ -50,8 +50,8 @@ bun run lint
 bun run typecheck
 bun run test
 bun run build
-cd apps/desktop/src-tauri && cargo check
-cd apps/desktop/src-tauri && cargo test
+bun run check:rust
+bun run test:rust
 ```
 
 ## Development Expectations
