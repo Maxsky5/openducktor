@@ -204,4 +204,52 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.unmount();
     }
   });
+
+  test("retries task hydration after a cancelled in-flight load clears its pending state", async () => {
+    const firstTaskLoad = createDeferred<void>();
+    const secondTaskLoad = createDeferred<void>();
+    let taskOneLoadCount = 0;
+    const loadAgentSessions = mock(async (taskId: string) => {
+      if (taskId === "task-1") {
+        taskOneLoadCount += 1;
+        return taskOneLoadCount === 1 ? firstTaskLoad.promise : secondTaskLoad.promise;
+      }
+    });
+    const harness = createHookHarness(createBaseArgs({ loadAgentSessions }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
+
+      await harness.update(
+        createBaseArgs({
+          activeTaskId: "task-2",
+          loadAgentSessions,
+        }),
+      );
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 2);
+
+      await harness.update(createBaseArgs({ loadAgentSessions }));
+      expect(loadAgentSessions.mock.calls.length).toBe(2);
+
+      await harness.run(async () => {
+        firstTaskLoad.resolve(undefined);
+        await firstTaskLoad.promise;
+      });
+
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 3);
+
+      await harness.run(async () => {
+        secondTaskLoad.resolve(undefined);
+        await secondTaskLoad.promise;
+      });
+
+      await harness.waitFor((state) => state.hydratedTasksByRepoAndTask["/repo-a:task-1"] === true);
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(false);
+    } finally {
+      firstTaskLoad.resolve(undefined);
+      secondTaskLoad.resolve(undefined);
+      await harness.unmount();
+    }
+  });
 });

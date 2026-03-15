@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 
@@ -17,6 +17,21 @@ type UseAgentStudioTaskHydrationResult = {
   isActiveSessionHistoryHydrating: boolean;
 };
 
+type HydrationStatus = "hydrating" | "hydrated" | "failed";
+
+const clearHydrationStatus = (
+  key: string,
+  setStatus: Dispatch<SetStateAction<Record<string, HydrationStatus>>>,
+): void => {
+  setStatus((current) => {
+    if (current[key] !== "hydrating") {
+      return current;
+    }
+    const { [key]: _removed, ...rest } = current;
+    return rest;
+  });
+};
+
 export function useAgentStudioTaskHydration({
   activeRepo,
   activeTaskId,
@@ -31,11 +46,12 @@ export function useAgentStudioTaskHydration({
     Record<string, boolean>
   >({});
   const [taskHydrationStatusByRepoKey, setTaskHydrationStatusByRepoKey] = useState<
-    Record<string, "hydrating" | "hydrated" | "failed">
+    Record<string, HydrationStatus>
   >({});
   const [sessionHistoryStatusByRepoKey, setSessionHistoryStatusByRepoKey] = useState<
-    Record<string, "hydrating" | "hydrated" | "failed">
+    Record<string, HydrationStatus>
   >({});
+  const [hydrationRetryVersion, setHydrationRetryVersion] = useState(0);
 
   useEffect(() => {
     if (previousRepoRef.current === activeRepo) {
@@ -50,12 +66,18 @@ export function useAgentStudioTaskHydration({
     setSessionHistoryStatusByRepoKey({});
   }, [activeRepo]);
 
+  const activeTaskHydrationKey = activeRepo && activeTaskId ? `${activeRepo}:${activeTaskId}` : "";
+  const activeSessionHistoryKey =
+    activeRepo && activeTaskId && activeSessionId
+      ? `${activeRepo}:${activeTaskId}:${activeSessionId}`
+      : "";
+
   useEffect(() => {
     if (!activeRepo || !activeTaskId || activeSessionId) {
       return;
     }
 
-    const hydrationKey = `${activeRepo}:${activeTaskId}`;
+    const hydrationKey = activeTaskHydrationKey;
     if (hydratedTasksByRepoAndTask[hydrationKey]) {
       return;
     }
@@ -68,6 +90,7 @@ export function useAgentStudioTaskHydration({
       ...current,
       [hydrationKey]: "hydrating",
     }));
+    const currentHydrationRetryVersion = hydrationRetryVersion;
     let cancelled = false;
     void loadAgentSessions(activeTaskId)
       .then(() => {
@@ -102,20 +125,34 @@ export function useAgentStudioTaskHydration({
       })
       .finally(() => {
         hydratingTasksByRepoRef.current.delete(hydrationKey);
+        if (cancelled) {
+          clearHydrationStatus(hydrationKey, setTaskHydrationStatusByRepoKey);
+          setHydrationRetryVersion((current) =>
+            current === currentHydrationRetryVersion ? current + 1 : current,
+          );
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, activeSessionId, activeTaskId, hydratedTasksByRepoAndTask, loadAgentSessions]);
+  }, [
+    activeRepo,
+    activeSessionId,
+    activeTaskHydrationKey,
+    activeTaskId,
+    hydrationRetryVersion,
+    hydratedTasksByRepoAndTask,
+    loadAgentSessions,
+  ]);
 
   useEffect(() => {
     if (!activeRepo || !activeTaskId || !activeSessionId) {
       return;
     }
 
-    const taskHydrationKey = `${activeRepo}:${activeTaskId}`;
-    const sessionHydrationKey = `${activeRepo}:${activeTaskId}:${activeSessionId}`;
+    const taskHydrationKey = activeTaskHydrationKey;
+    const sessionHydrationKey = activeSessionHistoryKey;
     if (hydratedSessionHistoriesByRepoRef.current.has(sessionHydrationKey)) {
       return;
     }
@@ -128,6 +165,7 @@ export function useAgentStudioTaskHydration({
       ...current,
       [sessionHydrationKey]: "hydrating",
     }));
+    const currentHydrationRetryVersion = hydrationRetryVersion;
     let cancelled = false;
     void loadAgentSessions(activeTaskId, {
       hydrateHistoryForSessionId: activeSessionId,
@@ -180,23 +218,32 @@ export function useAgentStudioTaskHydration({
       })
       .finally(() => {
         hydratingSessionHistoriesByRepoRef.current.delete(sessionHydrationKey);
+        if (cancelled) {
+          clearHydrationStatus(sessionHydrationKey, setSessionHistoryStatusByRepoKey);
+          setHydrationRetryVersion((current) =>
+            current === currentHydrationRetryVersion ? current + 1 : current,
+          );
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activeRepo, activeSessionId, activeTaskId, loadAgentSessions]);
+  }, [
+    activeRepo,
+    activeSessionHistoryKey,
+    activeSessionId,
+    activeTaskHydrationKey,
+    activeTaskId,
+    hydrationRetryVersion,
+    loadAgentSessions,
+  ]);
 
-  const activeSessionHistoryKey =
-    activeRepo && activeTaskId && activeSessionId
-      ? `${activeRepo}:${activeTaskId}:${activeSessionId}`
-      : "";
-  const activeSessionHistoryStatus = activeSessionHistoryKey
-    ? sessionHistoryStatusByRepoKey[activeSessionHistoryKey]
-    : undefined;
-  const activeTaskHydrationKey = activeRepo && activeTaskId ? `${activeRepo}:${activeTaskId}` : "";
   const activeTaskHydrationStatus = activeTaskHydrationKey
     ? taskHydrationStatusByRepoKey[activeTaskHydrationKey]
+    : undefined;
+  const activeSessionHistoryStatus = activeSessionHistoryKey
+    ? sessionHistoryStatusByRepoKey[activeSessionHistoryKey]
     : undefined;
 
   return {
