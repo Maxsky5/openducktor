@@ -1,13 +1,13 @@
 import { type ReactElement, useEffect, useRef } from "react";
 import { SessionStartModal } from "@/components/features/agents";
-import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   buildSessionStartModalDescription,
   buildSessionStartModalTitle,
   type SessionStartModalOpenRequest,
   toSessionStartPostAction,
   useSessionStartModalCoordinator,
-} from "../shared/use-session-start-modal-coordinator";
+} from "@/features/session-start";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import type { NewSessionStartDecision } from "./use-agent-studio-session-actions";
 import type { PendingSessionStartRequest } from "./use-agent-studio-session-start-request";
 

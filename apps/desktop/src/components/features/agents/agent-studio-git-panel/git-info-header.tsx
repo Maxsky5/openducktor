@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
-import type { DiffScope } from "@/pages/agents/use-agent-studio-diff-data";
 import { DIFF_SCOPE_OPTIONS } from "./constants";
 import type { AgentStudioGitPanelModel } from "./types";
 

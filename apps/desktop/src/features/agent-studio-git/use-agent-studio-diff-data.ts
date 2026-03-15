@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { canonicalTargetBranch } from "@/lib/target-branch";
-import type { DiffDataState, UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
-
-export type { DiffDataState, DiffScope } from "./agent-studio-diff-data-model";
-
+import type { UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
+import type { DiffDataState } from "./contracts";
 import { useAgentStudioDiffController } from "./use-agent-studio-diff-controller";
 import { useAgentStudioWorktreeResolution } from "./use-agent-studio-worktree-resolution";
+
+export type { DiffDataState, DiffScope } from "./contracts";
 
 export function useAgentStudioDiffData({
   repoPath,

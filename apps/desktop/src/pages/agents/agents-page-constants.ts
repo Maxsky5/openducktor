@@ -10,7 +10,7 @@ export {
   kickoffPromptForScenario,
   SCENARIO_LABELS,
   SCENARIOS_BY_ROLE,
-} from "../shared/session-start-prompts";
+} from "@/features/session-start";
 
 export const ROLE_OPTIONS: Array<{
   role: AgentRole;

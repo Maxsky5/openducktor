@@ -2,6 +2,11 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { assertAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  NewSessionStartRequest,
+  RequestNewSessionStart,
+  SessionStartRequestReason,
+} from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
@@ -13,11 +18,6 @@ import {
   type QueryUpdate,
 } from "./use-agent-studio-session-action-helpers";
 import { useAgentStudioSessionStartSession } from "./use-agent-studio-session-start-session";
-import type {
-  NewSessionStartRequest,
-  RequestNewSessionStart,
-  SessionStartRequestReason,
-} from "./use-agent-studio-session-start-types";
 
 type UseAgentStudioSessionStartFlowArgs = {
   activeRepo: string | null;

@@ -1,6 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { AgentStudioRebaseConflict } from "@/features/agent-studio-git";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
@@ -11,7 +12,6 @@ import {
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
 } from "./agents-page-selection";
-import type { AgentStudioRebaseConflict } from "./use-agent-studio-git-actions";
 
 export type RebaseConflictResolutionDecision =
   | {

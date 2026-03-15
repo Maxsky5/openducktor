@@ -6,28 +6,7 @@ import type {
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
-
-export type DiffDataState = {
-  branch: string | null;
-  worktreePath: string | null;
-  targetBranch: string;
-  diffScope: DiffScope;
-  commitsAheadBehind: CommitsAheadBehind | null;
-  upstreamAheadBehind: CommitsAheadBehind | null;
-  upstreamStatus: "tracking" | "untracked" | "error";
-  fileDiffs: FileDiff[];
-  fileStatuses: FileStatus[];
-  statusSnapshotKey?: string | null;
-  uncommittedFileCount: number;
-  isLoading: boolean;
-  error: string | null;
-  refresh: () => void;
-  selectedFile: string | null;
-  setSelectedFile: (path: string | null) => void;
-  setDiffScope: (scope: DiffScope) => void;
-};
-
-export type DiffScope = "target" | "uncommitted";
+import type { DiffScope } from "@/features/agent-studio-git";
 
 export type UseAgentStudioDiffDataInput = {
   repoPath: string | null;

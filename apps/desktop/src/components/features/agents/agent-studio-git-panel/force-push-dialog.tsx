@@ -1,6 +1,6 @@
 import { ArrowUp } from "lucide-react";
 import { memo, type ReactElement } from "react";
-import type { AgentStudioPendingForcePush } from "@/pages/agents/use-agent-studio-git-actions";
+import type { AgentStudioPendingForcePush } from "@/features/agent-studio-git";
 import { INLINE_CODE_CLASS_NAME } from "./constants";
 import { GitConfirmationDialog } from "./git-confirmation-dialog";
 

@@ -2,9 +2,9 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { assertAgentKickoffScenario } from "@openducktor/core";
 import { toast } from "sonner";
+import { kickoffPromptForScenario } from "@/features/session-start";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
-import { kickoffPromptForScenario } from "../shared/session-start-prompts";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 

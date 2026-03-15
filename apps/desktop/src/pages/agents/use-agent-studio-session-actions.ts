@@ -2,6 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor/core";
 import { isAgentKickoffScenario } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RequestNewSessionStart } from "@/features/session-start";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 import { SCENARIO_LABELS } from "./agents-page-constants";
@@ -13,12 +14,8 @@ import {
   shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
 import { useAgentStudioSessionStartFlow } from "./use-agent-studio-session-start-flow";
-import type { RequestNewSessionStart } from "./use-agent-studio-session-start-types";
 
-export type {
-  NewSessionStartDecision,
-  NewSessionStartRequest,
-} from "./use-agent-studio-session-start-types";
+export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
 
 type UseAgentStudioSessionActionsArgs = {
   activeRepo: string | null;

@@ -2,7 +2,7 @@ export {
   isSameSelection,
   normalizeSelectionForCatalog,
   pickDefaultSelectionForCatalog,
-} from "../shared/session-start-selection";
+} from "@/features/session-start";
 
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";

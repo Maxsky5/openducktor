@@ -1,7 +1,7 @@
 import { LoaderCircle, RotateCcw, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import type { AgentStudioRebaseConflictAction } from "@/pages/agents/use-agent-studio-git-actions";
+import type { AgentStudioRebaseConflictAction } from "@/features/agent-studio-git";
 
 export type RebaseConflictActionsModel = {
   isDisabled: boolean;

@@ -12,13 +12,13 @@ import {
   applySummarySnapshot,
   createInitialDiffBatchState,
   type DiffBatchState,
-  type DiffScope,
   type LoadDataMode,
   type ScopeSnapshot,
   toScopeSnapshot,
   toScopeSummaryFields,
   toStatusSnapshotKey,
 } from "./agent-studio-diff-data-model";
+import type { DiffScope } from "./contracts";
 
 const POLL_INTERVAL_MS = 30_000;
 

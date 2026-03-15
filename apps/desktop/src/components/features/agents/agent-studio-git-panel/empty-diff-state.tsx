@@ -1,6 +1,6 @@
 import { FolderGit2 } from "lucide-react";
 import type { ReactElement } from "react";
-import type { DiffScope } from "@/pages/agents/use-agent-studio-diff-data";
+import type { DiffScope } from "@/features/agent-studio-git";
 
 export function EmptyDiffState({
   isLoading,

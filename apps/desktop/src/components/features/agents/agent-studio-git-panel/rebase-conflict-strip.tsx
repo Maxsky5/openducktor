@@ -1,7 +1,7 @@
 import { memo, type ReactElement, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { AgentStudioRebaseConflict } from "@/pages/agents/use-agent-studio-git-actions";
+import type { AgentStudioRebaseConflict } from "@/features/agent-studio-git";
 import { INLINE_CODE_CLASS_NAME } from "./constants";
 import { RebaseConflictActions, type RebaseConflictActionsModel } from "./rebase-conflict-actions";
 

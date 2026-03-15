@@ -4,7 +4,7 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "@/pages/agents/agent-studio-test-utils";
 
 enableReactActEnvironment();
 
@@ -77,8 +77,8 @@ const gitGetWorktreeStatusSummaryMock = mock(
   },
 );
 
-mock.module("@/state/operations/host", () => ({
-  host: {
+mock.module("@/lib/host-client", () => ({
+  hostClient: {
     runsList: runsListMock,
     gitGetWorktreeStatus: gitGetWorktreeStatusMock,
     gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,

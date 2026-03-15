@@ -3,6 +3,7 @@ import type { AgentModelSelection, AgentRole, AgentScenario } from "@openducktor
 import { assertAgentKickoffScenario } from "@openducktor/core";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { toast } from "sonner";
+import type { NewSessionStartRequest } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
 import { host } from "@/state/operations/host";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -18,7 +19,6 @@ import {
   type QueryUpdate,
   shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
-import type { NewSessionStartRequest } from "./use-agent-studio-session-start-types";
 
 type UseAgentStudioFreshSessionCreationArgs = {
   activeRepo: string | null;

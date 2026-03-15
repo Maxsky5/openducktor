@@ -20,6 +20,7 @@ import {
 } from "@/components/features/task-details/task-details-sheet-controller";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
+import { useAgentStudioDiffData } from "@/features/agent-studio-git";
 import { normalizeTargetBranch, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import { useAgentState, useChecksState, useTasksState, useWorkspaceState } from "@/state";
@@ -36,7 +37,6 @@ import { RebaseConflictResolutionModal } from "./agents-page-rebase-conflict-mod
 import { AgentStudioSessionStartModalBridge } from "./agents-page-session-start-modal-bridge";
 import { AgentsPageShell } from "./agents-page-shell";
 import { useAgentStudioBuildWorktreeRefresh } from "./use-agent-studio-build-worktree-refresh";
-import { useAgentStudioDiffData } from "./use-agent-studio-diff-data";
 import { useAgentStudioGitActions } from "./use-agent-studio-git-actions";
 import {
   type AgentStudioOrchestrationActionsContext,
