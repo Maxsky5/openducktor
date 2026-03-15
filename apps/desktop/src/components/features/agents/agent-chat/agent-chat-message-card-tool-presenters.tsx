@@ -27,7 +27,7 @@ import {
   questionToolDetails,
   toolDisplayName,
 } from "./agent-chat-message-card-model";
-import type { ToolMeta } from "./agent-chat-message-card-types";
+import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { formatAgentDuration } from "./format-agent-duration";
 import { relativizeDisplayPathsInValue } from "./tool-path-utils";
 
