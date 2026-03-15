@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-type TaskCreateModalProps = {
+export type TaskCreateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tasks: TaskCard[];

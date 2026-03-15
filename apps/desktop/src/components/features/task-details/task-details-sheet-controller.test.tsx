@@ -132,4 +132,77 @@ describe("TaskDetailsSheetController", () => {
       renderer.unmount();
     });
   });
+
+  test("syncs controlled active task ids and close events", async () => {
+    const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
+
+    const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
+    const onActiveTaskIdChange = mock((_taskId: string | null) => {});
+
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(
+        createElement(TaskDetailsSheetController, {
+          allTasks: [task],
+          runs: [],
+          workflowActionsEnabled: false,
+          activeTaskId: null,
+          onActiveTaskIdChange,
+        }),
+      );
+    });
+
+    await act(async () => {
+      renderer.update(
+        createElement(TaskDetailsSheetController, {
+          allTasks: [task],
+          runs: [],
+          workflowActionsEnabled: false,
+          activeTaskId: task.id,
+          onActiveTaskIdChange,
+        }),
+      );
+    });
+
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        task,
+        open: true,
+      }),
+    );
+
+    const latestProps = taskDetailsSheetRenderMock.mock.calls.at(-1)?.[0] as
+      | { onOpenChange: (open: boolean) => void }
+      | undefined;
+    expect(latestProps).toBeTruthy();
+
+    await act(async () => {
+      latestProps?.onOpenChange(false);
+    });
+
+    expect(onActiveTaskIdChange).toHaveBeenLastCalledWith(null);
+
+    await act(async () => {
+      renderer.update(
+        createElement(TaskDetailsSheetController, {
+          allTasks: [task],
+          runs: [],
+          workflowActionsEnabled: false,
+          activeTaskId: null,
+          onActiveTaskIdChange,
+        }),
+      );
+    });
+
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        task: null,
+        open: false,
+      }),
+    );
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });
