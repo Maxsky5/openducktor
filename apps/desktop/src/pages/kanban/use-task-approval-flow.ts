@@ -15,7 +15,7 @@ import {
   loadSpecDocumentFromQuery,
 } from "@/state/queries/documents";
 import { loadTaskApprovalContextFromQuery } from "@/state/queries/task-approval";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
 type ApprovalState = {
@@ -37,7 +37,7 @@ type UseTaskApprovalFlowArgs = {
   activeRepo: string | null;
   tasks: TaskCard[];
   sessions: AgentSessionState[];
-  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   forkAgentSession: (input: { parentSessionId: string }) => Promise<string>;
   sendAgentMessage: (sessionId: string, content: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
@@ -168,7 +168,9 @@ export function useTaskApprovalFlow({
 
   const waitForLoadedParentSession = useCallback(
     async (taskId: string, sessionId: string): Promise<AgentSessionState> => {
-      await loadAgentSessions(taskId);
+      await loadAgentSessions(taskId, {
+        hydrateHistoryForSessionId: sessionId,
+      });
       for (let attempt = 0; attempt < 20; attempt += 1) {
         const parentSession = sessionsRef.current.find((entry) => entry.sessionId === sessionId);
         if (
@@ -180,9 +182,7 @@ export function useTaskApprovalFlow({
         }
         await delay(50);
       }
-      throw new Error(
-        "Failed to reconnect the parent Builder session for pull request drafting.",
-      );
+      throw new Error("Failed to reconnect the parent Builder session for pull request drafting.");
     },
     [loadAgentSessions],
   );
@@ -205,7 +205,9 @@ export function useTaskApprovalFlow({
           );
         }
 
-        const assistantMessages = session.messages.filter((message) => message.role === "assistant");
+        const assistantMessages = session.messages.filter(
+          (message) => message.role === "assistant",
+        );
         if (
           assistantMessages.length > baselineAssistantCount &&
           isSettledSessionStatus(session.status)
@@ -251,13 +253,12 @@ export function useTaskApprovalFlow({
         throw new Error(`Task not found: ${currentState.taskId}`);
       }
 
+      const baselineAssistantCount = parentSession.messages.filter(
+        (message) => message.role === "assistant",
+      ).length;
       const forkedSessionId = await forkAgentSession({
         parentSessionId: parentSession.sessionId,
       });
-      const baselineAssistantCount =
-        sessionsRef.current
-          .find((entry) => entry.sessionId === forkedSessionId)
-          ?.messages.filter((message) => message.role === "assistant").length ?? 0;
       const prompt = buildAgentMessagePrompt({
         role: "build",
         templateId: "message.build_pull_request_draft",

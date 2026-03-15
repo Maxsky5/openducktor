@@ -103,14 +103,10 @@ export function useAppLifecycle({
         setRunCompletionSignal(parsed.data.runId, parsed.data.type);
         const repoPath = activeRepoRef.current;
         if (repoPath) {
-          void Promise.all([
-            appQueryClient.invalidateQueries({
+          void appQueryClient
+            .invalidateQueries({
               queryKey: taskQueryKeys.repoData(repoPath),
-            }),
-            appQueryClient.invalidateQueries({
-              queryKey: taskQueryKeys.runs(repoPath),
-            }),
-          ])
+            })
             .then(() => refreshTaskDataRef.current(repoPath))
             .catch((error: unknown) => {
               toast.error("Failed to refresh tasks", {

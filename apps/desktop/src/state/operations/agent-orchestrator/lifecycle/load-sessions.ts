@@ -1,5 +1,4 @@
 import type {
-  AgentSessionRecord,
   RepoPromptOverrides,
   RunSummary,
   RuntimeInstanceSummary,
@@ -165,32 +164,6 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const shouldRefreshRuntimeConnection = (record: AgentSessionRecord): boolean => {
-      const existingSession = sessionsRef.current[record.sessionId];
-      if (!existingSession) {
-        return true;
-      }
-
-      const recordRuntimeKind =
-        record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
-      const existingRuntimeKind =
-        existingSession.runtimeKind ??
-        existingSession.selectedModel?.runtimeKind ??
-        DEFAULT_RUNTIME_KIND;
-
-      return (
-        existingSession.runtimeEndpoint.trim().length === 0 ||
-        existingSession.workingDirectory !== record.workingDirectory ||
-        existingRuntimeKind !== recordRuntimeKind
-      );
-    };
-
-    const runtimeAttachmentSessionIds = new Set(
-      persisted
-        .filter((record) => shouldRefreshRuntimeConnection(record))
-        .map((record) => record.sessionId),
-    );
-
     const historyHydrationSessionIds = new Set(
       persisted
         .filter((record) => {
@@ -206,11 +179,11 @@ export const createLoadAgentSessions = ({
         .map((record) => record.sessionId),
     );
 
-    const recordsToHydrate = persisted.filter(
-      (record) =>
-        runtimeAttachmentSessionIds.has(record.sessionId) ||
-        historyHydrationSessionIds.has(record.sessionId),
-    );
+    if (!shouldHydrateRequestedSession) {
+      return;
+    }
+
+    const recordsToHydrate = persisted.filter((record) => record.sessionId === requestedSessionId);
 
     if (recordsToHydrate.length === 0) {
       if (!shouldHydrateRequestedSession) {
@@ -436,11 +409,24 @@ export const createLoadAgentSessions = ({
       }
 
       const shouldHydrateHistory = historyHydrationSessionIds.has(record.sessionId);
-      const existingSession = sessionsRef.current[record.sessionId];
       const workingDirectory = record.workingDirectory;
       const runtimeResolution = await resolveHydrationRuntime(record);
       if (!runtimeResolution.ok) {
-        throw new Error(runtimeResolution.reason);
+        if (shouldHydrateHistory) {
+          throw new Error(runtimeResolution.reason);
+        }
+        updateSession(
+          record.sessionId,
+          (current) => ({
+            ...current,
+            runtimeKind: readPersistedRuntimeKind(record),
+            runtimeEndpoint: "",
+            workingDirectory,
+            promptOverrides: repoPromptOverrides,
+          }),
+          { persist: false },
+        );
+        return;
       }
       const { runtimeKind, runtimeConnection, runtimeEndpoint } = runtimeResolution;
       const externalSessionId = record.externalSessionId ?? record.sessionId;
@@ -460,13 +446,17 @@ export const createLoadAgentSessions = ({
           }),
           { persist: false },
         );
-        warmPersistedSession(
-          record.sessionId,
-          runtimeKind,
-          runtimeConnection,
-          externalSessionId,
-          record.role,
-        );
+        if (shouldHydrateRequestedSession && record.sessionId === requestedSessionId) {
+          const requestedSession = sessionsRef.current[record.sessionId];
+          warmPersistedSession(
+            record.sessionId,
+            runtimeKind,
+            runtimeConnection,
+            externalSessionId,
+            record.role,
+            !requestedSession?.modelCatalog && !requestedSession?.isLoadingModelCatalog,
+          );
+        }
         return;
       }
 

@@ -47,46 +47,75 @@ mock.module("sonner", () => ({
   },
 }));
 
-mock.module("@/state/operations/host", () => ({
-  host: {
-    taskApprovalContextGet: taskApprovalContextGetMock,
-    taskDirectMerge: taskDirectMergeMock,
-    taskPullRequestUpsert: taskPullRequestUpsertMock,
-    gitPushBranch: gitPushBranchMock,
-    agentSessionsList: async () => [{ role: "build", sessionId: "builder-session" }],
-    specGet: async () => ({ markdown: "", updatedAt: null }),
-    planGet: async () => ({ markdown: "", updatedAt: null }),
-    qaGetReport: async () => ({ markdown: "", updatedAt: null }),
-    workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
-    workspaceGetSettingsSnapshot: async () => ({
-      theme: "light" as const,
-      git: { defaultMergeMethod: "merge_commit" as const },
-      chat: { showThinkingMessages: false },
-      repos: {},
-      globalPromptOverrides: {},
-    }),
-  },
-}));
-
-mock.module("@/lib/host-client", () => ({
-  hostClient: {
-    ...createTauriHostClient(async () => {
-      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
-    }),
-    workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
-    workspaceGetSettingsSnapshot: async () => ({
-      theme: "light" as const,
-      git: { defaultMergeMethod: "merge_commit" as const },
-      chat: { showThinkingMessages: false },
-      repos: {},
-      globalPromptOverrides: {},
-    }),
-  },
-}));
-
 mock.module("@/lib/open-external-url", () => ({
   openExternalUrl: async () => {},
 }));
+
+const createUnavailableHostClient = () =>
+  createTauriHostClient(async () => {
+    throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+  });
+
+const buildMockedHost = () => ({
+  ...createUnavailableHostClient(),
+  taskApprovalContextGet: taskApprovalContextGetMock,
+  taskDirectMerge: taskDirectMergeMock,
+  taskPullRequestUpsert: taskPullRequestUpsertMock,
+  gitPushBranch: gitPushBranchMock,
+  agentSessionsList: async () => [{ role: "build", sessionId: "builder-session" }],
+  specGet: async () => ({ markdown: "", updatedAt: null }),
+  planGet: async () => ({ markdown: "", updatedAt: null }),
+  qaGetReport: async () => ({ markdown: "", updatedAt: null }),
+  workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
+  workspaceGetSettingsSnapshot: async () => ({
+    theme: "light" as const,
+    git: { defaultMergeMethod: "merge_commit" as const },
+    chat: { showThinkingMessages: false },
+    repos: {},
+    globalPromptOverrides: {},
+  }),
+});
+
+const HOST_METHOD_NAMES = [
+  "taskApprovalContextGet",
+  "taskDirectMerge",
+  "taskPullRequestUpsert",
+  "gitPushBranch",
+  "agentSessionsList",
+  "specGet",
+  "planGet",
+  "qaGetReport",
+  "workspaceGetRepoConfig",
+  "workspaceGetSettingsSnapshot",
+] as const;
+
+type HostMethodName = (typeof HOST_METHOD_NAMES)[number];
+type HostLike = Record<HostMethodName, unknown>;
+
+let originalHostMethods: Partial<HostLike> | null = null;
+
+const applyHostMocks = async (): Promise<void> => {
+  const hostModule = await import("@/state/operations/host");
+  const hostClientModule = await import("@/lib/host-client");
+  const mockedHost = buildMockedHost();
+  if (!originalHostMethods) {
+    originalHostMethods = Object.fromEntries(
+      HOST_METHOD_NAMES.map((name) => [name, hostClientModule.hostClient[name]]),
+    ) as Partial<HostLike>;
+  }
+  Object.assign(hostClientModule.hostClient, mockedHost);
+  Object.assign(hostModule.host, mockedHost);
+};
+
+const restoreHostMocks = async (): Promise<void> => {
+  if (!originalHostMethods) {
+    return;
+  }
+  const hostModule = await import("@/state/operations/host");
+  const hostClientModule = await import("@/lib/host-client");
+  Object.assign(hostClientModule.hostClient, originalHostMethods);
+  Object.assign(hostModule.host, originalHostMethods);
+};
 
 let latestHarnessValue: {
   taskApprovalModal: {
@@ -124,6 +153,7 @@ function createDeferred<TValue>() {
 describe("useTaskApprovalFlow", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
+    await applyHostMocks();
     latestHarnessValue = null;
     taskApprovalContextGetMock.mockClear();
     taskDirectMergeMock.mockClear();
@@ -134,7 +164,8 @@ describe("useTaskApprovalFlow", () => {
     toastErrorMock.mockClear();
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    await restoreHostMocks();
     mock.restore();
   });
 
@@ -371,7 +402,14 @@ describe("useTaskApprovalFlow", () => {
       scenario: "build_implementation_start",
       status: "running",
       startedAt: "2026-03-12T12:01:00Z",
-      messages: [],
+      messages: [
+        {
+          id: "assistant-builder",
+          role: "assistant",
+          content: "Builder context",
+          timestamp: "2026-03-12T12:00:00Z",
+        },
+      ],
     });
 
     const Harness = (): ReactElement | null => {
@@ -478,7 +516,14 @@ describe("useTaskApprovalFlow", () => {
       scenario: "build_implementation_start",
       status: "idle",
       startedAt: "2026-03-12T12:01:00Z",
-      messages: [],
+      messages: [
+        {
+          id: "assistant-builder",
+          role: "assistant",
+          content: "Builder context",
+          timestamp: "2026-03-12T12:00:00Z",
+        },
+      ],
     });
 
     const Harness = (): ReactElement | null => {
