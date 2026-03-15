@@ -8,7 +8,7 @@ import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 
 const BRANCH_DATA_STALE_TIME_MS = 60_000;
-const WORKTREE_STATUS_STALE_TIME_MS = 0;
+const WORKTREE_STATUS_STALE_TIME_MS = 5_000;
 
 export const gitQueryKeys = {
   all: ["git"] as const,
@@ -100,8 +100,21 @@ export const loadWorktreeStatusFromQuery = (
   targetBranch: string,
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
-): Promise<GitWorktreeStatus> =>
-  queryClient.fetchQuery(worktreeStatusQueryOptions(repoPath, targetBranch, diffScope, workingDir));
+  options?: {
+    force?: boolean;
+  },
+): Promise<GitWorktreeStatus> => {
+  const queryKey = gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir);
+
+  if (options?.force === true) {
+    void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+  }
+
+  return queryClient.fetchQuery({
+    ...worktreeStatusQueryOptions(repoPath, targetBranch, diffScope, workingDir),
+    staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
+  });
+};
 
 export const loadWorktreeStatusSummaryFromQuery = (
   queryClient: QueryClient,
@@ -109,7 +122,23 @@ export const loadWorktreeStatusSummaryFromQuery = (
   targetBranch: string,
   diffScope: "target" | "uncommitted",
   workingDir: string | null,
-): Promise<GitWorktreeStatusSummary> =>
-  queryClient.fetchQuery(
-    worktreeStatusSummaryQueryOptions(repoPath, targetBranch, diffScope, workingDir),
+  options?: {
+    force?: boolean;
+  },
+): Promise<GitWorktreeStatusSummary> => {
+  const queryKey = gitQueryKeys.worktreeStatusSummary(
+    repoPath,
+    targetBranch,
+    diffScope,
+    workingDir,
   );
+
+  if (options?.force === true) {
+    void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+  }
+
+  return queryClient.fetchQuery({
+    ...worktreeStatusSummaryQueryOptions(repoPath, targetBranch, diffScope, workingDir),
+    staleTime: options?.force === true ? 0 : WORKTREE_STATUS_STALE_TIME_MS,
+  });
+};

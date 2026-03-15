@@ -303,6 +303,7 @@ export const applySummarySnapshot = ({
   requestSequence: number;
   latestSharedSequence: number;
 }): {
+  invalidatedScopes: DiffScope[];
   nextState: DiffBatchState;
   nextLatestSharedSequence: number;
   shouldReloadFullScope: boolean;
@@ -328,6 +329,7 @@ export const applySummarySnapshot = ({
     didChange = true;
   }
 
+  const invalidatedScopes: DiffScope[] = shouldReloadFullScope ? [scope] : [];
   let nextLoadedByScope = state.loadedByScope;
   let nextLatestSharedSequence = latestSharedSequence;
   if (requestSequence >= latestSharedSequence) {
@@ -365,6 +367,7 @@ export const applySummarySnapshot = ({
             ...nextLoadedByScope,
             [otherScope]: false,
           };
+          invalidatedScopes.push(otherScope);
           didChange = true;
         }
       }
@@ -372,6 +375,7 @@ export const applySummarySnapshot = ({
   }
 
   return {
+    invalidatedScopes,
     nextState: finalizeCompletedState(state, nextByScope, nextLoadedByScope, didChange),
     nextLatestSharedSequence,
     shouldReloadFullScope,

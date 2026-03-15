@@ -77,6 +77,14 @@ const gitGetWorktreeStatusSummaryMock = mock(
   },
 );
 
+mock.module("@/state/operations/host", () => ({
+  host: {
+    runsList: runsListMock,
+    gitGetWorktreeStatus: gitGetWorktreeStatusMock,
+    gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
+  },
+}));
+
 mock.module("@/lib/host-client", () => ({
   hostClient: {
     runsList: runsListMock,
@@ -296,6 +304,25 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("reuses the cached full snapshot when remounting within the stale window", async () => {
+    const firstHarness = createHookHarness(createBaseArgs());
+    const secondHarness = createHookHarness(createBaseArgs());
+
+    try {
+      await firstHarness.mount();
+      await firstHarness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      await firstHarness.unmount();
+
+      await secondHarness.mount();
+      await secondHarness.waitFor((state) => state.fileDiffs.length === 1);
+
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
+    } finally {
+      await firstHarness.unmount();
+      await secondHarness.unmount();
+    }
+  });
+
   test("manual refresh updates active scope without extra background scope call", async () => {
     const harness = createHookHarness(createBaseArgs());
 
@@ -320,7 +347,7 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("selected file triggers on-demand full reload for the active scope", async () => {
+  test("selected file updates local selection without reloading the active scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 
     try {
@@ -335,15 +362,8 @@ describe("useAgentStudioDiffData", () => {
       await harness.run((state) => {
         state.setSelectedFile("src/main.ts");
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
-
-      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        3,
-        "/repo",
-        "origin/main",
-        "uncommitted",
-        undefined,
-      );
+      await harness.waitFor((state) => state.selectedFile === "src/main.ts");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
     } finally {
       await harness.unmount();
     }
@@ -536,6 +556,101 @@ describe("useAgentStudioDiffData", () => {
         file: "src/switched.ts",
         additions: 5,
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("forces the first inactive-scope reload after branch identity changes", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      defaultTargetBranch: { branch: "@{upstream}" },
+      branchIdentityKey: "branch:main",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor((state) => state.diffScope === "target");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+
+      gitGetWorktreeStatusMock.mockImplementation(
+        async (
+          _repoPath: string,
+          targetBranch: string,
+          diffScope?: "target" | "uncommitted",
+          workingDir?: string,
+        ): Promise<GitWorktreeStatus> =>
+          withSnapshotHashes({
+            currentBranch: { name: "feature/switched", detached: false },
+            fileStatuses:
+              (diffScope ?? "target") === "target"
+                ? [{ path: "src/switched.ts", status: "M", staged: false }]
+                : [{ path: "src/worktree-switched.ts", status: "M", staged: false }],
+            fileDiffs:
+              (diffScope ?? "target") === "target"
+                ? [
+                    {
+                      file: "src/switched.ts",
+                      type: "modified",
+                      additions: 5,
+                      deletions: 1,
+                      diff: "@@ -1 +1,5 @@",
+                    },
+                  ]
+                : [
+                    {
+                      file: "src/worktree-switched.ts",
+                      type: "modified",
+                      additions: 3,
+                      deletions: 0,
+                      diff: "@@ -1 +1,3 @@",
+                    },
+                  ],
+            targetAheadBehind: { ahead: 2, behind: 0 },
+            upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
+            snapshot: {
+              effectiveWorkingDir: workingDir ?? "/repo",
+              targetBranch,
+              diffScope: diffScope ?? "target",
+              observedAtMs: 1731000000300,
+            },
+          }),
+      );
+
+      await harness.update({
+        ...createBaseArgs(),
+        defaultTargetBranch: { branch: "@{upstream}" },
+        branchIdentityKey: "branch:feature/switched",
+      });
+
+      await harness.waitFor((state) => state.branch === "feature/switched");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(3);
+
+      await harness.run((state) => {
+        state.setDiffScope("uncommitted");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 4);
+      await harness.waitFor((state) => state.diffScope === "uncommitted");
+
+      expect(harness.getLatest().fileDiffs).toEqual([
+        {
+          file: "src/worktree-switched.ts",
+          type: "modified",
+          additions: 3,
+          deletions: 0,
+          diff: "@@ -1 +1,3 @@",
+        },
+      ]);
     } finally {
       await harness.unmount();
     }
@@ -959,7 +1074,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setSelectedFile("src/full.ts");
+        state.refresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
 
@@ -1015,7 +1130,9 @@ describe("useAgentStudioDiffData", () => {
   test("polling persists hash metadata changes even when derived shared fields stay equal", async () => {
     const originalSetInterval = globalThis.setInterval;
     const originalClearInterval = globalThis.clearInterval;
+    const originalDateNow = Date.now;
     let intervalCallback: (() => void) | null = null;
+    let nowMs = 1_731_000_000_000;
 
     const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
       if (typeof callback !== "function") {
@@ -1135,6 +1252,7 @@ describe("useAgentStudioDiffData", () => {
 
     globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
     globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
+    Date.now = () => nowMs;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1162,6 +1280,7 @@ describe("useAgentStudioDiffData", () => {
       expect(secondState.upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
       expect(secondState).not.toBe(firstState);
 
+      nowMs += 6_000;
       await harness.run(() => {
         runTick();
       });
@@ -1172,6 +1291,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.unmount();
       globalThis.setInterval = originalSetInterval;
       globalThis.clearInterval = originalClearInterval;
+      Date.now = originalDateNow;
     }
   });
 
