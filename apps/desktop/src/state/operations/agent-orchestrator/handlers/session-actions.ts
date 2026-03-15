@@ -12,6 +12,7 @@ import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { now } from "../support/utils";
 import { createStartAgentSession } from "./start-session";
@@ -397,14 +398,25 @@ export const createAgentSessionActions = ({
         workingDirectory: nextSession.workingDirectory,
       },
     );
-    void loadSessionTodos(
-      summary.sessionId,
-      nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+    runOrchestratorSideEffect(
+      "fork-session-load-session-todos",
+      loadSessionTodos(
+        summary.sessionId,
+        nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+        {
+          endpoint: nextSession.runtimeEndpoint,
+          workingDirectory: nextSession.workingDirectory,
+        },
+        summary.externalSessionId,
+      ),
       {
-        endpoint: nextSession.runtimeEndpoint,
-        workingDirectory: nextSession.workingDirectory,
+        tags: {
+          repoPath: activeRepo,
+          parentSessionId,
+          sessionId: summary.sessionId,
+          externalSessionId: summary.externalSessionId,
+        },
       },
-      summary.externalSessionId,
     );
     return summary.sessionId;
   };

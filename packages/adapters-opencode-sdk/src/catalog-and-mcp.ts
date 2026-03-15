@@ -24,19 +24,16 @@ export const listAvailableModels = async (
     if (!app || typeof app.agents !== "function") {
       return [];
     }
-    try {
-      const payload = await app.agents({
-        directory: input.workingDirectory,
-      } as {
-        directory: string;
-      });
-      return unwrapData(
-        payload as { data?: unknown; error?: { message?: string } | unknown },
-        "list agents",
-      );
-    } catch {
-      return [];
-    }
+
+    const payload = await app.agents({
+      directory: input.workingDirectory,
+    } as {
+      directory: string;
+    });
+    return unwrapData(
+      payload as { data?: unknown; error?: { message?: string } | unknown },
+      "list agents",
+    );
   })();
   const baseCatalog = mapProviderListToCatalog(providerData);
   const rawAgents = Array.isArray(agentsData)

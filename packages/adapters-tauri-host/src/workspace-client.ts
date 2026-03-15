@@ -67,6 +67,39 @@ export type TrustedHooksProof = {
   fingerprint: string;
 };
 
+const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Expected trusted hooks challenge payload from host command");
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  const readString = (key: keyof TrustedHooksChallenge): string => {
+    const value = candidate[key];
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error(`Expected string field '${key}' in trusted hooks challenge payload`);
+    }
+    return value;
+  };
+  const readCount = (key: "preStartCount" | "postCompleteCount"): number => {
+    const value = candidate[key];
+    if (!Number.isInteger(value) || (value as number) < 0) {
+      throw new Error(
+        `Expected non-negative integer field '${key}' in trusted hooks challenge payload`,
+      );
+    }
+    return value as number;
+  };
+
+  return {
+    nonce: readString("nonce"),
+    repoPath: readString("repoPath"),
+    fingerprint: readString("fingerprint"),
+    expiresAt: readString("expiresAt"),
+    preStartCount: readCount("preStartCount"),
+    postCompleteCount: readCount("postCompleteCount"),
+  };
+};
+
 export const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
   const payload = await invokeFn<unknown>("workspace_list");
   return parseArray(workspaceRecordSchema, payload);
@@ -185,7 +218,10 @@ export const workspacePrepareTrustedHooksChallenge = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<TrustedHooksChallenge> => {
-  return invokeFn("workspace_prepare_trusted_hooks_challenge", { repoPath });
+  const payload = await invokeFn<unknown>("workspace_prepare_trusted_hooks_challenge", {
+    repoPath,
+  });
+  return parseTrustedHooksChallenge(payload);
 };
 
 export const setTheme = async (invokeFn: InvokeFn, theme: string): Promise<void> => {

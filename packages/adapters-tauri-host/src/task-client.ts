@@ -20,6 +20,12 @@ export type SetSpecInput = {
   repoPath?: string;
 };
 
+export type SaveSpecDocumentInput = {
+  repoPath: string;
+  taskId: string;
+  markdown: string;
+};
+
 export type PlanSubtaskInput = {
   title: string;
   issueType?: "task" | "feature" | "bug";
@@ -32,6 +38,12 @@ export type SetPlanInput = {
   markdown: string;
   subtasks?: PlanSubtaskInput[];
   repoPath?: string;
+};
+
+export type SavePlanDocumentInput = {
+  repoPath: string;
+  taskId: string;
+  markdown: string;
 };
 
 export class TauriTaskClient {
@@ -150,17 +162,13 @@ export class TauriTaskClient {
     return { updatedAt: payload.updatedAt };
   }
 
-  async saveSpecDocument(
-    repoPath: string,
-    taskId: string,
-    markdown: string,
-  ): Promise<SetSpecOutput> {
+  async saveSpecDocument(input: SaveSpecDocumentInput): Promise<SetSpecOutput> {
     const payload = await this.invokeFn<{ updatedAt: string }>("spec_save_document", {
-      repoPath,
-      taskId,
-      markdown,
+      repoPath: input.repoPath,
+      taskId: input.taskId,
+      markdown: input.markdown,
     });
-    this.invalidateTaskMetadata(repoPath, taskId);
+    this.invalidateTaskMetadata(input.repoPath, input.taskId);
     return { updatedAt: payload.updatedAt };
   }
 
@@ -180,17 +188,13 @@ export class TauriTaskClient {
     return { updatedAt: payload.updatedAt };
   }
 
-  async savePlanDocument(
-    repoPath: string,
-    taskId: string,
-    markdown: string,
-  ): Promise<SetPlanOutput> {
+  async savePlanDocument(input: SavePlanDocumentInput): Promise<SetPlanOutput> {
     const payload = await this.invokeFn<{ updatedAt: string }>("plan_save_document", {
-      repoPath,
-      taskId,
-      markdown,
+      repoPath: input.repoPath,
+      taskId: input.taskId,
+      markdown: input.markdown,
     });
-    this.invalidateTaskMetadata(repoPath, taskId);
+    this.invalidateTaskMetadata(input.repoPath, input.taskId);
     return { updatedAt: payload.updatedAt };
   }
 

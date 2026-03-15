@@ -166,7 +166,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
           };
         }
 
-        const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
+        const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
         const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
         return {
           runtimeKind,
@@ -227,7 +227,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
         };
       }
 
-      const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
+      const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
       const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
       return {
         runtimeKind,
@@ -239,7 +239,7 @@ export const createEnsureRuntime = ({ runsRef, refreshTaskData }: EnsureRuntimeD
       };
     }
 
-    const runtime = await host.runtimeEnsure(runtimeKind, repoPath);
+    const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
     const workingDirectory = workingDirectoryOverride || runtime.workingDirectory;
     const runtimeEndpoint = resolveRuntimeEndpoint(runtime.runtimeRoute);
     return {

@@ -417,7 +417,7 @@ describe("use-workspace-operations", () => {
       expect(clearTaskData).toHaveBeenCalled();
       expect(clearActiveBeadsCheck).toHaveBeenCalled();
       expect(workspaceSelect).toHaveBeenCalledWith("/repo-a");
-      expect(runtimeEnsure).toHaveBeenCalledWith("opencode", "/repo-a");
+      expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a", "opencode");
     } finally {
       runtimeDeferred.resolve(runtimeValue);
       await harness.unmount();
@@ -568,7 +568,7 @@ describe("use-workspace-operations", () => {
       expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
       expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
       expect(workspaceList).toHaveBeenCalled();
-      expect(runtimeEnsure).toHaveBeenCalledWith("opencode", "/repo-a");
+      expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a", "opencode");
 
       if (!latest) {
         throw new Error("Hook not mounted");

@@ -365,7 +365,7 @@ export const createHostRuntimeCatalogOperations = (
 ): RuntimeCatalogOperations =>
   createRuntimeCatalogOperations({
     getRuntimeDefinition,
-    ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(runtimeKind, repoPath),
+    ensureRuntime: (runtimeKind, repoPath) => host.runtimeEnsure(repoPath, runtimeKind),
     stopRuntime: (runtimeId) => host.runtimeStop(runtimeId),
     listAvailableModels: (input) =>
       getAdapter(input.runtimeKind).listAvailableModels({

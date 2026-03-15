@@ -17,8 +17,6 @@ if (hasVulnerableHono) {
   process.exit(1);
 }
 
-console.log(`[deps:audit:hono] No ${HONO_ADVISORY_ID} advisory detected for hono.`);
-
 if (exitCode !== 0) {
   console.warn(
     "[deps:audit:hono] `bun audit` reported additional advisories outside this targeted gate.",

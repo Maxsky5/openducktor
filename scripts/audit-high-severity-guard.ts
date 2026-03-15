@@ -31,5 +31,3 @@ if (blockingAdvisories.length > 0) {
   }
   process.exit(1);
 }
-
-console.log("[deps:audit:high] No high/critical advisories detected.");

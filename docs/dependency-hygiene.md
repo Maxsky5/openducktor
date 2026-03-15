@@ -37,6 +37,7 @@ Implementation notes:
 - Backed by: `knip`
 - Scope: all workspaces matching `@openducktor/*`
 - Check type: `dependencies`
+- Implementation: `bunx knip --workspace='@openducktor/*' --include dependencies`
 
 This check is included in `deps:check`.
 
@@ -46,6 +47,7 @@ This check is included in `deps:check`.
 - Backed by: `knip`
 - Scope: all workspaces matching `@openducktor/*`
 - Check types: `dependencies` (blocking) then `exports` (advisory report)
+- Implementation: `bunx knip --workspace='@openducktor/*' --include exports --no-exit-code`
 
 The export section runs with `--no-exit-code` so teams can review and clean progressively without blocking all PRs.
 

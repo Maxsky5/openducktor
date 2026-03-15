@@ -39,32 +39,32 @@ export type UpdateAgentSessionModelInput = {
 };
 
 export type LoadAgentSessionHistoryInput = {
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
   externalSessionId: string;
   limit?: number;
 };
 
 export type LoadAgentSessionTodosInput = {
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
   externalSessionId: string;
 };
 
 export type ListAgentModelsInput = {
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
 };
 
 export type LoadAgentSessionDiffInput = {
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
   sessionId: string;
   messageId?: string;
 };
 
 export type LoadAgentFileStatusInput = {
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   runtimeConnection: AgentRuntimeConnection;
 };
 

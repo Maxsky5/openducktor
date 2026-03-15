@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
-import type { AgentEvent, AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentEvent } from "@openducktor/core";
 import { OpencodeSdkAdapter } from "./index";
 
 const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -94,6 +94,20 @@ type TodoMockResult =
       error: Error;
     };
 
+type AgentsMockResult =
+  | {
+      mode: "success";
+      data: unknown;
+    }
+  | {
+      mode: "api_error";
+      error: unknown;
+    }
+  | {
+      mode: "throw";
+      error: Error;
+    };
+
 type MakeMockClientInput = {
   sessionId?: string;
   streamEvents?: Event[];
@@ -110,6 +124,7 @@ type MakeMockClientInput = {
   todoResult?: TodoMockResult;
   providerResponse?: unknown;
   agentsResponse?: unknown;
+  agentsResult?: AgentsMockResult;
   toolIdsResponse?: unknown;
   modelToolsResponse?: unknown;
   mcpStatusResponse?: unknown;
@@ -149,6 +164,7 @@ const makeMockClient = ({
     },
   },
   agentsResponse = [],
+  agentsResult,
   toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
   modelToolsResponse = [],
   mcpStatusResponse = { openducktor: { status: "connected" } },
@@ -292,9 +308,17 @@ const makeMockClient = ({
     },
     app: {
       agents: async () => {
+        if (agentsResult?.mode === "throw") {
+          throw agentsResult.error;
+        }
         return {
-          data: agentsResponse,
-          error: undefined,
+          data:
+            agentsResult?.mode === "success"
+              ? agentsResult.data
+              : agentsResult?.mode === "api_error"
+                ? undefined
+                : agentsResponse,
+          error: agentsResult?.mode === "api_error" ? agentsResult.error : undefined,
         };
       },
     },
@@ -379,40 +403,29 @@ const startDefaultSession = async (
 };
 
 const defaultLoadSessionTodosInput = {
+  runtimeKind: "opencode" as const,
   runtimeConnection: defaultRuntimeConnection,
   externalSessionId: "session-opencode-1",
 };
 
-const runLoadSessionTodosWithWarningCapture = async (
+const createLoadSessionTodosHarness = (
   mockInput: MakeMockClientInput,
-): Promise<{
-  todos: AgentSessionTodoItem[];
-  warnCalls: unknown[][];
+): {
+  adapter: OpencodeSdkAdapter;
   session: MockSession;
   createClientCalls: unknown[];
-}> => {
-  const originalWarn = console.warn;
-  const warnCalls: unknown[][] = [];
+} => {
   const createClientCalls: unknown[] = [];
-  console.warn = ((...args: unknown[]) => {
-    warnCalls.push(args);
-  }) as typeof console.warn;
+  const mock = makeMockClient(mockInput);
+  const adapter = new OpencodeSdkAdapter({
+    createClient: (input) => {
+      createClientCalls.push(input);
+      return mock.client;
+    },
+    now: () => "2026-02-17T12:00:00Z",
+  });
 
-  try {
-    const mock = makeMockClient(mockInput);
-    const adapter = new OpencodeSdkAdapter({
-      createClient: (input) => {
-        createClientCalls.push(input);
-        return mock.client;
-      },
-      now: () => "2026-02-17T12:00:00Z",
-    });
-
-    const todos = await adapter.loadSessionTodos(defaultLoadSessionTodosInput);
-    return { todos, warnCalls, session: mock.session, createClientCalls };
-  } finally {
-    console.warn = originalWarn;
-  }
+  return { adapter, session: mock.session, createClientCalls };
 };
 
 describe("OpencodeSdkAdapter", () => {
@@ -1349,6 +1362,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
+      runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
       externalSessionId: "session-opencode-1",
     });
@@ -1381,27 +1395,21 @@ describe("OpencodeSdkAdapter", () => {
     ]);
   });
 
-  test("loadSessionTodos logs client errors and returns empty todos", async () => {
-    const { todos, warnCalls, session, createClientCalls } =
-      await runLoadSessionTodosWithWarningCapture({
-        todoResult: {
-          mode: "api_error",
-          error: {
-            message: "Service Unavailable",
-          },
-          status: 503,
-          statusText: "Service Unavailable",
+  test("loadSessionTodos rejects client errors with actionable status context", async () => {
+    const { adapter, session, createClientCalls } = createLoadSessionTodosHarness({
+      todoResult: {
+        mode: "api_error",
+        error: {
+          message: "Service Unavailable",
         },
-      });
-
-    expect(todos).toEqual([]);
-    expect(warnCalls).toHaveLength(1);
-    expect(warnCalls[0][0]).toBe("loadSessionTodos: request failed");
-    expect(warnCalls[0][1]).toEqual({
-      message: "Service Unavailable",
-      status: 503,
-      statusText: "Service Unavailable",
+        status: 503,
+        statusText: "Service Unavailable",
+      },
     });
+
+    await expect(adapter.loadSessionTodos(defaultLoadSessionTodosInput)).rejects.toThrow(
+      "OpenCode request failed: load session todos (503 Service Unavailable): Service Unavailable",
+    );
     expect(session.todoCalls).toEqual([
       {
         sessionID: "session-opencode-1",
@@ -1416,22 +1424,18 @@ describe("OpencodeSdkAdapter", () => {
     ]);
   });
 
-  test("loadSessionTodos logs thrown request errors and returns empty todos", async () => {
+  test("loadSessionTodos rejects thrown request errors", async () => {
     const requestError = new Error("network down");
-    const { todos, warnCalls, session, createClientCalls } =
-      await runLoadSessionTodosWithWarningCapture({
-        todoResult: {
-          mode: "throw",
-          error: requestError,
-        },
-      });
-
-    expect(todos).toEqual([]);
-    expect(warnCalls).toHaveLength(1);
-    expect(warnCalls[0][0]).toBe("loadSessionTodos: request failed");
-    expect(warnCalls[0][1]).toEqual({
-      message: "network down",
+    const { adapter, session, createClientCalls } = createLoadSessionTodosHarness({
+      todoResult: {
+        mode: "throw",
+        error: requestError,
+      },
     });
+
+    await expect(adapter.loadSessionTodos(defaultLoadSessionTodosInput)).rejects.toThrow(
+      "OpenCode request failed: load session todos: network down",
+    );
     expect(session.todoCalls).toEqual([
       {
         sessionID: "session-opencode-1",
@@ -1464,6 +1468,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await expect(
       adapter.loadSessionTodos({
+        runtimeKind: "opencode",
         runtimeConnection: {
           endpoint: "http://127.0.0.1:12345",
           workingDirectory: "   ",
@@ -1489,6 +1494,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
+      runtimeKind: "opencode",
       runtimeConnection: {
         endpoint: "http://127.0.0.1:12345",
         workingDirectory: "  /repo  ",
@@ -1524,6 +1530,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
     });
 
@@ -1561,6 +1568,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
     });
 
@@ -1571,6 +1579,28 @@ describe("OpencodeSdkAdapter", () => {
         mode: "primary",
       }),
     ]);
+  });
+
+  test("listAvailableModels rejects profile lookup failures instead of masking them", async () => {
+    const mock = makeMockClient({
+      agentsResult: {
+        mode: "api_error",
+        error: {
+          message: "agent index unavailable",
+        },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await expect(
+      adapter.listAvailableModels({
+        runtimeKind: "opencode",
+        runtimeConnection: defaultRuntimeConnection,
+      }),
+    ).rejects.toThrow("agent index unavailable");
   });
 
   test("listAvailableToolIds returns normalized tool IDs", async () => {

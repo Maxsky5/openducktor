@@ -213,7 +213,11 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const output = await client.saveSpecDocument("/repo", "task-77", "# Updated Spec");
+    const output = await client.saveSpecDocument({
+      repoPath: "/repo",
+      taskId: "task-77",
+      markdown: "# Updated Spec",
+    });
 
     expect(output.updatedAt).toBe("2026-02-20T09:30:00Z");
     expect(calls).toEqual([
@@ -236,7 +240,11 @@ describe("TauriHostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const output = await client.savePlanDocument("/repo", "task-88", "## Plan");
+    const output = await client.savePlanDocument({
+      repoPath: "/repo",
+      taskId: "task-88",
+      markdown: "## Plan",
+    });
 
     expect(output.updatedAt).toBe("2026-02-20T09:45:00Z");
     expect(calls).toEqual([
@@ -999,8 +1007,8 @@ describe("TauriHostClient", () => {
 
     const definitions = await client.runtimeDefinitionsList();
     const qaTarget = await client.qaReviewTargetGet("/repo", "task-1");
-    const runtimes = await client.runtimeList("opencode", "/repo");
-    const ensured = await client.runtimeEnsure("opencode", "/repo");
+    const runtimes = await client.runtimeList("/repo", "opencode");
+    const ensured = await client.runtimeEnsure("/repo", "opencode");
     const stopped = await client.runtimeStop("runtime-1");
 
     expect(definitions[0]?.kind).toBe("opencode");
@@ -1018,6 +1026,44 @@ describe("TauriHostClient", () => {
       "runtime_ensure",
       "runtime_stop",
     ]);
+    expect(calls[2]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+    expect(calls[3]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+  });
+
+  test("runtime and build ack commands reject malformed host payloads", async () => {
+    const { client } = createClient((command) => {
+      switch (command) {
+        case "runtime_stop":
+          return { ok: "yes" };
+        case "build_respond":
+          return { ok: 1 };
+        case "build_stop":
+          return {};
+        case "build_cleanup":
+          return null;
+        default:
+          throw new Error(`Unexpected command: ${command}`);
+      }
+    });
+
+    await expect(client.runtimeStop("runtime-1")).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command runtime_stop",
+    );
+    await expect(client.buildRespond("run-1", { action: "approve" })).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command build_respond",
+    );
+    await expect(client.buildStop("run-1")).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command build_stop",
+    );
+    await expect(client.buildCleanup("run-1", "success")).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command build_cleanup",
+    );
   });
 
   test("agent session history commands use expected IPC routes", async () => {
@@ -1304,5 +1350,77 @@ describe("TauriHostClient", () => {
       "repo_pull_request_sync",
       "task_metadata_get",
     ]);
+  });
+
+  test("task approval ack commands reject malformed host payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "task_pull_request_unlink") {
+        return { ok: "nope" };
+      }
+      if (command === "repo_pull_request_sync") {
+        return {};
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.taskPullRequestUnlink("/repo", "task-1")).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command task_pull_request_unlink",
+    );
+    await expect(client.repoPullRequestSync("/repo")).rejects.toThrow(
+      "Expected { ok: boolean } payload from host command repo_pull_request_sync",
+    );
+  });
+
+  test("workspacePrepareTrustedHooksChallenge validates host payload shape", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_prepare_trusted_hooks_challenge") {
+        return {
+          nonce: "nonce-1",
+          repoPath: "/repo",
+          fingerprint: "fp-1",
+          expiresAt: "2026-03-15T01:00:00Z",
+          preStartCount: 1,
+          postCompleteCount: 2,
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.workspacePrepareTrustedHooksChallenge("/repo")).resolves.toEqual({
+      nonce: "nonce-1",
+      repoPath: "/repo",
+      fingerprint: "fp-1",
+      expiresAt: "2026-03-15T01:00:00Z",
+      preStartCount: 1,
+      postCompleteCount: 2,
+    });
+    expect(calls).toEqual([
+      {
+        command: "workspace_prepare_trusted_hooks_challenge",
+        args: {
+          repoPath: "/repo",
+        },
+      },
+    ]);
+  });
+
+  test("workspacePrepareTrustedHooksChallenge rejects malformed host payloads", async () => {
+    const { client } = createClient((command) => {
+      if (command === "workspace_prepare_trusted_hooks_challenge") {
+        return {
+          nonce: "nonce-1",
+          repoPath: "/repo",
+          fingerprint: "fp-1",
+          expiresAt: "2026-03-15T01:00:00Z",
+          preStartCount: "1",
+          postCompleteCount: 2,
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.workspacePrepareTrustedHooksChallenge("/repo")).rejects.toThrow(
+      "Expected non-negative integer field 'preStartCount' in trusted hooks challenge payload",
+    );
   });
 });
