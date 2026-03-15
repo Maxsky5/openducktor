@@ -1,13 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { ArrowLeft, Flag, Loader2, RotateCcw, Sparkles, WandSparkles } from "lucide-react";
-import type { ReactElement } from "react";
-import {
-  IssueTypeGrid,
-  TaskComposerStepper,
-  TaskDetailsForm,
-  TaskDocumentEditor,
-  TaskEditSectionSwitcher,
-} from "@/components/features/task-composer";
+import { lazy, type ReactElement, Suspense } from "react";
+import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-grid";
+import { TaskComposerStepper } from "@/components/features/task-composer/task-composer-stepper";
+import { TaskDetailsForm } from "@/components/features/task-composer/task-details-form";
+import { TaskEditSectionSwitcher } from "@/components/features/task-composer/task-edit-section-switcher";
 import {
   TaskCreateDiscardDialog,
   useTaskCreateModalController,
@@ -23,12 +20,52 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-type TaskCreateModalProps = {
+const TaskDocumentEditor = lazy(async () => {
+  const module = await import("@/components/features/task-composer/task-document-editor");
+  return { default: module.TaskDocumentEditor };
+});
+
+export type TaskCreateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tasks: TaskCard[];
   task?: TaskCard | null;
 };
+
+function TaskDocumentEditorFallback(): ReactElement {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-border bg-muted/70 px-4 py-3">
+        <div className="space-y-2">
+          <div className="h-4 w-32 animate-pulse rounded bg-card" />
+          <div className="h-3 w-64 animate-pulse rounded bg-card" />
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Markdown
+          </p>
+          <div className="min-h-[52vh] space-y-3 rounded-md border border-border bg-muted p-3">
+            <div className="h-3 w-2/5 animate-pulse rounded bg-card" />
+            <div className="h-3 w-full animate-pulse rounded bg-card" />
+            <div className="h-3 w-5/6 animate-pulse rounded bg-card" />
+          </div>
+        </div>
+        <div className="space-y-2 max-md:hidden">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Preview
+          </p>
+          <div className="min-h-[52vh] space-y-3 rounded-md border border-border bg-muted p-3">
+            <div className="h-3 w-1/3 animate-pulse rounded bg-card" />
+            <div className="h-3 w-full animate-pulse rounded bg-card" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-card" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function TaskCreateModal({
   open,
@@ -96,36 +133,40 @@ export function TaskCreateModal({
                   onSelectIssueType={controller.selectCreateIssueType}
                 />
               ) : controller.mode === "edit" && activeDocumentSection ? (
-                <TaskDocumentEditor
-                  key={activeDocumentSection}
-                  title={activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"}
-                  subtitle={
-                    activeDocumentSection === "spec"
-                      ? "Edit the canonical specification markdown for this task."
-                      : "Edit the implementation plan markdown for this task."
-                  }
-                  placeholder={
-                    activeDocumentSection === "spec"
-                      ? "# Purpose\n\nDescribe expected outcome..."
-                      : "## Milestones\n\n- ..."
-                  }
-                  markdown={controller.activeDraft}
-                  view={controller.views[activeDocumentSection]}
-                  onViewChange={(nextView) =>
-                    controller.setDocumentView(activeDocumentSection, nextView)
-                  }
-                  updatedAt={controller.activeDocument?.updatedAt ?? null}
-                  isLoading={controller.activeDocument?.isLoading ?? false}
-                  isSaving={controller.isSavingDocument === activeDocumentSection}
-                  error={controller.activeDocument?.error ?? null}
-                  hasUnsavedChanges={controller.isActiveDocumentDirty}
-                  onMarkdownChange={(value) =>
-                    controller.updateDocumentDraft(activeDocumentSection, value)
-                  }
-                  onRetryLoad={() => {
-                    void controller.loadDocumentSection(activeDocumentSection, true);
-                  }}
-                />
+                <Suspense fallback={<TaskDocumentEditorFallback />}>
+                  <TaskDocumentEditor
+                    key={activeDocumentSection}
+                    title={
+                      activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"
+                    }
+                    subtitle={
+                      activeDocumentSection === "spec"
+                        ? "Edit the canonical specification markdown for this task."
+                        : "Edit the implementation plan markdown for this task."
+                    }
+                    placeholder={
+                      activeDocumentSection === "spec"
+                        ? "# Purpose\n\nDescribe expected outcome..."
+                        : "## Milestones\n\n- ..."
+                    }
+                    markdown={controller.activeDraft}
+                    view={controller.views[activeDocumentSection]}
+                    onViewChange={(nextView) =>
+                      controller.setDocumentView(activeDocumentSection, nextView)
+                    }
+                    updatedAt={controller.activeDocument?.updatedAt ?? null}
+                    isLoading={controller.activeDocument?.isLoading ?? false}
+                    isSaving={controller.isSavingDocument === activeDocumentSection}
+                    error={controller.activeDocument?.error ?? null}
+                    hasUnsavedChanges={controller.isActiveDocumentDirty}
+                    onMarkdownChange={(value) =>
+                      controller.updateDocumentDraft(activeDocumentSection, value)
+                    }
+                    onRetryLoad={() => {
+                      void controller.loadDocumentSection(activeDocumentSection, true);
+                    }}
+                  />
+                </Suspense>
               ) : (
                 <TaskDetailsForm
                   mode={controller.mode}

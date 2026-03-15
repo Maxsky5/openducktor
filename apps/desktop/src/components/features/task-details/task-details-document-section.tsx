@@ -1,7 +1,11 @@
-import { memo, type ReactElement } from "react";
+import { lazy, memo, type ReactElement, Suspense } from "react";
 
 import { TaskDetailsCollapsibleCard } from "./task-details-collapsible-card";
-import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
+
+const TaskDetailsMarkdownContent = lazy(async () => {
+  const module = await import("./task-details-markdown-content");
+  return { default: module.TaskDetailsMarkdownContent };
+});
 
 type TaskDetailsDocumentSectionProps = {
   title: string;
@@ -21,6 +25,21 @@ export const TaskDetailsDocumentSection = memo(
     empty,
     defaultExpanded = false,
   }: TaskDetailsDocumentSectionProps): ReactElement {
+    if (markdown.trim().length === 0) {
+      return (
+        <TaskDetailsCollapsibleCard
+          title={title}
+          icon={icon}
+          updatedAt={updatedAt}
+          defaultExpanded={defaultExpanded}
+        >
+          <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            {empty}
+          </p>
+        </TaskDetailsCollapsibleCard>
+      );
+    }
+
     return (
       <TaskDetailsCollapsibleCard
         title={title}
@@ -29,7 +48,17 @@ export const TaskDetailsDocumentSection = memo(
         defaultExpanded={defaultExpanded}
       >
         {({ isExpanded }) => (
-          <TaskDetailsMarkdownContent active={isExpanded} markdown={markdown} empty={empty} />
+          <Suspense
+            fallback={
+              <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
+                <div className="h-3 w-4/5 animate-pulse rounded bg-card" />
+                <div className="h-3 w-full animate-pulse rounded bg-card" />
+                <div className="h-3 w-3/4 animate-pulse rounded bg-card" />
+              </div>
+            }
+          >
+            <TaskDetailsMarkdownContent active={isExpanded} markdown={markdown} empty={empty} />
+          </Suspense>
         )}
       </TaskDetailsCollapsibleCard>
     );

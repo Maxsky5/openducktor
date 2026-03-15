@@ -1,8 +1,12 @@
-import { memo, type ReactElement, useCallback } from "react";
+import { lazy, memo, type ReactElement, Suspense, useCallback } from "react";
 
 import { TaskDetailsCollapsibleCard } from "./task-details-collapsible-card";
-import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
 import type { TaskDocumentState } from "./use-task-documents";
+
+const TaskDetailsMarkdownContent = lazy(async () => {
+  const module = await import("./task-details-markdown-content");
+  return { default: module.TaskDetailsMarkdownContent };
+});
 
 type TaskDetailsAsyncDocumentSectionProps = {
   title: string;
@@ -45,8 +49,20 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
       onExpandedChange={handleExpandedChange}
     >
       {({ isExpanded }) => {
+        const markdownFallback = (
+          <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
+            <div className="h-3 w-2/5 animate-pulse rounded bg-card" />
+            <div className="h-3 w-full animate-pulse rounded bg-card" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-card" />
+          </div>
+        );
+
         if (!hasDocument) {
-          return <TaskDetailsMarkdownContent active={isExpanded} markdown="" empty={empty} />;
+          return (
+            <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {empty}
+            </p>
+          );
         }
 
         if (document.error) {
@@ -58,21 +74,25 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
         }
 
         if (!document.loaded || document.isLoading) {
+          return markdownFallback;
+        }
+
+        if (document.markdown.trim().length === 0) {
           return (
-            <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
-              <div className="h-3 w-2/5 animate-pulse rounded bg-secondary" />
-              <div className="h-3 w-full animate-pulse rounded bg-secondary" />
-              <div className="h-3 w-4/5 animate-pulse rounded bg-secondary" />
-            </div>
+            <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+              {empty}
+            </p>
           );
         }
 
         return (
-          <TaskDetailsMarkdownContent
-            active={isExpanded}
-            markdown={document.markdown}
-            empty={empty}
-          />
+          <Suspense fallback={markdownFallback}>
+            <TaskDetailsMarkdownContent
+              active={isExpanded}
+              markdown={document.markdown}
+              empty={empty}
+            />
+          </Suspense>
         );
       }}
     </TaskDetailsCollapsibleCard>
