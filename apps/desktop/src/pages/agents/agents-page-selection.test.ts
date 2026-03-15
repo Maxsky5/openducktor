@@ -70,6 +70,40 @@ describe("agents-page-selection", () => {
     });
   });
 
+  test("matches provider defaults by provider and model id", () => {
+    const providerCollisionCatalog: AgentModelCatalog = {
+      models: [
+        {
+          id: "openai/shared-model",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "shared-model",
+          modelName: "OpenAI Shared",
+          variants: ["default"],
+        },
+        {
+          id: "anthropic/shared-model",
+          providerId: "anthropic",
+          providerName: "Anthropic",
+          modelId: "shared-model",
+          modelName: "Anthropic Shared",
+          variants: ["balanced"],
+        },
+      ],
+      defaultModelsByProvider: {
+        anthropic: "shared-model",
+      },
+      profiles: [],
+    };
+
+    expect(pickDefaultSelectionForCatalog(providerCollisionCatalog)).toEqual({
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "shared-model",
+      variant: "balanced",
+    });
+  });
+
   test("normalizes variant and removes unsupported agent", () => {
     expect(
       normalizeSelectionForCatalog(catalogFixture, {

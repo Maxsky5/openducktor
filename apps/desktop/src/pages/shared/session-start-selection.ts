@@ -7,17 +7,21 @@ export const pickDefaultSelectionForCatalog = (
   if (!catalog || catalog.models.length === 0) {
     return null;
   }
-  const defaultProvider = Object.entries(catalog.defaultModelsByProvider).find(([, modelId]) =>
-    catalog.models.some((entry) => entry.modelId === modelId),
-  );
-  const selectedModel = defaultProvider
-    ? (catalog.models.find(
-        (entry) => entry.providerId === defaultProvider[0] && entry.modelId === defaultProvider[1],
-      ) ?? catalog.models[0])
-    : catalog.models[0];
-  if (!selectedModel) {
+  const fallbackModel = catalog.models[0];
+  if (!fallbackModel) {
     return null;
   }
+  const defaultProvider = Object.entries(catalog.defaultModelsByProvider).find(
+    ([providerId, modelId]) =>
+      catalog.models.some((entry) => entry.providerId === providerId && entry.modelId === modelId),
+  );
+  const selectedModel =
+    defaultProvider === undefined
+      ? fallbackModel
+      : (catalog.models.find(
+          (entry) =>
+            entry.providerId === defaultProvider[0] && entry.modelId === defaultProvider[1],
+        ) ?? fallbackModel);
 
   const catalogProfiles = catalog.profiles ?? catalog.agents ?? [];
   const primaryAgent = catalogProfiles.find((entry) => !entry.hidden && entry.mode === "primary");

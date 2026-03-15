@@ -8,6 +8,22 @@ import {
   buildAgentMessagePrompt,
 } from "@openducktor/core";
 
+type TaskPromptContext = {
+  title?: string;
+  issueType?: "task" | "feature" | "bug" | "epic";
+  status?: string;
+  qaRequired?: boolean;
+  description?: string;
+  specMarkdown?: string;
+  planMarkdown?: string;
+  latestQaReportMarkdown?: string;
+};
+
+type SessionStartPromptOptions = {
+  overrides?: RepoPromptOverrides;
+  task?: TaskPromptContext;
+};
+
 export const SCENARIOS_BY_ROLE: Record<AgentRole, AgentScenario[]> = {
   spec: ["spec_initial"],
   planner: ["planner_initial"],
@@ -43,19 +59,7 @@ export const kickoffPromptForScenario = (
   role: AgentRole,
   scenario: AgentKickoffScenario,
   taskId: string,
-  options?: {
-    overrides?: RepoPromptOverrides;
-    task?: {
-      title?: string;
-      issueType?: "task" | "feature" | "bug" | "epic";
-      status?: string;
-      qaRequired?: boolean;
-      description?: string;
-      specMarkdown?: string;
-      planMarkdown?: string;
-      latestQaReportMarkdown?: string;
-    };
-  },
+  options?: SessionStartPromptOptions,
 ): string => {
   return buildAgentKickoffPrompt({
     role,
@@ -70,18 +74,7 @@ export const kickoffPromptForScenario = (
 
 export const buildRebaseConflictResolutionPrompt = (
   taskId: string,
-  options?: {
-    overrides?: RepoPromptOverrides;
-    task?: {
-      title?: string;
-      issueType?: "task" | "feature" | "bug" | "epic";
-      status?: string;
-      qaRequired?: boolean;
-      description?: string;
-      specMarkdown?: string;
-      planMarkdown?: string;
-      latestQaReportMarkdown?: string;
-    };
+  options?: SessionStartPromptOptions & {
     git?: AgentPromptGitContext;
   },
 ): string => {
