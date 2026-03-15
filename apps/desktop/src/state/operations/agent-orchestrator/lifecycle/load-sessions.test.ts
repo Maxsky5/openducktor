@@ -130,6 +130,20 @@ describe("agent-orchestrator-load-sessions", () => {
       state = typeof updater === "function" ? updater(state) : updater;
       sessionsRef.current = state;
     };
+    const updateSession = (
+      sessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[sessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [sessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
 
     const loadAgentSessions = createLoadAgentSessions({
       activeRepo: "/tmp/repo",
@@ -144,7 +158,7 @@ describe("agent-orchestrator-load-sessions", () => {
       sessionsRef,
       setSessionsById,
       taskRef: { current: [taskFixture] },
-      updateSession: () => {},
+      updateSession,
       loadSessionTodos: async () => {},
       loadSessionModelCatalog: async () => {},
       loadRepoPromptOverrides: async () => ({}),
@@ -152,6 +166,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
+    const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
       {
         runtimeKind: "opencode",
@@ -166,16 +181,36 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
+    hostModule.host.runsList = async () => [
+      {
+        runId: "run-1",
+        runtimeKind: "opencode",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4444",
+        },
+        repoPath: "/tmp/repo",
+        taskId: "task-1",
+        branch: "odt/task-1",
+        worktreePath: "/tmp/repo",
+        port: 4444,
+        state: "running",
+        lastMessage: null,
+        startedAt: "2026-02-22T08:00:00.000Z",
+      },
+    ];
 
     try {
       await loadAgentSessions("task-1");
     } finally {
       hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runsList = originalRunsList;
     }
 
     expect(Object.keys(state)).toContain("session-1");
     expect(historyLoads).toBe(0);
     expect(state["session-1"]?.messages).toEqual([]);
+    expect(state["session-1"]?.runtimeEndpoint).toBe("http://127.0.0.1:4444");
   });
 
   test("hydrates requested session through its persisted runtime kind when endpoint is missing", async () => {

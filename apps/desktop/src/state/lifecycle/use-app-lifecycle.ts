@@ -3,6 +3,8 @@ import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { subscribeRunEvents } from "@/lib/host-client";
+import { appQueryClient } from "@/lib/query-client";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import { prependRunEvent, shouldLoadChecks } from "./app-lifecycle-model";
@@ -60,6 +62,13 @@ export function useAppLifecycle({
   hasCachedRepoRuntimeHealth,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
+  const activeRepoRef = useRef(activeRepo);
+  const refreshTaskDataRef = useRef(refreshTaskData);
+
+  useEffect(() => {
+    activeRepoRef.current = activeRepo;
+    refreshTaskDataRef.current = refreshTaskData;
+  }, [activeRepo, refreshTaskData]);
 
   useEffect(() => {
     Promise.allSettled([refreshWorkspaces(), refreshRuntimeCheck(false)]).then(
@@ -92,6 +101,23 @@ export function useAppLifecycle({
         parsed.data.type === "error"
       ) {
         setRunCompletionSignal(parsed.data.runId, parsed.data.type);
+        const repoPath = activeRepoRef.current;
+        if (repoPath) {
+          void Promise.all([
+            appQueryClient.invalidateQueries({
+              queryKey: taskQueryKeys.repoData(repoPath),
+            }),
+            appQueryClient.invalidateQueries({
+              queryKey: taskQueryKeys.runs(repoPath),
+            }),
+          ])
+            .then(() => refreshTaskDataRef.current(repoPath))
+            .catch((error: unknown) => {
+              toast.error("Failed to refresh tasks", {
+                description: summarizeTaskLoadError(error),
+              });
+            });
+        }
       }
     })
       .then((cleanup) => {
