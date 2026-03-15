@@ -417,6 +417,10 @@ export function useKanbanSessionStartFlow({
             setHumanReviewFeedbackState(null);
           },
         });
+      } catch (error) {
+        toast.error("Failed to prepare the Builder session.", {
+          description: error instanceof Error ? error.message : "Unknown error",
+        });
       } finally {
         setIsSubmittingHumanReviewFeedback(false);
       }

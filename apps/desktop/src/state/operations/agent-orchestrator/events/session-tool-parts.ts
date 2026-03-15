@@ -2,15 +2,17 @@ import { isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent, isTodoToolName } from "../../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
+import { upsertMessage } from "../support/messages";
 import {
   mergeTodoListPreservingOrder,
-  normalizeToolInput,
-  normalizeToolText,
   parseTodosFromToolInput,
   parseTodosFromToolOutput,
+} from "../support/todos";
+import {
+  normalizeToolInput,
+  normalizeToolText,
   resolveToolMessageId,
-  upsertMessage,
-} from "../support/utils";
+} from "../support/tool-messages";
 import type {
   SessionPart,
   SessionPartEvent,

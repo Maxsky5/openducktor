@@ -7,6 +7,7 @@ import type {
   RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
+import type { AgentModelCatalog } from "@openducktor/core";
 import { type Context, createContext, type Dispatch, type SetStateAction, useContext } from "react";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
@@ -35,6 +36,10 @@ export type RuntimeDefinitionsContextValue = {
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
   refreshRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  loadRepoRuntimeCatalog: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ) => Promise<AgentModelCatalog>;
 };
 
 export type ChecksOperationsContextValue = {

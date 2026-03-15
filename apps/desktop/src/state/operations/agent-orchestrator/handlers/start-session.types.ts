@@ -127,7 +127,6 @@ export type ResolvedRuntimeAndModel = {
   resolvedScenario: AgentScenario;
   systemPrompt: string;
   promptOverrides: RepoPromptOverrides;
-  defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
   resolvedDefaultModelSelection: AgentModelSelection | null;
 };
 
@@ -142,6 +141,5 @@ export type StartOrReuseResult =
       taskCard: TaskCard;
       ctx: StartedSessionContext;
       promptOverrides: RepoPromptOverrides;
-      defaultModelSelectionPromise: Promise<AgentModelSelection | null>;
       resolvedDefaultModelSelection: AgentModelSelection | null;
     };

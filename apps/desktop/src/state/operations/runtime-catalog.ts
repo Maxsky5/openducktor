@@ -7,7 +7,6 @@ import type {
 import type { AgentEnginePort, AgentModelCatalog } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import { configureRuntimeCatalogClient } from "../read-models/runtime-catalog-client";
 import { host } from "./host";
 
 type RuntimeMcpServerStatus = {
@@ -382,12 +381,6 @@ export const createHostRuntimeCatalogOperations = (
     shouldRestartRuntimeForMcpStatusError: (runtimeKind, message) =>
       getAdapter(runtimeKind).shouldRestartRuntimeForMcpStatusError(message),
   });
-
-export const configureRuntimeCatalogOperations = (operations: RuntimeCatalogOperations): void => {
-  configureRuntimeCatalogClient({
-    loadRepoRuntimeCatalog: operations.loadRepoRuntimeCatalog,
-  });
-};
 
 const resolveRuntimeEndpoint = (runtimeRoute: RuntimeRoute): string => {
   switch (runtimeRoute.type) {

@@ -6,33 +6,24 @@ import type {
   RuntimeRoute,
   TaskCard,
 } from "@openducktor/contracts";
-import {
-  type AgentEnginePort,
-  type AgentRuntimeConnection,
-  buildAgentSystemPrompt,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
-import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
+import { loadRuntimeListFromQuery, runtimeQueryKeys } from "@/state/queries/runtime";
 import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
+import { toRuntimeConnection } from "../runtime/runtime";
+import { createRepoStaleGuard, normalizeWorkingDirectory } from "../support/core";
+import { normalizePersistedSelection } from "../support/models";
 import {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "../support/async-side-effects";
-import {
-  createRepoStaleGuard,
   defaultScenarioForRole,
   fromPersistedSessionRecord,
   historyToChatMessages,
-  normalizePersistedSelection,
-  normalizeWorkingDirectory,
-  now,
-  upsertMessage,
-} from "../support/utils";
+} from "../support/persistence";
+import { buildSessionPreludeMessages, buildSessionSystemPrompt } from "../support/session-prompt";
+import { warmSessionData } from "../support/session-warmup";
 
 type UpdateSession = (
   sessionId: string,
@@ -41,18 +32,22 @@ type UpdateSession = (
 ) => void;
 
 type SessionHistoryAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
-type SessionHistoryLoadResult =
-  | {
-      ok: true;
-      history: Awaited<ReturnType<SessionHistoryAdapter["loadSessionHistory"]>>;
-    }
-  | {
-      ok: false;
-      reason: string;
-    };
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
+type PersistedSessionRecord = Awaited<ReturnType<typeof loadAgentSessionListFromQuery>>[number];
+
+const readPersistedRuntimeKind = ({
+  sessionId,
+  runtimeKind,
+  selectedModel,
+}: Pick<PersistedSessionRecord, "sessionId" | "runtimeKind" | "selectedModel">): RuntimeKind => {
+  const resolvedRuntimeKind = runtimeKind ?? selectedModel?.runtimeKind;
+  if (!resolvedRuntimeKind) {
+    throw new Error(`Persisted session '${sessionId}' is missing runtime kind metadata.`);
+  }
+  return resolvedRuntimeKind;
+};
 
 const resolveRuntimeRouteEndpoint = (runtimeRoute: RuntimeRoute): string => {
   switch (runtimeRoute.type) {
@@ -115,33 +110,27 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const warmSessionData = (
+    const warmPersistedSession = (
       targetSessionId: string,
       runtimeKind: RuntimeKind,
       runtimeConnection: AgentRuntimeConnection,
       externalSessionId: string,
+      role: AgentSessionState["role"],
+      shouldLoadModelCatalog = true,
     ): void => {
-      runOrchestratorSideEffect(
-        "load-sessions-warm-session-todos",
-        loadSessionTodos(targetSessionId, runtimeKind, runtimeConnection, externalSessionId),
-        {
-          tags: {
-            repoPath,
-            sessionId: targetSessionId,
-            externalSessionId,
-          },
-        },
-      );
-      runOrchestratorSideEffect(
-        "load-sessions-warm-session-model-catalog",
-        loadSessionModelCatalog(targetSessionId, runtimeKind, runtimeConnection),
-        {
-          tags: {
-            repoPath,
-            sessionId: targetSessionId,
-          },
-        },
-      );
+      warmSessionData({
+        operationPrefix: "load-sessions-warm-session",
+        repoPath,
+        sessionId: targetSessionId,
+        taskId,
+        role,
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
+        loadSessionTodos,
+        loadSessionModelCatalog,
+        shouldLoadModelCatalog,
+      });
     };
 
     const [persisted, repoPromptOverrides] = await Promise.all([
@@ -197,48 +186,41 @@ export const createLoadAgentSessions = ({
       if (
         requestedSession &&
         requestedSession.taskId === taskId &&
-        !requestedSession.modelCatalog &&
-        !requestedSession.isLoadingModelCatalog &&
         requestedSession.runtimeEndpoint &&
         requestedSession.workingDirectory
       ) {
-        const runtimeConnection = {
-          endpoint: requestedSession.runtimeEndpoint,
-          workingDirectory: requestedSession.workingDirectory,
-        } satisfies AgentRuntimeConnection;
-        const requestedRuntimeKind =
-          requestedSession.runtimeKind ??
-          requestedSession.selectedModel?.runtimeKind ??
-          DEFAULT_RUNTIME_KIND;
-        warmSessionData(
+        const requestedRecord =
+          requestedSessionId === null
+            ? undefined
+            : persisted.find((record) => record.sessionId === requestedSessionId);
+        const runtimeConnection = toRuntimeConnection(
+          requestedSession.runtimeEndpoint,
+          requestedSession.workingDirectory,
+        );
+        const requestedRuntimeKind = requestedRecord
+          ? readPersistedRuntimeKind(requestedRecord)
+          : (requestedSession.runtimeKind ?? requestedSession.selectedModel?.runtimeKind);
+        if (!requestedRuntimeKind) {
+          throw new Error(`Session '${requestedSession.sessionId}' is missing runtime kind.`);
+        }
+        warmPersistedSession(
           requestedSession.sessionId,
           requestedRuntimeKind,
           runtimeConnection,
           requestedSession.externalSessionId,
+          requestedSession.role,
+          !requestedSession.modelCatalog && !requestedSession.isLoadingModelCatalog,
         );
       }
       return;
     }
 
     const runtimeKindsToHydrate = Array.from(
-      new Set(
-        recordsToHydrate.map(
-          (record) =>
-            record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-        ),
-      ),
+      new Set(recordsToHydrate.map((record) => readPersistedRuntimeKind(record))),
     );
     const runtimeLists = await Promise.all(
       runtimeKindsToHydrate.map(async (runtimeKind) => {
-        const runtimes = await captureOrchestratorFallback(
-          "load-sessions-list-runtimes",
-          () => loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
-          {
-            tags: { repoPath, taskId, runtimeKind },
-            logLevel: "warn",
-            fallback: () => [] as RuntimeInstanceSummary[],
-          },
-        );
+        const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
         return [runtimeKind, runtimes] as const;
       }),
     );
@@ -247,15 +229,7 @@ export const createLoadAgentSessions = ({
     const liveRuns = recordsToHydrate.some(
       (record) => record.role === "build" || record.role === "qa",
     )
-      ? await captureOrchestratorFallback(
-          "load-sessions-list-runs",
-          () => loadRepoRunsFromQuery(appQueryClient, repoPath),
-          {
-            tags: { repoPath, taskId },
-            logLevel: "warn",
-            fallback: () => [] as RunSummary[],
-          },
-        )
+      ? await loadRepoRunsFromQuery(appQueryClient, repoPath)
       : [];
     const ensuredWorkspaceRuntimes = new Map<RuntimeKind, RuntimeInstanceSummary | null>();
 
@@ -265,16 +239,15 @@ export const createLoadAgentSessions = ({
       if (ensuredWorkspaceRuntimes.has(runtimeKind)) {
         return ensuredWorkspaceRuntimes.get(runtimeKind) ?? null;
       }
-      const runtime = await captureOrchestratorFallback(
-        "load-sessions-ensure-workspace-runtime",
-        async () => host.runtimeEnsure(repoPath, runtimeKind),
-        {
-          tags: { repoPath, taskId, runtimeKind },
-          logLevel: "warn",
-          fallback: () => null,
-        },
-      );
+      const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
       ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
+      if (runtime) {
+        await appQueryClient.invalidateQueries({
+          queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
+          exact: true,
+          refetchType: "none",
+        });
+      }
       return runtime;
     };
 
@@ -306,27 +279,44 @@ export const createLoadAgentSessions = ({
       );
     };
 
-    const resolveLiveRuntimeEndpoint = async (
-      record: (typeof recordsToHydrate)[number],
-    ): Promise<{ ok: true; endpoint: string } | { ok: false; reason: string }> => {
-      const runtimeKind =
-        record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
+    const resolveHydrationRuntime = async (
+      record: PersistedSessionRecord,
+    ): Promise<
+      | {
+          ok: true;
+          runtimeKind: RuntimeKind;
+          runtimeEndpoint: string;
+          runtimeConnection: AgentRuntimeConnection;
+        }
+      | {
+          ok: false;
+          runtimeKind: RuntimeKind;
+          reason: string;
+        }
+    > => {
+      const runtimeKind = readPersistedRuntimeKind(record);
       const workingDirectory = record.workingDirectory;
       if (record.role === "build" || record.role === "qa") {
         const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
         if (run) {
+          const runtimeEndpoint = resolveRuntimeRouteEndpoint(run.runtimeRoute);
           return {
             ok: true,
-            endpoint: resolveRuntimeRouteEndpoint(run.runtimeRoute),
+            runtimeKind,
+            runtimeEndpoint,
+            runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
           };
         }
       }
 
       const runtime = findRuntimeByWorkingDirectory(runtimeKind, workingDirectory);
       if (runtime) {
+        const runtimeEndpoint = resolveRuntimeRouteEndpoint(runtime.runtimeRoute);
         return {
           ok: true,
-          endpoint: resolveRuntimeRouteEndpoint(runtime.runtimeRoute),
+          runtimeKind,
+          runtimeEndpoint,
+          runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
         };
       }
 
@@ -340,62 +330,81 @@ export const createLoadAgentSessions = ({
         if (!workspaceRuntime) {
           return {
             ok: false,
+            runtimeKind,
             reason: `Runtime ${runtimeKind} is unavailable for session hydration.`,
           };
         }
+        const runtimeEndpoint = resolveRuntimeRouteEndpoint(workspaceRuntime.runtimeRoute);
         return {
           ok: true,
-          endpoint: resolveRuntimeRouteEndpoint(workspaceRuntime.runtimeRoute),
+          runtimeKind,
+          runtimeEndpoint,
+          runtimeConnection: toRuntimeConnection(runtimeEndpoint, workingDirectory),
         };
       }
 
       return {
         ok: false,
+        runtimeKind,
         reason: `No live runtime found for working directory ${workingDirectory}.`,
       };
+    };
+
+    const buildHydrationPreludeMessages = ({
+      record,
+      resolvedScenario,
+    }: {
+      record: PersistedSessionRecord;
+      resolvedScenario: AgentSessionState["scenario"];
+    }): AgentSessionState["messages"] => {
+      const task = taskRef.current.find((entry) => entry.id === taskId);
+      if (!task) {
+        return buildSessionPreludeMessages({
+          sessionId: record.sessionId,
+          role: record.role,
+          scenario: resolvedScenario,
+          systemPrompt: "",
+          startedAt: record.startedAt,
+          includeSystemPrompt: false,
+        });
+      }
+
+      const systemPrompt = buildSessionSystemPrompt({
+        role: record.role,
+        scenario: resolvedScenario,
+        task,
+        promptOverrides: repoPromptOverrides,
+        documents: {
+          specMarkdown: "",
+          planMarkdown: "",
+          qaMarkdown: "",
+        },
+      });
+
+      return buildSessionPreludeMessages({
+        sessionId: record.sessionId,
+        role: record.role,
+        scenario: resolvedScenario,
+        systemPrompt,
+        startedAt: record.startedAt,
+      });
     };
     if (isStaleRepoOperation()) {
       return;
     }
 
-    const hydrateRecord = async (record: (typeof recordsToHydrate)[number]): Promise<void> => {
+    const hydrateRecord = async (record: PersistedSessionRecord): Promise<void> => {
       if (isStaleRepoOperation()) {
         return;
       }
 
       const existingSession = sessionsRef.current[record.sessionId];
       const workingDirectory = record.workingDirectory;
-      const recordRuntimeKind =
-        record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
-      const runtimeResolution = await resolveLiveRuntimeEndpoint(record);
+      const runtimeResolution = await resolveHydrationRuntime(record);
       if (!runtimeResolution.ok) {
-        updateSession(
-          record.sessionId,
-          (current) => ({
-            ...current,
-            runtimeKind: recordRuntimeKind,
-            runtimeEndpoint: "",
-            workingDirectory,
-            promptOverrides: repoPromptOverrides,
-            messages:
-              existingSession && existingSession.messages.length > 0
-                ? current.messages
-                : upsertMessage(current.messages, {
-                    id: `history-unavailable:${record.sessionId}`,
-                    role: "system",
-                    content: `Session runtime unavailable: ${runtimeResolution.reason}`,
-                    timestamp: now(),
-                  }),
-          }),
-          { persist: false },
-        );
-        return;
+        throw new Error(runtimeResolution.reason);
       }
-      const runtimeEndpoint = runtimeResolution.endpoint;
-      const runtimeConnection = {
-        endpoint: runtimeEndpoint,
-        workingDirectory,
-      } satisfies AgentRuntimeConnection;
+      const { runtimeKind, runtimeConnection, runtimeEndpoint } = runtimeResolution;
       const externalSessionId = record.externalSessionId ?? record.sessionId;
       const resolvedScenario = record.scenario ?? defaultScenarioForRole(record.role);
       if (existingSession && existingSession.messages.length > 0) {
@@ -406,109 +415,39 @@ export const createLoadAgentSessions = ({
           record.sessionId,
           (current) => ({
             ...current,
-            runtimeKind: recordRuntimeKind,
+            runtimeKind,
             runtimeEndpoint,
             workingDirectory,
             promptOverrides: repoPromptOverrides,
           }),
           { persist: false },
         );
-        warmSessionData(record.sessionId, recordRuntimeKind, runtimeConnection, externalSessionId);
-        return;
-      }
-
-      const historyPromise = captureOrchestratorFallback<SessionHistoryLoadResult>(
-        "load-sessions-load-history",
-        async () => {
-          const history = await adapter.loadSessionHistory({
-            runtimeKind: recordRuntimeKind,
-            runtimeConnection,
-            externalSessionId,
-            limit: INITIAL_SESSION_HISTORY_LIMIT,
-          });
-          return { ok: true as const, history };
-        },
-        {
-          tags: {
-            repoPath,
-            taskId,
-            sessionId: record.sessionId,
-            externalSessionId,
-          },
-          logLevel: "warn",
-          fallback: (failure): SessionHistoryLoadResult => ({
-            ok: false,
-            reason: failure.reason,
-          }),
-        },
-      );
-
-      // Build basic prelude - documents loaded lazily when session is selected
-      const basicPreludeMessages: AgentSessionState["messages"] = [
-        {
-          id: `history:session-start:${record.sessionId}`,
-          role: "system",
-          content: `Session started (${record.role} - ${resolvedScenario})`,
-          timestamp: record.startedAt,
-        },
-      ];
-
-      const task = taskRef.current.find((entry) => entry.id === taskId);
-      const preludeMessages = task
-        ? [
-            ...basicPreludeMessages,
-            {
-              id: `history:system-prompt:${record.sessionId}`,
-              role: "system" as const,
-              content: `System prompt:\n\n${buildAgentSystemPrompt({
-                role: record.role,
-                scenario: resolvedScenario,
-                task: {
-                  taskId: task.id,
-                  title: task.title,
-                  issueType: task.issueType,
-                  status: task.status,
-                  qaRequired: task.aiReviewEnabled,
-                  description: task.description,
-                  specMarkdown: "",
-                  planMarkdown: "",
-                  latestQaReportMarkdown: "",
-                },
-                overrides: repoPromptOverrides,
-              })}`,
-              timestamp: record.startedAt,
-            },
-          ]
-        : basicPreludeMessages;
-
-      if (isStaleRepoOperation()) {
-        return;
-      }
-
-      const historyResult = await historyPromise;
-      if (isStaleRepoOperation()) {
-        return;
-      }
-
-      if (!historyResult.ok) {
-        updateSession(
+        warmPersistedSession(
           record.sessionId,
-          (current) => ({
-            ...current,
-            runtimeKind: recordRuntimeKind,
-            runtimeEndpoint,
-            workingDirectory,
-            promptOverrides: repoPromptOverrides,
-            messages: upsertMessage(current.messages, {
-              id: `history-unavailable:${record.sessionId}`,
-              role: "system",
-              content: `Session history unavailable: ${historyResult.reason}`,
-              timestamp: now(),
-            }),
-          }),
-          { persist: false },
+          runtimeKind,
+          runtimeConnection,
+          externalSessionId,
+          record.role,
         );
-        warmSessionData(record.sessionId, recordRuntimeKind, runtimeConnection, externalSessionId);
+        return;
+      }
+
+      const preludeMessages = buildHydrationPreludeMessages({
+        record,
+        resolvedScenario,
+      });
+
+      if (isStaleRepoOperation()) {
+        return;
+      }
+
+      const history = await adapter.loadSessionHistory({
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
+        limit: INITIAL_SESSION_HISTORY_LIMIT,
+      });
+      if (isStaleRepoOperation()) {
         return;
       }
 
@@ -516,13 +455,13 @@ export const createLoadAgentSessions = ({
         record.sessionId,
         (current) => ({
           ...current,
-          runtimeKind: recordRuntimeKind,
+          runtimeKind,
           runtimeEndpoint,
           workingDirectory,
           promptOverrides: repoPromptOverrides,
           messages: [
             ...preludeMessages,
-            ...historyToChatMessages(historyResult.history, {
+            ...historyToChatMessages(history, {
               role: record.role,
               selectedModel: normalizePersistedSelection(record.selectedModel),
             }),
@@ -530,7 +469,13 @@ export const createLoadAgentSessions = ({
         }),
         { persist: false },
       );
-      warmSessionData(record.sessionId, recordRuntimeKind, runtimeConnection, externalSessionId);
+      warmPersistedSession(
+        record.sessionId,
+        runtimeKind,
+        runtimeConnection,
+        externalSessionId,
+        record.role,
+      );
     };
 
     for (

@@ -2,6 +2,7 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 
 type UseSettingsModalCatalogStateArgs = {
@@ -25,6 +26,7 @@ export const useSettingsModalCatalogState = ({
   selectedRepoPath,
   runtimeDefinitions,
 }: UseSettingsModalCatalogStateArgs): SettingsModalCatalogState => {
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
   const runtimeKinds = useMemo(
     () => runtimeDefinitions.map((definition) => definition.kind),
     [runtimeDefinitions],
@@ -32,9 +34,11 @@ export const useSettingsModalCatalogState = ({
 
   const catalogQueries = useQueries({
     queries: runtimeKinds.map((runtimeKind) => ({
-      ...(selectedRepoPath
-        ? repoRuntimeCatalogQueryOptions(selectedRepoPath, runtimeKind)
-        : repoRuntimeCatalogQueryOptions("", runtimeKind)),
+      ...repoRuntimeCatalogQueryOptions(
+        selectedRepoPath ?? "",
+        runtimeKind,
+        loadRepoRuntimeCatalog,
+      ),
       enabled: open && Boolean(selectedRepoPath),
     })),
   });

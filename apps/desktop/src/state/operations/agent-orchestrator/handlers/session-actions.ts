@@ -5,16 +5,16 @@ import type {
   AgentRole,
   AgentRuntimeConnection,
 } from "@openducktor/core";
-import { buildAgentSystemPrompt } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
+import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
 import { annotateQuestionToolMessage } from "../support/question-messages";
-import { now } from "../support/utils";
+import { buildSessionPreludeMessages, loadSessionPromptContext } from "../support/session-prompt";
+import { warmSessionData } from "../support/session-warmup";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
@@ -65,6 +65,8 @@ export type ForkAgentSessionActionInput = {
   parentSessionId: string;
   selectedModel?: AgentModelSelection | null;
 };
+
+const STALE_FORK_ERROR = "Workspace changed while forking session.";
 
 const markTurnStartedIfMissing = (
   turnStartedAtBySessionRef: { current: Record<string, number> },
@@ -286,6 +288,13 @@ export const createAgentSessionActions = ({
     if (!activeRepo) {
       throw new Error("No active repository selected.");
     }
+    const repoPath = activeRepo;
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef,
+      previousRepoRef,
+    });
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
 
     const parentSession = sessionsRef.current[parentSessionId];
     if (!parentSession) {
@@ -300,33 +309,24 @@ export const createAgentSessionActions = ({
       throw new Error(unavailableRoleErrorMessage(task, parentSession.role));
     }
 
-    const [docs, promptOverrides] = await Promise.all([
-      loadTaskDocuments(activeRepo, parentSession.taskId),
-      loadRepoPromptOverrides(activeRepo),
-    ]);
+    const promptContext = await loadSessionPromptContext({
+      repoPath,
+      taskId: parentSession.taskId,
+      role: parentSession.role,
+      scenario: parentSession.scenario,
+      task,
+      loadTaskDocuments,
+      loadRepoPromptOverrides,
+    });
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     const modelSelection =
       selectedModel ??
       parentSession.selectedModel ??
-      (await loadRepoDefaultModel(activeRepo, parentSession.role));
-    const systemPrompt = buildAgentSystemPrompt({
-      role: parentSession.role,
-      scenario: parentSession.scenario,
-      task: {
-        taskId: task.id,
-        title: task.title,
-        issueType: task.issueType,
-        status: task.status,
-        qaRequired: task.aiReviewEnabled,
-        description: task.description,
-        specMarkdown: docs.specMarkdown,
-        planMarkdown: docs.planMarkdown,
-        latestQaReportMarkdown: docs.qaMarkdown,
-      },
-      overrides: promptOverrides,
-    });
-
+      (await loadRepoDefaultModel(repoPath, parentSession.role));
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
+    const { promptOverrides, systemPrompt } = promptContext;
     const summary = await adapter.forkSession({
-      repoPath: activeRepo,
+      repoPath,
       runtimeKind: (parentSession.runtimeKind ??
         modelSelection?.runtimeKind ??
         DEFAULT_RUNTIME_KIND) as string,
@@ -343,6 +343,7 @@ export const createAgentSessionActions = ({
       ...(modelSelection ? { model: modelSelection } : {}),
       parentExternalSessionId: parentSession.externalSessionId,
     });
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
 
     const nextSession: AgentSessionState = {
       sessionId: summary.sessionId,
@@ -357,20 +358,14 @@ export const createAgentSessionActions = ({
       runId: parentSession.runId,
       runtimeEndpoint: parentSession.runtimeEndpoint,
       workingDirectory: parentSession.workingDirectory,
-      messages: [
-        {
-          id: crypto.randomUUID(),
-          role: "system",
-          content: `Session forked (${parentSession.role} - ${parentSession.scenario})`,
-          timestamp: summary.startedAt,
-        },
-        {
-          id: crypto.randomUUID(),
-          role: "system",
-          content: `System prompt:\n\n${systemPrompt}`,
-          timestamp: summary.startedAt,
-        },
-      ],
+      messages: buildSessionPreludeMessages({
+        sessionId: summary.sessionId,
+        role: parentSession.role,
+        scenario: parentSession.scenario,
+        systemPrompt,
+        startedAt: summary.startedAt,
+        eventLabel: "forked",
+      }),
       draftAssistantText: "",
       draftAssistantMessageId: null,
       draftReasoningText: "",
@@ -384,40 +379,28 @@ export const createAgentSessionActions = ({
       promptOverrides,
     };
 
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     setSessionsById((current) => ({
       ...current,
       [summary.sessionId]: nextSession,
     }));
-    attachSessionListener(activeRepo, summary.sessionId);
+    attachSessionListener(repoPath, summary.sessionId);
     void persistSessionSnapshot(nextSession);
-    void loadSessionModelCatalog(
-      summary.sessionId,
-      nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-      {
+    warmSessionData({
+      operationPrefix: "fork-session-warm-session",
+      repoPath,
+      sessionId: summary.sessionId,
+      taskId: nextSession.taskId,
+      role: nextSession.role,
+      runtimeKind: nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      runtimeConnection: {
         endpoint: nextSession.runtimeEndpoint,
         workingDirectory: nextSession.workingDirectory,
       },
-    );
-    runOrchestratorSideEffect(
-      "fork-session-load-session-todos",
-      loadSessionTodos(
-        summary.sessionId,
-        nextSession.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-        {
-          endpoint: nextSession.runtimeEndpoint,
-          workingDirectory: nextSession.workingDirectory,
-        },
-        summary.externalSessionId,
-      ),
-      {
-        tags: {
-          repoPath: activeRepo,
-          parentSessionId,
-          sessionId: summary.sessionId,
-          externalSessionId: summary.externalSessionId,
-        },
-      },
-    );
+      externalSessionId: summary.externalSessionId,
+      loadSessionTodos,
+      loadSessionModelCatalog,
+    });
     return summary.sessionId;
   };
 

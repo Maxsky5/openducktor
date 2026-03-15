@@ -10,7 +10,7 @@ import {
 } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import { loadRepoRuntimeCatalog } from "@/state/operations";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -66,8 +66,10 @@ export function useAgentStudioModelSelection({
   role,
   repoSettings,
   updateAgentSessionModel,
-  loadCatalog = loadRepoRuntimeCatalog,
+  loadCatalog,
 }: UseAgentStudioModelSelectionArgs): AgentStudioModelSelectionState {
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
+  const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const previousActiveRepoRef = useRef<string | null>(activeRepo);
   const previousRepoForDefaultsRef = useRef<string | null>(activeRepo);
   const previousRepoSettingsRef = useRef<RepoSettingsInput | null>(repoSettings);
@@ -126,15 +128,13 @@ export function useAgentStudioModelSelection({
   }, [activeRepo, isAwaitingRepoSettingsForActiveRepo, repoSettings]);
 
   const composerCatalogQuery = useQuery({
-    ...(activeRepo
-      ? repoRuntimeCatalogQueryOptions(activeRepo, composerRuntimeKind)
-      : repoRuntimeCatalogQueryOptions("", composerRuntimeKind)),
+    ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", composerRuntimeKind, loadCatalogForRepo),
     enabled: activeRepo !== null && (activeSession == null || activeSession.modelCatalog == null),
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!activeRepo) {
         throw new Error("No repository selected.");
       }
-      return loadCatalog(activeRepo, composerRuntimeKind);
+      return loadCatalogForRepo(activeRepo, composerRuntimeKind);
     },
   });
   const composerCatalog = composerCatalogQuery.data ?? null;

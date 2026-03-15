@@ -1,22 +1,17 @@
 import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import {
-  type AgentEnginePort,
-  type AgentRuntimeConnection,
-  buildAgentSystemPrompt,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
 import { type RuntimeInfo, resolveRuntimeConnection, type TaskDocuments } from "../runtime/runtime";
-import {
-  captureOrchestratorFallback,
-  runOrchestratorSideEffect,
-} from "../support/async-side-effects";
+import { captureOrchestratorFallback } from "../support/async-side-effects";
 import {
   createRepoStaleGuard,
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,
-} from "../support/utils";
+} from "../support/core";
+import { loadSessionPromptContext } from "../support/session-prompt";
+import { warmSessionData } from "../support/session-warmup";
 
 type EnsureSessionReadyDependencies = {
   activeRepo: string | null;
@@ -128,39 +123,28 @@ export const createEnsureSessionReady = ({
       throw new Error(`Task not found: ${session.taskId}`);
     }
 
-    const [docs, runtime, promptOverrides] = await Promise.all([
-      loadTaskDocuments(repoPath, session.taskId),
-      ensureRuntime(repoPath, session.taskId, session.role, {
-        workingDirectoryOverride: session.workingDirectory,
-        ...(session.selectedModel?.runtimeKind
-          ? { runtimeKind: session.selectedModel.runtimeKind }
-          : {}),
-      }),
-      loadRepoPromptOverrides(repoPath),
-    ]);
+    const promptContext = await loadSessionPromptContext({
+      repoPath,
+      taskId: session.taskId,
+      role: session.role,
+      scenario: session.scenario,
+      task,
+      loadTaskDocuments,
+      loadRepoPromptOverrides,
+    });
+    assertNotStale();
+    const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+      workingDirectoryOverride: session.workingDirectory,
+      ...(session.selectedModel?.runtimeKind
+        ? { runtimeKind: session.selectedModel.runtimeKind }
+        : {}),
+    });
     assertNotStale();
     const resolvedRuntimeKind =
       runtime.runtimeKind ??
       session.selectedModel?.runtimeKind ??
       session.runtimeKind ??
       DEFAULT_RUNTIME_KIND;
-    const systemPrompt = buildAgentSystemPrompt({
-      role: session.role,
-      scenario: session.scenario,
-      task: {
-        taskId: task.id,
-        title: task.title,
-        issueType: task.issueType,
-        status: task.status,
-        qaRequired: task.aiReviewEnabled,
-        description: task.description,
-        specMarkdown: docs.specMarkdown,
-        planMarkdown: docs.planMarkdown,
-        latestQaReportMarkdown: docs.qaMarkdown,
-      },
-      overrides: promptOverrides,
-    });
-
     await adapter.resumeSession({
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,
@@ -171,7 +155,7 @@ export const createEnsureSessionReady = ({
       taskId: session.taskId,
       role: session.role,
       scenario: session.scenario,
-      systemPrompt,
+      systemPrompt: promptContext.systemPrompt,
       ...(session.selectedModel ? { model: session.selectedModel } : {}),
     });
 
@@ -203,7 +187,7 @@ export const createEnsureSessionReady = ({
       runId: runtime.runId,
       runtimeEndpoint: runtime.runtimeEndpoint,
       workingDirectory: runtime.workingDirectory,
-      promptOverrides,
+      promptOverrides: promptContext.promptOverrides,
     }));
 
     if (isStaleRepoOperation()) {
@@ -212,47 +196,28 @@ export const createEnsureSessionReady = ({
 
     const activeSession = sessionsRef.current[sessionId];
     const runtimeConnection = resolveRuntimeConnection(runtime);
-    const warmSessionData = (targetSession: AgentSessionState): void => {
+    const warmPreparedSession = (targetSession: AgentSessionState): void => {
       const targetRuntimeKind =
         targetSession.runtimeKind ?? targetSession.selectedModel?.runtimeKind;
       if (!targetRuntimeKind) {
         throw new Error(`Runtime kind is required to warm session '${sessionId}'.`);
       }
-      runOrchestratorSideEffect(
-        "ensure-ready-warm-session-todos",
-        loadSessionTodos(
-          sessionId,
-          targetRuntimeKind,
-          runtimeConnection,
-          targetSession.externalSessionId,
-        ),
-        {
-          tags: {
-            repoPath,
-            sessionId,
-            taskId: targetSession.taskId,
-            role: targetSession.role,
-            externalSessionId: targetSession.externalSessionId,
-          },
-        },
-      );
-      if (!targetSession.modelCatalog && !targetSession.isLoadingModelCatalog) {
-        runOrchestratorSideEffect(
-          "ensure-ready-warm-session-model-catalog",
-          loadSessionModelCatalog(sessionId, targetRuntimeKind, runtimeConnection),
-          {
-            tags: {
-              repoPath,
-              sessionId,
-              taskId: targetSession.taskId,
-              role: targetSession.role,
-            },
-          },
-        );
-      }
+      warmSessionData({
+        operationPrefix: "ensure-ready-warm-session",
+        repoPath,
+        sessionId,
+        taskId: targetSession.taskId,
+        role: targetSession.role,
+        runtimeKind: targetRuntimeKind,
+        runtimeConnection,
+        externalSessionId: targetSession.externalSessionId,
+        loadSessionTodos,
+        loadSessionModelCatalog,
+        shouldLoadModelCatalog: !targetSession.modelCatalog && !targetSession.isLoadingModelCatalog,
+      });
     };
     if (activeSession) {
-      warmSessionData(activeSession);
+      warmPreparedSession(activeSession);
     }
   };
 };

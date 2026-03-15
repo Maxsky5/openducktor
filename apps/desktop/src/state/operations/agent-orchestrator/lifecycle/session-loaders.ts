@@ -1,14 +1,9 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
-import { errorMessage } from "@/lib/errors";
+import type { AgentEnginePort, AgentModelCatalog, AgentRuntimeConnection } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  mergeTodoListPreservingOrder,
-  normalizeSelectionForCatalog,
-  now,
-  pickDefaultModel,
-  upsertMessage,
-} from "../support/utils";
+import { normalizeWorkingDirectory } from "../support/core";
+import { normalizeSelectionForCatalog, pickDefaultModel } from "../support/models";
+import { mergeTodoListPreservingOrder } from "../support/todos";
 
 type UpdateSession = (
   sessionId: string,
@@ -68,27 +63,27 @@ const validateLocalRuntimeBaseUrl = (runtimeEndpoint: string): string => {
 };
 
 const validateWorkingDirectory = (workingDirectory: string): string => {
-  const trimmedWorkingDirectory = workingDirectory.trim();
-  if (trimmedWorkingDirectory.length === 0) {
+  const normalizedWorkingDirectory = normalizeWorkingDirectory(workingDirectory);
+  if (normalizedWorkingDirectory.length === 0) {
     throw new Error("Session runtime workingDirectory is required.");
   }
 
-  if (!trimmedWorkingDirectory.startsWith("/")) {
+  if (!normalizedWorkingDirectory.startsWith("/")) {
     throw new Error("Session runtime workingDirectory must be an absolute path.");
   }
 
-  if (trimmedWorkingDirectory.includes("\u0000")) {
+  if (normalizedWorkingDirectory.includes("\u0000")) {
     throw new Error("Session runtime workingDirectory contains an invalid null byte.");
   }
 
-  const containsTraversalSegment = trimmedWorkingDirectory
+  const containsTraversalSegment = normalizedWorkingDirectory
     .split("/")
     .some((segment) => segment === "." || segment === "..");
   if (containsTraversalSegment) {
     throw new Error("Session runtime workingDirectory must not contain traversal segments.");
   }
 
-  return trimmedWorkingDirectory;
+  return normalizedWorkingDirectory;
 };
 
 const validateRuntimeConnection = (
@@ -120,36 +115,27 @@ export const createLoadSessionModelCatalog = ({
       { persist: false },
     );
 
+    let catalog: AgentModelCatalog | null = null;
     try {
       const validatedRuntimeConnection = validateRuntimeConnection(runtimeConnection);
-      const catalog = await adapter.listAvailableModels({
+      catalog = await adapter.listAvailableModels({
         runtimeKind,
         runtimeConnection: validatedRuntimeConnection,
       });
+    } finally {
       updateSession(
         sessionId,
         (current) => ({
           ...current,
-          modelCatalog: catalog,
-          selectedModel:
-            normalizeSelectionForCatalog(catalog, current.selectedModel) ??
-            pickDefaultModel(catalog),
+          ...(catalog
+            ? {
+                modelCatalog: catalog,
+                selectedModel:
+                  normalizeSelectionForCatalog(catalog, current.selectedModel) ??
+                  pickDefaultModel(catalog),
+              }
+            : {}),
           isLoadingModelCatalog: false,
-        }),
-        { persist: false },
-      );
-    } catch (error) {
-      updateSession(
-        sessionId,
-        (current) => ({
-          ...current,
-          isLoadingModelCatalog: false,
-          messages: upsertMessage(current.messages, {
-            id: `model-catalog:${sessionId}`,
-            role: "system",
-            content: `Model catalog unavailable: ${errorMessage(error)}`,
-            timestamp: now(),
-          }),
         }),
         { persist: false },
       );

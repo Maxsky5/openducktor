@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createDeferred } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
 const taskFixture: TaskCard = {
@@ -459,6 +460,106 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.hasSession = originalHasSession;
       adapter.resumeSession = originalResumeSession;
+    }
+  });
+
+  test("does not start a runtime when prompt loading fails during resume", async () => {
+    let runtimeCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => false;
+
+    const ensureReady = createEnsureSessionReady({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef: {
+        current: {
+          "session-1": buildSession(),
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: () => {},
+      attachSessionListener: () => {},
+      ensureRuntime: async () => {
+        runtimeCalls += 1;
+        return {
+          kind: "opencode",
+          runtimeId: null,
+          runId: "run-1",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadTaskDocuments: async () => {
+        throw new Error("prompt load failed");
+      },
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow("prompt load failed");
+      expect(runtimeCalls).toBe(0);
+    } finally {
+      adapter.hasSession = originalHasSession;
+    }
+  });
+
+  test("does not start a runtime when the workspace becomes stale after prompt loading", async () => {
+    let runtimeCalls = 0;
+    const promptOverridesDeferred = createDeferred<Record<string, string>>();
+    const repoEpochRef = { current: 1 };
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => false;
+
+    const ensureReady = createEnsureSessionReady({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef,
+      previousRepoRef,
+      sessionsRef: {
+        current: {
+          "session-1": buildSession(),
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: () => {},
+      attachSessionListener: () => {},
+      ensureRuntime: async () => {
+        runtimeCalls += 1;
+        return {
+          kind: "opencode",
+          runtimeId: null,
+          runId: "run-1",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoPromptOverrides: async () => promptOverridesDeferred.promise,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    try {
+      const ensurePromise = ensureReady("session-1");
+      repoEpochRef.current = 2;
+      previousRepoRef.current = "/tmp/other-repo";
+      promptOverridesDeferred.resolve({});
+
+      await expect(ensurePromise).rejects.toThrow("Workspace changed while preparing session.");
+      expect(runtimeCalls).toBe(0);
+    } finally {
+      adapter.hasSession = originalHasSession;
     }
   });
 });
