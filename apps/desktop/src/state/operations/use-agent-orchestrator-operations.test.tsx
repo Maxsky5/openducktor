@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
-  OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentSessionRecord,
+  OPENCODE_RUNTIME_DESCRIPTOR,
   type RunSummary,
   type TaskCard,
 } from "@openducktor/contracts";

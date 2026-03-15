@@ -461,4 +461,51 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.resumeSession = originalResumeSession;
     }
   });
+
+  test("does not start a runtime when prompt loading fails during resume", async () => {
+    let runtimeCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalHasSession = adapter.hasSession;
+    adapter.hasSession = () => false;
+
+    const ensureReady = createEnsureSessionReady({
+      activeRepo: "/tmp/repo",
+      adapter,
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef: {
+        current: {
+          "session-1": buildSession(),
+        },
+      },
+      taskRef: { current: [taskFixture] },
+      unsubscribersRef: { current: new Map() },
+      updateSession: () => {},
+      attachSessionListener: () => {},
+      ensureRuntime: async () => {
+        runtimeCalls += 1;
+        return {
+          kind: "opencode",
+          runtimeId: null,
+          runId: "run-1",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadTaskDocuments: async () => {
+        throw new Error("prompt load failed");
+      },
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+    });
+
+    try {
+      await expect(ensureReady("session-1")).rejects.toThrow("prompt load failed");
+      expect(runtimeCalls).toBe(0);
+    } finally {
+      adapter.hasSession = originalHasSession;
+    }
+  });
 });

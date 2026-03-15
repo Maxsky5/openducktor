@@ -123,23 +123,21 @@ export const createEnsureSessionReady = ({
       throw new Error(`Task not found: ${session.taskId}`);
     }
 
-    const [promptContext, runtime] = await Promise.all([
-      loadSessionPromptContext({
-        repoPath,
-        taskId: session.taskId,
-        role: session.role,
-        scenario: session.scenario,
-        task,
-        loadTaskDocuments,
-        loadRepoPromptOverrides,
-      }),
-      ensureRuntime(repoPath, session.taskId, session.role, {
-        workingDirectoryOverride: session.workingDirectory,
-        ...(session.selectedModel?.runtimeKind
-          ? { runtimeKind: session.selectedModel.runtimeKind }
-          : {}),
-      }),
-    ]);
+    const promptContext = await loadSessionPromptContext({
+      repoPath,
+      taskId: session.taskId,
+      role: session.role,
+      scenario: session.scenario,
+      task,
+      loadTaskDocuments,
+      loadRepoPromptOverrides,
+    });
+    const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+      workingDirectoryOverride: session.workingDirectory,
+      ...(session.selectedModel?.runtimeKind
+        ? { runtimeKind: session.selectedModel.runtimeKind }
+        : {}),
+    });
     assertNotStale();
     const resolvedRuntimeKind =
       runtime.runtimeKind ??

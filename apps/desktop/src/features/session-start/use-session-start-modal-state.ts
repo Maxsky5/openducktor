@@ -152,9 +152,7 @@ export function useSessionStartModalState({
   }, [runtimeDefinitions, selectedRuntimeKind]);
 
   const catalogQuery = useQuery({
-    ...(activeRepo
-      ? repoRuntimeCatalogQueryOptions(activeRepo, selectedRuntimeKind, loadCatalogForRepo)
-      : repoRuntimeCatalogQueryOptions("", selectedRuntimeKind, loadCatalogForRepo)),
+    ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", selectedRuntimeKind, loadCatalogForRepo),
     enabled: initialCatalog === undefined && Boolean(activeRepo) && intent !== null,
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!activeRepo) {

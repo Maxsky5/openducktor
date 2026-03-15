@@ -1530,7 +1530,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("starts runtime and default-model loading before documents resolve", async () => {
+  test("starts default-model loading before documents resolve and delays runtime startup", async () => {
     const docsDeferred = createDeferred<{
       specMarkdown: string;
       planMarkdown: string;
@@ -1594,18 +1594,73 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     try {
       const startPromise = start({ taskId: "task-1", role: "build" });
-      await withTimeout(
-        Promise.all([runtimeStarted.promise, defaultModelStarted.promise]).then(() => undefined),
-        50,
-      );
+      await withTimeout(defaultModelStarted.promise, 50);
 
-      expect(runtimeCalls).toBe(1);
       expect(defaultModelCalls).toBe(1);
+      expect(runtimeCalls).toBe(0);
 
       docsDeferred.resolve({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" });
+      await withTimeout(runtimeStarted.promise, 50);
+      expect(runtimeCalls).toBe(1);
       await expect(startPromise).resolves.toBe("session-created");
     } finally {
       docsDeferred.resolve({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" });
+      adapter.startSession = originalStartSession;
+      host.agentSessionsList = originalAgentSessionsList;
+    }
+  });
+
+  test("does not start a runtime when prompt loading fails", async () => {
+    let runtimeCalls = 0;
+
+    const adapter = new OpencodeSdkAdapter();
+    const originalStartSession = adapter.startSession;
+    adapter.startSession = async () => {
+      throw new Error("startSession should not be reached");
+    };
+
+    const originalAgentSessionsList = host.agentSessionsList;
+    host.agentSessionsList = async () => [];
+
+    const start = createStartAgentSessionWithFlatDeps({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: () => {},
+      sessionsRef: { current: {} },
+      taskRef: { current: [taskFixture] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      attachSessionListener: () => {},
+      ensureRuntime: async () => {
+        runtimeCalls += 1;
+        return {
+          kind: "opencode",
+          runtimeId: null,
+          runId: "run-1",
+          runtimeEndpoint: "http://127.0.0.1:4444",
+          workingDirectory: "/tmp/repo/worktree",
+        };
+      },
+      loadTaskDocuments: async () => {
+        throw new Error("prompt load failed");
+      },
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {},
+      sendAgentMessage: async () => {},
+    });
+
+    try {
+      await expect(start({ taskId: "task-1", role: "build" })).rejects.toThrow(
+        "prompt load failed",
+      );
+      expect(runtimeCalls).toBe(0);
+    } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }

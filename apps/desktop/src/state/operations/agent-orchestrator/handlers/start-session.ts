@@ -98,24 +98,22 @@ const resolveRuntimeAndModel = async ({
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
-  const runtimePromise = deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
-    ...(workingDirectoryOverride !== undefined ? { workingDirectoryOverride } : {}),
-    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
-  });
   const defaultModelSelectionPromise = deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
-
-  const [{ documents: docs, promptOverrides }, runtimeInfo] = await Promise.all([
-    loadSessionPromptInputs({
-      repoPath: ctx.repoPath,
-      taskId: ctx.taskId,
-      loadTaskDocuments: deps.task.loadTaskDocuments,
-      loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
-    }),
-    runtimePromise,
-  ]);
+  const { documents: docs, promptOverrides } = await loadSessionPromptInputs({
+    repoPath: ctx.repoPath,
+    taskId: ctx.taskId,
+    loadTaskDocuments: deps.task.loadTaskDocuments,
+    loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
+  });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   const resolvedScenario = scenario ?? inferScenario(ctx.role, taskCard, docs);
+  throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+
+  const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+    ...(workingDirectoryOverride !== undefined ? { workingDirectoryOverride } : {}),
+    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
+  });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   let resolvedDefaultModelSelection: AgentModelSelection | null = null;

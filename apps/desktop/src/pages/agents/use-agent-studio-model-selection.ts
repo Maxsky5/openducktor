@@ -128,9 +128,7 @@ export function useAgentStudioModelSelection({
   }, [activeRepo, isAwaitingRepoSettingsForActiveRepo, repoSettings]);
 
   const composerCatalogQuery = useQuery({
-    ...(activeRepo
-      ? repoRuntimeCatalogQueryOptions(activeRepo, composerRuntimeKind, loadCatalogForRepo)
-      : repoRuntimeCatalogQueryOptions("", composerRuntimeKind, loadCatalogForRepo)),
+    ...repoRuntimeCatalogQueryOptions(activeRepo ?? "", composerRuntimeKind, loadCatalogForRepo),
     enabled: activeRepo !== null && (activeSession == null || activeSession.modelCatalog == null),
     queryFn: async (): Promise<AgentModelCatalog> => {
       if (!activeRepo) {

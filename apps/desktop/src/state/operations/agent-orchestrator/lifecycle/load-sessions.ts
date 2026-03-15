@@ -8,7 +8,6 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import { loadRuntimeListFromQuery } from "@/state/queries/runtime";
@@ -46,6 +45,18 @@ type SessionHistoryLoadResult =
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
 type PersistedSessionRecord = Awaited<ReturnType<typeof loadAgentSessionListFromQuery>>[number];
+
+const readPersistedRuntimeKind = ({
+  sessionId,
+  runtimeKind,
+  selectedModel,
+}: Pick<PersistedSessionRecord, "sessionId" | "runtimeKind" | "selectedModel">): RuntimeKind => {
+  const resolvedRuntimeKind = runtimeKind ?? selectedModel?.runtimeKind;
+  if (!resolvedRuntimeKind) {
+    throw new Error(`Persisted session '${sessionId}' is missing runtime kind metadata.`);
+  }
+  return resolvedRuntimeKind;
+};
 
 const resolveRuntimeRouteEndpoint = (runtimeRoute: RuntimeRoute): string => {
   switch (runtimeRoute.type) {
@@ -187,14 +198,20 @@ export const createLoadAgentSessions = ({
         requestedSession.runtimeEndpoint &&
         requestedSession.workingDirectory
       ) {
+        const requestedRecord =
+          requestedSessionId === null
+            ? undefined
+            : persisted.find((record) => record.sessionId === requestedSessionId);
         const runtimeConnection = toRuntimeConnection(
           requestedSession.runtimeEndpoint,
           requestedSession.workingDirectory,
         );
-        const requestedRuntimeKind =
-          requestedSession.runtimeKind ??
-          requestedSession.selectedModel?.runtimeKind ??
-          DEFAULT_RUNTIME_KIND;
+        const requestedRuntimeKind = requestedRecord
+          ? readPersistedRuntimeKind(requestedRecord)
+          : (requestedSession.runtimeKind ?? requestedSession.selectedModel?.runtimeKind);
+        if (!requestedRuntimeKind) {
+          throw new Error(`Session '${requestedSession.sessionId}' is missing runtime kind.`);
+        }
         warmPersistedSession(
           requestedSession.sessionId,
           requestedRuntimeKind,
@@ -207,12 +224,7 @@ export const createLoadAgentSessions = ({
     }
 
     const runtimeKindsToHydrate = Array.from(
-      new Set(
-        recordsToHydrate.map(
-          (record) =>
-            record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
-        ),
-      ),
+      new Set(recordsToHydrate.map((record) => readPersistedRuntimeKind(record))),
     );
     const runtimeLists = await Promise.all(
       runtimeKindsToHydrate.map(async (runtimeKind) => {
@@ -283,8 +295,7 @@ export const createLoadAgentSessions = ({
           reason: string;
         }
     > => {
-      const runtimeKind =
-        record.runtimeKind ?? record.selectedModel?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
+      const runtimeKind = readPersistedRuntimeKind(record);
       const workingDirectory = record.workingDirectory;
       if (record.role === "build" || record.role === "qa") {
         const run = findRunByWorkingDirectory(runtimeKind, workingDirectory);
