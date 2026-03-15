@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { DiffScope } from "@/pages/agents/use-agent-studio-diff-data";
@@ -359,33 +360,35 @@ function GitDiffScopeTabs({
 }: GitDiffScopeTabsProps): ReactElement {
   return (
     <div className="flex flex-col gap-1">
-      <div
-        className="inline-flex h-9 w-full items-center gap-1 bg-muted p-1"
-        role="tablist"
-        aria-label="Git diff scope"
+      <Tabs
+        value={diffScope}
+        onValueChange={(value) => {
+          if (value === "target" || value === "uncommitted") {
+            onScopeChange(value);
+          }
+        }}
+        className="gap-0"
       >
-        {DIFF_SCOPE_OPTIONS.map((option) => {
-          const isActive = diffScope === option.scope;
-          return (
-            <button
+        <TabsList
+          aria-label="Git diff scope"
+          className="inline-flex h-9 w-full items-center gap-1 rounded-none bg-muted p-1"
+        >
+          {DIFF_SCOPE_OPTIONS.map((option) => (
+            <TabsTrigger
               key={option.scope}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
+              value={option.scope}
               className={cn(
-                "inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-sm px-3 text-xs transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                "inline-flex h-7 flex-1 cursor-pointer justify-center rounded-sm px-3 text-xs transition-colors",
+                "border-none bg-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
+                "text-muted-foreground hover:bg-background/80 hover:text-foreground data-[state=active]:border-transparent",
               )}
-              onClick={() => onScopeChange(option.scope)}
               data-testid={option.testId}
             >
               {option.scope === "target" && isRepositoryMode ? "Compare to upstream" : option.label}
-            </button>
-          );
-        })}
-      </div>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
     </div>
   );
 }

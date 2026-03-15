@@ -31,6 +31,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Attach PR branch context for React Doctor diff mode
+        run: git checkout -B "${{ github.head_ref }}"
+
       - name: Run React Doctor on changed desktop files
         uses: millionco/react-doctor@ec4a41fd827c29d79f9b27a588cde598e054d059 # main
         with:

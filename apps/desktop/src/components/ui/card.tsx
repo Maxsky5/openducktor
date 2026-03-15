@@ -19,11 +19,10 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function CardTitle({ className, children, ...props }: React.ComponentProps<"h3">) {
-  const HeadingElement = "h3";
   return (
-    <HeadingElement className={cn("text-base font-semibold tracking-tight", className)} {...props}>
+    <h3 className={cn("text-base font-semibold tracking-tight", className)} {...props}>
       {children}
-    </HeadingElement>
+    </h3>
   );
 }
 

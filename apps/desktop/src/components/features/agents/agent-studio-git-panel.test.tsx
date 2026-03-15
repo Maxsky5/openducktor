@@ -114,6 +114,25 @@ const countByTestId = (root: TestRenderer.ReactTestInstance, testId: string): nu
   root.findAll((node) => node.props["data-testid"] === testId && typeof node.type === "string")
     .length;
 
+const findDiffScopeTabs = (
+  root: TestRenderer.ReactTestInstance,
+  value: "target" | "uncommitted",
+): TestRenderer.ReactTestInstance => {
+  const matches = root.findAll(
+    (node) => node.props["data-slot"] === "tabs" && node.props.value === value,
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected exactly one diff scope tabs root for value=${value}, got ${matches.length}`,
+    );
+  }
+  const match = matches[0];
+  if (!match) {
+    throw new Error(`Missing diff scope tabs root for value=${value}`);
+  }
+  return match;
+};
+
 const ensureRenderer = (
   renderer: TestRenderer.ReactTestRenderer | null,
 ): TestRenderer.ReactTestRenderer => {
@@ -231,7 +250,7 @@ describe("AgentStudioGitPanel", () => {
 
     await act(async () => {
       findByTestId(root, "agent-studio-git-refresh-button").props.onClick();
-      findByTestId(root, "agent-studio-git-diff-scope-uncommitted").props.onClick();
+      findDiffScopeTabs(root, "target").props.onValueChange("uncommitted");
       await flush();
     });
 
@@ -546,13 +565,11 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    const targetButton = findByTestId(root, "agent-studio-git-diff-scope-target");
-    const uncommittedButton = findByTestId(root, "agent-studio-git-diff-scope-uncommitted");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
     expect(countByTestId(root, "agent-studio-git-commit-submit-button")).toBe(0);
 
     await act(async () => {
-      uncommittedButton.props.onClick();
+      findDiffScopeTabs(root, "target").props.onValueChange("uncommitted");
       await flush();
     });
     expect(setDiffScope).toHaveBeenCalledTimes(1);
@@ -580,7 +597,7 @@ describe("AgentStudioGitPanel", () => {
     expect(Boolean(submitButton.props.disabled)).toBe(true);
 
     await act(async () => {
-      targetButton.props.onClick();
+      findDiffScopeTabs(root, "uncommitted").props.onValueChange("target");
       await flush();
     });
     expect(setDiffScope).toHaveBeenCalledTimes(2);

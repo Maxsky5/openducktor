@@ -393,14 +393,16 @@ export function RepositoryGitSection({
 
   const handleRepositoryDraftFieldChange = useCallback(
     (field: keyof GithubRepositoryDraft, value: string): void => {
-      const nextDraft = {
-        ...repositoryDraft,
-        [field]: value,
-      };
-      setRepositoryDraft(nextDraft);
-      commitGithubRepositoryDraft(nextDraft);
+      setRepositoryDraft((currentDraft) => {
+        const nextDraft = {
+          ...currentDraft,
+          [field]: value,
+        };
+        commitGithubRepositoryDraft(nextDraft);
+        return nextDraft;
+      });
     },
-    [commitGithubRepositoryDraft, repositoryDraft],
+    [commitGithubRepositoryDraft],
   );
 
   const runDetection = useCallback(
