@@ -1,9 +1,5 @@
 import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import {
-  type AgentEnginePort,
-  type AgentRuntimeConnection,
-  buildAgentSystemPrompt,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../task-operations-model";
@@ -14,6 +10,7 @@ import {
   shouldReattachListenerForAttachedSession,
   throwIfRepoStale,
 } from "../support/core";
+import { loadSessionPromptContext } from "../support/session-prompt";
 import { warmSessionData } from "../support/session-warmup";
 
 type EnsureSessionReadyDependencies = {
@@ -126,15 +123,22 @@ export const createEnsureSessionReady = ({
       throw new Error(`Task not found: ${session.taskId}`);
     }
 
-    const [docs, runtime, promptOverrides] = await Promise.all([
-      loadTaskDocuments(repoPath, session.taskId),
+    const [promptContext, runtime] = await Promise.all([
+      loadSessionPromptContext({
+        repoPath,
+        taskId: session.taskId,
+        role: session.role,
+        scenario: session.scenario,
+        task,
+        loadTaskDocuments,
+        loadRepoPromptOverrides,
+      }),
       ensureRuntime(repoPath, session.taskId, session.role, {
         workingDirectoryOverride: session.workingDirectory,
         ...(session.selectedModel?.runtimeKind
           ? { runtimeKind: session.selectedModel.runtimeKind }
           : {}),
       }),
-      loadRepoPromptOverrides(repoPath),
     ]);
     assertNotStale();
     const resolvedRuntimeKind =
@@ -142,23 +146,6 @@ export const createEnsureSessionReady = ({
       session.selectedModel?.runtimeKind ??
       session.runtimeKind ??
       DEFAULT_RUNTIME_KIND;
-    const systemPrompt = buildAgentSystemPrompt({
-      role: session.role,
-      scenario: session.scenario,
-      task: {
-        taskId: task.id,
-        title: task.title,
-        issueType: task.issueType,
-        status: task.status,
-        qaRequired: task.aiReviewEnabled,
-        description: task.description,
-        specMarkdown: docs.specMarkdown,
-        planMarkdown: docs.planMarkdown,
-        latestQaReportMarkdown: docs.qaMarkdown,
-      },
-      overrides: promptOverrides,
-    });
-
     await adapter.resumeSession({
       sessionId: session.sessionId,
       externalSessionId: session.externalSessionId,
@@ -169,7 +156,7 @@ export const createEnsureSessionReady = ({
       taskId: session.taskId,
       role: session.role,
       scenario: session.scenario,
-      systemPrompt,
+      systemPrompt: promptContext.systemPrompt,
       ...(session.selectedModel ? { model: session.selectedModel } : {}),
     });
 
@@ -201,7 +188,7 @@ export const createEnsureSessionReady = ({
       runId: runtime.runId,
       runtimeEndpoint: runtime.runtimeEndpoint,
       workingDirectory: runtime.workingDirectory,
-      promptOverrides,
+      promptOverrides: promptContext.promptOverrides,
     }));
 
     if (isStaleRepoOperation()) {

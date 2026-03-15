@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentScenario } from "@openducktor/core";
-import { assertAgentKickoffScenario, buildAgentSystemPrompt } from "@openducktor/core";
+import { assertAgentKickoffScenario } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { appQueryClient } from "@/lib/query-client";
@@ -16,6 +16,11 @@ import {
 import { createRepoStaleGuard, normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { normalizePersistedSelection } from "../support/models";
 import { inferScenario, kickoffPromptWithTaskContext } from "../support/scenario";
+import {
+  buildSessionPreludeMessages,
+  createSessionPromptContext,
+  loadSessionPromptInputs,
+} from "../support/session-prompt";
 import { warmSessionData } from "../support/session-warmup";
 import type {
   ModelDependencies,
@@ -93,18 +98,20 @@ const resolveRuntimeAndModel = async ({
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
 }): Promise<ResolvedRuntimeAndModel> => {
-  const docsPromise = deps.task.loadTaskDocuments(ctx.repoPath, ctx.taskId);
   const runtimePromise = deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
     ...(workingDirectoryOverride !== undefined ? { workingDirectoryOverride } : {}),
     ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
   });
   const defaultModelSelectionPromise = deps.model.loadRepoDefaultModel(ctx.repoPath, ctx.role);
-  const promptOverridesPromise = deps.model.loadRepoPromptOverrides(ctx.repoPath);
 
-  const [docs, runtimeInfo, promptOverrides] = await Promise.all([
-    docsPromise,
+  const [{ documents: docs, promptOverrides }, runtimeInfo] = await Promise.all([
+    loadSessionPromptInputs({
+      repoPath: ctx.repoPath,
+      taskId: ctx.taskId,
+      loadTaskDocuments: deps.task.loadTaskDocuments,
+      loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
+    }),
     runtimePromise,
-    promptOverridesPromise,
   ]);
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
@@ -123,21 +130,12 @@ const resolveRuntimeAndModel = async ({
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
-  const systemPrompt = buildAgentSystemPrompt({
+  const { systemPrompt } = createSessionPromptContext({
     role: ctx.role,
     scenario: resolvedScenario,
-    task: {
-      taskId: taskCard.id,
-      title: taskCard.title,
-      issueType: taskCard.issueType,
-      status: taskCard.status,
-      qaRequired: taskCard.aiReviewEnabled,
-      description: taskCard.description,
-      specMarkdown: docs.specMarkdown,
-      planMarkdown: docs.planMarkdown,
-      latestQaReportMarkdown: docs.qaMarkdown,
-    },
-    overrides: promptOverrides,
+    task: taskCard,
+    promptOverrides,
+    documents: docs,
   });
 
   return {
@@ -176,20 +174,13 @@ const buildInitialSession = ({
   runId: runtime.runId,
   runtimeEndpoint: runtime.runtimeEndpoint,
   workingDirectory: runtime.workingDirectory,
-  messages: [
-    {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: `Session started (${startedCtx.role} - ${startedCtx.resolvedScenario})`,
-      timestamp: startedCtx.summary.startedAt,
-    },
-    {
-      id: crypto.randomUUID(),
-      role: "system",
-      content: `System prompt:\n\n${systemPrompt}`,
-      timestamp: startedCtx.summary.startedAt,
-    },
-  ],
+  messages: buildSessionPreludeMessages({
+    sessionId: startedCtx.summary.sessionId,
+    role: startedCtx.role,
+    scenario: startedCtx.resolvedScenario,
+    systemPrompt,
+    startedAt: startedCtx.summary.startedAt,
+  }),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

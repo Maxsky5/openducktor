@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { AgentSessionRecord, RunSummary, TaskCard } from "@openducktor/contracts";
+import {
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type AgentSessionRecord,
+  type RunSummary,
+  type TaskCard,
+} from "@openducktor/contracts";
 import TestRenderer, { act } from "react-test-renderer";
 import { toast } from "sonner";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -649,6 +654,9 @@ describe("use-agent-orchestrator-operations", () => {
       const originalSpecGet = host.specGet;
       const originalPlanGet = host.planGet;
       const originalQaGetReport = host.qaGetReport;
+      const originalRuntimeList = host.runtimeList;
+      const originalRunsList = host.runsList;
+      const originalRuntimeEnsure = host.runtimeEnsure;
 
       const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
       const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
@@ -660,6 +668,22 @@ describe("use-agent-orchestrator-operations", () => {
       host.specGet = async () => ({ markdown: "", updatedAt: null });
       host.planGet = async () => ({ markdown: "", updatedAt: null });
       host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
+      host.runtimeList = async () => [];
+      host.runsList = async () => [];
+      host.runtimeEnsure = async () => ({
+        runtimeId: "runtime-1",
+        kind: "opencode",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4555",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      });
 
       OpencodeSdkAdapter.prototype.startSession = async () => {
         startCalls += 1;
@@ -711,6 +735,9 @@ describe("use-agent-orchestrator-operations", () => {
         host.specGet = originalSpecGet;
         host.planGet = originalPlanGet;
         host.qaGetReport = originalQaGetReport;
+        host.runtimeList = originalRuntimeList;
+        host.runsList = originalRunsList;
+        host.runtimeEnsure = originalRuntimeEnsure;
 
         OpencodeSdkAdapter.prototype.startSession = originalStartSession;
         OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;

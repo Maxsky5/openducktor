@@ -6,11 +6,7 @@ import type {
   RuntimeRoute,
   TaskCard,
 } from "@openducktor/contracts";
-import {
-  type AgentEnginePort,
-  type AgentRuntimeConnection,
-  buildAgentSystemPrompt,
-} from "@openducktor/core";
+import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
@@ -27,6 +23,7 @@ import {
   fromPersistedSessionRecord,
   historyToChatMessages,
 } from "../support/persistence";
+import { buildSessionPreludeMessages, buildSessionSystemPrompt } from "../support/session-prompt";
 import { warmSessionData } from "../support/session-warmup";
 
 type UpdateSession = (
@@ -350,44 +347,37 @@ export const createLoadAgentSessions = ({
       record: PersistedSessionRecord;
       resolvedScenario: AgentSessionState["scenario"];
     }): AgentSessionState["messages"] => {
-      const basicPreludeMessages: AgentSessionState["messages"] = [
-        {
-          id: `history:session-start:${record.sessionId}`,
-          role: "system",
-          content: `Session started (${record.role} - ${resolvedScenario})`,
-          timestamp: record.startedAt,
-        },
-      ];
-
       const task = taskRef.current.find((entry) => entry.id === taskId);
       if (!task) {
-        return basicPreludeMessages;
+        return buildSessionPreludeMessages({
+          sessionId: record.sessionId,
+          role: record.role,
+          scenario: resolvedScenario,
+          systemPrompt: "",
+          startedAt: record.startedAt,
+          includeSystemPrompt: false,
+        });
       }
 
-      return [
-        ...basicPreludeMessages,
-        {
-          id: `history:system-prompt:${record.sessionId}`,
-          role: "system",
-          content: `System prompt:\n\n${buildAgentSystemPrompt({
-            role: record.role,
-            scenario: resolvedScenario,
-            task: {
-              taskId: task.id,
-              title: task.title,
-              issueType: task.issueType,
-              status: task.status,
-              qaRequired: task.aiReviewEnabled,
-              description: task.description,
-              specMarkdown: "",
-              planMarkdown: "",
-              latestQaReportMarkdown: "",
-            },
-            overrides: repoPromptOverrides,
-          })}`,
-          timestamp: record.startedAt,
+      const systemPrompt = buildSessionSystemPrompt({
+        role: record.role,
+        scenario: resolvedScenario,
+        task,
+        promptOverrides: repoPromptOverrides,
+        documents: {
+          specMarkdown: "",
+          planMarkdown: "",
+          qaMarkdown: "",
         },
-      ];
+      });
+
+      return buildSessionPreludeMessages({
+        sessionId: record.sessionId,
+        role: record.role,
+        scenario: resolvedScenario,
+        systemPrompt,
+        startedAt: record.startedAt,
+      });
     };
     if (isStaleRepoOperation()) {
       return;

@@ -1,7 +1,8 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { createElement, type ReactElement } from "react";
+import { type ComponentProps, createElement, type ReactElement } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { QueryProvider } from "@/lib/query-provider";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
@@ -34,6 +35,16 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
   workingDirectory: "/repo",
 };
 
+const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
+  runtimeDefinitions: [],
+  isLoadingRuntimeDefinitions: false,
+  runtimeDefinitionsError: null,
+  refreshRuntimeDefinitions: async () => [],
+  loadRepoRuntimeCatalog: async () => {
+    throw new Error("Test runtime catalog loader was not configured.");
+  },
+} satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
+
 export const createDeferred = createSharedDeferred;
 
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
@@ -65,7 +76,11 @@ export const createHookHarness = <Props, State>(
         createElement(
           QueryProvider,
           { useIsolatedClient: true },
-          createElement(Harness, { hookProps: currentProps }),
+          createElement(
+            RuntimeDefinitionsContext.Provider,
+            { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
+            createElement(Harness, { hookProps: currentProps }),
+          ),
         ),
       );
       await flushMicrotasks();
@@ -79,7 +94,11 @@ export const createHookHarness = <Props, State>(
         createElement(
           QueryProvider,
           { useIsolatedClient: true },
-          createElement(Harness, { hookProps: currentProps }),
+          createElement(
+            RuntimeDefinitionsContext.Provider,
+            { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
+            createElement(Harness, { hookProps: currentProps }),
+          ),
         ),
       );
       await flushMicrotasks();

@@ -5,7 +5,6 @@ import type {
   AgentRole,
   AgentRuntimeConnection,
 } from "@openducktor/core";
-import { buildAgentSystemPrompt } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
@@ -14,6 +13,7 @@ import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import { now } from "../support/core";
 import { annotateQuestionToolMessage } from "../support/question-messages";
+import { buildSessionPreludeMessages, loadSessionPromptContext } from "../support/session-prompt";
 import { warmSessionData } from "../support/session-warmup";
 import { createStartAgentSession } from "./start-session";
 
@@ -300,30 +300,20 @@ export const createAgentSessionActions = ({
       throw new Error(unavailableRoleErrorMessage(task, parentSession.role));
     }
 
-    const [docs, promptOverrides] = await Promise.all([
-      loadTaskDocuments(activeRepo, parentSession.taskId),
-      loadRepoPromptOverrides(activeRepo),
-    ]);
+    const promptContext = await loadSessionPromptContext({
+      repoPath: activeRepo,
+      taskId: parentSession.taskId,
+      role: parentSession.role,
+      scenario: parentSession.scenario,
+      task,
+      loadTaskDocuments,
+      loadRepoPromptOverrides,
+    });
     const modelSelection =
       selectedModel ??
       parentSession.selectedModel ??
       (await loadRepoDefaultModel(activeRepo, parentSession.role));
-    const systemPrompt = buildAgentSystemPrompt({
-      role: parentSession.role,
-      scenario: parentSession.scenario,
-      task: {
-        taskId: task.id,
-        title: task.title,
-        issueType: task.issueType,
-        status: task.status,
-        qaRequired: task.aiReviewEnabled,
-        description: task.description,
-        specMarkdown: docs.specMarkdown,
-        planMarkdown: docs.planMarkdown,
-        latestQaReportMarkdown: docs.qaMarkdown,
-      },
-      overrides: promptOverrides,
-    });
+    const { promptOverrides, systemPrompt } = promptContext;
 
     const summary = await adapter.forkSession({
       repoPath: activeRepo,
@@ -357,20 +347,14 @@ export const createAgentSessionActions = ({
       runId: parentSession.runId,
       runtimeEndpoint: parentSession.runtimeEndpoint,
       workingDirectory: parentSession.workingDirectory,
-      messages: [
-        {
-          id: crypto.randomUUID(),
-          role: "system",
-          content: `Session forked (${parentSession.role} - ${parentSession.scenario})`,
-          timestamp: summary.startedAt,
-        },
-        {
-          id: crypto.randomUUID(),
-          role: "system",
-          content: `System prompt:\n\n${systemPrompt}`,
-          timestamp: summary.startedAt,
-        },
-      ],
+      messages: buildSessionPreludeMessages({
+        sessionId: summary.sessionId,
+        role: parentSession.role,
+        scenario: parentSession.scenario,
+        systemPrompt,
+        startedAt: summary.startedAt,
+        eventLabel: "forked",
+      }),
       draftAssistantText: "",
       draftAssistantMessageId: null,
       draftReasoningText: "",
