@@ -1464,3 +1464,126 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn agent_session_upsert_rejects_working_directory_outside_repo_and_worktree_base() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-invalid-workdir");
+    let repo = repo_root.join("repo");
+    init_git_repo(&repo)?;
+    let external = repo_root.join("external");
+    fs::create_dir_all(&external)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+
+    let mut session = make_session("task-1", "session-invalid");
+    session.working_directory = external.to_string_lossy().to_string();
+
+    let error = service
+        .agent_session_upsert(repo_path.as_str(), "task-1", session)
+        .expect_err("upsert should reject working directories outside repo/worktree base");
+
+    assert!(error.to_string().contains("must stay inside repository"));
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .upserted_sessions
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn agent_session_upsert_accepts_working_directory_inside_effective_worktree_base() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-worktree-base");
+    let repo = repo_root.join("repo");
+    let worktree_base = repo_root.join("worktrees");
+    let worktree = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+    fs::create_dir_all(&worktree)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..RepoConfig::default()
+        },
+    )?;
+
+    let mut session = make_session("task-1", "session-worktree");
+    session.working_directory = worktree.to_string_lossy().to_string();
+
+    let upserted = service.agent_session_upsert(repo_path.as_str(), "task-1", session)?;
+    assert!(upserted);
+    assert_eq!(
+        task_state
+            .lock()
+            .expect("task lock poisoned")
+            .upserted_sessions
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn agent_session_upsert_rejects_unknown_role() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-invalid-role");
+    let repo = repo_root.join("repo");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+
+    let mut session = make_session("task-1", "session-invalid-role");
+    session.role = "workspace".to_string();
+    session.working_directory = repo_path.clone();
+
+    let error = service
+        .agent_session_upsert(repo_path.as_str(), "task-1", session)
+        .expect_err("upsert should reject unknown agent session roles");
+
+    assert!(error.to_string().contains("role must be one of spec, planner, build, or qa"));
+    assert!(
+        task_state
+            .lock()
+            .expect("task lock poisoned")
+            .upserted_sessions
+            .is_empty()
+    );
+    Ok(())
+}
