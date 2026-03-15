@@ -83,6 +83,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     selectedTask: createTask(),
     isTaskHydrating: false,
     isSessionHistoryHydrating: false,
+    isSessionHistoryHydrationFailed: false,
     contextSwitchVersion: 0,
     ...overrides.core,
     sessionsForTask,

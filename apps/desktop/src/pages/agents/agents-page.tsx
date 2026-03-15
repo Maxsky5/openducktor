@@ -445,6 +445,8 @@ type BuildAgentsPageOrchestrationContextsArgs = {
   contextSwitchVersion: AgentStudioOrchestrationSelectionContext["contextSwitchVersion"];
   isLoadingTasks: AgentStudioOrchestrationSelectionContext["isLoadingTasks"];
   isActiveTaskHydrated: AgentStudioOrchestrationSelectionContext["isActiveTaskHydrated"];
+  isActiveTaskHydrationFailed: AgentStudioOrchestrationSelectionContext["isActiveTaskHydrationFailed"];
+  isViewSessionHistoryHydrationFailed: AgentStudioOrchestrationSelectionContext["isViewSessionHistoryHydrationFailed"];
   isViewSessionHistoryHydrating: AgentStudioOrchestrationSelectionContext["isViewSessionHistoryHydrating"];
   onCreateTab: AgentStudioOrchestrationSelectionContext["onCreateTab"];
   onCloseTab: AgentStudioOrchestrationSelectionContext["onCloseTab"];
@@ -480,6 +482,8 @@ function buildAgentsPageOrchestrationContexts({
   contextSwitchVersion,
   isLoadingTasks,
   isActiveTaskHydrated,
+  isActiveTaskHydrationFailed,
+  isViewSessionHistoryHydrationFailed,
   isViewSessionHistoryHydrating,
   onCreateTab,
   onCloseTab,
@@ -517,6 +521,8 @@ function buildAgentsPageOrchestrationContexts({
       contextSwitchVersion,
       isLoadingTasks,
       isActiveTaskHydrated,
+      isActiveTaskHydrationFailed,
+      isViewSessionHistoryHydrationFailed,
       isViewSessionHistoryHydrating,
       onCreateTab,
       onCloseTab,
@@ -633,13 +639,13 @@ export function AgentsPage(): ReactElement {
   }, [selection.viewSelectedTask]);
   const handleDetectPullRequest = useCallback(
     (taskId: string): void => {
-      void syncPullRequests(taskId).catch(() => undefined);
+      void syncPullRequests(taskId);
     },
     [syncPullRequests],
   );
   const handleUnlinkPullRequest = useCallback(
     (taskId: string): void => {
-      void unlinkPullRequest(taskId).catch(() => undefined);
+      void unlinkPullRequest(taskId);
     },
     [unlinkPullRequest],
   );
@@ -685,6 +691,8 @@ export function AgentsPage(): ReactElement {
       contextSwitchVersion,
       isLoadingTasks,
       isActiveTaskHydrated: selection.isActiveTaskHydrated,
+      isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
+      isViewSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
       isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
       onCreateTab: selection.handleCreateTab,
       onCloseTab: selection.handleCloseTab,

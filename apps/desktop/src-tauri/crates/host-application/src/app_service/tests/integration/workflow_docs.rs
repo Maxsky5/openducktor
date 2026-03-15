@@ -1430,6 +1430,8 @@ fn qa_rejected_rejects_non_ai_review_tasks() {
 #[test]
 fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
     let repo_path = "/tmp/odt-repo-sessions";
+    fs::create_dir_all(repo_path)?;
+    init_git_repo(Path::new(repo_path))?;
     let (service, task_state, _git_state) = build_service_with_git_state(
         vec![],
         vec![],
@@ -1439,20 +1441,21 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
             revision: None,
         },
     );
+    service.workspace_add(repo_path)?;
     {
         let mut state = task_state.lock().expect("task lock poisoned");
-        state.agent_sessions = vec![make_session("task-1", "session-1")];
+        let mut existing_session = make_session("task-1", "session-1");
+        existing_session.working_directory = repo_path.to_string();
+        state.agent_sessions = vec![existing_session];
     }
 
     let sessions = service.agent_sessions_list(repo_path, "task-1")?;
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].session_id, "session-1");
 
-    let upserted = service.agent_session_upsert(
-        repo_path,
-        "task-1",
-        make_session("wrong-task", "session-2"),
-    )?;
+    let mut upsert_session = make_session("wrong-task", "session-2");
+    upsert_session.working_directory = repo_path.to_string();
+    let upserted = service.agent_session_upsert(repo_path, "task-1", upsert_session)?;
     assert!(upserted);
 
     let task_state = task_state.lock().expect("task lock poisoned");
@@ -1462,5 +1465,170 @@ fn agent_sessions_list_and_upsert_flow_through_store() -> Result<()> {
         task_state.upserted_sessions[0].1.task_id.as_deref(),
         Some("task-1")
     );
+    Ok(())
+}
+
+#[test]
+fn agent_session_upsert_rejects_working_directory_outside_repo_and_worktree_base() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-invalid-workdir");
+    let repo = repo_root.join("repo");
+    init_git_repo(&repo)?;
+    let external = repo_root.join("external");
+    fs::create_dir_all(&external)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+
+    let mut session = make_session("task-1", "session-invalid");
+    session.working_directory = external.to_string_lossy().to_string();
+
+    let error = service
+        .agent_session_upsert(repo_path.as_str(), "task-1", session)
+        .expect_err("upsert should reject working directories outside repo/worktree base");
+
+    assert!(error.to_string().contains("must stay inside repository"));
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .upserted_sessions
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn agent_session_upsert_rejects_parent_directory_traversal_working_directory() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-parent-traversal");
+    let repo = repo_root.join("repo");
+    let external = repo_root.join("external");
+    init_git_repo(&repo)?;
+    fs::create_dir_all(&external)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+
+    let mut session = make_session("task-1", "session-parent-traversal");
+    session.working_directory = repo
+        .join("..")
+        .join("external")
+        .to_string_lossy()
+        .to_string();
+
+    let error = service
+        .agent_session_upsert(repo_path.as_str(), "task-1", session)
+        .expect_err("upsert should reject lexical traversal outside the repo");
+
+    assert!(error.to_string().contains("must stay inside repository"));
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .upserted_sessions
+        .is_empty());
+    Ok(())
+}
+
+#[test]
+fn agent_session_upsert_accepts_working_directory_inside_effective_worktree_base() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-worktree-base");
+    let repo = repo_root.join("repo");
+    let worktree_base = repo_root.join("worktrees");
+    let worktree = worktree_base.join("task-1");
+    init_git_repo(&repo)?;
+    fs::create_dir_all(&worktree)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+    service.workspace_update_repo_config(
+        repo_path.as_str(),
+        RepoConfig {
+            worktree_base_path: Some(worktree_base.to_string_lossy().to_string()),
+            ..RepoConfig::default()
+        },
+    )?;
+
+    let mut session = make_session("task-1", "session-worktree");
+    session.working_directory = worktree.to_string_lossy().to_string();
+
+    let upserted = service.agent_session_upsert(repo_path.as_str(), "task-1", session)?;
+    assert!(upserted);
+    assert_eq!(
+        task_state
+            .lock()
+            .expect("task lock poisoned")
+            .upserted_sessions
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn agent_session_upsert_rejects_unknown_role() -> Result<()> {
+    let repo_root = unique_temp_path("session-upsert-invalid-role");
+    let repo = repo_root.join("repo");
+    init_git_repo(&repo)?;
+
+    let config_store = AppConfigStore::from_path(repo_root.join("config.json"));
+    let repo_path = fs::canonicalize(&repo)?.to_string_lossy().to_string();
+    let (service, task_state, _git_state) = build_service_with_store(
+        vec![],
+        vec![],
+        GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+        config_store,
+    );
+    service.workspace_add(repo_path.as_str())?;
+
+    let mut session = make_session("task-1", "session-invalid-role");
+    session.role = "workspace".to_string();
+    session.working_directory = repo_path.clone();
+
+    let error = service
+        .agent_session_upsert(repo_path.as_str(), "task-1", session)
+        .expect_err("upsert should reject unknown agent session roles");
+
+    assert!(error
+        .to_string()
+        .contains("role must be one of spec, planner, build, or qa"));
+    assert!(task_state
+        .lock()
+        .expect("task lock poisoned")
+        .upserted_sessions
+        .is_empty());
     Ok(())
 }

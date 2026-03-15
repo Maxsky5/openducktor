@@ -67,6 +67,7 @@ type AgentStudioCoreContext = {
   activeSession: AgentSessionState | null;
   isTaskHydrating: boolean;
   isSessionHistoryHydrating: boolean;
+  isSessionHistoryHydrationFailed: boolean;
   contextSwitchVersion: number;
 };
 

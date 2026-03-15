@@ -504,7 +504,7 @@ describe("use-task-operations", () => {
     }
   });
 
-  test("syncPullRequests fails fast when pull request detection errors", async () => {
+  test("syncPullRequests reports pull request detection errors without rethrowing", async () => {
     const taskPullRequestDetect = mock(async () => {
       throw new Error("gh auth expired");
     });
@@ -519,6 +519,9 @@ describe("use-task-operations", () => {
     host.taskPullRequestDetect = taskPullRequestDetect;
     host.tasksList = tasksList;
     host.runsList = runsList;
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
 
     const harness = createHookHarness({
       activeRepo: "/repo",
@@ -531,24 +534,106 @@ describe("use-task-operations", () => {
 
     try {
       await harness.mount();
-      let caughtError: unknown = null;
       await harness.run(async (value) => {
-        try {
-          await value.syncPullRequests("A");
-        } catch (error) {
-          caughtError = error;
-        }
+        await value.syncPullRequests("A");
       });
 
-      expect(caughtError).toBeInstanceOf(Error);
-      expect((caughtError as Error).message).toBe("gh auth expired");
       expect(taskPullRequestDetect).toHaveBeenCalledWith("/repo", "A");
       expect(tasksList).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to detect pull request", {
+        description: "gh auth expired",
+      });
     } finally {
       await harness.unmount();
       host.taskPullRequestDetect = original.taskPullRequestDetect;
       host.tasksList = original.tasksList;
       host.runsList = original.runsList;
+      toast.error = originalToastError;
+    }
+  });
+
+  test("syncPullRequests reports missing workspace selection without rethrowing", async () => {
+    const taskPullRequestDetect = mock(async () => {
+      throw new Error("taskPullRequestDetect should not be called without an active workspace");
+    });
+    const toastError = mock(() => "");
+    const originalTaskPullRequestDetect = host.taskPullRequestDetect;
+    const originalToastError = toast.error;
+    host.taskPullRequestDetect = taskPullRequestDetect;
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: null,
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: null,
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.syncPullRequests("A");
+      });
+
+      expect(taskPullRequestDetect).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to detect pull request", {
+        description: "Select a workspace first.",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = originalTaskPullRequestDetect;
+      toast.error = originalToastError;
+    }
+  });
+
+  test("unlinkPullRequest reports unlink errors without rethrowing", async () => {
+    const taskPullRequestUnlink = mock(async () => {
+      throw new Error("unlink failed");
+    });
+    const tasksList = mock(async () => [makeTask("A", "human_review")]);
+    const runsList = mock(async (): Promise<RunSummary[]> => []);
+
+    const original = {
+      taskPullRequestUnlink: host.taskPullRequestUnlink,
+      tasksList: host.tasksList,
+      runsList: host.runsList,
+    };
+    host.taskPullRequestUnlink = taskPullRequestUnlink;
+    host.tasksList = tasksList;
+    host.runsList = runsList;
+    const originalToastError = toast.error;
+    const toastError = mock((_message: string, _options?: { description?: string }) => "");
+    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo",
+      refreshBeadsCheckForRepo: async (): Promise<BeadsCheck> => ({
+        beadsOk: true,
+        beadsPath: "/repo/.beads",
+        beadsError: null,
+      }),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.unlinkPullRequest("A");
+      });
+
+      expect(taskPullRequestUnlink).toHaveBeenCalledWith("/repo", "A");
+      expect(tasksList).not.toHaveBeenCalled();
+      expect(runsList).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith("Failed to unlink pull request", {
+        description: "unlink failed",
+      });
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestUnlink = original.taskPullRequestUnlink;
+      host.tasksList = original.tasksList;
+      host.runsList = original.runsList;
+      toast.error = originalToastError;
     }
   });
 

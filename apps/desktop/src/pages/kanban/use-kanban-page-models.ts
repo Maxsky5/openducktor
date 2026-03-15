@@ -68,13 +68,13 @@ export function useKanbanPageModels({ onOpenDetails }: UseKanbanPageModelsArgs):
   }, [refreshTasks]);
   const onDetectPullRequest = useCallback(
     (taskId: string): void => {
-      void syncPullRequests(taskId).catch(() => undefined);
+      void syncPullRequests(taskId);
     },
     [syncPullRequests],
   );
   const onUnlinkPullRequest = useCallback(
     (taskId: string): void => {
-      void unlinkPullRequest(taskId).catch(() => undefined);
+      void unlinkPullRequest(taskId);
     },
     [unlinkPullRequest],
   );

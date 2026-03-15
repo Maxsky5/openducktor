@@ -120,6 +120,7 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
       expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-1"]).toBeUndefined();
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(true);
       expect(loadAgentSessions).toHaveBeenCalledTimes(1);
 
       await harness.update(
@@ -134,6 +135,32 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.update(args);
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 3);
       expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-1"]).toBe(true);
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("marks session history hydration as failed when loading history rejects", async () => {
+    const loadAgentSessions = mock(async (_taskId: string, options?: AgentSessionLoadOptions) => {
+      if (options?.hydrateHistoryForSessionId === "session-1") {
+        throw new Error("history failed");
+      }
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSessionId: "session-1",
+        loadAgentSessions,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(false);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
     } finally {
       await harness.unmount();
     }
@@ -174,6 +201,54 @@ describe("useAgentStudioTaskHydration", () => {
     } finally {
       firstLoad.resolve(undefined);
       secondLoad.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
+  test("retries task hydration after a cancelled in-flight load clears its pending state", async () => {
+    const firstTaskLoad = createDeferred<void>();
+    const secondTaskLoad = createDeferred<void>();
+    let taskOneLoadCount = 0;
+    const loadAgentSessions = mock(async (taskId: string) => {
+      if (taskId === "task-1") {
+        taskOneLoadCount += 1;
+        return taskOneLoadCount === 1 ? firstTaskLoad.promise : secondTaskLoad.promise;
+      }
+    });
+    const harness = createHookHarness(createBaseArgs({ loadAgentSessions }));
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
+
+      await harness.update(
+        createBaseArgs({
+          activeTaskId: "task-2",
+          loadAgentSessions,
+        }),
+      );
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 2);
+
+      await harness.update(createBaseArgs({ loadAgentSessions }));
+      expect(loadAgentSessions.mock.calls.length).toBe(2);
+
+      await harness.run(async () => {
+        firstTaskLoad.resolve(undefined);
+        await firstTaskLoad.promise;
+      });
+
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 3);
+
+      await harness.run(async () => {
+        secondTaskLoad.resolve(undefined);
+        await secondTaskLoad.promise;
+      });
+
+      await harness.waitFor((state) => state.hydratedTasksByRepoAndTask["/repo-a:task-1"] === true);
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(false);
+    } finally {
+      firstTaskLoad.resolve(undefined);
+      secondTaskLoad.resolve(undefined);
       await harness.unmount();
     }
   });
