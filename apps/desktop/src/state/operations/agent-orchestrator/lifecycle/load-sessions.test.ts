@@ -368,6 +368,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
       {
@@ -383,6 +384,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo/worktree",
       },
     ];
+    hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [
       {
         runId: "run-1",
@@ -406,6 +408,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
       hostModule.host.runsList = originalRunsList;
     }
 
@@ -463,6 +466,7 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
     const originalRunsList = hostModule.host.runsList;
     hostModule.host.agentSessionsList = async () => [
       {
@@ -478,6 +482,7 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo/worktree",
       },
     ];
+    hostModule.host.runtimeList = async () => [];
     hostModule.host.runsList = async () => [
       {
         runId: "run-1",
@@ -501,6 +506,7 @@ describe("agent-orchestrator-load-sessions", () => {
       await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-qa-1" });
     } finally {
       hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
       hostModule.host.runsList = originalRunsList;
     }
 
@@ -559,6 +565,7 @@ describe("agent-orchestrator-load-sessions", () => {
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
     const originalRuntimeList = hostModule.host.runtimeList;
+    const originalRunsList = hostModule.host.runsList;
     const originalEnsure = hostModule.host.runtimeEnsure;
     hostModule.host.agentSessionsList = async () => [
       {
@@ -575,6 +582,7 @@ describe("agent-orchestrator-load-sessions", () => {
       },
     ];
     hostModule.host.runtimeList = async () => [];
+    hostModule.host.runsList = async () => [];
     hostModule.host.runtimeEnsure = async (_repoPath, runtimeKind) => {
       ensuredRuntimeKinds.push(runtimeKind);
       return {
@@ -599,15 +607,18 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-qa-root" });
+      await expect(
+        loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-qa-root" }),
+      ).rejects.toThrow("No live runtime found for working directory /tmp/repo/.");
     } finally {
       hostModule.host.agentSessionsList = originalList;
       hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runsList = originalRunsList;
       hostModule.host.runtimeEnsure = originalEnsure;
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["session-qa-root"]?.messages[0]?.content).toContain("Session runtime unavailable");
+    expect(state["session-qa-root"]?.messages).toEqual([]);
   });
 
   test("rehydrates build sessions through a shared runtime when the persisted working directory is an override", async () => {
@@ -864,6 +875,9 @@ describe("agent-orchestrator-load-sessions", () => {
 
     const hostModule = await import("../../host");
     const originalList = hostModule.host.agentSessionsList;
+    const originalRuntimeList = hostModule.host.runtimeList;
+    const originalRunsList = hostModule.host.runsList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
     const originalSpecGet = hostModule.host.specGet;
     const originalPlanGet = hostModule.host.planGet;
     const originalQaGetReport = hostModule.host.qaGetReport;
@@ -882,6 +896,11 @@ describe("agent-orchestrator-load-sessions", () => {
         workingDirectory: "/tmp/repo",
       },
     ];
+    hostModule.host.runtimeList = async () => [];
+    hostModule.host.runsList = async () => [];
+    hostModule.host.runtimeEnsure = async () => {
+      throw new Error("runtime unavailable");
+    };
     hostModule.host.specGet = async () => {
       specCalls += 1;
       return { markdown: "spec", updatedAt: null };
@@ -896,18 +915,20 @@ describe("agent-orchestrator-load-sessions", () => {
     };
 
     try {
-      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+      await expect(
+        loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" }),
+      ).rejects.toThrow("runtime unavailable");
     } finally {
       hostModule.host.agentSessionsList = originalList;
+      hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runsList = originalRunsList;
+      hostModule.host.runtimeEnsure = originalEnsure;
       hostModule.host.specGet = originalSpecGet;
       hostModule.host.planGet = originalPlanGet;
       hostModule.host.qaGetReport = originalQaGetReport;
     }
 
-    const messages = state["session-1"]?.messages ?? [];
-    expect(messages).toHaveLength(1);
-    expect(messages[0]?.id).toBe("history-unavailable:session-1");
-    expect(messages[0]?.content).toContain("Session runtime unavailable");
+    expect(state["session-1"]?.messages).toEqual([]);
     expect(specCalls).toBe(0);
     expect(planCalls).toBe(0);
     expect(qaCalls).toBe(0);

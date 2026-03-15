@@ -20,9 +20,7 @@ import { loadRepoRunsFromQuery } from "@/state/queries/tasks";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../host";
 import { toRuntimeConnection } from "../runtime/runtime";
-import { captureOrchestratorFallback } from "../support/async-side-effects";
-import { createRepoStaleGuard, normalizeWorkingDirectory, now } from "../support/core";
-import { upsertMessage } from "../support/messages";
+import { createRepoStaleGuard, normalizeWorkingDirectory } from "../support/core";
 import { normalizePersistedSelection } from "../support/models";
 import {
   defaultScenarioForRole,
@@ -221,15 +219,7 @@ export const createLoadAgentSessions = ({
     );
     const runtimeLists = await Promise.all(
       runtimeKindsToHydrate.map(async (runtimeKind) => {
-        const runtimes = await captureOrchestratorFallback(
-          "load-sessions-list-runtimes",
-          () => loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
-          {
-            tags: { repoPath, taskId, runtimeKind },
-            logLevel: "warn",
-            fallback: () => [] as RuntimeInstanceSummary[],
-          },
-        );
+        const runtimes = await loadRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath);
         return [runtimeKind, runtimes] as const;
       }),
     );
@@ -238,15 +228,7 @@ export const createLoadAgentSessions = ({
     const liveRuns = recordsToHydrate.some(
       (record) => record.role === "build" || record.role === "qa",
     )
-      ? await captureOrchestratorFallback(
-          "load-sessions-list-runs",
-          () => loadRepoRunsFromQuery(appQueryClient, repoPath),
-          {
-            tags: { repoPath, taskId },
-            logLevel: "warn",
-            fallback: () => [] as RunSummary[],
-          },
-        )
+      ? await loadRepoRunsFromQuery(appQueryClient, repoPath)
       : [];
     const ensuredWorkspaceRuntimes = new Map<RuntimeKind, RuntimeInstanceSummary | null>();
 
@@ -256,15 +238,7 @@ export const createLoadAgentSessions = ({
       if (ensuredWorkspaceRuntimes.has(runtimeKind)) {
         return ensuredWorkspaceRuntimes.get(runtimeKind) ?? null;
       }
-      const runtime = await captureOrchestratorFallback(
-        "load-sessions-ensure-workspace-runtime",
-        async () => host.runtimeEnsure(repoPath, runtimeKind),
-        {
-          tags: { repoPath, taskId, runtimeKind },
-          logLevel: "warn",
-          fallback: () => null,
-        },
-      );
+      const runtime = await host.runtimeEnsure(repoPath, runtimeKind);
       ensuredWorkspaceRuntimes.set(runtimeKind, runtime);
       return runtime;
     };
@@ -428,27 +402,7 @@ export const createLoadAgentSessions = ({
       const workingDirectory = record.workingDirectory;
       const runtimeResolution = await resolveHydrationRuntime(record);
       if (!runtimeResolution.ok) {
-        updateSession(
-          record.sessionId,
-          (current) => ({
-            ...current,
-            runtimeKind: runtimeResolution.runtimeKind,
-            runtimeEndpoint: "",
-            workingDirectory,
-            promptOverrides: repoPromptOverrides,
-            messages:
-              existingSession && existingSession.messages.length > 0
-                ? current.messages
-                : upsertMessage(current.messages, {
-                    id: `history-unavailable:${record.sessionId}`,
-                    role: "system",
-                    content: `Session runtime unavailable: ${runtimeResolution.reason}`,
-                    timestamp: now(),
-                  }),
-          }),
-          { persist: false },
-        );
-        return;
+        throw new Error(runtimeResolution.reason);
       }
       const { runtimeKind, runtimeConnection, runtimeEndpoint } = runtimeResolution;
       const externalSessionId = record.externalSessionId ?? record.sessionId;
@@ -478,32 +432,6 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const historyPromise = captureOrchestratorFallback<SessionHistoryLoadResult>(
-        "load-sessions-load-history",
-        async () => {
-          const history = await adapter.loadSessionHistory({
-            runtimeKind,
-            runtimeConnection,
-            externalSessionId,
-            limit: INITIAL_SESSION_HISTORY_LIMIT,
-          });
-          return { ok: true as const, history };
-        },
-        {
-          tags: {
-            repoPath,
-            taskId,
-            sessionId: record.sessionId,
-            externalSessionId,
-          },
-          logLevel: "warn",
-          fallback: (failure): SessionHistoryLoadResult => ({
-            ok: false,
-            reason: failure.reason,
-          }),
-        },
-      );
-
       const preludeMessages = buildHydrationPreludeMessages({
         record,
         resolvedScenario,
@@ -513,36 +441,16 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const historyResult = await historyPromise;
-      if (isStaleRepoOperation()) {
-        return;
-      }
-
-      if (!historyResult.ok) {
-        updateSession(
-          record.sessionId,
-          (current) => ({
-            ...current,
-            runtimeKind,
-            runtimeEndpoint,
-            workingDirectory,
-            promptOverrides: repoPromptOverrides,
-            messages: upsertMessage(current.messages, {
-              id: `history-unavailable:${record.sessionId}`,
-              role: "system",
-              content: `Session history unavailable: ${historyResult.reason}`,
-              timestamp: now(),
-            }),
-          }),
-          { persist: false },
-        );
-        warmPersistedSession(
-          record.sessionId,
+      const historyResult: SessionHistoryLoadResult = {
+        ok: true,
+        history: await adapter.loadSessionHistory({
           runtimeKind,
           runtimeConnection,
           externalSessionId,
-          record.role,
-        );
+          limit: INITIAL_SESSION_HISTORY_LIMIT,
+        }),
+      };
+      if (isStaleRepoOperation()) {
         return;
       }
 
