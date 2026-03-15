@@ -19,6 +19,24 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  react-doctor:
+    name: React Doctor
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Run React Doctor on changed desktop files
+        uses: millionco/react-doctor@ec4a41fd827c29d79f9b27a588cde598e054d059 # main
+        with:
+          project: "@openducktor/desktop"
+          diff: ${{ github.base_ref }}
+
   bun-quality:
     name: Bun Quality (lint, typecheck, test, build)
     runs-on: ubuntu-latest
