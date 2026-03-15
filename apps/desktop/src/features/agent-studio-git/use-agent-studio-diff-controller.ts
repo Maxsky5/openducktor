@@ -28,6 +28,7 @@ type LoadDataContext = {
   workingDir: string | null;
   scope: DiffScope;
   mode?: LoadDataMode;
+  force?: boolean;
   replayIfInFlight?: boolean;
 };
 
@@ -249,19 +250,21 @@ export function useAgentStudioDiffController({
 
   const runFullLoad = useCallback(
     async ({
+      force = false,
       repoPath: activeRepoPath,
       requestSequence,
       scope,
       targetBranch: activeTargetBranch,
       version,
       workingDir: nextWorkingDir,
-    }: InFlightRequestContext): Promise<void> => {
+    }: InFlightRequestContext & { force?: boolean }): Promise<void> => {
       const snapshot = await loadWorktreeStatusFromQuery(
         appQueryClient,
         activeRepoPath,
         activeTargetBranch,
         scope,
         nextWorkingDir,
+        { force },
       );
 
       if (hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir)) {
@@ -313,6 +316,7 @@ export function useAgentStudioDiffController({
         workingDir: context?.workingDir ?? workingDirRef.current,
       };
       const mode = context?.mode ?? "full";
+      const force = context?.force === true;
       const replayIfInFlight = context?.replayIfInFlight === true;
       const requestKey = `${loadContext.repoPath}::${loadContext.targetBranch}::${loadContext.workingDir ?? ""}`;
 
@@ -353,7 +357,7 @@ export function useAgentStudioDiffController({
           return;
         }
 
-        await runFullLoad(inFlightRequestContext);
+        await runFullLoad({ ...inFlightRequestContext, force });
       } catch (error) {
         if (
           hasLoadContextChanged(
@@ -403,6 +407,7 @@ export function useAgentStudioDiffController({
               workingDir: loadContext.workingDir,
               scope: loadContext.scope,
               mode: "full",
+              force,
             });
           });
         }
@@ -439,6 +444,7 @@ export function useAgentStudioDiffController({
       workingDir: pendingFullReload.workingDir,
       scope: pendingFullReload.scope,
       mode: "full",
+      force: true,
     });
   }, [loadData, pendingFullReload]);
 
@@ -458,6 +464,7 @@ export function useAgentStudioDiffController({
         targetBranch,
         workingDir,
         scope: diffScopeRef.current,
+        force: true,
       });
       return;
     }
@@ -495,6 +502,7 @@ export function useAgentStudioDiffController({
       targetBranch,
       workingDir,
       scope: diffScope,
+      force: true,
     });
   }, [
     controllerState.batchState.loadedByScope,
@@ -536,6 +544,7 @@ export function useAgentStudioDiffController({
       targetBranch: targetBranchRef.current,
       workingDir: workingDirRef.current,
       scope: diffScopeRef.current,
+      force: true,
       replayIfInFlight: true,
     });
   }, [loadData, shouldBlockDiffLoading]);
@@ -552,6 +561,7 @@ export function useAgentStudioDiffController({
         workingDir: workingDirRef.current,
         scope: diffScopeRef.current,
         mode: "full",
+        force: true,
         replayIfInFlight: true,
       });
     },

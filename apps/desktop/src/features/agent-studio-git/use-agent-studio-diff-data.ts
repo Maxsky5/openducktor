@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
 import type { DiffDataState } from "./contracts";
@@ -42,15 +42,24 @@ export function useAgentStudioDiffData({
   }, [branchIdentityKey, repoPath, targetBranch, worktreePath, worktreeResolutionRunId]);
 
   const [selectedFileState, setSelectedFileState] = useState<string | null>(null);
+  const previousRequestContextKeyRef = useRef<string | null>(null);
   const handleContextReset = useCallback((): void => {
     setSelectedFileState(null);
   }, []);
+
+  useEffect(() => {
+    const previousRequestContextKey = previousRequestContextKeyRef.current;
+    previousRequestContextKeyRef.current = requestContextKey;
+
+    if (previousRequestContextKey !== null && previousRequestContextKey !== requestContextKey) {
+      setSelectedFileState(null);
+    }
+  }, [requestContextKey]);
 
   const {
     activeScopeState,
     diffScope,
     refreshActiveScope,
-    reloadActiveScope,
     setDiffScope,
     state,
     statusSnapshotKey,
@@ -87,14 +96,8 @@ export function useAgentStudioDiffData({
   const setSelectedFile = useCallback(
     (path: string | null): void => {
       setSelectedFileState(path);
-
-      if (path === null || shouldBlockDiffLoading) {
-        return;
-      }
-
-      reloadActiveScope();
     },
-    [reloadActiveScope, shouldBlockDiffLoading],
+    [],
   );
 
   const displayError = worktreeResolutionError ?? activeScopeState.error;

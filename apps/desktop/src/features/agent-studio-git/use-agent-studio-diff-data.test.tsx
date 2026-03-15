@@ -85,6 +85,12 @@ mock.module("@/lib/host-client", () => ({
   },
 }));
 
+mock.module("@/lib/host-client", () => ({
+  hostClient: {
+    runsList: runsListMock,
+  },
+}));
+
 type UseAgentStudioDiffDataHook =
   typeof import("./use-agent-studio-diff-data")["useAgentStudioDiffData"];
 
@@ -320,7 +326,7 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("selected file triggers on-demand full reload for the active scope", async () => {
+  test("selected file updates local selection without reloading the active scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 
     try {
@@ -335,15 +341,8 @@ describe("useAgentStudioDiffData", () => {
       await harness.run((state) => {
         state.setSelectedFile("src/main.ts");
       });
-      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
-
-      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
-        3,
-        "/repo",
-        "origin/main",
-        "uncommitted",
-        undefined,
-      );
+      await harness.waitFor((state) => state.selectedFile === "src/main.ts");
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
     } finally {
       await harness.unmount();
     }
@@ -959,7 +958,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
 
       await harness.run((state) => {
-        state.setSelectedFile("src/full.ts");
+        state.refresh();
       });
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
 
@@ -1015,7 +1014,9 @@ describe("useAgentStudioDiffData", () => {
   test("polling persists hash metadata changes even when derived shared fields stay equal", async () => {
     const originalSetInterval = globalThis.setInterval;
     const originalClearInterval = globalThis.clearInterval;
+    const originalDateNow = Date.now;
     let intervalCallback: (() => void) | null = null;
+    let nowMs = 1_731_000_000_000;
 
     const setIntervalMock = mock((callback: TimerHandler, _delay?: number) => {
       if (typeof callback !== "function") {
@@ -1135,6 +1136,7 @@ describe("useAgentStudioDiffData", () => {
 
     globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval;
     globalThis.clearInterval = clearIntervalMock as unknown as typeof globalThis.clearInterval;
+    Date.now = () => nowMs;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1162,6 +1164,7 @@ describe("useAgentStudioDiffData", () => {
       expect(secondState.upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
       expect(secondState).not.toBe(firstState);
 
+      nowMs += 6_000;
       await harness.run(() => {
         runTick();
       });
@@ -1172,6 +1175,7 @@ describe("useAgentStudioDiffData", () => {
       await harness.unmount();
       globalThis.setInterval = originalSetInterval;
       globalThis.clearInterval = originalClearInterval;
+      Date.now = originalDateNow;
     }
   });
 
