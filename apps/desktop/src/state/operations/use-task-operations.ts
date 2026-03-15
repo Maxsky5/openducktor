@@ -179,7 +179,6 @@ export function useTaskOperations({
         toast.error("Failed to detect pull request", {
           description: errorMessage(error),
         });
-        throw error;
       } finally {
         setDetectingPullRequestTaskId((currentTaskId) =>
           currentTaskId === taskId ? null : currentTaskId,
@@ -193,14 +192,18 @@ export function useTaskOperations({
     async (taskId: string): Promise<void> => {
       setUnlinkingPullRequestTaskId(taskId);
       try {
-        await runTaskMutation({
-          run: async (repoPath) => {
-            await host.taskPullRequestUnlink(repoPath, taskId);
-          },
-          successTitle: "Pull request unlinked",
-          successDescription: taskId,
-          failureTitle: "Failed to unlink pull request",
-        });
+        try {
+          await runTaskMutation({
+            run: async (repoPath) => {
+              await host.taskPullRequestUnlink(repoPath, taskId);
+            },
+            successTitle: "Pull request unlinked",
+            successDescription: taskId,
+            failureTitle: "Failed to unlink pull request",
+          });
+        } catch {
+          return;
+        }
       } finally {
         setUnlinkingPullRequestTaskId((currentTaskId) =>
           currentTaskId === taskId ? null : currentTaskId,

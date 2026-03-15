@@ -33,6 +33,8 @@ const baseArgs: BuildArgs = {
     viewSelectedTask: task,
     contextSwitchVersion: 4,
     isActiveTaskHydrated: true,
+    isActiveTaskHydrationFailed: false,
+    isViewSessionHistoryHydrationFailed: false,
     isViewSessionHistoryHydrating: false,
   },
   sessions: {
@@ -171,6 +173,19 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(hydrating.core.isTaskHydrating).toBe(true);
     expect(hydrated.core.isTaskHydrating).toBe(false);
     expect(noTaskSelected.core.isTaskHydrating).toBe(false);
+  });
+
+  test("stops reporting task hydration after hydration fails", () => {
+    const failed = buildAgentStudioPageModelsArgs({
+      ...baseArgs,
+      view: {
+        ...baseArgs.view,
+        isActiveTaskHydrated: false,
+        isActiveTaskHydrationFailed: true,
+      },
+    });
+
+    expect(failed.core.isTaskHydrating).toBe(false);
   });
 
   test("derives contextSessionsLength from the sessions context size", () => {

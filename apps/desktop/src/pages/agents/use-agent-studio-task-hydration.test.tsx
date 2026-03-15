@@ -120,6 +120,7 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.mount();
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
       expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-1"]).toBeUndefined();
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(true);
       expect(loadAgentSessions).toHaveBeenCalledTimes(1);
 
       await harness.update(
@@ -134,6 +135,31 @@ describe("useAgentStudioTaskHydration", () => {
       await harness.update(args);
       await harness.waitFor(() => loadAgentSessions.mock.calls.length === 3);
       expect(harness.getLatest().hydratedTasksByRepoAndTask["/repo-a:task-1"]).toBe(true);
+      expect(harness.getLatest().isActiveTaskHydrationFailed).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("marks session history hydration as failed when loading history rejects", async () => {
+    const loadAgentSessions = mock(async (_taskId: string, options?: AgentSessionLoadOptions) => {
+      if (options?.hydrateHistoryForSessionId === "session-1") {
+        throw new Error("history failed");
+      }
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeSessionId: "session-1",
+        loadAgentSessions,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => loadAgentSessions.mock.calls.length === 1);
+      expect(harness.getLatest().isActiveSessionHistoryHydrationFailed).toBe(true);
+      expect(harness.getLatest().isActiveSessionHistoryHydrated).toBe(false);
+      expect(harness.getLatest().isActiveSessionHistoryHydrating).toBe(false);
     } finally {
       await harness.unmount();
     }

@@ -42,7 +42,9 @@ type UseAgentStudioSelectionControllerResult = {
   viewRole: AgentRole;
   viewScenario: AgentScenario;
   isActiveTaskHydrated: boolean;
+  isActiveTaskHydrationFailed: boolean;
   isViewSessionHistoryHydrated: boolean;
+  isViewSessionHistoryHydrationFailed: boolean;
   isViewSessionHistoryHydrating: boolean;
 };
 
@@ -261,7 +263,9 @@ export function useAgentStudioSelectionController({
 
   const {
     hydratedTasksByRepoAndTask,
+    isActiveTaskHydrationFailed,
     isActiveSessionHistoryHydrated,
+    isActiveSessionHistoryHydrationFailed,
     isActiveSessionHistoryHydrating,
   } = useAgentStudioTaskHydration({
     activeRepo,
@@ -294,7 +298,9 @@ export function useAgentStudioSelectionController({
     viewRole,
     viewScenario,
     isActiveTaskHydrated,
+    isActiveTaskHydrationFailed,
     isViewSessionHistoryHydrated: isActiveSessionHistoryHydrated,
+    isViewSessionHistoryHydrationFailed: isActiveSessionHistoryHydrationFailed,
     isViewSessionHistoryHydrating: isActiveSessionHistoryHydrating,
   };
 }
