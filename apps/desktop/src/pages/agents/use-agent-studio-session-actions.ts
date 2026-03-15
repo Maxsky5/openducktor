@@ -18,7 +18,6 @@ import type { RequestNewSessionStart } from "./use-agent-studio-session-start-ty
 export type {
   NewSessionStartDecision,
   NewSessionStartRequest,
-  SessionStartRequestReason,
 } from "./use-agent-studio-session-start-types";
 
 type UseAgentStudioSessionActionsArgs = {

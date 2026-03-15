@@ -7,7 +7,7 @@ type SectionLoadState = {
   pendingForcedReload: boolean;
 };
 
-export type TaskDocumentLoadController = {
+type TaskDocumentLoadController = {
   contextVersion: number;
   sections: Record<TaskDocumentSectionKey, SectionLoadState>;
 };

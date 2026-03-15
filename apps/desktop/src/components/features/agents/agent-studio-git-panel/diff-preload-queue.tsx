@@ -2,7 +2,7 @@ import type { FileDiff } from "@openducktor/contracts";
 import { memo, type ReactElement, useMemo } from "react";
 import { PierreDiffPreloader } from "@/components/features/agents/pierre-diff-viewer";
 
-export type DiffPreloadEntry = {
+type DiffPreloadEntry = {
   file: string;
   diff: string;
 };

@@ -8,7 +8,7 @@ import { selectRenderableDiff } from "./renderable-patch";
 
 export type PierreDiffStyle = "split" | "unified";
 
-export type PierreDiffViewerProps = {
+type PierreDiffViewerProps = {
   /** Raw unified diff / patch string (e.g. from `git diff`). */
   patch: string;
   filePath: string;

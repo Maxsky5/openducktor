@@ -26,7 +26,7 @@ type TaskDocumentPayload = {
   updatedAt: string | null;
 };
 
-export type TaskDocumentLoaders = {
+type TaskDocumentLoaders = {
   loadSpecDocument: (taskId: string) => Promise<TaskDocumentPayload>;
   loadPlanDocument: (taskId: string) => Promise<TaskDocumentPayload>;
   loadQaReportDocument: (taskId: string) => Promise<TaskDocumentPayload>;

@@ -2,7 +2,7 @@ import type { TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
 import { normalizeLines } from "@/components/features/task-composer";
 import type { ComposerState, EditTaskSection } from "@/types/task-composer";
 
-export type DocumentSection = Extract<EditTaskSection, "spec" | "plan">;
+type DocumentSection = Extract<EditTaskSection, "spec" | "plan">;
 
 export const isDocumentSection = (section: EditTaskSection): section is DocumentSection =>
   section === "spec" || section === "plan";

@@ -12,7 +12,7 @@ type DocumentSectionState = {
   error: string | null;
 };
 
-export type TaskDocumentEditorState = Record<TaskDocumentSection, DocumentSectionState>;
+type TaskDocumentEditorState = Record<TaskDocumentSection, DocumentSectionState>;
 type TaskDocumentViewState = Record<TaskDocumentSection, DocumentEditorView>;
 
 type TaskDocumentPayload = {

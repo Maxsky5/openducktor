@@ -10,7 +10,7 @@ type UseSettingsModalSnapshotStateArgs = {
   loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
 };
 
-export type SettingsModalSnapshotState = {
+type SettingsModalSnapshotState = {
   loadedSnapshot: SettingsSnapshot | null;
   snapshotDraft: SettingsSnapshot | null;
   setSnapshotDraft: Dispatch<SetStateAction<SettingsSnapshot | null>>;

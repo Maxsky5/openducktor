@@ -10,7 +10,7 @@ export type AgentActivitySessionItem = {
   startedAt: string;
 };
 
-export type AgentActivitySummary = {
+type AgentActivitySummary = {
   activeSessionCount: number;
   waitingForInputCount: number;
   activeSessions: AgentActivitySessionItem[];

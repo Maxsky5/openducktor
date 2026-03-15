@@ -16,7 +16,7 @@ type UseSettingsModalPromptValidationArgs = {
   selectedRepoPath: string | null;
 };
 
-export type SettingsModalPromptValidation = {
+type SettingsModalPromptValidation = {
   promptValidationState: PromptValidationState;
   hasPromptValidationErrors: boolean;
   selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;

@@ -14,7 +14,7 @@ export const AGENT_STUDIO_QUERY_KEYS = {
   start: "start",
 } as const;
 
-export const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
+const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   AGENT_STUDIO_QUERY_KEYS.task,
   AGENT_STUDIO_QUERY_KEYS.session,
   AGENT_STUDIO_QUERY_KEYS.agent,
@@ -22,7 +22,7 @@ export const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   AGENT_STUDIO_QUERY_KEYS.start,
 ] as const;
 
-export const AGENT_STUDIO_PERSISTED_CONTEXT_KEYS = {
+const AGENT_STUDIO_PERSISTED_CONTEXT_KEYS = {
   taskId: "taskId",
   role: "role",
   sessionId: "sessionId",

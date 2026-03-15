@@ -5,8 +5,6 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 const Sheet = DialogPrimitive.Root;
-const SheetTrigger = DialogPrimitive.Trigger;
-const SheetClose = DialogPrimitive.Close;
 const SheetPortal = DialogPrimitive.Portal;
 
 function SheetOverlay({
@@ -88,10 +86,6 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("space-y-1.5 pr-8", className)} {...props} />;
 }
 
-function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("mt-auto flex justify-end gap-2", className)} {...props} />;
-}
-
 function SheetTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
@@ -113,15 +107,4 @@ function SheetDescription({
   );
 }
 
-export {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetOverlay,
-  SheetPortal,
-  SheetTitle,
-  SheetTrigger,
-};
+export { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle };

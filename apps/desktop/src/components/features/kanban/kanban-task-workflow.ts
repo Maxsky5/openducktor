@@ -3,7 +3,7 @@ import { isQaRejectedTask } from "@/lib/task-qa";
 
 export type TaskWorkflowAction = Exclude<TaskAction, "view_details">;
 
-export type TaskCardActionState = {
+type TaskCardActionState = {
   primaryAction: TaskWorkflowAction | null;
   secondaryActions: TaskWorkflowAction[];
   allActions: TaskWorkflowAction[];

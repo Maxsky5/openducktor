@@ -11,7 +11,6 @@ export {
 } from "./message-formatting";
 export type { QuestionToolDetail } from "./question-tool-parser";
 export { questionToolDetails } from "./question-tool-parser";
-export type { ToolLifecyclePhase } from "./tool-lifecycle";
 export {
   getToolLifecyclePhase,
   hasNonEmptyInput,

@@ -1,6 +1,6 @@
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type VirtualWindowRange = {
+type VirtualWindowRange = {
   startIndex: number;
   endIndex: number;
 };
@@ -27,7 +27,7 @@ type BuildVirtualRowLayoutArgs = {
 
 export const AGENT_CHAT_VIRTUALIZATION_MIN_ROW_COUNT = 40;
 export const AGENT_CHAT_VIRTUAL_OVERSCAN_ITEMS = 12;
-export const AGENT_CHAT_VIRTUAL_ROW_GAP_PX = 4;
+const AGENT_CHAT_VIRTUAL_ROW_GAP_PX = 4;
 
 const EMPTY_RANGE: VirtualWindowRange = { startIndex: 0, endIndex: -1 };
 

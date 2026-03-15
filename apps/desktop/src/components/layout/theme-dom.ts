@@ -2,9 +2,6 @@ import type { Theme } from "@openducktor/contracts";
 
 const THEME_CLASS_NAMES = ["light", "dark"] as const;
 
-export const normalizeTheme = (value: string | null | undefined, fallback: Theme): Theme =>
-  value === "dark" ? "dark" : value === "light" ? "light" : fallback;
-
 export const readDocumentTheme = (fallback: Theme): Theme => {
   if (typeof document === "undefined") {
     return fallback;

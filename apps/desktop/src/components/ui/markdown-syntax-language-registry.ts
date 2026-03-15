@@ -1,4 +1,4 @@
-export type PrismLanguageLoader = () => Promise<{ default: unknown }>;
+type PrismLanguageLoader = () => Promise<{ default: unknown }>;
 
 type CreateMarkdownSyntaxLanguageRegistryArgs = {
   languageAliases: Record<string, string>;
@@ -6,10 +6,6 @@ type CreateMarkdownSyntaxLanguageRegistryArgs = {
   lazyLanguageLoaders: Record<string, PrismLanguageLoader>;
   registerLanguage: (language: string, grammar: unknown) => void;
 };
-
-export type MarkdownSyntaxLanguageRegistry = ReturnType<
-  typeof createMarkdownSyntaxLanguageRegistry
->;
 
 export function createMarkdownSyntaxLanguageRegistry({
   languageAliases,

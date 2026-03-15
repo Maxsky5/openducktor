@@ -48,20 +48,6 @@ export const resolveRuntimeKindSelection = ({
   return runtimeDefinitions[0]?.kind ?? requestedRuntimeKind ?? fallbackRuntimeKind;
 };
 
-export const requireRuntimeDefinition = ({
-  runtimeDefinitions,
-  runtimeKind,
-}: {
-  runtimeDefinitions: RuntimeDescriptor[];
-  runtimeKind: RuntimeKind;
-}): RuntimeDescriptor => {
-  const definition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
-  if (!definition) {
-    throw new Error(`Unsupported agent runtime '${runtimeKind}'.`);
-  }
-  return definition;
-};
-
 export const runtimeLabelFor = ({
   runtimeDefinitions,
   runtimeKind,
@@ -72,7 +58,7 @@ export const runtimeLabelFor = ({
   return findRuntimeDefinition(runtimeDefinitions, runtimeKind)?.label ?? runtimeKind;
 };
 
-export const runtimeSupportsCapability = (
+const runtimeSupportsCapability = (
   runtimeDescriptor: RuntimeDescriptor,
   capability: RuntimeCapabilityKey,
 ): boolean => {
@@ -140,7 +126,7 @@ export const filterRuntimeDefinitionsForRole = (
   return runtimeDefinitions.filter((definition) => runtimeSupportsRole(definition, role));
 };
 
-export const runtimeSupportsAllRoles = (runtimeDescriptor: RuntimeDescriptor): boolean => {
+const runtimeSupportsAllRoles = (runtimeDescriptor: RuntimeDescriptor): boolean => {
   return (
     getMissingRequiredRuntimeSupportedScopes(runtimeDescriptor.capabilities.supportedScopes)
       .length === 0

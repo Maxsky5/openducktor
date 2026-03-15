@@ -19,7 +19,7 @@ import {
   refreshTodosFromSessionRef,
 } from "./session-helpers";
 
-export type ToolPart = Extract<SessionPart, { kind: "tool" }>;
+type ToolPart = Extract<SessionPart, { kind: "tool" }>;
 type ToolPartStatus = ToolPart["status"];
 type ToolMeta = Extract<AgentChatMessageMeta, { kind: "tool" }>;
 type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
@@ -30,7 +30,7 @@ type ToolTimingMeta = {
   inputReadyAtMs?: number;
 };
 
-export type ToolRefreshDecision = {
+type ToolRefreshDecision = {
   shouldRefreshTaskData: boolean;
   shouldRefreshSessionTodos: boolean;
 };
@@ -40,7 +40,7 @@ type ToolPartSessionUpdate = {
   nextState: AgentSessionState;
 };
 
-export const resolveTodoUpdateFromTool = (
+const resolveTodoUpdateFromTool = (
   part: ToolPart,
   input: Record<string, unknown> | undefined,
   output: string | undefined,

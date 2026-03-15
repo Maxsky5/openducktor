@@ -18,7 +18,7 @@ export const documentQueryKeys = {
     [...documentQueryKeys.all, "qa-report", repoPath, taskId] as const,
 };
 
-export const specDocumentQueryOptions = (repoPath: string, taskId: string) =>
+const specDocumentQueryOptions = (repoPath: string, taskId: string) =>
   queryOptions({
     queryKey: documentQueryKeys.spec(repoPath, taskId),
     queryFn: async (): Promise<TaskDocument> => {
@@ -31,7 +31,7 @@ export const specDocumentQueryOptions = (repoPath: string, taskId: string) =>
     staleTime: TASK_DOCUMENT_STALE_TIME_MS,
   });
 
-export const planDocumentQueryOptions = (repoPath: string, taskId: string) =>
+const planDocumentQueryOptions = (repoPath: string, taskId: string) =>
   queryOptions({
     queryKey: documentQueryKeys.plan(repoPath, taskId),
     queryFn: async (): Promise<TaskDocument> => {
@@ -44,7 +44,7 @@ export const planDocumentQueryOptions = (repoPath: string, taskId: string) =>
     staleTime: TASK_DOCUMENT_STALE_TIME_MS,
   });
 
-export const qaReportDocumentQueryOptions = (repoPath: string, taskId: string) =>
+const qaReportDocumentQueryOptions = (repoPath: string, taskId: string) =>
   queryOptions({
     queryKey: documentQueryKeys.qaReport(repoPath, taskId),
     queryFn: async (): Promise<TaskDocument> => {

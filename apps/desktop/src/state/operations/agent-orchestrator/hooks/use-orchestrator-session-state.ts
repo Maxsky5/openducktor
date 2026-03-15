@@ -4,12 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
 
-export type SessionStateById = Record<string, AgentSessionState>;
-export type SessionStateUpdater =
-  | SessionStateById
-  | ((current: SessionStateById) => SessionStateById);
+type SessionStateById = Record<string, AgentSessionState>;
+type SessionStateUpdater = SessionStateById | ((current: SessionStateById) => SessionStateById);
 
-export type OrchestratorMutableState = {
+type OrchestratorMutableState = {
   sessionsById: SessionStateById;
   tasks: TaskCard[];
   runs: RunSummary[];
@@ -25,7 +23,7 @@ export type OrchestratorMutableState = {
   turnModelBySession: Record<string, AgentSessionState["selectedModel"]>;
 };
 
-export type OrchestratorRefBridges = {
+type OrchestratorRefBridges = {
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   taskRef: MutableRefObject<TaskCard[]>;
   runsRef: MutableRefObject<RunSummary[]>;

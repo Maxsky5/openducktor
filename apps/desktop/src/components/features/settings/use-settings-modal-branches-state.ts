@@ -7,7 +7,7 @@ type UseSettingsModalBranchesStateArgs = {
   selectedRepoPath: string | null;
 };
 
-export type SettingsModalBranchesState = {
+type SettingsModalBranchesState = {
   selectedRepoBranches: GitBranch[];
   isLoadingSelectedRepoBranches: boolean;
   selectedRepoBranchesError: string | null;

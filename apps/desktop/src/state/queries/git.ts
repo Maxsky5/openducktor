@@ -51,14 +51,14 @@ export const repoBranchesQueryOptions = (repoPath: string) =>
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
-export const currentBranchQueryOptions = (repoPath: string) =>
+const currentBranchQueryOptions = (repoPath: string) =>
   queryOptions({
     queryKey: gitQueryKeys.currentBranch(repoPath),
     queryFn: (): Promise<GitCurrentBranch> => host.gitGetCurrentBranch(repoPath),
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
-export const worktreeStatusQueryOptions = (
+const worktreeStatusQueryOptions = (
   repoPath: string,
   targetBranch: string,
   diffScope: "target" | "uncommitted",
@@ -71,7 +71,7 @@ export const worktreeStatusQueryOptions = (
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 
-export const worktreeStatusSummaryQueryOptions = (
+const worktreeStatusSummaryQueryOptions = (
   repoPath: string,
   targetBranch: string,
   diffScope: "target" | "uncommitted",

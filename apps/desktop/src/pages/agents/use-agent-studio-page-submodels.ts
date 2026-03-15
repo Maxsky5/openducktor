@@ -25,7 +25,7 @@ import type {
   WorkflowHeaderContext,
 } from "./use-agent-studio-page-submodel-contracts";
 
-export type UseAgentStudioHeaderModelArgs = {
+type UseAgentStudioHeaderModelArgs = {
   selectedTask: TaskCard | null;
   onOpenTaskDetails: (() => void) | null;
   activeSession: AgentSessionState | null;
@@ -96,7 +96,7 @@ export const useAgentStudioHeaderModel = ({
   );
 };
 
-export type UseAgentStudioThreadModelArgs = {
+type UseAgentStudioThreadModelArgs = {
   session: AgentStudioThreadSessionContext;
   readiness: AgentStudioThreadReadinessContext;
   kickoff: AgentStudioThreadKickoffContext;
@@ -197,7 +197,7 @@ export const useAgentStudioThreadModel = ({
   );
 };
 
-export type UseAgentStudioComposerModelArgs = {
+type UseAgentStudioComposerModelArgs = {
   session: AgentStudioComposerSessionContext;
   readiness: AgentStudioComposerReadinessContext;
   interaction: AgentStudioComposerInteractionContext;

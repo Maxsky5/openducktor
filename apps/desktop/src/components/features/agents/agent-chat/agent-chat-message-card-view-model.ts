@@ -14,14 +14,14 @@ import {
   SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
 
-export type AgentChatMessageCardViewModelInput = {
+type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
   sessionRole: AgentRole | null;
   sessionSelectedModel: AgentModelSelection | null;
   sessionAgentColors: Record<string, string> | undefined;
 };
 
-export type AgentChatMessageCardViewModel = {
+type AgentChatMessageCardViewModel = {
   timeLabel: string;
   assistantRole: AgentRole | null;
   assistantAccentColor: string | undefined;

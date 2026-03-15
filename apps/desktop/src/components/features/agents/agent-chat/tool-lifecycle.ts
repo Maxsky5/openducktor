@@ -46,7 +46,7 @@ export const isToolMessageCancelled = (meta: ToolMeta): boolean => {
   );
 };
 
-export type ToolLifecyclePhase = "queued" | "executing" | "completed" | "cancelled" | "failed";
+type ToolLifecyclePhase = "queued" | "executing" | "completed" | "cancelled" | "failed";
 
 export const getToolLifecyclePhase = (meta: ToolMeta): ToolLifecyclePhase => {
   if (meta.status === "pending") {
