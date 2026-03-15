@@ -1,8 +1,8 @@
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { Fragment, type ReactElement, useMemo, useRef } from "react";
+import { type ReactElement, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import type { AgentChatVirtualRow } from "./agent-chat-thread-virtualization";
@@ -13,6 +13,49 @@ import { useAgentChatAutoScroll } from "./use-agent-chat-auto-scroll";
 import { useAgentChatLoadingOverlay } from "./use-agent-chat-loading-overlay";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 import { useAgentChatVirtualization } from "./use-agent-chat-virtualization";
+
+type AgentChatThreadMotionRowProps = {
+  row: AgentChatVirtualRow;
+  sessionAgentColors: Record<string, string>;
+  sessionRole: AgentSessionState["role"] | null;
+  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
+  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
+  resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
+  resolveStaticMeasurementRef?: (rowKey: string) => (element: HTMLDivElement | null) => void;
+  shouldMeasureStaticRow?: boolean;
+};
+
+function AgentChatThreadMotionRow({
+  row,
+  sessionAgentColors,
+  sessionRole,
+  sessionSelectedModel,
+  sessionWorkingDirectory,
+  resolveRowRef,
+  resolveStaticMeasurementRef,
+  shouldMeasureStaticRow = false,
+}: AgentChatThreadMotionRowProps): ReactElement {
+  const motionRef = resolveRowRef(row.key);
+  const measurementRef = shouldMeasureStaticRow
+    ? (resolveStaticMeasurementRef?.(row.key) ?? null)
+    : null;
+  const combinedRef = (element: HTMLDivElement | null) => {
+    motionRef(element);
+    measurementRef?.(element);
+  };
+
+  return (
+    <div ref={combinedRef} data-row-key={row.key} className="agent-chat-row-motion">
+      <AgentChatThreadRow
+        row={row}
+        sessionRole={sessionRole}
+        sessionSelectedModel={sessionSelectedModel}
+        sessionAgentColors={sessionAgentColors}
+        sessionWorkingDirectory={sessionWorkingDirectory}
+      />
+    </div>
+  );
+}
 
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
@@ -126,30 +169,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     return registerStaticMeasurementRowElement(rowKey);
   };
 
-  const renderThreadRow = (
-    row: (typeof virtualRows)[number],
-    options?: { measureStaticRow?: boolean },
-  ): ReactElement => {
-    const motionRef = resolveRowRef(row.key);
-    const measurementRef = options?.measureStaticRow ? resolveStaticMeasurementRef(row.key) : null;
-    const combinedRef = (element: HTMLDivElement | null) => {
-      motionRef(element);
-      measurementRef?.(element);
-    };
-
-    return (
-      <div ref={combinedRef} data-row-key={row.key} className="agent-chat-row-motion">
-        <AgentChatThreadRow
-          row={row}
-          sessionRole={sessionRole}
-          sessionSelectedModel={sessionSelectedModel}
-          sessionAgentColors={sessionAgentColors}
-          sessionWorkingDirectory={sessionWorkingDirectory}
-        />
-      </div>
-    );
-  };
-
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       {!agentStudioReady ? (
@@ -231,7 +250,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
                       width: "100%",
                     }}
                   >
-                    {renderThreadRow(row)}
+                    <AgentChatThreadMotionRow
+                      row={row}
+                      sessionRole={sessionRole}
+                      sessionSelectedModel={sessionSelectedModel}
+                      sessionAgentColors={sessionAgentColors}
+                      sessionWorkingDirectory={sessionWorkingDirectory}
+                      resolveRowRef={resolveRowRef}
+                    />
                   </div>
                 ))
               : null}
@@ -241,9 +267,17 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         {session && (!shouldVirtualize || !shouldRenderVirtualizedThread) ? (
           hasRenderableSessionRows ? (
             virtualRows.map((row) => (
-              <Fragment key={row.key}>
-                {renderThreadRow(row, { measureStaticRow: shouldVirtualize })}
-              </Fragment>
+              <AgentChatThreadMotionRow
+                key={row.key}
+                row={row}
+                sessionRole={sessionRole}
+                sessionSelectedModel={sessionSelectedModel}
+                sessionAgentColors={sessionAgentColors}
+                sessionWorkingDirectory={sessionWorkingDirectory}
+                resolveRowRef={resolveRowRef}
+                resolveStaticMeasurementRef={resolveStaticMeasurementRef}
+                shouldMeasureStaticRow={shouldVirtualize}
+              />
             ))
           ) : hasSessionHistory ? null : (
             <div className="rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">

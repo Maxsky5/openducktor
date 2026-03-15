@@ -38,7 +38,7 @@ export type AgentStudioOrchestrationSelectionContext = {
 
 export type AgentStudioOrchestrationReadinessContext = {
   agentStudioReady: boolean;
-  agentStudioBlockedReason: string;
+  agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
 };

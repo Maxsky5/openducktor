@@ -967,10 +967,11 @@ mod tests {
             "snapshot save response should include workspace records"
         );
 
-        let (_persisted_theme, _persisted_git, persisted_chat, persisted_repos, persisted_global) = fixture
-            .service
-            .workspace_get_settings_snapshot()
-            .map_err(|error| error.to_string())?;
+        let (_persisted_theme, _persisted_git, persisted_chat, persisted_repos, persisted_global) =
+            fixture
+                .service
+                .workspace_get_settings_snapshot()
+                .map_err(|error| error.to_string())?;
         let persisted_repo = persisted_repos
             .get(repo_key.as_str())
             .ok_or_else(|| "persisted repo config missing".to_string())?;
@@ -1008,8 +1009,7 @@ mod tests {
 
     #[test]
     fn workspace_get_settings_snapshot_returns_defaulted_chat_settings() -> Result<(), String> {
-        let fixture =
-            setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
+        let fixture = setup_workspace_command_fixture("snapshot-default-chat", HookSet::default());
 
         let (_theme, _git, chat, _repos, _global_prompt_overrides) = fixture
             .service
@@ -1060,10 +1060,11 @@ mod tests {
         invoke_workspace_save_settings_snapshot_ipc(&fixture, payload_with_chat)
             .expect("IPC snapshot save should persist chat settings");
 
-        let (_reloaded_theme, _reloaded_git, reloaded_chat, _reloaded_repos, _reloaded_global) = fixture
-            .service
-            .workspace_get_settings_snapshot()
-            .map_err(|error| error.to_string())?;
+        let (_reloaded_theme, _reloaded_git, reloaded_chat, _reloaded_repos, _reloaded_global) =
+            fixture
+                .service
+                .workspace_get_settings_snapshot()
+                .map_err(|error| error.to_string())?;
         assert!(reloaded_chat.show_thinking_messages);
         Ok(())
     }

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use fs2::FileExt;
 use host_domain::{
     GitPort, RunEvent, RunSummary, RuntimeCheck, RuntimeInstanceSummary, RuntimeRole, TaskCard,
@@ -38,18 +38,18 @@ mod workspace_policy;
 pub(crate) use events::{emit_event, spawn_output_forwarder};
 pub(crate) use hook_security::{run_parsed_hook_command_allow_failure, validate_hook_trust};
 pub(crate) use opencode_runtime::{
-    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
     opencode_server_parent_pid, process_exists, read_opencode_version,
     resolve_opencode_binary_path, spawn_opencode_server, terminate_child_process,
     terminate_process_by_pid, wait_for_local_server_with_process, wait_for_process_exit_by_pid,
+    OpencodeStartupReadinessPolicy, OpencodeStartupWaitReport, StartupCancelEpoch,
 };
-pub(crate) use process_registry::TrackedOpencodeProcessGuard;
 #[cfg(test)]
 pub(crate) use process_registry::read_opencode_process_registry;
+pub(crate) use process_registry::TrackedOpencodeProcessGuard;
 #[cfg(test)]
 pub(crate) use process_registry::{
-    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH, OpencodeProcessRegistryInstance,
-    with_locked_opencode_process_registry,
+    with_locked_opencode_process_registry, OpencodeProcessRegistryInstance,
+    OPENCODE_PROCESS_REGISTRY_RELATIVE_PATH,
 };
 pub(crate) use service_core::{
     AgentRuntimeProcess, CachedRuntimeCheck, RunProcess, RuntimeCleanupTarget,
@@ -57,11 +57,11 @@ pub(crate) use service_core::{
 pub use service_core::{AppService, RunEmitter};
 #[cfg(test)]
 pub(crate) use startup_metrics::{
-    OpencodeStartupMetricsSnapshot, build_opencode_startup_event_payload,
+    build_opencode_startup_event_payload, OpencodeStartupMetricsSnapshot,
 };
 pub(crate) use startup_metrics::{
-    STARTUP_CONFIG_INVALID_REASON, StartupEventContext, StartupEventCorrelation,
-    StartupEventPayload,
+    StartupEventContext, StartupEventCorrelation, StartupEventPayload,
+    STARTUP_CONFIG_INVALID_REASON,
 };
 pub(crate) use workflow_rules::{
     derive_agent_workflows, derive_available_actions, validate_transition,

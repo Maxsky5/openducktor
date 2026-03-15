@@ -118,7 +118,7 @@ type AgentChatThreadModelArgs = {
   isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
-  agentStudioBlockedReason: string;
+  agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
   onRefreshChecks: () => void;
   taskId: string;

@@ -81,6 +81,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     !selectedModelSelection ||
     !supportsVariants ||
     variantOptions.length === 0;
+  const handleConfirm = (): void => {
+    if (confirmDisabled) {
+      return;
+    }
+    onConfirm(false);
+  };
 
   let agentHelperText: string | null = null;
   if (isSelectionCatalogLoading) {
@@ -118,16 +124,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form
-          className="pt-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (confirmDisabled) {
-              return;
-            }
-            onConfirm(false);
-          }}
-        >
+        <form className="pt-2" action={handleConfirm}>
           <fieldset className="space-y-4" disabled={isStarting}>
             <div className="grid gap-1.5">
               <label

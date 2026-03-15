@@ -23,7 +23,7 @@ export type AgentChatThreadModel = {
   isSessionViewLoading: boolean;
   roleOptions: AgentRoleOption[];
   agentStudioReady: boolean;
-  blockedReason: string;
+  blockedReason: string | null;
   isLoadingChecks: boolean;
   onRefreshChecks: () => void;
   taskSelected: boolean;

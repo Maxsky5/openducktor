@@ -521,7 +521,9 @@ mod tests {
         })
         .await;
         let error = result.expect_err("panic in worker should map to join failure");
-        assert!(error.to_string().contains("tokio-test-join worker join failure"));
+        assert!(error
+            .to_string()
+            .contains("tokio-test-join worker join failure"));
     }
 
     #[test]

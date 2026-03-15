@@ -1,11 +1,15 @@
 import { AlertTriangle } from "lucide-react";
-import { Fragment, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { DiagnosticsKeyValueRow } from "./diagnostics-key-value-row";
 import type { DiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsSection } from "./diagnostics-section";
 
 type DiagnosticsPanelSectionsProps = {
   model: DiagnosticsPanelModel;
+};
+
+type DiagnosticsPanelSectionViewProps = {
+  section: DiagnosticsPanelModel["sections"][number];
 };
 
 const buildRenderEntries = <T,>(
@@ -26,11 +30,7 @@ const buildRenderEntries = <T,>(
   });
 };
 
-const renderSection = ({
-  section,
-}: {
-  section: DiagnosticsPanelModel["sections"][number];
-}): ReactElement => {
+function DiagnosticsPanelSectionView({ section }: DiagnosticsPanelSectionViewProps): ReactElement {
   const rowEntries = buildRenderEntries(section.rows, (row) => `${row.label}:${row.value}`);
   const errorEntries = buildRenderEntries(section.errors, (error) => error);
 
@@ -53,13 +53,18 @@ const renderSection = ({
       )}
     </DiagnosticsSection>
   );
-};
+}
 
 export function DiagnosticsPanelSections({ model }: DiagnosticsPanelSectionsProps): ReactElement {
+  const sectionEntries = buildRenderEntries(
+    model.sections,
+    (section) => `${section.title}:${section.badge ?? ""}`,
+  );
+
   return (
     <div className="space-y-3">
-      {model.sections.map((section) => (
-        <Fragment key={section.title}>{renderSection({ section })}</Fragment>
+      {sectionEntries.map(({ item: section, key }) => (
+        <DiagnosticsPanelSectionView key={key} section={section} />
       ))}
     </div>
   );

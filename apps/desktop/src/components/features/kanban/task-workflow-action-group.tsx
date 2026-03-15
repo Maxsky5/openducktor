@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { resolveTaskCardActions, type TaskWorkflowAction } from "./kanban-task-workflow";
 import { TASK_ACTION_ICON, taskActionLabel, taskPrimaryActionVariant } from "./task-action-ui";
 
+const EMPTY_EXTRA_MENU_ACTIONS: readonly ExtraTaskMenuAction[] = [];
+
 type ExtraTaskMenuAction = {
   id: string;
   label: string;
@@ -35,7 +37,7 @@ export function TaskWorkflowActionGroup({
   task,
   onAction,
   includeActions,
-  extraMenuActions = [],
+  extraMenuActions = EMPTY_EXTRA_MENU_ACTIONS,
   menuAlign = "end",
   className,
   primaryClassName,

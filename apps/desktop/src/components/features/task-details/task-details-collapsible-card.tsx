@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { type ReactElement, type ReactNode, useEffect, useState } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { humanDate } from "@/lib/task-display";
 import { cn } from "@/lib/utils";
@@ -23,12 +23,9 @@ export function TaskDetailsCollapsibleCard({
   onExpandedChange,
   children,
 }: TaskDetailsCollapsibleCardProps): ReactElement {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
   const summaryLabel = statusLabel ?? (updatedAt ? humanDate(updatedAt) : null);
-
-  useEffect(() => {
-    setIsExpanded(defaultExpanded);
-  }, [defaultExpanded]);
+  const isExpanded = expandedOverride ?? defaultExpanded;
 
   const resolvedChildren = typeof children === "function" ? children({ isExpanded }) : children;
 
@@ -36,7 +33,7 @@ export function TaskDetailsCollapsibleCard({
     <Collapsible
       open={isExpanded}
       onOpenChange={(nextOpen) => {
-        setIsExpanded(nextOpen);
+        setExpandedOverride(nextOpen);
         onExpandedChange?.(nextOpen);
       }}
       className="rounded-xl border border-border/90 bg-card shadow-sm"

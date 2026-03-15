@@ -37,7 +37,7 @@ export type AgentStudioThreadSessionContext = {
 
 export type AgentStudioThreadReadinessContext = {
   agentStudioReady: boolean;
-  agentStudioBlockedReason: string;
+  agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
 };

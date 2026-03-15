@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+const EMPTY_SUGGESTIONS: string[] = [];
+
 type TagSelectorProps = {
   value: string[];
   onChange: (next: string[]) => void;
@@ -17,7 +19,7 @@ const normalizeTag = (label: string): string => label.trim().replace(/\s+/g, "-"
 export function TagSelector({
   value,
   onChange,
-  suggestions = [],
+  suggestions = EMPTY_SUGGESTIONS,
   disabled = false,
   placeholder = "Type a label and press Enter",
 }: TagSelectorProps): ReactElement {

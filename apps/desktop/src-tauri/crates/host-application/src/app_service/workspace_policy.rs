@@ -244,13 +244,7 @@ impl AppService {
             repo_config.trusted_hooks_fingerprint = trusted_hooks_fingerprint;
         }
 
-        self.workspace_persist_settings_snapshot(
-            theme,
-            git,
-            chat,
-            repos,
-            global_prompt_overrides,
-        )?;
+        self.workspace_persist_settings_snapshot(theme, git, chat, repos, global_prompt_overrides)?;
         self.workspace_list()
     }
 
@@ -739,8 +733,7 @@ mod tests {
             persisted_chat,
             _persisted_repos,
             _persisted_global_prompt_overrides,
-        ) =
-            fixture.service.workspace_get_settings_snapshot()?;
+        ) = fixture.service.workspace_get_settings_snapshot()?;
         assert!(persisted_chat.show_thinking_messages);
         assert_eq!(confirmation.request_count(), 0);
         Ok(())

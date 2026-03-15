@@ -230,9 +230,7 @@ impl AppService {
         self.config_store.repo_config_optional(repo_path)
     }
 
-    pub fn workspace_get_settings_snapshot(
-        &self,
-    ) -> Result<SettingsSnapshotTuple> {
+    pub fn workspace_get_settings_snapshot(&self) -> Result<SettingsSnapshotTuple> {
         let config = self.config_store.load()?;
         Ok((
             config.theme,
