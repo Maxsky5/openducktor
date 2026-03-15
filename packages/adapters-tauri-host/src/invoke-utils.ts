@@ -3,13 +3,23 @@ export type InvokeFn = (command: string, args?: Record<string, unknown>) => Prom
 export type OkResult = { ok: boolean };
 export type UpdatedAtResult = { updatedAt: string };
 
-export const parseArray = <T>(schema: { parse: (value: unknown) => T }, payload: unknown): T[] => {
+/**
+ * Parse an array payload returned by a host command and validate each entry.
+ */
+export const parseArray = <T>(
+  schema: { parse: (value: unknown) => T },
+  payload: unknown,
+  command: string,
+): T[] => {
   if (!Array.isArray(payload)) {
-    throw new Error("Expected array payload from host command");
+    throw new Error(`Expected array payload from host command ${command}`);
   }
   return payload.map((entry) => schema.parse(entry));
 };
 
+/**
+ * Parse the canonical `{ ok: boolean }` ack shape returned by host mutations.
+ */
 export const parseOkResult = (payload: unknown, command: string): OkResult => {
   if (
     !payload ||
@@ -24,6 +34,9 @@ export const parseOkResult = (payload: unknown, command: string): OkResult => {
   };
 };
 
+/**
+ * Parse the canonical `{ updatedAt: string }` document-write result from the host.
+ */
 export const parseUpdatedAtResult = (payload: unknown, command: string): UpdatedAtResult => {
   if (
     !payload ||

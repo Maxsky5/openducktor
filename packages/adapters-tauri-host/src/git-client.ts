@@ -39,7 +39,7 @@ export const gitGetBranches = async (
   repoPath: string,
 ): Promise<GitBranch[]> => {
   const payload = await invokeFn("git_get_branches", { repoPath });
-  return parseArray(gitBranchSchema, payload);
+  return parseArray(gitBranchSchema, payload, "git_get_branches");
 };
 
 export const gitGetCurrentBranch = async (
@@ -145,7 +145,7 @@ export const gitGetStatus = async (
     repoPath,
     workingDir: workingDir ?? null,
   });
-  return parseArray(fileStatusSchema, payload);
+  return parseArray(fileStatusSchema, payload, "git_get_status");
 };
 
 export const gitGetDiff = async (
@@ -159,7 +159,7 @@ export const gitGetDiff = async (
     targetBranch: targetBranch ?? null,
     workingDir: workingDir ?? null,
   });
-  return parseArray(fileDiffSchema, payload);
+  return parseArray(fileDiffSchema, payload, "git_get_diff");
 };
 
 export const gitCommitsAheadBehind = async (

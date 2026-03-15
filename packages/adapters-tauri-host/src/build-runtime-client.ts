@@ -47,7 +47,7 @@ export const beadsCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<
 
 export const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<RunSummary[]> => {
   const payload = await invokeFn("runs_list", { repoPath });
-  return parseArray(runSummarySchema, payload);
+  return parseArray(runSummarySchema, payload, "runs_list");
 };
 
 export const runtimeList = async (
@@ -56,12 +56,12 @@ export const runtimeList = async (
   runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary[]> => {
   const payload = await invokeFn("runtime_list", { repoPath, runtimeKind });
-  return parseArray(runtimeInstanceSummarySchema, payload);
+  return parseArray(runtimeInstanceSummarySchema, payload, "runtime_list");
 };
 
 export const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
   const payload = await invokeFn("runtime_definitions_list", {});
-  return parseArray(runtimeDescriptorSchema, payload);
+  return parseArray(runtimeDescriptorSchema, payload, "runtime_definitions_list");
 };
 
 export const qaReviewTargetGet = async (

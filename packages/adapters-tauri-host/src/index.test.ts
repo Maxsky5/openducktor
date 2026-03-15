@@ -991,8 +991,10 @@ describe("TauriHostClient", () => {
   });
 
   test("tasksList rejects malformed host payloads", async () => {
-    const { client } = createClient(() => [{ id: "task-1", title: "broken" }]);
-    await expect(client.tasksList("/repo")).rejects.toThrow();
+    const { client } = createClient(() => ({ tasks: [] }));
+    await expect(client.tasksList("/repo")).rejects.toThrow(
+      "Expected array payload from host command tasks_list",
+    );
   });
 
   test("runtime commands use expected IPC routes", async () => {

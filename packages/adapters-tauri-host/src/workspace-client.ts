@@ -102,7 +102,7 @@ const parseTrustedHooksChallenge = (payload: unknown): TrustedHooksChallenge => 
 
 export const workspaceList = async (invokeFn: InvokeFn): Promise<WorkspaceRecord[]> => {
   const payload = await invokeFn("workspace_list");
-  return parseArray(workspaceRecordSchema, payload);
+  return parseArray(workspaceRecordSchema, payload, "workspace_list");
 };
 
 export const workspaceAdd = async (
@@ -177,7 +177,7 @@ export const workspaceSaveSettingsSnapshot = async (
   snapshot: SettingsSnapshot,
 ): Promise<WorkspaceRecord[]> => {
   const payload = await invokeFn("workspace_save_settings_snapshot", { snapshot });
-  return parseArray(workspaceRecordSchema, payload);
+  return parseArray(workspaceRecordSchema, payload, "workspace_save_settings_snapshot");
 };
 
 export const workspaceUpdateGlobalGitConfig = async (
