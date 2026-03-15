@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { DiffScope } from "@/features/agent-studio-git";
 import { appQueryClient } from "@/lib/query-client";
 import {
   loadWorktreeStatusFromQuery,
@@ -12,7 +13,6 @@ import {
   applySummarySnapshot,
   createInitialDiffBatchState,
   type DiffBatchState,
-  type DiffScope,
   type LoadDataMode,
   type ScopeSnapshot,
   toScopeSnapshot,

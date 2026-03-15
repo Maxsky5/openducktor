@@ -2,7 +2,7 @@ import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useSt
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { DiffScope } from "@/pages/agents/use-agent-studio-diff-data";
+import type { DiffScope } from "@/features/agent-studio-git";
 import { CommitComposer } from "./commit-composer";
 import { EmptyDiffState } from "./empty-diff-state";
 import { FileDiffList } from "./file-diff-list";

@@ -1,5 +1,5 @@
 import { FilePlus, FileText, FileX } from "lucide-react";
-import type { DiffScope } from "@/pages/agents/use-agent-studio-diff-data";
+import type { DiffScope } from "@/features/agent-studio-git";
 
 export const FILE_STATUS_ICON: Record<string, typeof FileText> = {
   modified: FileText,

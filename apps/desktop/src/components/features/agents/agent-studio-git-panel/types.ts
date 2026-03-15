@@ -1,11 +1,11 @@
 import type { PullRequest } from "@openducktor/contracts";
-import type { DiffDataState } from "@/pages/agents/use-agent-studio-diff-data";
 import type {
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
   AgentStudioRebaseConflict,
   AgentStudioRebaseConflictAction,
-} from "@/pages/agents/use-agent-studio-git-actions";
+  DiffDataState,
+} from "@/features/agent-studio-git";
 
 export type AgentStudioGitPanelModel = DiffDataState & {
   contextMode?: "repository" | "worktree";

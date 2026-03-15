@@ -1,31 +1,14 @@
 import type { CommitsAheadBehind } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type {
+  AgentStudioPendingForcePush,
+  AgentStudioPendingPullRebase,
+  AgentStudioRebaseConflict,
+  AgentStudioRebaseConflictAction,
+  AgentStudioRebaseConflictOperation,
+} from "@/features/agent-studio-git";
 import { host } from "@/state/operations/host";
-
-export type AgentStudioRebaseConflictOperation = "rebase" | "pull_rebase";
-export type AgentStudioRebaseConflictAction = "abort" | "ask_builder" | null;
-
-export type AgentStudioRebaseConflict = {
-  operation: AgentStudioRebaseConflictOperation;
-  currentBranch: string | null;
-  targetBranch: string;
-  conflictedFiles: string[];
-  output: string;
-  workingDir: string | null;
-};
-
-export type AgentStudioPendingForcePush = {
-  remote: string;
-  branch: string;
-  output: string;
-};
-
-export type AgentStudioPendingPullRebase = {
-  branch: string;
-  localAhead: number;
-  upstreamBehind: number;
-};
 
 type AgentStudioGitActionState = {
   isCommitting: boolean;
