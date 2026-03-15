@@ -1645,6 +1645,23 @@ describe("OpencodeSdkAdapter", () => {
     });
   });
 
+  test("getMcpStatus rejects malformed payloads instead of returning an empty map", async () => {
+    const mock = makeMockClient({
+      mcpStatusResponse: "not-an-object",
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await expect(
+      adapter.getMcpStatus({
+        runtimeEndpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toThrow("Invalid MCP status payload");
+  });
+
   test("connectMcpServer forwards server name and directory", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
