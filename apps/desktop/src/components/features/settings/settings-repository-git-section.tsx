@@ -289,6 +289,11 @@ export function RepositoryGitSection({
   const attemptedAutoDetectByRepoRef = useRef<Set<string>>(new Set());
   const activeDetectionSequenceRef = useRef(0);
   const activeRepoPathRef = useRef<string | null>(selectedRepoPath);
+  const repositoryDraftRef = useRef<GithubRepositoryDraft>({
+    host: "github.com",
+    owner: "",
+    name: "",
+  });
   const [uiState, dispatchUiState] = useReducer(
     repositoryGitSectionUiReducer,
     INITIAL_REPOSITORY_GIT_SECTION_UI_STATE,
@@ -393,14 +398,13 @@ export function RepositoryGitSection({
 
   const handleRepositoryDraftFieldChange = useCallback(
     (field: keyof GithubRepositoryDraft, value: string): void => {
-      setRepositoryDraft((currentDraft) => {
-        const nextDraft = {
-          ...currentDraft,
-          [field]: value,
-        };
-        commitGithubRepositoryDraft(nextDraft);
-        return nextDraft;
-      });
+      const nextDraft = {
+        ...repositoryDraftRef.current,
+        [field]: value,
+      };
+      repositoryDraftRef.current = nextDraft;
+      setRepositoryDraft(nextDraft);
+      commitGithubRepositoryDraft(nextDraft);
     },
     [commitGithubRepositoryDraft],
   );
@@ -437,11 +441,13 @@ export function RepositoryGitSection({
           detectionMessage: `Detected ${detected.owner}/${detected.name} from origin. Save settings to keep this mapping.`,
           ...(manual || !hasRepositoryCoordinates ? { isManualConfigOpen: false } : {}),
         });
-        setRepositoryDraft({
+        const nextDraft = {
           host: detected.host,
           owner: detected.owner,
           name: detected.name,
-        });
+        };
+        repositoryDraftRef.current = nextDraft;
+        setRepositoryDraft(nextDraft);
       } catch (error) {
         if (
           detectionSequence !== activeDetectionSequenceRef.current ||
@@ -481,11 +487,13 @@ export function RepositoryGitSection({
   }, [hasRepositoryCoordinates, selectedRepoPath]);
 
   useEffect(() => {
-    setRepositoryDraft({
+    const nextDraft = {
       host: github.repository?.host ?? "github.com",
       owner: github.repository?.owner ?? "",
       name: github.repository?.name ?? "",
-    });
+    };
+    repositoryDraftRef.current = nextDraft;
+    setRepositoryDraft(nextDraft);
   }, [github.repository?.host, github.repository?.name, github.repository?.owner]);
 
   useEffect(() => {
