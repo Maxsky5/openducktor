@@ -1026,6 +1026,14 @@ describe("TauriHostClient", () => {
       "runtime_ensure",
       "runtime_stop",
     ]);
+    expect(calls[2]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+    expect(calls[3]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
   });
 
   test("runtime and build ack commands reject malformed host payloads", async () => {

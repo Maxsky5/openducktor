@@ -68,8 +68,8 @@ export const runsList = async (invokeFn: InvokeFn, repoPath?: string): Promise<R
 
 export const runtimeList = async (
   invokeFn: InvokeFn,
-  repoPath?: string,
-  runtimeKind?: RuntimeKind,
+  repoPath: string | undefined,
+  runtimeKind: RuntimeKind,
 ): Promise<RuntimeInstanceSummary[]> => {
   const payload = await invokeFn<unknown>("runtime_list", { repoPath, runtimeKind });
   return parseArray(runtimeInstanceSummarySchema, payload);
@@ -307,8 +307,8 @@ export class TauriAgentClient {
   }
 
   async runtimeList(
-    repoPath?: string,
-    runtimeKind?: RuntimeKind,
+    repoPath: string | undefined,
+    runtimeKind: RuntimeKind,
   ): Promise<RuntimeInstanceSummary[]> {
     return runtimeList(this.invokeFn, repoPath, runtimeKind);
   }

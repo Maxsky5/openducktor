@@ -1361,6 +1361,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
+      runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
       externalSessionId: "session-opencode-1",
     });
@@ -1466,6 +1467,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await expect(
       adapter.loadSessionTodos({
+        runtimeKind: "opencode",
         runtimeConnection: {
           endpoint: "http://127.0.0.1:12345",
           workingDirectory: "   ",
@@ -1491,6 +1493,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const todos = await adapter.loadSessionTodos({
+      runtimeKind: "opencode",
       runtimeConnection: {
         endpoint: "http://127.0.0.1:12345",
         workingDirectory: "  /repo  ",
@@ -1526,6 +1529,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
     });
 
@@ -1563,6 +1567,7 @@ describe("OpencodeSdkAdapter", () => {
     });
 
     const catalog = await adapter.listAvailableModels({
+      runtimeKind: "opencode",
       runtimeConnection: defaultRuntimeConnection,
     });
 
@@ -1591,6 +1596,7 @@ describe("OpencodeSdkAdapter", () => {
 
     await expect(
       adapter.listAvailableModels({
+        runtimeKind: "opencode",
         runtimeConnection: defaultRuntimeConnection,
       }),
     ).rejects.toThrow("agent index unavailable");
