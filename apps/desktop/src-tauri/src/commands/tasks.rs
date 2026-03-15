@@ -1,5 +1,5 @@
 use super::issue_type::parse_issue_type;
-use crate::{as_error, AppState, TaskCreatePayload, TaskUpdatePayload};
+use crate::{as_error, run_service_blocking, AppState, TaskCreatePayload, TaskUpdatePayload};
 use host_domain::{CreateTaskInput, TaskCard, TaskStatus, UpdateTaskPatch};
 use tauri::State;
 
@@ -40,7 +40,9 @@ pub async fn tasks_list(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<Vec<TaskCard>, String> {
-    as_error(state.service.tasks_list(&repo_path))
+    let service = state.service.clone();
+    let result = run_service_blocking("tasks_list", move || service.tasks_list(&repo_path)).await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -50,7 +52,12 @@ pub async fn task_create(
     input: TaskCreatePayload,
 ) -> Result<TaskCard, String> {
     let create = map_task_create_payload(input)?;
-    as_error(state.service.task_create(&repo_path, create))
+    let service = state.service.clone();
+    let result = run_service_blocking("task_create", move || {
+        service.task_create(&repo_path, create)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -61,7 +68,12 @@ pub async fn task_update(
     patch: TaskUpdatePayload,
 ) -> Result<TaskCard, String> {
     let mapped = map_task_update_payload(patch)?;
-    as_error(state.service.task_update(&repo_path, &task_id, mapped))
+    let service = state.service.clone();
+    let result = run_service_blocking("task_update", move || {
+        service.task_update(&repo_path, &task_id, mapped)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -71,12 +83,15 @@ pub async fn task_delete(
     task_id: String,
     delete_subtasks: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    as_error(
-        state
-            .service
-            .task_delete(&repo_path, &task_id, delete_subtasks.unwrap_or(false))
-            .map(|()| serde_json::json!({ "ok": true })),
-    )
+    let service = state.service.clone();
+    let delete_subtasks = delete_subtasks.unwrap_or(false);
+    let result = run_service_blocking("task_delete", move || {
+        service
+            .task_delete(&repo_path, &task_id, delete_subtasks)
+            .map(|()| serde_json::json!({ "ok": true }))
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -87,11 +102,12 @@ pub async fn task_transition(
     status: TaskStatus,
     reason: Option<String>,
 ) -> Result<TaskCard, String> {
-    as_error(
-        state
-            .service
-            .task_transition(&repo_path, &task_id, status, reason.as_deref()),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("task_transition", move || {
+        service.task_transition(&repo_path, &task_id, status, reason.as_deref())
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -101,11 +117,12 @@ pub async fn task_defer(
     task_id: String,
     reason: Option<String>,
 ) -> Result<TaskCard, String> {
-    as_error(
-        state
-            .service
-            .task_defer(&repo_path, &task_id, reason.as_deref()),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("task_defer", move || {
+        service.task_defer(&repo_path, &task_id, reason.as_deref())
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -114,7 +131,12 @@ pub async fn task_resume_deferred(
     repo_path: String,
     task_id: String,
 ) -> Result<TaskCard, String> {
-    as_error(state.service.task_resume_deferred(&repo_path, &task_id))
+    let service = state.service.clone();
+    let result = run_service_blocking("task_resume_deferred", move || {
+        service.task_resume_deferred(&repo_path, &task_id)
+    })
+    .await;
+    as_error(result)
 }
 
 #[cfg(test)]

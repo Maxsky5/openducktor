@@ -10,7 +10,10 @@ pub async fn system_check(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<SystemCheck, String> {
-    as_error(state.service.system_check(&repo_path))
+    let service = state.service.clone();
+    let result =
+        run_service_blocking("system_check", move || service.system_check(&repo_path)).await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -18,11 +21,13 @@ pub async fn runtime_check(
     state: State<'_, AppState>,
     force: Option<bool>,
 ) -> Result<RuntimeCheck, String> {
-    as_error(
-        state
-            .service
-            .runtime_check_with_refresh(force.unwrap_or(false)),
-    )
+    let service = state.service.clone();
+    let force = force.unwrap_or(false);
+    let result = run_service_blocking("runtime_check", move || {
+        service.runtime_check_with_refresh(force)
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -30,14 +35,21 @@ pub async fn beads_check(
     state: State<'_, AppState>,
     repo_path: String,
 ) -> Result<BeadsCheck, String> {
-    as_error(state.service.beads_check(&repo_path))
+    let service = state.service.clone();
+    let result = run_service_blocking("beads_check", move || service.beads_check(&repo_path)).await;
+    as_error(result)
 }
 
 #[tauri::command]
 pub async fn runtime_definitions_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<RuntimeDescriptor>, String> {
-    as_error(state.service.runtime_definitions_list())
+    let service = state.service.clone();
+    let result = run_service_blocking("runtime_definitions_list", move || {
+        service.runtime_definitions_list()
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -46,11 +58,12 @@ pub async fn runtime_list(
     runtime_kind: String,
     repo_path: Option<String>,
 ) -> Result<Vec<RuntimeInstanceSummary>, String> {
-    as_error(
-        state
-            .service
-            .runtime_list(&runtime_kind, repo_path.as_deref()),
-    )
+    let service = state.service.clone();
+    let result = run_service_blocking("runtime_list", move || {
+        service.runtime_list(&runtime_kind, repo_path.as_deref())
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
@@ -72,12 +85,14 @@ pub async fn runtime_stop(
     state: State<'_, AppState>,
     runtime_id: String,
 ) -> Result<serde_json::Value, String> {
-    as_error(
-        state
-            .service
+    let service = state.service.clone();
+    let result = run_service_blocking("runtime_stop", move || {
+        service
             .runtime_stop(&runtime_id)
-            .map(|ok| serde_json::json!({ "ok": ok })),
-    )
+            .map(|ok| serde_json::json!({ "ok": ok }))
+    })
+    .await;
+    as_error(result)
 }
 
 #[tauri::command]
