@@ -7,15 +7,8 @@ const reactActEnvironment = globalThis as {
 };
 
 function getButtonLabel(btn: ReactTestInstance): string | undefined {
-  const labelParagraph = btn.findAllByType("p").find((p) => {
-    const firstChild = p.children[0];
-    return typeof firstChild === "string";
-  });
-  if (labelParagraph) {
-    const firstChild = labelParagraph.children[0];
-    return typeof firstChild === "string" ? firstChild : undefined;
-  }
-  return undefined;
+  const labelParagraph = btn.findAllByType("p").find((p) => typeof p.children[0] === "string");
+  return labelParagraph?.children[0] as string | undefined;
 }
 
 describe("IssueTypeGrid", () => {
@@ -71,7 +64,7 @@ describe("IssueTypeGrid", () => {
     expect(descriptionParagraph).toBeDefined();
   });
 
-  test("does not call onSelectIssueType when disabled option clicked", () => {
+  test("disables the epic button when not selected", () => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     const onSelectIssueType = mock(() => {});
     let root!: ReturnType<typeof create>;
@@ -89,10 +82,49 @@ describe("IssueTypeGrid", () => {
       throw new Error("expected epic card button");
     }
 
+    expect(epicCard.props.disabled).toBe(true);
+  });
+
+  test("selected epic does not show disabled state", () => {
+    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    const onSelectIssueType = mock(() => {});
+    let root!: ReturnType<typeof create>;
+
     act(() => {
-      epicCard.props.onClick();
+      root = create(
+        <IssueTypeGrid selectedIssueType="epic" onSelectIssueType={onSelectIssueType} />,
+      );
     });
 
-    expect(onSelectIssueType).not.toHaveBeenCalled();
+    const buttons = root.root.findAllByType("button");
+    const epicCard = buttons.find((btn) => getButtonLabel(btn) === "Epic");
+
+    if (!epicCard) {
+      throw new Error("expected epic card button");
+    }
+
+    // When selected, Epic should not be disabled
+    expect(epicCard.props.disabled).toBe(false);
+
+    // Should show the real description, not "Coming soon"
+    const paragraphs = epicCard.findAllByType("p");
+    const descriptionParagraph = paragraphs.find((p) => {
+      const firstChild = p.children[0];
+      return typeof firstChild === "string" && firstChild.includes("Large initiative");
+    });
+
+    expect(descriptionParagraph).toBeDefined();
+
+    // Should show the checkmark indicator
+    const checkSpan = epicCard.findAllByType("span").find((span) => {
+      // The checkmark span has specific classes when selected
+      return (
+        span.props.className?.includes("border-info-border") ||
+        span.props.className?.includes("border-destructive-border") ||
+        span.props.className?.includes("border-pending-border") ||
+        span.props.className?.includes("border-input")
+      );
+    });
+    expect(checkSpan).toBeDefined();
   });
 });

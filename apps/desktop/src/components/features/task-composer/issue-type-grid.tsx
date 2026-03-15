@@ -18,7 +18,7 @@ export function IssueTypeGrid({
       {ISSUE_TYPE_OPTIONS.map((option) => {
         const selected = selectedIssueType === option.value;
         const Icon = option.icon;
-        const isDisabled = option.disabled === true;
+        const isDisabled = option.disabled === true && !selected;
         return (
           <button
             key={option.value}
@@ -31,11 +31,7 @@ export function IssueTypeGrid({
                 : "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
               option.accentClass,
             )}
-            onClick={() => {
-              if (!isDisabled) {
-                onSelectIssueType(option.value);
-              }
-            }}
+            onClick={() => onSelectIssueType(option.value)}
           >
             <div className="flex items-start justify-between gap-3">
               <span
