@@ -17,7 +17,7 @@ import { loadRepoConfigFromQuery } from "../../../queries/workspace";
 import { host } from "../../host";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
-import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/utils";
+import { normalizeWorkingDirectory, runningStates, toBaseUrl } from "../support/core";
 
 export type RuntimeInfo = {
   runtimeKind?: RuntimeKind;

@@ -12,9 +12,9 @@ import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import { now } from "../support/core";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { warmSessionData } from "../support/session-warmup";
-import { now } from "../support/utils";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {
