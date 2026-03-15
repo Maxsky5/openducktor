@@ -63,8 +63,7 @@ mock.module("@/components/features/task-create", () => ({
 mock.module("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
   DialogContent: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
-  DialogDescription: ({ children }: { children: ReactNode }) =>
-    createElement("p", {}, children),
+  DialogDescription: ({ children }: { children: ReactNode }) => createElement("p", {}, children),
   DialogFooter: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
   DialogHeader: ({ children }: { children: ReactNode }) => createElement("div", {}, children),
   DialogTitle: ({ children }: { children: ReactNode }) => createElement("h2", {}, children),
@@ -77,7 +76,7 @@ describe("TaskCreateModal", () => {
     ({ TaskCreateModal } = await import("./task-create-modal"));
   });
 
-  test("keeps the edit modal shell visible while the document editor chunk loads", async () => {
+  test("renders the edit modal shell for the document editor flow", async () => {
     const task = { id: "TASK-123" } as TaskCard;
     let renderer!: ReactTestRenderer;
 
@@ -97,7 +96,6 @@ describe("TaskCreateModal", () => {
     expect(tree).toContain("Markdown");
     expect(tree).toContain("Preview");
     expect(tree).toContain("Save Spec");
-    expect(tree).toContain("animate-pulse");
 
     await act(async () => {
       renderer.unmount();

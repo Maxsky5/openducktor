@@ -51,9 +51,9 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
       {({ isExpanded }) => {
         const markdownFallback = (
           <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
-            <div className="h-3 w-2/5 animate-pulse rounded bg-secondary" />
-            <div className="h-3 w-full animate-pulse rounded bg-secondary" />
-            <div className="h-3 w-4/5 animate-pulse rounded bg-secondary" />
+            <div className="h-3 w-2/5 animate-pulse rounded bg-card" />
+            <div className="h-3 w-full animate-pulse rounded bg-card" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-card" />
           </div>
         );
 
@@ -74,13 +74,7 @@ export const TaskDetailsAsyncDocumentSection = memo(function TaskDetailsAsyncDoc
         }
 
         if (!document.loaded || document.isLoading) {
-          return (
-            <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
-              <div className="h-3 w-2/5 animate-pulse rounded bg-secondary" />
-              <div className="h-3 w-full animate-pulse rounded bg-secondary" />
-              <div className="h-3 w-4/5 animate-pulse rounded bg-secondary" />
-            </div>
-          );
+          return markdownFallback;
         }
 
         if (document.markdown.trim().length === 0) {

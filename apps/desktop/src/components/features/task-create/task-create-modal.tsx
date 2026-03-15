@@ -37,8 +37,8 @@ function TaskDocumentEditorFallback(): ReactElement {
     <div className="space-y-3">
       <div className="rounded-xl border border-border bg-muted/70 px-4 py-3">
         <div className="space-y-2">
-          <div className="h-4 w-32 animate-pulse rounded bg-secondary" />
-          <div className="h-3 w-64 animate-pulse rounded bg-secondary" />
+          <div className="h-4 w-32 animate-pulse rounded bg-card" />
+          <div className="h-3 w-64 animate-pulse rounded bg-card" />
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
@@ -47,9 +47,9 @@ function TaskDocumentEditorFallback(): ReactElement {
             Markdown
           </p>
           <div className="min-h-[52vh] space-y-3 rounded-md border border-border bg-muted p-3">
-            <div className="h-3 w-2/5 animate-pulse rounded bg-secondary" />
-            <div className="h-3 w-full animate-pulse rounded bg-secondary" />
-            <div className="h-3 w-5/6 animate-pulse rounded bg-secondary" />
+            <div className="h-3 w-2/5 animate-pulse rounded bg-card" />
+            <div className="h-3 w-full animate-pulse rounded bg-card" />
+            <div className="h-3 w-5/6 animate-pulse rounded bg-card" />
           </div>
         </div>
         <div className="space-y-2 max-md:hidden">
@@ -57,9 +57,9 @@ function TaskDocumentEditorFallback(): ReactElement {
             Preview
           </p>
           <div className="min-h-[52vh] space-y-3 rounded-md border border-border bg-muted p-3">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-secondary" />
-            <div className="h-3 w-full animate-pulse rounded bg-secondary" />
-            <div className="h-3 w-4/5 animate-pulse rounded bg-secondary" />
+            <div className="h-3 w-1/3 animate-pulse rounded bg-card" />
+            <div className="h-3 w-full animate-pulse rounded bg-card" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-card" />
           </div>
         </div>
       </div>
@@ -136,7 +136,9 @@ export function TaskCreateModal({
                 <Suspense fallback={<TaskDocumentEditorFallback />}>
                   <TaskDocumentEditor
                     key={activeDocumentSection}
-                    title={activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"}
+                    title={
+                      activeDocumentSection === "spec" ? "Specification" : "Implementation Plan"
+                    }
                     subtitle={
                       activeDocumentSection === "spec"
                         ? "Edit the canonical specification markdown for this task."
