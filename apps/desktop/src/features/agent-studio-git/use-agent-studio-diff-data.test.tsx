@@ -80,12 +80,6 @@ const gitGetWorktreeStatusSummaryMock = mock(
 mock.module("@/lib/host-client", () => ({
   hostClient: {
     runsList: runsListMock,
-  },
-}));
-
-mock.module("@/state/operations/host", () => ({
-  host: {
-    runsList: runsListMock,
     gitGetWorktreeStatus: gitGetWorktreeStatusMock,
     gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
   },

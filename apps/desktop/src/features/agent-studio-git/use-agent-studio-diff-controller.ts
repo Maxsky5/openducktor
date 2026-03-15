@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiffScope } from "@/features/agent-studio-git";
 import { appQueryClient } from "@/lib/query-client";
 import {
   loadWorktreeStatusFromQuery,
@@ -19,6 +18,7 @@ import {
   toScopeSummaryFields,
   toStatusSnapshotKey,
 } from "./agent-studio-diff-data-model";
+import type { DiffScope } from "./contracts";
 
 const POLL_INTERVAL_MS = 30_000;
 

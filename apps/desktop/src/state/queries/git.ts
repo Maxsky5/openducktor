@@ -5,7 +5,7 @@ import type {
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
-import { host } from "../operations/host";
+import { hostClient as host } from "@/lib/host-client";
 
 const BRANCH_DATA_STALE_TIME_MS = 60_000;
 const WORKTREE_STATUS_STALE_TIME_MS = 0;
