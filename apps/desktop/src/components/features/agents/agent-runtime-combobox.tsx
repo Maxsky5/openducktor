@@ -1,9 +1,10 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
 type AgentRuntimeComboboxProps = {
-  value: string;
-  onValueChange: (value: string) => void;
+  value: RuntimeKind;
+  onValueChange: (value: RuntimeKind) => void;
   runtimeOptions: ComboboxOption[];
   placeholder?: string;
   disabled?: boolean;

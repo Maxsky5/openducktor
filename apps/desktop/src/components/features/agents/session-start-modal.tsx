@@ -31,7 +31,7 @@ export type SessionStartModalModel = {
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
-  onSelectRuntime: (runtimeKind: string) => void;
+  onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;

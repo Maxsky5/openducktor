@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import {
   type AgentEnginePort,
   type AgentRuntimeConnection,
@@ -49,13 +49,13 @@ type EnsureSessionReadyDependencies = {
   loadRepoPromptOverrides: (repoPath: string) => Promise<RepoPromptOverrides>;
   loadSessionTodos: (
     sessionId: string,
-    runtimeKind: string,
+    runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;
   loadSessionModelCatalog: (
     sessionId: string,
-    runtimeKind: string,
+    runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ) => Promise<void>;
 };

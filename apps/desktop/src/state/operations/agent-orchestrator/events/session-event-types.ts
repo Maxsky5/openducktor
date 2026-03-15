@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
@@ -43,7 +44,7 @@ export type AttachAgentSessionListenerParams = {
   refreshTaskData: (repoPath: string) => Promise<void>;
   loadSessionTodos: (
     sessionId: string,
-    runtimeKind: string,
+    runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ) => Promise<void>;

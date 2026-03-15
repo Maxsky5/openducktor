@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import type { RepoPromptOverrides, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -102,7 +102,7 @@ export type AgentSessionState = {
   sessionId: string;
   externalSessionId: string;
   taskId: string;
-  runtimeKind?: string;
+  runtimeKind?: RuntimeKind;
   role: AgentRole;
   scenario: AgentScenario;
   status: "starting" | "running" | "idle" | "error" | "stopped";

@@ -68,7 +68,7 @@ type UseSessionStartModalStateResult = {
   variantOptions: ComboboxOption[];
   openStartModal: (nextIntent: SessionStartModalIntent) => void;
   closeStartModal: () => void;
-  handleSelectRuntime: (runtimeKind: string) => void;
+  handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectAgent: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
@@ -218,10 +218,10 @@ export function useSessionStartModalState({
   }, [activeRole, catalog, intent?.selectedModel, repoSettings, selectedRuntimeKind]);
 
   const handleSelectRuntime = useCallback(
-    (runtimeKindValue: string): void => {
+    (runtimeKindValue: RuntimeKind): void => {
       const runtimeKind = resolveRuntimeKindSelection({
         runtimeDefinitions,
-        requestedRuntimeKind: runtimeKindValue as RuntimeKind,
+        requestedRuntimeKind: runtimeKindValue,
       });
       setSelectedRuntimeKind(runtimeKind);
       setSelection((current) => {
