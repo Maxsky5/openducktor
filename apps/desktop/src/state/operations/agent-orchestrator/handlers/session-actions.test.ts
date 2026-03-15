@@ -71,6 +71,97 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     expect(typeof actions.stopAgentSession).toBe("function");
   });
 
+  test("forkAgentSession logs todo warm-up failures instead of leaving an unhandled rejection", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    const originalError = console.error;
+    const errorCalls: unknown[][] = [];
+    console.error = ((...args: unknown[]) => {
+      errorCalls.push(args);
+    }) as typeof console.error;
+
+    adapter.forkSession = async () => ({
+      sessionId: "session-2",
+      externalSessionId: "external-2",
+      startedAt: "2026-02-22T09:00:00.000Z",
+      runtimeKind: "opencode",
+      role: "build",
+      scenario: "build_implementation_start",
+      status: "idle",
+    });
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+        }),
+      },
+    };
+    const task = createTaskCardFixture({
+      id: "task-1",
+      issueType: "feature",
+      aiReviewEnabled: true,
+      status: "in_progress",
+    });
+    let persistedSessionId: string | null = null;
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        sessionsRef.current =
+          typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      },
+      sessionsRef,
+      taskRef: { current: [task] },
+      repoEpochRef: { current: 1 },
+      previousRepoRef: { current: "/tmp/repo" },
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: () => {},
+      attachSessionListener: () => {},
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => ({}),
+      loadSessionTodos: async () => {
+        throw new Error("todo sync failed");
+      },
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async (session) => {
+        persistedSessionId = session.sessionId;
+      },
+    });
+
+    try {
+      await expect(
+        actions.forkAgentSession({
+          parentSessionId: "session-1",
+        }),
+      ).resolves.toBe("session-2");
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(persistedSessionId === "session-2").toBe(true);
+      expect(errorCalls).toHaveLength(1);
+      expect(errorCalls[0]?.[0]).toBe("[agent-orchestrator]");
+      expect(errorCalls[0]?.[1]).toBe("fork-session-load-session-todos");
+    } finally {
+      adapter.forkSession = originalForkSession;
+      console.error = originalError;
+    }
+  });
+
   test("stops known session and clears pending state", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalHasSession = adapter.hasSession;

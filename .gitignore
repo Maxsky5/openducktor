@@ -20,3 +20,4 @@ apps/desktop/src-tauri/crates/*/target
 apps/desktop/src-tauri/crates/*/Cargo.lock
 
 .sisyphus
+.desloppify/
