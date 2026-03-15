@@ -119,10 +119,7 @@ const hasMeaningfulToolInputValue = (value: unknown): boolean => {
 };
 
 export const hasMeaningfulToolInput = (input: Record<string, unknown> | undefined): boolean => {
-  if (!input) {
-    return false;
-  }
-  return Object.values(input).some((value) => hasMeaningfulToolInputValue(value));
+  return input ? Object.values(input).some((value) => hasMeaningfulToolInputValue(value)) : false;
 };
 
 const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean => {

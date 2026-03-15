@@ -21,10 +21,7 @@ const hasMeaningfulInputValue = (value: unknown): boolean => {
 };
 
 export const hasNonEmptyInput = (input: Record<string, unknown> | undefined): boolean => {
-  if (!input) {
-    return false;
-  }
-  return Object.values(input).some((value) => hasMeaningfulInputValue(value));
+  return input ? Object.values(input).some((value) => hasMeaningfulInputValue(value)) : false;
 };
 
 export const hasNonEmptyText = (value: unknown): value is string => {
