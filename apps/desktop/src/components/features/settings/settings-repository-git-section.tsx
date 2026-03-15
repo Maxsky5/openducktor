@@ -109,6 +109,175 @@ const repositoryGitSectionUiReducer = (
   }
 };
 
+type RepositoryGitStatusHeaderProps = {
+  githubReady: boolean;
+  githubReadinessLabel: string;
+  githubReadinessMessage: string;
+};
+
+function RepositoryGitStatusHeader({
+  githubReady,
+  githubReadinessLabel,
+  githubReadinessMessage,
+}: RepositoryGitStatusHeaderProps): ReactElement {
+  return (
+    <CardHeader className="gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start gap-3">
+        <div className="rounded-lg border border-border bg-muted p-2 text-foreground">
+          <Github className="size-5" />
+        </div>
+        <div className="space-y-1">
+          <CardTitle>GitHub Pull Requests</CardTitle>
+          <CardDescription>{githubReadinessMessage}</CardDescription>
+        </div>
+      </div>
+      <Badge variant={githubReady ? "success" : "warning"}>{githubReadinessLabel}</Badge>
+    </CardHeader>
+  );
+}
+
+type RepositoryGitEnableCardProps = {
+  disabled: boolean;
+  githubEnabled: boolean;
+  onCheckedChange: (checked: boolean) => void;
+};
+
+function RepositoryGitEnableCard({
+  disabled,
+  githubEnabled,
+  onCheckedChange,
+}: RepositoryGitEnableCardProps): ReactElement {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">Enable provider for approvals</p>
+        <p className="text-sm text-muted-foreground">
+          When enabled, approved tasks can be delivered as GitHub pull requests.
+        </p>
+      </div>
+      <Label className="flex items-center gap-3 text-sm font-medium text-foreground">
+        <Switch checked={githubEnabled} disabled={disabled} onCheckedChange={onCheckedChange} />
+        {githubEnabled ? "Enabled" : "Disabled"}
+      </Label>
+    </div>
+  );
+}
+
+type RepositoryGitMappingCardProps = {
+  disabled: boolean;
+  githubHost: string;
+  isDetecting: boolean;
+  isManualConfigOpen: boolean;
+  repositorySlug: string | null;
+  onDetectFromOrigin: () => void;
+  onToggleManualEdit: () => void;
+};
+
+function RepositoryGitMappingCard({
+  disabled,
+  githubHost,
+  isDetecting,
+  isManualConfigOpen,
+  repositorySlug,
+  onDetectFromOrigin,
+  onToggleManualEdit,
+}: RepositoryGitMappingCardProps): ReactElement {
+  return (
+    <div className="grid gap-3 rounded-xl border border-border p-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">Repository mapping</p>
+        <p className="text-sm text-muted-foreground">
+          OpenDucktor needs the GitHub host and repository identity before it can open pull
+          requests.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/30 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-1">
+          <p className="text-base font-semibold text-foreground">
+            {repositorySlug ? repositorySlug : "Repository details missing"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {repositorySlug
+              ? `Host: ${githubHost}`
+              : "Detect the repository from the current origin remote or enter the details manually."}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || isDetecting}
+            onClick={onDetectFromOrigin}
+          >
+            {isDetecting ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <RefreshCcw className="size-4" />
+            )}
+            Detect from origin
+          </Button>
+          <Button type="button" variant="ghost" disabled={disabled} onClick={onToggleManualEdit}>
+            <PencilLine className="size-4" />
+            {isManualConfigOpen ? "Hide manual edit" : "Edit manually"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RepositoryGitManualConfigFormProps = {
+  disabled: boolean;
+  repositoryDraft: GithubRepositoryDraft;
+  onDraftFieldChange: (field: keyof GithubRepositoryDraft, value: string) => void;
+};
+
+function RepositoryGitManualConfigForm({
+  disabled,
+  repositoryDraft,
+  onDraftFieldChange,
+}: RepositoryGitManualConfigFormProps): ReactElement {
+  return (
+    <div className="grid gap-4 rounded-xl border border-border bg-card p-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-2">
+          <Label htmlFor="repo-github-host">Host</Label>
+          <Input
+            id="repo-github-host"
+            value={repositoryDraft.host}
+            disabled={disabled}
+            onChange={(event) => onDraftFieldChange("host", event.currentTarget.value)}
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="repo-github-owner">Owner</Label>
+          <Input
+            id="repo-github-owner"
+            value={repositoryDraft.owner}
+            disabled={disabled}
+            onChange={(event) => onDraftFieldChange("owner", event.currentTarget.value)}
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="repo-github-name">Repository</Label>
+          <Input
+            id="repo-github-name"
+            value={repositoryDraft.name}
+            disabled={disabled}
+            onChange={(event) => onDraftFieldChange("name", event.currentTarget.value)}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Manual values override the detected repository mapping for this workspace only.
+      </p>
+    </div>
+  );
+}
+
 export function RepositoryGitSection({
   selectedRepoPath,
   selectedRepoConfig,
@@ -131,6 +300,8 @@ export function RepositoryGitSection({
   });
 
   const github = selectedRepoConfig?.git.providers.github ?? EMPTY_GITHUB_CONFIG;
+  const githubEnabled = github.enabled ?? false;
+  const hasGithubCli = runtimeCheck?.ghOk ?? false;
   const githubHost = github.repository?.host ?? "github.com";
   const usesDefaultGithubHost = githubHost === "github.com";
   const hasRepositoryCoordinates = Boolean(
@@ -140,8 +311,8 @@ export function RepositoryGitSection({
     ? `${github.repository?.owner}/${github.repository?.name}`
     : null;
   const githubReady =
-    github.enabled &&
-    runtimeCheck?.ghOk &&
+    githubEnabled &&
+    hasGithubCli &&
     hasRepositoryCoordinates &&
     (usesDefaultGithubHost ? (runtimeCheck?.ghAuthOk ?? false) : true);
   const githubReadinessLabel = githubReady
@@ -160,8 +331,8 @@ export function RepositoryGitSection({
           : usesDefaultGithubHost
             ? "GitHub pull requests are ready for this repository."
             : `GitHub pull requests are configured for ${githubHost}. Authentication for that host is validated during approval.`;
-  const providerStatusLabel = github.enabled ? "Pull requests enabled" : "Pull requests disabled";
-  const cliStatusLabel = runtimeCheck?.ghOk ? "CLI installed" : "CLI missing";
+  const providerStatusLabel = githubEnabled ? "Pull requests enabled" : "Pull requests disabled";
+  const cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
   const { detectionMessage, isDetecting, isManualConfigOpen } = uiState;
 
   const buildGithubConfig = useCallback(
@@ -202,6 +373,34 @@ export function RepositoryGitSection({
       }));
     },
     [buildGithubConfig, onUpdateSelectedRepoConfig],
+  );
+
+  const handleGithubEnabledChange = useCallback(
+    (checked: boolean): void => {
+      onUpdateSelectedRepoConfig((repoConfig) => ({
+        ...repoConfig,
+        git: {
+          ...repoConfig.git,
+          providers: {
+            ...repoConfig.git.providers,
+            github: buildGithubConfig(repoConfig, { enabled: checked }),
+          },
+        },
+      }));
+    },
+    [buildGithubConfig, onUpdateSelectedRepoConfig],
+  );
+
+  const handleRepositoryDraftFieldChange = useCallback(
+    (field: keyof GithubRepositoryDraft, value: string): void => {
+      const nextDraft = {
+        ...repositoryDraft,
+        [field]: value,
+      };
+      setRepositoryDraft(nextDraft);
+      commitGithubRepositoryDraft(nextDraft);
+    },
+    [commitGithubRepositoryDraft, repositoryDraft],
   );
 
   const runDetection = useCallback(
@@ -310,162 +509,44 @@ export function RepositoryGitSection({
   return (
     <div className="p-5">
       <Card>
-        <CardHeader className="gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg border border-border bg-muted p-2 text-foreground">
-              <Github className="size-5" />
-            </div>
-            <div className="space-y-1">
-              <CardTitle>GitHub Pull Requests</CardTitle>
-              <CardDescription>{githubReadinessMessage}</CardDescription>
-            </div>
-          </div>
-          <Badge variant={githubReady ? "success" : "warning"}>{githubReadinessLabel}</Badge>
-        </CardHeader>
+        <RepositoryGitStatusHeader
+          githubReady={githubReady}
+          githubReadinessLabel={githubReadinessLabel}
+          githubReadinessMessage={githubReadinessMessage}
+        />
         <CardContent className="grid gap-5 py-5">
-          <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Enable provider for approvals</p>
-              <p className="text-sm text-muted-foreground">
-                When enabled, approved tasks can be delivered as GitHub pull requests.
-              </p>
-            </div>
-            <Label className="flex items-center gap-3 text-sm font-medium text-foreground">
-              <Switch
-                checked={github.enabled}
-                disabled={disabled}
-                onCheckedChange={(checked) =>
-                  onUpdateSelectedRepoConfig((repoConfig) => ({
-                    ...repoConfig,
-                    git: {
-                      ...repoConfig.git,
-                      providers: {
-                        ...repoConfig.git.providers,
-                        github: buildGithubConfig(repoConfig, { enabled: checked }),
-                      },
-                    },
-                  }))
-                }
-              />
-              {github.enabled ? "Enabled" : "Disabled"}
-            </Label>
-          </div>
+          <RepositoryGitEnableCard
+            disabled={disabled}
+            githubEnabled={githubEnabled}
+            onCheckedChange={handleGithubEnabledChange}
+          />
 
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={github.enabled ? "success" : "warning"}>{providerStatusLabel}</Badge>
-            <Badge variant={runtimeCheck?.ghOk ? "success" : "danger"}>{cliStatusLabel}</Badge>
+            <Badge variant={githubEnabled ? "success" : "warning"}>{providerStatusLabel}</Badge>
+            <Badge variant={hasGithubCli ? "success" : "danger"}>{cliStatusLabel}</Badge>
             {usesDefaultGithubHost ? null : <Badge variant="outline">{githubHost}</Badge>}
           </div>
 
-          <div className="grid gap-3 rounded-xl border border-border p-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Repository mapping</p>
-              <p className="text-sm text-muted-foreground">
-                OpenDucktor needs the GitHub host and repository identity before it can open pull
-                requests.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/30 p-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-1">
-                <p className="text-base font-semibold text-foreground">
-                  {repositorySlug ? repositorySlug : "Repository details missing"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {repositorySlug
-                    ? `Host: ${githubHost}`
-                    : "Detect the repository from the current origin remote or enter the details manually."}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={disabled || isDetecting}
-                  onClick={() => void runDetection(true)}
-                >
-                  {isDetecting ? (
-                    <LoaderCircle className="size-4 animate-spin" />
-                  ) : (
-                    <RefreshCcw className="size-4" />
-                  )}
-                  Detect from origin
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={disabled}
-                  onClick={() => dispatchUiState({ type: "toggle_manual_config_open" })}
-                >
-                  <PencilLine className="size-4" />
-                  {isManualConfigOpen ? "Hide manual edit" : "Edit manually"}
-                </Button>
-              </div>
-            </div>
-          </div>
+          <RepositoryGitMappingCard
+            disabled={disabled}
+            githubHost={githubHost}
+            isDetecting={isDetecting}
+            isManualConfigOpen={isManualConfigOpen}
+            repositorySlug={repositorySlug}
+            onDetectFromOrigin={() => void runDetection(true)}
+            onToggleManualEdit={() => dispatchUiState({ type: "toggle_manual_config_open" })}
+          />
 
           {detectionMessage ? (
             <p className="text-sm text-muted-foreground">{detectionMessage}</p>
           ) : null}
 
           {isManualConfigOpen ? (
-            <div className="grid gap-4 rounded-xl border border-border bg-card p-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="repo-github-host">Host</Label>
-                  <Input
-                    id="repo-github-host"
-                    value={repositoryDraft.host}
-                    disabled={disabled}
-                    onChange={(event) => {
-                      const nextDraft = {
-                        ...repositoryDraft,
-                        host: event.currentTarget.value,
-                      };
-                      setRepositoryDraft(nextDraft);
-                      commitGithubRepositoryDraft(nextDraft);
-                    }}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="repo-github-owner">Owner</Label>
-                  <Input
-                    id="repo-github-owner"
-                    value={repositoryDraft.owner}
-                    disabled={disabled}
-                    onChange={(event) => {
-                      const nextDraft = {
-                        ...repositoryDraft,
-                        owner: event.currentTarget.value,
-                      };
-                      setRepositoryDraft(nextDraft);
-                      commitGithubRepositoryDraft(nextDraft);
-                    }}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="repo-github-name">Repository</Label>
-                  <Input
-                    id="repo-github-name"
-                    value={repositoryDraft.name}
-                    disabled={disabled}
-                    onChange={(event) => {
-                      const nextDraft = {
-                        ...repositoryDraft,
-                        name: event.currentTarget.value,
-                      };
-                      setRepositoryDraft(nextDraft);
-                      commitGithubRepositoryDraft(nextDraft);
-                    }}
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Manual values override the detected repository mapping for this workspace only.
-              </p>
-            </div>
+            <RepositoryGitManualConfigForm
+              disabled={disabled}
+              repositoryDraft={repositoryDraft}
+              onDraftFieldChange={handleRepositoryDraftFieldChange}
+            />
           ) : null}
         </CardContent>
       </Card>

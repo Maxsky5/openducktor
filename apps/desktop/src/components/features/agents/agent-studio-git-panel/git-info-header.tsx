@@ -106,6 +106,319 @@ function GitActionIconButton({
   );
 }
 
+type GitInfoHeaderSummaryRowProps = {
+  isRepositoryMode: boolean;
+  pullRequest: GitInfoHeaderProps["pullRequest"];
+  uncommittedFileCount: number;
+};
+
+function GitInfoHeaderSummaryRow({
+  isRepositoryMode,
+  pullRequest,
+  uncommittedFileCount,
+}: GitInfoHeaderSummaryRowProps): ReactElement {
+  return (
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
+      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+        {isRepositoryMode ? "Repository context" : "Branch context"}
+      </span>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {pullRequest ? <TaskPullRequestLink pullRequest={pullRequest} /> : null}
+        <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
+          {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"} changed
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+type GitBranchContextRowProps = {
+  currentBranchLabel: string;
+  hasTargetAhead: boolean;
+  isRepositoryMode: boolean;
+  targetAheadCount: number | null;
+  targetBranchLabel: string;
+};
+
+function GitBranchContextRow({
+  currentBranchLabel,
+  hasTargetAhead,
+  isRepositoryMode,
+  targetAheadCount,
+  targetBranchLabel,
+}: GitBranchContextRowProps): ReactElement {
+  return (
+    <div
+      className={cn(
+        "mb-2 grid gap-2 px-3",
+        isRepositoryMode
+          ? "sm:grid-cols-[minmax(0,1fr)]"
+          : "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center",
+      )}
+      data-testid="agent-studio-git-branch-context-row"
+    >
+      <div className="rounded-lg border border-border bg-card px-3 py-2">
+        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          {isRepositoryMode ? "Repository branch" : "Current branch"}
+        </p>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+          <span
+            className="truncate font-mono text-xs text-foreground"
+            data-testid="agent-studio-git-current-branch"
+          >
+            {currentBranchLabel}
+          </span>
+        </div>
+      </div>
+
+      {isRepositoryMode ? null : (
+        <>
+          <div className="relative flex items-center justify-center" aria-hidden="true">
+            <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
+              <ArrowRight className="size-3.5" />
+            </span>
+            {hasTargetAhead ? (
+              <span
+                className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
+                data-testid="agent-studio-git-target-ahead-count"
+              >
+                {targetAheadCount}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-border bg-card px-3 py-2">
+            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+              Target branch
+            </p>
+            <div className="mt-1 flex min-w-0 items-center gap-1.5">
+              <Target className="size-3.5 shrink-0 text-muted-foreground" />
+              <span
+                className="truncate font-mono text-xs text-foreground"
+                data-testid="agent-studio-git-target-branch"
+              >
+                {targetBranchLabel}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+type GitActionRowProps = {
+  canPull: boolean;
+  canPush: boolean;
+  canRebase: boolean;
+  canRefresh: boolean;
+  isDetectingPullRequest: boolean;
+  isLoading: boolean;
+  isPushing: boolean;
+  isRepositoryMode: boolean;
+  onDetectPullRequest?: (() => Promise<void> | void) | null | undefined;
+  onRefresh: () => void;
+  pullFromUpstream: (() => Promise<void>) | null;
+  pullTooltip: string;
+  pushAheadCount: number | null;
+  pushBehindCount: number | null;
+  pushBranch: (() => Promise<void>) | null;
+  pushTooltip: string;
+  rebaseBehindCount: number | null;
+  rebaseOntoTarget: (() => Promise<void>) | null;
+  rebaseTooltip: string;
+  showDetectPullRequest: boolean;
+};
+
+function GitActionRow({
+  canPull,
+  canPush,
+  canRebase,
+  canRefresh,
+  isDetectingPullRequest,
+  isLoading,
+  isPushing,
+  isRepositoryMode,
+  onDetectPullRequest,
+  onRefresh,
+  pullFromUpstream,
+  pullTooltip,
+  pushAheadCount,
+  pushBehindCount,
+  pushBranch,
+  pushTooltip,
+  rebaseBehindCount,
+  rebaseOntoTarget,
+  rebaseTooltip,
+  showDetectPullRequest,
+}: GitActionRowProps): ReactElement {
+  return (
+    <div
+      className="flex items-center justify-between gap-2 border-y border-border py-1"
+      data-testid="agent-studio-git-action-row"
+    >
+      <div className="inline-flex items-center gap-0.5 px-1">
+        <GitActionIconButton
+          testId="agent-studio-git-refresh-button"
+          srLabel="Refresh"
+          icon={RefreshCw}
+          onClick={onRefresh}
+          disabled={!canRefresh}
+          tooltip={isLoading ? "Refreshing" : "Refresh changes"}
+          isSpinning={isLoading}
+        />
+        {isRepositoryMode ? null : (
+          <GitActionIconButton
+            testId="agent-studio-git-rebase-button"
+            srLabel="Rebase onto target"
+            icon={Target}
+            onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
+            disabled={!canRebase}
+            tooltip={rebaseTooltip}
+            badge={
+              rebaseBehindCount != null && rebaseBehindCount > 0
+                ? {
+                    testId: "agent-studio-git-behind-count",
+                    value: rebaseBehindCount,
+                    toneClassName: "text-rose-600 dark:text-rose-400",
+                  }
+                : undefined
+            }
+          />
+        )}
+        <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
+          <GitActionIconButton
+            testId="agent-studio-git-pull-button"
+            srLabel="Pull from upstream"
+            icon={ArrowDown}
+            onClick={pullFromUpstream ? () => void pullFromUpstream() : null}
+            disabled={!canPull}
+            tooltip={pullTooltip}
+            badge={
+              pushBehindCount != null && pushBehindCount > 0
+                ? {
+                    testId: "agent-studio-git-upstream-behind-count",
+                    value: pushBehindCount,
+                    toneClassName: "text-rose-600 dark:text-rose-400",
+                  }
+                : undefined
+            }
+            wrapTrigger
+          />
+        </span>
+        <GitActionIconButton
+          testId="agent-studio-git-push-button"
+          srLabel="Push branch"
+          icon={ArrowUp}
+          onClick={pushBranch ? () => void pushBranch() : null}
+          disabled={!canPush}
+          tooltip={pushTooltip}
+          badge={
+            pushAheadCount != null && pushAheadCount > 0
+              ? {
+                  testId: "agent-studio-git-ahead-count",
+                  value: pushAheadCount,
+                  toneClassName: "text-emerald-600 dark:text-emerald-400",
+                }
+              : undefined
+          }
+          isSpinning={isPushing}
+        />
+      </div>
+      {showDetectPullRequest ? (
+        <div className="inline-flex items-center px-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={() => void onDetectPullRequest?.()}
+            disabled={Boolean(isDetectingPullRequest)}
+            data-testid="agent-studio-git-detect-pr-button"
+          >
+            <Link2 data-icon="inline-start" />
+            {isDetectingPullRequest ? "Detecting PR" : "Detect PR"}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type GitDiffScopeTabsProps = {
+  diffScope: DiffScope;
+  isRepositoryMode: boolean;
+  onScopeChange: (scope: DiffScope) => void;
+};
+
+function GitDiffScopeTabs({
+  diffScope,
+  isRepositoryMode,
+  onScopeChange,
+}: GitDiffScopeTabsProps): ReactElement {
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        className="inline-flex h-9 w-full items-center gap-1 bg-muted p-1"
+        role="tablist"
+        aria-label="Git diff scope"
+      >
+        {DIFF_SCOPE_OPTIONS.map((option) => {
+          const isActive = diffScope === option.scope;
+          return (
+            <button
+              key={option.scope}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={cn(
+                "inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-sm px-3 text-xs transition-colors",
+                isActive
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+              )}
+              onClick={() => onScopeChange(option.scope)}
+              data-testid={option.testId}
+            >
+              {option.scope === "target" && isRepositoryMode ? "Compare to upstream" : option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type GitInfoHeaderErrorsProps = {
+  pushError: string | null;
+  rebaseError: string | null;
+};
+
+function GitInfoHeaderErrors({
+  pushError,
+  rebaseError,
+}: GitInfoHeaderErrorsProps): ReactElement | null {
+  if (!rebaseError && !pushError) {
+    return null;
+  }
+
+  return (
+    <>
+      {rebaseError ? (
+        <p className="text-xs text-destructive" data-testid="agent-studio-git-rebase-error">
+          {rebaseError}
+        </p>
+      ) : null}
+      {pushError ? (
+        <p className="text-xs text-destructive" data-testid="agent-studio-git-push-error">
+          {pushError}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export function GitInfoHeader({
   contextMode = "worktree",
   pullRequest,
@@ -207,164 +520,42 @@ export function GitInfoHeader({
 
   return (
     <div className="flex flex-col border-b border-border">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
-        <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-          {isRepositoryMode ? "Repository context" : "Branch context"}
-        </span>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {pullRequest ? <TaskPullRequestLink pullRequest={pullRequest} /> : null}
-          <Badge variant="outline" className="px-2 py-0.5 text-[10px]">
-            {uncommittedFileCount} file{uncommittedFileCount === 1 ? "" : "s"} changed
-          </Badge>
-        </div>
-      </div>
+      <GitInfoHeaderSummaryRow
+        isRepositoryMode={isRepositoryMode}
+        pullRequest={pullRequest}
+        uncommittedFileCount={uncommittedFileCount}
+      />
 
-      <div
-        className={cn(
-          "mb-2 grid gap-2 px-3",
-          isRepositoryMode
-            ? "sm:grid-cols-[minmax(0,1fr)]"
-            : "sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center",
-        )}
-        data-testid="agent-studio-git-branch-context-row"
-      >
-        <div className="rounded-lg border border-border bg-card px-3 py-2">
-          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-            {isRepositoryMode ? "Repository branch" : "Current branch"}
-          </p>
-          <div className="mt-1 flex min-w-0 items-center gap-1.5">
-            <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-            <span
-              className="truncate font-mono text-xs text-foreground"
-              data-testid="agent-studio-git-current-branch"
-            >
-              {currentBranchLabel}
-            </span>
-          </div>
-        </div>
+      <GitBranchContextRow
+        currentBranchLabel={currentBranchLabel}
+        hasTargetAhead={hasTargetAhead}
+        isRepositoryMode={isRepositoryMode}
+        targetAheadCount={targetAheadCount}
+        targetBranchLabel={targetBranchLabel}
+      />
 
-        {isRepositoryMode ? null : (
-          <>
-            <div className="relative flex items-center justify-center" aria-hidden="true">
-              <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
-                <ArrowRight className="size-3.5" />
-              </span>
-              {hasTargetAhead ? (
-                <span
-                  className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
-                  data-testid="agent-studio-git-target-ahead-count"
-                >
-                  {targetAheadCount}
-                </span>
-              ) : null}
-            </div>
-
-            <div className="rounded-lg border border-border bg-card px-3 py-2">
-              <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                Target branch
-              </p>
-              <div className="mt-1 flex min-w-0 items-center gap-1.5">
-                <Target className="size-3.5 shrink-0 text-muted-foreground" />
-                <span
-                  className="truncate font-mono text-xs text-foreground"
-                  data-testid="agent-studio-git-target-branch"
-                >
-                  {targetBranchLabel}
-                </span>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      <div
-        className="flex items-center justify-between gap-2 border-y border-border py-1"
-        data-testid="agent-studio-git-action-row"
-      >
-        <div className="inline-flex items-center gap-0.5 px-1">
-          <GitActionIconButton
-            testId="agent-studio-git-refresh-button"
-            srLabel="Refresh"
-            icon={RefreshCw}
-            onClick={onRefresh}
-            disabled={!canRefresh}
-            tooltip={isLoading ? "Refreshing" : "Refresh changes"}
-            isSpinning={isLoading}
-          />
-          {isRepositoryMode ? null : (
-            <GitActionIconButton
-              testId="agent-studio-git-rebase-button"
-              srLabel="Rebase onto target"
-              icon={Target}
-              onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
-              disabled={!canRebase}
-              tooltip={rebaseTooltip}
-              badge={
-                rebaseBehindCount != null && rebaseBehindCount > 0
-                  ? {
-                      testId: "agent-studio-git-behind-count",
-                      value: rebaseBehindCount,
-                      toneClassName: "text-rose-600 dark:text-rose-400",
-                    }
-                  : undefined
-              }
-            />
-          )}
-          <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
-            <GitActionIconButton
-              testId="agent-studio-git-pull-button"
-              srLabel="Pull from upstream"
-              icon={ArrowDown}
-              onClick={pullFromUpstream ? () => void pullFromUpstream() : null}
-              disabled={!canPull}
-              tooltip={pullTooltip}
-              badge={
-                pushBehindCount != null && pushBehindCount > 0
-                  ? {
-                      testId: "agent-studio-git-upstream-behind-count",
-                      value: pushBehindCount,
-                      toneClassName: "text-rose-600 dark:text-rose-400",
-                    }
-                  : undefined
-              }
-              wrapTrigger
-            />
-          </span>
-          <GitActionIconButton
-            testId="agent-studio-git-push-button"
-            srLabel="Push branch"
-            icon={ArrowUp}
-            onClick={pushBranch ? () => void pushBranch() : null}
-            disabled={!canPush}
-            tooltip={pushTooltip}
-            badge={
-              pushAheadCount != null && pushAheadCount > 0
-                ? {
-                    testId: "agent-studio-git-ahead-count",
-                    value: pushAheadCount,
-                    toneClassName: "text-emerald-600 dark:text-emerald-400",
-                  }
-                : undefined
-            }
-          />
-        </div>
-        {showDetectPullRequest ? (
-          <div className="inline-flex items-center px-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => void onDetectPullRequest()}
-              disabled={Boolean(isDetectingPullRequest)}
-              data-testid="agent-studio-git-detect-pr-button"
-            >
-              <Link2 data-icon="inline-start" />
-              {isDetectingPullRequest ? "Detecting PR" : "Detect PR"}
-            </Button>
-          </div>
-        ) : null}
-      </div>
+      <GitActionRow
+        canPull={canPull}
+        canPush={canPush}
+        canRebase={canRebase}
+        canRefresh={canRefresh}
+        isDetectingPullRequest={Boolean(isDetectingPullRequest)}
+        isLoading={isLoading}
+        isPushing={Boolean(isPushing)}
+        isRepositoryMode={isRepositoryMode}
+        onDetectPullRequest={onDetectPullRequest}
+        onRefresh={onRefresh}
+        pullFromUpstream={pullFromUpstream}
+        pullTooltip={pullTooltip}
+        pushAheadCount={pushAheadCount}
+        pushBehindCount={pushBehindCount}
+        pushBranch={pushBranch}
+        pushTooltip={pushTooltip}
+        rebaseBehindCount={rebaseBehindCount}
+        rebaseOntoTarget={rebaseOntoTarget}
+        rebaseTooltip={rebaseTooltip}
+        showDetectPullRequest={showDetectPullRequest}
+      />
 
       {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (
         <div
@@ -375,48 +566,12 @@ export function GitInfoHeader({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-1">
-        <div
-          className="inline-flex h-9 w-full items-center bg-muted p-1 gap-1"
-          role="tablist"
-          aria-label="Git diff scope"
-        >
-          {DIFF_SCOPE_OPTIONS.map((option) => {
-            const isActive = diffScope === option.scope;
-            return (
-              <button
-                key={option.scope}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className={cn(
-                  "inline-flex h-7 flex-1 items-center justify-center rounded-sm px-3 text-xs transition-colors cursor-pointer",
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-                )}
-                onClick={() => handleScopeChange(option.scope)}
-                data-testid={option.testId}
-              >
-                {option.scope === "target" && isRepositoryMode
-                  ? "Compare to upstream"
-                  : option.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {rebaseError ? (
-        <p className="text-xs text-destructive" data-testid="agent-studio-git-rebase-error">
-          {rebaseError}
-        </p>
-      ) : null}
-      {pushError ? (
-        <p className="text-xs text-destructive" data-testid="agent-studio-git-push-error">
-          {pushError}
-        </p>
-      ) : null}
+      <GitDiffScopeTabs
+        diffScope={diffScope}
+        isRepositoryMode={isRepositoryMode}
+        onScopeChange={handleScopeChange}
+      />
+      <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
     </div>
   );
 }

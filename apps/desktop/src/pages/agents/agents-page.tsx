@@ -10,16 +10,14 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  AgentChat,
-  AgentStudioHeader,
-  AgentStudioRightPanel,
-  AgentStudioTaskTabs,
-} from "@/components/features/agents";
+import { AgentChat } from "@/components/features/agents/agent-chat/agent-chat";
+import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
+import { AgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
+import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
 import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
-} from "@/components/features/task-details";
+} from "@/components/features/task-details/task-details-sheet-controller";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { normalizeTargetBranch, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";

@@ -299,16 +299,25 @@ describe("useAgentChatAutoScroll", () => {
       await flush();
     });
 
-    const firstAnimationFrame = rafCallbacks.shift();
-    if (!firstAnimationFrame) {
-      throw new Error("Missing smooth-scroll animation frame");
-    }
-    firstAnimationFrame(0);
-    const secondAnimationFrame = rafCallbacks.shift();
-    if (!secondAnimationFrame) {
-      throw new Error("Missing follow-up smooth-scroll animation frame");
-    }
-    secondAnimationFrame(1000);
+    await act(async () => {
+      const firstAnimationFrame = rafCallbacks.shift();
+      if (!firstAnimationFrame) {
+        throw new Error("Missing smooth-scroll animation frame");
+      }
+      await act(async () => {
+        firstAnimationFrame(0);
+        await flush();
+      });
+      const secondAnimationFrame = rafCallbacks.shift();
+      if (!secondAnimationFrame) {
+        throw new Error("Missing follow-up smooth-scroll animation frame");
+      }
+      await act(async () => {
+        secondAnimationFrame(1000);
+        await flush();
+      });
+      await flush();
+    });
 
     expect(measure).toHaveBeenCalledTimes(1);
     expect(scrollToIndex).toHaveBeenCalledTimes(0);
@@ -430,7 +439,10 @@ describe("useAgentChatAutoScroll", () => {
       await flush();
     });
 
-    drainAnimationFrames(rafCallbacks);
+    await act(async () => {
+      drainAnimationFrames(rafCallbacks);
+      await flush();
+    });
     measure.mockClear();
     scrollToIndex.mockClear();
     scrollToMock.mockClear();

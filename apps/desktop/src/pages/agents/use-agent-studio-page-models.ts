@@ -10,16 +10,14 @@ import {
   useState,
   type WheelEvent,
 } from "react";
-import {
-  type AgentChatModel,
-  type AgentStudioTaskTabsModel,
-  isNearBottom,
-  useAgentChatLayout,
-} from "@/components/features/agents";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import {
   CHAT_PROGRAMMATIC_AUTOSCROLL_DATASET,
   CHAT_PROGRAMMATIC_AUTOSCROLL_TOLERANCE_PX,
+  isNearBottom,
+  useAgentChatLayout,
 } from "@/components/features/agents/agent-chat/use-agent-chat-layout";
+import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { ROLE_OPTIONS } from "./agents-page-constants";

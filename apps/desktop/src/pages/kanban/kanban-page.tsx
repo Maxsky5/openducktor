@@ -3,7 +3,7 @@ import { TaskCreateModal } from "@/components/features/task-create/task-create-m
 import {
   TaskDetailsSheetController,
   type TaskDetailsSheetControllerHandle,
-} from "@/components/features/task-details";
+} from "@/components/features/task-details/task-details-sheet-controller";
 import { HumanReviewFeedbackModal } from "./human-review-feedback-modal";
 import { KanbanPageContent } from "./kanban-page-content";
 import { KanbanPageHeader } from "./kanban-page-header";
