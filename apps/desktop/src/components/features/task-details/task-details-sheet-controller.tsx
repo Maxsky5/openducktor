@@ -15,13 +15,11 @@ export type TaskDetailsSheetControllerHandle = {
   close: () => void;
 };
 
-export type TaskDetailsSheetControllerProps = Omit<
+type TaskDetailsSheetControllerProps = Omit<
   TaskDetailsSheetProps,
   "task" | "open" | "onOpenChange"
 > & {
   allTasks: TaskCard[];
-  activeTaskId?: string | null;
-  onActiveTaskIdChange?: (taskId: string | null) => void;
 };
 
 export const TaskDetailsSheetController = forwardRef<
@@ -30,8 +28,6 @@ export const TaskDetailsSheetController = forwardRef<
 >(function TaskDetailsSheetController(
   {
     allTasks,
-    activeTaskId,
-    onActiveTaskIdChange,
     runs,
     workflowActionsEnabled,
     onPlan,
@@ -65,29 +61,19 @@ export const TaskDetailsSheetController = forwardRef<
     () => ({
       openTask: (nextTaskId: string) => {
         setTaskId(nextTaskId);
-        onActiveTaskIdChange?.(nextTaskId);
       },
       close: () => {
         setTaskId(null);
-        onActiveTaskIdChange?.(null);
       },
     }),
-    [onActiveTaskIdChange],
+    [],
   );
 
   useEffect(() => {
     if (taskId && !task) {
       setTaskId(null);
-      onActiveTaskIdChange?.(null);
     }
-  }, [onActiveTaskIdChange, task, taskId]);
-
-  useEffect(() => {
-    if (activeTaskId === undefined || activeTaskId === taskId) {
-      return;
-    }
-    setTaskId(activeTaskId);
-  }, [activeTaskId, taskId]);
+  }, [task, taskId]);
 
   return (
     <TaskDetailsSheet
@@ -98,7 +84,6 @@ export const TaskDetailsSheetController = forwardRef<
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           setTaskId(null);
-          onActiveTaskIdChange?.(null);
         }
       }}
       {...(workflowActionsEnabled !== undefined ? { workflowActionsEnabled } : {})}
