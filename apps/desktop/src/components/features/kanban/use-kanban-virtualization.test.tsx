@@ -90,7 +90,77 @@ const createHarness = (initialProps: HookArgs) => {
   return { mount, update, run, getLatest, unmount };
 };
 
-const installMockWindow = () => {
+const attachContainer = async (
+  harness: Pick<ReturnType<typeof createHarness>, "getLatest" | "run">,
+  container?: Partial<HTMLDivElement>,
+): Promise<void> => {
+  await harness.run(() => {
+    harness.getLatest().containerRef({
+      getBoundingClientRect: () => ({ top: 0 }),
+      closest: () => null,
+      ...container,
+    } as HTMLDivElement);
+  });
+};
+
+const createPairHarness = (initialPropsList: [HookArgs, HookArgs]) => {
+  let latestStates: HookState[] = [];
+
+  const HarnessGroup = ({
+    firstHook,
+    secondHook,
+  }: {
+    firstHook: HookArgs;
+    secondHook: HookArgs;
+  }): ReactElement | null => {
+    const firstState = useKanbanVirtualization(firstHook);
+    const secondState = useKanbanVirtualization(secondHook);
+    latestStates = [firstState, secondState];
+    return null;
+  };
+
+  let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+  const mount = async (): Promise<void> => {
+    await act(async () => {
+      renderer = TestRenderer.create(
+        createElement(HarnessGroup, {
+          firstHook: initialPropsList[0],
+          secondHook: initialPropsList[1],
+        }),
+      );
+      await flush();
+    });
+  };
+
+  const getLatestStates = (): HookState[] => latestStates;
+
+  const run = async (fn: () => void): Promise<void> => {
+    await act(async () => {
+      fn();
+      await flush();
+    });
+  };
+
+  const unmount = async (): Promise<void> => {
+    if (!renderer) {
+      return;
+    }
+
+    await act(async () => {
+      renderer?.unmount();
+      await flush();
+    });
+  };
+
+  return { mount, getLatestStates, run, unmount };
+};
+
+const installMockWindow = ({
+  runAnimationFrameCallbacks = false,
+}: {
+  runAnimationFrameCallbacks?: boolean;
+} = {}) => {
   const globalWithWindow = globalThis as typeof globalThis & {
     window?: Window & typeof globalThis;
   };
@@ -102,7 +172,12 @@ const installMockWindow = () => {
   const removeEventListener = mock(
     (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
   );
-  const requestAnimationFrame = mock((_callback: FrameRequestCallback): number => 1);
+  const requestAnimationFrame = mock((callback: FrameRequestCallback): number => {
+    if (runAnimationFrameCallbacks) {
+      callback(0);
+    }
+    return 1;
+  });
   const cancelAnimationFrame = mock((_handle: number) => {});
 
   globalWithWindow.window = {
@@ -129,6 +204,51 @@ const installMockWindow = () => {
     cancelAnimationFrame,
     restore,
   };
+};
+
+const installMockResizeObserver = () => {
+  const globalWithResizeObserver = globalThis as typeof globalThis & {
+    ResizeObserver?: typeof ResizeObserver;
+  };
+  const previousResizeObserver = globalWithResizeObserver.ResizeObserver;
+  const activeCallbacks = new Set<ResizeObserverCallback>();
+
+  class MockResizeObserver {
+    private callback: ResizeObserverCallback;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+    }
+
+    observe(_target: Element): void {
+      activeCallbacks.add(this.callback);
+    }
+
+    unobserve(_target: Element): void {}
+
+    disconnect(): void {
+      activeCallbacks.delete(this.callback);
+    }
+  }
+
+  globalWithResizeObserver.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+  const trigger = (): void => {
+    for (const callback of [...activeCallbacks]) {
+      callback([], {} as ResizeObserver);
+    }
+  };
+
+  const restore = (): void => {
+    if (typeof previousResizeObserver === "undefined") {
+      delete globalWithResizeObserver.ResizeObserver;
+      return;
+    }
+
+    globalWithResizeObserver.ResizeObserver = previousResizeObserver;
+  };
+
+  return { trigger, restore };
 };
 
 describe("useKanbanVirtualization", () => {
@@ -222,6 +342,7 @@ describe("useKanbanVirtualization", () => {
 
     try {
       await harness.mount();
+      await attachContainer(harness);
       expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
       expect(mockWindow.requestAnimationFrame).toHaveBeenCalledTimes(1);
 
@@ -247,10 +368,10 @@ describe("useKanbanVirtualization", () => {
       await harness.mount();
 
       await harness.run(() => {
-        harness.getLatest().containerRef.current = {
+        harness.getLatest().containerRef({
           getBoundingClientRect,
           closest: () => null,
-        } as unknown as HTMLDivElement;
+        } as unknown as HTMLDivElement);
       });
 
       const callsBeforeMeasure = getBoundingClientRect.mock.calls.length;
@@ -261,6 +382,97 @@ describe("useKanbanVirtualization", () => {
 
       expect(getBoundingClientRect.mock.calls.length).toBeGreaterThan(callsBeforeMeasure);
       expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+      mockWindow.restore();
+    }
+  });
+
+  test("invalidates visible-card measurements when the lane container resizes", async () => {
+    const resizeObserver = installMockResizeObserver();
+    const harness = createHarness({ tasks: createTasks(30) });
+
+    try {
+      await harness.mount();
+      await attachContainer(harness);
+
+      const initialMeasurementVersion = harness.getLatest().measurementVersion;
+
+      await harness.run(() => {
+        resizeObserver.trigger();
+      });
+
+      expect(harness.getLatest().measurementVersion).toBe(initialMeasurementVersion + 1);
+    } finally {
+      await harness.unmount();
+      resizeObserver.restore();
+    }
+  });
+
+  test("recomputes the virtual window when the lane container resizes", async () => {
+    const mockWindow = installMockWindow({ runAnimationFrameCallbacks: true });
+    const resizeObserver = installMockResizeObserver();
+    const harness = createHarness({ tasks: createTasks(30) });
+    const getBoundingClientRect = mock(() => ({ top: 120 }));
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        harness.getLatest().containerRef({
+          getBoundingClientRect,
+          closest: () => null,
+        } as unknown as HTMLDivElement);
+      });
+
+      const callsBeforeResize = getBoundingClientRect.mock.calls.length;
+
+      await harness.run(() => {
+        resizeObserver.trigger();
+      });
+
+      expect(getBoundingClientRect.mock.calls.length).toBeGreaterThan(callsBeforeResize);
+    } finally {
+      await harness.unmount();
+      resizeObserver.restore();
+      mockWindow.restore();
+    }
+  });
+
+  test("shares global viewport listeners across multiple virtualized lanes", async () => {
+    const mockWindow = installMockWindow();
+    const scrollContainerAddEventListener = mock(
+      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    );
+    const scrollContainerRemoveEventListener = mock(
+      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    );
+    const scrollContainer = {
+      addEventListener: scrollContainerAddEventListener,
+      removeEventListener: scrollContainerRemoveEventListener,
+      getBoundingClientRect: () => ({ top: 0 }),
+      clientHeight: 900,
+    } as unknown as HTMLElement;
+    const harness = createPairHarness([{ tasks: createTasks(30) }, { tasks: createTasks(30) }]);
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        for (const state of harness.getLatestStates()) {
+          state.containerRef({
+            getBoundingClientRect: () => ({ top: 0 }),
+            closest: () => scrollContainer,
+          } as unknown as HTMLDivElement);
+        }
+      });
+
+      expect(mockWindow.addEventListener).toHaveBeenCalledTimes(2);
+      expect(mockWindow.requestAnimationFrame).toHaveBeenCalledTimes(1);
+      expect(scrollContainerAddEventListener).toHaveBeenCalledTimes(1);
+      expect(harness.getLatestStates()).toHaveLength(2);
+
+      await harness.unmount();
+      expect(mockWindow.removeEventListener).toHaveBeenCalledTimes(2);
+      expect(scrollContainerRemoveEventListener).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
       mockWindow.restore();

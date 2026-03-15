@@ -19,6 +19,11 @@ type UseKanbanVirtualizationArgs = {
   tasks: KanbanColumnData["tasks"];
 };
 
+type KanbanViewportSubscriber = {
+  element: HTMLDivElement;
+  onSync: () => void;
+};
+
 type KanbanVirtualizedRenderModel = {
   kind: "virtualized";
   totalHeight: number;
@@ -35,8 +40,9 @@ type KanbanSimpleRenderModel = {
 type KanbanVirtualizationRenderModel = KanbanSimpleRenderModel | KanbanVirtualizedRenderModel;
 
 type UseKanbanVirtualizationResult = {
-  containerRef: { current: HTMLDivElement | null };
+  containerRef: (node: HTMLDivElement | null) => void;
   renderModel: KanbanVirtualizationRenderModel;
+  measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
 };
 
@@ -46,14 +52,118 @@ type VirtualLayoutSnapshot = {
   totalHeight: number;
 };
 
+const viewportSubscribers = new Map<number, KanbanViewportSubscriber>();
+const viewportScrollContainers = new Map<HTMLElement, number>();
+let viewportSubscriptionId = 0;
+let viewportSyncFrameHandle: number | null = null;
+let hasViewportWindowListeners = false;
+
+const scheduleViewportSubscribersSync = (): void => {
+  if (typeof window === "undefined" || viewportSyncFrameHandle !== null) {
+    return;
+  }
+
+  viewportSyncFrameHandle = window.requestAnimationFrame(() => {
+    viewportSyncFrameHandle = null;
+    for (const subscriber of viewportSubscribers.values()) {
+      subscriber.onSync();
+    }
+  });
+};
+
+const onViewportWindowEvent = (): void => {
+  scheduleViewportSubscribersSync();
+};
+
+const retainViewportWindowListeners = (): void => {
+  if (typeof window === "undefined" || hasViewportWindowListeners) {
+    return;
+  }
+
+  window.addEventListener("scroll", onViewportWindowEvent, { passive: true });
+  window.addEventListener("resize", onViewportWindowEvent);
+  hasViewportWindowListeners = true;
+};
+
+const releaseViewportWindowListeners = (): void => {
+  if (
+    typeof window === "undefined" ||
+    !hasViewportWindowListeners ||
+    viewportSubscribers.size > 0 ||
+    viewportScrollContainers.size > 0
+  ) {
+    return;
+  }
+
+  window.removeEventListener("scroll", onViewportWindowEvent);
+  window.removeEventListener("resize", onViewportWindowEvent);
+  if (viewportSyncFrameHandle !== null) {
+    window.cancelAnimationFrame(viewportSyncFrameHandle);
+    viewportSyncFrameHandle = null;
+  }
+  hasViewportWindowListeners = false;
+};
+
+const retainViewportScrollContainer = (container: HTMLElement): void => {
+  const nextCount = (viewportScrollContainers.get(container) ?? 0) + 1;
+  viewportScrollContainers.set(container, nextCount);
+  if (nextCount === 1) {
+    container.addEventListener("scroll", onViewportWindowEvent, { passive: true });
+  }
+};
+
+const releaseViewportScrollContainer = (container: HTMLElement): void => {
+  const currentCount = viewportScrollContainers.get(container);
+  if (!currentCount) {
+    return;
+  }
+
+  if (currentCount === 1) {
+    viewportScrollContainers.delete(container);
+    container.removeEventListener("scroll", onViewportWindowEvent);
+    releaseViewportWindowListeners();
+    return;
+  }
+
+  viewportScrollContainers.set(container, currentCount - 1);
+};
+
+const registerViewportSubscriber = (subscriber: KanbanViewportSubscriber): (() => void) => {
+  retainViewportWindowListeners();
+
+  const scrollContainer = subscriber.element.closest(
+    "[data-main-scroll-container='true']",
+  ) as HTMLElement | null;
+  if (scrollContainer) {
+    retainViewportScrollContainer(scrollContainer);
+  }
+
+  const subscriberId = viewportSubscriptionId;
+  viewportSubscriptionId += 1;
+  viewportSubscribers.set(subscriberId, subscriber);
+  scheduleViewportSubscribersSync();
+
+  return () => {
+    viewportSubscribers.delete(subscriberId);
+    if (scrollContainer) {
+      releaseViewportScrollContainer(scrollContainer);
+    }
+    releaseViewportWindowListeners();
+  };
+};
+
 export function useKanbanVirtualization({
   tasks,
 }: UseKanbanVirtualizationArgs): UseKanbanVirtualizationResult {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
   const [measuredHeightsByTaskId, setMeasuredHeightsByTaskId] = useState<Record<string, number>>(
     {},
   );
+  const [measurementVersion, setMeasurementVersion] = useState(0);
   const shouldVirtualize = tasks.length >= VIRTUALIZATION_MIN_TASK_COUNT;
+  const containerRef = useCallback((node: HTMLDivElement | null): void => {
+    setContainerElement(node);
+  }, []);
 
   const itemHeights = useMemo(() => {
     if (!shouldVirtualize) {
@@ -106,7 +216,7 @@ export function useKanbanVirtualization({
         return;
       }
 
-      const viewportElement = containerRef.current;
+      const viewportElement = containerElement;
       if (!viewportElement) {
         return;
       }
@@ -143,57 +253,56 @@ export function useKanbanVirtualization({
         return nextRange;
       });
     };
-  }, [shouldVirtualize]);
+  }, [containerElement, shouldVirtualize]);
 
   useEffect(() => {
-    if (!shouldVirtualize || typeof window === "undefined") {
+    if (!shouldVirtualize || typeof window === "undefined" || !containerElement) {
       return;
     }
 
-    const rafRef: { current: number | null } = { current: null };
+    return registerViewportSubscriber({
+      element: containerElement,
+      onSync: () => {
+        syncViewportRef.current();
+      },
+    });
+  }, [containerElement, shouldVirtualize]);
 
-    const scheduleViewportSync = (): void => {
-      if (rafRef.current !== null) {
+  useEffect(() => {
+    if (!shouldVirtualize || !containerElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let frameHandle: number | null = null;
+    const scheduleMeasurementInvalidation = (): void => {
+      if (typeof window === "undefined") {
+        setMeasurementVersion((current) => current + 1);
         return;
       }
 
-      rafRef.current = window.requestAnimationFrame(() => {
-        rafRef.current = null;
+      if (frameHandle !== null) {
+        return;
+      }
+
+      frameHandle = window.requestAnimationFrame(() => {
+        frameHandle = null;
+        setMeasurementVersion((current) => current + 1);
         syncViewportRef.current();
       });
     };
 
-    const scrollContainer = containerRef.current?.closest(
-      "[data-main-scroll-container='true']",
-    ) as HTMLElement | null;
+    const observer = new ResizeObserver(() => {
+      scheduleMeasurementInvalidation();
+    });
 
-    scheduleViewportSync();
-    window.addEventListener("scroll", scheduleViewportSync, { passive: true });
-    window.addEventListener("resize", scheduleViewportSync);
-    scrollContainer?.addEventListener("scroll", scheduleViewportSync, { passive: true });
-
-    const viewportElement = containerRef.current;
-    const resizeObserver =
-      typeof ResizeObserver === "undefined"
-        ? null
-        : new ResizeObserver(() => {
-            scheduleViewportSync();
-          });
-
-    if (resizeObserver && viewportElement) {
-      resizeObserver.observe(viewportElement);
-    }
-
+    observer.observe(containerElement);
     return () => {
-      window.removeEventListener("scroll", scheduleViewportSync);
-      window.removeEventListener("resize", scheduleViewportSync);
-      scrollContainer?.removeEventListener("scroll", scheduleViewportSync);
-      if (rafRef.current !== null) {
-        window.cancelAnimationFrame(rafRef.current);
+      observer.disconnect();
+      if (frameHandle !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(frameHandle);
       }
-      resizeObserver?.disconnect();
     };
-  }, [shouldVirtualize]);
+  }, [containerElement, shouldVirtualize]);
 
   useEffect(() => {
     if (shouldVirtualize) {
@@ -302,6 +411,7 @@ export function useKanbanVirtualization({
   return {
     containerRef,
     renderModel,
+    measurementVersion,
     onMeasuredHeight,
   };
 }

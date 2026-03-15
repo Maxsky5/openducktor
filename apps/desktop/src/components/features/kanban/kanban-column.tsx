@@ -44,6 +44,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   runState,
   activeSessions,
+  measurementVersion,
   onMeasuredHeight,
   onOpenDetails,
   onDelegate,
@@ -57,13 +58,42 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task: KanbanColumnData["tasks"][number];
   runState: RunSummary["state"] | undefined;
   activeSessions: RunningTaskSessions | undefined;
+  measurementVersion: number;
   onMeasuredHeight: (taskId: string, height: number) => void;
 } & TaskCardHandlers): ReactElement {
   const taskWrapperRef = useRef<HTMLDivElement | null>(null);
+  const taskMeasurementKey = [
+    task.updatedAt ?? "",
+    task.title,
+    task.status,
+    task.issueType,
+    task.priority,
+    task.subtaskIds.join(","),
+    task.availableActions.join(","),
+    task.pullRequest?.number ?? "",
+    task.pullRequest?.state ?? "",
+    task.pullRequest?.url ?? "",
+  ].join("|");
+  const activeSessionsMeasurementKey =
+    activeSessions
+      ?.map(
+        (session) => `${session.sessionId}:${session.role}:${session.scenario}:${session.status}`,
+      )
+      .join("|") ?? "";
+  const measurementTrigger = [
+    measurementVersion,
+    runState ?? "",
+    taskMeasurementKey,
+    activeSessionsMeasurementKey,
+  ].join("::");
 
   useEffect(() => {
     const element = taskWrapperRef.current;
     if (!element) {
+      return;
+    }
+
+    if (measurementTrigger.length === 0) {
       return;
     }
 
@@ -74,21 +104,19 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       }
     };
 
-    reportHeight();
-
-    if (typeof ResizeObserver === "undefined") {
+    if (typeof window === "undefined") {
+      reportHeight();
       return;
     }
 
-    const observer = new ResizeObserver(() => {
+    const frameHandle = window.requestAnimationFrame(() => {
       reportHeight();
     });
 
-    observer.observe(element);
     return () => {
-      observer.disconnect();
+      window.cancelAnimationFrame(frameHandle);
     };
-  }, [onMeasuredHeight, task.id]);
+  }, [measurementTrigger, onMeasuredHeight, task.id]);
 
   return (
     <div ref={taskWrapperRef}>
@@ -169,6 +197,7 @@ export function KanbanColumn({
   const {
     containerRef: cardsViewportRef,
     renderModel,
+    measurementVersion,
     onMeasuredHeight: handleMeasuredHeight,
   } = useKanbanVirtualization({
     tasks: column.tasks,
@@ -198,6 +227,7 @@ export function KanbanColumn({
                   task={task}
                   runState={runStateByTaskId.get(task.id)}
                   activeSessions={activeSessionsByTaskId.get(task.id) ?? EMPTY_ACTIVE_SESSIONS}
+                  measurementVersion={measurementVersion}
                   onMeasuredHeight={handleMeasuredHeight}
                   onOpenDetails={onOpenDetails}
                   onDelegate={onDelegate}
