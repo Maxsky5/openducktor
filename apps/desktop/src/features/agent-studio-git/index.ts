@@ -7,3 +7,4 @@ export type {
   DiffDataState,
   DiffScope,
 } from "./contracts";
+export { useAgentStudioDiffData } from "./use-agent-studio-diff-data";
