@@ -43,9 +43,6 @@ export function useAgentStudioDiffData({
 
   const [selectedFileState, setSelectedFileState] = useState<string | null>(null);
   const previousRequestContextKeyRef = useRef<string | null>(null);
-  const handleContextReset = useCallback((): void => {
-    setSelectedFileState(null);
-  }, []);
 
   useEffect(() => {
     const previousRequestContextKey = previousRequestContextKeyRef.current;
@@ -70,7 +67,6 @@ export function useAgentStudioDiffData({
     requestContextKey,
     enablePolling,
     shouldBlockDiffLoading,
-    onContextReset: handleContextReset,
   });
 
   const selectedFile = selectedFileState;

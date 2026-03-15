@@ -302,6 +302,25 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("reuses the cached full snapshot when remounting within the stale window", async () => {
+    const firstHarness = createHookHarness(createBaseArgs());
+    const secondHarness = createHookHarness(createBaseArgs());
+
+    try {
+      await firstHarness.mount();
+      await firstHarness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      await firstHarness.unmount();
+
+      await secondHarness.mount();
+      await secondHarness.waitFor((state) => state.fileDiffs.length === 1);
+
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
+    } finally {
+      await firstHarness.unmount();
+      await secondHarness.unmount();
+    }
+  });
+
   test("manual refresh updates active scope without extra background scope call", async () => {
     const harness = createHookHarness(createBaseArgs());
 
