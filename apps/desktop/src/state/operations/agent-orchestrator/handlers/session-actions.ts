@@ -11,7 +11,7 @@ import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import { now } from "../support/core";
+import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import { buildSessionPreludeMessages, loadSessionPromptContext } from "../support/session-prompt";
 import { warmSessionData } from "../support/session-warmup";
@@ -65,6 +65,8 @@ export type ForkAgentSessionActionInput = {
   parentSessionId: string;
   selectedModel?: AgentModelSelection | null;
 };
+
+const STALE_FORK_ERROR = "Workspace changed while forking session.";
 
 const markTurnStartedIfMissing = (
   turnStartedAtBySessionRef: { current: Record<string, number> },
@@ -286,6 +288,13 @@ export const createAgentSessionActions = ({
     if (!activeRepo) {
       throw new Error("No active repository selected.");
     }
+    const repoPath = activeRepo;
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef,
+      previousRepoRef,
+    });
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
 
     const parentSession = sessionsRef.current[parentSessionId];
     if (!parentSession) {
@@ -309,14 +318,17 @@ export const createAgentSessionActions = ({
       loadTaskDocuments,
       loadRepoPromptOverrides,
     });
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     const modelSelection =
       selectedModel ??
       parentSession.selectedModel ??
-      (await loadRepoDefaultModel(activeRepo, parentSession.role));
+      (await loadRepoDefaultModel(repoPath, parentSession.role));
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     const { promptOverrides, systemPrompt } = promptContext;
 
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     const summary = await adapter.forkSession({
-      repoPath: activeRepo,
+      repoPath,
       runtimeKind: (parentSession.runtimeKind ??
         modelSelection?.runtimeKind ??
         DEFAULT_RUNTIME_KIND) as string,
@@ -333,6 +345,7 @@ export const createAgentSessionActions = ({
       ...(modelSelection ? { model: modelSelection } : {}),
       parentExternalSessionId: parentSession.externalSessionId,
     });
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
 
     const nextSession: AgentSessionState = {
       sessionId: summary.sessionId,
@@ -368,15 +381,16 @@ export const createAgentSessionActions = ({
       promptOverrides,
     };
 
+    throwIfRepoStale(isStaleRepoOperation, STALE_FORK_ERROR);
     setSessionsById((current) => ({
       ...current,
       [summary.sessionId]: nextSession,
     }));
-    attachSessionListener(activeRepo, summary.sessionId);
+    attachSessionListener(repoPath, summary.sessionId);
     void persistSessionSnapshot(nextSession);
     warmSessionData({
       operationPrefix: "fork-session-warm-session",
-      repoPath: activeRepo,
+      repoPath,
       sessionId: summary.sessionId,
       taskId: nextSession.taskId,
       role: nextSession.role,

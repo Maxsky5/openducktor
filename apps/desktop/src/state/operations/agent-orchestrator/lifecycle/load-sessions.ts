@@ -125,6 +125,7 @@ export const createLoadAgentSessions = ({
       runtimeConnection: AgentRuntimeConnection,
       externalSessionId: string,
       role: AgentSessionState["role"],
+      shouldLoadModelCatalog = true,
     ): void => {
       warmSessionData({
         operationPrefix: "load-sessions-warm-session",
@@ -137,6 +138,7 @@ export const createLoadAgentSessions = ({
         externalSessionId,
         loadSessionTodos,
         loadSessionModelCatalog,
+        shouldLoadModelCatalog,
       });
     };
 
@@ -193,8 +195,6 @@ export const createLoadAgentSessions = ({
       if (
         requestedSession &&
         requestedSession.taskId === taskId &&
-        !requestedSession.modelCatalog &&
-        !requestedSession.isLoadingModelCatalog &&
         requestedSession.runtimeEndpoint &&
         requestedSession.workingDirectory
       ) {
@@ -218,6 +218,7 @@ export const createLoadAgentSessions = ({
           runtimeConnection,
           requestedSession.externalSessionId,
           requestedSession.role,
+          !requestedSession.modelCatalog && !requestedSession.isLoadingModelCatalog,
         );
       }
       return;

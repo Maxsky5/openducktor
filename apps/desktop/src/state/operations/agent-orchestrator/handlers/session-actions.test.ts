@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createTaskCardFixture } from "../test-utils";
+import { createDeferred, createTaskCardFixture } from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -159,6 +159,103 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     } finally {
       adapter.forkSession = originalForkSession;
       console.error = originalError;
+    }
+  });
+
+  test("forkAgentSession aborts without side effects when the active repo becomes stale", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalForkSession = adapter.forkSession;
+    let forkCalls = 0;
+    let attachCalls = 0;
+    let persistCalls = 0;
+    let setCalls = 0;
+    const promptOverridesDeferred = createDeferred<Record<string, string>>();
+    const repoEpochRef = { current: 1 };
+    const previousRepoRef = { current: "/tmp/repo" as string | null };
+
+    adapter.forkSession = async () => {
+      forkCalls += 1;
+      return {
+        sessionId: "session-2",
+        externalSessionId: "external-2",
+        startedAt: "2026-02-22T09:00:00.000Z",
+        runtimeKind: "opencode",
+        role: "build",
+        scenario: "build_implementation_start",
+        status: "idle",
+      };
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({
+          status: "idle",
+        }),
+      },
+    };
+    const task = createTaskCardFixture({
+      id: "task-1",
+      issueType: "feature",
+      aiReviewEnabled: true,
+      status: "in_progress",
+    });
+
+    const actions = createAgentSessionActions({
+      activeRepo: "/tmp/repo",
+      adapter,
+      setSessionsById: (updater) => {
+        setCalls += 1;
+        sessionsRef.current =
+          typeof updater === "function" ? updater(sessionsRef.current) : updater;
+      },
+      sessionsRef,
+      taskRef: { current: [task] },
+      repoEpochRef,
+      previousRepoRef,
+      inFlightStartsByRepoTaskRef: { current: new Map() },
+      unsubscribersRef: { current: new Map() },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession: () => {},
+      attachSessionListener: () => {
+        attachCalls += 1;
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeId: null,
+        runId: "run-1",
+        runtimeEndpoint: "http://127.0.0.1:4444",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadRepoDefaultModel: async () => null,
+      loadRepoPromptOverrides: async () => promptOverridesDeferred.promise,
+      loadSessionTodos: async () => {},
+      loadSessionModelCatalog: async () => {},
+      loadAgentSessions: async () => {},
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      persistSessionSnapshot: async () => {
+        persistCalls += 1;
+      },
+    });
+
+    try {
+      const forkPromise = actions.forkAgentSession({
+        parentSessionId: "session-1",
+      });
+
+      repoEpochRef.current = 2;
+      previousRepoRef.current = "/tmp/other-repo";
+      promptOverridesDeferred.resolve({});
+
+      await expect(forkPromise).rejects.toThrow("Workspace changed while forking session.");
+      expect(forkCalls).toBe(0);
+      expect(setCalls).toBe(0);
+      expect(attachCalls).toBe(0);
+      expect(persistCalls).toBe(0);
+      expect(sessionsRef.current["session-2"]).toBeUndefined();
+    } finally {
+      adapter.forkSession = originalForkSession;
     }
   });
 

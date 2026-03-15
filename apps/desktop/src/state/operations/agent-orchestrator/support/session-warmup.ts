@@ -2,7 +2,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentRole, AgentRuntimeConnection } from "@openducktor/core";
 import { runOrchestratorSideEffect } from "./async-side-effects";
 
-type SessionWarmupInput = {
+export type SessionWarmupInput = {
   operationPrefix: string;
   repoPath: string;
   sessionId: string;

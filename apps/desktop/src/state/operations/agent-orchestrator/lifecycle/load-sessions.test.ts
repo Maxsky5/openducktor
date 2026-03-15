@@ -369,6 +369,96 @@ describe("agent-orchestrator-load-sessions", () => {
     }
   });
 
+  test("warms requested-session todos even when the model catalog is already loaded", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": {
+          runtimeKind: "opencode",
+          sessionId: "session-1",
+          externalSessionId: "external-1",
+          taskId: "task-1",
+          role: "planner",
+          scenario: "planner_initial",
+          status: "idle",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeId: "runtime-1",
+          runId: null,
+          runtimeEndpoint: "http://127.0.0.1:4555",
+          workingDirectory: "/tmp/repo",
+          messages: [
+            {
+              id: "history:session-start:session-1",
+              role: "system",
+              content: "Session started (planner - planner_initial)",
+              timestamp: "2026-02-22T08:00:00.000Z",
+            },
+          ],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingPermissions: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: {
+            models: [],
+            defaultModelsByProvider: {},
+          },
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+        },
+      },
+    };
+    let todoLoads = 0;
+    let modelCatalogLoads = 0;
+
+    const loadAgentSessions = createLoadAgentSessions({
+      activeRepo: "/tmp/repo",
+      adapter: {
+        loadSessionHistory: async () => [],
+      },
+      repoEpochRef: { current: 2 },
+      previousRepoRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById: () => {},
+      taskRef: { current: [taskFixture] },
+      updateSession: () => {},
+      loadSessionTodos: async () => {
+        todoLoads += 1;
+      },
+      loadSessionModelCatalog: async () => {
+        modelCatalogLoads += 1;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../host");
+    const originalList = hostModule.host.agentSessionsList;
+    hostModule.host.agentSessionsList = async () => [
+      {
+        runtimeKind: "opencode",
+        sessionId: "session-1",
+        externalSessionId: "external-1",
+        taskId: "task-1",
+        role: "planner",
+        scenario: "planner_initial",
+        status: "idle",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+        workingDirectory: "/tmp/repo",
+      },
+    ];
+
+    try {
+      await loadAgentSessions("task-1", { hydrateHistoryForSessionId: "session-1" });
+    } finally {
+      hostModule.host.agentSessionsList = originalList;
+    }
+
+    expect(todoLoads).toBe(1);
+    expect(modelCatalogLoads).toBe(0);
+  });
+
   test("rehydrates persisted sessions that exist in memory with empty message history", async () => {
     const existingSession: AgentSessionState = {
       runtimeKind: "opencode",
