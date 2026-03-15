@@ -1,13 +1,12 @@
-import type { TaskCard as CanonicalTaskCard, IssueType, TaskStatus } from "@openducktor/contracts";
+import type {
+  TaskCard as CanonicalTaskCard,
+  IssueType,
+  PlanSubtaskInput,
+  QaReportVerdict,
+  TaskStatus,
+} from "@openducktor/contracts";
 
-export type { IssueType, TaskStatus };
-
-export type PlanSubtaskInput = {
-  title: string;
-  issueType?: Exclude<IssueType, "epic"> | undefined;
-  priority?: number | undefined;
-  description?: string | undefined;
-};
+export type { IssueType, PlanSubtaskInput, QaReportVerdict, TaskStatus };
 
 export type TaskCard = Pick<
   CanonicalTaskCard,
@@ -43,7 +42,7 @@ export type MarkdownEntry = {
 
 export type QaEntry = {
   markdown: string;
-  verdict: "approved" | "rejected";
+  verdict: QaReportVerdict;
   updatedAt: string;
   updatedBy: string;
   sourceTool: string;

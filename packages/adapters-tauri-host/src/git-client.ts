@@ -32,14 +32,14 @@ import {
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
-import { parseArray } from "./invoke-utils";
+import { parseArray, parseOkResult } from "./invoke-utils";
 
 export const gitGetBranches = async (
   invokeFn: InvokeFn,
   repoPath: string,
 ): Promise<GitBranch[]> => {
-  const payload = await invokeFn<unknown>("git_get_branches", { repoPath });
-  return parseArray(gitBranchSchema, payload);
+  const payload = await invokeFn("git_get_branches", { repoPath });
+  return parseArray(gitBranchSchema, payload, "git_get_branches");
 };
 
 export const gitGetCurrentBranch = async (
@@ -47,7 +47,7 @@ export const gitGetCurrentBranch = async (
   repoPath: string,
   workingDir?: string,
 ): Promise<GitCurrentBranch> => {
-  const payload = await invokeFn<unknown>("git_get_current_branch", {
+  const payload = await invokeFn("git_get_current_branch", {
     repoPath,
     workingDir: workingDir ?? null,
   });
@@ -60,7 +60,7 @@ export const gitSwitchBranch = async (
   branch: string,
   options?: { create?: boolean },
 ): Promise<GitCurrentBranch> => {
-  const payload = await invokeFn<unknown>("git_switch_branch", {
+  const payload = await invokeFn("git_switch_branch", {
     repoPath,
     branch,
     create: options?.create ?? false,
@@ -75,7 +75,7 @@ export const gitCreateWorktree = async (
   branch: string,
   options?: { createBranch?: boolean },
 ): Promise<GitWorktreeSummary> => {
-  const payload = await invokeFn<unknown>("git_create_worktree", {
+  const payload = await invokeFn("git_create_worktree", {
     repoPath,
     worktreePath,
     branch,
@@ -90,11 +90,12 @@ export const gitRemoveWorktree = async (
   worktreePath: string,
   options?: { force?: boolean },
 ): Promise<{ ok: boolean }> => {
-  return invokeFn<{ ok: boolean }>("git_remove_worktree", {
+  const payload = await invokeFn("git_remove_worktree", {
     repoPath,
     worktreePath,
     force: options?.force ?? false,
   });
+  return parseOkResult(payload, "git_remove_worktree");
 };
 
 export const gitPushBranch = async (
@@ -108,7 +109,7 @@ export const gitPushBranch = async (
     workingDir?: string;
   },
 ): Promise<GitPushBranchResult> => {
-  const payload = await invokeFn<unknown>("git_push_branch", {
+  const payload = await invokeFn("git_push_branch", {
     repoPath,
     branch,
     remote: options?.remote,
@@ -128,7 +129,7 @@ export const gitPullBranch = async (
     repoPath,
     workingDir,
   };
-  const payload = await invokeFn<unknown>("git_pull_branch", {
+  const payload = await invokeFn("git_pull_branch", {
     repoPath: request.repoPath,
     workingDir: request.workingDir ?? null,
   });
@@ -140,11 +141,11 @@ export const gitGetStatus = async (
   repoPath: string,
   workingDir?: string,
 ): Promise<FileStatus[]> => {
-  const payload = await invokeFn<unknown>("git_get_status", {
+  const payload = await invokeFn("git_get_status", {
     repoPath,
     workingDir: workingDir ?? null,
   });
-  return parseArray(fileStatusSchema, payload);
+  return parseArray(fileStatusSchema, payload, "git_get_status");
 };
 
 export const gitGetDiff = async (
@@ -153,12 +154,12 @@ export const gitGetDiff = async (
   targetBranch?: string,
   workingDir?: string,
 ): Promise<FileDiff[]> => {
-  const payload = await invokeFn<unknown>("git_get_diff", {
+  const payload = await invokeFn("git_get_diff", {
     repoPath,
     targetBranch: targetBranch ?? null,
     workingDir: workingDir ?? null,
   });
-  return parseArray(fileDiffSchema, payload);
+  return parseArray(fileDiffSchema, payload, "git_get_diff");
 };
 
 export const gitCommitsAheadBehind = async (
@@ -167,7 +168,7 @@ export const gitCommitsAheadBehind = async (
   targetBranch: string,
   workingDir?: string,
 ): Promise<CommitsAheadBehind> => {
-  const payload = await invokeFn<unknown>("git_commits_ahead_behind", {
+  const payload = await invokeFn("git_commits_ahead_behind", {
     repoPath,
     targetBranch,
     workingDir: workingDir ?? null,
@@ -182,7 +183,7 @@ export const gitGetWorktreeStatus = async (
   diffScope?: "target" | "uncommitted",
   workingDir?: string,
 ): Promise<GitWorktreeStatus> => {
-  const payload = await invokeFn<unknown>("git_get_worktree_status", {
+  const payload = await invokeFn("git_get_worktree_status", {
     repoPath,
     targetBranch,
     diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
@@ -198,7 +199,7 @@ export const gitGetWorktreeStatusSummary = async (
   diffScope?: "target" | "uncommitted",
   workingDir?: string,
 ): Promise<GitWorktreeStatusSummary> => {
-  const payload = await invokeFn<unknown>("git_get_worktree_status_summary", {
+  const payload = await invokeFn("git_get_worktree_status_summary", {
     repoPath,
     targetBranch,
     diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
@@ -218,7 +219,7 @@ export const gitCommitAll = async (
     message,
     workingDir,
   };
-  const payload = await invokeFn<unknown>("git_commit_all", {
+  const payload = await invokeFn("git_commit_all", {
     repoPath: request.repoPath,
     workingDir: request.workingDir ?? null,
     message: request.message,
@@ -237,7 +238,7 @@ export const gitRebaseBranch = async (
     targetBranch,
     workingDir,
   };
-  const payload = await invokeFn<unknown>("git_rebase_branch", {
+  const payload = await invokeFn("git_rebase_branch", {
     repoPath: request.repoPath,
     targetBranch: request.targetBranch,
     workingDir: request.workingDir ?? null,
@@ -254,7 +255,7 @@ export const gitRebaseAbort = async (
     repoPath,
     workingDir,
   };
-  const payload = await invokeFn<unknown>("git_rebase_abort", {
+  const payload = await invokeFn("git_rebase_abort", {
     repoPath: request.repoPath,
     workingDir: request.workingDir ?? null,
   });

@@ -1,25 +1,5 @@
-import { type AgentToolName, issueTypeSchema } from "@openducktor/contracts";
+import { type AgentToolName, planSubtaskInputSchema } from "@openducktor/contracts";
 import { z } from "zod";
-
-const PLAN_SUBTASK_PRIORITY_VALUES = [0, 1, 2, 3, 4] as const;
-const PlanSubtaskPrioritySchema = z
-  .union([
-    z.literal(PLAN_SUBTASK_PRIORITY_VALUES[0]),
-    z.literal(PLAN_SUBTASK_PRIORITY_VALUES[1]),
-    z.literal(PLAN_SUBTASK_PRIORITY_VALUES[2]),
-    z.literal(PLAN_SUBTASK_PRIORITY_VALUES[3]),
-    z.literal(PLAN_SUBTASK_PRIORITY_VALUES[4]),
-  ])
-  .describe("Subtask priority. Valid values: 0, 1, 2, 3, 4. Default is 2.");
-
-const PlanSubtaskSchema = z.object({
-  title: z.string().trim().min(1),
-  issueType: issueTypeSchema
-    .refine((value) => value !== "epic", "Epic subtasks are not allowed.")
-    .optional(),
-  priority: PlanSubtaskPrioritySchema.optional(),
-  description: z.string().optional(),
-});
 
 export const ReadTaskInputSchema = z.object({
   taskId: z.string().trim().min(1),
@@ -33,7 +13,7 @@ export const SetSpecInputSchema = z.object({
 export const SetPlanInputSchema = z.object({
   taskId: z.string().trim().min(1),
   markdown: z.string().trim().min(1),
-  subtasks: z.array(PlanSubtaskSchema).optional(),
+  subtasks: z.array(planSubtaskInputSchema).optional(),
 });
 
 export const BuildBlockedInputSchema = z.object({

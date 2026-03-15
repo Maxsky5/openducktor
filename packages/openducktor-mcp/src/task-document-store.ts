@@ -1,4 +1,4 @@
-import type { AgentToolName } from "@openducktor/contracts";
+import type { AgentToolName, QaReportVerdict } from "@openducktor/contracts";
 import type { TaskPersistencePort } from "./bd-persistence";
 import type { TimeProvider } from "./beads-runtime";
 import type { MarkdownEntry, QaEntry, RawIssue } from "./contracts";
@@ -6,7 +6,6 @@ import { parseTaskDocuments, type TaskDocumentsSnapshot } from "./metadata-docs"
 import { parseMarkdownEntries, parseQaEntries } from "./task-mapping";
 
 type MarkdownDocumentKey = "spec" | "implementationPlan";
-type QaVerdict = "approved" | "rejected";
 
 type PersistLatestMarkdownInput = {
   issue: RawIssue;
@@ -39,7 +38,7 @@ const QA_REPORT_SOURCES = {
     updatedBy: "qa-agent",
     sourceTool: "odt_qa_rejected",
   },
-} as const satisfies Record<QaVerdict, DocumentSource>;
+} as const satisfies Record<QaReportVerdict, DocumentSource>;
 
 const getNextRevision = (entries: Array<{ revision: number }>): number => {
   const maxRevision = entries.reduce((max, entry) => Math.max(max, entry.revision), 0);
@@ -61,11 +60,11 @@ export type TaskDocumentPort = {
     taskId: string,
     markdown: string,
   ): Promise<{ updatedAt: string; revision: number }>;
-  appendQaReport(taskId: string, markdown: string, verdict: QaVerdict): Promise<void>;
+  appendQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void>;
   prepareQaReportWrite(
     issue: RawIssue,
     markdown: string,
-    verdict: QaVerdict,
+    verdict: QaReportVerdict,
   ): PreparedQaReportWrite;
 };
 
@@ -111,7 +110,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
     });
   }
 
-  async appendQaReport(taskId: string, markdown: string, verdict: QaVerdict): Promise<void> {
+  async appendQaReport(taskId: string, markdown: string, verdict: QaReportVerdict): Promise<void> {
     const issue = await this.persistence.showRawIssue(taskId);
     const preparedWrite = this.prepareQaReportWrite(issue, markdown, verdict);
     await this.persistence.writeNamespace(taskId, preparedWrite.root, preparedWrite.namespace);
@@ -120,7 +119,7 @@ export class TaskDocumentStore implements TaskDocumentPort {
   prepareQaReportWrite(
     issue: RawIssue,
     markdown: string,
-    verdict: QaVerdict,
+    verdict: QaReportVerdict,
   ): PreparedQaReportWrite {
     const { root, namespace, documents } = this.persistence.getNamespaceData(issue);
     const entries = parseQaEntries(documents.qaReports);

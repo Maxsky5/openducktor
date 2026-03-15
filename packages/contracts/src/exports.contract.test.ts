@@ -36,6 +36,10 @@ import type {
   GitWorktreeSummary,
   GlobalConfig,
   IssueType,
+  PlanSubtaskInput,
+  PlanSubtaskIssueType,
+  PlanSubtaskPriority,
+  QaReportVerdict,
   QaReviewTarget,
   QaReviewTargetSource,
   QaWorkflowVerdict,
@@ -173,6 +177,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "settingsSnapshotSchema",
   "specTemplateSections",
   "systemCheckSchema",
+  "planSubtaskInputSchema",
+  "planSubtaskIssueTypeSchema",
+  "planSubtaskPrioritySchema",
   "taskActionSchema",
   "taskApprovalContextSchema",
   "taskCardSchema",
@@ -182,6 +189,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskMetadataPayloadSchema",
   "taskMetadataQaReportSchema",
   "taskPrioritySchema",
+  "qaReportVerdictSchema",
   "taskStatusSchema",
   "taskUpdatePatchSchema",
   "themeSchema",
@@ -232,6 +240,10 @@ type ExportedTypeContract = {
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
   IssueType: IssueType;
+  PlanSubtaskInput: PlanSubtaskInput;
+  PlanSubtaskIssueType: PlanSubtaskIssueType;
+  PlanSubtaskPriority: PlanSubtaskPriority;
+  QaReportVerdict: QaReportVerdict;
   QaWorkflowVerdict: QaWorkflowVerdict;
   RepoAgentDefaults: RepoAgentDefaults;
   RepoConfig: RepoConfig;

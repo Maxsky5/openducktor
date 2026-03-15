@@ -35,6 +35,22 @@ export type TaskAction = z.infer<typeof taskActionSchema>;
 export const taskPrioritySchema = z.number().int().min(0).max(4);
 export type TaskPriority = z.infer<typeof taskPrioritySchema>;
 
+export const planSubtaskPrioritySchema = taskPrioritySchema.describe(
+  "Subtask priority. Valid values: 0, 1, 2, 3, 4. Default is 2.",
+);
+export type PlanSubtaskPriority = z.infer<typeof planSubtaskPrioritySchema>;
+
+export const planSubtaskIssueTypeSchema = z.enum(["task", "feature", "bug"]);
+export type PlanSubtaskIssueType = z.infer<typeof planSubtaskIssueTypeSchema>;
+
+export const planSubtaskInputSchema = z.object({
+  title: z.string().trim().min(1),
+  issueType: planSubtaskIssueTypeSchema.optional(),
+  priority: planSubtaskPrioritySchema.optional(),
+  description: z.string().optional(),
+});
+export type PlanSubtaskInput = z.infer<typeof planSubtaskInputSchema>;
+
 const taskDocumentPresenceSchema = z.object({
   has: z.boolean().default(false),
   updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
@@ -43,6 +59,9 @@ export type TaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
 
 export const qaWorkflowVerdictSchema = z.enum(["approved", "rejected", "not_reviewed"]);
 export type QaWorkflowVerdict = z.infer<typeof qaWorkflowVerdictSchema>;
+
+export const qaReportVerdictSchema = z.enum(["approved", "rejected"]);
+export type QaReportVerdict = z.infer<typeof qaReportVerdictSchema>;
 
 const taskQaDocumentPresenceSchema = taskDocumentPresenceSchema.extend({
   verdict: qaWorkflowVerdictSchema.default("not_reviewed"),

@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRuntimeConnection } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -19,7 +20,7 @@ type SessionLoadersAdapter = Pick<AgentEnginePort, "listAvailableModels" | "load
 
 type CreateSessionLoadersArgs = {
   adapter: SessionLoadersAdapter;
-  supportsSessionTodos?: (runtimeKind: string) => boolean;
+  supportsSessionTodos?: (runtimeKind: RuntimeKind) => boolean;
   updateSession: UpdateSession;
 };
 
@@ -102,12 +103,12 @@ export const createLoadSessionModelCatalog = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
-  runtimeKind: string,
+  runtimeKind: RuntimeKind,
   runtimeConnection: AgentRuntimeConnection,
 ) => Promise<void>) => {
   return async (
     sessionId: string,
-    runtimeKind: string,
+    runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
   ): Promise<void> => {
     updateSession(
@@ -162,13 +163,13 @@ export const createLoadSessionTodos = ({
   updateSession,
 }: CreateSessionLoadersArgs): ((
   sessionId: string,
-  runtimeKind: string,
+  runtimeKind: RuntimeKind,
   runtimeConnection: AgentRuntimeConnection,
   externalSessionId: string,
 ) => Promise<void>) => {
   return async (
     sessionId: string,
-    runtimeKind: string,
+    runtimeKind: RuntimeKind,
     runtimeConnection: AgentRuntimeConnection,
     externalSessionId: string,
   ): Promise<void> => {

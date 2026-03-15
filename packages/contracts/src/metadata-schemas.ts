@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { directMergeRecordSchema, pullRequestSchema } from "./git-schemas";
+import { qaReportVerdictSchema } from "./task-schemas";
 
 export const taskMetadataDocumentSchema = z.object({
   markdown: z.string().default(""),
@@ -9,7 +10,7 @@ export type TaskMetadataDocument = z.infer<typeof taskMetadataDocumentSchema>;
 
 export const taskMetadataQaReportSchema = z.object({
   markdown: z.string(),
-  verdict: z.enum(["approved", "rejected"]),
+  verdict: qaReportVerdictSchema,
   updatedAt: z.string(),
   revision: z.number().int().nonnegative(),
 });
