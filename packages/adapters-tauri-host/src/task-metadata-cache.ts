@@ -1,7 +1,6 @@
 import {
   type AgentSessionRecord,
   agentSessionRecordSchema,
-  agentSessionScenarioSchema,
   type TaskMetadataPayload,
   taskMetadataPayloadSchema,
 } from "@openducktor/contracts";
@@ -22,11 +21,7 @@ const normalizeAgentSessionScenario = (entry: unknown): unknown => {
   }
   const normalizedScenario = LEGACY_AGENT_SESSION_SCENARIO_MAP[candidate.scenario];
   if (!normalizedScenario) {
-    if (agentSessionScenarioSchema.safeParse(candidate.scenario).success) {
-      return entry;
-    }
-    const { scenario: _ignoredScenario, ...rest } = entry as Record<string, unknown>;
-    return rest;
+    return entry;
   }
   return {
     ...entry,
@@ -38,14 +33,28 @@ export type ParsedTaskMetadata = Omit<TaskMetadataPayload, "agentSessions"> & {
   agentSessions: AgentSessionRecord[];
 };
 
-const parseAgentSessions = (entries: unknown[]): AgentSessionRecord[] => {
+const parseAgentSessions = (entries: unknown[], taskId: string): AgentSessionRecord[] => {
   const sessions: AgentSessionRecord[] = [];
-  for (const entry of entries) {
+  const invalidEntries: string[] = [];
+
+  for (const [index, entry] of entries.entries()) {
     const parsed = agentSessionRecordSchema.safeParse(normalizeAgentSessionScenario(entry));
     if (parsed.success) {
       sessions.push(parsed.data);
+      continue;
     }
+
+    invalidEntries.push(
+      `agentSessions[${index}]: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+    );
   }
+
+  if (invalidEntries.length > 0) {
+    throw new Error(
+      `Task metadata for ${taskId} contains invalid persisted agent sessions: ${invalidEntries.join(" | ")}`,
+    );
+  }
+
   return sessions;
 };
 
@@ -93,7 +102,7 @@ export class TaskMetadataCache {
         const parsed = taskMetadataPayloadSchema.parse(payload);
         const metadata = {
           ...parsed,
-          agentSessions: parseAgentSessions(parsed.agentSessions),
+          agentSessions: parseAgentSessions(parsed.agentSessions, taskId),
         };
 
         if (this.inFlight.get(cacheKey) === next) {
